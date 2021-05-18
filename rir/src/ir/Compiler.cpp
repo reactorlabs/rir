@@ -1517,19 +1517,21 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (/*Rf_install(".Primitive") != fun &&*/ Rf_install(".Call") != fun) {
             // forces promises but should be okay when starting in the global
             // env
-            auto builtin = Rf_findVar(fun, R_GlobalEnv);
-            auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-            speculateOnBuiltins = !callHasDots & likelyBuiltin;
-            // speculateOnBuiltins=false;
-            if (speculateOnBuiltins) {
+            if (!callHasDots) {
+                auto builtin = Rf_findVar(fun, R_GlobalEnv);
+                auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+                speculateOnBuiltins = likelyBuiltin;
 
-                eager = cs.mkLabel();
-                theEnd = cs.mkLabel();
-                cs << BC::push(builtin) << BC::dup() << BC::ldvarNoForce(fun)
-                   << BC::identicalNoforce() << BC::recordTest()
-                   << BC::brtrue(eager);
+                if (speculateOnBuiltins) {
 
-                cs << BC::pop();
+                    eager = cs.mkLabel();
+                    theEnd = cs.mkLabel();
+                    cs << BC::push(builtin) << BC::dup()
+                       << BC::ldvarNoForce(fun) << BC::identicalNoforce()
+                       << BC::recordTest() << BC::brtrue(eager);
+
+                    cs << BC::pop();
+                }
             }
         }
 
