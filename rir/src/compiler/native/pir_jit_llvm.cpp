@@ -373,6 +373,18 @@ void PirJitLLVM::compile(
             assert(!funs.count(c));
             auto f = llvm::Function::Create(
                 signature, llvm::Function::ExternalLinkage, name, *M);
+            if (LLVMDebugInfo()) {
+                llvm::AttrBuilder ab;
+                ab.addAttribute(llvm::Attribute::get(*TSC.getContext(),
+                                                     "frame-pointer", "all"));
+                ab.addAttribute(llvm::Attribute::NoInline);
+                ab.addAttribute(llvm::Attribute::NoMerge);
+                ab.addAttribute(llvm::Attribute::NoRedZone);
+                // ab.addAttribute(llvm::Attribute::OptimizeNone);
+                ab.addAttribute(llvm::Attribute::UWTable);
+                f->setAttributes(
+                    llvm::AttributeList::get(*TSC.getContext(), ~0U, ab));
+            }
             funs[c] = f;
             return f;
         },

@@ -2003,26 +2003,10 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
 void LowerFunctionLLVM::compile() {
 
     {
-        // TODO: debug info for the jitted function arguments doensn't work atm
-        // std::array<llvm::DIType*, 4> argDITypes;
-        // if (LLVMDebugInfo()) {
-        //     argDITypes = {DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType,
-        //                   DI->SEXPType};
-        // }
         auto arg = fun->arg_begin();
         for (size_t i = 0; i < argNames.size(); ++i) {
             args.push_back(arg);
             args.back()->setName(argNames[i]);
-
-            // if (LLVMDebugInfo()) {
-            //     DILocalVariable* D = DIB->createParameterVariable(
-            //         DI->getScope(), argNames[i], i + 1, DI->File, 1,
-            //         argDITypes[i], true);
-            //     DIB->insertDbgValueIntrinsic(arg, D, DIB->createExpression(),
-            //                                  builder.getCurrentDebugLocation(),
-            //                                  builder.GetInsertBlock());
-            // }
-
             arg++;
         }
     }
@@ -2042,6 +2026,25 @@ void LowerFunctionLLVM::compile() {
     };
     entryBlock = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.SetInsertPoint(entryBlock);
+
+    if (LLVMDebugInfo()) {
+        std::array<llvm::DIType*, 4> argDITypes = {
+            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            auto store =
+                builder.CreateAlloca(arg->getType(), nullptr, argNames[i]);
+            builder.CreateStore(arg, store);
+            DILocalVariable* D =
+                DIB->createParameterVariable(DI->getScope(), argNames[i], i + 1,
+                                             DI->File, 1, argDITypes[i], true);
+            DIB->insertDeclare(store, D, DIB->createExpression(),
+                               builder.getCurrentDebugLocation(),
+                               builder.GetInsertBlock());
+            arg++;
+        }
+    }
+
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
     basepointer = nodestackPtr();
 
