@@ -362,8 +362,8 @@ Breakpoint 2, rsh_f[0x558eb132cba0].1 () at f.001:56
 Current limitations:
 * ~~`continue` after setting a breakpoint breaks something in `rr` and kills the session~~ Use `hbreak` instead of `break` (creates a hw breakpoint, see [https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091](https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091))
 * `reverse-continue` not working, reports a couple warnings `warning: Corrupted shared library list: 0x558eb0cccca0 != 0x7f53e49fd5b0` and `warning: Temporarily disabling breakpoints for unloaded shared library "/home/jecmejan/rir/build/debug/librir.so"` and runs all the way to the start of the program
-* ~~No variable information (can't do `p %0.1`)~~ Works at places (when the values are not optimized out) by `p pir_0_1` for printing PIR variable `%0.1`). Also useful can be `info locals`
-* Stepping into functions - goes somewhere to the calling convention guts but then when stepping to the actuall native call it behaves as next without a breakpoint in the callee :(
+* ~~No variable information (can't do `p %0.1`)~~ Works at places (when the values are not optimized out) by `p pir_0_1` (for printing PIR variable `%0.1`). Also useful can be `info locals`
+* Stepping into functions - goes somewhere to the calling convention guts but then when stepping to the actual native call it behaves as next without a breakpoint in the callee :(
 
 ## PIR and perf (experimental)
 
