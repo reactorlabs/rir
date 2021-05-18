@@ -682,8 +682,17 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         // preserved them before the setjmp and then continue
         // execution
         builder.SetInsertPoint(longjmpRestart);
-        for (auto& v : savedLocals)
-            updateVariable(v.first, v.second.get(builder));
+        for (auto& v : savedLocals) {
+            auto loc = v.first;
+            auto val = v.second.get(builder);
+            if (LLVMDebugInfo() && diVariables_.count(loc)) {
+                DIB->insertDbgValueIntrinsic(val, diVariables_[loc],
+                                             DIB->createExpression(),
+                                             builder.getCurrentDebugLocation(),
+                                             builder.GetInsertBlock());
+            }
+            updateVariable(loc, val);
+        }
 
         // Also clear all binding caches
         for (const auto& be : bindingsCache)
@@ -889,6 +898,11 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
     if (!val->hasName())
         val->setName(i->getRef());
 
+    if (LLVMDebugInfo() && diVariables_.count(i)) {
+        DIB->insertDbgValueIntrinsic(
+            val, diVariables_[i], DIB->createExpression(),
+            builder.getCurrentDebugLocation(), builder.GetInsertBlock());
+    }
     setVariable(i, val, inPushContext && escapesInlineContext.count(i));
 }
 
@@ -1990,9 +2004,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
 void LowerFunctionLLVM::compile() {
 
     {
-        // std::array<llvm::Type*, 4> argTypes = {t::voidPtr, t::voidPtr,
-        // t::SEXP,
-        //                                        t::SEXP};
+        // TODO: debug info for the jitted function arguments doensn't work atm
         // std::array<llvm::DIType*, 4> argDITypes;
         // if (LLVMDebugInfo()) {
         //     argDITypes = {DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType,
@@ -2004,15 +2016,12 @@ void LowerFunctionLLVM::compile() {
             args.back()->setName(argNames[i]);
 
             // if (LLVMDebugInfo()) {
-            //     AllocaInst* Alloca =
-            //         builder.CreateAlloca(argTypes[i], nullptr, argNames[i]);
-            //     builder.CreateStore(arg, Alloca);
             //     DILocalVariable* D = DIB->createParameterVariable(
-            //         DI->getScope(), argNames[i], i + 1, DI->File, 0,
+            //         DI->getScope(), argNames[i], i + 1, DI->File, 1,
             //         argDITypes[i], true);
-            //     DIB->insertDeclare(Alloca, D, DIB->createExpression(),
-            //                        builder.getCurrentDebugLocation(),
-            //                        builder.GetInsertBlock());
+            //     DIB->insertDbgValueIntrinsic(arg, D, DIB->createExpression(),
+            //                                  builder.getCurrentDebugLocation(),
+            //                                  builder.GetInsertBlock());
             // }
 
             arg++;
@@ -2176,6 +2185,47 @@ void LowerFunctionLLVM::compile() {
             currentInstr = it;
             auto i = *it;
 
+            if (LLVMDebugInfo()) {
+                DI->emitLocation(builder, DI->getInstLoc(i));
+
+                if (variables_.count(i)) {
+                    auto makeName = [](Instruction* i) {
+                        std::stringstream n;
+                        auto id = i->id();
+                        char sep = '_';
+                        n << "pir" << sep << id.bb() << sep << id.idx();
+                        return n.str();
+                    };
+                    auto& v = variables_[i];
+                    auto store = v.slot;
+                    auto rep = Representation::Of(i);
+                    auto ditype = (rep == Representation::Sexp
+                                       ? DI->SEXPType
+                                       : (rep == Representation::Integer
+                                              ? DI->IntType
+                                              : (rep == Representation::Real
+                                                     ? DI->DoubleType
+                                                     : DI->UnspecifiedType)));
+                    assert(diVariables_.count(i) == 0);
+                    diVariables_[i] = DIB->createAutoVariable(
+                        DI->getScope(), makeName(i), DI->File,
+                        builder.getCurrentDebugLocation().getLine(), ditype,
+                        true);
+                    if (store) {
+                        if (rep == Representation::Sexp)
+                            DIB->insertDeclare(
+                                store, diVariables_[i], DIB->createExpression(),
+                                builder.getCurrentDebugLocation(),
+                                builder.GetInsertBlock());
+                        else
+                            DIB->insertDbgValueIntrinsic(
+                                store, diVariables_[i], DIB->createExpression(),
+                                builder.getCurrentDebugLocation(),
+                                builder.GetInsertBlock());
+                    }
+                }
+            }
+
             auto adjustRefcount = refcount.beforeUse.find(i);
             if (adjustRefcount != refcount.beforeUse.end()) {
                 i->eachArg([&](Value* v) {
@@ -2193,11 +2243,6 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                 });
-            }
-
-            if (LLVMDebugInfo()) {
-                auto line = DI->getInstLoc(i);
-                DI->emitLocation(builder, line);
             }
 
             switch (i->tag) {
@@ -5691,40 +5736,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            if (LLVMDebugInfo()) {
-                if (auto v = tryGetVariable(i)) {
-                    auto makeName = [&](Instruction* i) {
-                        std::stringstream n;
-                        auto id = i->id();
-                        char sep = '_';
-                        n << "pir" << sep << id.bb() << sep << id.idx();
-                        return n.str();
-                    };
-                    auto store = v->slot;
-                    auto rep = Representation::Of(i);
-                    auto ditype = (rep == Representation::Sexp
-                                       ? DI->SEXPType
-                                       : (rep == Representation::Integer
-                                              ? DI->IntType
-                                              : (rep == Representation::Real
-                                                     ? DI->DoubleType
-                                                     : DI->UnspecifiedType)));
-                    DILocalVariable* D = DIB->createAutoVariable(
-                        DI->getScope(), makeName(i), DI->File,
-                        builder.getCurrentDebugLocation().getLine(), ditype,
-                        true);
-                    if (rep == Representation::Sexp)
-                        DIB->insertDeclare(store, D, DIB->createExpression(),
-                                           builder.getCurrentDebugLocation(),
-                                           builder.GetInsertBlock());
-                    else
-                        DIB->insertDbgValueIntrinsic(
-                            store, D, DIB->createExpression(),
-                            builder.getCurrentDebugLocation(),
-                            builder.GetInsertBlock());
-                }
-            }
-
             // Here we directly access the variable to bypass liveness
             // checks when loading the variable. This is ok, since this is
             // the current instruction and we have already written to it...
@@ -5775,6 +5786,12 @@ void LowerFunctionLLVM::compile() {
                 auto r = Representation::Of(phi->type);
                 auto inpv = load(i, r);
                 ensureNamedIfNeeded(phi, inpv);
+                if (LLVMDebugInfo() && diVariables_.count(phi)) {
+                    DIB->insertDbgValueIntrinsic(
+                        inpv, diVariables_[phi], DIB->createExpression(),
+                        builder.getCurrentDebugLocation(),
+                        builder.GetInsertBlock());
+                }
                 updateVariable(phi, inpv);
             }
         }
@@ -5803,14 +5820,19 @@ void LowerFunctionLLVM::compile() {
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
     int sz = numLocals + maxTemps;
-    if (sz > 1)
+    if (sz > 1) {
+        if (LLVMDebugInfo())
+            DI->emitLocation(builder, DI->getBookkeepingLoc(code));
         incStack(sz - 1, true);
+    }
     builder.CreateBr(getBlock(code->entry));
 
     for (auto bb : exitBlocks) {
         auto pos = bb->end();
         pos--;
         builder.SetInsertPoint(bb, pos);
+        if (LLVMDebugInfo())
+            DI->emitLocation(builder, DI->getBookkeepingLoc(code));
         decStack(sz);
     }
 

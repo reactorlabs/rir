@@ -136,6 +136,10 @@ class PirJitLLVM {
         size_t getCodeLoc(Code* c) const { return codeLoc.at(c); }
         size_t getBBLoc(BB* bb) const { return BBLoc.at(bb); }
         size_t getInstLoc(Instruction* i) const { return instLoc.at(i); }
+        // Bookkeeping is a fake location for instructions that are emitted
+        // after all other instructions (to increment the stack in the entry bb
+        // and decrement it at exits)
+        size_t getBookkeepingLoc(Code* c) const { return codeLoc.at(c) + 1; }
         void emitLocation(llvm::IRBuilder<>&, size_t);
     };
     std::unique_ptr<DebugInfo> DI;

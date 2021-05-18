@@ -100,6 +100,10 @@ class LowerFunctionLLVM {
             auto mk = MkEnv::Cast(p->second.second->env());
             myPromenv = mk;
         }
+
+        if (LLVMDebugInfo()) {
+            DI->emitLocation(builder, DI->getCodeLoc(code));
+        }
     }
 
     llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
@@ -178,6 +182,7 @@ class LowerFunctionLLVM {
         return PhiBuilder(builder, type);
     }
 
+    std::unordered_map<Instruction*, llvm::DILocalVariable*> diVariables_;
     std::unordered_map<Instruction*, Variable> variables_;
     void setVariable(Instruction* variable, llvm::Value* val,
                      bool volatile_ = false) {
@@ -221,11 +226,6 @@ class LowerFunctionLLVM {
                 assert(liveness.live(currentInstr - 1, variable));
         }
         return variables_.at(variable).get(builder);
-    }
-    Variable* tryGetVariable(Instruction* variable) {
-        if (variables_.count(variable))
-            return &variables_.at(variable);
-        return nullptr;
     }
 
     llvm::Value* constant(SEXP co, llvm::Type* needed);

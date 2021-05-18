@@ -42,6 +42,9 @@ void PirJitLLVM::DebugInfo::addCode(Code* c) {
     assert(!codeLoc.count(c));
     codeLoc[c] = line++;
     *log << makeName(c) << "\n";
+    // Write a fake line for instructions that handle stack inc and dec
+    line++;
+    *log << "  <stack bookkeeping>\n";
     Visitor::run(c->entry, [&](BB* bb) {
         assert(!BBLoc.count(bb));
         BBLoc[bb] = line++;
@@ -55,8 +58,8 @@ void PirJitLLVM::DebugInfo::addCode(Code* c) {
             *log << "\n";
         }
 
-        bb->printEpilogue(log->out, false, /* always print newline */ true);
         line++;
+        bb->printEpilogue(log->out, false, /* always print newline */ true);
     });
     line++;
     *log << "\n";
@@ -419,13 +422,16 @@ void PirJitLLVM::compile(
                      std::make_pair(target, funCompiler.fun->getName().str()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
-        auto f = funCompiler.fun;
+        bool debug = true;
         llvm::raw_os_ostream ro(out);
-        // f->print(ro, nullptr);
-        // For debugging, print the whole module to see the debuginfo
-        // Also comment out insn_assert in lower_function_llvm.cpp to get
-        // smaller listings...
-        ro << *M;
+        if (debug) {
+            // For debugging, print the whole module to see the debuginfo
+            // Also comment out insn_assert in lower_function_llvm.cpp to get
+            // smaller listings...
+            ro << *M;
+        } else {
+            funCompiler.fun->print(ro, nullptr);
+        }
     });
 }
 

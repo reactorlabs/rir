@@ -164,15 +164,16 @@ debugging:
 
 ## PIR & gdb (experimental)
 
-There is *EXPERIMENTAL* support for debugging LLVM jitted PIR code.
+There is some support for debugging LLVM jitted PIR code.
 It is enabled by setting the `PIR_DEBUG=LLVMDebugInfo` flag.
-Optionally, you can specify where PIR sources for gdb should be stored by setting an environment variable `PIR_GDB_FOLDER`. If not set, a new folder in `/tmp` named `rsh.XXXXXX` is created and these files stored there.
+It can be useful to set also `PIR_LLVM_OPT_LEVEL=0` to help with preserving debug info through LLVM opt passes.
+Optionally, you can specify where the PIR sources for gdb should be stored by setting the environment variable `PIR_GDB_FOLDER`. If not set, a new folder in `/tmp` named `rsh.XXXXXX` is created and these files stored there.
 The name of this folder is then written to the file `./PIR_GDB_FOLDER`.
-This is handy when you need to set a breakpoint in PIR: you can eg. `ls \`cat PIR_GDB_FOLDER\`` to see the files.
+This is handy when you need to set a breakpoint in PIR: you can eg. `ls \`cat PIR_GDB_FOLDER\`` to list the sources.
 
-Run your program, ideally with `rr`:
+First, run your program (ideally with `rr`):
 ```
-***@***:~/rir/build/debug$ bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; f(4L); f(4L); f(4L); f(4L)" -d rr
+***@***:~/rir/build/debug$ PIR_DEBUG=LLVMDebugInfo PIR_LLVM_OPT_LEVEL=0 bin/R -e "f <- function(x) { Sys.sleep(0.01); x + 123L }; for (i in 1:4) f(i)" -d rr
 rr: Saving execution to trace directory `/home/***/.local/share/rr/R-402'.
 
 R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
@@ -182,120 +183,192 @@ R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 This will produce PIR listing files for each PIR module compiled, named like `f.001` in the folder `/tmp/rsh.XXXXXX`:
 ```
 ***@***:~/rir/build/debug$ cat PIR_GDB_FOLDER
-/tmp/rsh.6icTYj
+/tmp/rsh.FoaeY4
 ***@***:~/rir/build/debug$ ls `cat PIR_GDB_FOLDER`
 f.001
-***@***:~/rir/build/debug$ cat `cat PIR_GDB_FOLDER`/f.001
-rsh_f[0x56500a98aa80].1
-BB0
-  int$~"          %0.0  = LdArg                    0
-  val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
-  cls"            %0.2  = LdConst                  function (time)
-  lgl$#"          %0.3  = Identical                %0.1, %0.2
-  void                    Branch                   %0.3 -> BB4 (if true) | BB5 (if false)
-BB4   <- [0]
-  real$#"         %4.0  = LdConst                  0.01
-  prom"           %4.1  = MkArg                    %4.0, Prom(0) (!refl),
-  code"           %4.2  = LdConst                  Sys.sleep(0.01)
-  env"            e4.3  = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
-  ct              %4.4  = PushContext        lCL   %4.1, %4.2, %0.2, e4.3
-  env"            e4.5  = MKEnv              l     time=%4.0, parent=BaseNamespace, context 1
-  val?            %4.6  = CallBuiltin        !v    Sys.sleep(%4.0) e4.5
-  val?            %4.7  = PopContext         C     %4.6, %4.4
-  int$"<>         %4.8  = Force!<lazy>       d     %0.0,
-  int$#"          %4.9  = LdConst                  123
-  int$"<>         %4.10 = Add                vd    %4.8, %4.9, elided
-  void                    Return                   %4.10
-BB5   <- [0]
-  void                    RecordDeoptReason  m     %0.1
-  env"            e5.1  = MKEnv              l     x=%0.0, parent=GlobalEnv, context 1
-  void                    ScheduledDeopt           0x5650095589a0+0: [], env=e5.1
-
-rsh_f[0x56500a98aa80]_Prom(0).1
-BB0
-  real$#"         %0.0  = LdConst                  0.01
-  void                    Visible            v
-  void                    Return                   %0.0
+***@***:~/rir/build/debug$ cat -n `cat PIR_GDB_FOLDER`/f.001
+     1  rsh_f[0x558eb132cba0].1
+     2    <stack bookkeeping>
+     3  BB0
+     4    val^            %0.0  = LdArg                    0
+     5    val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
+     6    cls$⁻           %0.2  = LdConst                  function (time)
+     7    lgl$#⁻          %0.3  = Identical                %0.1, %0.2
+     8    void                    Branch                   %0.3 -> BB10 (if true) | BB11 (if false)
+     9
+    10  BB10   <- [0]
+    11    real$#⁻         %10.0 = LdConst                  0.01
+    12    code⁻           %10.1 = LdConst                  Sys.sleep(0.01)
+    13    env             e10.2 = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
+    14    ct              %10.3 = PushContext        lCL   %10.0, %10.1, %0.2, e10.2
+    15    env             e10.4 = MKEnv              l     time=%10.0, parent=BaseNamespace, context 1
+    16    val?            %10.5 = CallBuiltin        !v    Sys.sleep(%10.0) e10.4
+    17    lgl$#⁻          %10.6 = IsEnvStub          R     , e10.2
+    18    void                    Branch                   %10.6 -> BB12 (if true) | BB13 (if false)
+    19
+    20  BB12   <- [10]
+    21    val?            %12.0 = PopContext         C     %10.5, %10.3
+    22    lgl$#⁻          %12.1 = IsEnvStub          R     , e10.2
+    23    void                    Branch                   %12.1 -> BB14 (if true) | BB15 (if false)
+    24
+    25  BB14   <- [12]
+    26    val?<int$⁻>     %14.0 = Force!<lazy>       !vrL  %0.0,
+    27    lgl$#⁻          %14.1 = IsType                   %14.0 isA int$⁻
+    28    void                    Branch                   %14.1 -> BB16 (if true) | BB17 (if false)
+    29
+    30  BB16   <- [14]
+    31    int$⁻           %16.0 = CastType           d     dn %14.0
+    32    lgl$#⁻          %16.1 = IsEnvStub          R     , e10.2
+    33    void                    Branch                   %16.1 -> BB18 (if true) | BB19 (if false)
+    34
+    35  BB11   <- [0]
+    36    void                    RecordDeoptReason  m     %0.1
+    37    env             e11.1 = MKEnv              l     x=%0.0, parent=GlobalEnv, context 1
+    38    void                    ScheduledDeopt           0x558eb0d67bf0+0: [], env=e11.1
+    39
+    40  BB13   <- [10]
+    41    void                    RecordDeoptReason  m     e10.2
+    42    void                    ScheduledDeopt           0x558eb0d67bf0+49: [], env=e10.2; 0x558eb1acc118+27: [%10.5], env=e10.4
+    43
+    44  BB15   <- [12]
+    45    void                    RecordDeoptReason  m     e10.2
+    46    void                    ScheduledDeopt           0x558eb0d67bf0+49: [%12.0], env=e10.2
+    47
+    48  BB17   <- [14]
+    49    void                    RecordDeoptReason  m     %14.0
+    50    goto BB7
+    51  BB7   <- [17, 19]
+    52    void                    ScheduledDeopt           0x558eb0d67bf0+59: [%14.0], env=e10.2
+    53
+    54  BB18   <- [16]
+    55    int$#⁻          %18.0 = LdConst                  123
+    56    int$⁻<>         %18.1 = Add                vd    %16.0, %18.0, elided
+    57    void                    Return                   %18.1
+    58
+    59  BB19   <- [16]
+    60    void                    RecordDeoptReason  m     e10.2
+    61    goto BB7
+    62
 ```
 
-Now you can run the debugger and set a breakpoint in those files:
+Now you can run the debugger and set breakpoints in those files:
 ```
 ***@***:~/rir/build/debug$ rr replay
 GNU gdb (Ubuntu 8.1.1-0ubuntu1) 8.1.1
 [...]
-0x00007f0bdeeef090 in _start () from /lib64/ld-linux-x86-64.so.2
-(rr) b f.001:3
+0x00007f53e481d090 in _start () from /lib64/ld-linux-x86-64.so.2
+(rr) hbreak f.001:1
 No source file named f.001.
-Make breakpoint pending on future shared library load? (y or [n]) y
-Breakpoint 1 (f.001:3) pending.
+Make hw breakpoint pending on future shared library load? (y or [n]) y
+Hardware assisted breakpoint 1 (f.001:1) pending.
+(rr) hbreak f.001:56
+No source file named f.001.
+Make hw breakpoint pending on future shared library load? (y or [n]) y
+Hardware assisted breakpoint 2 (f.001:56) pending.
 (rr) c
 Continuing.
 
 R version 3.6.2 (2019-12-12) -- "Dark and Stormy Night"
 [...]
 
-Breakpoint 1, rsh_f[0x56500a98aa80].1 () at f.001:3
-3         int$~"          %0.0  = LdArg                    0
+Breakpoint 1, rsh_f[0x558eb132cba0].1 () at f.001:1
+1       rsh_f[0x558eb132cba0].1
+(rr) info locals
+pir_0_0 = <optimized out>
+pir_0_1 = <optimized out>
+[...]
 (rr) n
-4         val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
+2         <stack bookkeeping>
 (rr) n
-6         lgl$#"          %0.3  = Identical                %0.1, %0.2
+4         val^            %0.0  = LdArg                    0
 (rr) n
-10        prom"           %4.1  = MkArg                    %4.0, Prom(0) (!refl),
+5         val?^           %0.1  = LdVar              eR    Sys.sleep, GlobalEnv
 (rr) n
-12        env"            e4.3  = (MkEnv)            l     x=%0.0, parent=GlobalEnv, context 1
+7         lgl$#⁻          %0.3  = Identical                %0.1, %0.2
+(rr) p pir_0_1
+$1 = (SEXP) 0x558eb0582c50
+(rr) ptype pir_0_1
+type = struct SEXPREC {
+    struct sxpinfo_struct sxpinfo;
+    struct SEXPREC *attrib;
+    struct SEXPREC *gengc_next_node;
+    struct SEXPREC *gengc_prev_node;
+    union {
+        struct primsxp_struct primsxp;
+        struct symsxp_struct symsxp;
+        struct listsxp_struct listsxp;
+        struct envsxp_struct envsxp;
+        struct closxp_struct closxp;
+        struct promsxp_struct promsxp;
+    } u;
+} *
+(rr) p *pir_0_1
+$2 = {sxpinfo = {type = 5, scalar = 0, obj = 0, alt = 0, gp = 0, mark = 1,
+    debug = 0, trace = 0, spare = 0, gcgen = 0, gccls = 0, named = 7,
+    extra = 0}, attrib = 0x558eb04cb240, gengc_next_node = 0x558eb059a1d0,
+  gengc_prev_node = 0x558eb04cac20, u = {primsxp = {offset = -1304651768},
+    symsxp = {pname = 0x558eb23c9808, value = 0x558eb0582c88,
+      internal = 0x558eb04cb240}, listsxp = {carval = 0x558eb23c9808,
+      cdrval = 0x558eb0582c88, tagval = 0x558eb04cb240}, envsxp = {
+      frame = 0x558eb23c9808, enclos = 0x558eb0582c88,
+      hashtab = 0x558eb04cb240}, closxp = {formals = 0x558eb23c9808,
+      body = 0x558eb0582c88, env = 0x558eb04cb240}, promsxp = {
+      value = 0x558eb23c9808, expr = 0x558eb0582c88, env = 0x558eb04cb240}}}
+(rr) p Rf_PrintValue(pir_0_1)
+<promise: 0x558eb0582c50>
+$3 = void
+(rr) c
+Continuing.
+
+Breakpoint 2, rsh_f[0x558eb132cba0].1 () at f.001:56
+56        int$⁻<>         %18.1 = Add                vd    %16.0, %18.0, elided
+(rr) p pir_16_0
+$4 = 3
+(rr) ptype pir_16_0
+type = int
+(rr) p pir_18_1
+$5 = <optimized out>
+(rr) n
+57        void                    Return                   %18.1
+(rr) p pir_18_1
+$6 = 126
+(rr) n
+2         <stack bookkeeping>
+(rr) n
+57        void                    Return                   %18.1
+(rr) n
+rir::evalRirCode (c=0x558eb1acc7f8, ctx=0x558eb086d000, env=0x558eb08748c8,
+    callCtxt=0x7ffd5ef08030, initialPC=0x0, cache=0x0)
+    at ../../rir/src/interpreter/interp.cpp:1935
+1935                                 env, callCtxt ? callCtxt->callee : nullptr);
+(rr) rn
+
+Breakpoint 2, rsh_f[0x558eb132cba0].1 () at f.001:56
+56        int$⁻<>         %18.1 = Add                vd    %16.0, %18.0, elided
 (rr) bt
-#0  rsh_f[0x56500a98aa80].1 () at f.001:12
-#1  0x00007f0bd9a5a223 in rir::evalRirCode (c=0x56500aa2fcd8, ctx=0x5650097ce110,
-    env=0x5650097d59a8, callCtxt=0x7fff4d1290d0, initialPC=0x0, cache=0x0)
-    at ../../rir/src/interpreter/interp.cpp:1918
-#2  0x00007f0bd9a6b0ee in rir::evalRirCode (c=0x56500aa2fcd8, ctx=0x5650097ce110,
-    env=0x5650097d59a8, callCtxt=0x7fff4d1290d0)
-    at ../../rir/src/interpreter/interp.cpp:3783
-#3  0x00007f0bd9a5676e in rir::rirCallTrampoline_ (cntxt=..., call=...,
-    code=0x56500aa2fcd8, env=0x5650097d59a8, ctx=0x5650097ce110)
-    at ../../rir/src/interpreter/interp.cpp:501
-#4  0x00007f0bd9a568f9 in rir::rirCallTrampoline (call=..., fun=0x56500aa2ff98,
-    env=0x5650097d59a8, arglist=0x56500b32ffc0, ctx=0x5650097ce110)
-    at ../../rir/src/interpreter/interp.cpp:529
-#5  0x00007f0bd9a6ce41 in rir::rirCallTrampoline (call=..., fun=0x56500aa2ff98,
-    arglist=0x56500b32ffc0, ctx=0x5650097ce110)
-    at ../../rir/src/interpreter/interp.cpp:545
-#6  0x00007f0bd9a6d34a in rir::rirCall (call=..., ctx=0x5650097ce110)
-    at ../../rir/src/interpreter/interp.cpp:1054
-#7  0x00007f0bd9a6b56e in rir::rirApplyClosure (ast=0x56500b330068,
-    op=0x56500b328cb8, arglist=0x56500b32ffc0, rho=0x56500945e800,
-    suppliedvars=0x56500942c190) at ../../rir/src/interpreter/interp.cpp:3827
-#8  0x00005650070d9352 in Rf_applyClosure (call=call@entry=0x56500b330068,
-    op=op@entry=0x56500b328cb8, arglist=0x56500b32ffc0,
-    rho=rho@entry=0x56500945e800, suppliedvars=<optimized out>) at eval.c:1704
-#9  0x00005650070d6c15 in Rf_eval (e=e@entry=0x56500b330068,
-    rho=rho@entry=0x56500945e800) at eval.c:775
-#10 0x0000565007105dbd in Rf_ReplIteration (rho=0x56500945e800, savestack=0,
-    browselevel=0, state=0x7fff4d129400) at main.c:260
-#11 0x0000565007106181 in R_ReplConsole (rho=0x56500945e800, savestack=0,
-    browselevel=0) at main.c:310
-#12 0x0000565007106232 in run_Rmainloop () at main.c:1086
-#13 0x0000565007106282 in Rf_mainloop () at main.c:1093
-#14 0x000056500700cc98 in main (ac=ac@entry=3, av=av@entry=0x7fff4d12a548)
-    at Rmain.c:29
-#15 0x00007f0bdd1ebbf7 in __libc_start_main (main=0x56500700cc80 <main>, argc=3,
-    argv=0x7fff4d12a548, init=<optimized out>, fini=<optimized out>,
-    rtld_fini=<optimized out>, stack_end=0x7fff4d12a538)
-    at ../csu/libc-start.c:310
-#16 0x000056500700ccca in _start ()
-(rr)
+#0  rsh_f[0x558eb132cba0].1 () at f.001:56
+#1  0x00007f53e0320c6d in rir::evalRirCode (c=0x558eb1acc7f8,
+    ctx=0x558eb086d000, env=0x558eb08748c8, callCtxt=0x7ffd5ef08030,
+    initialPC=0x0, cache=0x0) at ../../rir/src/interpreter/interp.cpp:1934
+#2  0x00007f53e0331b1c in rir::evalRirCode (c=0x558eb1acc7f8,
+    ctx=0x558eb086d000, env=0x558eb08748c8, callCtxt=0x7ffd5ef08030)
+    at ../../rir/src/interpreter/interp.cpp:3798
+#3  0x00007f53e031d0d7 in rir::rirCallTrampoline_ (cntxt=..., call=...,
+    code=0x558eb1acc7f8, env=0x558eb08748c8, ctx=0x558eb086d000)
+    at ../../rir/src/interpreter/interp.cpp:502
+[...]
 ```
 
 Current limitations:
-* `continue` after setting a breakpoint breaks something in `rr` and kills the session: use `hbreak` instead of `break` (creates a hw breakpoint, see [https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091](https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091))
-* no variable information (can't do `p %0.1`)
-* sort of stepping into functions but not tested much
+* ~~`continue` after setting a breakpoint breaks something in `rr` and kills the session~~ Use `hbreak` instead of `break` (creates a hw breakpoint, see [https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091](https://github.com/rr-debugger/rr/issues/2163#issuecomment-363230091))
+* `reverse-continue` not working, reports a couple warnings `warning: Corrupted shared library list: 0x558eb0cccca0 != 0x7f53e49fd5b0` and `warning: Temporarily disabling breakpoints for unloaded shared library "/home/jecmejan/rir/build/debug/librir.so"` and runs all the way to the start of the program
+* ~~No variable information (can't do `p %0.1`)~~ Works at places (when the values are not optimized out) by `p pir_0_1` for printing PIR variable `%0.1`). Also useful can be `info locals`
+* Stepping into functions - goes somewhere to the calling convention guts but then when stepping to the actuall native call it behaves as next without a breakpoint in the callee :(
 
-## PIR and perf
+## PIR and perf (experimental)
 
 To get support for `perf` profiling:
-* Build LLVM from source with `perf` support enabled (eg., pass `-DLLVM_USE_PERF:BOOL=ON` to `cmake`, see `sync.sh` for details, don't forget to set the LLVM symlink in `external`)
+* ~~Build LLVM from source with `perf` support enabled (eg., pass `-DLLVM_USE_PERF:BOOL=ON` to `cmake`, see `sync.sh` for details, don't forget to set the LLVM symlink in `external`)~~ _This should be the default now_
 * Pass `-DLLVM_USE_PERF=1` to Ř `cmake`
 * Record: `PIR_DEBUG=LLVMDebugInfo perf record -k 1 bin/R -f test.r`
 * Inject jit info: `perf inject -j -i perf.data -o perf.data.jitted`
