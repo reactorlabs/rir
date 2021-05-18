@@ -175,7 +175,6 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
 
 void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
                                     llvm::Value* p) {
-    return;
     auto nok = BasicBlock::Create(PirJitLLVM::getContext(), "assertFail", fun);
     auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "assertOk", fun);
 

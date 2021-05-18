@@ -114,15 +114,15 @@ class PirJitLLVM {
 
         std::vector<llvm::DIScope*> LexicalBlocks;
 
-        llvm::DIType* UnspecifiedType;
-        llvm::DIType* VoidType;
-        llvm::DIType* IntType;
-        llvm::DIType* UIntType;
-        llvm::DIType* DoubleType;
-        llvm::DIType* VoidPtrType;
-        llvm::DIType* SEXPRECType;
-        llvm::DIType* SEXPType;
-        llvm::DISubroutineType* NativeCodeType;
+        llvm::DIType* UnspecifiedType = nullptr;
+        llvm::DIType* VoidType = nullptr;
+        llvm::DIType* IntType = nullptr;
+        llvm::DIType* UIntType = nullptr;
+        llvm::DIType* DoubleType = nullptr;
+        llvm::DIType* VoidPtrType = nullptr;
+        llvm::DIType* SEXPRECType = nullptr;
+        llvm::DIType* SEXPType = nullptr;
+        llvm::DISubroutineType* NativeCodeType = nullptr;
 
         std::unique_ptr<FileLogStream> log;
         size_t line;
