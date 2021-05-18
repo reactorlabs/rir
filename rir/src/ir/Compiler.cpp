@@ -1503,7 +1503,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        if (Rf_install(".Primitive") != fun && Rf_install(".Internal") != fun) {
+        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun) {
             // forces promises but should be okay when starting in the global
             // env
             auto builtin = Rf_findVar(fun, R_GlobalEnv);
@@ -1549,8 +1549,6 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     } else {
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
     }
-
-    // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
 
     compileCall();
 
