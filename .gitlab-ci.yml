@@ -142,8 +142,8 @@ tests_debug2:
     - schedules
   script:
     - cd /opt/rir/build/debugopt
-    - ./bin/gnur-make-tests check-devel
-    - ../../tools/check-gnur-make-tests-error
+    - PIR_ENABLE=off ./bin/gnur-make-tests check-devel
+    - PIR_ENABLE=off ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
     - "../../external/custom-r/tests/*.log"
