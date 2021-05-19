@@ -100,6 +100,10 @@ class LowerFunctionLLVM {
             auto mk = MkEnv::Cast(p->second.second->env());
             myPromenv = mk;
         }
+
+        if (LLVMDebugInfo()) {
+            DI->emitLocation(builder, DI->getCodeLoc(code));
+        }
     }
 
     llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
@@ -178,6 +182,7 @@ class LowerFunctionLLVM {
         return PhiBuilder(builder, type);
     }
 
+    std::unordered_map<Instruction*, llvm::DILocalVariable*> diVariables_;
     std::unordered_map<Instruction*, Variable> variables_;
     void setVariable(Instruction* variable, llvm::Value* val,
                      bool volatile_ = false) {
@@ -261,7 +266,7 @@ class LowerFunctionLLVM {
 
     void setVisible(int i);
 
-    std::array<std::string, 4> argNames = {{"code", "args", "env", "closure"}};
+    std::array<std::string, 4> argNames = {"code", "args", "env", "closure"};
     std::vector<llvm::Value*> args;
     llvm::Value* paramCode() { return args[0]; }
     llvm::Value* paramArgs() { return args[1]; }
