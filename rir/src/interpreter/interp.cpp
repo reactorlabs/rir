@@ -901,7 +901,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     auto sig =
         DispatchTable::unpack(BODY(call.callee))->baseline()->signature();
     if (tryArgmatch && given.includes(Assumption::NotTooManyArguments) &&
-        given.numMissing() == 0 && !sig.hasDotsFormals)
+        ((!sig.hasDotsFormals) || (call.suppliedArgs <= sig.dotsPosition)))
         given.add(Assumption::StaticallyArgmatched);
 
     SEXP formals = FORMALS(call.callee);
@@ -931,8 +931,6 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     assert(expected == call.suppliedArgs ||
            !context.includes(Assumption::NoExplicitlyMissingArgs));
     if (expected > call.suppliedArgs) {
-        // TODO: maybe we could also deal with ... here by pasing an empty dots
-        // list?
         for (size_t i = 0; i < expected - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
         call.passedArgs = expected;
@@ -1790,7 +1788,6 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 }
             } else if (ellipsis == R_NilValue) {
             } else {
-                Rf_PrintValue(ellipsis);
                 assert(ellipsis == R_UnboundValue);
             }
         }
