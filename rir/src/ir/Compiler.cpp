@@ -1504,24 +1504,27 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        auto callHasDots = false;
+        auto callHasDotsOrMissing = false;
         for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
 
-            if (*arg == R_DotsSymbol) {
-                callHasDots = true;
+            if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
+                callHasDotsOrMissing = true;
                 break;
             }
         }
 
-        // test_mark_function fails is this if is not here *******
-        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun) {
+        // test_mark_function fails is this is not here *******
+        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun &&
+            Rf_install("is.na") != fun
+
+        ) {
             // forces promises but should be okay when starting in the global
             // env
-            if (!callHasDots) {
+            if (!callHasDotsOrMissing) {
                 auto builtin = Rf_findVar(fun, R_GlobalEnv);
                 auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
                 speculateOnBuiltins = likelyBuiltin;
-
+                // speculateOnBuiltins=false;
                 if (speculateOnBuiltins) {
 
                     eager = cs.mkLabel();
@@ -1569,21 +1572,12 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (speculateOnBuiltins) {
         cs << BC::br(theEnd) << eager;
 
-        // if (Compiler::profile)
-        //     cs << BC::recordCall();
 
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
                                RList(args).length());
 
-        // for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg)
-        // {
-        //     if (*arg == R_DotsSymbol)
-        //         cs << BC::push(R_DotsSymbol);
-        //     else if (*arg == R_MissingArg)
-        //         cs << BC::push(R_MissingArg);
-        //     else
-        //         compileExpr(ctx, *arg, false);
-        // }
+        Rf_PrintValue(fun);
+        // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
 
         compileCall();
 
