@@ -122,7 +122,7 @@ tests_debug:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/debugopt
+    - cd /opt/rir/build/releaseassert
     - export UNSOUND_OPTS=off
     - R_ENABLE_JIT=0 ./bin/tests
     - R_ENABLE_JIT=1 ./bin/tests
@@ -141,7 +141,7 @@ tests_debug2:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/debugopt
+    - cd /opt/rir/build/releaseassert
     - ./bin/gnur-make-tests check-devel
     - ../../tools/check-gnur-make-tests-error
   artifacts:
@@ -179,7 +179,7 @@ test_features_1:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/debugopt
+    - cd /opt/rir/build/releaseassert
 #    - PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
@@ -218,7 +218,7 @@ test_sanitize1:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/release
+    - cd /opt/rir/build/releaseassert
     - R_GCTORTURE=5000 ./bin/gnur-make-tests check
 
 test_sanitize2:
@@ -231,7 +231,7 @@ test_sanitize2:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/release
+    - cd /opt/rir/build/releaseassert
     - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=50 bin/tests
 
 # Test with inlining big functions
