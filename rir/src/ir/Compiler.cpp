@@ -875,15 +875,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
                     compileCall(ctx, equality_ast, CAR(equality_ast),
                                 CDR(equality_ast), false);
-
-                    cs << BC::brfalse(is_not_special_branch);
-
-                    // To avoid evaluating the RHS in GnuR, compile and evaluate
-                    // it here, and pass the resulting value through a variable
-                    // (this preserves the semantics: the RHS is evaluated
-                    // eagerly
-                    //  in the assignment)
-
+                } // stop protecting AST
+                cs << BC::brfalse(is_not_special_branch);
+#if false
+                // To avoid evaluating the RHS in GnuR, compile and evaluate
+                // it here, and pass the resulting value through a variable
+                // (this preserves the semantics: the RHS is evaluated
+                // eagerly
+                //  in the assignment)
+                SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
+                {
                     SEXP new_ast = Rf_duplicate(ast);
                     Protect new_ast_protect(new_ast);
 
@@ -896,7 +897,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     compileExpr(ctx, CAR(rhs_expr_cell));
 
                     // and keep the resulting value in a temporary variable
-                    SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
                     cs << BC::stvar(tmp_rhs);
 
                     // use this temporary variable holding the evaluated RHS
@@ -914,22 +914,26 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     // Make sure not to recurse into compileSpecialCall
                     compileCall(ctx, new_ast, CAR(new_ast), CDR(new_ast),
                                 voidContext, false);
+                } // stop protecting AST
+#else
+                compileCall(ctx, ast, CAR(ast), CDR(ast), voidContext, false);
+#endif
 
-                    // Remove the temporary binding
-                    // TODO: do it without a function call to `rm`?
+#if false
+                // Remove the temporary binding
+                // TODO: do it without a function call to `rm`?
 
-                    auto remove_var = [&ctx](SEXP var) {
-                        SEXP const remove_ast = Rf_lcons(
-                            Rf_install("rm"), Rf_lcons(var, R_NilValue));
-                        Protect remove_ast_protect(remove_ast);
-                        compileCall(ctx, remove_ast, CAR(remove_ast),
-                                    CDR(remove_ast), true);
-                    };
+                auto remove_var = [&ctx](SEXP var) {
+                    SEXP const remove_ast = Rf_lcons(
+                        Rf_install("rm"), Rf_lcons(var, R_NilValue));
+                    Protect remove_ast_protect(remove_ast);
+                    compileCall(ctx, remove_ast, CAR(remove_ast),
+                                CDR(remove_ast), true);
+                };
 
-                    remove_var(tmp_rhs);
-
-                    cs << BC::br(next_branch);
-                }
+                remove_var(tmp_rhs);
+#endif
+                cs << BC::br(next_branch);
 
                 // Compile non special complex assignments
                 cs << is_not_special_branch;
@@ -1017,7 +1021,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                               load_arg_res);
 
             // call f<- with the arguments
-            cs << BC::call(load_arg_res.numArgs, load_arg_res.names, farrow_ast, load_arg_res.assumptions);
+            if (load_arg_res.hasDots) {
+                cs << BC::callDots(load_arg_res.numArgs, load_arg_res.names,
+                                   farrow_ast, load_arg_res.assumptions);
+            } else {
+                assert(load_arg_res.hasNames);
+                cs << BC::call(load_arg_res.numArgs, load_arg_res.names,
+                               farrow_ast, load_arg_res.assumptions);
+            }
 
             // Bind the result to x
             if (superAssign) {
