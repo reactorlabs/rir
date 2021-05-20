@@ -2681,15 +2681,13 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("abs"): {
-                        if (irep == Representation::Integer) {
-                            assert(orep == irep);
+                        if (irep == orep && irep == Representation::Integer) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateICmpSGE(a, c(0)), a,
                                           builder.CreateNeg(a)));
 
-                        } else if (irep == Representation::Real) {
-                            assert(orep == irep);
-
+                        } else if (irep == orep &&
+                                   irep == Representation::Real) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
@@ -2709,7 +2707,8 @@ void LowerFunctionLLVM::compile() {
                                    irep == Representation::Real) {
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
-                        } else if (i->arg(0).val()->type.isA(
+                        } else if (irep == t::SEXP &&
+                                   i->arg(0).val()->type.isA(
                                        PirType(RType::real))) {
                             auto l = vectorLength(a);
                             auto res = call(NativeBuiltins::get(
@@ -5062,7 +5061,11 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* assign = nullptr;
                 auto irep = Representation::Of(subAssign->idx1());
                 auto vrep = Representation::Of(subAssign->val());
-                if (Representation::Of(subAssign->idx2()) == irep &&
+                // TODO: support unboxed logicals stored into e.g. vectors
+                bool noConfusion = vrep != t::Int ||
+                                   subAssign->val()->type.isA(RType::integer);
+                if (noConfusion &&
+                    Representation::Of(subAssign->idx2()) == irep &&
                     irep != t::SEXP && vrep != t::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
@@ -5254,7 +5257,10 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res0 = nullptr;
                 auto irep = Representation::Of(subAssign->idx());
                 auto vrep = Representation::Of(subAssign->val());
-                if (irep != t::SEXP && vrep != t::SEXP &&
+                // TODO: support unboxed logicals stored into e.g. vectors
+                bool noConfusion = vrep != t::Int ||
+                                   subAssign->val()->type.isA(RType::integer);
+                if (noConfusion && irep != t::SEXP && vrep != t::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
