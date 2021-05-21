@@ -978,6 +978,12 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         // some missing args might need to be supplied.
         if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
             call.passedArgs != fun->nargs()) {
+            if (call.arglist) {
+                promargs = Rf_shallow_duplicate(promargs);
+                PROTECT(promargs);
+                npreserved++;
+            }
+
             auto f = formals;
             auto a = frame;
             SEXP prevA = nullptr;
