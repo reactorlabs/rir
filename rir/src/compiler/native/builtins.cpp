@@ -45,7 +45,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     if (val == R_MissingArg)
-        SET_MISSING(res, 2);
+        SET_MISSING(res, 1);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -53,7 +53,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
-    SET_MISSING(res, 2);
+    SET_MISSING(res, val == R_MissingArg ? 1 : 2);
     INCREMENT_NAMED(val);
     return res;
 }
