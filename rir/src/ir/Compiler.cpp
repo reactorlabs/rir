@@ -195,6 +195,7 @@ struct LoadArgsResult {
 };
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
+Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 // If we are in a void context, then compile expression will not leave a value
 // on the stack. For example in `{a; b}` the expression `a` is in a void
 // context, but `b` is not. In `while(...) {...}` all loop body expressions are
@@ -1755,23 +1756,22 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
         return;
     }
 
-    else if (arg_type == ArgType::EAGER_PROMISE) {
-        res.assumptions.setEager(i);
+    Code* prom;
+    if (arg_type == ArgType::EAGER_PROMISE) {
         compileExpr(ctx, CAR(arg), false);
-        // leave the value on the stack for mkEagerPromise
+        prom = compilePromiseNoRir(ctx, CAR(arg));
     }
 
     else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
-        res.assumptions.setEager(i);
-        // mkEagerPromise will use the value that is already TOS
+        prom = compilePromiseNoRir(ctx, CAR(arg));
+    } else {
+        prom = compilePromise(ctx, CAR(arg));
     }
 
-    // Arguments are wrapped as Promises:
-    //     create a new Code object for the promise
-    Code* prom = compilePromise(ctx, CAR(arg));
     size_t idx = cs.addPromise(prom);
 
     if (arg_type == ArgType::EAGER_PROMISE || arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+        res.assumptions.setEager(i);
         cs << BC::mkEagerPromise(idx);
     }
     else
@@ -1944,6 +1944,16 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
+    return ctx.pop();
+}
+
+/* Create a promise code object without compiling the AST to RIR bytecode.
+   This is useful for evaluated promises: the bytecode is never used since
+   the value is already stored in the promise.
+*/
+Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
+    ctx.pushPromiseContext(exp);
+    ctx.cs() << BC::push(R_NilValue) << BC::ret();
     return ctx.pop();
 }
 
