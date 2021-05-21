@@ -1532,7 +1532,6 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             Rf_install("is.na") == fun && astContains(args, Rf_install("what"));
         if (isNaWhat)
             times++;
-        std::cerr << "times: " << times << "\n";
 
         // test_mark_function fails is this is not here *******
         if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun &&
