@@ -183,3 +183,37 @@ for (i in 1:10) {
   f20()
   stopifnot(length(attributes(defaultPrototype())) == 0)
 }
+
+
+# Test nested complex assignments for stack overflows
+
+g <- function(x) { x }
+`g<-` <- function(x,value) { value }
+
+f21 <- function() {
+  x <- 1
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+    2
+}
+
+for (i in 1:10) {
+  f21()
+}
+
+f22 <- function() {
+  x <- list()
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+    1
+}
+
+for (i in 1:10) {
+  f22()
+}
