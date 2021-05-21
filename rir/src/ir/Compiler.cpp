@@ -1598,11 +1598,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
         // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
 
-        if (Rf_install("is.na") == fun) {
-            std::cerr << "Spec on is.na \n";
-            Rf_PrintValue(args);
-            std::cerr << "\n \n";
-        }
+        // if (Rf_install("is.na") == fun) {
+        //     std::cerr << "Spec on is.na \n";
+        //     Rf_PrintValue(args);
+        //     std::cerr << "\n \n";
+        // }
 
         compileCall();
 
