@@ -202,7 +202,7 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
-                 bool voidContext, bool do_compile_special_calls = true);
+                 bool voidContext);
 
 // EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
 // been evaluated: wrap the value at TOS into a promise.
@@ -840,104 +840,18 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 - $<-
              This leaves only two to deal with.
 
-             Note:  The approach used in the GnuR BC compiler is to add the
-             special instruction SETTER_CALL to deal with these situations:
+             It would still be interesting to compile the RHS and somehow pass
+             the value to the special. The approach used in the GnuR BC compiler
+             is to add the special instruction SETTER_CALL to deal with this
+             situation at runtime: the AST of the RHS is replaced at runtime by
+             an AST containing just the value obtained from the evaluation of
+             the RHS. See
                 https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
             */
 
             bool const maybe_special = (fun2name == "$" || fun2name == "@");
-            BC::Label const is_not_special_branch = cs.mkLabel();
-            BC::Label const next_branch = cs.mkLabel();
-
             if (maybe_special) {
-                {
-                    // Branch at runtime between the special and the non-special
-                    // case Build and compile the AST for
-                    //    .Internal(typeof(`f<-`))
-                    SEXP const internal_sym = Rf_install(".Internal");
-                    SEXP const typeof_sym = Rf_install("typeof");
-                    SEXP const typeof_ast =
-                        Rf_lcons(typeof_sym, Rf_lcons(farrow_sym, R_NilValue));
-
-                    SEXP const internal_typeof_ast = Rf_lcons(
-                        internal_sym, Rf_lcons(typeof_ast, R_NilValue));
-
-                    SEXP const primitive_sym = Rf_install(".Primitive");
-                    SEXP const equality_str = Rf_mkString("==");
-                    SEXP const special_str = Rf_mkString("special");
-                    // .Primitive("==")(typeof(fun), "special")
-                    SEXP const equality_ast =
-                        Rf_lcons(Rf_lcons(primitive_sym,
-                                          Rf_lcons(equality_str, R_NilValue)),
-                                 Rf_lcons(internal_typeof_ast,
-                                          Rf_lcons(special_str, R_NilValue)));
-
-                    Protect equality_ast_protect(equality_ast);
-
-                    compileCall(ctx, equality_ast, CAR(equality_ast),
-                                CDR(equality_ast), false);
-                } // stop protecting AST
-                cs << BC::brfalse(is_not_special_branch);
-#if false
-                // To avoid evaluating the RHS in GnuR, compile and evaluate
-                // it here, and pass the resulting value through a variable
-                // (this preserves the semantics: the RHS is evaluated
-                // eagerly
-                //  in the assignment)
-                SEXP tmp_rhs = Rf_install("*tmp_rhs_complex_assignment*");
-                {
-                    SEXP new_ast = Rf_duplicate(ast);
-                    Protect new_ast_protect(new_ast);
-
-                    // find the cell containing the RHS
-                    SEXP rhs_expr_cell = CDR(new_ast);
-                    while (CDR(rhs_expr_cell) != R_NilValue) {
-                        rhs_expr_cell = CDR(rhs_expr_cell);
-                    }
-                    // compile the RHS
-                    compileExpr(ctx, CAR(rhs_expr_cell));
-
-                    // and keep the resulting value in a temporary variable
-                    cs << BC::stvar(tmp_rhs);
-
-                    // use this temporary variable holding the evaluated RHS
-                    // value as the complex argument assignment value
-                    CAR(rhs_expr_cell) = tmp_rhs;
-
-                    // Evaluate the destination
-                    //    x <- x
-
-                    SEXP dest_cell = CDR(CAR(CDR(new_ast)));
-                    compileExpr(ctx, CAR(dest_cell));
-                    cs << BC::stvar(CAR(dest_cell));
-
-                    // compile the modified AST
-                    // Make sure not to recurse into compileSpecialCall
-                    compileCall(ctx, new_ast, CAR(new_ast), CDR(new_ast),
-                                voidContext, false);
-                } // stop protecting AST
-#else
-                compileCall(ctx, ast, CAR(ast), CDR(ast), voidContext, false);
-#endif
-
-#if false
-                // Remove the temporary binding
-                // TODO: do it without a function call to `rm`?
-
-                auto remove_var = [&ctx](SEXP var) {
-                    SEXP const remove_ast = Rf_lcons(
-                        Rf_install("rm"), Rf_lcons(var, R_NilValue));
-                    Protect remove_ast_protect(remove_ast);
-                    compileCall(ctx, remove_ast, CAR(remove_ast),
-                                CDR(remove_ast), true);
-                };
-
-                remove_var(tmp_rhs);
-#endif
-                cs << BC::br(next_branch);
-
-                // Compile non special complex assignments
-                cs << is_not_special_branch;
+                return false;
             }
 
             // Get the LISTSXP of args for f
@@ -1048,10 +962,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 if (Compiler::profile) {
                     cs << BC::recordType();
                 }
-            }
-
-            if (maybe_special) {
-                cs << next_branch;
             }
 
             return true;
@@ -1822,7 +1732,7 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
 
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
-                 bool voidContext, bool do_compile_special_calls) {
+                 bool voidContext) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -1830,8 +1740,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     // LHS can either be an identifier or an expression
     if (TYPEOF(fun) == SYMSXP) {
-        if (do_compile_special_calls &&
-            compileSpecialCall(ctx, ast, fun, args, voidContext))
+        if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
         cs << BC::ldfun(fun);
