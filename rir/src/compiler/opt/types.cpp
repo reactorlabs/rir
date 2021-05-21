@@ -153,8 +153,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         "is.raw",      "is.object",    "isS4",
                         "is.numeric",  "is.matrix",    "is.array",
                         "is.atomic",   "is.recursive", "is.call",
-                        "is.language", "is.function",  "is.single",
-                        "all",         "any"};
+                        "is.language", "is.function",  "all",
+                        "any"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
                             inferred = PirType(RType::logical)
