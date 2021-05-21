@@ -304,7 +304,6 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         blt("is.call"),
         blt("is.language"),
         blt("is.function"),
-        blt("is.single"),
         blt("is.na"),
         blt("is.nan"),
         blt("is.finite"),
@@ -444,8 +443,8 @@ bool SafeBuiltinsList::nonObjectIdempotent(int builtin) {
 
         blt("is.numeric"), blt("is.matrix"), blt("is.array"),
         blt("is.recursive"), blt("is.call"), blt("is.language"),
-        blt("is.function"), blt("is.single"), blt("is.na"), blt("is.nan"),
-        blt("is.finite"), blt("is.infinite"),
+        blt("is.function"), blt("is.na"), blt("is.nan"), blt("is.finite"),
+        blt("is.infinite"),
 
         blt("cumsum"), blt("colSums"),
 
