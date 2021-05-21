@@ -1487,9 +1487,24 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
     return res;
 }
 
+bool astContains(SEXP ast, SEXP symbol) {
+    if (ast == R_NilValue)
+        return false;
+
+    if (TYPEOF(ast) == SYMSXP)
+        return ast == symbol;
+
+    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        return astContains(CAR(ast), symbol) || astContains(CDR(ast), symbol);
+    }
+
+    return false;
+}
+
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext) {
+    int times = 0;
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -1513,10 +1528,15 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             }
         }
 
+        auto isNaWhat =
+            Rf_install("is.na") == fun && astContains(args, Rf_install("what"));
+        if (isNaWhat)
+            times++;
+        std::cerr << "times: " << times << "\n";
+
         // test_mark_function fails is this is not here *******
-        if (/* Rf_install(".Primitive") != fun && */ Rf_install(".Call") !=
-                fun &&
-            Rf_install("is.na") != fun
+        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun &&
+            (!isNaWhat || times == 2)
 
         ) {
             // forces promises but should be okay when starting in the global
@@ -1578,6 +1598,12 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                                RList(args).length());
 
         // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+
+        if (Rf_install("is.na") == fun) {
+            std::cerr << "Spec on is.na \n";
+            Rf_PrintValue(args);
+            std::cerr << "\n \n";
+        }
 
         compileCall();
 
