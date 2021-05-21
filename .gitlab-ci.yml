@@ -71,6 +71,7 @@ test_release_1:
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 10000
     PIR_INLINER_MAX_SIZE: 10000
+    PIR_LLVM_OPT_LEVEL: 1
   stage: Run tests
   needs:
     - rir_container
@@ -95,6 +96,7 @@ test_release_2:
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_MAX_INPUT_SIZE: 5000
     PIR_INLINER_MAX_SIZE: 5000
+    PIR_LLVM_OPT_LEVEL: 1
   stage: Run tests
   needs:
     - rir_container
@@ -251,7 +253,6 @@ test_big_inline:
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=1000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check
 
 # Test the benchmarks container before deploying
