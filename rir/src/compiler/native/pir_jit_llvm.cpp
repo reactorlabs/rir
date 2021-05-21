@@ -42,9 +42,6 @@ void PirJitLLVM::DebugInfo::addCode(Code* c) {
     assert(!codeLoc.count(c));
     codeLoc[c] = line++;
     *log << makeName(c) << "\n";
-    // Write a fake line for instructions that handle stack inc and dec
-    line++;
-    *log << "  <stack bookkeeping>\n";
     Visitor::run(c->entry, [&](BB* bb) {
         assert(!BBLoc.count(bb));
         BBLoc[bb] = line++;
@@ -290,6 +287,10 @@ void PirJitLLVM::DebugInfo::emitLocation(llvm::IRBuilder<>& builder,
     llvm::DIScope* Scope = getScope();
     builder.SetCurrentDebugLocation(
         llvm::DILocation::get(Scope->getContext(), line, col, Scope));
+}
+
+void PirJitLLVM::DebugInfo::clearLocation(llvm::IRBuilder<>& builder) {
+    builder.SetCurrentDebugLocation(llvm::DebugLoc());
 }
 
 PirJitLLVM::PirJitLLVM(const std::string& name) : name(name) {

@@ -5830,7 +5830,7 @@ void LowerFunctionLLVM::compile() {
     int sz = numLocals + maxTemps;
     if (sz > 1) {
         if (LLVMDebugInfo())
-            DI->emitLocation(builder, DI->getBookkeepingLoc(code));
+            DI->clearLocation(builder);
         incStack(sz - 1, true);
     }
     builder.CreateBr(getBlock(code->entry));
@@ -5840,7 +5840,7 @@ void LowerFunctionLLVM::compile() {
         pos--;
         builder.SetInsertPoint(bb, pos);
         if (LLVMDebugInfo())
-            DI->emitLocation(builder, DI->getBookkeepingLoc(code));
+            DI->clearLocation(builder);
         decStack(sz);
     }
 
