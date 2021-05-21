@@ -185,8 +185,8 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
          {convertToPointer((void*)msg, t::i8, true)});
-    builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
-
+    // builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+    builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
 }
 
