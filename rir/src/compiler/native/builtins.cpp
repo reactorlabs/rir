@@ -178,19 +178,6 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
 
 void setCarImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setCar");
-
-    if (!(!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen)) {
-        printf("Error\n");
-        printf("%d %d %d %d\n", y->sxpinfo.mark, x->sxpinfo.mark,
-               y->sxpinfo.gcgen, x->sxpinfo.gcgen);
-        printf("---- x ----\n");
-        Rf_PrintValue(x);
-        printf("------ end x ----\n");
-        printf("---- y ----\n");
-        Rf_PrintValue(y);
-        printf("------ end y ----\n");
-    }
-
     assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
            "use fast path setCar");
     SETCAR(x, y);
