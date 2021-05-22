@@ -859,26 +859,25 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // Make the ast for the call : f<-, x, y, value=z
             // and protect it from GC
-            SEXP farrow_ast = Rf_lcons(farrow_sym, R_NilValue);
-            Protect farrow_ast_protect(farrow_ast);
+            SEXP farrow_ast;
+            Protect farrow_ast_protect{farrow_ast =
+                                           Rf_lcons(farrow_sym, R_NilValue)};
+            // duplicate the args from the AST of the call to f into the AST for
+            // the call to `f<-` (directly linked in the AST so that everything
+            // is protected)
+            SETCDR(farrow_ast, Rf_duplicate(f_args));
 
             SEXP last_farrow_cell = farrow_ast;
-            // Copy the arguments of f into the call to f<- (with names)
-            for (SEXP cur_f_arg_cell = f_args; cur_f_arg_cell != R_NilValue;
-                 cur_f_arg_cell = CDR(cur_f_arg_cell)) {
-                SEXP new_cell = Rf_lcons(CAR(cur_f_arg_cell), R_NilValue);
-                SET_TAG(new_cell, TAG(cur_f_arg_cell));
-                CDR(last_farrow_cell) = new_cell;
-                last_farrow_cell = new_cell;
+            while (CDR(last_farrow_cell) != R_NilValue) {
+                last_farrow_cell = CDR(last_farrow_cell);
             }
 
             // We need to append "value = z" to the list of args for f<-
-            // Let's create the corresponding cell
-            SEXP new_z_cell = Rf_lcons(rhs, R_NilValue);
+            // Let's create the corresponding cell (directly linked in AST so
+            // that it is protected)
+            SETCDR(last_farrow_cell, Rf_lcons(rhs, R_NilValue));
+            SEXP new_z_cell = CDR(last_farrow_cell);
             SET_TAG(new_z_cell, Rf_install("value"));
-
-            // Append this new cell to the LISTSXP
-            CDR(last_farrow_cell) = new_z_cell;
 
             // The RHS must be evaluated before the LHS
             // Additionnaly, the value of the RHS must be returned after the
