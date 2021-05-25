@@ -1534,8 +1534,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             times++;
 
         // test_mark_function fails is this is not here *******
-        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun &&
-            (!isNaWhat || times == 2)
+        if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun
+            //&& (!isNaWhat || times == 2)
 
         ) {
             // forces promises but should be okay when starting in the global
