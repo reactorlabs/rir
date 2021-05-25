@@ -1504,7 +1504,7 @@ bool astContains(SEXP ast, SEXP symbol) {
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext) {
-    int times = 0;
+
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -1530,12 +1530,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
         auto isNaWhat =
             Rf_install("is.na") == fun && astContains(args, Rf_install("what"));
-        if (isNaWhat)
-            times++;
 
         // test_mark_function fails is this is not here *******
         if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun
-            //&& (!isNaWhat || times == 2)
+
+            //&& !isNaWhat
 
         ) {
             // forces promises but should be okay when starting in the global
@@ -1598,11 +1597,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
         // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
 
-        // if (Rf_install("is.na") == fun) {
-        //     std::cerr << "Spec on is.na \n";
-        //     Rf_PrintValue(args);
-        //     std::cerr << "\n \n";
-        // }
+        if (Rf_install("is.na") == fun) {
+            std::cerr << "Spec on is.na \n";
+            Rf_PrintValue(args);
+            std::cerr << "\n \n";
+        }
 
         compileCall();
 
