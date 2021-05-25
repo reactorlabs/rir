@@ -1528,8 +1528,9 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             }
         }
 
-        auto isNaWhat =
-            Rf_install("is.na") == fun && astContains(args, Rf_install("what"));
+        // auto isNaWhat =
+        //     Rf_install("is.na") == fun && astContains(args,
+        //     Rf_install("what"));
 
         // test_mark_function fails is this is not here *******
         if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun
