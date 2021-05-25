@@ -293,7 +293,10 @@ SEXP materialize(SEXP wrapper) {
             // cons protects its args if needed
             arglist = CONS_NR(val, arglist);
             SET_TAG(arglist, name);
-            SET_MISSING(arglist, lazyEnv->missing[i] ? 2 : 0);
+            if (val == R_MissingArg)
+                SET_MISSING(arglist, 1);
+            else if (lazyEnv->missing[i])
+                SET_MISSING(arglist, 2);
         }
         res = Rf_NewEnvironment(R_NilValue, arglist, lazyEnv->getParent());
         lazyEnv->materialized(res);
@@ -435,7 +438,8 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
-        if (recreateOriginalPromargs && arg == R_MissingArg && a == R_NilValue)
+        if (recreateOriginalPromargs && arg == R_MissingArg &&
+            expr == R_NilValue)
             continue;
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
@@ -897,7 +901,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     auto sig =
         DispatchTable::unpack(BODY(call.callee))->baseline()->signature();
     if (tryArgmatch && given.includes(Assumption::NotTooManyArguments) &&
-        given.numMissing() == 0 && !sig.hasDotsFormals)
+        ((!sig.hasDotsFormals) || (call.suppliedArgs <= sig.dotsPosition)))
         given.add(Assumption::StaticallyArgmatched);
 
     SEXP formals = FORMALS(call.callee);
@@ -927,8 +931,6 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     assert(expected == call.suppliedArgs ||
            !context.includes(Assumption::NoExplicitlyMissingArgs));
     if (expected > call.suppliedArgs) {
-        // TODO: maybe we could also deal with ... here by pasing an empty dots
-        // list?
         for (size_t i = 0; i < expected - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
         call.passedArgs = expected;
@@ -978,6 +980,12 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         // some missing args might need to be supplied.
         if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
             call.passedArgs != fun->nargs()) {
+            if (call.arglist) {
+                promargs = Rf_shallow_duplicate(promargs);
+                PROTECT(promargs);
+                npreserved++;
+            }
+
             auto f = formals;
             auto a = frame;
             SEXP prevA = nullptr;
@@ -1780,7 +1788,6 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 }
             } else if (ellipsis == R_NilValue) {
             } else {
-                Rf_PrintValue(ellipsis);
                 assert(ellipsis == R_UnboundValue);
             }
         }

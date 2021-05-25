@@ -45,7 +45,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     if (val == R_MissingArg)
-        SET_MISSING(res, 2);
+        SET_MISSING(res, 1);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -53,7 +53,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
-    SET_MISSING(res, 2);
+    SET_MISSING(res, val == R_MissingArg ? 1 : 2);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -169,6 +169,8 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
             } else {
                 ENSURE_NAMED(val);
             }
+            if (MISSING(loc.cell))
+                SET_MISSING(loc.cell, 2);
             return;
         }
     }
@@ -194,7 +196,7 @@ void setTagImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setTag");
     assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
            "use fast path setTag");
-    SETCAR(x, y);
+    SET_TAG(x, y);
 }
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
