@@ -953,9 +953,9 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
 llvm::Value* LowerFunctionLLVM::sxpinfoPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkIsSexp(v, "in sxpinfoPtr");
-    auto sxpinfoPtr = builder.CreateGEP(t::SEXPREC, v, {c(0), c(0)});
+    auto sxpinfoPtr = builder.CreateGEP(t::SEXPREC, v, {c(0), c(0), c(0)});
     sxpinfoPtr->setName("sxpinfo");
-    return builder.CreateBitCast(sxpinfoPtr, t::i64ptr);
+    return sxpinfoPtr;
 }
 
 void LowerFunctionLLVM::setSexptype(llvm::Value* v, int t) {
@@ -5465,6 +5465,9 @@ void LowerFunctionLLVM::compile() {
                     assert(cache->getType() == t::SEXP);
                     assert(newVal->getType() == t::SEXP);
                     setCar(cache, newVal);
+                    // Missingness needs not be updated here, because the cache
+                    // hit on the second store, i.e. after a slow-case starg
+                    // builtin, which already updated missingness
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(identical);
