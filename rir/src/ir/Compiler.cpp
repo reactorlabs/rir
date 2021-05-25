@@ -799,7 +799,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 This rewriting is theoretical. Indeed, there are some
                 specificities to complex assignments:
                     - z is evaluated eagerly, followed by x
-                    - the other arguments as passed as promises, as usual
+                    - the other arguments are passed as promises, as usual
                     - the complex assignment returns the value of z
             */
 
@@ -826,11 +826,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
              If we use the same strategy for special function, the arguments
              will be evaluated a second time.
 
-             The solution would be to patch the AST passed to the special
-             function at runtime: we can replace in the AST the expression for
-             the arguments by evaluated promises containing the values
-             previously computed.
-
              There are only a couple special assignment functions
                 - [[<-   (handled above)
                 - [ <-   (handled above)
@@ -839,6 +834,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 - @<-
                 - $<-
              This leaves only two to deal with.
+
+             The simple solution is to give up trying to compile the complex
+             assignments for the two special assignment functions. In that case
+             we lose the opportunity of compiling the RHS ; it will get
+             interpreted by GNU R.
 
              It would still be interesting to compile the RHS and somehow pass
              the value to the special. The approach used in the GnuR BC compiler
@@ -897,7 +897,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             SEXP farrow_args = CDR(farrow_ast);
 
             // Load the value of x as an eager promise
-
             compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
                               load_arg_res);
 
@@ -929,8 +928,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // N+2     N+1     N   N-1           1        0
             //  ??,  `f<-`,    x,   y1,  <...>, yn, z (raw)
 
-            // Wrap the value argument in an evaluated promise:
-
+            // Wrap the value of z in an evaluated promise:
             compileLoadOneArg(ctx, new_z_cell, ArgType::EAGER_PROMISE_FROM_TOS,
                               load_arg_res);
 
@@ -1633,8 +1631,9 @@ SIMPLE_INSTRUCTIONS(V, _)
 
 static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res)
 {
-    // Prepare argument arg for a function call.
-    // The bytecode generated will return the result either as a promise, an evaluated promise, or a raw value.
+    // Prepare the argument arg for a function call.
+    // The bytecode generated will return the result either as a promise, an
+    // evaluated promise, or a raw value.
 
     CodeStream& cs = ctx.cs();
     int i = res.numArgs;
@@ -1667,13 +1666,19 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
 
     Code* prom;
     if (arg_type == ArgType::EAGER_PROMISE) {
+        // Compile the expression to evaluate it eagerly, and
+        // wrap the return value in a promise without rir code
         compileExpr(ctx, CAR(arg), false);
         prom = compilePromiseNoRir(ctx, CAR(arg));
     }
 
     else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+        // The value we want to wrap in the argument's promise is
+        // already on TOS, no nead to compile the expression.
+        // Wrap it in a promise without rir code.
         prom = compilePromiseNoRir(ctx, CAR(arg));
-    } else {
+    } else { // ArgType::PROMISE
+        // Compile the expression as a promise.
         prom = compilePromise(ctx, CAR(arg));
     }
 
