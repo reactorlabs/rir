@@ -186,12 +186,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
          {convertToPointer((void*)msg, t::i8, true)});
 
-    // builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
-
     builder.CreateUnreachable();
-
-    // builder.CreateBr(ok);
-
     builder.SetInsertPoint(ok);
 
 
@@ -5369,7 +5364,6 @@ void LowerFunctionLLVM::compile() {
                         incrementNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
-                        builder.CreateBr(done);
                     } else {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),

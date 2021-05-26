@@ -74,12 +74,12 @@ llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
 operator()(llvm::orc::ThreadSafeModule TSM,
            llvm::orc::MaterializationResponsibility& R) {
     TSM.withModuleDo([this](llvm::Module& M) {
-        PM->run(M);
 #ifdef ENABLE_SLOWASSERT
         for (auto& F : M) {
             verifyFunction(F);
         }
 #endif
+        PM->run(M);
     });
     return std::move(TSM);
 }

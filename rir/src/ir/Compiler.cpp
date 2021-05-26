@@ -1487,19 +1487,6 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
     return res;
 }
 
-bool astContains(SEXP ast, SEXP symbol) {
-    if (ast == R_NilValue)
-        return false;
-
-    if (TYPEOF(ast) == SYMSXP)
-        return ast == symbol;
-
-    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
-        return astContains(CAR(ast), symbol) || astContains(CDR(ast), symbol);
-    }
-
-    return false;
-}
 
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
@@ -1511,7 +1498,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
-    bool speculateOnBuiltins = false;
+    bool speculateOnBuiltin = false;
     BC::Label eager = 0;
     BC::Label theEnd = 0;
 
@@ -1528,14 +1515,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             }
         }
 
-        // auto isNaWhat =
-        //     Rf_install("is.na") == fun && astContains(args,
-        //     Rf_install("what"));
-
-        // test_mark_function fails is this is not here *******
+        // test_mark_function fails fs this is not here *******
         if (Rf_install(".Primitive") != fun && Rf_install(".Call") != fun
-
-            //&& !isNaWhat
 
         ) {
             // forces promises but should be okay when starting in the global
@@ -1543,9 +1524,9 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             if (!callHasDotsOrMissing) {
                 auto builtin = Rf_findVar(fun, R_GlobalEnv);
                 auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-                speculateOnBuiltins = likelyBuiltin;
-                // speculateOnBuiltins=false;
-                if (speculateOnBuiltins) {
+                speculateOnBuiltin = likelyBuiltin;
+
+                if (speculateOnBuiltin) {
 
                     eager = cs.mkLabel();
                     theEnd = cs.mkLabel();
@@ -1589,20 +1570,12 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     compileCall();
 
-    if (speculateOnBuiltins) {
+    if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
 
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
                                RList(args).length());
-
-        // info = compileLoadArgs(ctx, ast, fun, args, voidContext);
-
-        if (Rf_install("is.na") == fun) {
-            std::cerr << "Spec on is.na \n";
-            Rf_PrintValue(args);
-            std::cerr << "\n \n";
-        }
 
         compileCall();
 
