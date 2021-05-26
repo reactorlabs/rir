@@ -2197,22 +2197,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        //  INSTRUCTION(ldvar_noforce_) {
-        //     Immediate id = readImmediate();
-        //     advanceImmediate();
-        //     res = cachedGetVar(ep->env(), id, ctx, bindingCache);
-        //     R_Visible = TRUE;
-
-        //     if (res == R_UnboundValue) {
-        //         Rf_error("object not found");
-        //     }
-
-        //     if (NAMED(res) == 0 && res != R_NilValue)
-        //         SET_NAMED(res, 1);
-
-        //     ostack_push(ctx, res);
-        //     NEXT();
-        // }
 
         INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
@@ -3056,7 +3040,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             case BC::RirTypecheck::isCPLXSXP:
             case BC::RirTypecheck::isRAWSXP:
             case BC::RirTypecheck::isEXPRSXP:
-            case BC::RirTypecheck::isBUILTINSXP:
                 res = TYPEOF(val) == type;
                 break;
 

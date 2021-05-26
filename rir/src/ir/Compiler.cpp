@@ -1548,8 +1548,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
-    LoadArgsResult info;
-    auto compileCall = [&]() {
+    auto compileCall = [&](LoadArgsResult& info) {
         if (info.hasDots) {
             cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
         } else if (info.hasNames) {
@@ -1561,23 +1560,22 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     };
 
     // IS THIS SOUND? We could have an assume method C++ and reuse that ********
+    LoadArgsResult info;
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
         info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
     } else {
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
     }
-
-    compileCall();
+    compileCall(info);
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
+        auto infoEager = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
+                                         RList(args).length());
 
-        info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
-                               RList(args).length());
-
-        compileCall();
+        compileCall(infoEager);
 
         cs << theEnd;
     }

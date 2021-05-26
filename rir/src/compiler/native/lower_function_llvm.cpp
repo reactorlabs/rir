@@ -4230,7 +4230,6 @@ void LowerFunctionLLVM::compile() {
                     case BC::RirTypecheck::isINTSXP:
                     case BC::RirTypecheck::isCPLXSXP:
                     case BC::RirTypecheck::isRAWSXP:
-                    case BC::RirTypecheck::isBUILTINSXP:
                     case BC::RirTypecheck::isEXPRSXP: {
                         auto typeNative = sexptype(argNative);
                         auto expectedTypeNative = c((SEXPTYPE)is->typecheck);

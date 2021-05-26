@@ -128,7 +128,6 @@ class BC {
         isEXPRSXP = EXPRSXP,
         isVECSXP = VECSXP,
         isLISTSXP = LISTSXP,
-        isBUILTINSXP = BUILTINSXP,
 
         isNonObject = 200,
         isVector = 201,
