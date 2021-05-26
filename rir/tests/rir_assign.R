@@ -161,3 +161,59 @@ f18 <- rir.compile(function() {
   stopifnot(x[, 2] == c(5,6,7))
 })
 f18()
+
+
+p <- defaultPrototype()
+f19 <- function() {
+  slot(p, "a", FALSE) <- "a"
+}
+
+for (i in 1:10) {
+  f19()
+  stopifnot(length(attributes(p)) == 0)
+}
+
+
+f20 <- function() {
+  q <- defaultPrototype()
+  slot(q, "a", FALSE) <- "a"
+}
+
+for (i in 1:10) {
+  f20()
+  stopifnot(length(attributes(defaultPrototype())) == 0)
+}
+
+
+# Test nested complex assignments for stack overflows
+
+g <- function(x) { x }
+`g<-` <- function(x,value) { value }
+
+f21 <- function() {
+  x <- 1
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+  g(x) <- g(x) <- g(x) <- g(x) <-
+    2
+}
+
+for (i in 1:10) {
+  f21()
+}
+
+f22 <- function() {
+  x <- list()
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+  x$a <- x$a <- x$a <- x$a <-
+    1
+}
+
+for (i in 1:10) {
+  f22()
+}

@@ -610,7 +610,7 @@ void Missing::printArgs(std::ostream& out, bool tty) const {
 }
 
 void LdVar::printArgs(std::ostream& out, bool tty) const {
-    out << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << (forUpdate ? " !upd" : "") << ", ";
 }
 
 void LdFun::printArgs(std::ostream& out, bool tty) const {
