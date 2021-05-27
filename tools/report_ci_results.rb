@@ -62,7 +62,6 @@ puts "Fetching #{full_url}"
 
 res = `curl -L -s "#{full_url}"`
 res = YAML.load(res)
-exit 0
 
 big_change = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,v)| k != 'summary' && (v > 1.02 || v < 0.98)}
 summary = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,_)| k == 'summary'}.first
