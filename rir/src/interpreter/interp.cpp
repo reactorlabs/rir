@@ -2179,7 +2179,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediate();
             assert(!LazyEnvironment::check(env));
             res = Rf_findVar(sym, env);
-            R_Visible = TRUE;
+            // R_Visible = TRUE;
 
             // recordForceBehavior(res);
 
