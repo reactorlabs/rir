@@ -2190,8 +2190,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                          CHAR(PRINTNAME(sym)));
             }
 
-            if (res != R_NilValue)
-                ENSURE_NAMED(res);
+            // if (res != R_NilValue)
+            //     ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
