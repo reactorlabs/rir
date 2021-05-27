@@ -5363,10 +5363,13 @@ void LowerFunctionLLVM::compile() {
                         incrementNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
+
+
                     } else {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
+
                     }
 
                     builder.CreateBr(done);

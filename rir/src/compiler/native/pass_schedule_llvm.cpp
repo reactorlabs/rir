@@ -17,6 +17,9 @@
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Vectorize.h"
 
+#include "llvm/Support/raw_os_ostream.h"
+#include <iostream>
+
 namespace rir {
 namespace pir {
 
@@ -69,6 +72,41 @@ static llvm::RegisterPass<NooptCold> X("noopt-cold",
                                        "Don't optimize cold functions",
                                        false /* Only looks at CFG */,
                                        false /* Analysis Pass */);
+
+struct OneTerminator : public llvm::ModulePass {
+    static char ID;
+    OneTerminator() : ModulePass(ID) {}
+
+    bool runOnModule(llvm::Module& module) override {
+        // bool changed = false;
+
+        for (auto& fun : module) {
+            for (auto& bb : fun) {
+                auto foundTerm = false;
+                for (auto& instr : bb) {
+                    if (instr.isTerminator()) {
+                        assert(
+                            !foundTerm &&
+                            "Only one terminator is allowed per basic block");
+                        foundTerm = true;
+                    }
+                }
+                if (!foundTerm) {
+                    llvm::raw_os_ostream ro(std::cerr);
+                    bb.print(ro);
+                    assert(false && "No terminator was found");
+                }
+            }
+        }
+        return false;
+    }
+};
+
+char OneTerminator::ID = 1;
+static llvm::RegisterPass<OneTerminator> X2("one-term",
+                                            "Ensure only one terminator per BB",
+                                            false /* Only looks at CFG */,
+                                            false /* Analysis Pass */);
 
 llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
 operator()(llvm::orc::ThreadSafeModule TSM,
@@ -190,6 +228,10 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM->add(createAggressiveDCEPass());
 
     PM->add(createDivRemPairsPass());
+
+#ifdef ENABLE_SLOWASSERT
+    PM->add(new OneTerminator());
+#endif
 }
 
 std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::PM = nullptr;
