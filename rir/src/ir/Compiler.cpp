@@ -896,8 +896,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             LoadArgsResult load_arg_res;
             SEXP farrow_args = CDR(farrow_ast);
 
-            // Load the value of x as an eager promise
-            compileLoadOneArg(ctx, farrow_args, ArgType::EAGER_PROMISE,
+            // Load the value of x as a raw value
+            // Passing x as a raw value instead of an evaluated promise is valid
+            // in this case since R code is already discouraged from doing
+            // non-standard evaluation on the destination of a complex
+            // assignment. See "A Byte Code Compiler for R" p.76 for a
+            // discussion on how one package used to do NSE on the destination
+            // of complex assignments (by modifying `*tmp*` in the evaluation
+            // environment) but was asked to abandon this practice.
+            compileLoadOneArg(ctx, farrow_args, ArgType::RAW_VALUE,
                               load_arg_res);
 
             //load y1, <...>, yn
