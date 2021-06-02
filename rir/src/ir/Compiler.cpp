@@ -1522,7 +1522,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             // forces promises but should be okay when starting in the global
             // env
             if (!callHasDotsOrMissing) {
-                auto builtin = Rf_findVar(fun, R_GlobalEnv);
+                auto builtin = Rf_findVar(fun, R_BaseEnv);
                 auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
                 speculateOnBuiltin = likelyBuiltin;
 

@@ -73,50 +73,22 @@ static llvm::RegisterPass<NooptCold> X("noopt-cold",
                                        false /* Only looks at CFG */,
                                        false /* Analysis Pass */);
 
-struct OneTerminator : public llvm::ModulePass {
-    static char ID;
-    OneTerminator() : ModulePass(ID) {}
 
-    bool runOnModule(llvm::Module& module) override {
-        // bool changed = false;
-
-        for (auto& fun : module) {
-            for (auto& bb : fun) {
-                auto foundTerm = false;
-                for (auto& instr : bb) {
-                    if (instr.isTerminator()) {
-                        assert(
-                            !foundTerm &&
-                            "Only one terminator is allowed per basic block");
-                        foundTerm = true;
-                    }
-                }
-                if (!foundTerm) {
-                    llvm::raw_os_ostream ro(std::cerr);
-                    bb.print(ro);
-                    assert(false && "No terminator was found");
-                }
-            }
-        }
-        return false;
-    }
-};
-
-char OneTerminator::ID = 1;
-static llvm::RegisterPass<OneTerminator> X2("one-term",
-                                            "Ensure only one terminator per BB",
-                                            false /* Only looks at CFG */,
-                                            false /* Analysis Pass */);
 
 llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
 operator()(llvm::orc::ThreadSafeModule TSM,
            llvm::orc::MaterializationResponsibility& R) {
-    TSM.withModuleDo([this](llvm::Module& M) {
+
+    TSM.withModuleDo([&](llvm::Module& M) {
+
 #ifdef ENABLE_SLOWASSERT
+        llvm::raw_os_ostream ro(std::cout);
         for (auto& F : M) {
-            verifyFunction(F);
+            assert(!verifyFunction(F, &llvm::errs()) &&
+                   "LLVM Verifier failed.");
         }
 #endif
+
         PM->run(M);
     });
     return std::move(TSM);
@@ -228,10 +200,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM->add(createAggressiveDCEPass());
 
     PM->add(createDivRemPairsPass());
-
-#ifdef ENABLE_SLOWASSERT
-    PM->add(new OneTerminator());
-#endif
 }
 
 std::unique_ptr<llvm::legacy::PassManager> PassScheduleLLVM::PM = nullptr;

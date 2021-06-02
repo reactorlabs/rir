@@ -4776,14 +4776,16 @@ void LowerFunctionLLVM::compile() {
                 if (fastcase) {
                     auto fallback =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                    auto hit2 =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
                     done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
                     if (Representation::Of(extract->vec()) == t::SEXP) {
+                        auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
