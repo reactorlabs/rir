@@ -2028,6 +2028,7 @@ void LowerFunctionLLVM::compile() {
     builder.SetInsertPoint(entryBlock);
 
     if (LLVMDebugInfo()) {
+        DI->emitLocation(builder, 0);
         std::array<llvm::DIType*, 4> argDITypes = {
             DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
         auto arg = fun->arg_begin();
