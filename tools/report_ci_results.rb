@@ -40,14 +40,28 @@ end
 head_jobs = get_pipeline(sha)
 max_job = head_jobs.map{|j| [j['duration'], j['name']]}.sort{|a,b| a[0] <=> b[0]}.last
 
-head_bm = head_jobs.select{|j| j['name'] == 'benchmark_llvm'}.last['id']
-
-base_bm = get_pipeline(pr[:base]).select{|j| j['name'] == 'benchmark_llvm'}.last['id']
+head_bm = head_jobs.select{|j| j['name'] == 'benchmark_llvm' && j['status'] == 'success'}.first
+unless head_bm
+  puts "Unfortunately I could not find a successufl benchmark job for this commit"
+  exit 1
+end
+head_bm = head_bm['id']
+base_bm = get_pipeline(pr[:base]).select{|j| j['name'] == 'benchmark_llvm' && j['status'] == 'success'}.first
+unless base_bm
+  puts "Unfortunately I could not find a successufl benchmark job for the baseline"
+  puts "Either I github reported the wrong baseline (#{pr[:base]}) or the baseline does not have a successful benchmark run."
+  exit 1
+end
+base_bm = base_bm['id']
 
 diff_url = "#{SP_URL}/diff?job_ids[]=#{head_bm}&job_ids[]=#{base_bm}"
 diff_yaml_url = diff_url.gsub("diff", "diff.yaml")
 
-res = YAML.load(`curl -L -s "#{diff_yaml_url}&selection=all"`)
+full_url = "#{diff_yaml_url}&selection=all"
+puts "Fetching #{full_url}"
+
+res = `curl -L -s "#{full_url}"`
+res = YAML.load(res)
 
 big_change = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,v)| k != 'summary' && (v > 1.02 || v < 0.98)}
 summary = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,_)| k == 'summary'}.first

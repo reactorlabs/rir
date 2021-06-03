@@ -374,7 +374,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_for_update_cache_: {
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
-        v = insert(new LdVar(bc.immediateConst(), env));
+        auto ld = new LdVar(bc.immediateConst(), env);
+        if (bc.bc == Opcode::ldvar_for_update_ ||
+            bc.bc == Opcode::ldvar_for_update_cache_)
+            ld->forUpdate = true;
+        v = insert(ld);
         // PIR LdVar corresponds to ldvar_noforce_ which does not change
         // visibility
         insert(new Visible());

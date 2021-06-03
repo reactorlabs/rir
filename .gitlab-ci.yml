@@ -11,6 +11,7 @@ variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
+  SAVE_LOGS: "/opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
 
 rir_container:
   stage: Build container
@@ -80,12 +81,11 @@ test_release_1:
   script:
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
-    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel
+    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - logs
     when: on_failure
     expire_in: 1 week
 
@@ -104,12 +104,11 @@ test_release_2:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - bin/gnur-make-tests check-recommended
+    - bin/gnur-make-tests check-recommended || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - logs
     when: on_failure
     expire_in: 1 week
 
@@ -144,12 +143,11 @@ tests_debug2:
     - schedules
   script:
     - cd /opt/rir/build/releaseassert
-    - ./bin/gnur-make-tests check-devel
+    - ./bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
-    - "../../external/custom-r/tests/*.log"
-    - "../../external/custom-r/tests/*/*check.log"
+    - logs
     when: on_failure
     expire_in: 1 week
 
@@ -184,8 +182,8 @@ test_features_1:
     - cd /opt/rir/build/releaseassert
 #    - PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
-    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check
+    - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check || $SAVE_LOGS
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 ./bin/tests
@@ -193,6 +191,11 @@ test_features_1:
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 ./bin/tests
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
 
 test_features_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -206,7 +209,12 @@ test_features_2:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check
+    - ./bin/gnur-make-tests check || $SAVE_LOGS
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
 
 # Run ubsan and gc torture
 test_sanitize1:
@@ -221,7 +229,12 @@ test_sanitize1:
     - schedules
   script:
     - cd /opt/rir/build/releaseassert
-    - R_GCTORTURE=5000 ./bin/gnur-make-tests check
+    - R_GCTORTURE=5000 ./bin/gnur-make-tests check || $SAVE_LOGS
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
 
 test_sanitize2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
@@ -253,7 +266,12 @@ test_big_inline:
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check
+    - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
 
 # Test the benchmarks container before deploying
 test_benchmarks:

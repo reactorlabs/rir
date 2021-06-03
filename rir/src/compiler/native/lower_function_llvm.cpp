@@ -2034,6 +2034,7 @@ void LowerFunctionLLVM::compile() {
     builder.SetInsertPoint(entryBlock);
 
     if (LLVMDebugInfo()) {
+        DI->emitLocation(builder, 0);
         std::array<llvm::DIType*, 4> argDITypes = {
             DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
         auto arg = fun->arg_begin();
@@ -4550,12 +4551,12 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    auto res0 = call(
+                    llvm::Value* res0 = call(
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarCacheMiss),
                         {constant(varName, t::SEXP), loadSxp(i->env()),
                          cachePtr});
                     if (needsLdVarForUpdate.count(i))
-                        ensureShared(res0);
+                        res0 = cloneIfShared(res0);
                     phi.addInput(res0);
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
