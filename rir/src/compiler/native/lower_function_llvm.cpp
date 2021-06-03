@@ -3650,9 +3650,11 @@ void LowerFunctionLLVM::compile() {
                                      {a->getType(), b->getType()}, {a, b});
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::pow,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 //  return builder.CreateIntrinsic(
+                                 //      Intrinsic::pow,
+                                 //      {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateBinaryIntrinsic(
+                                     Intrinsic::pow, a, b);
                              },
                              BinopKind::POW);
                 break;
