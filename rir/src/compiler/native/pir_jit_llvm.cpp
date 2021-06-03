@@ -422,7 +422,6 @@ void PirJitLLVM::compile(
 
     if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
 
-        funCompiler.fun->print(llvm::errs());
 
         assert(false &&
                "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
