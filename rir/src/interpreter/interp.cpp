@@ -677,8 +677,7 @@ static RIR_INLINE SEXP legacyCall(CallContext& call, InterpreterInstance* ctx) {
     return res;
 }
 
-static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
-                                   SEXP suppliedvars) {
+static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     SEXP op = call.callee;
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
@@ -752,8 +751,8 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
 
     /*  Fix up any extras that were supplied by usemethod. */
 
-    if (suppliedvars != R_NilValue)
-        Rf_addMissingVarsToNewEnv(newrho, suppliedvars);
+    if (call.suppliedvars != R_NilValue)
+        Rf_addMissingVarsToNewEnv(newrho, call.suppliedvars);
 
     if (R_envHasNoSpecialSymbols(newrho))
         SET_NO_SPECIAL_SYMBOLS(newrho);
@@ -798,6 +797,16 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         given.add(Assumption::NotTooManyArguments);
         given.numMissing(formalNargs - call.suppliedArgs);
     }
+
+    // S3 dispatch adds additional arguments to the function environment. This
+    // is unfortunately not compatible with optimized code, since in PIR we need
+    // to know all the formals of a function.
+    // TODO: make S3 dispatch a context flag, so we can compile a version of the
+    // function that expects the additional suppliedvars on the stack. For now
+    // let's just prevent calling into optimized code by removing the
+    // notTooManyArguments assumption.
+    if (call.suppliedvars != R_NilValue)
+        given.remove(Assumption::NotTooManyArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
 
@@ -1022,7 +1031,7 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     } else {
         // No need for lazy args if we have the non-modified list anyway
         promargs = frame;
-        env = closureArgumentAdaptor(call, frame, R_NilValue);
+        env = closureArgumentAdaptor(call, frame);
         PROTECT(env);
         npreserved++;
     }
@@ -2335,7 +2344,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
                              n, ast, ostack_cell_at(ctx, (long)n - 1), env,
-                             given, ctx);
+                             R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2362,7 +2371,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediateN(n);
             CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
                              n, ast, ostack_cell_at(ctx, (long)n - 1), names,
-                             env, given, ctx);
+                             env, R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2403,7 +2412,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
-                             given, ctx);
+                             R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1 + pushed);
             ostack_push(ctx, res);
@@ -2426,8 +2435,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env, Context(),
-                             ctx);
+                             ostack_cell_at(ctx, (long)n - 1), env, R_NilValue,
+                             Context(), ctx);
             res = builtinCall(call, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
@@ -3835,26 +3844,11 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     if (!names.empty()) {
         names.resize(nargs);
     }
-    // Add extra arguments from object dispatching
-    if (suppliedvars != R_NilValue) {
-        auto extra = RList(suppliedvars);
-        for (auto a = extra.begin(); a != extra.end(); ++a) {
-            if (a.hasTag()) {
-                auto var = Pool::insert(a.tag());
-                if (std::find(names.begin(), names.end(), var) == names.end()) {
-                    ostack_push(ctx, *a);
-                    names.resize(nargs + 1);
-                    names[nargs] = var;
-                    nargs++;
-                }
-            }
-        }
-    }
 
     CallContext call(ArglistOrder::NOT_REORDERED, nullptr, op, nargs, ast,
                      ostack_cell_at(ctx, nargs - 1),
-                     names.empty() ? nullptr : names.data(), rho, Context(),
-                     ctx);
+                     names.empty() ? nullptr : names.data(), rho, suppliedvars,
+                     Context(), ctx);
     call.arglist = arglist;
     call.safeForceArgs();
 

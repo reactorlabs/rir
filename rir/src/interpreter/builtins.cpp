@@ -174,7 +174,7 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
                               nargs, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
-                              call.callerEnv, innerCtxt, ctx);
+                              call.callerEnv, R_NilValue, innerCtxt, ctx);
 
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
             for (int i = 0; i < n; i++) {
