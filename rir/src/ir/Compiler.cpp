@@ -1777,9 +1777,9 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
             // env
             if (!callHasDotsOrMissing) {
                 auto builtin = Rf_findVar(fun, R_BaseEnv);
-                // auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-                // speculateOnBuiltin = likelyBuiltin;
-                speculateOnBuiltin = false;
+                auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+                speculateOnBuiltin = likelyBuiltin;
+
                 if (speculateOnBuiltin) {
 
                     eager = cs.mkLabel();
