@@ -109,6 +109,7 @@ class Compiler {
 
         // Allocate a new vtable.
         DispatchTable* vtable = DispatchTable::create();
+        p(vtable->container());
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
