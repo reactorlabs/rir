@@ -418,7 +418,18 @@ void PirJitLLVM::compile(
 
     funCompiler.compile();
 
-    llvm::verifyFunction(*funCompiler.fun);
+#ifdef ENABLE_SLOWASSERT
+
+    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
+
+        // funCompiler.fun->print(llvm::errs());
+
+        assert(false &&
+               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
+    }
+
+#endif
+
     assert(jitFixup.count(code) == 0);
 
     if (LLVMDebugInfo()) {
@@ -524,6 +535,7 @@ void PirJitLLVM::initializeLLVM() {
     SymbolMap builtinSymbols(
         static_cast<size_t>(NativeBuiltins::Id::NUM_BUILTINS));
     NativeBuiltins::eachBuiltin([&](const NativeBuiltin& blt) {
+
         auto res = builtinSymbols.try_emplace(
             JIT->mangleAndIntern(blt.name),
             JITEvaluatedSymbol(pointerToJITTargetAddress(blt.fun),
@@ -531,6 +543,7 @@ void PirJitLLVM::initializeLLVM() {
                                    JITSymbolFlags::Callable));
         assert(res.second && "duplicate builtin?");
     });
+
     ExitOnErr(builtinsDL.define(absoluteSymbols(builtinSymbols)));
 
     // Add a generator that will look for symbols in the host process.

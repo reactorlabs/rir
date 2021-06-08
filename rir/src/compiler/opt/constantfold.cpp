@@ -1041,15 +1041,16 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         auto deadAndUnreachable = dead;
         deadAndUnreachable.insert(unreachableEnd.begin(), unreachableEnd.end());
         toDelete = DominanceGraph::dominatedSet(code, deadAndUnreachable);
-        for (auto u : unreachableEnd) {
-            if (!dead.count(u))
-                toDelete.erase(u);
-        }
     }
     Visitor::run(code->entry, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i))
             phi->removeInputs(toDelete);
     });
+
+    for (auto u : unreachableEnd) {
+        if (!dead.count(u))
+            toDelete.erase(u);
+    }
 
     for (const auto& bb : unreachableEnd)
         bb->deleteSuccessors();
