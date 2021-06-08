@@ -32,12 +32,15 @@ struct NooptCold : public llvm::ModulePass {
         for (auto& fun : module) {
             if (fun.hasName()) {
                 if (fun.getName().contains(".cold.")) {
-                    if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone) &&
-                        !fun.hasFnAttribute(llvm::Attribute::MinSize)) {
+                    if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+
                         fun.addAttribute(llvm::AttributeList::FunctionIndex,
                                          llvm::Attribute::OptimizeNone);
                         fun.addAttribute(llvm::AttributeList::FunctionIndex,
                                          llvm::Attribute::NoInline);
+                        fun.removeAttribute(llvm::AttributeList::FunctionIndex,
+                                            llvm::Attribute::MinSize);
+
                         fun.setCallingConv(llvm::CallingConv::Cold);
                         changed = true;
                     }
