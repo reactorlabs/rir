@@ -7,6 +7,8 @@ if (!jitOn)
 if (Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
   q()
 
+.Call("rirDisableJitCache")
+
 # Sanity check for loop peeling, and testing that enabling/disabling works
 # These loop peeling tests may be a bit brittle.
 # Loop peeling should be enabled by default

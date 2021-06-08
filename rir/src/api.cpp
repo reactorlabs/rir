@@ -14,6 +14,7 @@
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
+#include "utils/jit_cache.h"
 
 #include <cassert>
 #include <cstdio>
@@ -65,16 +66,22 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+REXPORT SEXP rirDisableJitCache() {
+    JitCache::enabled = false;
+    return R_NilValue;
+}
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
-        // Change the input closure inplace
-        Compiler::compileClosure(what);
-
-        return what;
+        return JitCache::getEntryOrCreate(what, [&]() {
+            // Change the input closure inplace
+            Compiler::compileClosure(what);
+            return what;
+        });
     } else {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
@@ -420,11 +427,13 @@ SEXP rirOptDefaultOpts(SEXP closure, const Context& assumptions, SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
+
     // PIR can only optimize closures, not expressions
-    if (isValidClosureSEXP(closure))
+    if (isValidClosureSEXP(closure)) {
         return pirCompile(closure, assumptions, n, PirDebug);
-    else
+    } else {
         return closure;
+    }
 }
 
 SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
