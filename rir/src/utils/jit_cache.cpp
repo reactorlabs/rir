@@ -256,8 +256,8 @@ SEXP JitCache::getEntryOrCreate(SEXP closure, std::function<SEXP()> create) {
     if (!enabled)
         return create();
 
-    R_exprhash_t hash = hashfun(closure);
-    SEXP entry = get_jit_cache_entry(hash);
+    R_exprhash_t h = hashfun(closure);
+    SEXP entry = get_jit_cache_entry(h);
 
     if (entry != R_NilValue) {
         if (jit_env_match(jit_cache_env(entry), closure)) {
@@ -282,7 +282,7 @@ SEXP JitCache::getEntryOrCreate(SEXP closure, std::function<SEXP()> create) {
 
     auto res = create();
     if (isValidClosureSEXP(res))
-        set_jit_cache_entry(hash, res);
+        set_jit_cache_entry(h, res);
     return res;
 }
 
