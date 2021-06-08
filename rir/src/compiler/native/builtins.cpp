@@ -248,7 +248,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(), ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue, Context(),
+                     ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -285,8 +286,8 @@ static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
                            unsigned long available, Immediate cache) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
@@ -305,7 +306,7 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env,
+                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
                      Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
@@ -335,7 +336,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env, given, ctx);
+                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
+                     given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -804,7 +806,8 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
-                     (Immediate*)nullptr, env, Context(), globalContext());
+                     (Immediate*)nullptr, env, R_NilValue, Context(),
+                     globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
                            m->numFrames - 1, stackHeight,
@@ -1162,8 +1165,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     auto fail = !call.givenContext.smaller(fun->context());
     if (fail) {
