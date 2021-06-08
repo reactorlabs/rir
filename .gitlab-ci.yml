@@ -11,7 +11,7 @@ variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
-  SAVE_LOGS: "/opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
+  SAVE_LOGS: "sh /opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
 
 rir_container:
   stage: Build container
