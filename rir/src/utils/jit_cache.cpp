@@ -3,6 +3,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "interpreter/interp_incl.h"
+#include "runtime/DispatchTable.h"
 
 /*
  * This is the JIT cache logic copied from GNUR
@@ -260,24 +261,28 @@ SEXP JitCache::getEntryOrCreate(SEXP closure, std::function<SEXP()> create) {
 
     if (entry != R_NilValue) {
         if (jit_env_match(jit_cache_env(entry), closure)) {
-            if (jit_expr_match(jit_cache_expr(entry),
-                               rirDecompile(BODY(closure)))) {
-                /* if function body has a srcref, all srcrefs compiled
-                   in that function only depend on the body srcref;
-                   but, otherwise the srcrefs compiled in are taken
-                   from the function (op) */
-                if (getAttrib(BODY(closure), symbol::srcref) != R_NilValue ||
-                    jit_srcref_match(jit_cache_srcref(entry),
-                                     getAttrib(closure, symbol::srcref))) {
-                    SET_BODY(closure, jit_cache_code(entry));
-                    return closure;
+            auto dt = DispatchTable::check(BODY(closure));
+            if (dt && dt->baseline()->deoptCount() == 0) {
+                if (jit_expr_match(jit_cache_expr(entry),
+                                   rirDecompile(BODY(closure)))) {
+                    /* if function body has a srcref, all srcrefs compiled
+                       in that function only depend on the body srcref;
+                       but, otherwise the srcrefs compiled in are taken
+                       from the function (op) */
+                    if (getAttrib(BODY(closure), symbol::srcref) != R_NilValue ||
+                        jit_srcref_match(jit_cache_srcref(entry),
+                                         getAttrib(closure, symbol::srcref))) {
+                        SET_BODY(closure, jit_cache_code(entry));
+                        return closure;
+                    }
                 }
             }
         }
     }
 
     auto res = create();
-    set_jit_cache_entry(hash, res);
+    if (isValidClosureSEXP(res))
+        set_jit_cache_entry(hash, res);
     return res;
 }
 
