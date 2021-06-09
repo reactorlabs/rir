@@ -776,25 +776,6 @@ int asLogicalImpl(SEXP a) {
 int lengthImpl(SEXP e) { return Rf_length(e); }
 
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    if (!pir::Parameter::DEOPT_CHAOS) {
-        if (cls) {
-            // TODO: this version is still reachable from static call inline
-            // caches. Thus we need to preserve it forever. We need some
-            // dependency management here.
-            Pool::insert(c->container());
-            // remove the deoptimized function. Unless on deopt chaos,
-            // always recompiling would just blow testing time...
-            auto dt = DispatchTable::unpack(BODY(cls));
-            dt->remove(c);
-        } else {
-            // In some cases we don't know the callee here, so we can't properly
-            // remove the deoptimized code. But we can kill the native code,
-            // this will cause a fallback to rir, which will then be able to
-            // deoptimize properly.
-            // TODO: find a way to always know the closure in native code!
-            c->nativeCode = nullptr;
-        }
-    }
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -1173,7 +1154,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         inferCurrentContext(call, fun->nargs(), ctx);
         fail = !call.givenContext.smaller(fun->context());
     }
-    if (!fun->body()->nativeCode)
+    if (!fun->body()->nativeCode || fun->body()->isDeoptimized)
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));

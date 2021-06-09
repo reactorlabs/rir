@@ -55,7 +55,6 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
     auto& flags = fun->flags;
     return (!flags.contains(Function::NotOptimizable) &&
             (flags.contains(Function::MarkOpt) ||
-             flags.contains(Function::Dead) ||
              (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
               ((fun != table->baseline() && fun->invocationCount() >= 2 &&
                 fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
@@ -67,7 +66,7 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
-            fun->flags.contains(Function::Dead) || fun == table->baseline() ||
+            fun == table->baseline() ||
             (context.smaller(fun->context()) && context.isImproving(fun)) ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
