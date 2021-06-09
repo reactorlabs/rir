@@ -1515,8 +1515,18 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (TYPEOF(fun) == SYMSXP) {
             SEXP internal = fun->u.symsxp.internal;
-            int i = ((sexprec_rjit*)internal)->u.i;
 
+            // Check if the .Internal call is malformed:
+            //      .Internal(undefined_function())
+            // This can occur in normal R code as some internal functions are
+            // not defined on all platforms (see names.c). E.g.
+            //      .Internal(tzone_name())
+            // only works on win32.
+            if (internal == R_NilValue) {
+                return false;
+            }
+
+            int i = ((sexprec_rjit*)internal)->u.i;
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 emitGuardForNamePrimitive(cs, symbol::Internal);
