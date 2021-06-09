@@ -3650,9 +3650,6 @@ void LowerFunctionLLVM::compile() {
                                      {a->getType(), b->getType()}, {a, b});
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 //  return builder.CreateIntrinsic(
-                                 //      Intrinsic::pow,
-                                 //      {a->getType(), b->getType()}, {a, b});
                                  return builder.CreateBinaryIntrinsic(
                                      Intrinsic::pow, a, b);
                              },
@@ -5368,7 +5365,6 @@ void LowerFunctionLLVM::compile() {
                         incrementNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
-
 
                     } else {
                         ensureNamed(val);

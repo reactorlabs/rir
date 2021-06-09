@@ -36,8 +36,14 @@ struct NooptCold : public llvm::ModulePass {
             if (fun.hasName()) {
                 if (fun.getName().contains(".cold.")) {
                     if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+
                         fun.addAttribute(llvm::AttributeList::FunctionIndex,
                                          llvm::Attribute::OptimizeNone);
+                        fun.addAttribute(llvm::AttributeList::FunctionIndex,
+                                         llvm::Attribute::NoInline);
+                        fun.removeAttribute(llvm::AttributeList::FunctionIndex,
+                                            llvm::Attribute::MinSize);
+
                         fun.setCallingConv(llvm::CallingConv::Cold);
                         changed = true;
                     }
@@ -82,11 +88,21 @@ operator()(llvm::orc::ThreadSafeModule TSM,
     TSM.withModuleDo([&](llvm::Module& M) {
 
 #ifdef ENABLE_SLOWASSERT
-        llvm::raw_os_ostream ro(std::cout);
-        for (auto& F : M) {
-            assert(!verifyFunction(F, &llvm::errs()) &&
-                   "LLVM Verifier failed.");
-        }
+        auto verify = [&]() {
+            for (auto& F : M) {
+                assert(!verifyFunction(F, &llvm::errs()) &&
+                       "LLVM Verifier failed.");
+            }
+        };
+
+        verify();
+#endif
+
+        PM->run(M);
+
+#ifdef ENABLE_SLOWASSERT
+        verify();
+
 #endif
 
         PM->run(M);
