@@ -59,7 +59,6 @@ DeadInstructions::DeadInstructions(Code* code, uint8_t maxBurstSize,
                     if (std::find(IgnoreIntVsReal.begin(),
                                   IgnoreIntVsReal.end(),
                                   use->tag) == IgnoreIntVsReal.end() &&
-                        !use->effects.includes(Effect::ExecuteCode) &&
                         isAlive(use))
                         addToDead = false;
                     break;
