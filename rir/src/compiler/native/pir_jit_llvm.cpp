@@ -418,16 +418,12 @@ void PirJitLLVM::compile(
 
     funCompiler.compile();
 
-#ifdef ENABLE_SLOWASSERT
+#ifndef NDEBUG
 
     if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
-
-        // funCompiler.fun->print(llvm::errs());
-
         assert(false &&
                "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
     }
-
 #endif
 
     assert(jitFixup.count(code) == 0);
