@@ -801,7 +801,6 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
         stackHeight += m->frames[i].stackSize + 1;
     }
 
-    c->registerDeopt();
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,

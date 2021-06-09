@@ -94,7 +94,7 @@ static R_exprhash_t hashsrcref(SEXP e, R_exprhash_t h) {
 static R_exprhash_t hashexpr(SEXP e) { return hashexpr1(e, 5381); }
 
 static R_exprhash_t hashfun(SEXP f) {
-    R_exprhash_t h = hashexpr(rir::rirDecompile(BODY(f)));
+    R_exprhash_t h = hashexpr(R_ClosureExpr(f));
     if (getAttrib(BODY(f), rir::symbol::srcref) == R_NilValue) {
         h = hashsrcref(getAttrib(f, rir::symbol::srcref), h);
     }
@@ -261,10 +261,10 @@ SEXP JitCache::getEntryOrCreate(SEXP closure, std::function<SEXP()> create) {
 
     if (entry != R_NilValue) {
         if (jit_env_match(jit_cache_env(entry), closure)) {
-            auto dt = DispatchTable::check(BODY(closure));
+            auto dt = DispatchTable::check(jit_cache_code(entry));
             if (dt && dt->baseline()->deoptCount() == 0) {
                 if (jit_expr_match(jit_cache_expr(entry),
-                                   rirDecompile(BODY(closure)))) {
+                                   R_ClosureExpr(closure))) {
                     /* if function body has a srcref, all srcrefs compiled
                        in that function only depend on the body srcref;
                        but, otherwise the srcrefs compiled in are taken
@@ -272,11 +272,26 @@ SEXP JitCache::getEntryOrCreate(SEXP closure, std::function<SEXP()> create) {
                     if (getAttrib(BODY(closure), symbol::srcref) != R_NilValue ||
                         jit_srcref_match(jit_cache_srcref(entry),
                                          getAttrib(closure, symbol::srcref))) {
+                        if (dt->size() == 1)
+                            dt->baseline()->unregisterInvocation();
                         SET_BODY(closure, jit_cache_code(entry));
+                        // std::cout << "HIT\n";
                         return closure;
+                    } else {
+                        // std::cout << "srcref mismatch\n";
                     }
+                } else {
+                    // std::cout << "expr mismatch\n";
                 }
+            } else {
+                // if (!dt)
+                //   std::cout << "not compiled\n";
+                // else {
+                //   std::cout << "deopt\n";
+                //}
             }
+        } else {
+            // std::cout << "env mismatch\n";
         }
     }
 

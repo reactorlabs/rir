@@ -1628,6 +1628,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
+    code->registerDeopt();
     code->registerInvocation();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;

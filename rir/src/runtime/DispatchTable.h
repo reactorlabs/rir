@@ -100,7 +100,7 @@ struct DispatchTable
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->context();
-        long i;
+        size_t i;
         for (i = size() - 1; i > 0; --i) {
             if (get(i)->context() == assumptions) {
                 // If we override a version we should ensure that we don't call
@@ -139,7 +139,7 @@ struct DispatchTable
             return insert(fun);
         }
 
-        for (long j = size(); j > i; --j)
+        for (size_t j = size(); j > i; --j)
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());
