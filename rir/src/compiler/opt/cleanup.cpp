@@ -301,8 +301,27 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
         // that it will never have predecessors.
         if (code->entry == bb)
             return;
-        if (bb->isJmp() && bb->hasSinglePred() && bb->next()->hasSinglePred()) {
-            BB* d = bb->next();
+        bool uselessCheckpoint = !bb->isEmpty() &&
+                                 Checkpoint::Cast(bb->last()) &&
+                                 bb->nonDeoptSuccessors().size() == 0;
+        if (uselessCheckpoint || (bb->isJmp() && bb->hasSinglePred() &&
+                                  bb->next()->hasSinglePred())) {
+            BB* d;
+            if (uselessCheckpoint) {
+                d = bb->deoptBranch();
+                auto dead = bb->trueBranch();
+                assert(dead != d);
+                while (true) {
+                    toDel[dead] = nullptr;
+                    if (dead->successors().size())
+                        dead = dead->next();
+                    else
+                        break;
+                }
+                bb->remove(bb->end() - 1);
+            } else {
+                d = bb->next();
+            }
             while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
