@@ -1763,7 +1763,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         auto callHasDotsOrMissing = false;
         for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
 
-            if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
+            if (*arg == R_DotsSymbol /*|| *arg == R_MissingArg */) {
                 callHasDotsOrMissing = true;
                 break;
             }
