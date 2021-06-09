@@ -1770,29 +1770,30 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         }
 
         // test_mark_function fails fs this is not here *******
-        if (true /*Rf_install(".Primitive") != fun && */ // Rf_install(".Call")
-                                                         // != fun
+        // if (true /*Rf_install(".Primitive") != fun && */ //
+        // Rf_install(".Call")
+        // != fun
 
-        ) {
-            // forces promises but should be okay when starting in the global
-            // env
-            if (!callHasDotsOrMissing) {
-                auto builtin = Rf_findVar(fun, R_BaseEnv);
-                auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-                speculateOnBuiltin = likelyBuiltin;
+        //) {
+        // forces promises but should be okay when starting in the global
+        // env
+        if (!callHasDotsOrMissing) {
+            auto builtin = Rf_findVar(fun, R_BaseEnv);
+            auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+            speculateOnBuiltin = likelyBuiltin;
 
-                if (speculateOnBuiltin) {
+            if (speculateOnBuiltin) {
 
-                    eager = cs.mkLabel();
-                    theEnd = cs.mkLabel();
-                    cs << BC::push(builtin) << BC::dup()
-                       << BC::ldvarNoForce(fun) << BC::identicalNoforce()
-                       << BC::recordTest() << BC::brtrue(eager);
+                eager = cs.mkLabel();
+                theEnd = cs.mkLabel();
+                cs << BC::push(builtin) << BC::dup() << BC::ldvarNoForce(fun)
+                   << BC::identicalNoforce() << BC::recordTest()
+                   << BC::brtrue(eager);
 
-                    cs << BC::pop();
-                }
+                cs << BC::pop();
             }
         }
+        // }
 
         cs << BC::ldfun(fun);
     } else {
