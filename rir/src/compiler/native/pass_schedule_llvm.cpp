@@ -33,8 +33,14 @@ struct NooptCold : public llvm::ModulePass {
             if (fun.hasName()) {
                 if (fun.getName().contains(".cold.")) {
                     if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+
                         fun.addAttribute(llvm::AttributeList::FunctionIndex,
                                          llvm::Attribute::OptimizeNone);
+                        fun.addAttribute(llvm::AttributeList::FunctionIndex,
+                                         llvm::Attribute::NoInline);
+                        fun.removeAttribute(llvm::AttributeList::FunctionIndex,
+                                            llvm::Attribute::MinSize);
+
                         fun.setCallingConv(llvm::CallingConv::Cold);
                         changed = true;
                     }
@@ -73,12 +79,25 @@ static llvm::RegisterPass<NooptCold> X("noopt-cold",
 llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
 operator()(llvm::orc::ThreadSafeModule TSM,
            llvm::orc::MaterializationResponsibility& R) {
-    TSM.withModuleDo([this](llvm::Module& M) {
-        PM->run(M);
+
+    TSM.withModuleDo([&](llvm::Module& M) {
+
 #ifdef ENABLE_SLOWASSERT
-        for (auto& F : M) {
-            verifyFunction(F);
-        }
+        auto verify = [&]() {
+            for (auto& F : M) {
+                assert(!verifyFunction(F, &llvm::errs()) &&
+                       "LLVM Verifier failed.");
+            }
+        };
+
+        verify();
+#endif
+
+        PM->run(M);
+
+#ifdef ENABLE_SLOWASSERT
+        verify();
+
 #endif
     });
     return std::move(TSM);

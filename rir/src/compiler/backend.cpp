@@ -118,6 +118,7 @@ static void lower(Code* code) {
         DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
 
     Visitor::runPostChange(code->entry, [&](BB* bb) {
+
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
@@ -139,7 +140,6 @@ static void lower(Code* code) {
                         representAsReal.isDead(*it);
                     if (indistinguishable) {
                         b->type = b->type & PirType::simpleScalarReal();
-                        break;
                     }
                 }
             } else if (auto ldfun = LdFun::Cast(*it)) {
@@ -200,6 +200,7 @@ static void lower(Code* code) {
                 }
                 bb->replace(it, newDeopt);
                 next = it + 1;
+
             } else if (auto expect = Assume::Cast(*it)) {
                 if (expect->arg(0).val() == True::instance()) {
                     next = bb->remove(it);
