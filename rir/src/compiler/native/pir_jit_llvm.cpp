@@ -418,13 +418,14 @@ void PirJitLLVM::compile(
 
     funCompiler.compile();
 
-#ifndef NDEBUG
+    // #ifndef NDEBUG
 
-    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
-        assert(false &&
-               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
-    }
-#endif
+    //     if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
+    //         assert(false &&
+    //                "Error in llvm::verifyFunction() called from
+    //                pir_jit_llvm.cpp");
+    //     }
+    // #endif
 
     assert(jitFixup.count(code) == 0);
 
