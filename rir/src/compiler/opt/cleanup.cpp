@@ -301,9 +301,35 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
         // that it will never have predecessors.
         if (code->entry == bb)
             return;
+
+        // A Checkpoint where the normal continue branch ends in a deopt is
+        // unnecessary. We remove it by unconditionally going into the deopt
+        // branch.
         bool uselessCheckpoint = !bb->isEmpty() &&
                                  Checkpoint::Cast(bb->last()) &&
                                  bb->nonDeoptSuccessors().size() == 0;
+        std::vector<Instruction*> deoptReason;
+        // We need to preserve the deopt reason from the main branch. To do so
+        // we copy the instruction with all dependencies into the deopt branch.
+        if (uselessCheckpoint) {
+            for (auto i : *bb->trueBranch())
+                if (RecordDeoptReason::Cast(i)) {
+                    std::vector<Instruction*> todo = {i->clone()};
+                    while (!todo.empty()) {
+                        auto d = todo.back();
+                        todo.pop_back();
+                        deoptReason.push_back(d);
+                        d->eachArg([&](InstrArg& arg) {
+                            if (auto j = Instruction::Cast(arg.val()))
+                                if (j->bb() == bb->trueBranch()) {
+                                    auto clone = j->clone();
+                                    arg.val() = clone;
+                                    todo.push_back(clone);
+                                }
+                        });
+                    }
+                }
+        }
         if (uselessCheckpoint || (bb->isJmp() && bb->hasSinglePred() &&
                                   bb->next()->hasSinglePred())) {
             BB* d;
@@ -319,6 +345,10 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         break;
                 }
                 bb->remove(bb->end() - 1);
+                while (!deoptReason.empty()) {
+                    bb->append(deoptReason.back());
+                    deoptReason.pop_back();
+                }
             } else {
                 d = bb->next();
             }
