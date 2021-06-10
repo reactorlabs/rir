@@ -3380,6 +3380,7 @@ void LowerFunctionLLVM::compile() {
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
+                        NativeBuiltins::targetCaches.push_back(idx);
                         Pool::patch(idx, nativeTarget->container());
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
