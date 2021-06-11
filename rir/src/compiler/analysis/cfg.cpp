@@ -12,41 +12,53 @@ namespace pir {
 CFG::CFG(Code* start)
     : predecessors_(start->nextBBId), transitivePredecessors(start->nextBBId) {
     Visitor::run(start->entry, [&](BB* bb) {
-        auto apply = [&](BB* next) {
-            if (!next)
-                return;
-            if (!bb->predecessors().count(next)) {
-                predecessors_[next->id].push_back(bb);
-                transitivePredecessors[next->id].push_back(bb);
-            }
-        };
-        auto succs = bb->successors();
-        for (auto suc : succs)
-            apply(suc);
-        if (succs.size() == 0)
+        if (bb->successors().size() == 0)
             exits_.push_back(bb);
-    });
-
-    std::function<void(BB*, BB*)> complete = [&](BB* bb, BB* pre1) {
-        for (auto pre2 : pre1->predecessors()) {
-            if (!isPredecessor(pre2, bb)) {
-                transitivePredecessors[bb->id].push_back(pre2);
-                complete(bb, pre2);
-            }
-        }
-    };
-
-    Visitor::run(start->entry, [&](BB* bb) {
-        for (auto pre1 : bb->predecessors())
-            complete(bb, pre1);
     });
 }
 
+void CFG::computeTransitivePreds(BB* bb) {
+    auto& preds = transitivePredecessors[bb->id];
+
+    std::stack<BB*> todo;
+
+    for (auto pre : bb->predecessors()) {
+        preds.push_back(pre->id);
+        if (!pre->predecessors().empty())
+            todo.push(pre);
+    }
+
+    while (!todo.empty()) {
+        auto cur = todo.top();
+        todo.pop();
+        for (auto pre : cur->predecessors()) {
+            auto id = pre->id;
+            auto existing = std::find(preds.begin(), preds.end(), id);
+            if (existing == preds.end()) {
+                preds.push_back(id);
+                if (!pre->predecessors().empty())
+                    todo.push(pre);
+            }
+        }
+    }
+
+    std::sort(preds.begin(), preds.end());
+}
+
 bool CFG::isPredecessor(BB* a, BB* b) const {
+    if (b->predecessors().size() == 0)
+        return false;
     auto& preds = transitivePredecessors[b->id];
-    return std::any_of(
-        preds.begin(), preds.end(),
-        std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
+    if (preds.size() == 0)
+        const_cast<CFG*>(this)->computeTransitivePreds(b);
+    auto aId = a->id;
+    for (auto i : preds) {
+        if (i == aId)
+            return true;
+        if (i > aId)
+            return false;
+    }
+    return false;
 }
 
 static constexpr unsigned NoIdomId = (unsigned)-1;

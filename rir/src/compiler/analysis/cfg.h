@@ -16,8 +16,10 @@ class CFG {
     typedef std::vector<BB*> BBList;
 
     std::vector<BBList> predecessors_;
-    std::vector<BBList> transitivePredecessors;
+    std::vector<std::vector<size_t>> transitivePredecessors;
     BBList exits_;
+
+    void computeTransitivePreds(BB*);
 
   public:
     explicit CFG(Code*);
