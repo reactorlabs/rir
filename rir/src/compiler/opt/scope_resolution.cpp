@@ -449,7 +449,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         ip = bb->insert(ip, deoptEnv);
                                         ip++;
                                         next = ip + 1;
-                                        mk->replaceDominatedUses(deoptEnv);
+                                        mk->replaceDominatedUses(deoptEnv, dom);
                                         anyChange = true;
                                     });
                             }
