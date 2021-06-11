@@ -588,6 +588,9 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         }
         break;
     }
+    case DeoptReason::DeadCall:
+        reason.srcCode->deadCallReached++;
+        // fall through
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);

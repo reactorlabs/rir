@@ -181,6 +181,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             }
             switch (r) {
             case DeoptReason::Typecheck:
+            case DeoptReason::DeadCall:
             case DeoptReason::Calltarget: {
                 auto offset =
                     (uintptr_t)origin.second - (uintptr_t)origin.first;
