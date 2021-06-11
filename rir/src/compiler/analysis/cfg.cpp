@@ -49,6 +49,8 @@ bool CFG::isPredecessor(BB* a, BB* b) const {
         std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
 }
 
+static constexpr unsigned NoIdomId = (unsigned)-1;
+
 DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
     // We use the Lengauer-Tarjan algorithm [LT79] for computing dominators.
     // The algorithmic complexity is O(N log N), where N is the number of edges
@@ -347,6 +349,15 @@ DominanceGraph::DominanceGraph(Code* start) : idom(start->nextBBId) {
             idom[n->id] = idom[y->id];
         }
     }
+
+    // For faster lookup lets keep a copy with just the ids
+    idomId.resize(idom.size(), NoIdomId);
+    auto pos = idomId.begin();
+    for (auto bb : idom) {
+        if (bb)
+            *pos = bb->id;
+        pos++;
+    }
 }
 
 DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
@@ -411,12 +422,13 @@ DominanceGraph::BBSet DominanceGraph::dominatedSet(Code* start,
 bool DominanceGraph::dominates(BB* a, BB* b) const {
     // Start with node `b`, because `a` dominates `b` if `a` equals `b`. Then
     // walk up the dominator tree, comparing each visited node to `a`.
-    BB* dominator = b;
-    while (dominator != nullptr) {
-        if (dominator == a) {
+    size_t dominator = b->id;
+    auto aId = a->id;
+    while (dominator != NoIdomId) {
+        if (dominator == aId) {
             return true;
         }
-        dominator = idom[dominator->id];
+        dominator = idomId[dominator];
     }
     return false;
 }

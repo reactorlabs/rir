@@ -37,6 +37,7 @@ class DominanceGraph {
     // can be found by walking through this array. E.g., `idom[v->id]`
     // dominates `v`, `idom[idom[v->id]->id]` dominates `v`, and so on.
     BBList idom;
+    std::vector<unsigned> idomId;
 
   public:
     explicit DominanceGraph(Code*);
