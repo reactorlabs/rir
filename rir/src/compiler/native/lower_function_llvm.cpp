@@ -1328,15 +1328,16 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
 }
 
 llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
-    auto gt = builder.CreateFCmpOGT(ld, c((double)INT_MIN - 1));
-    auto lt = builder.CreateFCmpOLT(ld, c((double)INT_MAX + 1));
+    assert(INT_MIN == NA_INTEGER); // used for lower limit
+    auto gt = builder.CreateFCmpUGT(ld, c((double)INT_MIN));
+    auto lt = builder.CreateFCmpULT(ld, c((double)INT_MAX + 1));
     auto inrange = builder.CreateAnd(lt, gt);
     auto conv = createSelect2(inrange,
                               [&]() {
                                   // converting to signed int is not undefined
                                   // here since we first check that it does not
                                   // overflow
-                                  auto conv = builder.CreateFPToSI(ld, t::i64);
+                                  auto conv = builder.CreateFPToSI(ld, t::Int);
                                   conv = builder.CreateSIToFP(conv, t::Double);
                                   return builder.CreateFCmpUEQ(ld, conv);
                               },
