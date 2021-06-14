@@ -1328,10 +1328,20 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
 }
 
 llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
-    auto toInt = builder.CreateFPToSI(ld, t::Int);
-    auto toDouble = builder.CreateSIToFP(toInt, t::Double);
-    return builder.CreateAnd(builder.CreateICmpNE(toInt, c(NA_INTEGER)),
-                             builder.CreateFCmpOEQ(toDouble, ld));
+    auto gt = builder.CreateFCmpOGT(ld, c((double)INT_MIN - 1));
+    auto lt = builder.CreateFCmpOLT(ld, c((double)INT_MAX + 1));
+    auto inrange = builder.CreateAnd(lt, gt);
+    auto conv = createSelect2(inrange,
+                              [&]() {
+                                  // converting to signed int is not undefined
+                                  // here since we first check that it does not
+                                  // overflow
+                                  auto conv = builder.CreateFPToSI(ld, t::i64);
+                                  conv = builder.CreateSIToFP(conv, t::Double);
+                                  return builder.CreateFCmpUEQ(ld, conv);
+                              },
+                              [&]() { return builder.getFalse(); });
+    return conv;
 }
 
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
