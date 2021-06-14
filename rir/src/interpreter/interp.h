@@ -198,5 +198,23 @@ inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
     __a4__cell__.u.listsxp.carval = a4;                                        \
     res = &__a1__cell__
 
+#define FAKE_ARGS5(res, a1, a2, a3, a4, a5)                                    \
+    SEXPREC __a5__cell__;                                                      \
+    createFakeCONS(__a5__cell__, R_NilValue);                                  \
+    SEXPREC __a4__cell__;                                                      \
+    createFakeCONS(__a4__cell__, &__a5__cell__);                               \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    __a4__cell__.u.listsxp.carval = a4;                                        \
+    __a5__cell__.u.listsxp.carval = a5;                                        \
+    res = &__a1__cell__
+
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

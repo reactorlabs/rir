@@ -1152,6 +1152,7 @@ class SlowcaseCounter {
 SEXP builtinCall(CallContext& call, InterpreterInstance* ctx) {
     if (!call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
+        res = nullptr;
         if (res) {
             int flag = getFlag(call.callee);
             if (flag < 2)

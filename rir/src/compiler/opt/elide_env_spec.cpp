@@ -170,7 +170,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (std::find(allowed.begin(), allowed.end(), i->tag) ==
                             allowed.end() ||
                         !i->hasEnv() || i->env() != m ||
-                        (bt && !supportsFastBuiltinCall(bt->builtinSexp))) {
+                        (bt && !supportsFastBuiltinCall(bt->builtinSexp,
+                                                        bt->nCallArgs()))) {
                         bool ok = false;
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(

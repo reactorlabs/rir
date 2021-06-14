@@ -204,20 +204,57 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     return nullptr;
 }
 
-static constexpr size_t MAXARGS = 8;
+static constexpr size_t MAXARGS = 5;
+
+bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
+    if (nargs > 5)
+        return false;
+
+    // This is a blocklist of builtins which tamper with the argslist in some
+    // bad way. This can be changing contents and assume they are protected, or
+    // leaking cons cells of the arglist (e.g. through the gengc_next pointers).
+    switch (b->u.primsxp.offset) {
+    // Protect issue due to unprotected SETCAR
+    case blt("%*%"):
+    case blt("crossprod"):
+    case blt("tcrossprod"):
+    case blt("match"):
+    case blt("unclass"):
+    case blt("call"):
+    // misc
+    case blt("registerNamespace"):
+    case blt("...length"):
+    case blt("...elt"):
+    // Injects args
+    case blt("standardGeneric"):
+    // because of fixup_NaRm
+    case blt("range"):
+    case blt("sum"):
+    case blt("min"):
+    case blt("max"):
+    case blt("prod"):
+    case blt("mean"):
+    case blt("any"):
+    case blt("all"):
+    // because of other SETCDR on the argslist
+    case blt("match.call"):
+    case blt(".subset"):
+    case blt(".subset2"):
+    case blt("$<-"):
+    case blt("NextMethod"):
+    case blt("options"):
+    case blt("&"):
+    case blt("|"):
+        return false;
+    default: {}
+    }
+    return true;
+}
 
 SEXP tryFastBuiltinCall2(const CallContext& call, InterpreterInstance* ctx,
-                         size_t nargs, bool hasAttrib, SEXP (&args)[MAXARGS]) {
-    if (nargs > 4)
+                         size_t nargs, SEXP (&args)[MAXARGS]) {
+    if (!supportsFastBuiltinCall2(call.callee, nargs))
         return nullptr;
-    if (hasAttrib)
-        return nullptr;
-    switch (call.callee->u.primsxp.offset) {
-    case blt("c"):
-        break;
-    default:
-        return nullptr;
-    }
 
     {
         SEXP arglist;
@@ -228,37 +265,28 @@ SEXP tryFastBuiltinCall2(const CallContext& call, InterpreterInstance* ctx,
             return f(call.ast, call.callee, R_NilValue, R_BaseEnv);
         }
         case 1: {
-            PROTECT(args[0]);
             FAKE_ARGS1(arglist, args[0]);
             res = f(call.ast, call.callee, arglist, R_BaseEnv);
-            UNPROTECT(1);
             break;
         }
         case 2: {
-            PROTECT(args[0]);
-            PROTECT(args[1]);
             FAKE_ARGS2(arglist, args[0], args[1]);
             res = f(call.ast, call.callee, arglist, R_BaseEnv);
-            UNPROTECT(2);
             break;
         }
         case 3: {
-            PROTECT(args[0]);
-            PROTECT(args[1]);
-            PROTECT(args[2]);
             FAKE_ARGS3(arglist, args[0], args[1], args[2]);
             res = f(call.ast, call.callee, arglist, R_BaseEnv);
-            UNPROTECT(3);
             break;
         }
         case 4: {
-            PROTECT(args[0]);
-            PROTECT(args[1]);
-            PROTECT(args[2]);
-            PROTECT(args[3]);
             FAKE_ARGS4(arglist, args[0], args[1], args[2], args[3]);
             res = f(call.ast, call.callee, arglist, R_BaseEnv);
-            UNPROTECT(4);
+            break;
+        }
+        case 5: {
+            FAKE_ARGS5(arglist, args[0], args[1], args[2], args[3], args[4]);
+            res = f(call.ast, call.callee, arglist, R_BaseEnv);
             break;
         }
         }
@@ -921,7 +949,7 @@ SEXP tryFastBuiltinCall1(const CallContext& call, InterpreterInstance* ctx,
     return nullptr;
 }
 
-bool supportsFastBuiltinCall(SEXP b) {
+bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     switch (b->u.primsxp.offset) {
     case blt("nargs"):
     case blt("length"):
@@ -966,7 +994,7 @@ bool supportsFastBuiltinCall(SEXP b) {
         return true;
     default: {}
     }
-    return false;
+    return supportsFastBuiltinCall2(b, nargs);
 }
 
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
@@ -979,6 +1007,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return nullptr;
 
     bool hasAttrib = false;
+    bool isObj = false;
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
@@ -987,13 +1016,19 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         if (ATTRIB(arg) != R_NilValue)
             hasAttrib = true;
+        if (isObject(arg))
+            isObj = true;
         args[i] = arg;
     }
 
     auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args);
     if (res)
         return res;
-    return tryFastBuiltinCall2(call, ctx, nargs, hasAttrib, args);
+
+    if (isObj || hasAttrib)
+        return nullptr;
+
+    return tryFastBuiltinCall2(call, ctx, nargs, args);
 }
 
 } // namespace rir
