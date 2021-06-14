@@ -59,8 +59,7 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
               ((fun != table->baseline() && fun->invocationCount() >= 2 &&
                 fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
                (fun->invocationCount() %
-                (factor * (fun->deoptCount() + pir::Parameter::RIR_WARMUP))) ==
-                   0))));
+                (factor * (pir::Parameter::RIR_WARMUP))) == 0))));
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
