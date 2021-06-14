@@ -287,8 +287,6 @@ class Instruction : public Value {
     void replaceDominatedUses(Instruction* replacement,
                               const DominanceGraph& dom,
                               const std::initializer_list<Tag>& skip = {});
-    void replaceDominatedUses(Instruction* replacement,
-                              const std::initializer_list<Tag>& skip = {});
     void
     replaceUsesIn(Value* val, BB* target,
                   const std::function<void(Instruction*, size_t)>& postAction =
