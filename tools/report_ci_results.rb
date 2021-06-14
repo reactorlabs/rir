@@ -54,16 +54,17 @@ unless base_bm
 end
 base_bm = base_bm['id']
 
-diff_url = "#{SP_URL}/diff?job_ids[]=#{head_bm}&job_ids[]=#{base_bm}"
+diff_url = "#{SP_URL}/diff?job_ids[]=#{head_bm}&job_ids[]=#{base_bm}&selection=all"
 diff_yaml_url = diff_url.gsub("diff", "diff.yaml")
 
-full_url = "#{diff_yaml_url}&selection=all"
-puts "Fetching #{full_url}"
+puts "Fetching #{diff_yaml_url}"
 
-res = `curl -L -s "#{full_url}"`
+res = `curl -L -s "#{diff_yaml_url}"`
 res = YAML.load(res)
 
-big_change = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,v)| k != 'summary' && (v > 1.02 || v < 0.98)}
+big_change = res[0][:diff].map{|r| ["#{r[0]} suite", r[1][:mean]]}.select{|(k,v)| k != 'summary' && (v > 1.02 || v < 0.98)} +
+  res[0][:diff].map{|r| r[1][:res]}.flatten.each_slice(2).to_a.map{|a| [a[0], a[1][:mean]]}.select{|a| a[1] < 0.95}
+
 summary = res[0][:diff].map{|r| [r[0], r[1][:mean]]}.select{|(k,_)| k == 'summary'}.first
 
 text = "Here are some stats for your PR:\n\n"
@@ -73,7 +74,7 @@ if max_job[0].to_i > 2.2*60*50
 end
 text << "the longest CI job #{max_job[1]} took #{(max_job[0] / 60.0 / 60.0).round(2)}h\n"
 
-text << big_change.map{|(k,v)| "* The #{k} suite #{if v>1.0 then 'improved' else 'regressed' end} by #{v.round(2)}\n"}.join
+text << big_change.map{|(k,v)| "* #{k} #{if v>1.0 then 'improved' else 'regressed' end} by #{v.round(2)}\n"}.join
 text << "* Overall benchmarks #{if summary[1]>1.0 then 'improved' else 'regressed' end} by #{summary[1].round(2)}\n"
 
 text << "\nPlease find your performance results at #{diff_url}\n"
