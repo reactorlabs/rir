@@ -1327,11 +1327,30 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
     builder.SetInsertPoint(notNa);
 }
 
-llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
-    auto toInt = builder.CreateFPToSI(ld, t::Int);
-    auto toDouble = builder.CreateSIToFP(toInt, t::Double);
-    return builder.CreateAnd(builder.CreateICmpNE(toInt, c(NA_INTEGER)),
-                             builder.CreateFCmpOEQ(toDouble, ld));
+llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld,
+                                                 const PirType& type) {
+    if (type.isA(RType::integer))
+        return builder.getTrue();
+
+    assert(INT_MIN == NA_INTEGER); // used for lower limit
+    auto lower = c((double)INT_MIN);
+    auto upper = c((double)INT_MAX + 1);
+    auto gt = type.maybeNAOrNaN() ? builder.CreateFCmpUGT(ld, lower)
+                                  : builder.CreateFCmpOGT(ld, lower);
+    auto lt = type.maybeNAOrNaN() ? builder.CreateFCmpULT(ld, upper)
+                                  : builder.CreateFCmpOLT(ld, upper);
+    auto inrange = builder.CreateAnd(lt, gt);
+    auto conv = createSelect2(inrange,
+                              [&]() {
+                                  // converting to signed int is not undefined
+                                  // here since we first check that it does not
+                                  // overflow
+                                  auto conv = builder.CreateFPToSI(ld, t::Int);
+                                  conv = builder.CreateSIToFP(conv, t::Double);
+                                  return builder.CreateFCmpOEQ(ld, conv);
+                              },
+                              [&]() { return builder.getFalse(); });
+    return conv;
 }
 
 void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
@@ -4195,7 +4214,8 @@ void LowerFunctionLLVM::compile() {
                         arg->type.maybe(RType::real) &&
                         !t->typeTest.maybe(RType::real)) {
                         setVal(i, builder.CreateZExt(
-                                      checkDoubleToInt(load(arg)), t::Int));
+                                      checkDoubleToInt(load(arg), arg->type),
+                                      t::Int));
                     } else {
                         setVal(i, c(1));
                     }
@@ -5563,9 +5583,9 @@ void LowerFunctionLLVM::compile() {
                 };
 
                 auto sequenceIsReal =
-                    Representation::Of(a) != Representation::Real
-                        ? builder.getFalse()
-                        : builder.CreateNot(checkDoubleToInt(load(a)));
+                    Representation::Of(a) == Representation::Real
+                        ? builder.CreateNot(checkDoubleToInt(load(a), a->type))
+                        : builder.getFalse();
 
                 auto res = createSelect2(
                     sequenceIsReal,
@@ -5576,8 +5596,9 @@ void LowerFunctionLLVM::compile() {
                     },
                     [&]() -> llvm::Value* {
                         auto sequenceIsAmbiguous =
-                            Representation::Of(b) == Representation::Real
-                                ? builder.CreateNot(checkDoubleToInt(load(b)))
+                            Representation::Of(a) == Representation::Real
+                                ? builder.CreateNot(
+                                      checkDoubleToInt(load(b), b->type))
                                 : builder.getFalse();
 
                         return createSelect2(

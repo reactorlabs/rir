@@ -374,7 +374,7 @@ class LowerFunctionLLVM {
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
-    llvm::Value* checkDoubleToInt(llvm::Value*);
+    llvm::Value* checkDoubleToInt(llvm::Value*, const PirType&);
 
     llvm::CallInst* call(const NativeBuiltin& builtin,
                          const std::vector<llvm::Value*>& args);
