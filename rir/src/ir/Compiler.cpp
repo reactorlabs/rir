@@ -1760,11 +1760,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        auto callHasDotsOrMissing = false;
+        auto callHasDots = false;
         for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
 
-            if (*arg == R_DotsSymbol /*|| *arg == R_MissingArg */) {
-                callHasDotsOrMissing = true;
+            if (*arg == R_DotsSymbol) {
+                callHasDots = true;
                 break;
             }
         }
@@ -1775,9 +1775,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         // != fun
 
         //) {
-        // forces promises but should be okay when starting in the global
-        // env
-        if (!callHasDotsOrMissing) {
+
+        if (!callHasDots) {
             auto builtin = Rf_findVar(fun, R_BaseEnv);
             auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
             speculateOnBuiltin = likelyBuiltin;
@@ -1815,7 +1814,6 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         }
     };
 
-    // IS THIS SOUND? We could have an assume method C++ and reuse that ********
     LoadArgsResult info;
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
