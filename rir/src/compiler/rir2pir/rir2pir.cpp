@@ -546,11 +546,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed. Might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            srcCode->funInvocationCount > 1) {
+            srcCode->funInvocationCount > 1 && srcCode->deadCallReached < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
             auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
-            DeoptReason reason = {DeoptReason::Calltarget, srcCode,
+            DeoptReason reason = {DeoptReason::DeadCall, srcCode,
                                   (uint32_t)offset};
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));

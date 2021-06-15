@@ -3379,26 +3379,10 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
-                        // TODO: callId is not used here.. should it be?
-                        auto trg = getFunction(target);
-                        if (trg &&
-                            target->properties.includes(
-                                ClosureVersion::Property::NoReflection)) {
-                            auto code = builder.CreateIntToPtr(
-                                c(nativeTarget->body()), t::voidPtr);
-                            llvm::Value* arglist = nodestackPtr();
-                            auto rr = withCallFrame(args, [&]() {
-                                return builder.CreateCall(
-                                    trg, {code, arglist, loadSxp(i->env()),
-                                          constant(callee, t::SEXP)});
-                            });
-                            setVal(i, rr);
-                            break;
-                        }
-
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
+                        NativeBuiltins::targetCaches.push_back(idx);
                         Pool::patch(idx, nativeTarget->container());
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {

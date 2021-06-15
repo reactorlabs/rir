@@ -98,8 +98,9 @@ class Compiler {
         Protect p;
 
         SEXP body = BODY(inClosure);
+        SEXP origBC = nullptr;
         if (TYPEOF(body) == BCODESXP) {
-            R_PreserveObject(body);
+            origBC = p(body);
             body = VECTOR_ELT(CDR(body), 0);
         }
 
@@ -108,10 +109,14 @@ class Compiler {
 
         // Allocate a new vtable.
         DispatchTable* vtable = DispatchTable::create();
+        p(vtable->container());
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
         vtable->baseline(Function::unpack(compiledFun));
+        // Keep alive. TODO: why is this needed?
+        if (origBC)
+            vtable->baseline()->body()->addExtraPoolEntry(origBC);
 
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
