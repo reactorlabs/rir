@@ -19,6 +19,8 @@
 #define THREADED_CODE
 #endif
 
+extern "C" void __asan_poison_memory_region(const volatile void* p, size_t n);
+
 namespace rir {
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv, InterpreterInstance* ctx);
@@ -154,6 +156,17 @@ inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
+    __asan_poison_memory_region(&res.u.listsxp.cdrval, sizeof(SEXP));
+}
+
+inline SEXPREC createFakeCONS(SEXP cdr) {
+    SEXPREC res;
+    createFakeSEXP(res, LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+    __asan_poison_memory_region(&res.u.listsxp.cdrval, sizeof(SEXP));
+    return res;
 }
 
 #define FAKE_ARGS1(res, a1)                                                    \

@@ -225,6 +225,8 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     case blt("registerNamespace"):
     case blt("...length"):
     case blt("...elt"):
+    case blt("strsplit"):
+    case blt("eval"):
     // Injects args
     case blt("standardGeneric"):
     // because of fixup_NaRm
