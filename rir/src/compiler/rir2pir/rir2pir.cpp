@@ -1588,7 +1588,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
     if (auto last = insert.getCurrentBB()) {
         res = Return::Cast(last->last())->arg(0).val();
-        last->eraseLast();
+        last->remove(last->end() - 1);
     }
 
     Visitor::run(insert.code->entry, [&](Instruction* i) {

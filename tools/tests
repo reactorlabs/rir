@@ -68,8 +68,12 @@ function run_test {
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
   
   LOG=$(mktemp /tmp/r-test.XXXXXX)
+  if [[ "$R_LD_PRELOAD" != "" ]]; then
+    export LD_PRELOAD=$R_LD_PRELOAD
+  fi
   $R $VALGRIND --no-init-file -f $TEST &> $LOG
   res=$?
+  export LD_PRELOAD=""
 
   ps -p $PARENT &> /dev/null
   if [ $? -ne 0 ]; then

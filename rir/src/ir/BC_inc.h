@@ -587,12 +587,16 @@ BC_NOARGS(V, _)
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::brfalse_:
+            memcpy(&immediate.offset, pc, sizeof(immediate.offset));
+            break;
         case Opcode::beginloop_:
         case Opcode::popn_:
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+            memcpy(&immediate.i, pc, sizeof(immediate.i));
+            break;
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;

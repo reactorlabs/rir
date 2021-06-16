@@ -238,6 +238,7 @@ static void lower(Code* code) {
         }
     });
 
+    std::vector<BB*> dead;
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
@@ -245,12 +246,17 @@ static void lower(Code* code) {
             if (FrameState::Cast(*it)) {
                 next = bb->remove(it);
             } else if (Checkpoint::Cast(*it)) {
+                auto d = bb->deoptBranch();
                 next = bb->remove(it);
                 bb->convertBranchToJmp(true);
+                if (d->predecessors().size() == 0)
+                    dead.push_back(d);
             }
             it = next;
         }
     });
+    for (auto bb : dead)
+        delete bb;
 
     BBTransform::mergeRedundantBBs(code);
 

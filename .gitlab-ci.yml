@@ -167,7 +167,10 @@ tests_fullverify:
   except:
     - schedules
   script:
+    - mkdir -p /opt/rir/build/fullverifier
     - cd /opt/rir/build/fullverifier
+    - cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../..
+    - ninja
     - bin/tests
 
 # Test particular features, like deoptimization and serialization
@@ -237,7 +240,7 @@ test_features_3:
 
 
 # Run ubsan and gc torture
-test_sanitize1:
+test_gctorture1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -256,7 +259,7 @@ test_sanitize1:
     when: on_failure
     expire_in: 1 week
 
-test_sanitize2:
+test_gctorture2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -293,6 +296,24 @@ test_big_inline:
     - logs
     when: on_failure
     expire_in: 1 week
+
+# Test with asan and ubsan
+test_sanitize:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - mkdir /opt/rir/build/sanitize
+    - cd /opt/rir/build/sanitize
+    - CC=../../external/clang*/bin/clang CXX=../../external/clang*/bin/clang cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
+    - ninja
+    # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
+    - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/11.0.1/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
 
 # Test the benchmarks container before deploying
 test_benchmarks:

@@ -286,7 +286,7 @@ static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
                            unsigned long available, Immediate cache) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
