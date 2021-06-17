@@ -202,7 +202,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
         hoistAssume;
 
     bool anyChange = false;
-    Visitor::runPostChange(code->entry, [&](BB* bb) {
+    Visitor::runPostChange(code->entry, [&checkpoint, &assumptions, &dom,
+                                         &replaced, &hoistAssume,
+                                         &anyChange](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
