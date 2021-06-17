@@ -170,7 +170,7 @@ tests_fullverify:
     - curl 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir -p /opt/rir/build/fullverifier
     - cd /opt/rir/build/fullverifier
-    - /opt/rir/tools/sync.sh
+    - /opt/rir/tools/fetch-llvm.sh
     - cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../..
     - ninja
     - bin/tests
@@ -313,7 +313,7 @@ test_sanitize:
     - curl 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
-    - /opt/rir/tools/sync.sh
+    - /opt/rir/tools/fetch-llvm.sh
     - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
     - ninja
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
