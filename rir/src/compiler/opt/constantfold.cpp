@@ -294,8 +294,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         }
     }
 
-    DominanceGraph::BBSet dead;
-    DominanceGraph::BBSet unreachableEnd;
+    DominanceGraph::BBSet newUnreachable;
     for (auto i = 0; i < 2; ++i) {
         bool iterAnyChange = false;
         Visitor::run(code->entry, [&](BB* bb) {
@@ -312,16 +311,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     ip = bb->insert(ip + 1, new Unreachable()) + 1;
                     while (ip != bb->end())
                         ip = bb->remove(ip);
-                    for (auto b : bb->successors()) {
-                        bool isdead = true;
-                        if (b->predecessors().size() != 1)
-                            for (auto p : b->predecessors())
-                                if (!dead.count(p))
-                                    isdead = false;
-                        if (isdead)
-                            dead.insert(b);
-                    }
-                    unreachableEnd.insert(bb);
+                    newUnreachable.insert(bb);
                     next = bb->end();
                 };
 
@@ -1035,49 +1025,54 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             break;
         anyChange = true;
     }
+
+    DominanceGraph::BBSet maybeDead;
     // Find all dead basic blocks
     for (const auto& e : branchRemoval) {
-        const auto& branch = e.first;
+        const auto& bb = e.first;
         const auto& condition = e.second;
-        dead.insert(condition ? branch->falseBranch() : branch->trueBranch());
-    }
-    // If we have two blocks A,B newly ending with Unreachable and originally
-    // joining into C, then C is now dead. To find the block C dead, we have to
-    // add A and B to the dominating set of dead blocks.
-    DominanceGraph::BBSet toDelete;
-    if (unreachableEnd.empty()) {
-        toDelete = DominanceGraph::dominatedSet(code, dead);
-    } else {
-        auto deadAndUnreachable = dead;
-        deadAndUnreachable.insert(unreachableEnd.begin(), unreachableEnd.end());
-        toDelete = DominanceGraph::dominatedSet(code, deadAndUnreachable);
-    }
-    Visitor::run(code->entry, [&](Instruction* i) {
-        if (auto phi = Phi::Cast(i))
-            phi->removeInputs(toDelete);
-    });
-
-    for (auto u : unreachableEnd) {
-        if (!dead.count(u))
-            toDelete.erase(u);
-    }
-
-    for (const auto& bb : unreachableEnd)
-        bb->deleteSuccessors();
-
-    for (const auto& e : branchRemoval) {
-        const auto& branch = e.first;
-        const auto& condition = e.second;
-        for (auto i : *branch->getBranch(!condition))
+        for (auto i : *bb->getBranch(!condition))
             if (auto phi = Phi::Cast(i))
-                phi->removeInputs({branch});
-        branch->remove(branch->end() - 1);
-        branch->convertBranchToJmp(condition);
+                phi->removeInputs({bb});
+        bb->remove(bb->end() - 1);
+        maybeDead.insert(condition ? bb->falseBranch() : bb->trueBranch());
+        bb->convertBranchToJmp(condition);
     }
-    // Needs to happen in two steps in case dead bb point to dead bb
-    for (const auto& bb : toDelete)
+
+    for (auto bb : newUnreachable) {
+        for (auto n : bb->successors())
+            for (auto i : *n)
+                if (auto phi = Phi::Cast(i))
+                    phi->removeInputs({bb});
+        auto succ = bb->successors();
+        maybeDead.insert(succ.begin(), succ.end());
         bb->deleteSuccessors();
-    for (const auto& bb : toDelete)
+    }
+
+    DominanceGraph::BBSet reachable;
+    // Mark all still reachable BBs, the rest will be surely dead
+    Visitor::run(code->entry, [&](BB* bb) { reachable.insert(bb); });
+
+    DominanceGraph::BBSet dead;
+    for (auto bb : maybeDead) {
+        if (!reachable.count(bb)) {
+            Visitor::run(bb, [&](BB* bb) {
+                if (!reachable.count(bb))
+                    dead.insert(bb);
+            });
+        }
+    }
+
+    // Needs to happen in two steps in case dead bb point to dead bb
+    for (const auto& bb : dead) {
+        for (auto n : bb->successors())
+            if (reachable.count(n))
+                for (auto i : *n)
+                    if (auto phi = Phi::Cast(i))
+                        phi->removeInputs({bb});
+        bb->deleteSuccessors();
+    }
+    for (const auto& bb : dead)
         delete bb;
 
     return anyChange;
