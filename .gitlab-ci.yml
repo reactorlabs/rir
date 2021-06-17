@@ -167,8 +167,11 @@ tests_fullverify:
   except:
     - schedules
   script:
+    - cd /opt/rir/external
+    - wget 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir -p /opt/rir/build/fullverifier
     - cd /opt/rir/build/fullverifier
+    - /opt/rir/tools/sync.sh
     - cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../..
     - ninja
     - bin/tests
@@ -308,9 +311,12 @@ test_sanitize:
   except:
     - schedules
   script:
+    - cd /opt/rir/external
+    - wget 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
-    - CC=../../external/clang*/bin/clang CXX=../../external/clang*/bin/clang cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
+    - /opt/rir/tools/sync.sh
+    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
     - ninja
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
     - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/11.0.1/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
