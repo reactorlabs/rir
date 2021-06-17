@@ -169,9 +169,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
 
-    DominanceGraph dom(code);
-    DominanceFrontier dfront(code, dom);
     {
+        DominanceGraph dom(code);
+        DominanceFrontier* dfront = nullptr;
         // Branch Elimination
         //
         // Given branch `a` and `b`, where both have the same
@@ -238,8 +238,11 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         True::instance();
                                     inputs[bb1->falseBranch()] =
                                         False::instance();
+                                    if (!dfront)
+                                        dfront =
+                                            new DominanceFrontier(code, dom);
                                     pl = new PhiPlacement(code, inputs, dom,
-                                                          dfront);
+                                                          *dfront);
 
                                     assert(pl->placement.size() > 0);
                                     anyChange = true;
@@ -292,6 +295,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
             }
         }
+        if (dfront)
+            delete dfront;
     }
 
     DominanceGraph::BBSet newUnreachable;
