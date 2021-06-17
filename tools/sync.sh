@@ -20,14 +20,14 @@ if [[ "$1" == "--macos_gcc9" ]]; then
     MACOS_GCC9=1
 fi
 
-echo "-> update submodules"
-git submodule update --init
-
 # check the .git of the rjit directory
 test -d ${SRC_DIR}/.git
 IS_GIT_CHECKOUT=$?
 
 if [ $IS_GIT_CHECKOUT -eq 0 ]; then
+    echo "-> update submodules"
+    git submodule update --init
+
     echo "-> install git hooks"
     ${SRC_DIR}/tools/install_hooks.sh
 fi
