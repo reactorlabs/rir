@@ -248,8 +248,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue, Context(),
-                     ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     Context(), ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -306,8 +306,8 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
-                     Context(available), ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
+                     R_NilValue, Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -336,8 +336,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
-                     given, ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
+                     R_NilValue, given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -1172,7 +1172,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
-                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
     auto fail = !call.givenContext.smaller(fun->context());
@@ -1900,7 +1900,7 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
                             size_t nargs) {
     auto lazyArglist =
         LazyArglistOnHeap::New(callId, c->arglistOrderContainer(), nargs,
-                               ostack_cell_at(ctx, nargs - 1), ast);
+                               ostack_cell_at(ctx, (long)nargs - 1), ast);
     ostack_popn(globalContext(), nargs);
 
     auto global = (RCNTXT*)R_GlobalContext;
