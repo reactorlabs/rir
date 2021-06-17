@@ -90,6 +90,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void registerDeopt() {
+        isDeoptimized = true;
         if (deoptCount < UINT_MAX)
             deoptCount++;
     }
@@ -98,6 +99,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     // of a function
     unsigned funInvocationCount;
     unsigned deoptCount;
+    unsigned deadCallReached = 0;
+    bool isDeoptimized = false;
 
     enum Flag {
         NeedsFullEnv,

@@ -25,11 +25,12 @@ struct CallContext {
 
     CallContext(ArglistOrder::CallId callId, const Code* c, SEXP callee,
                 size_t nargs, SEXP ast, R_bcstack_t* stackArgs,
-                const Immediate* names, SEXP callerEnv,
+                const Immediate* names, SEXP callerEnv, SEXP suppliedvars,
                 const Context& givenContext, InterpreterInstance* ctx)
         : callId(callId), caller(c), suppliedArgs(nargs), passedArgs(nargs),
-          stackArgs(stackArgs), names(names), callerEnv(callerEnv), ast(ast),
-          callee(callee), givenContext(givenContext) {
+          stackArgs(stackArgs), names(names), callerEnv(callerEnv),
+          suppliedvars(suppliedvars), ast(ast), callee(callee),
+          givenContext(givenContext) {
         assert(callerEnv);
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
@@ -42,17 +43,18 @@ struct CallContext {
     // cppcheck-suppress uninitMemberVar
     CallContext(ArglistOrder::CallId callId, Code* c, SEXP callee, size_t nargs,
                 Immediate ast, R_bcstack_t* stackArgs, Immediate* names,
-                SEXP callerEnv, const Context& givenContext,
+                SEXP callerEnv, SEXP suppliedvars, const Context& givenContext,
                 InterpreterInstance* ctx)
         : CallContext(callId, c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      names, callerEnv, givenContext, ctx) {}
+                      names, callerEnv, suppliedvars, givenContext, ctx) {}
 
     // cppcheck-suppress uninitMemberVar
     CallContext(ArglistOrder::CallId callId, Code* c, SEXP callee, size_t nargs,
                 Immediate ast, R_bcstack_t* stackArgs, SEXP callerEnv,
-                const Context& givenContext, InterpreterInstance* ctx)
+                SEXP suppliedvars, const Context& givenContext,
+                InterpreterInstance* ctx)
         : CallContext(callId, c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, callerEnv, givenContext, ctx) {}
+                      nullptr, callerEnv, suppliedvars, givenContext, ctx) {}
 
     const ArglistOrder::CallId callId;
     const Code* caller;
@@ -61,6 +63,7 @@ struct CallContext {
     R_bcstack_t* stackArgs;
     const Immediate* names;
     SEXP callerEnv;
+    SEXP suppliedvars;
     const SEXP ast;
     const SEXP callee;
     Context givenContext;

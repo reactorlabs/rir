@@ -159,6 +159,7 @@ struct DeoptReason {
     enum Reason : uint32_t {
         None,
         Typecheck,
+        DeadCall,
         Calltarget,
         EnvStubMaterialized,
         DeadBranchReached,

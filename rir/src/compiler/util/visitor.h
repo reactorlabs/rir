@@ -324,11 +324,7 @@ class VisitorImplementation {
     }
 
   private:
-    static bool coinFlip() {
-        static std::mt19937 gen(42);
-        static std::bernoulli_distribution coin(0.5);
-        return coin(gen);
-    };
+    static bool coinFlip() { return rand() >= (RAND_MAX / 2); };
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster

@@ -248,7 +248,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(), ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue, Context(),
+                     ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -285,8 +286,8 @@ static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
                            unsigned long available, Immediate cache) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
@@ -305,7 +306,7 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env,
+                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
                      Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
@@ -335,7 +336,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env, given, ctx);
+                     ostack_cell_at(ctx, nargs - 1), names, env, R_NilValue,
+                     given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -773,26 +775,27 @@ int asLogicalImpl(SEXP a) {
 
 int lengthImpl(SEXP e) { return Rf_length(e); }
 
+std::vector<BC::PoolIdx> NativeBuiltins::targetCaches;
+
+// An empty function that is marked as deoptimized to use as sentinel e.g. in
+// invalidated caches.
+static FunctionSignature
+    deoptSentinelSig(FunctionSignature::Environment::CallerProvided,
+                     FunctionSignature::OptimizationLevel::Optimized);
+static Function* deoptSentinel;
+static SEXP deoptSentinelContainer = []() {
+    auto c = Code::New(0);
+    PROTECT(c->container());
+    SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
+    R_PreserveObject(store);
+    deoptSentinel = new (INTEGER(store))
+        Function(0, c->container(), {}, deoptSentinelSig, Context());
+    deoptSentinel->registerDeopt();
+    UNPROTECT(1);
+    return store;
+}();
+
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    if (!pir::Parameter::DEOPT_CHAOS) {
-        if (cls) {
-            // TODO: this version is still reachable from static call inline
-            // caches. Thus we need to preserve it forever. We need some
-            // dependency management here.
-            Pool::insert(c->container());
-            // remove the deoptimized function. Unless on deopt chaos,
-            // always recompiling would just blow testing time...
-            auto dt = DispatchTable::unpack(BODY(cls));
-            dt->remove(c);
-        } else {
-            // In some cases we don't know the callee here, so we can't properly
-            // remove the deoptimized code. But we can kill the native code,
-            // this will cause a fallback to rir, which will then be able to
-            // deoptimize properly.
-            // TODO: find a way to always know the closure in native code!
-            c->nativeCode = nullptr;
-        }
-    }
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -800,11 +803,18 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     }
 
     c->registerDeopt();
+    // Invalidate target caches pointing to deoptimized version
+    for (auto idx : NativeBuiltins::targetCaches)
+        if (auto f = Function::check(Pool::get(idx)))
+            if (f->body() == c)
+                Pool::patch(idx, deoptSentinelContainer);
+
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
-                     (Immediate*)nullptr, env, Context(), globalContext());
+                     (Immediate*)nullptr, env, R_NilValue, Context(),
+                     globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
                            m->numFrames - 1, stackHeight,
@@ -1162,15 +1172,15 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     auto fail = !call.givenContext.smaller(fun->context());
     if (fail) {
         inferCurrentContext(call, fun->nargs(), ctx);
         fail = !call.givenContext.smaller(fun->context());
     }
-    if (!fun->body()->nativeCode)
+    if (!fun->body()->nativeCode || fun->body()->isDeoptimized)
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));

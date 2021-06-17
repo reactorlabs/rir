@@ -126,7 +126,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                                      info.result);
             cast->effects.set(Effect::DependsOnAssume);
             bb->insert(ip, cast);
-            i->replaceDominatedUses(cast);
+            i->replaceDominatedUses(cast, dom);
             anyChange = true;
         }
     });

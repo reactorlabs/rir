@@ -23,64 +23,6 @@
 namespace rir {
 namespace pir {
 
-// Pass to run after hotCold splitting:
-// We use cold functions for bailout branches, thus we set the optnone attribute
-// on cold functions and uses the coldcc calling convention to call them.
-struct NooptCold : public llvm::ModulePass {
-    static char ID;
-    NooptCold() : ModulePass(ID) {}
-
-    bool runOnModule(llvm::Module& module) override {
-        bool changed = false;
-        for (auto& fun : module) {
-            if (fun.hasName()) {
-                if (fun.getName().contains(".cold.")) {
-                    if (!fun.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
-
-                        fun.addAttribute(llvm::AttributeList::FunctionIndex,
-                                         llvm::Attribute::OptimizeNone);
-                        fun.addAttribute(llvm::AttributeList::FunctionIndex,
-                                         llvm::Attribute::NoInline);
-                        fun.removeAttribute(llvm::AttributeList::FunctionIndex,
-                                            llvm::Attribute::MinSize);
-
-                        fun.setCallingConv(llvm::CallingConv::Cold);
-                        changed = true;
-                    }
-                }
-            }
-        }
-        for (auto& fun : module) {
-            for (auto& bb : fun) {
-                for (auto& instr : bb) {
-                    if (llvm::CallInst* call =
-                            llvm::dyn_cast<llvm::CallInst>(&instr)) {
-                        if (call->getCallingConv() != llvm::CallingConv::Cold) {
-                            if (auto callee = call->getCalledFunction()) {
-                                if (callee->getCallingConv() ==
-                                    llvm::CallingConv::Cold) {
-                                    call->setCallingConv(
-                                        llvm::CallingConv::Cold);
-                                    changed = true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return changed;
-    }
-};
-
-char NooptCold::ID = 0;
-static llvm::RegisterPass<NooptCold> X("noopt-cold",
-                                       "Don't optimize cold functions",
-                                       false /* Only looks at CFG */,
-                                       false /* Analysis Pass */);
-
-
-
 llvm::Expected<llvm::orc::ThreadSafeModule> PassScheduleLLVM::
 operator()(llvm::orc::ThreadSafeModule TSM,
            llvm::orc::MaterializationResponsibility& R) {
@@ -119,7 +61,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM.reset(new llvm::legacy::PassManager);
 
     PM->add(createHotColdSplittingPass());
-    PM->add(new NooptCold());
 
     PM->add(createFunctionInliningPass());
 

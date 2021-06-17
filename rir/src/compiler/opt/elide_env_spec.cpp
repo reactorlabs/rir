@@ -97,7 +97,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     cast->effects.set(Effect::DependsOnAssume);
                                     ip = bb->insert(ip, cast);
                                     ip++;
-                                    argi->replaceDominatedUses(cast);
+                                    argi->replaceDominatedUses(cast, dom);
                                 }
                             },
                             [&]() { successful = false; });
