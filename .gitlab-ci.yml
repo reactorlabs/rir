@@ -167,8 +167,7 @@ tests_fullverify:
   except:
     - schedules
   script:
-    - cd /opt/rir/external
-    - wget 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - curl 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir -p /opt/rir/build/fullverifier
     - cd /opt/rir/build/fullverifier
     - /opt/rir/tools/sync.sh
@@ -311,8 +310,7 @@ test_sanitize:
   except:
     - schedules
   script:
-    - cd /opt/rir/external
-    - wget 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - curl 10.200.14.25:8080/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
     - /opt/rir/tools/sync.sh
