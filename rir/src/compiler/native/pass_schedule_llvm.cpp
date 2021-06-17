@@ -47,7 +47,6 @@ operator()(llvm::orc::ThreadSafeModule TSM,
 
 #endif
 
-        PM->run(M);
     });
     return std::move(TSM);
 }
