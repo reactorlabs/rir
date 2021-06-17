@@ -72,9 +72,7 @@ class DeadStoreAnalysis {
             : StaticAnalysis("envLeak", cls, code, initialState, NULL, log),
               promEnv(promEnv) {}
 
-        EnvSet leakedWhile(Instruction* i) const {
-            return at<StaticAnalysis::PositioningStyle::AfterInstruction>(i);
-        }
+        EnvSet leakedWhile(Instruction* i) const { return after(i); }
 
       protected:
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
@@ -361,7 +359,7 @@ class DeadStoreAnalysis {
 
       public:
         bool isObserved(StVar* st) const {
-            auto state = at<PositioningStyle::BeforeInstruction>(st);
+            auto state = before(st);
             auto e = resolveEnv(st->env());
             Variable var({st->varName, e});
             if (state.ignoreStore.count(var))
@@ -373,7 +371,7 @@ class DeadStoreAnalysis {
         }
 
         bool isObservedOnlyByDeopt(StVar* st) const {
-            auto state = at<PositioningStyle::BeforeInstruction>(st);
+            auto state = before(st);
             auto e = resolveEnv(st->env());
             Variable var({st->varName, e});
             assert(!(state.completelyObserved.count(e) &&
@@ -385,7 +383,7 @@ class DeadStoreAnalysis {
 
         std::unordered_set<Instruction*>
         observedByDeoptInstructions(StVar* st) const {
-            auto state = at<PositioningStyle::BeforeInstruction>(st);
+            auto state = before(st);
             auto e = resolveEnv(st->env());
             assert(state.observedByDeopt.count(e));
             return state.observedByDeopt.at(e);

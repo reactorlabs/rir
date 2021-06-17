@@ -82,8 +82,7 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
     }
 
     ALoad get(Instruction* i) const {
-        auto res = StaticAnalysis::at<
-            StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
+        auto res = before(i);
         for (auto dld : res.available) {
             if (dld.same(i))
                 return dld;

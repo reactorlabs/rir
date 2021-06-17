@@ -663,7 +663,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
                              didLongjmp);
     }
 
-    // Handle Incomming longjumps
+    // Handle incoming longjumps
     {
         builder.SetInsertPoint(didLongjmp);
         llvm::Value* returned = builder.CreateLoad(

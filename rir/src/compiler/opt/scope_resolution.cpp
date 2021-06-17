@@ -255,8 +255,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 Instruction* i = *ip;
                 auto next = ip + 1;
 
-                auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
-                auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
+                auto before = analysis.before(i);
+                auto after = analysis.after(i);
 
                 // Force and callees can only see our env only through
                 // reflection

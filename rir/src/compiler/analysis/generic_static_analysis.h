@@ -18,7 +18,7 @@ namespace rir {
 namespace pir {
 
 /*
- * Generic implementation of a (forward) static analysis.
+ * Generic implementation of a static analysis.
  *
  * In "mergepoint" we keep a list of abstract states for every basic block. The
  * first state is the abstract state at the beginning of the basic block. We
@@ -27,7 +27,7 @@ namespace pir {
  * To implement a concrete static analysis, the "apply" method needs to be
  * implemented, which supplies the implementation for every instruction. Apply
  * is supposed to modify the abstract state, but not (!) the analysis itself
- * (that is why it is marked const). The reason is, that after we reached a
+ * (that is why it is marked const). The reason is that after we reach a
  * fixed-point, it should be possible to reconstruct the state of the analysis
  * at every instruction. To do so, a dominating state is loaded from
  * "mergepoint" and then "apply" is used to seek to the desired instruction
@@ -37,8 +37,6 @@ namespace pir {
  * Anything else depends on the requirements of the apply function, which is
  * provided by the subclass that specializes StaticAnalysis.
  */
-
-class AvailableCheckpoints;
 
 enum class AnalysisDebugLevel {
     None,
@@ -69,8 +67,10 @@ class StaticAnalysis {
 
     struct BBSnapshot {
         bool seen = false;
-        size_t incomming = 0;
+        size_t incoming = 0;
+        // entry stores the state *before* the first instruction in the BB
         AbstractState entry;
+        // extra stores the state *after* calling apply on the given instruction
         std::unordered_map<Instruction*, AbstractState> extra;
     };
     typedef std::vector<BBSnapshot> AnalysisSnapshots;
@@ -83,24 +83,33 @@ class StaticAnalysis {
     // For lookup, after fixed-point was found
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
 
-    constexpr static size_t MAX_CACHE_SIZE = 128 / sizeof(AbstractState);
+#ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
+    constexpr static size_t MAX_CACHE_SIZE =
+        std::max(1UL, 128 / sizeof(AbstractState));
 
-    std::unordered_map<Instruction*, AbstractState> cache;
-    std::deque<Instruction*> cacheQueue;
-    void addToCache(Instruction* i, const AbstractState& state) const {
+    mutable std::unordered_map<Instruction*, AbstractState> beforeCache;
+    mutable std::unordered_map<Instruction*, AbstractState> afterCache;
+    mutable std::deque<Instruction*> beforeCacheQueue;
+    mutable std::deque<Instruction*> afterCacheQueue;
+    void addToCache(PositioningStyle pos, Instruction* i,
+                    const AbstractState& state) const {
+        auto& cache = pos == BeforeInstruction ? beforeCache : afterCache;
+        auto& cacheQueue =
+            pos == BeforeInstruction ? beforeCacheQueue : afterCacheQueue;
         if (cache.count(i)) {
-            const_cast<StaticAnalysis*>(this)->cache.erase(cache.find(i));
-            const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
+            cache.erase(cache.find(i));
+            cache.emplace(i, state);
             return;
         }
         if (cacheQueue.size() > MAX_CACHE_SIZE) {
             auto oldest = cacheQueue.front();
-            const_cast<StaticAnalysis*>(this)->cacheQueue.pop_front();
-            const_cast<StaticAnalysis*>(this)->cache.erase(cache.find(oldest));
+            cacheQueue.pop_front();
+            cache.erase(cache.find(oldest));
         }
-        const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
-        const_cast<StaticAnalysis*>(this)->cacheQueue.push_back(i);
+        cache.emplace(i, state);
+        cacheQueue.push_back(i);
     }
+#endif
     std::unordered_map<BB*, AbstractState> exitpoints;
     AbstractState exitpoint;
 
@@ -230,21 +239,23 @@ class StaticAnalysis {
         return at<PositioningStyle::AfterInstruction>(i);
     }
 
+  private:
     template <PositioningStyle POS>
     AbstractState at(Instruction* i) const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
 
-        BB* bb = i->bb();
-
-        if (cache.count(i)) {
-            auto state = cache.at(i);
-            if (PositioningStyle::AfterInstruction == POS)
-                apply(state, i);
-            return state;
+#ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
+        if (beforeCache.count(i) && POS == BeforeInstruction) {
+            return beforeCache.at(i);
         }
+        if (afterCache.count(i) && POS == AfterInstruction) {
+            return afterCache.at(i);
+        }
+#endif
 
+        BB* bb = i->bb();
         if (Forward)
             return findSnapshot<POS>(bb->begin(), bb->end(), bb, i);
 
@@ -254,12 +265,13 @@ class StaticAnalysis {
     template <PositioningStyle POS, typename Iter>
     AbstractState findSnapshot(Iter begin, Iter end, BB* bb,
                                Instruction* i) const {
-        size_t tried = 0;
         const BBSnapshot& bbSnapshots = snapshots[bb->id];
 
+        // Find the snapshot closest to the desired state
+        size_t tried = 0;
         auto snapshotPos = begin;
-        for (auto pos = begin, e = end;
-             pos != e && tried < bbSnapshots.extra.size(); ++pos) {
+        for (auto pos = begin; pos != end && tried < bbSnapshots.extra.size();
+             ++pos) {
             if (POS == BeforeInstruction && i == *pos)
                 break;
             if (bbSnapshots.extra.count(*pos)) {
@@ -270,18 +282,43 @@ class StaticAnalysis {
                 break;
         }
 
+        auto state =
+            tried == 0 ? bbSnapshots.entry : bbSnapshots.extra.at(*snapshotPos);
+
+        // If we found a snapshot in extra, this gives us the state *after*
+        // applying, hence we either found the result or need to move to the
+        // next instruction
+        if (tried) {
+            if (i == *snapshotPos) {
+                assert(POS == AfterInstruction);
+#ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
+                addToCache(AfterInstruction, i, state);
+                if (snapshotPos + 1 != end)
+                    addToCache(BeforeInstruction, *(snapshotPos + 1), state);
+#endif
+                return state;
+            }
+            ++snapshotPos;
+            assert(snapshotPos != end);
+        }
+
         // Apply until we arrive at the position
-        auto state = snapshotPos == begin ? bbSnapshots.entry
-                                          : bbSnapshots.extra.at(*snapshotPos);
-        for (auto pos = snapshotPos, e = end; pos != e; ++pos) {
+        for (auto pos = snapshotPos; pos != end; ++pos) {
             if (POS == BeforeInstruction && i == *pos) {
-                addToCache(i, state);
+#ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
+                addToCache(BeforeInstruction, i, state);
+                if (pos != begin)
+                    addToCache(AfterInstruction, *(pos - 1), state);
+#endif
                 return state;
             }
             apply(state, *pos);
             if (POS == AfterInstruction && i == *pos) {
+#ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
+                addToCache(AfterInstruction, i, state);
                 if (pos + 1 != end)
-                    addToCache(*(pos + 1), state);
+                    addToCache(BeforeInstruction, *(pos + 1), state);
+#endif
                 return state;
             }
         }
@@ -290,6 +327,7 @@ class StaticAnalysis {
         return AbstractState();
     }
 
+  public:
     typedef std::function<void(const AbstractState&, Instruction*)> Collect;
 
     template <PositioningStyle POS>
@@ -446,14 +484,14 @@ class StaticAnalysis {
         if (!thisState.seen) {
             thisState.entry = state;
             thisState.seen = true;
-            thisState.incomming = in->id;
+            thisState.incoming = in->id;
             done = false;
             changed[id] = true;
-        } else if (in->id == thisState.incomming) {
+        } else if (in->id == thisState.incoming) {
             thisState.entry = state;
             changed[id] = changed[in->id];
         } else {
-            thisState.incomming = -1;
+            thisState.incoming = -1;
             AbstractState old;
             if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
                 old = thisState.entry;

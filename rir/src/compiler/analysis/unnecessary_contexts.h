@@ -106,7 +106,7 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
     };
 
     PushContext* canRemove(PopContext* i) const {
-        auto res = StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i);
+        auto res = before(i);
         if (res.get() && res.get() == i->push() && !res.needed)
             return res.get();
         return nullptr;
