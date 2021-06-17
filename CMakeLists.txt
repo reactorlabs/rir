@@ -54,8 +54,8 @@ set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
-set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUGOPT} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fno-sanitize=alignment -shared-libasan -fvisibility=default -fstandalone-debug")
-set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUGOPT} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fno-sanitize=alignment -shared-libasan -fvisibility=default -fstandalone-debug")
+set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
+set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
 
 MARK_AS_ADVANCED(
     CMAKE_CXX_FLAGS_SANITIZE
