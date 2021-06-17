@@ -265,6 +265,7 @@ test_gctorture2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
