@@ -316,7 +316,7 @@ SEXP materialize(SEXP wrapper) {
     return res;
 }
 
-static SEXP materializeCallerEnv(CallContext& callCtx,
+SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
         if (le->materialized())

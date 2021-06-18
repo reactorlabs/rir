@@ -19,8 +19,6 @@
 #define THREADED_CODE
 #endif
 
-extern "C" void __asan_poison_memory_region(const volatile void* p, size_t n);
-
 namespace rir {
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv, InterpreterInstance* ctx);
@@ -140,6 +138,9 @@ inline bool needsExpandedDots(SEXP callee) {
            callee->u.primsxp.offset == blt("forceAndCall");
 }
 
+SEXP materializeCallerEnv(CallContext& callCtx,
+                                 InterpreterInstance* ctx);
+
 inline void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
     memset(&res, 0, sizeof(SEXPREC));
     res.attrib = R_NilValue;
@@ -156,7 +157,6 @@ inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
-    __asan_poison_memory_region(&res.u.listsxp.cdrval, sizeof(SEXP));
 }
 
 inline SEXPREC createFakeCONS(SEXP cdr) {
@@ -165,7 +165,6 @@ inline SEXPREC createFakeCONS(SEXP cdr) {
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
-    __asan_poison_memory_region(&res.u.listsxp.cdrval, sizeof(SEXP));
     return res;
 }
 
