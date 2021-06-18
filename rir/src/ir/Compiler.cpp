@@ -114,6 +114,7 @@ class CompilerContext {
     };
 
     class PromiseContext : public CodeContext {
+
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : CodeContext(ast, fun, p) {}
@@ -129,7 +130,7 @@ class CompilerContext {
     };
 
     std::stack<CodeContext*> code;
-    bool compilingPromise = false;
+    unsigned int pushedPromiseContexts = 0;
 
     CodeStream& cs() { return code.top()->cs; }
 
@@ -168,7 +169,7 @@ class CompilerContext {
     }
 
     void pushPromiseContext(SEXP ast) {
-        compilingPromise = true;
+        pushedPromiseContexts++;
 
         code.push(
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
@@ -177,7 +178,7 @@ class CompilerContext {
     Code* pop() {
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
         if (code.top()->isPromiseContext())
-            compilingPromise = false;
+            pushedPromiseContexts--;
         delete code.top();
         code.pop();
         return res;
@@ -1778,7 +1779,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        if (!ctx.compilingPromise) {
+        if (ctx.pushedPromiseContexts == 0) {
 
             auto callHasDots = false;
             for (RListIter arg = RList(args).begin(); arg != RList::end();
