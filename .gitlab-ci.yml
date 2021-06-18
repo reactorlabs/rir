@@ -318,7 +318,7 @@ test_sanitize:
     - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
     - ninja
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
-    - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/11.0.1/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
+    - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/11.0.0/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
 
 # Test the benchmarks container before deploying
 test_benchmarks:
