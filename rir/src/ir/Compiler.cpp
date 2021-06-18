@@ -110,6 +110,7 @@ class CompilerContext {
                 .first->second;
         }
         virtual bool loopIsLocal() { return !loops.empty(); }
+        virtual bool isPromiseContext() { return false; }
     };
 
     class PromiseContext : public CodeContext {
@@ -123,9 +124,12 @@ class CompilerContext {
             }
             return true;
         }
+
+        bool isPromiseContext() override { return true; }
     };
 
     std::stack<CodeContext*> code;
+    bool compilingPromise = false;
 
     CodeStream& cs() { return code.top()->cs; }
 
@@ -164,12 +168,16 @@ class CompilerContext {
     }
 
     void pushPromiseContext(SEXP ast) {
+        compilingPromise = true;
+
         code.push(
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
     Code* pop() {
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
+        if (code.top()->isPromiseContext())
+            compilingPromise = false;
         delete code.top();
         code.pop();
         return res;
@@ -1770,30 +1778,33 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        auto callHasDots = false;
-        for (RListIter arg = RList(args).begin(); arg != RList::end(); ++arg) {
+        if (!ctx.compilingPromise) {
 
-            if (*arg == R_DotsSymbol) {
-                callHasDots = true;
-                break;
+            auto callHasDots = false;
+            for (RListIter arg = RList(args).begin(); arg != RList::end();
+                 ++arg) {
+
+                if (*arg == R_DotsSymbol) {
+                    callHasDots = true;
+                    break;
+                }
             }
-        }
 
+            if (!callHasDots) {
+                auto builtin = Rf_findVar(fun, R_BaseEnv);
+                auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+                speculateOnBuiltin = likelyBuiltin;
 
-        if (!callHasDots) {
-            auto builtin = Rf_findVar(fun, R_BaseEnv);
-            auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
-            speculateOnBuiltin = likelyBuiltin;
+                if (speculateOnBuiltin) {
 
-            if (speculateOnBuiltin) {
+                    eager = cs.mkLabel();
+                    theEnd = cs.mkLabel();
+                    cs << BC::push(builtin) << BC::dup()
+                       << BC::ldvarNoForce(fun) << BC::identicalNoforce()
+                       << BC::recordTest() << BC::brtrue(eager);
 
-                eager = cs.mkLabel();
-                theEnd = cs.mkLabel();
-                cs << BC::push(builtin) << BC::dup() << BC::ldvarNoForce(fun)
-                   << BC::identicalNoforce() << BC::recordTest()
-                   << BC::brtrue(eager);
-
-                cs << BC::pop();
+                    cs << BC::pop();
+                }
             }
         }
 
