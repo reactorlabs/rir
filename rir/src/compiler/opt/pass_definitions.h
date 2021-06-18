@@ -9,19 +9,18 @@ namespace pir {
 class LogStream;
 class Closure;
 
-#define PASS(name, __runOnPromises__, __slow__)                                \
-    name:                                                                      \
-  public                                                                       \
-    Pass {                                                                     \
+#define PASS(__name__, __runOnPromises__, __slow__)                            \
+    class __name__ : public Pass, public detail::HasIDCounter<__name__> {      \
       public:                                                                  \
-        name() : Pass(#name){};                                                \
+        __name__() : Pass(#__name__) {}                                        \
         bool apply(Compiler& cmp, ClosureVersion* function, Code* code,        \
                    LogStream& log) const final override;                       \
         bool runOnPromises() const final override {                            \
             return __runOnPromises__;                                          \
         }                                                                      \
         bool isSlow() const final override { return __slow__; }                \
-    };
+        size_t id() const final override { return __name__::_id(); }           \
+    }
 
 /*
  * Uses scope analysis to get rid of as many `LdVar`'s as possible.
@@ -30,7 +29,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution, false, true);
+PASS(ScopeResolution, false, true);
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -40,7 +39,7 @@ class PASS(ScopeResolution, false, true);
  *
  */
 
-class PASS(ElideEnv, true, false);
+PASS(ElideEnv, true, false);
 
 /*
  * This pass searches for dominating force instructions.
@@ -50,13 +49,13 @@ class PASS(ElideEnv, true, false);
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, false, true);
+PASS(ForceDominance, false, true);
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, false, false);
+PASS(DelayInstr, false, false);
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -64,7 +63,7 @@ class PASS(DelayInstr, false, false);
  * the goal is to move it out of the others.
  *
  */
-class PASS(DelayEnv, false, false);
+PASS(DelayEnv, false, false);
 
 /*
  * Inlines a closure. Intentionally stupid. It does not resolve inner
@@ -72,7 +71,7 @@ class PASS(DelayEnv, false, false);
  * with multiple environments. Later scope resolution and force dominance
  * passes will do the smart parts.
  */
-class PASS(Inline, false, false);
+PASS(Inline, false, false);
 
 /*
  * Goes through every operation that for the general case needs an environment
@@ -84,26 +83,26 @@ class PASS(Inline, false, false);
  * instruction for which we could not prove it does not access the parent
  * environment reflectively and speculate it will not.
  */
-class PASS(ElideEnvSpec, false, false);
+PASS(ElideEnvSpec, false, false);
 
 /*
  * Constantfolding and dead branch removal.
  */
-class PASS(Constantfold, true, false);
+PASS(Constantfold, true, false);
 
 // Constantfolding to be used in rir2pi
-class PASS(EarlyConstantfold, true, false);
+PASS(EarlyConstantfold, true, false);
 
 /*
  * Generic instruction and controlflow cleanup pass.
  */
-class PASS(Cleanup, true, true);
+PASS(Cleanup, true, true);
 
 /*
  * Checkpoints keep values alive. Thus it makes sense to remove them if they
  * are unused after a while.
  */
-class PASS(CleanupCheckpoints, true, false);
+PASS(CleanupCheckpoints, true, false);
 
 /*
  * Unused framestate instructions usually get removed automatically. Except
@@ -112,57 +111,57 @@ class PASS(CleanupCheckpoints, true, false);
  * that they can be removed later, if they are not actually used by any
  * checkpoint/deopt.
  */
-class PASS(CleanupFramestate, true, false);
+PASS(CleanupFramestate, true, false);
 
 /*
  * Trying to group assumptions, by pushing them up. This well lead to fewer
  * checkpoints being used overall.
  */
-class PASS(OptimizeAssumptions, false, false);
+PASS(OptimizeAssumptions, false, false);
 
-class PASS(EagerCalls, false, false);
+PASS(EagerCalls, false, false);
 
-class PASS(OptimizeVisibility, true, false);
+PASS(OptimizeVisibility, true, false);
 
-class PASS(OptimizeContexts, false, false);
+PASS(OptimizeContexts, false, false);
 
-class PASS(DeadStoreRemoval, false, true);
+PASS(DeadStoreRemoval, false, true);
 
-class PASS(DotDotDots, false, false);
+PASS(DotDotDots, false, false);
 
-class PASS(MatchCallArgs, false, false);
+PASS(MatchCallArgs, false, false);
 
 /*
  * At this point, loop code invariant mainly tries to hoist ldFun operations
  * outside the loop in case it can prove that the loop body will not change
  * the binding
  */
-class PASS(LoopInvariant, false, false);
+PASS(LoopInvariant, false, false);
 
-class PASS(GVN, true, true);
+PASS(GVN, true, true);
 
-class PASS(LoadElision, false, false);
+PASS(LoadElision, false, false);
 
-class PASS(TypeInference, true, false);
+PASS(TypeInference, true, false);
 
-class PASS(TypeSpeculation, false, false);
+PASS(TypeSpeculation, false, false);
 
-class PASS(PromiseSplitter, false, false);
+PASS(PromiseSplitter, false, false);
 
-class PASS(InlineForcePromises, false, false);
+PASS(InlineForcePromises, false, false);
 
 /*
  * Range analysis to detect and optimize code which will not create overflows /
  * underflows
  */
-class PASS(Overflow, true, false);
+PASS(Overflow, true, false);
 
 /*
  * Loop Invariant Code motion
  */
-class PASS(HoistInstruction, false, false);
+PASS(HoistInstruction, false, false);
 
-class PhaseMarker : public Pass {
+class PhaseMarker : public Pass, detail::HasIDCounter<PhaseMarker> {
   public:
     explicit PhaseMarker(const std::string& name) : Pass(name) {}
     bool apply(Compiler&, ClosureVersion*, Code*,
@@ -170,6 +169,7 @@ class PhaseMarker : public Pass {
         return false;
     }
     bool isPhaseMarker() const final override { return true; }
+    size_t id() const final override { return PhaseMarker::_id(); }
 };
 
 } // namespace pir

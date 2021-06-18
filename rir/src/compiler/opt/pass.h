@@ -1,14 +1,32 @@
 #ifndef PIR_PASS_H
 #define PIR_PASS_H
 
-#include "../pir/module.h"
 #include "compiler/log/stream_logger.h"
+#include "compiler/pir/module.h"
+
 #include <string>
 
 namespace rir {
 namespace pir {
 
 class Compiler;
+
+namespace detail {
+
+struct IDCounter {
+    static size_t nextId;
+};
+
+template <typename Derived>
+struct HasIDCounter : IDCounter {
+    HasIDCounter() { _id(); }
+    static size_t _id() {
+        static size_t c = detail::IDCounter::nextId++;
+        return c;
+    }
+};
+
+} // namespace detail
 
 class Pass {
   public:
@@ -26,6 +44,7 @@ class Pass {
     virtual ~Pass() {}
     virtual bool isPhaseMarker() const { return false; }
     virtual unsigned cost() const { return 1; }
+    virtual size_t id() const = 0;
 
   protected:
     std::string name;

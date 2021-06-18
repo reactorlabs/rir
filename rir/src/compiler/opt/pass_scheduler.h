@@ -6,6 +6,10 @@
 
 #include "pass.h"
 
+#ifdef PIR_PASS_SCHEDULER_REPORT_SKIPS
+#include "utils/measuring.h"
+#endif
+
 namespace rir {
 namespace pir {
 
@@ -31,6 +35,8 @@ class PassScheduler {
     }
 
     void run(const std::function<bool(const Pass*)>& apply) const {
+        std::vector<size_t> lastRun(detail::IDCounter::nextId, 0);
+        size_t lastChange = 1, now = 1;
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
             bool changed = false;
@@ -44,9 +50,26 @@ class PassScheduler {
                         }
                         budget -= pass->cost();
                     }
-                    if (apply(pass.get())) {
-                        changed = true;
+                    now++;
+                    if (lastRun.size() <= pass->id())
+                        lastRun.resize(pass->id() + 1);
+                    if (!pass->isPhaseMarker() &&
+                        lastChange > lastRun[pass->id()]) {
+                        lastRun[pass->id()] = now;
+                        if (apply(pass.get())) {
+                            changed = true;
+                            lastChange = now;
+                        }
                     }
+#ifdef PIR_PASS_SCHEDULER_REPORT_SKIPS
+                    else {
+#define STR(...)                                                               \
+    static_cast<std::stringstream&&>(std::stringstream() << __VA_ARGS__).str()
+                        Measuring::countEvent(
+                            STR("skipped " << pass->getName()));
+#undef STR
+                    }
+#endif
                 }
             } while (changed && budget && !phase.once);
         }

@@ -135,5 +135,6 @@ void PassScheduler::nextPhase(const std::string& name, unsigned budget) {
     currentPhase->passes.push_back(
         std::unique_ptr<const Pass>(new PhaseMarker(name)));
 }
-}
-}
+
+} // namespace pir
+} // namespace rir
