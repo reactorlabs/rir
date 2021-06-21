@@ -254,6 +254,7 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     // because of longjmp
     case blt("warning"):
     case blt("stop"):
+    case blt(".dfltStop"):
     case blt(".signalCondition"):
         return false;
     default: {}
