@@ -7,6 +7,7 @@
 #include "utils/filesystem.h"
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/Mangling.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
@@ -555,9 +556,9 @@ void PirJitLLVM::initializeLLVM() {
     // name. symbols starting with "ept_" are external pointers, the ones
     // starting with "efn_" are external function pointers. these must exist in
     // the host process.
-    class ExtSymbolGenerator : public llvm::orc::JITDylib::DefinitionGenerator {
+    class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
-        Error tryToGenerate(LookupKind K, JITDylib& JD,
+        Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
                             JITDylibLookupFlags JDLookupFlags,
                             const SymbolLookupSet& LookupSet) override {
             orc::SymbolMap NewSymbols;
