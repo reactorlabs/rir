@@ -130,7 +130,6 @@ class CompilerContext {
     };
 
     std::stack<CodeContext*> code;
-    unsigned int pushedPromiseContexts = 0;
 
     CodeStream& cs() { return code.top()->cs; }
 
@@ -168,6 +167,8 @@ class CompilerContext {
             new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
+    bool isInPromise() { return pushedPromiseContexts > 0; }
+
     void pushPromiseContext(SEXP ast) {
         pushedPromiseContexts++;
 
@@ -193,6 +194,9 @@ class CompilerContext {
              << BC::push(R_FalseValue) << BC::push(Rf_mkString(msg))
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
+
+  private:
+    unsigned int pushedPromiseContexts = 0;
 };
 
 struct LoadArgsResult {
@@ -1779,7 +1783,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
 
-        if (ctx.pushedPromiseContexts == 0) {
+        if (!ctx.isInPromise()) {
 
             auto callHasDots = false;
             for (RListIter arg = RList(args).begin(); arg != RList::end();
