@@ -1040,7 +1040,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (auto phi = Phi::Cast(i))
                 phi->removeInputs({bb});
         bb->remove(bb->end() - 1);
-        maybeDead.insert(condition ? bb->falseBranch() : bb->trueBranch());
+        maybeDead.insert(bb->getBranch(!condition));
         bb->convertBranchToJmp(condition);
     }
 
@@ -1077,8 +1077,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         phi->removeInputs({bb});
         bb->deleteSuccessors();
     }
-    for (auto bb : dead)
+    for (auto bb : dead) {
+        assert(!reachable.count(bb));
         delete bb;
+    }
 
     return anyChange;
 }
