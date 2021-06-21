@@ -120,9 +120,11 @@ PassScheduleLLVM::PassScheduleLLVM() {
     // might not be necessary:
     PM->add(createInstSimplifyLegacyPass());
 
-    PM->add(createGVNPass());
+    PM->add(createNewGVNPass());
     PM->add(createMemCpyOptPass());
     PM->add(createSCCPPass());
+    PM->add(createConstantHoistingPass());
+    PM->add(createFloat2IntPass());
     PM->add(createSinkingPass());
 
     // Run instcombine after redundancy elimination to exploit opportunities
