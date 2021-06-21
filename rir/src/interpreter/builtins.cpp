@@ -1,6 +1,7 @@
 #include "builtins.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
+#include "compiler/util/safe_builtins_list.h"
 #include "interp.h"
 #include "runtime/LazyArglist.h"
 #include <algorithm>
@@ -247,152 +248,13 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     case blt("options"):
     case blt("&"):
     case blt("|"):
-
-    case blt("invisible"):
-    case blt("sprintf"):
-    case blt("as.character"):
-    case blt("is.complex"):
-    case blt("ceiling"):
-    case blt("log2"):
-    case blt("getRegisteredNamespace"):
-    case blt("get0"):
-    case blt("isNamespaceEnv"):
-
-case blt("set.seed"):
-case blt("c"):
-case blt("RNGkind"):
-case blt("nzchar"):
-case blt("pmax"):
-case blt("as.integer"):
-case blt("floor"):
-case blt("is.finite"):
-case blt("typeof"):
-case blt("paste0"):
-case blt("nchar"):
-case blt("log10"):
-case blt(".Primitive"):
-case blt("remove"):
-case blt("exists"):
-case blt("search"):
-case blt("getwd"):
-case blt("Sys.getenv"):
-case blt("lengths"):
-case blt("seq_len"):
-case blt("rep.int"):
-case blt("get"):
-case blt("parent.frame"):
-case blt("pmatch"):
-case blt("anyNA"):
-case blt("deparse"):
-case blt("paste"):
-case blt("names"):
-case blt("order"):
-case blt("unique"):
-case blt("is.na"):
-case blt("attributes"):
-case blt("islistfactor"):
-case blt("unlist"):
-case blt("sys.parent"):
-case blt("sys.function"):
-case blt("formals"):
-case blt("sys.frame"):
-case blt("inherits"):
-case blt("rep_len"):
-case blt("radixsort"):
-case blt("getOption"):
-case blt("sys.call"):
-
-case blt("as.environment"):
-case blt("is.character"):
-case blt("environment"):
-case blt(".addCondHands"):
-case blt("ls"):
-
-case blt("strrep"):
-case blt("array"):
-case blt("format.info"):
-case blt("intToUtf8"):
-case blt("l10n_info"):
-case blt("as.call"):
-case blt("as.vector"):
-
-case blt("all.names"):
-case blt("as.numeric"):
-case blt("as.raw"):
-case blt("assign"):
-case blt("attr"):
-case blt("basename"):
-case blt("besselI"):
-case blt("besselJ"):
-case blt("besselK"):
-case blt("besselY"):
-case blt("bindtextdomain"):
-case blt("chartr"):
-case blt("choose"):
-case blt("class"):
-case blt("delayedAssign"):
-case blt("dimnames"):
-case blt("dir.exists"):
-case blt("dirname"):
-case blt("do.call"):
-case blt("dyn.load"):
-case blt("environmentIsLocked"):
-//case blt("f"):
-case blt("file.exists"):
-case blt("file.path"):
-//case blt("FUN"):
-case blt("gamma"):
-case blt("geterrmessage"):
-//case blt("get(nm)"):
-case blt("gettext"):
-case blt("gzfile"):
-case blt("Im"):
-case blt("importIntoEnv"):
-case blt("internalsID"):
-case blt("is.integer"):
-case blt("is.language"):
-case blt(".isMethodsDispatchOn"):
-case blt("is.recursive"):
-case blt("isRegisteredNamespace"):
-case blt("lazyLoadDBfetch"):
-case blt("lockEnvironment"):
-case blt("mget"):
-case blt("new.env"):
-case blt("ngettext"):
-case blt("normalizePath"):
-case blt("parent.env<-"):
-case blt("parent.env"):
-case blt("path.expand"):
-case blt("pmin"):
-case blt("pos.to.env"):
-case blt("printDeferredWarnings"):
-case blt("psigamma"):
-case blt("psort"):
-case blt("qsort"):
-case blt("Re"):
-case blt("seq_along"):
-case blt("seterrmessage"):
-case blt("sort"):
-case blt("sorted_fpass"):
-case blt("startsWith"):
-case blt("substr"):
-case blt("sys.nframe"):
-case blt("Sys.setenv"):
-case blt("system"):
-case blt("Sys.unsetenv"):
-case blt("tolower"):
-case blt("toupper"):
-case blt("trunc"):
-case blt("warning"):
-case blt("wrap_meta"):
-
-
-
-case blt("mapply"):
-case blt("regexec"):
-
-
-
+    case blt("attach"):
+    case blt("psort"):
+    // case blt("invisible"):
+    // because of longjmp
+    case blt("warning"):
+    case blt("stop"):
+    case blt(".signalCondition"):
         return false;
     default: {}
     }
@@ -401,7 +263,7 @@ case blt("regexec"):
 
 
 static bool doesNotAccessEnv(SEXP b) {
-    return false;
+    return pir::SafeBuiltinsList::nonObject(b->u.primsxp.offset);
 }
 
 SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
@@ -415,8 +277,6 @@ SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
         SEXP arglist;
         CCODE f = getBuiltin(call.callee);
         SEXP res = nullptr;
-//        std::cout << "@@@@@@ ";
-//        Rf_PrintValue(CAR(call.ast));
         auto env = doesNotAccessEnv(call.callee) ? R_BaseEnv : materializeCallerEnv(call, ctx);
         switch (call.passedArgs) {
         case 0: {
@@ -425,26 +285,31 @@ SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
         case 1: {
             FAKE_ARGS1(arglist, args[0]);
             res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS1();
             break;
         }
         case 2: {
             FAKE_ARGS2(arglist, args[0], args[1]);
             res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS2();
             break;
         }
         case 3: {
             FAKE_ARGS3(arglist, args[0], args[1], args[2]);
             res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS3();
             break;
         }
         case 4: {
             FAKE_ARGS4(arglist, args[0], args[1], args[2], args[3]);
             res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS4();
             break;
         }
         case 5: {
             FAKE_ARGS5(arglist, args[0], args[1], args[2], args[3], args[4]);
             res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS5();
             break;
         }
         }
