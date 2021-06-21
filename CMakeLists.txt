@@ -7,7 +7,7 @@ set(R_HOME ${CMAKE_SOURCE_DIR}/external/custom-r)
 set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
-set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-11)
+set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-12)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 

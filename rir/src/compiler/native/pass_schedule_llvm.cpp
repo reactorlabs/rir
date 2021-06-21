@@ -64,7 +64,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     // for inspiration
 
     PM->add(createEntryExitInstrumenterPass());
-    PM->add(createDeadInstEliminationPass());
     PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
@@ -79,11 +78,9 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM->add(createEarlyCSEPass(true));
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
         PM->add(createPromoteMemoryToRegisterPass());
-        PM->add(createConstantPropagationPass());
     }
     PM->add(createLowerExpectIntrinsicPass());
 
-    PM->add(createDeadInstEliminationPass());
     PM->add(createDeadCodeEliminationPass());
     PM->add(createInstructionCombiningPass());
     PM->add(createCFGSimplificationPass());
