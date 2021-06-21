@@ -1045,11 +1045,11 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     }
 
     for (auto bb : newUnreachable) {
-        for (auto n : bb->successors())
+        auto succ = bb->successors();
+        for (auto n : succ)
             for (auto i : *n)
                 if (auto phi = Phi::Cast(i))
                     phi->removeInputs({bb});
-        auto succ = bb->successors();
         maybeDead.insert(succ.begin(), succ.end());
         bb->deleteSuccessors();
     }
@@ -1077,7 +1077,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         phi->removeInputs({bb});
         bb->deleteSuccessors();
     }
-    for (const auto& bb : dead)
+    for (auto bb : dead)
         delete bb;
 
     return anyChange;
