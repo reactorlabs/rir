@@ -24,7 +24,7 @@ static SEXP isConst(Value* instr, Preserve& p) {
 
     if (auto cst = LdConst::Cast(instr)) {
         if (TYPEOF(cst->c()) == SYMSXP) {
-            return p(Rf_lang2(symbol::quote, cst->c()));
+            return p.operator()(Rf_lang2(symbol::quote, cst->c()));
         }
         return cst->c();
     }
