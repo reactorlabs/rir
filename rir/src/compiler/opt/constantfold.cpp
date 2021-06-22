@@ -14,6 +14,7 @@
 #include <cmath>
 #include <iterator>
 #include <list>
+#include <memory>
 #include <unordered_set>
 
 namespace rir {
@@ -171,7 +172,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
     {
         DominanceGraph dom(code);
-        DominanceFrontier* dfront = nullptr;
+        std::unique_ptr<DominanceFrontier> dfront;
         // Branch Elimination
         //
         // Given branch `a` and `b`, where both have the same
@@ -199,27 +200,23 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
             }
         });
-        std::unordered_set<Branch*> removed;
 
         for (auto& c : condition) {
-
-            removed.clear();
+            std::unordered_set<Branch*> removed;
             auto& uses = c.second;
             if (uses.size() > 1) {
-
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
-
                     if (removed.count(*a))
                         continue;
 
-                    PhiPlacement* pl = nullptr;
                     auto phisPlaced = false;
+                    std::unique_ptr<PhiPlacement> pl;
                     std::unordered_map<BB*, Phi*> newPhisByBB;
                     newPhisByBB.clear();
                     for (auto b = a + 1; b != uses.end(); b++) {
-
                         if (removed.count(*b))
                             continue;
+
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
@@ -230,7 +227,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 anyChange = true;
                                 (*b)->arg(0).val() = False::instance();
                             } else {
-
                                 if (!phisPlaced) {
                                     // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
@@ -240,9 +236,12 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         False::instance();
                                     if (!dfront)
                                         dfront =
-                                            new DominanceFrontier(code, dom);
-                                    pl = new PhiPlacement(code, inputs, dom,
-                                                          *dfront);
+                                            std::make_unique<DominanceFrontier>(
+                                                code, dom);
+                                    assert(!pl);
+                                    pl = std::make_unique<PhiPlacement>(
+                                        code, inputs, dom, *dfront);
+                                    assert(pl);
 
                                     assert(pl->placement.size() > 0);
                                     anyChange = true;
@@ -280,23 +279,15 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     assert(pl->dominatingPhi.count(bb2) > 0);
                                     auto phi = newPhisByBB.at(
                                         pl->dominatingPhi.at(bb2));
-
                                     (*b)->arg(0).val() = phi;
                                 }
                             }
                         }
                         removed.insert(*b);
                     }
-
-                    if (pl != nullptr) {
-                        delete pl;
-                        pl = nullptr;
-                    }
                 }
             }
         }
-        if (dfront)
-            delete dfront;
     }
 
     DominanceGraph::BBSet newUnreachable;

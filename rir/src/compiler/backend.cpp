@@ -249,8 +249,10 @@ static void lower(Code* code) {
                 auto d = bb->deoptBranch();
                 next = bb->remove(it);
                 bb->convertBranchToJmp(true);
-                if (d->predecessors().size() == 0)
+                if (d->predecessors().size() == 0) {
+                    assert(d->successors().size() == 0);
                     dead.push_back(d);
+                }
             }
             it = next;
         }
