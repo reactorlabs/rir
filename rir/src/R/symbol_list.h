@@ -59,6 +59,7 @@
     V(seq, "seq")                                                              \
     V(lapply, "lapply")                                                        \
     V(aslist, "as.list")                                                       \
+    V(ascharacter, "as.character")                                             \
     V(isvector, "is.vector")                                                   \
     V(substr, "substr")                                                        \
     V(Class, "class")                                                          \

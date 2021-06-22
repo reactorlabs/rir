@@ -19,31 +19,35 @@
 namespace rir {
 namespace pir {
 
-static SEXP isConst(Value* instr) {
+static SEXP isConst(Value* instr, Preserve& p) {
     instr = instr->followCastsAndForce();
+
+    if (auto cst = LdConst::Cast(instr)) {
+        if (TYPEOF(cst->c()) == SYMSXP) {
+            return p(Rf_lang2(symbol::quote, cst->c()));
+        }
+        return cst->c();
+    }
 
     if (instr->asRValue() && instr != MissingArg::instance())
         return instr->asRValue();
 
-    if (auto cst = LdConst::Cast(instr)) {
-        return cst->c();
-    }
     return nullptr;
 }
 #define FOLD_BINARY_NATIVE(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
-                if (auto rhs = isConst(instr->arg<1>().val())) {               \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
+                if (auto rhs = isConst(instr->arg<1>().val(), p)) {            \
                     auto res =                                                 \
-                        Rf_eval(Rf_lang3(Operation, lhs, rhs), R_BaseEnv);     \
+                        Rf_eval(p(Rf_lang3(Operation, lhs, rhs)), R_BaseEnv);  \
                     if (res == R_TrueValue || res == R_FalseValue) {           \
                         instr->replaceUsesWith(                                \
                             res == R_TrueValue ? (Value*)True::instance()      \
                                                : (Value*)False::instance());   \
                         next = bb->remove(ip);                                 \
                     } else {                                                   \
-                        cmp.preserve(res);                                     \
+                        p(res);                                                \
                         auto resi = new LdConst(res);                          \
                         anyChange = true;                                      \
                         instr->replaceUsesWith(resi);                          \
@@ -56,15 +60,15 @@ static SEXP isConst(Value* instr) {
 #define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto arg = isConst(instr->arg<0>().val()))                     \
+            if (auto arg = isConst(instr->arg<0>().val(), p))                  \
                 Operation(arg);                                                \
         }                                                                      \
     } while (false)
 #define FOLD_BINARY(Instruction, Operation)                                    \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
-                if (auto rhs = isConst(instr->arg<1>().val())) {               \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
+                if (auto rhs = isConst(instr->arg<1>().val(), p)) {            \
                     Operation(lhs, rhs);                                       \
                 }                                                              \
             }                                                                  \
@@ -73,11 +77,11 @@ static SEXP isConst(Value* instr) {
 #define FOLD_BINARY_EITHER(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
                 if (Operation(lhs, instr->arg<1>().val()))                     \
                     break;                                                     \
             }                                                                  \
-            if (auto rhs = isConst(instr->arg<1>().val())) {                   \
+            if (auto rhs = isConst(instr->arg<1>().val(), p)) {                \
                 Operation(rhs, instr->arg<0>().val());                         \
             }                                                                  \
         }                                                                      \
@@ -158,6 +162,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
     bool anyChange = false;
 
+    Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
 
     DominanceGraph dom(code);
@@ -317,7 +322,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 };
 
                 auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
-                    if (!isConst(varg) && // If this is true, was already folded
+                    if (!isConst(varg, p) && // was already folded
                         IS_SIMPLE_SCALAR(carg, LGLSXP) &&
                         varg->type.isA(PirType::simpleScalarLogical())) {
                         int larg = *LOGICAL(carg);
@@ -375,9 +380,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                            : (Value*)False::instance();
                         i->replaceUsesWith(replace);
                         next = bb->remove(ip);
-                    } else if (isConst(a) &&
-                               convertsToLogicalWithoutWarning(isConst(a))) {
-                        auto replace = Rf_asLogical(isConst(a)) == TRUE
+                    } else if (isConst(a, p) &&
+                               convertsToLogicalWithoutWarning(isConst(a, p))) {
+                        auto replace = Rf_asLogical(isConst(a, p)) == TRUE
                                            ? (Value*)True::instance()
                                            : (Value*)False::instance();
                         i->replaceUsesWith(replace);
@@ -484,28 +489,28 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
                         }
-                    } else if (isConst(i->arg(0).val()) &&
-                               isConst(i->arg(0).val()) == R_TrueValue &&
+                    } else if (isConst(i->arg(0).val(), p) &&
+                               isConst(i->arg(0).val(), p) == R_TrueValue &&
                                i->arg(1).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         i->replaceUsesWith(i->arg(1).val());
                         next = bb->remove(ip);
-                    } else if (isConst(i->arg(1).val()) &&
-                               isConst(i->arg(1).val()) == R_TrueValue &&
+                    } else if (isConst(i->arg(1).val(), p) &&
+                               isConst(i->arg(1).val(), p) == R_TrueValue &&
                                i->arg(0).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
-                    } else if (isConst(i->arg(0).val()) &&
-                               isConst(i->arg(0).val()) == R_FalseValue &&
+                    } else if (isConst(i->arg(0).val(), p) &&
+                               isConst(i->arg(0).val(), p) == R_FalseValue &&
                                i->arg(1).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         auto neg =
                             new Not(i->arg(1).val(), Env::elided(), i->srcIdx);
                         neg->type = PirType::test();
                         i->replaceUsesAndSwapWith(neg, ip);
-                    } else if (isConst(i->arg(1).val()) &&
-                               isConst(i->arg(1).val()) == R_FalseValue &&
+                    } else if (isConst(i->arg(1).val(), p) &&
+                               isConst(i->arg(1).val(), p) == R_FalseValue &&
                                i->arg(0).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         auto neg =
@@ -570,7 +575,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 }
                 if (auto cl = Colon::Cast(i)) {
-                    if (auto a = isConst(cl->arg(0).val())) {
+                    if (auto a = isConst(cl->arg(0).val(), p)) {
                         if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
                             REAL(a)[0] == (double)(int)REAL(a)[0]) {
                             iterAnyChange = true;
@@ -579,7 +584,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             ip++;
                         }
                     }
-                    if (auto a = isConst(cl->arg(1).val())) {
+                    if (auto a = isConst(cl->arg(1).val(), p)) {
                         if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
                             REAL(a)[0] == (double)(int)REAL(a)[0]) {
                             iterAnyChange = true;
@@ -665,12 +670,12 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesWith(i->arg(0).val());
                             next = bb->remove(ip);
-                        } else if (auto con = isConst(i->arg(0).val())) {
+                        } else if (auto con = isConst(i->arg(0).val(), p)) {
                             auto t = TYPEOF(con);
                             if (t == REALSXP || t == INTSXP || t == LGLSXP) {
-                                auto res = Rf_eval(
-                                    Rf_lang2(Rf_install("as.character"), con),
-                                    R_BaseEnv);
+                                auto res = p(Rf_eval(
+                                    p(Rf_lang2(symbol::ascharacter, con)),
+                                    R_BaseEnv));
                                 iterAnyChange = true;
                                 i->replaceUsesAndSwapWith(new LdConst(res), ip);
                             }
@@ -683,7 +688,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesWith(i->arg(0).val());
                             next = bb->remove(ip);
-                        } else if (auto con = isConst(i->arg(0).val())) {
+                        } else if (auto con = isConst(i->arg(0).val(), p)) {
                             if (IS_SIMPLE_SCALAR(con, REALSXP)) {
                                 if (REAL(con)[0] == REAL(con)[0]) {
                                     iterAnyChange = true;
@@ -880,7 +885,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
                 if (auto not_ = Not::Cast(i)) {
                     Value* arg = not_->arg<0>().val();
-                    if (auto carg = isConst(arg)) {
+                    if (auto carg = isConst(arg, p)) {
                         if (IS_SIMPLE_SCALAR(carg, LGLSXP) ||
                             IS_SIMPLE_SCALAR(carg, INTSXP) ||
                             IS_SIMPLE_SCALAR(carg, REALSXP)) {
