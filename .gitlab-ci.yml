@@ -266,6 +266,9 @@ test_sanitize2:
   except:
     - schedules
   script:
+    - cd /opt/rir/build/release
+    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
     - cd /opt/rir/build/releaseassert
     - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=60 bin/tests
 
@@ -284,8 +287,6 @@ test_big_inline:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
