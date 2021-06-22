@@ -1393,13 +1393,6 @@ llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
 
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
-#ifdef ENABLE_SLOWASSERT
-    // abuse BB label as comment
-    auto callBB =
-        BasicBlock::Create(PirJitLLVM::getContext(), builtin.name, fun);
-    builder.CreateBr(callBB);
-    builder.SetInsertPoint(callBB);
-#endif
     return builder.CreateCall(getBuiltin(builtin), args);
 }
 
