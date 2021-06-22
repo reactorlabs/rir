@@ -205,7 +205,7 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     return nullptr;
 }
 
-static constexpr size_t MAXARGS = 5;
+static constexpr size_t MAXARGS = 8;
 
 bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     if (nargs > 5)
@@ -269,9 +269,6 @@ static bool doesNotAccessEnv(SEXP b) {
 
 SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
                          size_t nargs, SEXP (&args)[MAXARGS]) {
-    if (!supportsFastBuiltinCall2(call.callee, nargs))
-        return nullptr;
-
     assert(nargs <= 5);
 
     {
@@ -1018,7 +1015,7 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
         return true;
     default: {}
     }
-    return supportsFastBuiltinCall2(b, nargs);
+    return false;
 }
 
 SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
@@ -1031,7 +1028,6 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
         return nullptr;
 
     bool hasAttrib = false;
-    bool isObj = false;
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
@@ -1040,8 +1036,6 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         if (ATTRIB(arg) != R_NilValue)
             hasAttrib = true;
-        if (isObject(arg))
-            isObj = true;
         args[i] = arg;
     }
 
@@ -1049,7 +1043,10 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
     if (res)
         return res;
 
-    if (isObj || hasAttrib)
+    if (hasAttrib)
+        return nullptr;
+
+    if (!supportsFastBuiltinCall2(call.callee, nargs))
         return nullptr;
 
     return tryFastBuiltinCall2(call, ctx, nargs, args);
