@@ -210,7 +210,7 @@ class BB {
             return {res.next[1], nullptr};
         return res;
     }
-    const Successors successors() { return {next0, next1}; }
+    const Successors successors() const { return {next0, next1}; }
 
     void setSuccessors(const Successors& succ) {
         assert(!next0 && !next1);

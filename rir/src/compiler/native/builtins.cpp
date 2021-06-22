@@ -1199,7 +1199,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     for (size_t i = 0; i < missing; ++i)
         ostack_push(globalContext(), R_MissingArg);
 
-    R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
+    R_bcstack_t* args = ostack_cell_at(ctx, (long)(nargs + missing) - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
     LazyArglistOnStack lazyArgs(call.callId,
