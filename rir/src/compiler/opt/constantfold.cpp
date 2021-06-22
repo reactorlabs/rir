@@ -22,25 +22,29 @@ namespace pir {
 static SEXP isConst(Value* instr, Preserve& p) {
     instr = instr->followCastsAndForce();
 
-    if (auto cst = LdConst::Cast(instr)) {
-        if (TYPEOF(cst->c()) == SYMSXP) {
-            return p.operator()(Rf_lang2(symbol::quote, cst->c()));
-        }
+    if (auto cst = LdConst::Cast(instr))
         return cst->c();
-    }
 
     if (instr->asRValue() && instr != MissingArg::instance())
         return instr->asRValue();
 
     return nullptr;
 }
+
+SEXP qt(SEXP c, Preserve& p) {
+    if (TYPEOF(c) == SYMSXP)
+        return p.operator()(Rf_lang2(symbol::quote, c));
+    return c;
+}
+
 #define FOLD_BINARY_NATIVE(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
                 if (auto rhs = isConst(instr->arg<1>().val(), p)) {            \
-                    auto res =                                                 \
-                        Rf_eval(p(Rf_lang3(Operation, lhs, rhs)), R_BaseEnv);  \
+                    auto res = Rf_eval(                                        \
+                        p(Rf_lang3(Operation, qt(lhs, p), qt(rhs, p))),        \
+                        R_BaseEnv);                                            \
                     if (res == R_TrueValue || res == R_FalseValue) {           \
                         instr->replaceUsesWith(                                \
                             res == R_TrueValue ? (Value*)True::instance()      \
@@ -673,9 +677,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         } else if (auto con = isConst(i->arg(0).val(), p)) {
                             auto t = TYPEOF(con);
                             if (t == REALSXP || t == INTSXP || t == LGLSXP) {
-                                auto res = p(Rf_eval(
-                                    p(Rf_lang2(symbol::ascharacter, con)),
-                                    R_BaseEnv));
+                                auto res =
+                                    p(Rf_eval(p(Rf_lang2(symbol::ascharacter,
+                                                         qt(con, p))),
+                                              R_BaseEnv));
                                 iterAnyChange = true;
                                 i->replaceUsesAndSwapWith(new LdConst(res), ip);
                             }
