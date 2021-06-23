@@ -46,6 +46,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_noforce_:
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_super_:
     case Opcode::stvar_:
@@ -134,6 +135,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
         case Opcode::ldvar_for_update_:
         case Opcode::ldvar_super_:
         case Opcode::stvar_:
@@ -229,6 +231,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
         case Opcode::ldvar_for_update_:
         case Opcode::ldvar_super_:
         case Opcode::stvar_:
@@ -373,6 +376,7 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_noforce_:
     case Opcode::ldvar_for_update_:
     case Opcode::ldvar_super_:
     case Opcode::ldddvar_:

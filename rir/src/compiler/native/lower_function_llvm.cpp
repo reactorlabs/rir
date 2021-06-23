@@ -188,6 +188,8 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
+
+
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
@@ -5355,6 +5357,7 @@ void LowerFunctionLLVM::compile() {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
+
                     }
 
                     builder.CreateBr(done);

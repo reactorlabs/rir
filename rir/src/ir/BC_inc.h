@@ -326,6 +326,7 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
@@ -552,6 +553,7 @@ BC_NOARGS(V, _)
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:

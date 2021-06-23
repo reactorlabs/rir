@@ -110,6 +110,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar_noforce_:
     case Opcode::ldvar_cached_:
     case Opcode::ldvar_for_update_cache_:
     case Opcode::ldvar_for_update_:
@@ -290,7 +291,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     Rf_error("RIR Verifier: Branch outside closure");
             }
             if (*cptr == Opcode::ldvar_ || *cptr == Opcode::ldvar_super_ ||
-                *cptr == Opcode::ldvar_for_update_) {
+                *cptr == Opcode::ldvar_for_update_ ||
+                *cptr == Opcode::ldvar_noforce_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 if (*argsIndex >= cp_pool_length(ctx))
                     Rf_error("RIR Verifier: Invalid arglist index");

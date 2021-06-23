@@ -17,6 +17,9 @@
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Vectorize.h"
 
+#include "llvm/Support/raw_os_ostream.h"
+#include <iostream>
+
 namespace rir {
 namespace pir {
 
@@ -43,6 +46,7 @@ operator()(llvm::orc::ThreadSafeModule TSM,
         verify();
 
 #endif
+
     });
     return std::move(TSM);
 }
