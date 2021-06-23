@@ -169,8 +169,7 @@ struct AvailableAssumptions
         return res;
     }
     const SmallSet<AAssumption> at(Instruction* i) const {
-        auto res = StaticAnalysis::at<
-            StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
+        auto res = before(i);
         return res.available;
     }
 };
