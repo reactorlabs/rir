@@ -591,6 +591,7 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     case DeoptReason::DeadCall:
         reason.srcCode->deadCallReached++;
         // fall through
+        [[clang::fallthrough]];
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
@@ -3877,7 +3878,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     }
 
     CallContext call(ArglistOrder::NOT_REORDERED, nullptr, op, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1),
+                     ostack_cell_at(ctx, (long)nargs - 1),
                      names.empty() ? nullptr : names.data(), rho, suppliedvars,
                      Context(), ctx);
     call.arglist = arglist;

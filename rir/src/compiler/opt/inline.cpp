@@ -352,7 +352,10 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 });
 
                 if (failedToInline) {
-                    delete copy;
+                    std::vector<BB*> toDel;
+                    Visitor::run(copy, [&](BB* bb) { toDel.push_back(bb); });
+                    for (auto bb : toDel)
+                        delete bb;
                     bb->overrideNext(split);
                     inlineeCls->rirFunction()->flags.set(
                         rir::Function::NotInlineable);

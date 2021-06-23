@@ -2,14 +2,13 @@
 
 #include <R/r.h>
 
-#define UUID_SIZE 64
-
 namespace rir {
 
 class UUID {
-    char data[UUID_SIZE] = {};
+    size_t uuid;
 
     UUID() {}
+    explicit UUID(size_t v) : uuid(v) {}
 
   public:
     // Generates a random UUID
@@ -19,7 +18,6 @@ class UUID {
     std::string str();
 
     bool operator==(const UUID& other) const;
-    UUID operator^(const UUID& other) const;
     friend struct std::hash<UUID>;
 };
 
@@ -28,6 +26,6 @@ class UUID {
 namespace std {
 template <>
 struct hash<rir::UUID> {
-    std::size_t operator()(const rir::UUID& v) const { return *(size_t*)&v; }
+    std::size_t operator()(const rir::UUID& v) const { return v.uuid; }
 };
 } // namespace std
