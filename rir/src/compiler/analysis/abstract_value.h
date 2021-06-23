@@ -18,7 +18,7 @@ namespace pir {
 struct ValOrig {
     Value* val;
     Instruction* origin;
-    unsigned recursionLevel;
+    uint8_t recursionLevel;
 
     ValOrig(Value* v, Instruction* o, unsigned recursionLevel)
         : val(v), origin(o), recursionLevel(recursionLevel) {}
@@ -63,8 +63,8 @@ namespace pir {
  */
 struct AbstractPirValue {
   private:
-    bool unknown = false;
     SmallSet<ValOrig> vals;
+    uint8_t unknown = false;
     constexpr static size_t MAX_VALS = 5;
 
   public:
@@ -359,18 +359,22 @@ class AbstractREnvironmentHierarchy {
         return res;
     }
 
-    bool known(Value* env) const { return envs.contains(env); }
+    bool known(Value* env) const {
+        if (aliases.count(env))
+            return known(aliases.at(env));
+        return envs.contains(env);
+    }
 
     const AbstractREnvironment& at(Value* env) const {
         if (aliases.count(env))
-            return envs.at(aliases.at(env));
+            return at(aliases.at(env));
         else
             return envs.at(env);
     }
 
     AbstractREnvironment& at(Value* env) {
         if (aliases.count(env))
-            return envs[aliases.at(env)];
+            return at(aliases.at(env));
         else
             return envs[env];
     }

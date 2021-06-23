@@ -250,13 +250,27 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     Visitor::run(
         code->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                return;
+
+            auto before = analysis.before(*bb->begin());
+            auto after = before;
+            Instruction* expectedNext = *bb->begin();
+
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
                 auto next = ip + 1;
 
-                auto before = analysis.before(i);
-                auto after = analysis.after(i);
+                if (expectedNext == i)
+                    before = analysis.before(i, &after);
+                else
+                    before = analysis.before(i);
+                after = analysis.after(i, &before);
+                if (next != bb->end())
+                    expectedNext = *next;
+                else
+                    expectedNext = nullptr;
 
                 // Force and callees can only see our env only through
                 // reflection
@@ -282,28 +296,24 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 // If no reflective argument is passed to us, then forcing an
                 // argument cannot see our environment
-                    if (auto force = Force::Cast(i)) {
-                            auto arg =
-                                force->arg<0>().val()->followCastsAndForce();
-                            analysis.lookup(
-                                arg, [&](const AbstractPirValue& res) {
-                                    res.ifSingleValue(
-                                        [&](Value* val) { arg = val; });
-                                });
-                            if (auto ld = LdArg::Cast(arg)) {
-                                if (force->hasEnv() &&
-                                    cls->context().isNonRefl(ld->id)) {
-                                    force->elideEnv();
-                                    force->effects.reset(Effect::Reflection);
-                                }
+                if (auto force = Force::Cast(i)) {
+                    auto arg = force->arg<0>().val()->followCastsAndForce();
+                    analysis.lookup(arg, [&](const AbstractPirValue& res) {
+                        res.ifSingleValue([&](Value* val) { arg = val; });
+                    });
+                    if (auto ld = LdArg::Cast(arg)) {
+                        if (force->hasEnv() &&
+                            cls->context().isNonRefl(ld->id)) {
+                            force->elideEnv();
+                            force->effects.reset(Effect::Reflection);
+                        }
 
-                                if (after.noReflection()) {
-                                    force->type.fromContext(cls->context(),
-                                                            ld->id,
-                                                            cls->nargs(), true);
-                                }
+                        if (after.noReflection()) {
+                            force->type.fromContext(cls->context(), ld->id,
+                                                    cls->nargs(), true);
                         }
                     }
+                }
 
                 // StVarSuper where the parent environment is known and
                 // local, can be replaced by simple StVar, if the variable

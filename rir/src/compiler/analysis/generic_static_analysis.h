@@ -231,17 +231,20 @@ class StaticAnalysis {
         }
     }
 
-    AbstractState before(Instruction* i) const {
-        return at<PositioningStyle::BeforeInstruction>(i);
+    AbstractState before(Instruction* i,
+                         AbstractState* afterPreviousInstr = nullptr) const {
+        return at<PositioningStyle::BeforeInstruction>(i, afterPreviousInstr);
     }
 
-    AbstractState after(Instruction* i) const {
-        return at<PositioningStyle::AfterInstruction>(i);
+    AbstractState after(Instruction* i,
+                        AbstractState* afterPreviousInstr = nullptr) const {
+        return at<PositioningStyle::AfterInstruction>(i, afterPreviousInstr);
     }
 
   private:
     template <PositioningStyle POS>
-    AbstractState at(Instruction* i) const {
+    AbstractState at(Instruction* i,
+                     AbstractState* afterPreviousInstr = nullptr) const {
         if (!done)
             const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
@@ -255,16 +258,22 @@ class StaticAnalysis {
         }
 #endif
 
+        if (POS == PositioningStyle::BeforeInstruction && afterPreviousInstr)
+            return *afterPreviousInstr;
+
         BB* bb = i->bb();
         if (Forward)
-            return findSnapshot<POS>(bb->begin(), bb->end(), bb, i);
+            return findSnapshot<POS>(bb->begin(), bb->end(), bb, i,
+                                     afterPreviousInstr);
 
-        return findSnapshot<POS>(bb->rbegin(), bb->rend(), bb, i);
+        return findSnapshot<POS>(bb->rbegin(), bb->rend(), bb, i,
+                                 afterPreviousInstr);
     }
 
     template <PositioningStyle POS, typename Iter>
-    AbstractState findSnapshot(Iter begin, Iter end, BB* bb,
-                               Instruction* i) const {
+    AbstractState
+    findSnapshot(Iter begin, Iter end, BB* bb, Instruction* i,
+                 AbstractState* afterPreviousInstr = nullptr) const {
         const BBSnapshot& bbSnapshots = snapshots[bb->id];
 
         // Find the snapshot closest to the desired state
@@ -300,6 +309,16 @@ class StaticAnalysis {
             }
             ++snapshotPos;
             assert(snapshotPos != end);
+        }
+
+        // No snapshot found for the current position. If we have the state
+        // after the previous instruction, then this is the next fastest way to
+        // compute it.
+        if (afterPreviousInstr && *snapshotPos != i) {
+            assert(POS == PositioningStyle::AfterInstruction);
+            auto state = *afterPreviousInstr;
+            apply(state, i);
+            return state;
         }
 
         // Apply until we arrive at the position
