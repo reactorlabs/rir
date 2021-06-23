@@ -5,6 +5,7 @@
 #include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "compiler/analysis/context_stack.h"
 #include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
 #include "utils/Set.h"
@@ -97,6 +98,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     DominanceGraph dom(code);
     DominanceFrontier dfront(code, dom);
+    ContextStack contexts(cls, code, log);
 
     bool anyChange = false;
     ScopeAnalysis analysis(cls, code, log);
@@ -395,7 +397,7 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
                             if (!mk->stub)
                                 allowed.insert(Tag::LdVar);
-                            if (mk->context == 1 && mk->bb() != bb &&
+                            if (mk->bb() != bb &&
                                 mk->usesAreOnly(code->entry, allowed)) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
@@ -450,6 +452,16 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         ip++;
                                         next = ip + 1;
                                         mk->replaceDominatedUses(deoptEnv, dom);
+                                        if (mk->context) {
+                                            auto diff =
+                                                contexts.before(deoptEnv)
+                                                    .context() -
+                                                contexts.before(mk).context();
+                                            deoptEnv->context =
+                                                mk->context + diff;
+                                        } else {
+                                            deoptEnv->context = 0;
+                                        }
                                         anyChange = true;
                                     });
                             }
