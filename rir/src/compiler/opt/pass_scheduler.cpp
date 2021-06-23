@@ -37,20 +37,14 @@ PassScheduler::PassScheduler() {
         add<LoadElision>();
         add<GVN>();
         add<Constantfold>();
-        add<DeadStoreRemoval>();
 
         add<Inline>();
-        add<OptimizeContexts>();
-
-        add<OptimizeVisibility>();
-        add<OptimizeAssumptions>();
-        add<Cleanup>();
 
         add<ElideEnv>();
         add<DelayEnv>();
         add<DelayInstr>();
-        add<Cleanup>();
 
+        add<OptimizeContexts>();
         add<OptimizeVisibility>();
         add<OptimizeAssumptions>();
         add<Cleanup>();
@@ -59,23 +53,23 @@ PassScheduler::PassScheduler() {
         add<Overflow>();
     };
     auto addDefaultPostPhaseOpt = [&]() {
+        add<DeadStoreRemoval>();
         add<HoistInstruction>();
         add<LoopInvariant>();
     };
 
-    nextPhase("Initial", 60);
+    nextPhase("Initial");
     addDefaultOpt();
-    nextPhase("Initial post");
-    addDefaultPostPhaseOpt();
 
     // ==== Phase 2) Speculate away environments
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    nextPhase("Speculation", 100);
+    nextPhase("Speculation", 80);
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
+    addDefaultOpt();
 
     nextPhase("Speculation post");
     addDefaultPostPhaseOpt();
@@ -89,9 +83,9 @@ PassScheduler::PassScheduler() {
     // After this phase it is no longer possible to add assumptions at any point
     nextPhase("Remove CP");
     add<CleanupCheckpoints>();
-    addDefaultPostPhaseOpt();
 
-    nextPhase("Intermediate 2", 60);
+    nextPhase("Intermediate 2");
+    addDefaultOpt();
     addDefaultOpt();
     nextPhase("Intermediate 2 post");
     addDefaultPostPhaseOpt();
@@ -106,7 +100,7 @@ PassScheduler::PassScheduler() {
     add<CleanupFramestate>();
     add<CleanupCheckpoints>();
 
-    nextPhase("Final", 120);
+    nextPhase("Final", 80);
     // ==== Phase 4) Final round of default opts
     addDefaultOpt();
     add<ElideEnvSpec>();
