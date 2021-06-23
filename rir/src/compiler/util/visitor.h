@@ -5,6 +5,7 @@
 #include "../pir/code.h"
 #include "../pir/instruction.h"
 #include "../pir/pir.h"
+#include "utils/random.h"
 
 #include <deque>
 #include <functional>
@@ -324,7 +325,11 @@ class VisitorImplementation {
     }
 
   private:
-    static bool coinFlip() { return rand() >= (RAND_MAX / 2); };
+    static Random& random() {
+        static Random r;
+        return r;
+    }
+    static bool coinFlip() { return random()() > (ULONG_MAX / 2L); }
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
