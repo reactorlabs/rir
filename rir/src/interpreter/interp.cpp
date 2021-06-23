@@ -1032,6 +1032,9 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                 pos++;
             }
         }
+
+        if (call.suppliedvars != R_NilValue)
+            Rf_addMissingVarsToNewEnv(env, call.suppliedvars);
     } else {
         // No need for lazy args if we have the non-modified list anyway
         promargs = frame;
