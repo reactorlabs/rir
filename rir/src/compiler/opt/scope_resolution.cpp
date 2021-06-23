@@ -393,12 +393,29 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (bb->isDeopt()) {
                     if (auto fs = FrameState::Cast(i)) {
                         if (auto mk = MkEnv::Cast(fs->env())) {
+                            bool candidate = mk->bb() != bb;
+                            // Environments which start off with a lot of
+                            // uninitialized variables are not profitable to
+                            // elide, because all these variables need to be
+                            // boxed.
+                            // TODO: implement unboxed uninitialized values
+                            size_t unbound = 0;
+                            if (candidate)
+                                mk->eachLocalVar([&](SEXP, Value* v, bool) {
+                                    if (v == UnboundValue::instance())
+                                        unbound++;
+                                });
+                            if (unbound > 3)
+                                candidate = false;
                             std::unordered_set<Tag> allowed(
                                 {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
                             if (!mk->stub)
                                 allowed.insert(Tag::LdVar);
-                            if (mk->bb() != bb &&
-                                mk->usesAreOnly(code->entry, allowed)) {
+                            if (candidate)
+                                if (!mk->usesAreOnly(code->entry, allowed))
+                                    candidate = false;
+
+                            if (candidate) {
                                 analysis.tryMaterializeEnv(
                                     before, mk,
                                     [&](const std::unordered_map<
