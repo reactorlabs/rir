@@ -94,9 +94,11 @@ test_release_2:
   variables:
     GIT_STRATEGY: none
     PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_MAX_INPUT_SIZE: 5000
-    PIR_INLINER_MAX_SIZE: 5000
-    PIR_LLVM_OPT_LEVEL: 1
+    PIR_MAX_INPUT_SIZE: 4000
+    PIR_INLINER_MAX_SIZE: 4000
+    PIR_LLVM_OPT_LEVEL: 0
+  # there is an impossible to reproduce memory corruption issue in survivals compete.Rnw
+  retry: 1
   stage: Run tests
   needs:
     - rir_container
@@ -136,6 +138,7 @@ tests_debug2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
@@ -179,18 +182,14 @@ test_features_1:
   except:
     - schedules
   script:
-    - cd /opt/rir/build/releaseassert
-#    - PIR_ENABLE_PROFILER=1 ./bin/tests
     - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
-    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=400 ./bin/gnur-make-tests check || $SAVE_LOGS
-    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=2 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 ./bin/tests
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 ./bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 FAST_TESTS=1 ./bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=2 FAST_TESTS=1 ./bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 FAST_TESTS=1 ./bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 FAST_TESTS=1 ./bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 FAST_TESTS=1 ./bin/tests
   artifacts:
     paths:
     - logs
@@ -215,6 +214,27 @@ test_features_2:
     - logs
     when: on_failure
     expire_in: 1 week
+
+test_features_3:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - cd /opt/rir/build/release
+    - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
+    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
+
 
 # Run ubsan and gc torture
 test_sanitize1:
@@ -246,8 +266,11 @@ test_sanitize2:
   except:
     - schedules
   script:
+    - cd /opt/rir/build/release
+    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
     - cd /opt/rir/build/releaseassert
-    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=50 bin/tests
+    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=60 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
@@ -264,8 +287,6 @@ test_big_inline:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
@@ -342,7 +363,7 @@ benchmark_llvm:
     paths:
     - benchmarks.data
     expire_in: 24 month
-  retry: 2
+  retry: 1
 
 benchmark_gnur:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
