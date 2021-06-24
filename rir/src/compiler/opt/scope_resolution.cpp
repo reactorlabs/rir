@@ -250,327 +250,259 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
         return target;
     };
 
-    Visitor::run(
-        code->entry, [&](BB* bb) {
-            if (bb->isEmpty())
-                return;
+    Visitor::run(code->entry, [&](BB* bb) {
+        if (bb->isEmpty())
+            return;
 
-            auto before = analysis.before(*bb->begin());
-            auto after = before;
-            Instruction* expectedNext = *bb->begin();
+        auto before = analysis.before(*bb->begin());
+        auto after = before;
+        bool changed = false;
 
-            auto ip = bb->begin();
-            while (ip != bb->end()) {
-                Instruction* i = *ip;
-                auto next = ip + 1;
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
+            Instruction* i = *ip;
+            auto next = ip + 1;
 
-                if (expectedNext == i)
-                    before = analysis.before(i, &after);
-                else
-                    before = analysis.before(i);
-                after = analysis.after(i, &before);
-                if (next != bb->end())
-                    expectedNext = *next;
-                else
-                    expectedNext = nullptr;
+            if (changed) {
+                before = analysis.before(i);
+                anyChange = true;
+                changed = false;
+            } else {
+                before = analysis.before(i, &after);
+            }
+            after = analysis.after(i, &before);
 
-                // Force and callees can only see our env only through
-                // reflection
-                if (i->hasEnv() &&
-                    (CallInstruction::CastCall(i) || Force::Cast(i))) {
+            // Force and callees can only see our env only through
+            // reflection
+            if (i->hasEnv() &&
+                (CallInstruction::CastCall(i) || Force::Cast(i))) {
+                if (after.noReflection()) {
+                    i->elideEnv();
+                    i->effects.reset(Effect::Reflection);
+                }
+                if (after.envNotEscaped(i->env())) {
+                    i->effects.reset(Effect::LeaksEnv);
+                }
+            }
+
+            if (auto mk = MkArg::Cast(i)) {
+                if (!mk->noReflection)
+                    if (noReflection(cls, mk->prom(),
+                                     i->hasEnv() ? i->env() : Env::notClosed(),
+                                     analysis, before)) {
+                        mk->noReflection = true;
+                        changed = true;
+                    }
+            }
+
+            // If no reflective argument is passed to us, then forcing an
+            // argument cannot see our environment
+            if (auto force = Force::Cast(i)) {
+                auto arg = force->arg<0>().val()->followCastsAndForce();
+                analysis.lookup(arg, [&](const AbstractPirValue& res) {
+                    res.ifSingleValue([&](Value* val) { arg = val; });
+                });
+                if (auto ld = LdArg::Cast(arg)) {
+                    if (force->hasEnv() && cls->context().isNonRefl(ld->id)) {
+                        force->elideEnv();
+                        force->effects.reset(Effect::Reflection);
+                        changed = true;
+                    }
+
                     if (after.noReflection()) {
-                        i->elideEnv();
-                        i->effects.reset(Effect::Reflection);
-                    }
-                    if (after.envNotEscaped(i->env())) {
-                        i->effects.reset(Effect::LeaksEnv);
+                        force->type.fromContext(cls->context(), ld->id,
+                                                cls->nargs(), true);
                     }
                 }
+            }
 
-                if (auto mk = MkArg::Cast(i)) {
-                    if (!mk->noReflection)
-                        if (noReflection(cls, mk->prom(),
-                                         i->hasEnv() ? i->env()
-                                                     : Env::notClosed(),
-                                         analysis, before))
-                            mk->noReflection = true;
-                }
-
-                // If no reflective argument is passed to us, then forcing an
-                // argument cannot see our environment
-                if (auto force = Force::Cast(i)) {
-                    auto arg = force->arg<0>().val()->followCastsAndForce();
-                    analysis.lookup(arg, [&](const AbstractPirValue& res) {
-                        res.ifSingleValue([&](Value* val) { arg = val; });
-                    });
-                    if (auto ld = LdArg::Cast(arg)) {
-                        if (force->hasEnv() &&
-                            cls->context().isNonRefl(ld->id)) {
-                            force->elideEnv();
-                            force->effects.reset(Effect::Reflection);
-                        }
-
-                        if (after.noReflection()) {
-                            force->type.fromContext(cls->context(), ld->id,
-                                                    cls->nargs(), true);
-                        }
+            // StVarSuper where the parent environment is known and
+            // local, can be replaced by simple StVar, if the variable
+            // exists in the super env. Or if the super env is the global
+            // env, since super assign never goes beyond that one.
+            if (auto sts = StVarSuper::Cast(i)) {
+                auto aLoad =
+                    analysis.superLoad(before, sts->varName, sts->env());
+                if (aLoad.env != AbstractREnvironment::UnknownParent) {
+                    auto env = Env::Cast(aLoad.env);
+                    if ((env && env->rho == R_GlobalEnv) ||
+                        (!aLoad.result.isUnknown() &&
+                         aLoad.env->validIn(code))) {
+                        auto r = new StVar(sts->varName, sts->val(), aLoad.env);
+                        bb->replace(ip, r);
+                        sts->replaceUsesWith(r);
+                        replacedValue[sts] = r;
+                        changed = true;
                     }
                 }
+                ip = next;
+                continue;
+            }
 
-                // StVarSuper where the parent environment is known and
-                // local, can be replaced by simple StVar, if the variable
-                // exists in the super env. Or if the super env is the global
-                // env, since super assign never goes beyond that one.
-                if (auto sts = StVarSuper::Cast(i)) {
-                    auto aLoad =
-                        analysis.superLoad(before, sts->varName, sts->env());
-                    if (aLoad.env != AbstractREnvironment::UnknownParent) {
-                        auto env = Env::Cast(aLoad.env);
-                        if ((env && env->rho == R_GlobalEnv) ||
-                            (!aLoad.result.isUnknown() &&
-                             aLoad.env->validIn(code))) {
-                            auto r =
-                                new StVar(sts->varName, sts->val(), aLoad.env);
-                            bb->replace(ip, r);
-                            sts->replaceUsesWith(r);
-                            replacedValue[sts] = r;
-                            anyChange = true;
-                        }
-                    }
-                    ip = next;
-                    continue;
-                }
-
-                // Constant fold "missing" if we can.
-                if (auto missing = Missing::Cast(i)) {
-                    auto res =
-                        analysis.load(before, missing->varName, missing->env());
-                    bool notMissing = false;
-                    if (res.result.isSingleValue()) {
-                        auto v =
-                            res.result.singleValue().val->followCastsAndForce();
-                        if (!v->type.maybePromiseWrapped() &&
-                            !v->type.maybeMissing() &&
-                            /* Warning: Forcing a (non-missing) promise can
-                                still return missing... */
-                            !MkArg::Cast(v)) {
-                            notMissing = true;
-                        }
-                        // If we find the (eager) root promise, we know if it is
-                        // missing or not! Note this doesn't go throught forces.
-                        if (auto mk = MkArg::Cast(
-                                res.result.singleValue().val->followCasts())) {
-                            if (mk->isEager() &&
-                                mk->eagerArg() != MissingArg::instance())
-                                notMissing = true;
-                        }
-                    }
-                    if (!res.result.type.maybeMissing() &&
-                        !res.result.type.maybePromiseWrapped()) {
+            // Constant fold "missing" if we can.
+            if (auto missing = Missing::Cast(i)) {
+                auto res =
+                    analysis.load(before, missing->varName, missing->env());
+                bool notMissing = false;
+                if (res.result.isSingleValue()) {
+                    auto v =
+                        res.result.singleValue().val->followCastsAndForce();
+                    if (!v->type.maybePromiseWrapped() &&
+                        !v->type.maybeMissing() &&
+                        /* Warning: Forcing a (non-missing) promise can
+                            still return missing... */
+                        !MkArg::Cast(v)) {
                         notMissing = true;
                     }
+                    // If we find the (eager) root promise, we know if it is
+                    // missing or not! Note this doesn't go throught forces.
+                    if (auto mk = MkArg::Cast(
+                            res.result.singleValue().val->followCasts())) {
+                        if (mk->isEager() &&
+                            mk->eagerArg() != MissingArg::instance())
+                            notMissing = true;
+                    }
+                }
+                if (!res.result.type.maybeMissing() &&
+                    !res.result.type.maybePromiseWrapped()) {
+                    notMissing = true;
+                }
 
-                    if (notMissing) {
-                        // Missing still returns TRUE, if the argument was
-                        // initially missing, but then overwritten by a default
-                        // argument.
-                        if (auto env = MkEnv::Cast(missing->env())) {
-                            bool initiallyMissing = false;
-                            env->eachLocalVar(
-                                [&](SEXP name, Value* val, bool m) {
-                                    if (name == missing->varName)
-                                        initiallyMissing = m;
-                                });
-                            if (!initiallyMissing) {
-                                missing->replaceUsesWith(False::instance());
-                                replacedValue[missing] = False::instance();
-                                next = bb->remove(ip);
-                                anyChange = true;
-                            }
-                        }
-                    } else {
-                        res.result.ifSingleValue([&](Value* v) {
-                            if (v == MissingArg::instance()) {
-                                missing->replaceUsesWith(True::instance());
-                                replacedValue[missing] = True::instance();
-                                next = bb->remove(ip);
-                                anyChange = true;
-                            }
+                if (notMissing) {
+                    // Missing still returns TRUE, if the argument was
+                    // initially missing, but then overwritten by a default
+                    // argument.
+                    if (auto env = MkEnv::Cast(missing->env())) {
+                        bool initiallyMissing = false;
+                        env->eachLocalVar([&](SEXP name, Value* val, bool m) {
+                            if (name == missing->varName)
+                                initiallyMissing = m;
                         });
+                        if (!initiallyMissing) {
+                            missing->replaceUsesWith(False::instance());
+                            replacedValue[missing] = False::instance();
+                            next = bb->remove(ip);
+                            changed = true;
+                        }
                     }
+                } else {
+                    res.result.ifSingleValue([&](Value* v) {
+                        if (v == MissingArg::instance()) {
+                            missing->replaceUsesWith(True::instance());
+                            replacedValue[missing] = True::instance();
+                            next = bb->remove(ip);
+                            changed = true;
+                        }
+                    });
                 }
+            }
 
-                if (bb->isDeopt()) {
-                    if (auto fs = FrameState::Cast(i)) {
-                        if (auto mk = MkEnv::Cast(fs->env())) {
-                            bool candidate = mk->bb() != bb;
-                            // Environments which start off with a lot of
-                            // uninitialized variables are not profitable to
-                            // elide, because all these variables need to be
-                            // boxed.
-                            // TODO: implement unboxed uninitialized values
-                            size_t unbound = 0;
-                            if (candidate)
-                                mk->eachLocalVar([&](SEXP, Value* v, bool) {
-                                    if (v == UnboundValue::instance())
-                                        unbound++;
-                                });
-                            if (unbound > 3)
+            if (bb->isDeopt()) {
+                if (auto fs = FrameState::Cast(i)) {
+                    if (auto mk = MkEnv::Cast(fs->env())) {
+                        bool candidate = mk->bb() != bb;
+                        // Environments which start off with a lot of
+                        // uninitialized variables are not profitable to
+                        // elide, because all these variables need to be
+                        // boxed.
+                        // TODO: implement unboxed uninitialized values
+                        size_t unbound = 0;
+                        if (candidate)
+                            mk->eachLocalVar([&](SEXP, Value* v, bool) {
+                                if (v == UnboundValue::instance())
+                                    unbound++;
+                            });
+                        if (unbound > 3)
+                            candidate = false;
+                        std::unordered_set<Tag> allowed(
+                            {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
+                        if (!mk->stub)
+                            allowed.insert(Tag::LdVar);
+                        if (candidate)
+                            if (!mk->usesAreOnly(code->entry, allowed))
                                 candidate = false;
-                            std::unordered_set<Tag> allowed(
-                                {Tag::FrameState, Tag::StVar, Tag::IsEnvStub});
-                            if (!mk->stub)
-                                allowed.insert(Tag::LdVar);
-                            if (candidate)
-                                if (!mk->usesAreOnly(code->entry, allowed))
-                                    candidate = false;
 
-                            if (candidate) {
-                                analysis.tryMaterializeEnv(
-                                    before, mk,
-                                    [&](const std::unordered_map<
-                                        SEXP, std::pair<AbstractPirValue,
-                                                        bool>>& env) {
-                                        std::vector<SEXP> names;
-                                        std::vector<Value*> values;
-                                        std::vector<bool> missing;
-                                        for (auto& e : env) {
-                                            names.push_back(e.first);
-                                            auto v = e.second.first;
-                                            auto miss = e.second.second;
-                                            if (v.isUnknown())
-                                                return;
-                                            if (auto val =
-                                                    getSingleLocalValue(v)) {
-                                                values.push_back(val);
-                                            } else {
-                                                Value* phi = nullptr;
-                                                for (auto& c : createdPhis) {
-                                                    if (c.first == v) {
-                                                        auto& cache = c.second;
-                                                        if (cache.phis.count(
-                                                                bb))
-                                                            phi = cache.phis.at(
-                                                                bb);
-                                                        else if (
-                                                            cache.dominatingPhi
-                                                                .count(bb))
-                                                            phi = cache.phis.at(
-                                                                cache
-                                                                    .dominatingPhi
-                                                                    .at(bb));
-                                                        break;
-                                                    }
-                                                }
-                                                if (!phi) {
-                                                    phi = tryInsertPhis(
-                                                        mk, v, bb, ip, true);
-                                                }
-                                                if (!phi)
-                                                    return;
-                                                values.push_back(phi);
-                                            }
-                                            missing.push_back(miss);
-                                        }
-                                        auto deoptEnv =
-                                            new MkEnv(mk->lexicalEnv(), names,
-                                                      values.data(), missing);
-                                        ip = bb->insert(ip, deoptEnv);
-                                        ip++;
-                                        next = ip + 1;
-                                        mk->replaceDominatedUses(deoptEnv, dom);
-                                        if (mk->context) {
-                                            auto diff =
-                                                contexts.before(deoptEnv)
-                                                    .context() -
-                                                contexts.before(mk).context();
-                                            deoptEnv->context =
-                                                mk->context + diff;
+                        if (candidate) {
+                            analysis.tryMaterializeEnv(
+                                before, mk,
+                                [&](const std::unordered_map<
+                                    SEXP, std::pair<AbstractPirValue, bool>>&
+                                        env) {
+                                    std::vector<SEXP> names;
+                                    std::vector<Value*> values;
+                                    std::vector<bool> missing;
+                                    for (auto& e : env) {
+                                        names.push_back(e.first);
+                                        auto v = e.second.first;
+                                        auto miss = e.second.second;
+                                        if (v.isUnknown())
+                                            return;
+                                        if (auto val = getSingleLocalValue(v)) {
+                                            values.push_back(val);
                                         } else {
-                                            deoptEnv->context = 0;
+                                            Value* phi = nullptr;
+                                            for (auto& c : createdPhis) {
+                                                if (c.first == v) {
+                                                    auto& cache = c.second;
+                                                    if (cache.phis.count(bb))
+                                                        phi = cache.phis.at(bb);
+                                                    else if (cache.dominatingPhi
+                                                                 .count(bb))
+                                                        phi = cache.phis.at(
+                                                            cache.dominatingPhi
+                                                                .at(bb));
+                                                    break;
+                                                }
+                                            }
+                                            if (!phi) {
+                                                phi = tryInsertPhis(mk, v, bb,
+                                                                    ip, true);
+                                            }
+                                            if (!phi)
+                                                return;
+                                            values.push_back(phi);
                                         }
-                                        anyChange = true;
-                                    });
-                            }
+                                        missing.push_back(miss);
+                                    }
+                                    auto deoptEnv =
+                                        new MkEnv(mk->lexicalEnv(), names,
+                                                  values.data(), missing);
+                                    ip = bb->insert(ip, deoptEnv);
+                                    ip++;
+                                    next = ip + 1;
+                                    mk->replaceDominatedUses(deoptEnv, dom);
+                                    if (mk->context) {
+                                        auto diff =
+                                            contexts.before(deoptEnv)
+                                                .context() -
+                                            contexts.before(mk).context();
+                                        deoptEnv->context =
+                                            mk->context + diff;
+                                    } else {
+                                        deoptEnv->context = 0;
+                                    }
+                                    changed = true;
+                                });
                         }
                     }
                 }
+                if (changed)
+                    anyChange = true;
+            }
 
-                analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
-                    auto& res = aLoad.result;
+            analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
+                auto& res = aLoad.result;
 
-                    bool isActualLoad =
-                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
+                bool isActualLoad =
+                    LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
 
-                    // In case the scope analysis is sure that this is
-                    // actually the same as some other PIR value. So let's just
-                    // replace it.
-                    if (res.isSingleValue()) {
-                        if (auto val = getSingleLocalValue(res)) {
-                            if (val->type.isA(i->type)) {
-                                if (isActualLoad && val->type.maybeMissing()) {
-                                    // LdVar checks for missingness, so we need
-                                    // to preserve this.
-                                    auto chk = new ChkMissing(val);
-                                    ip = bb->insert(ip, chk);
-                                    ip++;
-                                    val = chk;
-                                }
-                                replacedValue[i] = val;
-                                i->replaceUsesWith(val);
-                                assert(!val->type.maybePromiseWrapped() ||
-                                       i->type.maybePromiseWrapped());
-                                next = bb->remove(ip);
-                                anyChange = true;
-                                return;
-                            }
-                        }
-                    }
-
-                    // Narrow down type according to what the analysis reports
-                    if (i->type.isRType()) {
-                        auto inferedType = res.type;
-                        if (!i->type.isA(inferedType))
-                            i->type = inferedType;
-                    }
-
-                    // The generic case where we have a bunch of potential
-                    // values we will insert a phi to group all of them. In
-                    // general this is only possible if they all come from the
-                    // current function (and not through inter procedural
-                    // analysis from other functions).
-                    //
-                    // Also, we shold only do this for actual loads and not
-                    // in general. Otherwise there is a danger that we insert
-                    // the same phi twice (e.g. if a force returns the result
-                    // of a load, we will resolve the load and the force) which
-                    // ends up being rather painful.
-                    if (!res.isUnknown() && isActualLoad) {
-                        Value* resPhi = nullptr;
-                        bool failed = false;
-
-                        for (auto& c : createdPhis) {
-                            if (c.first == res) {
-                                auto& cache = c.second;
-                                if (cache.hasUnbound) {
-                                    failed = true;
-                                    break;
-                                }
-                                if (cache.phis.count(bb))
-                                    resPhi = cache.phis.at(bb);
-                                else if (cache.dominatingPhi.count(bb))
-                                    resPhi = cache.phis.at(
-                                        cache.dominatingPhi.at(bb));
-                                break;
-                            }
-                        }
-                        if (!resPhi && !failed)
-                            resPhi =
-                                tryInsertPhis(i->env(), res, bb, ip, false);
-
-                        if (resPhi) {
-                            Value* val = resPhi;
-                            if (val->type.maybeMissing()) {
+                // In case the scope analysis is sure that this is
+                // actually the same as some other PIR value. So let's just
+                // replace it.
+                if (res.isSingleValue()) {
+                    if (auto val = getSingleLocalValue(res)) {
+                        if (val->type.isA(i->type)) {
+                            if (isActualLoad && val->type.maybeMissing()) {
                                 // LdVar checks for missingness, so we need
                                 // to preserve this.
                                 auto chk = new ChkMissing(val);
@@ -578,169 +510,226 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 ip++;
                                 val = chk;
                             }
-                            i->replaceUsesWith(val);
                             replacedValue[i] = val;
+                            i->replaceUsesWith(val);
                             assert(!val->type.maybePromiseWrapped() ||
                                    i->type.maybePromiseWrapped());
                             next = bb->remove(ip);
-                            anyChange = true;
+                            changed = true;
                             return;
                         }
                     }
+                }
 
-                    // LdVarSuper where the parent environment is known and
-                    // local, can be replaced by a simple LdVar
-                    if (auto lds = LdVarSuper::Cast(i)) {
-                        auto e = Env::parentEnv(lds->env());
-                        if (e) {
-                            auto r = new LdVar(lds->varName, e);
-                            bb->replace(ip, r);
-                            lds->replaceUsesWith(r);
-                            assert(!r->type.maybePromiseWrapped() ||
-                                   i->type.maybePromiseWrapped());
-                            replacedValue[lds] = r;
-                            anyChange = true;
+                // Narrow down type according to what the analysis reports
+                if (i->type.isRType()) {
+                    auto inferedType = res.type;
+                    if (!i->type.isA(inferedType))
+                        i->type = inferedType;
+                }
+
+                // The generic case where we have a bunch of potential
+                // values we will insert a phi to group all of them. In
+                // general this is only possible if they all come from the
+                // current function (and not through inter procedural
+                // analysis from other functions).
+                //
+                // Also, we shold only do this for actual loads and not
+                // in general. Otherwise there is a danger that we insert
+                // the same phi twice (e.g. if a force returns the result
+                // of a load, we will resolve the load and the force) which
+                // ends up being rather painful.
+                if (!res.isUnknown() && isActualLoad) {
+                    Value* resPhi = nullptr;
+                    bool failed = false;
+
+                    for (auto& c : createdPhis) {
+                        if (c.first == res) {
+                            auto& cache = c.second;
+                            if (cache.hasUnbound) {
+                                failed = true;
+                                break;
+                            }
+                            if (cache.phis.count(bb))
+                                resPhi = cache.phis.at(bb);
+                            else if (cache.dominatingPhi.count(bb))
+                                resPhi =
+                                    cache.phis.at(cache.dominatingPhi.at(bb));
+                            break;
                         }
+                    }
+                    if (!resPhi && !failed)
+                        resPhi = tryInsertPhis(i->env(), res, bb, ip, false);
+
+                    if (resPhi) {
+                        Value* val = resPhi;
+                        if (val->type.maybeMissing()) {
+                            // LdVar checks for missingness, so we need
+                            // to preserve this.
+                            auto chk = new ChkMissing(val);
+                            ip = bb->insert(ip, chk);
+                            ip++;
+                            val = chk;
+                        }
+                        i->replaceUsesWith(val);
+                        replacedValue[i] = val;
+                        assert(!val->type.maybePromiseWrapped() ||
+                               i->type.maybePromiseWrapped());
+                        next = bb->remove(ip);
+                        changed = true;
                         return;
-                    }
-
-                    // Ldfun needs some special treatment sometimes:
-                    // Since non closure bindings are skipped at runtime, we can
-                    // only resolve ldfun if we are certain which one is the
-                    // first binding that holds a closure. Often this is only
-                    // possible after inlining a promise. But inlining a promise
-                    // requires a force instruction. But ldfun does force
-                    // implicitly. To get out of this vicious circle, we add the
-                    // first binding we find with a normal load (as opposed to
-                    // loadFun) from the abstract state as a "guess" This will
-                    // enable other passes (especially the promise inliner pass)
-                    // to work on the guess and maybe the next time we end up
-                    // here, we can actually prove that the guess was right.
-                    if (auto ldfun = LdFun::Cast(i)) {
-                        auto guess = ldfun->guessedBinding();
-                        // If we already have a guess, let's see if now know
-                        // that it is a closure.
-                        if (guess) {
-                            // TODO: if !guess->maybe(closure) we know that the
-                            // guess is wrong and could try the next binding.
-                            if (!guess->type.isA(PirType::closure())) {
-                                if (auto i = Instruction::Cast(guess)) {
-                                    analysis.lookupAt(
-                                        before, i,
-                                        [&](const AbstractPirValue& res) {
-                                            if (auto val =
-                                                    getSingleLocalValue(res))
-                                                guess = val;
-                                        });
-                                }
-                            }
-                            if (guess->type.isA(PirType::closure()) &&
-                                guess->validIn(code)) {
-                                guess = getReplacedValue(guess);
-                                ldfun->replaceUsesWith(guess);
-                                replacedValue[ldfun] = guess;
-                                next = bb->remove(ip);
-                                anyChange = true;
-                                return;
-                            }
-                        } else {
-                            auto res =
-                                analysis
-                                    .load(before, ldfun->varName, ldfun->env())
-                                    .result;
-                            if (auto firstBinding = getSingleLocalValue(res)) {
-                                ip = bb->insert(
-                                    ip, new Force(firstBinding, ldfun->env(),
-                                                  Tombstone::framestate()));
-                                ldfun->guessedBinding(*ip);
-                                next = ip + 2;
-                                return;
-                            }
-                        }
-                    }
-
-                    // If nothing else, narrow down the environment (in case we
-                    // found something more concrete).
-                    if (i->hasEnv() &&
-                        aLoad.env != AbstractREnvironment::UnknownParent) {
-                        if (!MaterializeEnv::Cast(i->env()))
-                            i->env(aLoad.env);
-
-                        // Assume bindings in base namespace stay unchanged
-                        if (!bb->isDeopt()) {
-                            if (auto env = Env::Cast(aLoad.env)) {
-                                if (env->rho == R_BaseEnv ||
-                                    env->rho == R_BaseNamespace) {
-                                    SEXP name = nullptr;
-                                    if (auto ld = LdVar::Cast(i))
-                                        name = ld->varName;
-                                    if (auto ldfun = LdFun::Cast(i))
-                                        name = ldfun->varName;
-                                    if (name &&
-                                        SafeBuiltinsList::assumeStableInBaseEnv(
-                                            name)) {
-                                        auto value = SYMVALUE(name);
-                                        assert(Rf_findVar(name, env->rho) ==
-                                               value);
-                                        if (TYPEOF(value) == PROMSXP)
-                                            value = PRVALUE(value);
-                                        if (value != R_UnboundValue)
-                                            if (LdVar::Cast(i) ||
-                                                TYPEOF(value) == BUILTINSXP ||
-                                                TYPEOF(value) == SPECIALSXP ||
-                                                TYPEOF(value) == CLOSXP) {
-                                                auto con = new LdConst(value);
-                                                i->replaceUsesAndSwapWith(con,
-                                                                          ip);
-                                                anyChange = true;
-                                                return;
-                                            }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-
-                // TODO move this to a pass where it fits...
-                if (auto b = CallBuiltin::Cast(i)) {
-                    bool noObjects = true;
-                    bool unsafe = false;
-                    i->eachArg([&](Value* v) {
-                        if (v != i->env()) {
-                            if (v->cFollowCastsAndForce()->type.maybeObj())
-                                noObjects = false;
-                            if (v->type.isA(RType::expandedDots))
-                                unsafe = true;
-                        }
-                    });
-
-                    if (!unsafe && noObjects &&
-                        SafeBuiltinsList::nonObject(b->builtinId)) {
-                        std::vector<Value*> args;
-                        i->eachArg([&](Value* v) {
-                            if (v != i->env()) {
-                                auto mk = MkArg::Cast(v);
-                                if (mk && mk->isEager())
-                                    args.push_back(mk->eagerArg());
-                                else
-                                    args.push_back(v);
-                            }
-                        });
-                        auto safe = BuiltinCallFactory::New(
-                            b->env(), b->builtinSexp, args, b->srcIdx);
-                        assert(!b->type.maybePromiseWrapped() ||
-                               safe->type.maybePromiseWrapped());
-                        b->replaceUsesWith(safe);
-                        bb->replace(ip, safe);
-                        replacedValue[b] = safe;
-                        anyChange = true;
                     }
                 }
 
-                ip = next;
+                // LdVarSuper where the parent environment is known and
+                // local, can be replaced by a simple LdVar
+                if (auto lds = LdVarSuper::Cast(i)) {
+                    auto e = Env::parentEnv(lds->env());
+                    if (e) {
+                        auto r = new LdVar(lds->varName, e);
+                        bb->replace(ip, r);
+                        lds->replaceUsesWith(r);
+                        assert(!r->type.maybePromiseWrapped() ||
+                               i->type.maybePromiseWrapped());
+                        replacedValue[lds] = r;
+                        changed = true;
+                    }
+                    return;
+                }
+
+                // Ldfun needs some special treatment sometimes:
+                // Since non closure bindings are skipped at runtime, we can
+                // only resolve ldfun if we are certain which one is the
+                // first binding that holds a closure. Often this is only
+                // possible after inlining a promise. But inlining a promise
+                // requires a force instruction. But ldfun does force
+                // implicitly. To get out of this vicious circle, we add the
+                // first binding we find with a normal load (as opposed to
+                // loadFun) from the abstract state as a "guess" This will
+                // enable other passes (especially the promise inliner pass)
+                // to work on the guess and maybe the next time we end up
+                // here, we can actually prove that the guess was right.
+                if (auto ldfun = LdFun::Cast(i)) {
+                    auto guess = ldfun->guessedBinding();
+                    // If we already have a guess, let's see if now know
+                    // that it is a closure.
+                    if (guess) {
+                        // TODO: if !guess->maybe(closure) we know that the
+                        // guess is wrong and could try the next binding.
+                        if (!guess->type.isA(PirType::closure())) {
+                            if (auto i = Instruction::Cast(guess)) {
+                                analysis.lookupAt(
+                                    before, i,
+                                    [&](const AbstractPirValue& res) {
+                                        if (auto val = getSingleLocalValue(res))
+                                            guess = val;
+                                    });
+                            }
+                        }
+                        if (guess->type.isA(PirType::closure()) &&
+                            guess->validIn(code)) {
+                            guess = getReplacedValue(guess);
+                            ldfun->replaceUsesWith(guess);
+                            replacedValue[ldfun] = guess;
+                            next = bb->remove(ip);
+                            changed = true;
+                            return;
+                        }
+                    } else {
+                        auto res =
+                            analysis.load(before, ldfun->varName, ldfun->env())
+                                .result;
+                        if (auto firstBinding = getSingleLocalValue(res)) {
+                            ip = bb->insert(
+                                ip, new Force(firstBinding, ldfun->env(),
+                                              Tombstone::framestate()));
+                            ldfun->guessedBinding(*ip);
+                            next = ip + 2;
+                            return;
+                        }
+                    }
+                }
+
+                // If nothing else, narrow down the environment (in case we
+                // found something more concrete).
+                if (i->hasEnv() &&
+                    aLoad.env != AbstractREnvironment::UnknownParent) {
+                    if (!MaterializeEnv::Cast(i->env()))
+                        i->env(aLoad.env);
+
+                    // Assume bindings in base namespace stay unchanged
+                    if (!bb->isDeopt()) {
+                        if (auto env = Env::Cast(aLoad.env)) {
+                            if (env->rho == R_BaseEnv ||
+                                env->rho == R_BaseNamespace) {
+                                SEXP name = nullptr;
+                                if (auto ld = LdVar::Cast(i))
+                                    name = ld->varName;
+                                if (auto ldfun = LdFun::Cast(i))
+                                    name = ldfun->varName;
+                                if (name &&
+                                    SafeBuiltinsList::assumeStableInBaseEnv(
+                                        name)) {
+                                    auto value = SYMVALUE(name);
+                                    assert(Rf_findVar(name, env->rho) == value);
+                                    if (TYPEOF(value) == PROMSXP)
+                                        value = PRVALUE(value);
+                                    if (value != R_UnboundValue)
+                                        if (LdVar::Cast(i) ||
+                                            TYPEOF(value) == BUILTINSXP ||
+                                            TYPEOF(value) == SPECIALSXP ||
+                                            TYPEOF(value) == CLOSXP) {
+                                            auto con = new LdConst(value);
+                                            i->replaceUsesAndSwapWith(con, ip);
+                                            changed = true;
+                                            return;
+                                        }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // TODO move this to a pass where it fits...
+            if (auto b = CallBuiltin::Cast(i)) {
+                bool noObjects = true;
+                bool unsafe = false;
+                i->eachArg([&](Value* v) {
+                    if (v != i->env()) {
+                        if (v->cFollowCastsAndForce()->type.maybeObj())
+                            noObjects = false;
+                        if (v->type.isA(RType::expandedDots))
+                            unsafe = true;
+                    }
+                });
+
+                if (!unsafe && noObjects &&
+                    SafeBuiltinsList::nonObject(b->builtinId)) {
+                    std::vector<Value*> args;
+                    i->eachArg([&](Value* v) {
+                        if (v != i->env()) {
+                            auto mk = MkArg::Cast(v);
+                            if (mk && mk->isEager())
+                                args.push_back(mk->eagerArg());
+                            else
+                                args.push_back(v);
+                        }
+                    });
+                    auto safe = BuiltinCallFactory::New(
+                        b->env(), b->builtinSexp, args, b->srcIdx);
+                    assert(!b->type.maybePromiseWrapped() ||
+                           safe->type.maybePromiseWrapped());
+                    b->replaceUsesWith(safe);
+                    bb->replace(ip, safe);
+                    replacedValue[b] = safe;
+                    changed = true;
+                }
             }
-        });
+
+            ip = next;
+        }
+    });
     // Scope resolution can sometimes generate dead phis, so we remove them
     // here, before they cause errors in later compiler passes. (Sometimes, the
     // verifier will even catch these errors, but then segfault when trying to
