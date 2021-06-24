@@ -970,7 +970,10 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     SEXP frame;
     SEXP promargs;
     if (call.arglist) {
-        promargs = frame = call.arglist;
+        promargs = call.arglist;
+        frame = Rf_shallow_duplicate(promargs);
+        PROTECT(promargs);
+        npreserved++;
     } else {
         // Wrap the passed args in a linked-list.
         frame = createEnvironmentFrameFromStackValues(call, ctx);
@@ -993,11 +996,6 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         // some missing args might need to be supplied.
         if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
             call.passedArgs != fun->nargs()) {
-            if (call.arglist) {
-                promargs = Rf_shallow_duplicate(promargs);
-                PROTECT(promargs);
-                npreserved++;
-            }
 
             auto f = formals;
             auto a = frame;
