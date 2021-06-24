@@ -318,6 +318,7 @@ class StaticAnalysis {
             assert(POS == PositioningStyle::AfterInstruction);
             auto state = *afterPreviousInstr;
             apply(state, i);
+            assert(!bbSnapshots.extra.count(i));
             return state;
         }
 
