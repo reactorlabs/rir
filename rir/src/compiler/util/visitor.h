@@ -266,6 +266,7 @@ class VisitorImplementation {
         Marker done;
         BB* next = nullptr;
         done.set(cur);
+        Random random;
 
         while (cur) {
             next = nullptr;
@@ -283,13 +284,13 @@ class VisitorImplementation {
                     } else if (returnBranch) {
                         delayed.push_front(bb);
                     } else {
-                        enqueue(todo, bb);
+                        enqueue(todo, bb, random);
                     }
                 } else {
                     if (!next && todo.empty()) {
                         next = bb;
                     } else {
-                        enqueue(todo, bb);
+                        enqueue(todo, bb, random);
                     }
                 }
                 done.set(bb);
@@ -325,15 +326,12 @@ class VisitorImplementation {
     }
 
   private:
-    static Random& random() {
-        static Random r;
-        return r;
-    }
-    static bool coinFlip() { return random()() > (ULONG_MAX / 2L); }
+    static bool coinFlip(Random& random) { return random() > (ULONG_MAX / 2L); }
 
-    static void enqueue(std::deque<BB*>& todo, BB* bb) {
+    static void enqueue(std::deque<BB*>& todo, BB* bb, Random& random) {
         // For analysis random search is faster
-        if (ORDER == Order::Breadth || (ORDER == Order::Random && coinFlip()))
+        if (ORDER == Order::Breadth ||
+            (ORDER == Order::Random && coinFlip(random)))
             todo.push_back(bb);
         else
             todo.push_front(bb);
