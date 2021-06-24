@@ -542,6 +542,8 @@ class StaticAnalysis {
         }
     }
 
+    bool fixedPointReached() { return done; }
+
   private:
     void seedEntries() {
         if (Forward) {

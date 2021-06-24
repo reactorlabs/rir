@@ -288,7 +288,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
                         auto upd = state.forcedPromise.find(mkarg);
                         if (upd == state.forcedPromise.end()) {
-                            if (depth < MAX_DEPTH && force->strict) {
+                            if (depth < MAX_DEPTH && !fixedPointReached() &&
+                                force->strict) {
                                 if (ld->id < args.size())
                                     arg = args[ld->id];
 
@@ -346,7 +347,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 return;
             }
 
-            if (depth == MAX_DEPTH)
+            if (fixedPointReached() || depth == MAX_DEPTH)
                 return;
 
             if (version->numNonDeoptInstrs() > MAX_SIZE)
