@@ -1353,6 +1353,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
 
             if (isDeopt) {
+
                 auto deopt = assumeBB0 ? insert.getCurrentBB()->falseBranch()
                                        : insert.getCurrentBB()->trueBranch();
                 insert.enterBB(deopt);
@@ -1360,11 +1361,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 auto sp = insert.registerFrameState(
                     srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
                     inPromise());
-                auto offset = (uintptr_t)deoptCondition->typeFeedback.origin -
-                              (uintptr_t)srcCode;
-                DeoptReason reason = {DeoptReason::DeadBranchReached, srcCode,
-                                      (uint32_t)offset};
-                insert(new RecordDeoptReason(reason, deoptCondition));
 
                 insert(new Deopt(sp));
 
