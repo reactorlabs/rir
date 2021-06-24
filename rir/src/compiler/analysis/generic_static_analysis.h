@@ -141,6 +141,11 @@ class StaticAnalysis {
             snapshots[e->id].entry = initialState;
     }
 
+    void setInitialState(const std::function<void(AbstractState&)>& apply) {
+        for (auto& e : entrypoints)
+            apply(snapshots[e->id].entry);
+    }
+
     const GlobalAbstractState& getGlobalState() { return *globalState; }
 
     const AbstractState& result() const {
