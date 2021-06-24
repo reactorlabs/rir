@@ -279,8 +279,11 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (after.noReflection()) {
                     i->elideEnv();
                     i->effects.reset(Effect::Reflection);
+                    changed = true;
                 }
-                if (after.envNotEscaped(i->env())) {
+                if (after.envNotEscaped(i->env()) &&
+                    i->effects.includes(Effect::LeaksEnv)) {
+                    changed = true;
                     i->effects.reset(Effect::LeaksEnv);
                 }
             }
@@ -486,8 +489,6 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                     }
                 }
-                if (changed)
-                    anyChange = true;
             }
 
             analysis.lookupAt(after, i, [&](const AbstractLoad& aLoad) {
@@ -524,8 +525,10 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 // Narrow down type according to what the analysis reports
                 if (i->type.isRType()) {
                     auto inferedType = res.type;
-                    if (!i->type.isA(inferedType))
+                    if (!i->type.isA(inferedType)) {
                         i->type = inferedType;
+                        changed = true;
+                    }
                 }
 
                 // The generic case where we have a bunch of potential
@@ -654,8 +657,11 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                 // found something more concrete).
                 if (i->hasEnv() &&
                     aLoad.env != AbstractREnvironment::UnknownParent) {
-                    if (!MaterializeEnv::Cast(i->env()))
+                    if (!MaterializeEnv::Cast(i->env()) &&
+                        i->env() != aLoad.env) {
+                        changed = true;
                         i->env(aLoad.env);
+                    }
 
                     // Assume bindings in base namespace stay unchanged
                     if (!bb->isDeopt()) {
@@ -689,6 +695,8 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                     }
                 }
+                if (changed)
+                    anyChange = true;
             });
 
             // TODO move this to a pass where it fits...
