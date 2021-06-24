@@ -56,14 +56,16 @@ struct RangeAnalysisState {
                 if (mi < MIN)
                     mi = MIN;
                 if (mine.first > mi) {
-                    mine.first = mi;
+                    auto diff = mine.first - mi;
+                    mine.first -= 3 * diff;
                     res.update();
                 }
                 auto ma = max(mine.second, their.second);
                 if (ma > MAX)
                     ma = MAX;
                 if (mine.second < ma) {
-                    mine.second = ma;
+                    auto diff = ma - mine.second;
+                    mine.second += 3 * diff;
                     res.update();
                 }
             }
