@@ -188,6 +188,8 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
+
+
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
@@ -663,7 +665,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
                              didLongjmp);
     }
 
-    // Handle Incomming longjumps
+    // Handle incoming longjumps
     {
         builder.SetInsertPoint(didLongjmp);
         llvm::Value* returned = builder.CreateLoad(
@@ -1393,13 +1395,6 @@ llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
 
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
-#ifdef ENABLE_SLOWASSERT
-    // abuse BB label as comment
-    auto callBB =
-        BasicBlock::Create(PirJitLLVM::getContext(), builtin.name, fun);
-    builder.CreateBr(callBB);
-    builder.SetInsertPoint(callBB);
-#endif
     return builder.CreateCall(getBuiltin(builtin), args);
 }
 
@@ -5362,6 +5357,7 @@ void LowerFunctionLLVM::compile() {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
+
                     }
 
                     builder.CreateBr(done);

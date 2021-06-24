@@ -37,9 +37,7 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
 
     bool envStillValid(Instruction* i) { return currentEnv(i) == i->env(); }
 
-    Value* currentEnv(Instruction* i) {
-        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
-    }
+    Value* currentEnv(Instruction* i) { return before(i).get(); }
 };
 
 } // namespace pir

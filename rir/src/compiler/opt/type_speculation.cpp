@@ -90,7 +90,10 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 typecheckPos = guardPos->nextBB();
         }
 
-        if (!speculateOn || !guardPos)
+        if (!speculateOn || !guardPos || !typecheckPos ||
+            typecheckPos->isDeopt() ||
+            (speculate.count(typecheckPos) &&
+             speculate[typecheckPos].count(speculateOn)))
             return;
 
         TypeTest::Create(

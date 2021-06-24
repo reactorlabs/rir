@@ -1,7 +1,7 @@
 #!/bin/sh
 
 TARGET=$2
-FILES=$(find $1 -iname '*.rout' -o -iname '*.log')
+FILES=$(find $1 -iname '*.rout.fail' -o -iname '*.log')
 
 mkdir -p $TARGET
 for f in $FILES; do

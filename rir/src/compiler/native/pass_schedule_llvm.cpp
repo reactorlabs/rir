@@ -17,6 +17,9 @@
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Vectorize.h"
 
+#include "llvm/Support/raw_os_ostream.h"
+#include <iostream>
+
 namespace rir {
 namespace pir {
 
@@ -43,6 +46,7 @@ operator()(llvm::orc::ThreadSafeModule TSM,
         verify();
 
 #endif
+
     });
     return std::move(TSM);
 }
@@ -64,7 +68,6 @@ PassScheduleLLVM::PassScheduleLLVM() {
     // for inspiration
 
     PM->add(createEntryExitInstrumenterPass());
-    PM->add(createDeadInstEliminationPass());
     PM->add(createCFGSimplificationPass());
 
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 1) {
@@ -79,11 +82,9 @@ PassScheduleLLVM::PassScheduleLLVM() {
     PM->add(createEarlyCSEPass(true));
     if (rir::pir::Parameter::PIR_LLVM_OPT_LEVEL > 0) {
         PM->add(createPromoteMemoryToRegisterPass());
-        PM->add(createConstantPropagationPass());
     }
     PM->add(createLowerExpectIntrinsicPass());
 
-    PM->add(createDeadInstEliminationPass());
     PM->add(createDeadCodeEliminationPass());
     PM->add(createInstructionCombiningPass());
     PM->add(createCFGSimplificationPass());
@@ -123,9 +124,11 @@ PassScheduleLLVM::PassScheduleLLVM() {
     // might not be necessary:
     PM->add(createInstSimplifyLegacyPass());
 
-    PM->add(createGVNPass());
+    PM->add(createNewGVNPass());
     PM->add(createMemCpyOptPass());
     PM->add(createSCCPPass());
+    PM->add(createConstantHoistingPass());
+    PM->add(createFloat2IntPass());
     PM->add(createSinkingPass());
 
     // Run instcombine after redundancy elimination to exploit opportunities

@@ -591,6 +591,7 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     case DeoptReason::DeadCall:
         reason.srcCode->deadCallReached++;
         // fall through
+        [[clang::fallthrough]];
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
@@ -969,7 +970,10 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     SEXP frame;
     SEXP promargs;
     if (call.arglist) {
-        promargs = frame = call.arglist;
+        promargs = call.arglist;
+        frame = Rf_shallow_duplicate(promargs);
+        PROTECT(promargs);
+        npreserved++;
     } else {
         // Wrap the passed args in a linked-list.
         frame = createEnvironmentFrameFromStackValues(call, ctx);
@@ -992,11 +996,6 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         // some missing args might need to be supplied.
         if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
             call.passedArgs != fun->nargs()) {
-            if (call.arglist) {
-                promargs = Rf_shallow_duplicate(promargs);
-                PROTECT(promargs);
-                npreserved++;
-            }
 
             auto f = formals;
             auto a = frame;
@@ -1031,6 +1030,9 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                 pos++;
             }
         }
+
+        if (call.suppliedvars != R_NilValue)
+            Rf_addMissingVarsToNewEnv(env, call.suppliedvars);
     } else {
         // No need for lazy args if we have the non-modified list anyway
         promargs = frame;
@@ -2185,6 +2187,34 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             ostack_push(ctx, res);
             NEXT();
         }
+
+        INSTRUCTION(ldvar_noforce_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            assert(!LazyEnvironment::check(env));
+            res = Rf_findVar(sym, env);
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            } else if (TYPEOF(res) == PROMSXP) {
+                // if already evaluated, return the value
+                if (PRVALUE(res) && PRVALUE(res) != R_UnboundValue) {
+                    res = PRVALUE(res);
+                    assert(TYPEOF(res) != PROMSXP);
+
+                    if (res != R_NilValue)
+                        ENSURE_NAMED(res);
+                }
+            }
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
 
         INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
@@ -3849,7 +3879,7 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     }
 
     CallContext call(ArglistOrder::NOT_REORDERED, nullptr, op, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1),
+                     ostack_cell_at(ctx, (long)nargs - 1),
                      names.empty() ? nullptr : names.data(), rho, suppliedvars,
                      Context(), ctx);
     call.arglist = arglist;

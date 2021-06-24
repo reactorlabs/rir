@@ -236,18 +236,21 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         }
                                     }
                                 } else {
-                                    if (FrameState::Cast(*it))
-                                        next = bb->remove(it);
                                     // TODO: don't copy this to start with
                                     if ((*it)->frameState())
                                         (*it)->clearFrameState();
-                                    if (auto cp = Checkpoint::Cast(*it)) {
+                                    if (FrameState::Cast(*it)) {
+                                        next = bb->remove(it);
+                                    } else if (auto cp =
+                                                   Checkpoint::Cast(*it)) {
                                         auto n = cp->nextBB();
                                         auto d = cp->deoptBranch();
-                                        bb->eraseLast();
+                                        next = bb->remove(it);
                                         bb->overrideSuccessors({n});
-                                        delete d;
-                                        next = bb->end();
+                                        if (d->predecessors().size() == 0) {
+                                            assert(d->successors().size() == 0);
+                                            delete d;
+                                        }
                                     }
                                 }
                                 it = next;

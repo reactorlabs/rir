@@ -37,9 +37,7 @@ class FwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* reaching(Instruction* i) const {
-        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
-    }
+    Checkpoint* reaching(Instruction* i) const { return before(i).get(); }
 };
 
 class RwdAvailableCheckpoints
@@ -53,12 +51,8 @@ class RwdAvailableCheckpoints
         return AvailableCheckpointsApply::apply(state, i);
     }
 
-    Checkpoint* reachingThrough(Instruction* i) const {
-        return StaticAnalysis::at<PositioningStyle::AfterInstruction>(i).get();
-    }
-    Checkpoint* reaching(Instruction* i) const {
-        return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
-    }
+    Checkpoint* reachingThrough(Instruction* i) const { return after(i).get(); }
+    Checkpoint* reaching(Instruction* i) const { return before(i).get(); }
 };
 
 class AvailableCheckpoints {

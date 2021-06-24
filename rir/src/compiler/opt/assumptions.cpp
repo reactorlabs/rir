@@ -169,8 +169,7 @@ struct AvailableAssumptions
         return res;
     }
     const SmallSet<AAssumption> at(Instruction* i) const {
-        auto res = StaticAnalysis::at<
-            StaticAnalysis::PositioningStyle::BeforeInstruction>(i);
+        auto res = before(i);
         return res.available;
     }
 };
@@ -203,7 +202,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
         hoistAssume;
 
     bool anyChange = false;
-    Visitor::runPostChange(code->entry, [&](BB* bb) {
+    Visitor::runPostChange(code->entry, [&checkpoint, &assumptions, &dom,
+                                         &replaced, &hoistAssume,
+                                         &anyChange](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;

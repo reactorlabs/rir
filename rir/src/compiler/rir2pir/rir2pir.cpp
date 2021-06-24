@@ -384,8 +384,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         auto fs = inlining() ? (Value*)Tombstone::framestate()
                              : insert.registerFrameState(srcCode, nextPos,
+
                                                          stack, inPromise());
         push(insert(new Force(v, env, fs)));
+        break;
+    }
+
+    case Opcode::ldvar_noforce_: {
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
+        v = insert(new LdVar(bc.immediateConst(), env));
+
+        push(v);
         break;
     }
 
@@ -1599,7 +1609,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
     if (auto last = insert.getCurrentBB()) {
         res = Return::Cast(last->last())->arg(0).val();
-        last->eraseLast();
+        last->remove(last->end() - 1);
     }
 
     Visitor::run(insert.code->entry, [&](Instruction* i) {
