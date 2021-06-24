@@ -1306,9 +1306,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             case Opcode::brfalse_: {
                 v = branchCondition = cur.stack.pop();
                 if (auto c = Instruction::Cast(branchCondition)) {
-                    std::cerr << c->typeFeedback.value;
-                    srcCode->print(std::cerr);
-
                     if (c->typeFeedback.value == True::instance()) {
                         assumeBB0 = bc.bc == Opcode::brtrue_;
                         deoptCondition = c;
