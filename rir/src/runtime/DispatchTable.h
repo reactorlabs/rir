@@ -4,6 +4,7 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "utils/random.h"
 
 namespace rir {
 
@@ -131,7 +132,7 @@ struct DispatchTable
             Rf_error("dispatch table overflow");
 #endif
             // Evict one element and retry
-            auto pos = 1 + (std::rand() % (size() - 1));
+            auto pos = 1 + (Random::singleton()() % (size() - 1));
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
