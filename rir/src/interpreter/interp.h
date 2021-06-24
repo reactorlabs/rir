@@ -6,6 +6,7 @@
 #include "instance.h"
 
 #include "compiler/parameter.h"
+#include "compiler/worker.h"
 #include "interp_incl.h"
 #include "ir/Deoptimization.h"
 

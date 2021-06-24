@@ -22,6 +22,7 @@ struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
     size_t size() const { return size_; }
+    long compiling = 0;
 
     Function* get(size_t i) const {
         assert(i < capacity());

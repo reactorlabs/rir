@@ -11,6 +11,7 @@
 #include "compiler/parameter.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
+#include "compiler/worker.h"
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
@@ -293,37 +294,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         Rf_error("Cannot optimize compiled expression, only closure");
     }
 
-    PROTECT(what);
+    pir::CompilerWorker::singleton().add({name, what, assumptions, debug});
 
-    bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    // compile to pir
-    pir::Module* m = new pir::Module;
-    pir::StreamLogger logger(debug);
-    logger.title("Compiling " + name);
-    pir::Compiler cmp(m, logger);
-    pir::Backend backend(logger, name);
-    cmp.compileClosure(what, name, assumptions, true,
-                       [&](pir::ClosureVersion* c) {
-                           logger.flush();
-                           cmp.optimizeModule();
-
-                           auto fun = backend.getOrCompile(c);
-
-                           // Install
-                           if (dryRun)
-                               return;
-
-                           Protect p(fun->container());
-                           DispatchTable::unpack(BODY(what))->insert(fun);
-                       },
-                       [&]() {
-                           if (debug.includes(pir::DebugFlag::ShowWarnings))
-                               std::cerr << "Compilation failed\n";
-                       },
-                       {});
-
-    delete m;
-    UNPROTECT(1);
     return what;
 }
 
@@ -545,6 +517,8 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[1] = n2;
     return res;
 }
+
+REXPORT void rir_shutdown() { pir::CompilerWorker::shut(); }
 
 bool startup() {
     initializeRuntime();

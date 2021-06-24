@@ -214,3 +214,5 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+.Last <- function() .Call("rir_shutdown")

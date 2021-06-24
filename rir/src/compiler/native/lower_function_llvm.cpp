@@ -5870,7 +5870,6 @@ void LowerFunctionLLVM::compile() {
     }
     if (!variableMapping.empty()) {
         pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
-        p_(pirTypeFeedback->container());
 #ifdef DEBUG_REGISTER_MAP
         for (auto m : variableMapping) {
             auto origin = registerMap->getOriginOfSlot(m.first);

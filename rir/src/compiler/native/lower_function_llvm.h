@@ -1,7 +1,6 @@
 #ifndef PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 #define PIR_COMPILER_LOWER_FUNCTION_LLVM_H
 
-#include "R/Protect.h"
 #include "compiler/analysis/liveness.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/native/builtins.h"
@@ -68,8 +67,6 @@ class LowerFunctionLLVM {
 
     PirJitLLVM::DebugInfo* DI;
     llvm::DIBuilder* DIB;
-
-    Protect p_;
 
   public:
     PirTypeFeedback* pirTypeFeedback = nullptr;

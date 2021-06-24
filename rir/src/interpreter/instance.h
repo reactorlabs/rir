@@ -7,6 +7,7 @@
 
 #include "interp_incl.h"
 
+#include <atomic>
 #include <stdio.h>
 
 #include <assert.h>
@@ -28,8 +29,8 @@ typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
                            SEXP name)>
     ClosureOptimizer;
 
-#define POOL_CAPACITY 4096
-#define STACK_CAPACITY 4096
+#define POOL_CAPACITY 40960
+#define STACK_CAPACITY 40960
 
 /** Resizeable R list.
 
@@ -41,7 +42,7 @@ typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
  */
 typedef struct {
     SEXP list;
-    size_t capacity;
+    R_len_t capacity;
 } ResizeableList;
 
 #define CONTEXT_INDEX_CP 0
@@ -67,7 +68,7 @@ struct InterpreterInstance {
 // TODO we might actually need to do more for the lengths (i.e. true length vs
 // length)
 
-RIR_INLINE size_t rl_length(ResizeableList* l) { return Rf_length(l->list); }
+RIR_INLINE R_len_t rl_length(ResizeableList* l) { return Rf_length(l->list); }
 
 RIR_INLINE void rl_setLength(ResizeableList* l, size_t length) {
     ((VECSEXP)l->list)->vecsxp.length = length;
@@ -75,6 +76,9 @@ RIR_INLINE void rl_setLength(ResizeableList* l, size_t length) {
 }
 
 RIR_INLINE void rl_grow(ResizeableList* l, SEXP parent, size_t index) {
+    // not thread safe!
+    assert(false);
+
     int oldsize = rl_length(l);
     SEXP n = Rf_allocVector(VECSXP, l->capacity * 2);
     memcpy(DATAPTR(n), DATAPTR(l->list), l->capacity * sizeof(SEXP));
@@ -86,13 +90,19 @@ RIR_INLINE void rl_grow(ResizeableList* l, SEXP parent, size_t index) {
 
 RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
                           size_t index) {
-    size_t i = rl_length(l);
-    if (i == l->capacity) {
-        PROTECT(val);
-        rl_grow(l, parent, index);
-        UNPROTECT(1);
+    R_len_t i;
+    while (true) {
+        i = rl_length(l);
+        if (i == l->capacity) {
+            PROTECT(val);
+            rl_grow(l, parent, index);
+            UNPROTECT(1);
+        }
+        auto ptr = reinterpret_cast<std::atomic<R_len_t>*>(
+            &(((VECSEXP)l->list)->vecsxp.length));
+        if (std::atomic_compare_exchange_weak(ptr, &i, i + 1))
+            break;
     }
-    rl_setLength(l, i + 1);
     SET_VECTOR_ELT(l->list, i, val);
 }
 
@@ -194,17 +204,17 @@ RIR_INLINE size_t src_pool_add(InterpreterInstance* c, SEXP v) {
     return result;
 }
 
-RIR_INLINE SEXP cp_pool_at(InterpreterInstance* c, unsigned index) {
+RIR_INLINE SEXP cp_pool_at(InterpreterInstance* c, R_len_t index) {
     SLOWASSERT(c->cp.capacity > index);
     return VECTOR_ELT(c->cp.list, index);
 }
 
-RIR_INLINE SEXP src_pool_at(InterpreterInstance* c, unsigned index) {
+RIR_INLINE SEXP src_pool_at(InterpreterInstance* c, R_len_t index) {
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
 }
 
-RIR_INLINE void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
+RIR_INLINE void cp_pool_set(InterpreterInstance* c, R_len_t index, SEXP e) {
     SLOWASSERT(c->cp.capacity > index);
     SET_VECTOR_ELT(c->cp.list, index, e);
 }

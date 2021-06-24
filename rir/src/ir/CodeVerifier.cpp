@@ -294,7 +294,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 *cptr == Opcode::ldvar_for_update_ ||
                 *cptr == Opcode::ldvar_noforce_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
-                if (*argsIndex >= cp_pool_length(ctx))
+                if (*argsIndex >= (unsigned)cp_pool_length(ctx))
                     Rf_error("RIR Verifier: Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
                 if (TYPEOF(sym) != SYMSXP)
@@ -306,7 +306,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 *cptr == Opcode::stvar_cached_ ||
                 *cptr == Opcode::ldvar_for_update_cache_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
-                if (*argsIndex >= cp_pool_length(ctx))
+                if (*argsIndex >= (unsigned)cp_pool_length(ctx))
                     Rf_error("RIR Verifier: Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
                 if (TYPEOF(sym) != SYMSXP)

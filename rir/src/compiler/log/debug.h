@@ -58,8 +58,8 @@ enum class DebugStyle {
 struct DebugOptions {
     typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
-    const std::regex passFilter;
-    const std::regex functionFilter;
+    std::regex passFilter;
+    std::regex functionFilter;
     DebugStyle style;
 
     DebugOptions operator|(const DebugFlags& f) const {
@@ -83,6 +83,8 @@ struct DebugOptions {
         : flags(flags), passFilter(filter), functionFilter(functionFilter),
           style(style) {}
     DebugOptions() {}
+
+    DebugOptions& operator=(const DebugOptions& other) = default;
 };
 
 const static DebugOptions::DebugFlags PrintDebugPasses =
