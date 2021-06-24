@@ -1797,11 +1797,11 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
             if (!callHasDots) {
                 auto builtin = Rf_findVar(fun, R_BaseEnv);
+                assert(builtin != R_NilValue);
                 auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
                 speculateOnBuiltin = likelyBuiltin;
 
                 if (speculateOnBuiltin) {
-
                     eager = cs.mkLabel();
                     theEnd = cs.mkLabel();
                     cs << BC::push(builtin) << BC::dup()
