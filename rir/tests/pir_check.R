@@ -498,3 +498,7 @@ h <- function() {
   g(g(g(f()) + g(g(f()))) + g(40L))
 }
 stopifnot(pir.check(h, NoExternalCalls, Returns42L, warmup=function(h) {h();h()}))
+
+# checks range analysis
+f <- function(a,b) if (b > 0) a[b]
+stopifnot(pir.check(f, UnboxedExtract, warmup=function(f) f(1,1)))
