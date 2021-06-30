@@ -39,8 +39,8 @@ void AbstractREnvironment::print(std::ostream& out, bool tty) const {
     if (!reachableEnvs.empty()) {
         out << "- reachable: ";
         for (auto r : reachableEnvs) {
-            r->printRef(std::cout);
-            std::cout << " ";
+            r->printRef(out);
+            out << " ";
         }
         out << "\n";
     }

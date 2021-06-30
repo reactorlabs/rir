@@ -120,6 +120,9 @@ class ScopeAnalysis
 
     ScopeAnalysisResults* globalStateStore = nullptr;
 
+    std::unordered_map<Instruction*, std::unique_ptr<ScopeAnalysis>>
+        subAnalysis;
+
   protected:
     AbstractResult compute(ScopeAnalysisState& state, Instruction* i) override {
         return doCompute(state, i, true);
