@@ -247,14 +247,18 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                 auto a = state.range.at(i->arg(0).val());
                 auto b = state.range.at(i->arg(1).val());
 
-                auto up = Range::get(apply(a.begin(), b.begin()),
-                                     apply(a.begin(), b.end()));
+                auto lower = a.begin() == INT_MIN || b.begin() == INT_MIN
+                                 ? INT_MIN
+                                 : apply(a.begin(), b.begin());
+                auto upper = a.end() == INT_MAX || b.begin() == INT_MAX
+                                 ? INT_MAX
+                                 : apply(a.end(), b.end());
+                auto up = Range::get(lower, upper);
 
                 if (state.range.count(i)) {
                     auto& cur = state.range.at(i);
-                    auto m = cur.merge(up);
-                    if (cur != m) {
-                        cur = m;
+                    if (cur != up) {
+                        cur = up;
                         res.update();
                     }
                 } else {
@@ -310,10 +314,12 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                 }
                 first = false;
             });
-            if (!state.seen.count(p) || state.range.at(p) != m) {
-                state.range.emplace(p, m);
+            if (!state.seen.count(p)) {
                 res.update();
+                state.range.emplace(p, m);
                 state.seen.insert(p);
+            } else if (state.range.at(p) != m) {
+                state.range.at(p) = m;
             }
             break;
         }
