@@ -319,6 +319,8 @@ test_sanitize:
     - ninja
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
     - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/12.0.0/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
+  # sometimes leak sanitizer segfaults
+  retry: 1
 
 # Test the benchmarks container before deploying
 test_benchmarks:

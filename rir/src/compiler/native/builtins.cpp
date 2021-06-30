@@ -412,66 +412,6 @@ SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
     } while (false)
 
-static void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
-    memset(&res, 0, sizeof(SEXPREC));
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
-}
-
-static void createFakeCONS(SEXPREC& res, SEXP cdr) {
-    createFakeSEXP(res, LISTSXP);
-    res.u.listsxp.carval = R_NilValue;
-    res.u.listsxp.tagval = R_NilValue;
-    res.u.listsxp.cdrval = cdr;
-}
-
-#define FAKE_ARGS1(res, a1)                                                    \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, R_NilValue);                                  \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS2(res, a1, a2)                                                \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, R_NilValue);                                  \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS3(res, a1, a2, a3)                                            \
-    SEXPREC __a3__cell__;                                                      \
-    createFakeCONS(__a3__cell__, R_NilValue);                                  \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    __a3__cell__.u.listsxp.carval = a3;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS4(res, a1, a2, a3, a4)                                        \
-    SEXPREC __a4__cell__;                                                      \
-    createFakeCONS(__a4__cell__, R_NilValue);                                  \
-    SEXPREC __a3__cell__;                                                      \
-    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    __a3__cell__.u.listsxp.carval = a3;                                        \
-    __a4__cell__.u.listsxp.carval = a4;                                        \
-    res = &__a1__cell__
-
 static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
                         UnopKind op) {
     SEXP res = nullptr;
