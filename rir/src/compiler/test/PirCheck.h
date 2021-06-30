@@ -29,6 +29,7 @@ namespace rir {
     V(LazyCallArgs)                                                            \
     V(EagerCallArgs)                                                           \
     V(LdVarVectorInFirstBB)                                                    \
+    V(UnboxedExtract)                                                          \
     V(AnAddIsNotNAOrNaN)
 
 struct PirCheck {

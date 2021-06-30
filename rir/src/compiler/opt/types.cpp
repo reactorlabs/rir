@@ -238,7 +238,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 getType(e->idx()).isSimpleScalar()) {
                                 auto range = rangeAnalysis.before(e).range;
                                 if (range.count(e->idx())) {
-                                    if (range.at(e->idx()).first > 0) {
+                                    if (range.at(e->idx()) > 0) {
                                         // Negative numbers as indices make the
                                         // extract return a vector. Only
                                         // positive are safe.
