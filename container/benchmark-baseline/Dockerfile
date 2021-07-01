@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/rirvm/rir_mirror/base
+FROM ubuntu:20.04
 
 ARG GRAAL_VERSION=20.3.0
 
