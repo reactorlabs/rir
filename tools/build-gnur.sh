@@ -56,13 +56,17 @@ function build_r {
     rm -rf Matrix
     cd ../../../
 
+    if [[ "$GNUR_BRANCH" != "" ]]; then
+        git checkout $GNUR_BRANCH
+    fi
+
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
             ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
-            ./configure --with-ICU=no
+            ./configure
         fi
     fi
 
