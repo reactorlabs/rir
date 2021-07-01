@@ -10,8 +10,6 @@ stages:
 cache:
   paths:
   - apt-cache/
-before_script:
-  - export APT_CACHE_DIR=`pwd`/apt-cache && mkdir -pv $APT_CACHE_DIR
 
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
