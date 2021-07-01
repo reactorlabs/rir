@@ -7,6 +7,12 @@ stages:
   - Benchmark
   - Report
 
+cache:
+  paths:
+  - apt-cache/
+before_script:
+  - export APT_CACHE_DIR=`pwd`/apt-cache && mkdir -pv $APT_CACHE_DIR
+
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
