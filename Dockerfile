@@ -11,7 +11,7 @@ RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     find external -type f -name '*.o' -exec rm -f {} \; && \
     find external -type f -name '*.tar.gz' -exec rm -f {} \; && \
     find external -type f -name '*.tar.xz' -exec rm -f {} \; && \
-    apt-get remove -y -qq  libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev && \
+    apt-get remove -y -qq  libreadline-dev libx11-dev libxt-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev && \
     apt-get autoremove -y -qq && \
     apt-get clean all
 RUN mkdir -p /opt/rir/build/release && \
