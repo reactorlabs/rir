@@ -4,7 +4,7 @@ ADD . /opt/rir
 RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev && \
     cd /opt/rir && \
     tools/build-gnur.sh && \
     rm -rf external/custom-r/cache_recommended.tar .git && \
@@ -15,7 +15,7 @@ RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     apt-get autoremove -y -qq && \
     apt-get clean all
 RUN mkdir -p /opt/rir/build/release && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xz-utils cmake libtinfo5 && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xz-utils cmake && \
     cd /opt/rir && \
     (curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz || true) && \
     tools/fetch-llvm.sh && \
