@@ -7,10 +7,6 @@ stages:
   - Benchmark
   - Report
 
-cache:
-  paths:
-  - apt-cache/
-
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
@@ -30,7 +26,7 @@ rir_container:
     - docker info
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
-    - docker build -v $CI_PROJECT_DIR/apt-cache:/apt-cache --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
+    - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
     - dockerInDocker
