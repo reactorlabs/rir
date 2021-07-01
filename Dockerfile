@@ -21,8 +21,8 @@ RUN mkdir -p /opt/rir/build/release && \
     tools/fetch-llvm.sh && \
     cd /opt/rir/build/release && \
     cmake -DCMAKE_BUILD_TYPE=release ../.. && \
-    make -j4 && \
-    rm -rf CMakeFiles external/clang+llvm* && \
+    make -j8 && \
+    rm -rf CMakeFiles /opt/rir/external/clang+llvm* && \
     apt-get remove -y -qq xz-utils && \
     apt-get autoremove -y -qq && \
     apt-get clean all
