@@ -3,7 +3,7 @@ ARG GRAAL_VERSION=20.3.0
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake python3-pip && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake python3-pip sudo && \
     git clone --recursive https://github.com/reactorlabs/rir /opt/rir && cd /opt/rir && \
     GNUR_BRANCH=R-3-6-2-branch tools/build-gnur.sh && \
     find external -type f -name '*.o' -exec rm -f {} \; && \
