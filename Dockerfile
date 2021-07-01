@@ -9,8 +9,6 @@ RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     tools/build-gnur.sh && \
     rm -rf external/custom-r/cache_recommended.tar .git && \
     find external -type f -name '*.o' -exec rm -f {} \; && \
-    find external -type f -name '*.tar.gz' -exec rm -f {} \; && \
-    find external -type f -name '*.tar.xz' -exec rm -f {} \; && \
     apt-get clean
 RUN mkdir -p /opt/rir/build/release && \
     cd /opt/rir && \
