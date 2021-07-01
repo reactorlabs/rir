@@ -14,7 +14,7 @@ RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     apt-get remove -y -qq  libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev && \
     apt-get autoremove -y -qq
 RUN mkdir -p /opt/rir/build/release && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -o dir::cache::archives="/apt-cache" -y -qq xz-utils cmake && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -o dir::cache::archives="/apt-cache" -y -qq xz-utils cmake libtinfo5 && \
     cd /opt/rir && \
     (curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz || true) && \
     tools/fetch-llvm.sh && \
