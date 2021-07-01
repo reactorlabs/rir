@@ -11,7 +11,7 @@ RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     find external -type f -name '*.o' -exec rm -f {} \; && \
     find external -type f -name '*.tar.gz' -exec rm -f {} \; && \
     find external -type f -name '*.tar.xz' -exec rm -f {} \; && \
-    apt-get clean && rm -rf /var/cache/apt/lists
+    apt-get clean
 RUN mkdir -p /opt/rir/build/release && \
     cd /opt/rir && \
     (curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz || true) && \

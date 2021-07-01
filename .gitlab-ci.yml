@@ -16,8 +16,8 @@ variables:
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
   SAVE_LOGS: "sh /opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
-  BUILD_RELEASE_ASSERT: "bash -c 'curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz' && mkdir /opt/rir/build/sanitize && cd /opt/rir/build/sanitize && /opt/rir/tools/fetch-llvm.sh && cmake -DCMAKE_BUILD_TYPE=RELEASESLOWASSERT ../.. && make -j6"
-  APT_INSTALL: "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq"
+  BUILD_RELEASE_ASSERT: "bash -c 'curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mkdir /opt/rir/build/sanitize && cd /opt/rir/build/sanitize && /opt/rir/tools/fetch-llvm.sh && cmake -DCMAKE_BUILD_TYPE=RELEASESLOWASSERT ../.. && make -j6'"
+  APT_INSTALL: "DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq"
   INSTALL_TEST_DEPS: "$APT_INSTALL texlive-base"
 
 rir_container:
@@ -69,6 +69,7 @@ cpp_check:
   needs:
     - rir_container
   script:
+    - apt-get update
     - $APT_INSTALL cppcheck
     - /opt/rir/tools/cppcheck
 
@@ -87,6 +88,7 @@ test_release_1:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
@@ -155,6 +157,7 @@ tests_debug2:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - $BUILD_RELEASE_ASSERT
     - cd /opt/rir/build/releaseassert
@@ -199,6 +202,7 @@ test_features_1:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - cd /opt/rir/build/release
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
@@ -225,6 +229,7 @@ test_features_2:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - cd /opt/rir/build/release
     - ./bin/gnur-make-tests check || $SAVE_LOGS
@@ -267,6 +272,7 @@ test_gctorture1:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - $BUILD_RELEASE_ASSERT
     - cd /opt/rir/build/releaseassert
@@ -309,6 +315,7 @@ test_big_inline:
   except:
     - schedules
   script:
+    - apt-get update
     - $INSTALL_TEST_DEPS
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
