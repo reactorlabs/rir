@@ -186,17 +186,14 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 src = t->arg(0).val(); // *** reverse?
                 r = DeoptReason::DeadBranchReached;
 
-            } else if (auto t = LdConst::Cast(cond)) {
+            } else if (LdConst::Cast(cond)) {
                 // src = t->arg(0).val();
                 r = DeoptReason::None;
 
             } else {
                 if (auto c = Instruction::Cast(cond)) {
-                    std::cerr << "\n";
+
                     c->print(std::cerr);
-                    c->bb()->print(std::cerr, true);
-                    std::cerr << "\n";
-                    assume->bb()->print(std::cerr, true);
                     std::cerr << "\n";
 
                     assert(src && "Don't know how to report deopt reason");
