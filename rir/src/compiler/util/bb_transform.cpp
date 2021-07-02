@@ -135,6 +135,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                              Assume* assume, bool condition, BB* deoptBlock_,
                              const std::string& debugMessage,
                              bool triggerAnyway) {
+
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
     static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
@@ -160,6 +161,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
+
             auto r = DeoptReason::None;
             if (auto t = IsType::Cast(cond)) {
                 r = DeoptReason::Typecheck;
@@ -170,22 +172,53 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                     src = t->arg<1>().val();
                 assert(!LdConst::Cast(src));
                 r = DeoptReason::Calltarget;
+
             } else if (auto t = IsEnvStub::Cast(cond)) {
                 src = t->arg(0).val();
                 r = DeoptReason::EnvStubMaterialized;
+            } else if (auto t = ColonInputEffects::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::DeadBranchReached;
+            } else if (auto t = CheckTrueFalse::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::DeadBranchReached;
+            } else if (auto t = Not::Cast(cond)) {
+                src = t->arg(0).val(); // *** reverse?
+                r = DeoptReason::DeadBranchReached;
+
+            } else if (auto t = LdConst::Cast(cond)) {
+                // src = t->arg(0).val();
+                r = DeoptReason::None;
+
             } else {
                 if (auto c = Instruction::Cast(cond)) {
+                    std::cerr << "\n";
                     c->print(std::cerr);
+                    c->bb()->print(std::cerr, true);
+                    std::cerr << "\n";
+                    assume->bb()->print(std::cerr, true);
+                    std::cerr << "\n";
+
                     assert(src && "Don't know how to report deopt reason");
                 }
             }
             switch (r) {
             case DeoptReason::Typecheck:
             case DeoptReason::DeadCall:
-            case DeoptReason::Calltarget: {
+            case DeoptReason::Calltarget:
+            case DeoptReason::DeadBranchReached: {
+
                 auto offset =
                     (uintptr_t)origin.second - (uintptr_t)origin.first;
                 auto o = *((Opcode*)origin.first + offset);
+
+                // when the instruction is 'Identical', we decide the
+                // DeoptReason based on the opcode too. First guess is
+                // CallTarget, but then if the Opcode is record_test_ we change
+                // it to DeadBranchReached
+                if (o == Opcode::record_test_)
+                    r = DeoptReason::DeadBranchReached;
+
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);
                 assert((uintptr_t)origin.second > (uintptr_t)origin.first);
@@ -199,10 +232,10 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 deoptBlock->append(rec);
                 break;
             }
-            case DeoptReason::DeadBranchReached: {
-                assert(false);
-                break;
-            }
+            // case DeoptReason::DeadBranchReached: {
+            //     assert(false);
+            //     break;
+            // }
             case DeoptReason::None:
                 break;
             }
