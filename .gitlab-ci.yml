@@ -9,7 +9,7 @@ stages:
 
 cache:
   paths:
-  - /apt-cache
+  - apt-cache/
 
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
@@ -67,7 +67,7 @@ cpp_check:
     - rir_container
   script:
     - apt-get update
-    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=/apt-cache install -y -qq cppcheck
+    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq cppcheck
     - /opt/rir/tools/cppcheck
 
 # Run check-all in release mode  (additionally check pir types)
