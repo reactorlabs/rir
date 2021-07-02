@@ -243,6 +243,7 @@ test_features_3:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
