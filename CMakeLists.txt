@@ -119,11 +119,13 @@ add_custom_target(setup-build-dir
 
 if(${MACOS_USE_GCC_9})
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh --macos_gcc9
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh --macos_gcc9
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh --macos_gcc9
     )
 else()
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
     )
 endif()
 
