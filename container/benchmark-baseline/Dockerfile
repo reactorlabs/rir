@@ -6,6 +6,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake python3-pip sudo && \
     git clone --recursive https://github.com/reactorlabs/rir /opt/rir && cd /opt/rir && \
     GNUR_BRANCH=R-3-6-2-branch tools/build-gnur.sh && \
+    rm -rf .git && \
     find external -type f -name '*.o' -exec rm -f {} \; && \
     find external -type f -name '*.tar.gz' -exec rm -f {} \; && \
     find external -type f -name '*.tar.xz' -exec rm -f {} \; && \
