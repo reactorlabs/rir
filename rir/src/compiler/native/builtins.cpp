@@ -455,6 +455,7 @@ static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS1(arglist, argument);
+    MATERIALIZE_IF_OBJ1(arglist, argument);
     SEXP call = src_pool_at(globalContext(), srcIdx);
     PROTECT(arglist);
     OPERATION_FALLBACK("!");
@@ -467,6 +468,7 @@ static SEXP notImpl(SEXP argument) {
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS1(arglist, argument);
+    MATERIALIZE_IF_OBJ1(arglist, argument);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
     // Why we do not need a protect here?
@@ -480,6 +482,7 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS2(arglist, lhs, rhs);
+    MATERIALIZE_IF_OBJ2(arglist, lhs, rhs);
     SEXP call = src_pool_at(globalContext(), srcIdx);
 
     PROTECT(arglist);
@@ -544,6 +547,7 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 
     SEXP arglist;
     FAKE_ARGS2(arglist, lhs, rhs);
+    MATERIALIZE_IF_OBJ2(arglist, lhs, rhs);
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
 

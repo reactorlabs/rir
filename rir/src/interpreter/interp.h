@@ -175,6 +175,16 @@ inline SEXPREC createFakeCONS(SEXP cdr) {
     return res;
 }
 
+#define MATERIALIZE_IF_OBJ1(res, a1)                                           \
+    if (isObject(a1)) {                                                        \
+        res = CONS_NR(a1, R_NilValue);                                         \
+    }
+
+#define MATERIALIZE_IF_OBJ2(res, a1, a2)                                       \
+    if (isObject(a1) || isObject(a2)) {                                        \
+        res = CONS_NR(a1, CONS_NR(a2, R_NilValue));                            \
+    }
+
 #define FAKE_ARGS1(res, a1)                                                    \
     SEXPREC __a1__cell__;                                                      \
     createFakeCONS(__a1__cell__, R_NilValue);                                  \
