@@ -1310,7 +1310,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             Value* v = nullptr;
             bool assumeBB0 = false;
             bool isDeopt = false;
-            auto negateCondition = false;
+            auto feedbackIsFalse = false;
+            auto negateAssumption = false;
 
             // Conditional jump
             switch (bc.bc) {
@@ -1325,7 +1326,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     if (c->typeFeedback.value == False::instance()) {
                         assumeBB0 = bc.bc == Opcode::brfalse_;
                         deoptCondition = c;
-                        negateCondition = true;
+                        feedbackIsFalse = true;
                     }
                 }
 
@@ -1337,17 +1338,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                                  ? (Value*)True::instance()
                                                  : (Value*)False::instance(),
                                              PirType::val()));
+
                 } else {
 
                     if (isDeopt) {
-
-                        if (negateCondition) {
-
-                            auto c = Instruction::Cast(v);
-                            v = insert(new Not(v, Env::elided(), c->srcIdx));
-                            v->type = PirType::test();
-                        }
-
+                        if (feedbackIsFalse)
+                            negateAssumption = true;
                     } else {
                         swapTrueFalse = bc.bc == Opcode::brfalse_;
                     }
@@ -1385,8 +1381,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 //                         :
                 //                         insert.getCurrentBB()->trueBranch();
 
-                auto deoptBranch = fall;
                 auto assumeBranch = branch;
+                auto deoptBranch = fall;
 
                 insert.enterBB(deoptBranch);
 
@@ -1394,7 +1390,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 //     srcCode, (deoptBranch == fall) ? nextPos : trg,
                 //     cur.stack, inPromise());
 
-                auto sp = insert.registerFrameState( //  *****************
+                auto sp = insert.registerFrameState(
                     srcCode, assumeBB0 ? nextPos : trg, cur.stack, inPromise());
 
                 insert(new Deopt(sp));
@@ -1404,6 +1400,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 finger = assumeBB0 ? trg : nextPos;
 
                 auto assumption = new Assume(v, cp);
+                if (negateAssumption)
+                    assumption->Not();
 
                 //  ************************ negate feedback?  **********
                 assumption->feedbackOrigin.push_back(
@@ -1411,6 +1409,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                      deoptCondition->typeFeedback.origin});
                 insert(assumption);
 
+                // ******************  //
                 // If we deopt on a typecheck, then we should record that
                 // information by casting the value.
                 if (assumeBB0)
@@ -1428,6 +1427,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                             block = true;
                                     }
                                     if (!block) {
+
                                         auto cast = insert(new CastType(
                                             e, CastType::Downcast,
                                             PirType::any(), tt->typeTest));

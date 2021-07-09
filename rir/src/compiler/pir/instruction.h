@@ -2625,6 +2625,13 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     std::string name() const override {
         return assumeTrue ? "Assume" : "AssumeNot";
     }
+
+    bool triviallyHolds() const {
+
+        auto pirBool =
+            assumeTrue ? (Value*)True::instance() : (Value*)False::instance();
+        return arg(0).val() == pirBool;
+    }
 };
 
 class ScheduledDeopt

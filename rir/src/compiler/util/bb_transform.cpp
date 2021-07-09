@@ -138,12 +138,12 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
-    static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
-
     BB* deoptBlock = new BB(code, code->nextBBId++);
     deoptBlock->setNext(deoptBlock_);
 
     if (debugMessage.size() != 0) {
+        static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
+
         SEXP msg = Rf_mkString(debugMessage.c_str());
         auto ldprint = new LdConst(print);
         Instruction* ldmsg = new LdConst(msg);
