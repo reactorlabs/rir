@@ -1629,14 +1629,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                    << BC::stvar(isym);
 
                 // construct ast for FUN(X[[i]], ...)
-                SEXP tmp = LCONS(symbol::DoubleBracket,
-                                 LCONS(args[0], LCONS(isym, R_NilValue)));
+                SEXP tmp =
+                    PROTECT(LCONS(symbol::DoubleBracket,
+                                  LCONS(args[0], LCONS(isym, R_NilValue))));
                 SEXP call =
                     LCONS(args[1], LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue)));
 
                 PROTECT(call);
                 compileCall(ctx, call, CAR(call), CDR(call), false);
-                UNPROTECT(1);
+                UNPROTECT(2);
 
                 // store result
                 cs << BC::pull(1)
