@@ -993,14 +993,13 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     });
 
-                    if (!done &&
+                    if (!done && i->effects.includes(Effect::Error) &&
                         castRhs->arg(0).val()->type.isA(
                             PirType(RType::integer).notNAOrNaN()) &&
                         castRhs->arg(1).val()->type.isA(
                             PirType(RType::integer).notNAOrNaN())) {
                         iterAnyChange = true;
-                        i->replaceUsesWith(castRhs->arg(0).val());
-                        next = bb->remove(ip);
+                        i->effects.reset(Effect::Error);
                     }
                 }
                 ip = next;
