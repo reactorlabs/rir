@@ -148,19 +148,19 @@ inline bool needsExpandedDots(SEXP callee) {
 SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx);
 
-inline void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
-    memset(&res, 0, sizeof(SEXPREC));
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
+inline void createFakeSEXP(SEXP res, SEXPTYPE t) {
+    memset(res, 0, sizeof(SEXPREC));
+    res->attrib = R_NilValue;
+    res->gengc_next_node = R_NilValue;
+    res->gengc_prev_node = R_NilValue;
+    res->sxpinfo.gcgen = 1;
+    res->sxpinfo.mark = 1;
+    res->sxpinfo.named = NAMEDMAX;
+    res->sxpinfo.type = t;
 }
 
 inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
-    createFakeSEXP(res, LISTSXP);
+    createFakeSEXP(&res, LISTSXP);
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
@@ -168,7 +168,7 @@ inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
 
 inline SEXPREC createFakeCONS(SEXP cdr) {
     SEXPREC res;
-    createFakeSEXP(res, LISTSXP);
+    createFakeSEXP(&res, LISTSXP);
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
