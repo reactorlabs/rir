@@ -211,17 +211,11 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     if (nargs > 5)
         return false;
 
+    return false;
     // This is a blocklist of builtins which tamper with the argslist in some
     // bad way. This can be changing contents and assume they are protected, or
     // leaking cons cells of the arglist (e.g. through the gengc_next pointers).
     switch (b->u.primsxp.offset) {
-    // Protect issue due to unprotected SETCAR
-    case blt("%*%"):
-    case blt("crossprod"):
-    case blt("tcrossprod"):
-    case blt("match"):
-    case blt("unclass"):
-    case blt("call"):
     // misc
     case blt("registerNamespace"):
     case blt("...length"):
@@ -256,6 +250,38 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     case blt("stop"):
     case blt(".dfltStop"):
     case blt(".signalCondition"):
+    // SETCAR
+    case blt("%*%"):
+    case blt("match"):
+    case blt("crossprod"):
+    case blt("tcrossprod"):
+    case blt("comment<-"):
+    case blt("oldClass<-"):
+    case blt("names<-"):
+    case blt("dimnames<-"):
+    case blt("dim<-"):
+    case blt("levels<-"):
+    case blt("makeLazy"):
+    case blt("args"):
+    case blt("as.function.default"):
+    case blt("as.call"):
+    case blt("do.call"):
+    case blt("call"):
+    case blt("class<-"):
+    case blt("debug"):
+    case blt("undebug"):
+    case blt("isdebugged"):
+    case blt("debugonce"):
+    case blt("dump"):
+    case blt("browser"):
+    case blt("unclass"):
+    case blt("save"):
+    case blt("saveToConn"):
+    case blt("[<-"):
+    case blt("[[<-"):
+    // SET_TAG
+    case blt("cbind"):
+    case blt("rbind"):
         return false;
     default: {}
     }
