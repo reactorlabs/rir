@@ -96,7 +96,7 @@ struct Context {
         memcpy((void*)this, &val, sizeof(*this));
     }
 
-    unsigned long toI() {
+    unsigned long toI() const {
         static_assert(sizeof(*this) == sizeof(unsigned long), "");
         uint64_t m;
         memcpy(&m, this, sizeof(*this));
@@ -249,10 +249,10 @@ struct Context {
                typeFlags.includes(other.typeFlags);
     }
 
-    bool isImproving(rir::Function*) const;
-    bool isImproving(rir::pir::ClosureVersion*) const;
-    bool isImproving(const Context& other, bool hasDotsFormals,
-                     bool hasDefaultArgs) const;
+    unsigned isImproving(rir::Function*) const;
+    unsigned isImproving(rir::pir::ClosureVersion*) const;
+    unsigned isImproving(const Context& other, bool hasDotsFormals,
+                         bool hasDefaultArgs) const;
 
     static Context deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;

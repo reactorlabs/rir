@@ -148,6 +148,7 @@ tests_debug2:
   variables:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
+    PIR_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
@@ -238,6 +239,7 @@ test_features_3:
   variables:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
+    PIR_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
@@ -247,7 +249,7 @@ test_features_3:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
-    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_OPT_LEVEL=2 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
   artifacts:
     paths:
     - logs

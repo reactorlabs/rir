@@ -73,7 +73,8 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
             fun == table->baseline() ||
-            (context.smaller(fun->context()) && context.isImproving(fun)) ||
+            (context.smaller(fun->context()) &&
+             context.isImproving(fun) > table->size()) ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
 

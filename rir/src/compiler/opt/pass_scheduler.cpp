@@ -1,4 +1,5 @@
 #include "pass_scheduler.h"
+#include "compiler/parameter.h"
 #include "pass_definitions.h"
 
 namespace rir {
@@ -19,6 +20,9 @@ void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
         return;
     currentPhase->passes.push_back(std::move(t));
 }
+
+unsigned Parameter::PIR_OPT_LEVEL =
+    getenv("PIR_OPT_LEVEL") ? atoi(getenv("PIR_OPT_LEVEL")) : 2;
 
 PassScheduler::PassScheduler() {
     auto addDefaultOpt = [&]() {
@@ -63,7 +67,7 @@ PassScheduler::PassScheduler() {
         add<LoopInvariant>();
     };
 
-    nextPhase("Initial", 60);
+    nextPhase("Initial", Parameter::PIR_OPT_LEVEL > 1 ? 60 : 0);
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
@@ -72,41 +76,45 @@ PassScheduler::PassScheduler() {
     //
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
-    nextPhase("Speculation", 100);
+    nextPhase("Speculation", Parameter::PIR_OPT_LEVEL > 1 ? 100 : 0);
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();
 
-    nextPhase("Speculation post");
-    addDefaultPostPhaseOpt();
+    if (Parameter::PIR_OPT_LEVEL > 0) {
+        nextPhase("Speculation post");
+        addDefaultPostPhaseOpt();
 
-    // ==== Phase 3) Remove checkpoints we did not use
-    //
-    // This pass removes unused checkpoints.
-    // We schedule this pass here, since it might unblock optimizations.
-    // Since for example even unused checkpoints keep variables live.
-    //
-    // After this phase it is no longer possible to add assumptions at any point
-    nextPhase("Remove CP");
-    add<CleanupCheckpoints>();
-    addDefaultPostPhaseOpt();
+        // ==== Phase 3) Remove checkpoints we did not use
+        //
+        // This pass removes unused checkpoints.
+        // We schedule this pass here, since it might unblock optimizations.
+        // Since for example even unused checkpoints keep variables live.
+        //
+        // After this phase it is no longer possible to add assumptions at any
+        // point
+        nextPhase("Remove CP");
+        add<CleanupCheckpoints>();
+        addDefaultPostPhaseOpt();
 
-    nextPhase("Intermediate 2", 60);
-    addDefaultOpt();
-    nextPhase("Intermediate 2 post");
-    addDefaultPostPhaseOpt();
+        nextPhase("Intermediate 2", Parameter::PIR_OPT_LEVEL > 1 ? 60 : 0);
+        addDefaultOpt();
+        nextPhase("Intermediate 2 post");
+        addDefaultPostPhaseOpt();
 
-    // ==== Phase 3.1) Remove Framestates we did not use
-    //
-    // Framestates can be used by call instructions. This pass removes this
-    // dependency and the framestates will subsequently be cleaned.
-    //
-    // After this pass it is no longer possible to inline callees with deopts
-    nextPhase("Cleanup FS");
-    add<CleanupFramestate>();
-    add<CleanupCheckpoints>();
+        // ==== Phase 3.1) Remove Framestates we did not use
+        //
+        // Framestates can be used by call instructions. This pass removes this
+        // dependency and the framestates will subsequently be cleaned.
+        //
+        // After this pass it is no longer possible to inline callees with
+        // deopts
+        nextPhase("Cleanup FS");
+        add<CleanupFramestate>();
+        add<CleanupCheckpoints>();
 
-    nextPhase("Final", 120);
+        nextPhase("Final", Parameter::PIR_OPT_LEVEL > 1 ? 120 : 0);
+    }
     // ==== Phase 4) Final round of default opts
     addDefaultOpt();
     add<ElideEnvSpec>();
