@@ -211,7 +211,6 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     if (nargs > 5)
         return false;
 
-    return false;
     // This is a blocklist of builtins which tamper with the argslist in some
     // bad way. This can be changing contents and assume they are protected, or
     // leaking cons cells of the arglist (e.g. through the gengc_next pointers).
