@@ -450,22 +450,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
-    // TODO: this is not sound... There are other ways to call remove... What we
-    // should do instead is trap do_remove in gnur and clear the cache!
-    if (fun == symbol::remove) {
-        CompilerContext::CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
-        CompilerContext::CodeContext::CacheSlotNumber max = 0;
-        for (auto c : ctx.code.top()->loadsSlotInCache) {
-            auto i = c.second;
-            if (i < min)
-                min = i;
-            if (i > max)
-                max = i;
-        }
-        cs << BC::clearBindingCache(min, max - min);
-        return false;
-    }
-
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
             SEXP fun = Compiler::compileFunction(args[1], args[0]);
