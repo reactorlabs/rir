@@ -87,6 +87,7 @@
     V(all, "all")                                                              \
     V(FUN, "FUN")                                                              \
     V(forceAndCall, "forceAndCall")                                            \
+    V(remove, "remove")                                                        \
     V(Recall, "Recall")
 
 #endif // SYMBOLS_LIST_H_

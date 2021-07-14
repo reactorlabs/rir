@@ -3258,6 +3258,21 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::CallBuiltin: {
                 auto b = CallBuiltin::Cast(i);
+
+                // TODO: this is not sound... There are other ways to call
+                // remove... What we should do instead is trap do_remove in gnur
+                // and clear the cache!
+                if (b->builtinId == blt("remove")) {
+                    if (bindingsCache.count(b->env())) {
+                        auto& be = bindingsCache[b->env()];
+                        for (const auto& b : be)
+                            builder.CreateStore(
+                                llvm::ConstantPointerNull::get(t::SEXP),
+                                builder.CreateGEP(bindingsCacheBase,
+                                                  c(b.second)));
+                    }
+                }
+
                 if (compileDotcall(
                         b, [&]() { return constant(b->builtinSexp, t::SEXP); },
                         [&](size_t i) { return R_NilValue; })) {
