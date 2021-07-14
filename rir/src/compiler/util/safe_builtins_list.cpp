@@ -128,6 +128,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
     case blt("dim"):
     case blt("names"):
 
+    case blt("$"):
     case blt("c"):
     case blt("["):
     case blt("[["):

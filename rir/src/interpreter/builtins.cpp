@@ -9,6 +9,7 @@
 
 extern "C" {
 extern Rboolean R_Visible;
+SEXP R_subset3_dflt(SEXP, SEXP, SEXP);
 }
 
 namespace rir {
@@ -129,6 +130,22 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         if (nargs != 1 || call.hasNames())
             return nullptr;
         return Rf_substitute(call.stackArg(0), call.callerEnv);
+    }
+    case blt("$"): {
+        auto x = call.stackArg(0);
+        auto s = call.stackArg(1);
+        if (TYPEOF(s) != PROMSXP)
+            return nullptr;
+        s = PREXPR(s);
+        if (auto c = Code::check(s))
+            s = c->trivialExpr;
+        if (nargs == 2 && s && TYPEOF(s) == SYMSXP) {
+            if (TYPEOF(x) == PROMSXP)
+                x = evaluatePromise(x, ctx);
+            if (!isObject(x))
+                return R_subset3_dflt(x, PRINTNAME(s), R_NilValue);
+        }
+        return nullptr;
     }
     case blt("forceAndCall"): {
 
@@ -1037,6 +1054,7 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     case blt("col"):
     case blt("row"):
     case blt("dim"):
+    case blt("$"):
         return true;
     default: {}
     }
