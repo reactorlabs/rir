@@ -1310,13 +1310,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             Value* v = nullptr;
             bool assumeBB0 = false;
             bool isDeopt = false;
-            auto feedbackIsTrue = false;
             auto negateAssumption = false;
 
             // Conditional jump
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
+                auto feedbackIsTrue = false;
+
                 v = branchCondition = cur.stack.pop();
                 if (auto c = Instruction::Cast(branchCondition)) {
                     if (c->typeFeedback.value == True::instance()) {
