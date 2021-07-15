@@ -1701,15 +1701,32 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
     // remember if the argument had a name associated
     res.names.push_back(TAG(arg));
     if (TAG(arg) != R_NilValue)
-    {
         res.hasNames = true;
-    }
-
 
     if (arg_type == ArgType::RAW_VALUE) {
         compileExpr(ctx, CAR(arg), false);
         return;
     }
+
+    // Constant arguments do not need to be promise wrapped
+    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS)
+        switch (TYPEOF(CAR(arg))) {
+        case LANGSXP:
+        case SYMSXP:
+            break;
+        default:
+            auto eager = CAR(arg);
+            res.assumptions.setEager(i);
+            if (!isObject(eager)) {
+                res.assumptions.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(eager, REALSXP))
+                    res.assumptions.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(eager, INTSXP))
+                    res.assumptions.setSimpleInt(i);
+            }
+            cs << BC::push(eager);
+            return;
+        }
 
     Code* prom;
     if (arg_type == ArgType::EAGER_PROMISE) {
@@ -1717,9 +1734,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
         // wrap the return value in a promise without rir code
         compileExpr(ctx, CAR(arg), false);
         prom = compilePromiseNoRir(ctx, CAR(arg));
-    }
-
-    else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+    } else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         // The value we want to wrap in the argument's promise is
         // already on TOS, no nead to compile the expression.
         // Wrap it in a promise without rir code.
@@ -1734,27 +1749,8 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
     if (arg_type == ArgType::EAGER_PROMISE || arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         res.assumptions.setEager(i);
         cs << BC::mkEagerPromise(idx);
-    }
-    else
-    {
-        // "safe force" the argument to get static assumptions
-        SEXP known = safeEval(CAR(arg));
-        // TODO: If we add more assumptions should probably abstract with
-        // testArg in interp.cpp. For now they're both much different though
-        if (known != R_UnboundValue) {
-            res.assumptions.setEager(i);
-            if (!isObject(known)) {
-                res.assumptions.setNotObj(i);
-                if (IS_SIMPLE_SCALAR(known, REALSXP))
-                    res.assumptions.setSimpleReal(i);
-                if (IS_SIMPLE_SCALAR(known, INTSXP))
-                    res.assumptions.setSimpleInt(i);
-            }
-            cs << BC::push(known);
-            cs << BC::mkEagerPromise(idx);
-        } else {
-            cs << BC::mkPromise(idx);
-        }
+    } else {
+        cs << BC::mkPromise(idx);
     }
 }
 
