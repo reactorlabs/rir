@@ -1774,7 +1774,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 }
             } else if (ellipsis == R_NilValue || ellipsis == R_UnboundValue) {
             } else {
-                assert(false);
+                // TODO: why does this happen in SERIALIZE CHAOS?
                 args.push_back(ellipsis);
                 names.push_back(R_NilValue);
             }
