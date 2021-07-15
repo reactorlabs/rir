@@ -1310,7 +1310,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             Value* v = nullptr;
             bool assumeBB0 = false;
             bool isDeopt = false;
-            auto feedbackIsFalse = false;
+            auto feedbackIsTrue = false;
             auto negateAssumption = false;
 
             // Conditional jump
@@ -1322,11 +1322,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     if (c->typeFeedback.value == True::instance()) {
                         assumeBB0 = bc.bc == Opcode::brtrue_;
                         deoptCondition = c;
+                        feedbackIsTrue = true;
                     }
                     if (c->typeFeedback.value == False::instance()) {
                         assumeBB0 = bc.bc == Opcode::brfalse_;
                         deoptCondition = c;
-                        feedbackIsFalse = true;
                     }
                 }
 
@@ -1342,14 +1342,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     if (isDeopt) {
                         // negateAssumption = (bc.bc == Opcode::brfalse_);
 
-                        if ((bc.bc == Opcode::brtrue_) != !feedbackIsFalse)
+                        if ((bc.bc == Opcode::brtrue_) != feedbackIsTrue)
                             negateAssumption = true;
                     }
 
                 } else {
 
                     if (isDeopt) {
-                        if (feedbackIsFalse)
+                        if (!feedbackIsTrue)
                             negateAssumption = true;
                     } else {
                         swapTrueFalse = bc.bc == Opcode::brfalse_;
