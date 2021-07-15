@@ -836,7 +836,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // "slot<-" ignores value semantics and modifies shared objects
             // in-place, our implementation does not deal with this case.
-            if (fun2name == "slot") {
+            if (fun2name == "slot" || fun2name == "class") {
                 return false;
             }
 
