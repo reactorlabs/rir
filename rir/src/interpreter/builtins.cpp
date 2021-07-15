@@ -141,9 +141,9 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
             s = c->trivialExpr;
         if (nargs == 2 && s && TYPEOF(s) == SYMSXP) {
             if (TYPEOF(x) == PROMSXP)
-                x = evaluatePromise(x, ctx);
-            if (!isObject(x))
-                return R_subset3_dflt(x, PRINTNAME(s), R_NilValue);
+                x = PRVALUE(x);
+            if (x != R_UnboundValue && !isObject(x))
+                return R_subset3_dflt(x, PRINTNAME(s), call.ast);
         }
         return nullptr;
     }
