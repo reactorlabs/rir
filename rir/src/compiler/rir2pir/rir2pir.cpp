@@ -1339,6 +1339,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                                  : (Value*)False::instance(),
                                              PirType::val()));
 
+                    if (isDeopt) {
+                        negateAssumption = (bc.bc == Opcode::brfalse_);
+                    }
+
                 } else {
 
                     if (isDeopt) {
