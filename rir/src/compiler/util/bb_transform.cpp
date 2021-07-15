@@ -171,7 +171,16 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 if (LdConst::Cast(src))
                     src = t->arg<1>().val();
                 assert(!LdConst::Cast(src));
-                r = DeoptReason::Calltarget;
+
+                auto offset =
+                    (uintptr_t)origin.second - (uintptr_t)origin.first;
+                auto o = *((Opcode*)origin.first + offset);
+
+                // determine DeoptReason based on the opcode too.
+                if (o == Opcode::record_test_)
+                    r = DeoptReason::DeadBranchReached;
+                else
+                    r = DeoptReason::Calltarget;
 
             } else if (auto t = IsEnvStub::Cast(cond)) {
                 src = t->arg(0).val();
@@ -183,7 +192,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 src = t->arg(0).val();
                 r = DeoptReason::DeadBranchReached;
             } else if (auto t = Not::Cast(cond)) {
-                src = t->arg(0).val(); // *** reverse?
+                src = t->arg(0).val();
                 r = DeoptReason::DeadBranchReached;
 
             } else if (LdConst::Cast(cond)) {
@@ -208,13 +217,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 auto offset =
                     (uintptr_t)origin.second - (uintptr_t)origin.first;
                 auto o = *((Opcode*)origin.first + offset);
-
-                // when the instruction is 'Identical', we decide the
-                // DeoptReason based on the opcode too. First guess is
-                // CallTarget, but then if the Opcode is record_test_ we change
-                // it to DeadBranchReached
-                if (o == Opcode::record_test_)
-                    r = DeoptReason::DeadBranchReached;
 
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);
