@@ -179,23 +179,23 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
 }
 
 void setCarImpl(SEXP x, SEXP y) {
-    assert(x->sxpinfo.mark && "Use fastpath setCar");
-    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
-           "use fast path setCar");
+    //    assert(x->sxpinfo.mark && "Use fastpath setCar");
+    //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+    //           "use fast path setCar");
     SETCAR(x, y);
 }
 
 void setCdrImpl(SEXP x, SEXP y) {
-    assert(x->sxpinfo.mark && "Use fastpath setCdr");
-    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
-           "use fast path setCdr");
+    //    assert(x->sxpinfo.mark && "Use fastpath setCdr");
+    //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+    //           "use fast path setCdr");
     SETCDR(x, y);
 }
 
 void setTagImpl(SEXP x, SEXP y) {
-    assert(x->sxpinfo.mark && "Use fastpath setTag");
-    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
-           "use fast path setTag");
+    //    assert(x->sxpinfo.mark && "Use fastpath setTag");
+    //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+    //           "use fast path setTag");
     SET_TAG(x, y);
 }
 
