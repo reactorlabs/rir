@@ -1340,7 +1340,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                              PirType::val()));
 
                     if (isDeopt) {
-                        negateAssumption = (bc.bc == Opcode::brfalse_);
+                        // negateAssumption = (bc.bc == Opcode::brfalse_);
+
+                        if ((bc.bc == Opcode::brtrue_) != !feedbackIsFalse)
+                            negateAssumption = true;
                     }
 
                 } else {
