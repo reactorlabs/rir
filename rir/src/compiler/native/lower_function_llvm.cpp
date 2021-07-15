@@ -4197,10 +4197,10 @@ void LowerFunctionLLVM::compile() {
                             !t->typeTest.maybeNotFastVecelt()) {
                             res = builder.CreateAnd(res, fastVeceltOkNative(a));
                         }
-                        if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
-                            res = builder.CreateAnd(
-                                res, builder.CreateNot(isObj(a)));
-                        }
+                    }
+                    if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
+                        res =
+                            builder.CreateAnd(res, builder.CreateNot(isObj(a)));
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
@@ -5779,7 +5779,7 @@ void LowerFunctionLLVM::compile() {
                         static const char* defaultMsg = "";
                         if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
-                            i->printRecursive(str, 2);
+                            i->printRecursive(str, 4);
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
                         } else {
