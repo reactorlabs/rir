@@ -77,7 +77,8 @@ static void approximateNeedsLdVarForUpdate(
                 if (auto l = LdVar::Cast(
                         b->callArg(0).val()->followCastsAndForce())) {
                     static std::unordered_set<SEXP> block = {
-                        Rf_install("C_R_set_slot")};
+                        Rf_install("C_R_set_slot"),
+                        Rf_install("C_R_set_class")};
                     if (block.count(l->varName)) {
                         apply(i, l);
                     }
