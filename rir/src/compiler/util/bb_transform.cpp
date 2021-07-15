@@ -165,13 +165,22 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             auto r = DeoptReason::None;
             if (auto t = IsType::Cast(cond)) {
                 r = DeoptReason::Typecheck;
+
+                auto offset =
+                    (uintptr_t)origin.second - (uintptr_t)origin.first;
+                auto o = *((Opcode*)origin.first + offset);
+                // determine DeoptReason based on the opcode too.
+                if (o == Opcode::record_test_)
+                    r = DeoptReason::DeadBranchReached;
+
                 src = t->arg<0>().val();
+
             } else if (auto t = Identical::Cast(cond)) {
                 src = t->arg<0>().val();
                 if (LdConst::Cast(src))
                     src = t->arg<1>().val();
                 assert(!LdConst::Cast(src));
-
+                r = DeoptReason::Calltarget;
                 auto offset =
                     (uintptr_t)origin.second - (uintptr_t)origin.first;
                 auto o = *((Opcode*)origin.first + offset);
@@ -179,8 +188,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 // determine DeoptReason based on the opcode too.
                 if (o == Opcode::record_test_)
                     r = DeoptReason::DeadBranchReached;
-                else
-                    r = DeoptReason::Calltarget;
 
             } else if (auto t = IsEnvStub::Cast(cond)) {
                 src = t->arg(0).val();
