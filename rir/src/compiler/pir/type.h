@@ -794,13 +794,13 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     else if (t.maybePromiseWrapped())
         out << "~";
     if (!t.maybeHasAttrs()) {
-        out << "⁻";
+        out << "-";
     } else {
         if (!t.maybeNotFastVecelt()) {
             assert(!t.maybeObj());
-            out << "ⁿ";
+            out << "¹";
         } else if (!t.maybeObj()) {
-            out << "⁺";
+            out << "+";
         }
     }
 

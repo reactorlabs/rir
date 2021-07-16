@@ -1926,7 +1926,8 @@ llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
     checkIsSexp(v, "in IsFastVeceltOkNative");
     auto attrs = attr(v);
     auto isNil = builder.CreateICmpEQ(attrs, constant(R_NilValue, t::SEXP));
-    return createSelect2(isNil, [&]() { return builder.getTrue(); },
+    auto ok = builder.CreateAnd(builder.CreateNot(isObj(v)), isNil);
+    return createSelect2(ok, [&]() { return builder.getTrue(); },
                          [&]() {
                              auto isMatr1 = builder.CreateICmpEQ(
                                  tag(attrs), constant(R_DimSymbol, t::SEXP));
@@ -4192,13 +4193,12 @@ void LowerFunctionLLVM::compile() {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpEQ(
                                      attr(a), constant(R_NilValue, t::SEXP)));
-                    } else {
-                        if (arg->type.maybeNotFastVecelt() &&
-                            !t->typeTest.maybeNotFastVecelt()) {
-                            res = builder.CreateAnd(res, fastVeceltOkNative(a));
-                        }
                     }
-                    if (arg->type.maybeObj() && !t->typeTest.maybeObj()) {
+                    if (arg->type.maybeNotFastVecelt() &&
+                        !t->typeTest.maybeNotFastVecelt()) {
+                        res = builder.CreateAnd(res, fastVeceltOkNative(a));
+                    } else if (arg->type.maybeObj() &&
+                               !t->typeTest.maybeObj()) {
                         res =
                             builder.CreateAnd(res, builder.CreateNot(isObj(a)));
                     }
