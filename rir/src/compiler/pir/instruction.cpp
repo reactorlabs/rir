@@ -1146,8 +1146,8 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
                        const std::vector<Value*>& args,
-                       ArglistOrder::CallArglistOrder&& argOrderOrig, Value* fs,
-                       unsigned srcIdx, Value* runtimeClosure)
+                       const ArglistOrder::CallArglistOrder& argOrderOrig,
+                       Value* fs, unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
     assert(cls->nargs() >= args.size());

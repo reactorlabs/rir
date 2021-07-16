@@ -3,6 +3,9 @@
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
 #include "compiler/util/visitor.h"
+#include "interpreter/instance.h"
+#include "interpreter/interp_incl.h"
+#include "ir/Compiler.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 
@@ -19,24 +22,59 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             auto next = ip + 1;
 
             if (auto calli = CallInstruction::CastCall(*ip)) {
-                if (!Call::Cast(*ip) && !NamedCall::Cast(*ip)) {
+                SEXP overrideTarget = nullptr;
+                if (auto cls = calli->tryGetCls()) {
+                    auto ast = src_pool_at(globalContext(),
+                                           cls->rirFunction()->body()->src);
+                    if (CAR(ast) == symbol::UseMethod &&
+                        TYPEOF(CADR(ast)) == STRSXP &&
+                        CDDR(ast) == R_NilValue) {
+                        bool nonObj = true;
+                        calli->eachCallArg([&](Value* v) {
+                            if (!v->type.isA(PirType::valOrLazy().notObject()))
+                                nonObj = false;
+                        });
+                        if (nonObj) {
+                            auto method = CHAR(STRING_ELT(CADR(ast), 0));
+                            auto defName = Rf_install(
+                                (std::string(method) + ".default").c_str());
+                            auto def = Rf_findVar(defName, R_BaseEnv);
+                            if (TYPEOF(def) == PROMSXP)
+                                def = PRVALUE(def);
+                            if (def && TYPEOF(def) == CLOSXP) {
+                                overrideTarget = def;
+                            }
+                        } else {
+                            ip = next;
+                            continue;
+                        }
+                    }
+                }
+
+                if (!Call::Cast(*ip) && !NamedCall::Cast(*ip) &&
+                    !overrideTarget) {
                     ip = next;
                     continue;
                 }
 
                 SEXP formals = nullptr;
                 ClosureVersion* target = nullptr;
-                if (auto cls = calli->tryGetCls()) {
-                    target = calli->tryDispatch(cls);
-                    formals = cls->formals().original();
-                }
-                if (!target) {
-                    if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
-                        if (TYPEOF(cnst->c()) == CLOSXP)
-                            formals = FORMALS(cnst->c());
+
+                if (overrideTarget) {
+                    formals = FORMALS(overrideTarget);
+                } else {
+                    if (auto cls = calli->tryGetCls()) {
+                        target = calli->tryDispatch(cls);
+                        formals = cls->formals().original();
                     }
-                    if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
-                        formals = mk->formals;
+                    if (!target) {
+                        if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
+                            if (TYPEOF(cnst->c()) == CLOSXP)
+                                formals = FORMALS(cnst->c());
+                        }
+                        if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
+                            formals = mk->formals;
+                        }
                     }
                 }
 
@@ -44,6 +82,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 ArglistOrder::CallArglistOrder argOrderOrig;
                 auto call = Call::Cast(*ip);
                 auto namedCall = NamedCall::Cast(*ip);
+                auto staticCall = StaticCall::Cast(*ip);
                 bool staticallyArgmatched = false;
 
                 if (formals) {
@@ -67,9 +106,17 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 Context asmpt;
 
                 if (staticallyArgmatched) {
-                    Call fake((*ip)->env(), calli->tryGetClsArg(), matchedArgs,
-                              Tombstone::framestate(), (*ip)->srcIdx);
-                    asmpt = fake.inferAvailableAssumptions();
+                    if (staticCall) {
+                        StaticCall fake((*ip)->env(), calli->tryGetCls(),
+                                        Context(), matchedArgs, argOrderOrig,
+                                        Tombstone::framestate(), (*ip)->srcIdx);
+                        asmpt = fake.inferAvailableAssumptions();
+                    } else {
+                        Call fake((*ip)->env(), calli->tryGetClsArg(),
+                                  matchedArgs, Tombstone::framestate(),
+                                  (*ip)->srcIdx);
+                        asmpt = fake.inferAvailableAssumptions();
+                    }
 
                     // We can add these because arguments will be statically
                     // matched
@@ -82,7 +129,19 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             asmpt.remove(Assumption::NoExplicitlyMissingArgs);
                     asmpt.numMissing(Rf_length(formals) - matchedArgs.size());
 
-                    if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
+                    if (overrideTarget) {
+                        if (!DispatchTable::check(BODY(overrideTarget)))
+                            rir::Compiler::compileClosure(overrideTarget);
+                        if (DispatchTable::check(BODY(overrideTarget)))
+                            cmp.compileClosure(overrideTarget,
+                                               "unknown--fromOverride", asmpt,
+                                               false,
+                                               [&](ClosureVersion* fun) {
+                                                   target = fun;
+                                               },
+                                               []() {}, {});
+                    } else if (auto cnst =
+                                   LdConst::Cast(calli->tryGetClsArg())) {
                         if (DispatchTable::check(BODY(cnst->c())))
                             cmp.compileClosure(
                                 cnst->c(), "unknown--fromConstant", asmpt,
@@ -109,17 +168,33 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 if (staticallyArgmatched && target) {
                     anyChange = true;
+                    Value* cls = nullptr;
+                    if (overrideTarget) {
+                        ip = bb->insert(ip, new LdConst(overrideTarget));
+                        cls = *ip;
+                        ip++;
+                        next = ip + 1;
+                    }
                     if (auto c = call) {
+                        if (!cls)
+                            cls = c->cls()->followCastsAndForce();
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
-                            std::move(argOrderOrig), c->frameStateOrTs(),
-                            c->srcIdx, c->cls()->followCastsAndForce());
+                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = namedCall) {
+                        if (!cls)
+                            cls = c->cls()->followCastsAndForce();
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
-                            std::move(argOrderOrig), c->frameStateOrTs(),
-                            c->srcIdx, c->cls()->followCastsAndForce());
+                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
+                        (*ip)->replaceUsesAndSwapWith(nc, ip);
+                    } else if (auto c = staticCall) {
+                        assert(overrideTarget);
+                        assert(cls);
+                        auto nc = new StaticCall(
+                            c->env(), target->owner(), asmpt, matchedArgs,
+                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else {
                         assert(false);
