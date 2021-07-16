@@ -5777,7 +5777,7 @@ void LowerFunctionLLVM::compile() {
                         static std::vector<std::string> leaky;
                         const char* msg = nullptr;
                         static const char* defaultMsg = "";
-                        if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
+                        if (true || Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
                             i->printRecursive(str, 4);
                             leaky.push_back(str.str());
