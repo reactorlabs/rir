@@ -1389,6 +1389,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                             block = true;
                                     }
                                     if (!block) {
+                                        assert(false && "uu");
                                         auto cast = insert(new CastType(
                                             e, CastType::Downcast,
                                             PirType::any(), tt->typeTest));
