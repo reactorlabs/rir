@@ -10,6 +10,8 @@
 extern "C" {
 extern Rboolean R_Visible;
 SEXP R_subset3_dflt(SEXP, SEXP, SEXP);
+int R_DispatchOrEvalSP(SEXP call, SEXP op, const char* generic, SEXP args,
+                       SEXP rho, SEXP* ans);
 }
 
 namespace rir {
@@ -123,7 +125,7 @@ static IsVectorCheck whichIsVectorCheck(SEXP str) {
     return IsVectorCheck::unsupported;
 }
 
-SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
+SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
     auto nargs = call.passedArgs;
     switch (call.callee->u.primsxp.offset) {
     case blt("substitute"): {
@@ -139,11 +141,31 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         s = PREXPR(s);
         if (auto c = Code::check(s))
             s = c->trivialExpr;
-        if (nargs == 2 && s && TYPEOF(s) == SYMSXP) {
+        if (TYPEOF(s) == SYMSXP)
+            s = PRINTNAME(s);
+        else if (TYPEOF(s) == STRSXP && XLENGTH(s) > 0)
+            s = STRING_ELT(s, 0);
+
+        if (nargs == 2 && s && TYPEOF(s) == CHARSXP) {
             if (TYPEOF(x) == PROMSXP)
-                x = PRVALUE(x);
-            if (x != R_UnboundValue && !isObject(x))
-                return R_subset3_dflt(x, PRINTNAME(s), call.ast);
+                x = evaluatePromise(x, ctx, nullptr, true);
+
+            if (isObject(x)) {
+                ENSURE_NAMEDMAX(x);
+                SEXP ss = PROTECT(allocVector(STRSXP, 1));
+                SET_STRING_ELT(ss, 0, s);
+                auto args = CONS_NR(x, CONS_NR(ss, R_NilValue));
+                PROTECT(args);
+                SEXP ans;
+                if (R_DispatchOrEvalSP(call.ast, call.callee, "$", args,
+                                       materializeCallerEnv(call, ctx), &ans)) {
+                    UNPROTECT(1); /* args */
+                    if (NAMED(ans))
+                        ENSURE_NAMEDMAX(ans);
+                    return (ans);
+                }
+            }
+            return R_subset3_dflt(x, s, call.ast);
         }
         return nullptr;
     }

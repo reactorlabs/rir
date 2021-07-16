@@ -54,7 +54,8 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc);
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc,
+                     bool delayNamed = false);
 inline SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
     return evaluatePromise(e, ctx, nullptr);
 }

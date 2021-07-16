@@ -5,7 +5,7 @@
 
 namespace rir {
 
-SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx);
+SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx);
 SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx);
 bool supportsFastBuiltinCall(SEXP blt, size_t nargs);
 

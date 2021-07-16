@@ -181,7 +181,8 @@ typedef struct RPRSTACK {
 } RPRSTACK;
 extern "C" struct RPRSTACK* R_PendingPromises;
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
+SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc,
+                     bool delayNamed) {
     // if already evaluated, return the value
     if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
         e = PRVALUE(e);
@@ -215,7 +216,8 @@ SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
-        ENSURE_NAMEDMAX(val);
+        if (!delayNamed)
+            ENSURE_NAMEDMAX(val);
         SET_PRENV(e, R_NilValue);
 
         assert(TYPEOF(val) != PROMSXP && "promise returned promise");
