@@ -159,12 +159,12 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
                 SEXP ans;
                 if (R_DispatchOrEvalSP(call.ast, call.callee, "$", args,
                                        materializeCallerEnv(call, ctx), &ans)) {
-                    UNPROTECT(1); /* args */
+                    UNPROTECT(2); /* args */
                     if (NAMED(ans))
                         ENSURE_NAMEDMAX(ans);
                     return (ans);
                 }
-                UNPROTECT(1);
+                UNPROTECT(2);
             }
             return R_subset3_dflt(x, s, call.ast);
         }
