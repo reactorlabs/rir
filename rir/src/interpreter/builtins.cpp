@@ -164,6 +164,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
                         ENSURE_NAMEDMAX(ans);
                     return (ans);
                 }
+                UNPROTECT(1);
             }
             return R_subset3_dflt(x, s, call.ast);
         }
