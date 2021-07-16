@@ -1384,19 +1384,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
             if (isDeopt) {
 
-                // auto deoptBranch = assumeBB0 ?
-                // insert.getCurrentBB()->falseBranch()
-                //                         :
-                //                         insert.getCurrentBB()->trueBranch();
-
                 auto assumeBranch = branch;
                 auto deoptBranch = fall;
 
                 insert.enterBB(deoptBranch);
-
-                // auto sp = insert.registerFrameState(  //  *****************
-                //     srcCode, (deoptBranch == fall) ? nextPos : trg,
-                //     cur.stack, inPromise());
 
                 auto sp = insert.registerFrameState(
                     srcCode, assumeBB0 ? nextPos : trg, cur.stack, inPromise());
@@ -1404,7 +1395,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 insert(new Deopt(sp));
 
                 insert.enterBB(assumeBranch);
-                // finger = (deopt == fall) ? trg : nextPos;
+
                 finger = assumeBB0 ? trg : nextPos;
 
                 auto assumption = new Assume(v, cp);

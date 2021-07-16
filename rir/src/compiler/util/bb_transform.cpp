@@ -161,14 +161,15 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
+            unsigned long offset;
+            rir::Opcode o;
 
             auto r = DeoptReason::None;
             if (auto t = IsType::Cast(cond)) {
                 r = DeoptReason::Typecheck;
 
-                auto offset =
-                    (uintptr_t)origin.second - (uintptr_t)origin.first;
-                auto o = *((Opcode*)origin.first + offset);
+                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                o = *((Opcode*)origin.first + offset);
                 // determine DeoptReason based on the opcode too.
                 if (o == Opcode::record_test_)
                     r = DeoptReason::DeadBranchReached;
@@ -181,9 +182,8 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                     src = t->arg<1>().val();
                 assert(!LdConst::Cast(src));
                 r = DeoptReason::Calltarget;
-                auto offset =
-                    (uintptr_t)origin.second - (uintptr_t)origin.first;
-                auto o = *((Opcode*)origin.first + offset);
+                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                o = *((Opcode*)origin.first + offset);
 
                 // determine DeoptReason based on the opcode too.
                 if (o == Opcode::record_test_)
@@ -221,9 +221,8 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             case DeoptReason::Calltarget:
             case DeoptReason::DeadBranchReached: {
 
-                auto offset =
-                    (uintptr_t)origin.second - (uintptr_t)origin.first;
-                auto o = *((Opcode*)origin.first + offset);
+                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                o = *((Opcode*)origin.first + offset);
 
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);

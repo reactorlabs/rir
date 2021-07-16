@@ -202,7 +202,8 @@ static void lower(Code* code) {
                 next = it + 1;
 
             } else if (auto expect = Assume::Cast(*it)) {
-                if (expect->triviallyHolds()) {
+                if (expect->arg(0).val() ==
+                    True::instance()) { // if (expect->triviallyHolds()) {
                     next = bb->remove(it);
                 } else {
                     auto expectation = expect->assumeTrue;
