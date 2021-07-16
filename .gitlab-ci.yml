@@ -7,6 +7,10 @@ stages:
   - Benchmark
   - Report
 
+cache:
+  paths:
+  - apt-cache/
+
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
@@ -62,6 +66,8 @@ cpp_check:
   needs:
     - rir_container
   script:
+    - apt-get update
+    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq cppcheck
     - /opt/rir/tools/cppcheck
 
 # Run check-all in release mode  (additionally check pir types)
@@ -79,6 +85,7 @@ test_release_1:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
     - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
@@ -105,6 +112,7 @@ test_release_2:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - bin/gnur-make-tests check-recommended || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
@@ -125,6 +133,7 @@ tests_debug:
   except:
     - schedules
   script:
+    - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - export UNSOUND_OPTS=off
     - R_ENABLE_JIT=0 ./bin/tests
@@ -145,6 +154,8 @@ tests_debug2:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
+    - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - ./bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
@@ -171,8 +182,8 @@ tests_fullverify:
     - mkdir -p /opt/rir/build/fullverifier
     - cd /opt/rir/build/fullverifier
     - /opt/rir/tools/fetch-llvm.sh
-    - cmake -DCMAKE_BUILD_TYPE=fullverifier -GNinja ../..
-    - ninja
+    - cmake -DCMAKE_BUILD_TYPE=fullverifier ../..
+    - make -j6
     - bin/tests
 
 # Test particular features, like deoptimization and serialization
@@ -187,6 +198,7 @@ test_features_1:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 ./bin/tests
@@ -212,6 +224,7 @@ test_features_2:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
@@ -231,6 +244,7 @@ test_features_3:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
@@ -253,6 +267,8 @@ test_gctorture1:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
+    - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - R_GCTORTURE=5000 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
@@ -275,6 +291,7 @@ test_gctorture2:
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
+    - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=60 bin/tests
 
@@ -292,6 +309,7 @@ test_big_inline:
   except:
     - schedules
   script:
+    - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
@@ -315,10 +333,12 @@ test_sanitize:
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
     - /opt/rir/tools/fetch-llvm.sh
-    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ../..
-    - ninja
+    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize ../..
+    - make -j6
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
     - LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/12.0.0/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
+  # sometimes leak sanitizer segfaults
+  retry: 1
 
 # Test the benchmarks container before deploying
 test_benchmarks:

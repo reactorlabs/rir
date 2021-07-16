@@ -2,6 +2,7 @@
 #include "../pir/pir_impl.h"
 #include "../util/safe_builtins_list.h"
 #include "query.h"
+#include <memory>
 
 namespace rir {
 namespace pir {
@@ -297,14 +298,34 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                                 // here. Let's peek through the argument and see
                                 // if we find a promise. If so, we will analyze
                                 // it.
-                                auto stateCopy = state;
-                                stateCopy.mayUseReflection = false;
-                                ScopeAnalysis prom(closure, mkarg->prom(),
-                                                   mkarg->env(), stateCopy,
-                                                   globalState, depth + 1, log);
-                                prom();
 
-                                auto res = prom.result();
+                                ScopeAnalysis* prom;
+                                if (!subAnalysis.count(i)) {
+                                    prom =
+                                        subAnalysis
+                                            .emplace(
+                                                i,
+                                                std::make_unique<ScopeAnalysis>(
+                                                    closure, mkarg->prom(),
+                                                    mkarg->env(), state,
+                                                    globalState, depth + 1,
+                                                    log))
+                                            .first->second.get();
+                                    prom->setInitialState(
+                                        [&](ScopeAnalysisState& init) {
+                                            init.mayUseReflection = false;
+                                        });
+                                } else {
+                                    prom = subAnalysis.at(i).get();
+                                    prom->setInitialState(
+                                        [&](ScopeAnalysisState& init) {
+                                            init = state;
+                                            init.mayUseReflection = false;
+                                        });
+                                }
+                                (*prom)();
+
+                                auto res = prom->result();
 
                                 state.mergeCall(code, res);
                                 updateReturnValue(res.returnValue);
@@ -357,11 +378,23 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
             while (args.size() < version->effectiveNArgs())
                 args.push_back(MissingArg::instance());
-            ScopeAnalysis nextFun(version, args, lexicalEnv, state, globalState,
-                                  depth + 1, log);
-            nextFun();
-            state.mergeCall(code, nextFun.result());
-            updateReturnValue(nextFun.result().returnValue);
+
+            ScopeAnalysis* nextFun;
+            if (!subAnalysis.count(i)) {
+                nextFun = subAnalysis
+                              .emplace(i, std::make_unique<ScopeAnalysis>(
+                                              version, args, lexicalEnv, state,
+                                              globalState, depth + 1, log))
+                              .first->second.get();
+            } else {
+                nextFun = subAnalysis.at(i).get();
+                nextFun->setInitialState(
+                    [&](ScopeAnalysisState& init) { init = state; });
+            }
+
+            (*nextFun)();
+            state.mergeCall(code, nextFun->result());
+            updateReturnValue(nextFun->result().returnValue);
             effect.keepSnapshot = true;
             handled = true;
             effect.update();

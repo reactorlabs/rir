@@ -316,7 +316,7 @@ SEXP materialize(SEXP wrapper) {
     return res;
 }
 
-static SEXP materializeCallerEnv(CallContext& callCtx,
+SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
         if (le->materialized())
@@ -1275,26 +1275,6 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
 enum class Binop { PLUSOP, MINUSOP, TIMESOP };
 enum class Unop { PLUSOP, MINUSOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
-
-static SEXPREC createFakeSEXP(SEXPTYPE t) {
-    SEXPREC res;
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
-    return res;
-}
-
-static SEXPREC createFakeCONS(SEXP cdr) {
-    auto res = createFakeSEXP(LISTSXP);
-    res.u.listsxp.carval = R_NilValue;
-    res.u.listsxp.tagval = R_NilValue;
-    res.u.listsxp.cdrval = cdr;
-    return res;
-}
 
 #define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
     do {                                                                       \

@@ -82,6 +82,10 @@ class StaticAnalysis {
     }
     // For lookup, after fixed-point was found
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
+    // Compute BB entry
+    virtual AbstractResult applyEntry(AbstractState&, BB*) const {
+        return AbstractResult::None;
+    };
 
 #ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
     constexpr static size_t MAX_CACHE_SIZE =
@@ -139,6 +143,11 @@ class StaticAnalysis {
         seedEntries();
         for (auto& e : entrypoints)
             snapshots[e->id].entry = initialState;
+    }
+
+    void setInitialState(const std::function<void(AbstractState&)>& apply) {
+        for (auto& e : entrypoints)
+            apply(snapshots[e->id].entry);
     }
 
     const GlobalAbstractState& getGlobalState() { return *globalState; }
@@ -397,6 +406,10 @@ class StaticAnalysis {
 
                     if (!changed[id])
                         return;
+
+                    if (applyEntry(snapshots[id].entry, bb) >
+                        AbstractResult::None)
+                        changed[id] = true;
 
                     AbstractState state = snapshots[id].entry;
                     logInitialState(state, bb);

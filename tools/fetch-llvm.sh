@@ -28,7 +28,7 @@ if [ ! -d $LLVM_DIR ]; then
         tar xf $F.tar.xz
         ln -s $F llvm-12
     else
-        V=`lsb_release -r -s`
+        V=`grep DISTRIB_RELEASE /etc/lsb-release | cut -d= -f2`
         if [ "$V" == "18.04" ]; then
           V="16.04"
         fi

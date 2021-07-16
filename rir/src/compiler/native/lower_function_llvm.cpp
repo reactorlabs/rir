@@ -320,7 +320,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                                              const std::vector<Value*>& args,
                                              int srcIdx, CCODE builtinFun,
                                              llvm::Value* env) {
-    if (supportsFastBuiltinCall(builtin)) {
+    if (supportsFastBuiltinCall(builtin, args.size())) {
         return withCallFrame(args, [&]() -> llvm::Value* {
             return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
