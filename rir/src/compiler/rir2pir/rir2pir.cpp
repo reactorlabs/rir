@@ -1402,7 +1402,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 if (negateAssumption)
                     assumption->Not();
 
-                //  ************************ negate feedback?  **********
                 assumption->feedbackOrigin.push_back(
                     {deoptCondition->typeFeedback.srcCode,
                      deoptCondition->typeFeedback.origin});
@@ -1411,12 +1410,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 // ******************  //
                 // If we deopt on a typecheck, then we should record that
                 // information by casting the value.
-                if (assumeBB0)
+                if (!negateAssumption)
                     if (auto tt = IsType::Cast(branchCondition)) {
                         for (auto& e : cur.stack) {
                             if (tt->arg<0>().val() == e) {
+
                                 if (!e->type.isA(tt->typeTest)) {
                                     bool block = false;
+
                                     if (auto j = Instruction::Cast(e)) {
                                         // In case the typefeedback is more
                                         // precise than the
@@ -1427,6 +1428,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                     }
                                     if (!block) {
 
+                                        assert(false && "eee");
                                         auto cast = insert(new CastType(
                                             e, CastType::Downcast,
                                             PirType::any(), tt->typeTest));

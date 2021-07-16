@@ -211,7 +211,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
                     c->print(std::cerr);
                     std::cerr << "\n";
-
                     assert(src && "Don't know how to report deopt reason");
                 }
             }
@@ -237,10 +236,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 deoptBlock->append(rec);
                 break;
             }
-            // case DeoptReason::DeadBranchReached: {
-            //     assert(false);
-            //     break;
-            // }
             case DeoptReason::None:
                 break;
             }
