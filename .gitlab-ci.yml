@@ -88,7 +88,7 @@ test_release_1:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
-    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
+    - RIR_CHECK_PIR_TYPES=2 bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
