@@ -20,20 +20,33 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
+            auto i = *ip;
 
-            if (auto calli = CallInstruction::CastCall(*ip)) {
-                SEXP overrideTarget = nullptr;
-                if (auto cls = calli->tryGetCls()) {
-                    auto ast = src_pool_at(globalContext(),
-                                           cls->rirFunction()->body()->src);
+            if (auto calli = CallInstruction::CastCall(i)) {
+                SEXP usemethodTarget = nullptr;
+
+                auto staticCall = StaticCall::Cast(i);
+                if (staticCall && staticCall->nCallArgs() > 0) {
+                    auto ast = src_pool_at(
+                        globalContext(),
+                        staticCall->tryGetCls()->rirFunction()->body()->src);
                     if (CAR(ast) == symbol::UseMethod &&
                         TYPEOF(CADR(ast)) == STRSXP &&
                         CDDR(ast) == R_NilValue) {
-                        bool nonObj = true;
-                        calli->eachCallArg([&](Value* v) {
-                            if (!v->type.isA(PirType::valOrLazy().notObject()))
-                                nonObj = false;
-                        });
+                        bool nonObj = false;
+                        auto testNonObj = [&](Value* v) {
+                            if (v->type.isA(PirType::valOrLazy()
+                                                .notT(RType::prom)
+                                                .notObject()))
+                                nonObj = true;
+                        };
+                        if (auto d =
+                                DotsList::Cast(staticCall->callArg(0).val())) {
+                            if (d->nargs() > 0)
+                                testNonObj(d->arg(0).val());
+                        } else {
+                            testNonObj(staticCall->callArg(0).val());
+                        }
                         if (nonObj) {
                             auto method = CHAR(STRING_ELT(CADR(ast), 0));
                             auto defName = Rf_install(
@@ -42,7 +55,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (TYPEOF(def) == PROMSXP)
                                 def = PRVALUE(def);
                             if (def && TYPEOF(def) == CLOSXP) {
-                                overrideTarget = def;
+                                usemethodTarget = def;
                             }
                         } else {
                             ip = next;
@@ -51,8 +64,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 }
 
-                if (!Call::Cast(*ip) && !NamedCall::Cast(*ip) &&
-                    !overrideTarget) {
+                if (!Call::Cast(i) && !NamedCall::Cast(i) && !usemethodTarget) {
                     ip = next;
                     continue;
                 }
@@ -60,8 +72,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 SEXP formals = nullptr;
                 ClosureVersion* target = nullptr;
 
-                if (overrideTarget) {
-                    formals = FORMALS(overrideTarget);
+                if (usemethodTarget) {
+                    formals = FORMALS(usemethodTarget);
                 } else {
                     if (auto cls = calli->tryGetCls()) {
                         target = calli->tryDispatch(cls);
@@ -80,41 +92,107 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 std::vector<Value*> matchedArgs;
                 ArglistOrder::CallArglistOrder argOrderOrig;
-                auto call = Call::Cast(*ip);
-                auto namedCall = NamedCall::Cast(*ip);
-                auto staticCall = StaticCall::Cast(*ip);
+                auto call = Call::Cast(i);
+                auto namedCall = NamedCall::Cast(i);
                 bool staticallyArgmatched = false;
 
                 if (formals) {
-                    staticallyArgmatched = ArgumentMatcher::reorder(
-                        [&](DotsList* d) {
-                            ip = bb->insert(ip, d) + 1;
-                            next = ip + 1;
-                        },
-                        formals,
-                        {[&]() { return calli->nCallArgs(); },
-                         [&](size_t i) { return calli->callArg(i).val(); },
-                         [&](size_t i) {
-                             SLOWASSERT(!namedCall ||
-                                        i < namedCall->names.size());
-                             return namedCall ? namedCall->names[i]
-                                              : R_NilValue;
-                         }},
-                        matchedArgs, argOrderOrig);
+                    bool failed = false;
+                    std::vector<std::pair<SEXP, Value*>> usemethodTargetArgs;
+                    if (usemethodTarget) {
+                        const auto& myFormals =
+                            staticCall->tryGetCls()->formals();
+                        size_t i = 0;
+                        staticCall->eachCallArg([&](Value* v) {
+                            if (v == MissingArg::instance()) {
+                                if (myFormals.hasDefaultArgs() &&
+                                    myFormals.nargs() > i) {
+                                    auto def = myFormals.defaultArgs().at(i);
+                                    if (TYPEOF(def) != LANGSXP &&
+                                        TYPEOF(def) != SYMSXP &&
+                                        TYPEOF(def) != BCODESXP &&
+                                        TYPEOF(def) != EXTERNALSXP) {
+                                        auto defA = new LdConst(def);
+                                        ip = bb->insert(ip, defA) + 1;
+                                        next = ip + 1;
+                                        usemethodTargetArgs.push_back(
+                                            {myFormals.names().at(i), defA});
+                                    } else {
+                                        failed = true;
+                                    }
+                                } else {
+                                    failed = true;
+                                }
+                            } else if (auto d = DotsList::Cast(v)) {
+                                d->eachElement([&](SEXP n, Value* v) {
+                                    usemethodTargetArgs.push_back({n, v});
+                                });
+                            } else {
+                                auto n = myFormals.nargs() > i
+                                             ? myFormals.names()[i]
+                                             : R_NilValue;
+                                usemethodTargetArgs.push_back({n, v});
+                            }
+                            i++;
+                        });
+                        // if (!failed) {
+                        //    Rf_PrintValue(formals);
+                        //    std::cout << "+++++++++++++++++++\n";
+                        //    for (auto& e : usemethodTargetArgs) {
+                        //        Rf_PrintValue(e.first);
+                        //        if (auto j = Instruction::Cast(e.second))
+                        //          j->printRecursive(std::cout, 1);
+                        //        else {
+                        //          e.second->printRef(std::cout);
+                        //          std::cout << "\n";
+                        //        }
+                        //    }
+                        //    std::cout << "+++++++++++++++++++\n";
+                        //}
+                    }
+                    staticallyArgmatched =
+                        !failed &&
+                        ArgumentMatcher::reorder(
+                            [&](DotsList* d) {
+                                ip = bb->insert(ip, d) + 1;
+                                next = ip + 1;
+                            },
+                            formals,
+                            {[&]() {
+                                 if (usemethodTarget)
+                                     return usemethodTargetArgs.size();
+                                 return calli->nCallArgs();
+                             },
+                             [&](size_t i) -> Value* {
+                                 if (usemethodTarget)
+                                     return usemethodTargetArgs[i].second;
+                                 return calli->callArg(i).val();
+                             },
+                             [&](size_t i) -> SEXP {
+                                 if (usemethodTarget)
+                                     return usemethodTargetArgs[i].first;
+                                 SLOWASSERT(!namedCall ||
+                                            i < namedCall->names.size());
+                                 return namedCall ? namedCall->names[i]
+                                                  : R_NilValue;
+                             }},
+                            matchedArgs, argOrderOrig);
                 }
 
                 Context asmpt;
 
                 if (staticallyArgmatched) {
-                    if (staticCall) {
-                        StaticCall fake((*ip)->env(), calli->tryGetCls(),
-                                        Context(), matchedArgs, argOrderOrig,
-                                        Tombstone::framestate(), (*ip)->srcIdx);
+                    if (usemethodTarget) {
+                        if (!DispatchTable::check(BODY(usemethodTarget)))
+                            rir::Compiler::compileClosure(usemethodTarget);
+
+                        LdConst cls(usemethodTarget);
+                        Call fake(i->env(), &cls, matchedArgs,
+                                  Tombstone::framestate(), i->srcIdx);
                         asmpt = fake.inferAvailableAssumptions();
                     } else {
-                        Call fake((*ip)->env(), calli->tryGetClsArg(),
-                                  matchedArgs, Tombstone::framestate(),
-                                  (*ip)->srcIdx);
+                        Call fake(i->env(), calli->tryGetClsArg(), matchedArgs,
+                                  Tombstone::framestate(), i->srcIdx);
                         asmpt = fake.inferAvailableAssumptions();
                     }
 
@@ -129,17 +207,15 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             asmpt.remove(Assumption::NoExplicitlyMissingArgs);
                     asmpt.numMissing(Rf_length(formals) - matchedArgs.size());
 
-                    if (overrideTarget) {
-                        if (!DispatchTable::check(BODY(overrideTarget)))
-                            rir::Compiler::compileClosure(overrideTarget);
-                        if (DispatchTable::check(BODY(overrideTarget)))
-                            cmp.compileClosure(overrideTarget,
-                                               "unknown--fromOverride", asmpt,
-                                               false,
-                                               [&](ClosureVersion* fun) {
-                                                   target = fun;
-                                               },
-                                               []() {}, {});
+                    if (usemethodTarget) {
+                        if (!DispatchTable::check(BODY(usemethodTarget)))
+                            rir::Compiler::compileClosure(usemethodTarget);
+                        if (DispatchTable::check(BODY(usemethodTarget)))
+                            cmp.compileClosure(
+                                usemethodTarget, "unknown--fromOverride", asmpt,
+                                false,
+                                [&](ClosureVersion* fun) { target = fun; },
+                                []() {}, {});
                     } else if (auto cnst =
                                    LdConst::Cast(calli->tryGetClsArg())) {
                         if (DispatchTable::check(BODY(cnst->c())))
@@ -168,30 +244,26 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 if (staticallyArgmatched && target) {
                     anyChange = true;
-                    Value* cls = nullptr;
-                    if (overrideTarget) {
-                        ip = bb->insert(ip, new LdConst(overrideTarget));
-                        cls = *ip;
-                        ip++;
-                        next = ip + 1;
-                    }
                     if (auto c = call) {
-                        if (!cls)
-                            cls = c->cls()->followCastsAndForce();
+                        assert(!usemethodTarget);
+                        auto cls = c->cls()->followCastsAndForce();
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
                             argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = namedCall) {
-                        if (!cls)
-                            cls = c->cls()->followCastsAndForce();
+                        assert(!usemethodTarget);
+                        auto cls = c->cls()->followCastsAndForce();
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
                             argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = staticCall) {
-                        assert(overrideTarget);
-                        assert(cls);
+                        assert(usemethodTarget);
+                        ip = bb->insert(ip, new LdConst(usemethodTarget));
+                        auto cls = *ip;
+                        ip++;
+                        next = ip + 1;
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
                             argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);

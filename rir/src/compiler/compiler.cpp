@@ -344,7 +344,7 @@ void Compiler::optimizeModule() {
 }
 
 size_t Parameter::MAX_INPUT_SIZE =
-    getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 8000;
+    getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 12000;
 
 } // namespace pir
 } // namespace rir
