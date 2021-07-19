@@ -3752,7 +3752,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
             if (isObject(seq)) {
-                seq = Rf_shallow_duplicate(seq);
+                if (Rf_inherits(seq, "factor"))
+                    seq = asCharacterFactor(seq);
+                else
+                    seq = Rf_shallow_duplicate(seq);
                 SET_OBJECT(seq, 0);
                 ostack_set(ctx, 0, seq);
             }
