@@ -76,9 +76,8 @@ test_release_1:
   variables:
     GIT_STRATEGY: none
     PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_MAX_INPUT_SIZE: 10000
-    PIR_INLINER_MAX_SIZE: 10000
     PIR_LLVM_OPT_LEVEL: 1
+    PIR_OPT_LEVEL: 1
   stage: Run tests
   needs:
     - rir_container
@@ -88,7 +87,7 @@ test_release_1:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - RIR_CHECK_PIR_TYPES=1 bin/tests
-    - RIR_CHECK_PIR_TYPES=2 bin/gnur-make-tests check-devel || $SAVE_LOGS
+    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
@@ -100,9 +99,6 @@ test_release_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_MAX_INPUT_SIZE: 4000
-    PIR_INLINER_MAX_SIZE: 4000
     PIR_LLVM_OPT_LEVEL: 0
     PIR_OPT_LEVEL: 0
   # there is an impossible to reproduce memory corruption issue in survivals compete.Rnw
