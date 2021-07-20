@@ -204,7 +204,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
             } else if (LdConst::Cast(cond)) {
                 // src = t->arg(0).val();
-                r = DeoptReason::None;
+                src = cond;
+                r = DeoptReason::DeadBranchReached;
+                // r = DeoptReason::None;
 
             } else {
                 if (auto c = Instruction::Cast(cond)) {
@@ -228,6 +230,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 assert((uintptr_t)origin.second > (uintptr_t)origin.first);
                 auto rec = new RecordDeoptReason(
                     {r, origin.first, (uint32_t)offset}, src);
+
                 deoptBlock->append(rec);
                 break;
             }
