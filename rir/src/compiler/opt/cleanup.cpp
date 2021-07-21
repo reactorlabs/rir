@@ -139,6 +139,10 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         tt->replaceUsesWith(True::instance());
                         removed = true;
                         next = bb->remove(ip);
+                    } else if (!arg->type.maybe(tt->typeTest)) {
+                        tt->replaceUsesWith(False::instance());
+                        removed = true;
+                        next = bb->remove(ip);
                     }
                 } else if (auto tt = CastType::Cast(i)) {
                     auto arg = tt->arg<0>().val();
