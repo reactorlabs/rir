@@ -462,7 +462,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             if (i > max)
                 max = i;
         }
-        cs << BC::clearBindingCache(min, max - min);
+        if (min < max)
+            cs << BC::clearBindingCache(min, max - min);
         return false;
     }
 
