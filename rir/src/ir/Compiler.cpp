@@ -452,7 +452,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     // TODO: this is not sound... There are other ways to call remove... What we
     // should do instead is trap do_remove in gnur and clear the cache!
-    if (fun == symbol::remove) {
+    if (fun == symbol::remove || fun == symbol::rm) {
         CompilerContext::CodeContext::CacheSlotNumber min = MAX_CACHE_SIZE;
         CompilerContext::CodeContext::CacheSlotNumber max = 0;
         for (auto c : ctx.code.top()->loadsSlotInCache) {

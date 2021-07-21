@@ -3264,14 +3264,20 @@ void LowerFunctionLLVM::compile() {
                 // remove... What we should do instead is trap do_remove in gnur
                 // and clear the cache!
                 if (b->builtinId == blt("remove")) {
-                    if (bindingsCache.count(b->env())) {
-                        auto& be = bindingsCache[b->env()];
-                        for (const auto& b : be)
-                            builder.CreateStore(
-                                llvm::ConstantPointerNull::get(t::SEXP),
-                                builder.CreateGEP(bindingsCacheBase,
-                                                  c(b.second)));
+                    std::unordered_set<size_t> affected;
+                    if (b->nargs() >= 2 &&
+                        bindingsCache.count(b->arg(1).val())) {
+                        for (const auto& b : bindingsCache[b->arg(1).val()])
+                            affected.insert(b.second);
                     }
+                    if (bindingsCache.count(b->env())) {
+                        for (const auto& b : bindingsCache[b->env()])
+                            affected.insert(b.second);
+                    }
+                    for (auto v : affected)
+                        builder.CreateStore(
+                            llvm::ConstantPointerNull::get(t::SEXP),
+                            builder.CreateGEP(bindingsCacheBase, c(v)));
                 }
 
                 if (compileDotcall(
