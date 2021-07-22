@@ -26,6 +26,8 @@ BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordType() { return BC(Opcode::record_type_); }
 BC BC::recordTest() { return BC(Opcode::record_test_); }
 
+BC BC::asSwitchIdx() { return BC(Opcode::as_switch_idx_); }
+
 BC BC::popn(unsigned n) {
     ImmediateArguments i;
     i.i = n;

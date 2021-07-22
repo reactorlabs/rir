@@ -968,7 +968,7 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     int minReferenceCount() const override { return 1; }
 };
 
-class FLI(ToForSeq, 1, Effects::None()) {
+class FLI(ToForSeq, 1, Effect::Error) {
   public:
     explicit ToForSeq(Value* val)
         : FixedLenInstruction(val->type.maybeObj()
@@ -984,15 +984,6 @@ class FLI(ToForSeq, 1, Effects::None()) {
             return type & it.notObject().orT(RType::chr);
         return type & it;
     }
-};
-
-class FLI(ForSeqSize, 1, Effect::Error) {
-  public:
-    explicit ForSeqSize(Value* val)
-        : FixedLenInstruction(
-              PirType(RType::integer).simpleScalar().notObject(),
-              {{PirType::val()}}, {{val}}) {}
-    size_t gvnBase() const override { return tagHash(); }
 };
 
 class FLI(Length, 1, Effects::None()) {
@@ -1338,6 +1329,16 @@ class FLI(AsLogical, 1, Effect::Error) {
         }
         return effects;
     }
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(AsSwitchIdx, 1, Effects::None()) {
+  public:
+    Value* val() const { return arg<0>().val(); }
+    AsSwitchIdx(Value* in)
+        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
+                              {{in}}) {}
+
     size_t gvnBase() const override { return tagHash(); }
 };
 

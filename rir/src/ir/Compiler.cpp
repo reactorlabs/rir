@@ -1268,8 +1268,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // Compile the seq expression (vector) and initialize the loop
         compileExpr(ctx, seq);
-        if (!isConstant(seq))
-            cs << BC::setShared();
         cs << BC::forSeqSize() << BC::push((int)0);
 
         auto compileIndexOps = [&](bool record) {
@@ -1492,9 +1490,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
         cs << BC::dup() << BC::is(BC::RirTypecheck::isSTRSXP)
            << BC::recordTest() << BC::brtrue(strBr);
-        // TODO needs Rf_asInteger, builtin as.integer behaves differently
-        // `raw(1)` errors on asInteger, but not on `as.integer`
-        cs << BC::callBuiltin(1, ast, getBuiltinFun("as.integer"));
+        cs << BC::asSwitchIdx();
 
         // currently stack is [arg[0]] (converted to integer)
         for (size_t i = 0; i < labels.size(); ++i) {

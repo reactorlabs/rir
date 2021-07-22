@@ -3468,19 +3468,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::ForSeqSize: {
-                auto a = i->arg(0).val();
-                if (Representation::Of(a) != t::SEXP) {
-                    setVal(i, c(1));
-                    break;
-                }
-                llvm::Value* res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::forSeqSize),
-                         {loadSxp(i->arg(0).val())});
-                setVal(i, convert(res, i->type));
-                break;
-            }
-
             case Tag::Branch: {
                 auto cond = load(i->arg(0).val(), Representation::Integer);
                 cond = builder.CreateICmpNE(cond, c(0));
@@ -4287,8 +4274,12 @@ void LowerFunctionLLVM::compile() {
                         break;
 
                     case BC::RirTypecheck::isFactor:
-                        // TODO
-                        res = builder.getFalse();
+                        if (Representation::Of(arg) != t::SEXP)
+                            res = builder.getFalse();
+                        else
+                            res = call(NativeBuiltins::get(
+                                           NativeBuiltins::Id::isFactor),
+                                       {loadSxp(arg)});
                         break;
                     }
                 } else {
@@ -4313,6 +4304,23 @@ void LowerFunctionLLVM::compile() {
                               : builder.getFalse();
                 }
                 setVal(i, builder.CreateZExt(res, t::Int));
+                break;
+            }
+
+            case Tag::AsSwitchIdx: {
+                auto arg = i->arg(0).val();
+                llvm::Value* res;
+                auto rep = Representation::Of(i->arg(0).val());
+                if (rep == t::Int) {
+                    auto a = load(arg);
+                    res = builder.CreateSelect(
+                        builder.CreateICmpEQ(c(NA_INTEGER), a), c(-1), a);
+                } else {
+                    res = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::asSwitchIdx),
+                        {loadSxp(arg)});
+                }
+                setVal(i, res);
                 break;
             }
 

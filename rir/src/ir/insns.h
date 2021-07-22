@@ -199,6 +199,11 @@ DEF_INSTR(uplus_, 0, 1, 1, 0)
  */
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
+/**
+ * as_switch_idx_ :: silently convert tos to integer, -1 if non-int
+ */
+DEF_INSTR(as_switch_idx_, 0, 1, 1, 1)
+
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
 DEF_INSTR(mul_, 0, 2, 1, 0)

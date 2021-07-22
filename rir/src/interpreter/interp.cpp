@@ -3734,6 +3734,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(as_switch_idx_) {
+            if (TYPEOF(ostack_top(ctx)) != INTSXP) {
+                auto v = asInteger(ostack_pop(ctx));
+                ostack_push(ctx, Rf_ScalarInteger(v == NA_INTEGER ? -1 : v));
+            }
+            NEXT();
+        }
+
         INSTRUCTION(for_seq_size_) {
             SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of
@@ -3759,6 +3767,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 SET_OBJECT(seq, 0);
                 ostack_set(ctx, 0, seq);
             }
+            ENSURE_NAMEDMAX(seq);
             ostack_push(ctx, value);
             NEXT();
         }

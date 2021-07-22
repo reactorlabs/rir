@@ -286,7 +286,6 @@ class StaticReferenceCount
         case Tag::MkEnv:
         case Tag::MkArg:
         case Tag::UpdatePromise:
-        case Tag::ForSeqSize:
         case Tag::ScheduledDeopt:
         case Tag::PopContext:
         case Tag::Extract2_2D:

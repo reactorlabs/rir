@@ -97,6 +97,13 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                         lgl->replaceUsesWith(lgl->arg(0).val());
                         next = bb->remove(ip);
                     }
+                } else if (auto idx = AsSwitchIdx::Cast(i)) {
+                    if (idx->arg(0).val()->type.isA(
+                            PirType::simpleScalarInt().notNAOrNaN())) {
+                        removed = true;
+                        idx->replaceUsesWith(idx->val());
+                        next = bb->remove(ip);
+                    }
                 } else if (auto seq = ToForSeq::Cast(i)) {
                     Value* arg = seq->arg<0>().val();
                     if (!arg->type.maybeObj()) {

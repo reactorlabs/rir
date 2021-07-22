@@ -676,6 +676,15 @@ int isMissingImpl(SEXP symbol, SEXP environment) {
     return rir::isMissing(symbol, environment, nullptr, nullptr);
 }
 
+bool isFactorImpl(SEXP val) {
+    return TYPEOF(val) == INTSXP && isObject(val) && Rf_inherits(val, "factor");
+}
+
+int asSwitchIdxImpl(SEXP val) {
+    int i = Rf_asInteger(val);
+    return i == NA_INTEGER ? -1 : i;
+}
+
 int checkTrueFalseImpl(SEXP val) {
     int cond = NA_LOGICAL;
     if (XLENGTH(val) > 1)
@@ -1815,31 +1824,24 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
 }
 
 SEXP toForSeqImpl(SEXP seq) {
+    if (!Rf_isVector(seq) && !Rf_isList(seq) && !isNull(seq)) {
+        Rf_errorcall(R_NilValue, "invalid for() loop sequence");
+    }
+
     // TODO: Even when the for loop sequence is an object, R won't
     // dispatch on it. Since in RIR we use the normals extract2_1
     // BC on it, we would. To prevent this we strip the object
     // flag here. What we should do instead, is use a non-dispatching
     // extract BC.
     if (isObject(seq)) {
-        if (Rf_inherits(seq, "factor"))
+        if (isFactorImpl(seq))
             seq = asCharacterFactor(seq);
         else
             seq = Rf_shallow_duplicate(seq);
         SET_OBJECT(seq, 0);
     }
+    ENSURE_NAMEDMAX(seq);
     return seq;
-}
-
-int forSeqSizeImpl(SEXP seq) {
-    // TODO: we should extract the length just once at the begining of
-    // the loop and generally have somthing more clever here...
-    if (Rf_isVector(seq)) {
-        return LENGTH(seq);
-    } else if (Rf_isList(seq) || isNull(seq)) {
-        return Rf_length(seq);
-    }
-    Rf_errorcall(R_NilValue, "invalid for() loop sequence");
-    return 0;
 }
 
 void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
@@ -2085,6 +2087,10 @@ void NativeBuiltins::initializeBuiltins() {
         "colon", (void*)&colonImpl,
         llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false)};
     get_(Id::isMissing) = {"isMissing", (void*)&isMissingImpl, t::int_sexpsexp};
+    get_(Id::isFactor) = {"isFactor", (void*)&isFactorImpl,
+                          llvm::FunctionType::get(t::i1, {t::SEXP}, false)};
+    get_(Id::asSwitchIdx) = {"asSwitchIdx", (void*)&asSwitchIdxImpl,
+                             llvm::FunctionType::get(t::Int, {t::SEXP}, false)};
     get_(Id::checkTrueFalse) = {"checkTrueFalse", (void*)&checkTrueFalseImpl,
                                 t::int_sexp};
     get_(Id::asLogicalBlt) = {"aslogical", (void*)&asLogicalImpl, t::int_sexp};
@@ -2213,7 +2219,6 @@ void NativeBuiltins::initializeBuiltins() {
         llvm::FunctionType::get(
             t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int},
             false)};
-    get_(Id::forSeqSize) = {"forSeqSize", (void*)&forSeqSizeImpl, t::int_sexp};
     get_(Id::toForSeq) = {"toForSeq", (void*)&toForSeqImpl, t::sexp_sexp};
     get_(Id::initClosureContext) = {
         "initClosureContext", (void*)&initClosureContextImpl,

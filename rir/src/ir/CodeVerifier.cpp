@@ -104,78 +104,13 @@ static Sources hasSources(Opcode bc) {
     case Opcode::subassign1_3_:
         return Sources::Required;
 
-    case Opcode::inc_:
-    case Opcode::identical_noforce_:
-    case Opcode::push_:
-    case Opcode::ldfun_:
-    case Opcode::ldddvar_:
-    case Opcode::ldvar_:
-    case Opcode::ldvar_noforce_:
-    case Opcode::ldvar_cached_:
-    case Opcode::ldvar_for_update_cache_:
-    case Opcode::ldvar_for_update_:
-    case Opcode::ldvar_super_:
-    case Opcode::stvar_:
-    case Opcode::stvar_cached_:
-    case Opcode::stvar_super_:
-    case Opcode::guard_fun_:
-    case Opcode::call_:
-    case Opcode::call_dots_:
-    case Opcode::named_call_:
-    case Opcode::call_builtin_:
-    case Opcode::mk_promise_:
-    case Opcode::mk_eager_promise_:
-    case Opcode::push_code_:
-    case Opcode::br_:
-    case Opcode::brtrue_:
-    case Opcode::beginloop_:
-    case Opcode::brfalse_:
-    case Opcode::pick_:
-    case Opcode::pull_:
-    case Opcode::is_:
-    case Opcode::put_:
-    case Opcode::nop_:
-    case Opcode::ret_:
-    case Opcode::names_:
-    case Opcode::set_names_:
-    case Opcode::force_:
-    case Opcode::pop_:
-    case Opcode::popn_:
-    case Opcode::close_:
-    case Opcode::asast_:
-    case Opcode::dup_:
-    case Opcode::dup2_:
-    case Opcode::for_seq_size_:
-    case Opcode::length_:
-    case Opcode::swap_:
-    case Opcode::set_shared_:
-    case Opcode::ensure_named_:
-    case Opcode::return_:
-    case Opcode::check_closure_:
-    case Opcode::invisible_:
-    case Opcode::visible_:
-    case Opcode::endloop_:
-    case Opcode::lgl_and_:
-    case Opcode::lgl_or_:
-    case Opcode::record_call_:
-    case Opcode::record_type_:
-    case Opcode::record_test_:
-    case Opcode::clear_binding_cache_:
-    case Opcode::colon_cast_lhs_:
-    case Opcode::colon_cast_rhs_:
-        return Sources::NotNeeded;
-
     case Opcode::aslogical_:
     case Opcode::asbool_:
     case Opcode::missing_:
-#define V(NESTED, name, Name)\
-    case Opcode::name ## _:\
         return Sources::May;
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
 
-    case Opcode::invalid_:
-    case Opcode::num_of: {}
+    default:
+        return Sources::NotNeeded;
     }
     assert(false);
     return Sources::NotNeeded;

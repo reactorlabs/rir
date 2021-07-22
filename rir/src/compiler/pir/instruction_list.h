@@ -52,6 +52,7 @@
     V(DotsList)                                                                \
     V(ExpandDots)                                                              \
     V(AsLogical)                                                               \
+    V(AsSwitchIdx)                                                             \
     V(CheckTrueFalse)                                                          \
     V(ColonInputEffects)                                                       \
     V(ColonCastLhs)                                                            \
@@ -86,7 +87,6 @@
     V(Minus)                                                                   \
     V(Identical)                                                               \
     V(ToForSeq)                                                                \
-    V(ForSeqSize)                                                              \
     V(Length)                                                                  \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
