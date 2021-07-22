@@ -1418,10 +1418,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                      deoptCondition->typeFeedback.origin});
                 insert(assumption);
 
-                // ******************  //
                 // If we deopt on a typecheck, then we should record that
                 // information by casting the value.
-                if (!negateAssumption)
+                if (assumeBB0)
                     if (auto tt = IsType::Cast(branchCondition)) {
                         for (auto& e : cur.stack) {
                             if (tt->arg<0>().val() == e) {
