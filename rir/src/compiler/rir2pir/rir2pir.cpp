@@ -793,6 +793,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         if (d->nargs() > 0) {
                             if (eagerEval(d->arg(0).val(), 0)) {
                                 d->arg(0).type() = d->arg(0).val()->type;
+                                // creation of dots list must come after eager
+                                // evaluation of content...
+                                auto clone = d->clone();
+                                matchedArgs[0] = clone;
+                                d->eraseAndRemove();
+                                insert(clone);
                             } else {
                                 return false;
                             }
