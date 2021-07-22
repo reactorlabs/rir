@@ -2610,6 +2610,8 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
     std::vector<std::pair<rir::Code*, Opcode*>> feedbackOrigin;
     bool assumeTrue = true;
+    DeoptReason::Reason deoptReason = DeoptReason::None;
+
     Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
                               {{PirType::test(), NativeType::checkpoint}},

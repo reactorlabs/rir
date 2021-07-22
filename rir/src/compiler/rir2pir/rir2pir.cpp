@@ -1343,7 +1343,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                         //                   (Value*)True::instance()
                         //                 : (Value*)False::instance();
 
-                        boolInstance = (feedbackIsTrue)
+                        boolInstance = feedbackIsTrue
                                            ? (Value*)True::instance()
                                            : (Value*)False::instance();
 
@@ -1409,6 +1409,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 finger = assumeBB0 ? trg : nextPos;
 
                 auto assumption = new Assume(v, cp);
+                assumption->deoptReason = DeoptReason::DeadBranchReached;
                 if (negateAssumption)
                     assumption->Not();
 

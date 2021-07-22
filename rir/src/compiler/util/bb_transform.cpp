@@ -158,6 +158,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     }
 
     if (!assume->feedbackOrigin.empty()) {
+
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
@@ -165,63 +166,73 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             rir::Opcode o;
 
             auto r = DeoptReason::None;
-            if (auto t = IsType::Cast(cond)) {
-                r = DeoptReason::Typecheck;
 
-                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                o = *((Opcode*)origin.first + offset);
-                // determine DeoptReason based on the opcode too.
-                if (o == Opcode::record_test_)
-                    r = DeoptReason::DeadBranchReached;
-
-                src = t->arg<0>().val();
-
-            } else if (auto t = Identical::Cast(cond)) {
-                src = t->arg<0>().val();
-                if (LdConst::Cast(src))
-                    src = t->arg<1>().val();
-                assert(!LdConst::Cast(src));
-                r = DeoptReason::Calltarget;
-                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                o = *((Opcode*)origin.first + offset);
-
-                // determine DeoptReason based on the opcode too.
-                if (o == Opcode::record_test_)
-                    r = DeoptReason::DeadBranchReached;
-
-            } else if (auto t = IsEnvStub::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::EnvStubMaterialized;
-            } else if (auto t = ColonInputEffects::Cast(cond)) {
-                src = t->arg(0).val();
+            if (assume->feedbackOrigin.size() == 1 &&
+                assume->deoptReason == DeoptReason::DeadBranchReached) {
                 r = DeoptReason::DeadBranchReached;
-            } else if (auto t = CheckTrueFalse::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::DeadBranchReached;
-            } else if (auto t = Not::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::DeadBranchReached;
-            } else if (auto t = Lte::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::DeadBranchReached;
-            } else if (auto t = Neq::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::DeadBranchReached;
-
-            } else if (LdConst::Cast(cond)) {
-                // src = t->arg(0).val();
                 src = cond;
-                r = DeoptReason::DeadBranchReached;
-                // r = DeoptReason::None;
 
             } else {
-                if (auto c = Instruction::Cast(cond)) {
 
-                    c->print(std::cerr);
-                    std::cerr << "\n";
-                    assert(src && "Don't know how to report deopt reason");
+                if (auto t = IsType::Cast(cond)) {
+                    r = DeoptReason::Typecheck;
+
+                    offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                    o = *((Opcode*)origin.first + offset);
+                    // determine DeoptReason based on the opcode too.
+                    if (o == Opcode::record_test_)
+                        r = DeoptReason::DeadBranchReached;
+
+                    src = t->arg<0>().val();
+
+                } else if (auto t = Identical::Cast(cond)) {
+                    src = t->arg<0>().val();
+                    if (LdConst::Cast(src))
+                        src = t->arg<1>().val();
+                    assert(!LdConst::Cast(src));
+                    r = DeoptReason::Calltarget;
+                    offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                    o = *((Opcode*)origin.first + offset);
+
+                    // determine DeoptReason based on the opcode too.
+                    if (o == Opcode::record_test_)
+                        r = DeoptReason::DeadBranchReached;
+
+                } else if (auto t = IsEnvStub::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::EnvStubMaterialized;
+                } else if (auto t = ColonInputEffects::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::DeadBranchReached;
+                } else if (auto t = CheckTrueFalse::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::DeadBranchReached;
+                } else if (auto t = Not::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::DeadBranchReached;
+                } else if (auto t = Lte::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::DeadBranchReached;
+                } else if (auto t = Neq::Cast(cond)) {
+                    src = t->arg(0).val();
+                    r = DeoptReason::DeadBranchReached;
+
+                } else if (LdConst::Cast(cond)) {
+                    // src = t->arg(0).val();
+                    src = cond;
+                    r = DeoptReason::DeadBranchReached;
+                    // r = DeoptReason::None;
+
+                } else {
+                    if (auto c = Instruction::Cast(cond)) {
+
+                        c->print(std::cerr);
+                        std::cerr << "\n";
+                        assert(src && "Don't know how to report deopt reason");
+                    }
                 }
             }
+
             switch (r) {
             case DeoptReason::Typecheck:
             case DeoptReason::DeadCall:
