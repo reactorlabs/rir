@@ -201,6 +201,12 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             } else if (auto t = Not::Cast(cond)) {
                 src = t->arg(0).val();
                 r = DeoptReason::DeadBranchReached;
+            } else if (auto t = Lte::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::DeadBranchReached;
+            } else if (auto t = Neq::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::DeadBranchReached;
 
             } else if (LdConst::Cast(cond)) {
                 // src = t->arg(0).val();

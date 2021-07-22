@@ -1334,18 +1334,28 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 isDeopt = deoptCondition && !inPromise() && !inlining();
 
                 if (!branchCondition->type.isA(PirType::test())) {
-                    v = insert(new Identical(branchCondition,
-                                             bc.bc == Opcode::brtrue_
-                                                 ? (Value*)True::instance()
-                                                 : (Value*)False::instance(),
-                                             PirType::val()));
-
+                    Value* boolInstance;
                     if (isDeopt) {
                         // negateAssumption = (bc.bc == Opcode::brfalse_);
 
-                        if ((bc.bc == Opcode::brtrue_) != feedbackIsTrue)
-                            negateAssumption = true;
+                        // boolInstance = ((bc.bc == Opcode::brtrue_) !=
+                        // feedbackIsTrue) ?
+                        //                   (Value*)True::instance()
+                        //                 : (Value*)False::instance();
+
+                        boolInstance = (feedbackIsTrue)
+                                           ? (Value*)True::instance()
+                                           : (Value*)False::instance();
+
+                    } else {
+
+                        boolInstance = bc.bc == Opcode::brtrue_
+                                           ? (Value*)True::instance()
+                                           : (Value*)False::instance();
                     }
+
+                    v = insert(new Identical(branchCondition, boolInstance,
+                                             PirType::val()));
 
                 } else {
 
