@@ -910,9 +910,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::for_seq_size_:
-        push(insert(new ForSeqSize(top())));
+    case Opcode::for_seq_size_: {
+        auto seq = pop();
+        push(insert(new ToForSeq(seq)));
+        push(insert(new ForSeqSize(seq)));
         break;
+    }
 
     case Opcode::length_:
         push(insert(new Length(pop())));

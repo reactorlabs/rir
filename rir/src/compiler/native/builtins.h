@@ -134,6 +134,7 @@ struct NativeBuiltins {
         subassign22rrr,
         subassign22rri,
         subassign22iir,
+        toForSeq,
         forSeqSize,
         initClosureContext,
         endClosureContext,

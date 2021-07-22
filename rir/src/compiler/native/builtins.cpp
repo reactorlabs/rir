@@ -1814,18 +1814,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
     return res;
 }
 
-int forSeqSizeImpl(SEXP seq) {
-    // TODO: we should extract the length just once at the begining of
-    // the loop and generally have somthing more clever here...
-    int res;
-    if (Rf_isVector(seq)) {
-        res = LENGTH(seq);
-    } else if (Rf_isList(seq) || isNull(seq)) {
-        res = Rf_length(seq);
-    } else {
-        Rf_errorcall(R_NilValue, "invalid for() loop sequence");
-        return 0;
-    }
+SEXP toForSeqImpl(SEXP seq) {
     // TODO: Even when the for loop sequence is an object, R won't
     // dispatch on it. Since in RIR we use the normals extract2_1
     // BC on it, we would. To prevent this we strip the object
@@ -1833,13 +1822,24 @@ int forSeqSizeImpl(SEXP seq) {
     // extract BC.
     if (isObject(seq)) {
         if (Rf_inherits(seq, "factor"))
-            seq = Rf_shallow_duplicate(seq);
+            seq = asCharacterFactor(seq);
         else
             seq = Rf_shallow_duplicate(seq);
         SET_OBJECT(seq, 0);
-        ostack_set(ctx, 0, seq);
     }
-    return res;
+    return seq;
+}
+
+int forSeqSizeImpl(SEXP seq) {
+    // TODO: we should extract the length just once at the begining of
+    // the loop and generally have somthing more clever here...
+    if (Rf_isVector(seq)) {
+        return LENGTH(seq);
+    } else if (Rf_isList(seq) || isNull(seq)) {
+        return Rf_length(seq);
+    }
+    Rf_errorcall(R_NilValue, "invalid for() loop sequence");
+    return 0;
 }
 
 void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
@@ -2214,6 +2214,7 @@ void NativeBuiltins::initializeBuiltins() {
             t::SEXP, {t::SEXP, t::Int, t::Int, t::Double, t::SEXP, t::Int},
             false)};
     get_(Id::forSeqSize) = {"forSeqSize", (void*)&forSeqSizeImpl, t::int_sexp};
+    get_(Id::toForSeq) = {"toForSeq", (void*)&toForSeqImpl, t::sexp_sexp};
     get_(Id::initClosureContext) = {
         "initClosureContext", (void*)&initClosureContextImpl,
         llvm::FunctionType::get(t::t_void,

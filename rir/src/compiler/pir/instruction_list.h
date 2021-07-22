@@ -85,6 +85,7 @@
     V(Plus)                                                                    \
     V(Minus)                                                                   \
     V(Identical)                                                               \
+    V(ToForSeq)                                                                \
     V(ForSeqSize)                                                              \
     V(Length)                                                                  \
     V(FrameState)                                                              \

@@ -968,6 +968,24 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     int minReferenceCount() const override { return 1; }
 };
 
+class FLI(ToForSeq, 1, Effects::None()) {
+  public:
+    explicit ToForSeq(Value* val)
+        : FixedLenInstruction(val->type.maybeObj()
+                                  ? val->type.notObject().orT(RType::chr)
+                                  : val->type,
+                              {{PirType::val()}}, {{val}}) {}
+
+    size_t gvnBase() const override { return tagHash(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        auto it = getType(arg(0).val());
+        if (it.maybeObj())
+            return type & it.notObject().orT(RType::chr);
+        return type & it;
+    }
+};
+
 class FLI(ForSeqSize, 1, Effect::Error) {
   public:
     explicit ForSeqSize(Value* val)

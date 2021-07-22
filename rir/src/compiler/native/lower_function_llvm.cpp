@@ -3455,6 +3455,19 @@ void LowerFunctionLLVM::compile() {
             case Tag::Nop:
                 break;
 
+            case Tag::ToForSeq: {
+                auto a = i->arg(0).val();
+                if (Representation::Of(a) != t::SEXP) {
+                    setVal(i, load(a));
+                    break;
+                }
+                llvm::Value* res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::toForSeq),
+                         {loadSxp(i->arg(0).val())});
+                setVal(i, res);
+                break;
+            }
+
             case Tag::ForSeqSize: {
                 auto a = i->arg(0).val();
                 if (Representation::Of(a) != t::SEXP) {
