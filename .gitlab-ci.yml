@@ -152,6 +152,7 @@ tests_debug2:
     - schedules
   script:
     - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
     - ./bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
@@ -264,6 +265,7 @@ test_gctorture1:
     - schedules
   script:
     - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
     - R_GCTORTURE=5000 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
