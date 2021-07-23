@@ -163,7 +163,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             Value* src = nullptr;
             auto cond = assume->condition();
             // unsigned long offset;
-            rir::Opcode o;
+            // rir::Opcode o;
 
             auto r = DeoptReason::None;
 
@@ -241,8 +241,8 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
                 // offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
                 // o = *((Opcode*)origin.first + offset);
-                o = *origin.opcode();
-
+                auto o = *origin.opcode();
+                assert(origin.originOffset > 0);
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);
 

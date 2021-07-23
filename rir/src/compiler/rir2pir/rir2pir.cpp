@@ -1418,8 +1418,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                     assumption->Not();
 
                 assumption->feedbackOrigin.push_back(
-                    DeoptReason(deoptCondition->typeFeedback.srcCode,
-                                deoptCondition->typeFeedback.origin,
+                    DeoptReason(srcCode, deoptCondition->typeFeedback.origin,
                                 DeoptReason::DeadBranchReached));
                 insert(assumption);
 
