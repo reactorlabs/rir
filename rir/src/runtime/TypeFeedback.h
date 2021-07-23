@@ -181,7 +181,8 @@ struct DeoptReason {
         : DeoptReason(src, (uintptr_t)originOffset - (uintptr_t)src, reason) {}
 
     Opcode* opcode() const {
-        return (Opcode*)((uintptr_t)srcCode + (uintptr_t)originOffset);
+        // (Opcode*)((uintptr_t)srcCode + (uintptr_t)originOffset);
+        return (Opcode*)srcCode + originOffset;
     }
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
