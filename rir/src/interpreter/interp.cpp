@@ -565,7 +565,9 @@ void checkUserInterrupt() {
 }
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
-    Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
+    // Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
+    Opcode* pos = reason.opcode();
+
     switch (reason.reason) {
     case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);

@@ -241,7 +241,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
                 // offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
                 // o = *((Opcode*)origin.first + offset);
-                o = origin.opcode();
+                o = *origin.opcode();
 
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);

@@ -560,11 +560,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             srcCode->funInvocationCount > 1 && srcCode->deadCallReached < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
-            auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
+            // auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
             // DeoptReason reason = {DeoptReason::DeadCall, srcCode,
             //                       (uint32_t)offset};
             DeoptReason reason =
-                DeoptReason(srcCode, (uint32_t)offset, DeoptReason::DeadCall);
+                DeoptReason(srcCode, pos, DeoptReason::DeadCall);
 
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));

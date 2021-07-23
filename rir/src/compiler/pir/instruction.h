@@ -848,7 +848,7 @@ struct RirStack {
 class FLI(RecordDeoptReason, 1, Effect(Effect::UpdatesMetadata)) {
   public:
     DeoptReason reason;
-    RecordDeoptReason(const DeoptReason r, Value* value)
+    RecordDeoptReason(const DeoptReason& r, Value* value)
         : FixedLenInstruction(PirType::voyd(), {{value->type}}, {{value}}),
           reason(r) {}
 };
