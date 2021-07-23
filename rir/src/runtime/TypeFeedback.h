@@ -167,6 +167,22 @@ struct DeoptReason {
     Reason reason;
     Code* srcCode;
     uint32_t originOffset;
+
+    DeoptReason(rir::Code* src, uint32_t originOffset,
+                DeoptReason::Reason reason = DeoptReason::None) {
+        // assert((uintptr_t)origin.second > (uintptr_t)origin.first);
+        this->srcCode = src;
+        this->originOffset = originOffset;
+        this->reason = reason;
+    }
+
+    DeoptReason(rir::Code* src, Opcode* originOffset,
+                DeoptReason::Reason reason = DeoptReason::None)
+        : DeoptReason(src, (uintptr_t)originOffset - (uintptr_t)src, reason) {}
+
+    Opcode opcode() {
+        return *((Opcode*)((uintptr_t)srcCode + (uintptr_t)originOffset));
+    }
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");

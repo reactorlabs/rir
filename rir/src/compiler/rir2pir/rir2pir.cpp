@@ -294,7 +294,8 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
     pos = bb->insert(pos, t) + 1;
 
     auto assumption = new Assume(t, cp);
-    assumption->feedbackOrigin.push_back({srcCode, pc});
+    // assumption->feedbackOrigin.push_back({srcCode, pc});
+    assumption->feedbackOrigin.push_back(DeoptReason(srcCode, pc));
     pos = bb->insert(pos, assumption) + 1;
 
     if (trg.stableEnv)
@@ -560,8 +561,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
             auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
-            DeoptReason reason = {DeoptReason::DeadCall, srcCode,
-                                  (uint32_t)offset};
+            // DeoptReason reason = {DeoptReason::DeadCall, srcCode,
+            //                       (uint32_t)offset};
+            DeoptReason reason =
+                DeoptReason(srcCode, (uint32_t)offset, DeoptReason::DeadCall);
+
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));
             stack.clear();
@@ -1409,13 +1413,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 finger = assumeBB0 ? trg : nextPos;
 
                 auto assumption = new Assume(v, cp);
-                assumption->deoptReason = DeoptReason::DeadBranchReached;
+
                 if (negateAssumption)
                     assumption->Not();
 
                 assumption->feedbackOrigin.push_back(
-                    {deoptCondition->typeFeedback.srcCode,
-                     deoptCondition->typeFeedback.origin});
+                    DeoptReason(deoptCondition->typeFeedback.srcCode,
+                                deoptCondition->typeFeedback.origin,
+                                DeoptReason::DeadBranchReached));
                 insert(assumption);
 
                 // If we deopt on a typecheck, then we should record that

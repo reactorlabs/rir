@@ -162,13 +162,12 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         for (auto& origin : assume->feedbackOrigin) {
             Value* src = nullptr;
             auto cond = assume->condition();
-            unsigned long offset;
+            // unsigned long offset;
             rir::Opcode o;
 
             auto r = DeoptReason::None;
 
-            if (assume->feedbackOrigin.size() == 1 &&
-                assume->deoptReason == DeoptReason::DeadBranchReached) {
+            if (origin.reason == DeoptReason::DeadBranchReached) {
                 r = DeoptReason::DeadBranchReached;
                 src = cond;
 
@@ -176,14 +175,13 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
                 if (auto t = IsType::Cast(cond)) {
                     r = DeoptReason::Typecheck;
-
-                    offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                    o = *((Opcode*)origin.first + offset);
-                    // determine DeoptReason based on the opcode too.
-                    if (o == Opcode::record_test_)
-                        r = DeoptReason::DeadBranchReached;
-
                     src = t->arg<0>().val();
+
+                    // offset = origin.offset();
+                    // o = *((Opcode*)origin.first + offset);
+                    // determine DeoptReason based on the opcode too.
+                    // if (o == Opcode::record_test_)
+                    // r = DeoptReason::DeadBranchReached;
 
                 } else if (auto t = Identical::Cast(cond)) {
                     src = t->arg<0>().val();
@@ -191,37 +189,39 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                         src = t->arg<1>().val();
                     assert(!LdConst::Cast(src));
                     r = DeoptReason::Calltarget;
-                    offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                    o = *((Opcode*)origin.first + offset);
+
+                    // offset = (uintptr_t)origin.second -
+                    // (uintptr_t)origin.first; o = *((Opcode*)origin.first +
+                    // offset);
 
                     // determine DeoptReason based on the opcode too.
-                    if (o == Opcode::record_test_)
-                        r = DeoptReason::DeadBranchReached;
+                    // if (o == Opcode::record_test_)
+                    //     r = DeoptReason::DeadBranchReached;
 
                 } else if (auto t = IsEnvStub::Cast(cond)) {
                     src = t->arg(0).val();
                     r = DeoptReason::EnvStubMaterialized;
-                } else if (auto t = ColonInputEffects::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::DeadBranchReached;
-                } else if (auto t = CheckTrueFalse::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::DeadBranchReached;
-                } else if (auto t = Not::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::DeadBranchReached;
-                } else if (auto t = Lte::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::DeadBranchReached;
-                } else if (auto t = Neq::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::DeadBranchReached;
+                    // } else if (auto t = ColonInputEffects::Cast(cond)) {
+                    //     src = t->arg(0).val();
+                    //     r = DeoptReason::DeadBranchReached;
+                    // } else if (auto t = CheckTrueFalse::Cast(cond)) {
+                    //     src = t->arg(0).val();
+                    //     r = DeoptReason::DeadBranchReached;
+                    // } else if (auto t = Not::Cast(cond)) {
+                    //     src = t->arg(0).val();
+                    //     r = DeoptReason::DeadBranchReached;
+                    // } else if (auto t = Lte::Cast(cond)) {
+                    //     src = t->arg(0).val();
+                    //     r = DeoptReason::DeadBranchReached;
+                    // } else if (auto t = Neq::Cast(cond)) {
+                    //     src = t->arg(0).val();
+                    //     r = DeoptReason::DeadBranchReached;
 
-                } else if (LdConst::Cast(cond)) {
-                    // src = t->arg(0).val();
-                    src = cond;
-                    r = DeoptReason::DeadBranchReached;
-                    // r = DeoptReason::None;
+                    // } else if (LdConst::Cast(cond)) {
+                    //     // src = t->arg(0).val();
+                    //     src = cond;
+                    //     r = DeoptReason::DeadBranchReached;
+                    //     // r = DeoptReason::None;
 
                 } else {
                     if (auto c = Instruction::Cast(cond)) {
@@ -239,20 +239,23 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
             case DeoptReason::Calltarget:
             case DeoptReason::DeadBranchReached: {
 
-                offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                o = *((Opcode*)origin.first + offset);
+                // offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
+                // o = *((Opcode*)origin.first + offset);
+                o = origin.opcode();
 
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);
-                assert((uintptr_t)origin.second > (uintptr_t)origin.first);
+
                 auto rec = new RecordDeoptReason(
-                    {r, origin.first, (uint32_t)offset}, src);
+                    DeoptReason(origin.srcCode, origin.originOffset, r), src);
 
                 deoptBlock->append(rec);
                 break;
             }
             case DeoptReason::EnvStubMaterialized: {
-                auto rec = new RecordDeoptReason({r, origin.first, 0}, src);
+                // auto rec = new RecordDeoptReason({r, origin.first, 0}, src);
+                auto rec = new RecordDeoptReason(
+                    DeoptReason(origin.srcCode, (uint32_t)0, r), src);
                 deoptBlock->append(rec);
                 break;
             }
@@ -313,7 +316,8 @@ void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
     position = bb->insert(position, condition);
     auto assume = new Assume(condition, cp);
     if (srcCode)
-        assume->feedbackOrigin.push_back({srcCode, origin});
+        // assume->feedbackOrigin.push_back({srcCode, origin});
+        assume->feedbackOrigin.push_back(DeoptReason(srcCode, origin));
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);
