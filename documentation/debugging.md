@@ -388,3 +388,11 @@ Overhead  Command   Shared Object         Symbol
 ```
 
 See [https://lists.llvm.org/pipermail/llvm-dev/2019-January/129160.html](https://lists.llvm.org/pipermail/llvm-dev/2019-January/129160.html)
+
+# Debug Ř using rr inside Docker
+
+In order to use rr inside a docker container, it is necessary to run it with some security capabilites:
+
+`docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it registry.gitlab.com/rirvm/rir_mirror/benchmark:SOME_COMMIT_ID`
+
+Recording Ř works just fine, with the usual `-d rr` . However, when running  `rr replay`, it complains about not being able to find the debug symbols. To overcome this issue type in: `/opt/rir/external/custom-r/bin/exec/R` right after `rr replay` (within the *rr* prompt).
