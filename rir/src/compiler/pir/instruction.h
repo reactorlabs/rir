@@ -2615,6 +2615,11 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
         : FixedLenInstruction(PirType::voyd(),
                               {{PirType::test(), NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
+    Assume(Value* test, Value* checkpoint, bool expectation)
+        : Assume(test, checkpoint) {
+        if (!expectation)
+            assumeTrue = false;
+    }
 
     Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }
     void checkpoint(Checkpoint* cp) { arg(1).val() = cp; }

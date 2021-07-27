@@ -1308,153 +1308,45 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 continue;
             }
 
-            bool swapTrueFalse = false;
-            Instruction* deoptCondition = nullptr;
-            Value* branchCondition;
-            Value* v = nullptr;
-            bool assumeBB0 = false;
-            bool isDeopt = false;
-            auto negateAssumption = false;
-
-            // Conditional jump
-            switch (bc.bc) {
-            case Opcode::brtrue_:
-            case Opcode::brfalse_: {
-                auto feedbackIsTrue = false;
-
-                v = branchCondition = cur.stack.pop();
-                if (auto c = Instruction::Cast(branchCondition)) {
-                    if (c->typeFeedback.value == True::instance()) {
-                        assumeBB0 = bc.bc == Opcode::brtrue_;
-                        deoptCondition = c;
-                        feedbackIsTrue = true;
-                    }
-                    if (c->typeFeedback.value == False::instance()) {
-                        assumeBB0 = bc.bc == Opcode::brfalse_;
-                        deoptCondition = c;
-                    }
-                }
-
-                isDeopt = deoptCondition && !inPromise() && !inlining();
-
-                if (!branchCondition->type.isA(PirType::test())) {
-                    Value* boolInstance;
-                    if (isDeopt) {
-                        // negateAssumption = (bc.bc == Opcode::brfalse_);
-
-                        // boolInstance = ((bc.bc == Opcode::brtrue_) !=
-                        // feedbackIsTrue) ?
-                        //                   (Value*)True::instance()
-                        //                 : (Value*)False::instance();
-
-                        boolInstance = feedbackIsTrue
-                                           ? (Value*)True::instance()
-                                           : (Value*)False::instance();
-
-                    } else {
-
-                        boolInstance = bc.bc == Opcode::brtrue_
-                                           ? (Value*)True::instance()
-                                           : (Value*)False::instance();
-                    }
-
-                    v = insert(new Identical(branchCondition, boolInstance,
-                                             PirType::val()));
-
-                } else {
-
-                    if (isDeopt) {
-                        if (!feedbackIsTrue)
-                            negateAssumption = true;
-                    } else {
-                        swapTrueFalse = bc.bc == Opcode::brfalse_;
-                    }
-                }
-                break;
-            }
-            case Opcode::beginloop_:
+            if (bc.bc == Opcode::beginloop_) {
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
                 return nullptr;
-            default:
-                assert(false);
             }
 
-            Checkpoint* cp = nullptr;
-            if (!isDeopt) {
-                insert(new Branch(v));
-            } else {
-                cp = insert(new Checkpoint());
+            // Conditional jump
+            assert(bc.isCondJmp());
+            auto branchCondition = cur.stack.top();
+            auto branchReason = bc.bc == Opcode::brtrue_
+                                    ? (Value*)True::instance()
+                                    : (Value*)False::instance();
+            auto asBool = insert(
+                new Identical(branchCondition, branchReason, PirType::val()));
+
+            if (!inPromise()) {
+                if (auto c = Instruction::Cast(branchCondition)) {
+                    auto likely = c->typeFeedback.value;
+                    if (likely == True::instance() ||
+                        likely == False::instance()) {
+                        if (auto cp = addCheckpoint(srcCode, pos, cur.stack,
+                                                    insert)) {
+                            bool expectBranch = likely == branchReason;
+                            if (expectBranch)
+                                finger = trg;
+                            insert(new Assume(asBool, cp, expectBranch));
+                            cur.stack.pop();
+                            continue;
+                        }
+                    }
+                }
             }
+
+            cur.stack.pop();
+            insert(new Branch(asBool));
 
             BB* branch = insert.createBB();
             BB* fall = insert.createBB();
 
-            if (swapTrueFalse) {
-                insert.setBranch(fall, branch);
-                assumeBB0 = !assumeBB0;
-            } else {
-                insert.setBranch(branch, fall);
-            }
-
-            if (isDeopt) {
-
-                auto assumeBranch = branch;
-                auto deoptBranch = fall;
-
-                insert.enterBB(deoptBranch);
-
-                auto sp = insert.registerFrameState(
-                    srcCode, assumeBB0 ? nextPos : trg, cur.stack, inPromise());
-
-                insert(new Deopt(sp));
-
-                insert.enterBB(assumeBranch);
-
-                finger = assumeBB0 ? trg : nextPos;
-
-                auto assumption = new Assume(v, cp);
-
-                if (negateAssumption)
-                    assumption->Not();
-
-                assumption->feedbackOrigin.push_back(
-                    DeoptReason(srcCode, deoptCondition->typeFeedback.origin,
-                                DeoptReason::DeadBranchReached));
-                insert(assumption);
-
-                // If we deopt on a typecheck, then we should record that
-                // information by casting the value.
-                if (assumeBB0)
-                    if (auto tt = IsType::Cast(branchCondition)) {
-                        for (auto& e : cur.stack) {
-                            if (tt->arg<0>().val() == e) {
-
-                                if (!e->type.isA(tt->typeTest)) {
-                                    bool block = false;
-
-                                    if (auto j = Instruction::Cast(e)) {
-                                        // In case the typefeedback is more
-                                        // precise than the
-                                        if (!j->typeFeedback.type.isVoid() &&
-                                            !tt->typeTest.isA(
-                                                j->typeFeedback.type))
-                                            block = true;
-                                    }
-                                    if (!block) {
-                                        auto cast = insert(new CastType(
-                                            e, CastType::Downcast,
-                                            PirType::any(), tt->typeTest));
-                                        cast->effects.set(
-                                            Effect::DependsOnAssume);
-                                        e = cast;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                continue;
-            }
+            insert.setBranch(branch, fall);
 
             pushWorklist(branch, trg);
             insert.enterBB(fall);
