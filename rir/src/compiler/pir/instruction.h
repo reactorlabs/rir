@@ -1335,7 +1335,7 @@ class FLI(AsLogical, 1, Effect::Error) {
 class FLI(AsSwitchIdx, 1, Effects::None()) {
   public:
     Value* val() const { return arg<0>().val(); }
-    AsSwitchIdx(Value* in)
+    explicit AsSwitchIdx(Value* in)
         : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
                               {{in}}) {}
 
