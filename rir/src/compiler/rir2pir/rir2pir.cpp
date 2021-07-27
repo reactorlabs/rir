@@ -1333,6 +1333,46 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                             if (expectBranch)
                                 finger = trg;
                             insert(new Assume(asBool, cp, expectBranch));
+
+                            // If we deopt on a typecheck, then we should record
+                            // that information by casting the value.
+                            // TODO: also do this for negative type checks
+                            if (expectBranch)
+                                if (auto tt = IsType::Cast(branchCondition)) {
+                                    auto checkedValue = tt->arg<0>().val();
+                                    auto checkedType = checkedValue->type;
+
+                                    for (auto& e : cur.stack) {
+                                        if (e == checkedValue) {
+                                            if (!e->type.isA(checkedType)) {
+                                                bool block = false;
+                                                if (auto j =
+                                                        Instruction::Cast(e)) {
+                                                    // In case the typefeedback
+                                                    // is more precise than the
+                                                    if (!j->typeFeedback.type
+                                                             .isVoid() &&
+                                                        !checkedType.isA(
+                                                            j->typeFeedback
+                                                                .type))
+                                                        block = true;
+                                                }
+                                                if (!block) {
+                                                    auto cast =
+                                                        insert(new CastType(
+                                                            e,
+                                                            CastType::Downcast,
+                                                            PirType::any(),
+                                                            checkedType));
+                                                    cast->effects.set(
+                                                        Effect::
+                                                            DependsOnAssume);
+                                                    e = cast;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             cur.stack.pop();
                             continue;
                         }
