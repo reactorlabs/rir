@@ -4274,12 +4274,26 @@ void LowerFunctionLLVM::compile() {
                         break;
 
                     case BC::RirTypecheck::isFactor:
-                        if (Representation::Of(arg) != t::SEXP)
+                        if (Representation::Of(arg) != t::SEXP) {
                             res = builder.getFalse();
-                        else
-                            res = call(NativeBuiltins::get(
-                                           NativeBuiltins::Id::isFactor),
-                                       {loadSxp(arg)});
+                        } else {
+                            auto argLlvm = loadSxp(arg);
+                            auto checkIsFactor = [&]() {
+                                return call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::isFactor),
+                                            {argLlvm});
+                            };
+                            res = nullptr;
+                            if (auto argi = Instruction::Cast(arg)) {
+                                if (!argi->typeFeedback.type.maybeObj()) {
+                                    res = createSelect2(
+                                        isObj(argLlvm), checkIsFactor,
+                                        [&]() { return builder.getFalse(); });
+                                }
+                            }
+                            if (!res)
+                                res = checkIsFactor();
+                        }
                         break;
                     }
                 } else {
