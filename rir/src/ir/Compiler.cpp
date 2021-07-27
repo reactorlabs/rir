@@ -76,6 +76,7 @@ class CompilerContext {
     class CodeContext {
       public:
         typedef size_t CacheSlotNumber;
+        static constexpr CacheSlotNumber BindingCacheDisabled = (size_t)-1;
 
         CodeStream cs;
         std::stack<LoopContext> loops;
@@ -102,12 +103,18 @@ class CompilerContext {
         }
         size_t isCached(SEXP name) {
             assert(loadsSlotInCache.size() <= MAX_CACHE_SIZE);
-            return loadsSlotInCache.size() < MAX_CACHE_SIZE ||
-                   loadsSlotInCache.count(name);
+            auto f = loadsSlotInCache.find(name);
+            return f != loadsSlotInCache.end() &&
+                   f->second != BindingCacheDisabled;
         }
+        size_t nCached = 0;
         size_t cacheSlotFor(SEXP name) {
-            return loadsSlotInCache.emplace(name, loadsSlotInCache.size())
-                .first->second;
+            auto f = loadsSlotInCache.find(name);
+            if (f != loadsSlotInCache.end())
+                return f->second;
+            if (nCached >= MAX_CACHE_SIZE)
+                return BindingCacheDisabled;
+            return loadsSlotInCache.emplace(name, nCached++).first->second;
         }
         virtual bool loopIsLocal() { return !loops.empty(); }
         virtual bool isPromiseContext() { return false; }
@@ -457,6 +464,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         CompilerContext::CodeContext::CacheSlotNumber max = 0;
         for (auto c : ctx.code.top()->loadsSlotInCache) {
             auto i = c.second;
+            if (i == CompilerContext::CodeContext::BindingCacheDisabled)
+                continue;
             if (i < min)
                 min = i;
             if (i > max)
@@ -1982,6 +1991,24 @@ SEXP Compiler::finalize() {
     }
 
     ctx.push(exp, closureEnv);
+
+    // Prepopulate all binding cache numbers for all variables occuring in the
+    // function.
+    std::function<void(SEXP)> scanNames = [&](SEXP e) {
+        if (TYPEOF(e) == LANGSXP)
+            for (auto n : RList(CDR(e))) {
+                if (CAR(e) == symbol::rm) {
+                    ctx.code.top()->loadsSlotInCache[n] =
+                        CompilerContext::CodeContext::BindingCacheDisabled;
+                } else if (TYPEOF(n) == SYMSXP) {
+                    ctx.code.top()->cacheSlotFor(n);
+                } else {
+                    scanNames(n);
+                }
+            }
+    };
+    scanNames(exp);
+
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();

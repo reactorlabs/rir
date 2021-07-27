@@ -86,6 +86,7 @@ BC BC::ldvarNoForce(SEXP sym) {
 BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
+    assert(cacheSlot != (uint32_t)-1);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
@@ -94,6 +95,7 @@ BC BC::ldvarCached(SEXP sym, uint32_t cacheSlot) {
 BC BC::ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
+    assert(cacheSlot != (uint32_t)-1);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
@@ -159,6 +161,7 @@ BC BC::stvar(SEXP sym) {
 BC BC::stvarCached(SEXP sym, uint32_t cacheSlot) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
+    assert(cacheSlot != (uint32_t)-1);
     ImmediateArguments i;
     i.poolAndCache.poolIndex = Pool::insert(sym);
     i.poolAndCache.cacheIndex = cacheSlot;
