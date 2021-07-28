@@ -910,11 +910,8 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                 given.setSimpleInt(i);
         }
 
-        if (arg == R_MissingArg) {
+        if (arg == R_MissingArg)
             given.resetNotObj(i);
-            given.resetSimpleInt(i);
-            given.resetSimpleReal(i);
-        }
     };
 
     bool tryArgmatch = !given.includes(Assumption::StaticallyArgmatched);

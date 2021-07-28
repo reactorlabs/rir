@@ -4277,22 +4277,9 @@ void LowerFunctionLLVM::compile() {
                         if (Representation::Of(arg) != t::SEXP) {
                             res = builder.getFalse();
                         } else {
-                            auto argLlvm = loadSxp(arg);
-                            auto checkIsFactor = [&]() {
-                                return call(NativeBuiltins::get(
-                                                NativeBuiltins::Id::isFactor),
-                                            {argLlvm});
-                            };
-                            res = nullptr;
-                            if (auto argi = Instruction::Cast(arg)) {
-                                if (!argi->typeFeedback.type.maybeObj()) {
-                                    res = createSelect2(
-                                        isObj(argLlvm), checkIsFactor,
-                                        [&]() { return builder.getFalse(); });
-                                }
-                            }
-                            if (!res)
-                                res = checkIsFactor();
+                            res = call(NativeBuiltins::get(
+                                           NativeBuiltins::Id::isFactor),
+                                       {loadSxp(arg)});
                         }
                         break;
                     }
