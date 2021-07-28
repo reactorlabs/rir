@@ -1,5 +1,6 @@
 #include "R/Symbols.h"
 #include "compiler/compiler.h"
+#include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
 #include "compiler/util/visitor.h"
@@ -202,14 +203,16 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 false,
                                 [&](ClosureVersion* fun) { target = fun; },
                                 []() {}, {});
-                    } else if (auto cnst =
-                                   LdConst::Cast(calli->tryGetClsArg())) {
-                        if (DispatchTable::check(BODY(cnst->c())))
-                            cmp.compileClosure(
-                                cnst->c(), "unknown--fromConstant", asmpt,
-                                false,
-                                [&](ClosureVersion* fun) { target = fun; },
-                                []() {}, {});
+                    } else if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
+                        if (auto dt = DispatchTable::check(BODY(cnst->c())))
+                            if (dt->size() == 1 || !dt->contains(asmpt) ||
+                                dt->baseline()->body()->codeSize <
+                                    Parameter::RECOMPILE_THRESHOLD)
+                                cmp.compileClosure(
+                                    cnst->c(), "unknown--fromConstant", asmpt,
+                                    false,
+                                    [&](ClosureVersion* fun) { target = fun; },
+                                    []() {}, {});
                     } else if (auto mk =
                                    MkFunCls::Cast(calli->tryGetClsArg())) {
                         if (auto cls = mk->tryGetCls())
@@ -217,13 +220,17 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto dt = mk->originalBody;
                         if (!target && dt) {
                             auto srcRef = mk->srcRef;
-                            cmp.compileFunction(dt, "unknown--fromMkFunCls",
-                                                formals, srcRef, asmpt,
-                                                [&](ClosureVersion* fun) {
-                                                    mk->setCls(fun->owner());
-                                                    target = fun;
-                                                },
-                                                []() {}, {});
+                            if (dt->size() == 1 || !dt->contains(asmpt) ||
+                                dt->baseline()->body()->codeSize <
+                                    Parameter::RECOMPILE_THRESHOLD)
+                                cmp.compileFunction(dt, "unknown--fromMkFunCls",
+                                                    formals, srcRef, asmpt,
+                                                    [&](ClosureVersion* fun) {
+                                                        mk->setCls(
+                                                            fun->owner());
+                                                        target = fun;
+                                                    },
+                                                    []() {}, {});
                         }
                     }
                 }

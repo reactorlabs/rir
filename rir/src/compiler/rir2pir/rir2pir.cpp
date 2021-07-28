@@ -7,6 +7,7 @@
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/opt/pass_definitions.h"
+#include "compiler/parameter.h"
 #include "compiler/pir/builder.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
@@ -685,6 +686,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool monomorphicSpecial =
             ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
             supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
+        if (monomorphicClosure && !monomorphicInnerFunction) {
+            auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
+            // Let's not re-translate already optimized functions if they are
+            // huge.
+            // TODO: this is more of a temporary measure. Long term we should
+            // have static calls with lazily compiled PIR targtets, so we can
+            // defer compilation to the point where we e.g. want to analyze or
+            // inline the callee...
+            if (dt->size() > 1 && dt->baseline()->body()->codeSize >
+                                      Parameter::RECOMPILE_THRESHOLD) {
+                monomorphicClosure = false;
+            }
+        }
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
