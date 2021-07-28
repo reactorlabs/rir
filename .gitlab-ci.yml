@@ -75,8 +75,7 @@ test_release_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_LLVM_OPT_LEVEL: 1
+    PIR_LLVM_OPT_LEVEL: 0
     PIR_OPT_LEVEL: 1
   stage: Run tests
   needs:
@@ -101,6 +100,7 @@ test_release_2:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
     PIR_OPT_LEVEL: 0
+    PIR_MAX_INPUT_SIZE: 4000
     PIR_WARMUP: 5
   stage: Run tests
   needs:
@@ -243,8 +243,8 @@ test_features_3:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=1000 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check || $SAVE_LOGS
-    - PIR_OPT_LEVEL=2 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
+    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
   artifacts:
     paths:
     - logs
@@ -298,6 +298,8 @@ test_big_inline:
     GIT_STRATEGY: none
     PIR_MAX_INPUT_SIZE: 5000
     PIR_INLINER_MAX_SIZE: 5000
+    PIR_INLINER_INLINE_UNLIKELY: 1
+    PIR_INLINER_MAX_INLINEE_SIZE: 400
     PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
@@ -307,7 +309,8 @@ test_big_inline:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_INLINER_MAX_INLINEE_SIZE=400 PIR_INLINER_INLINE_UNLIKELY=1 ./bin/gnur-make-tests check || $SAVE_LOGS
+    - bin/tests
+    - ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
