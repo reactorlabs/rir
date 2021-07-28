@@ -2087,8 +2087,12 @@ void NativeBuiltins::initializeBuiltins() {
         "colon", (void*)&colonImpl,
         llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false)};
     get_(Id::isMissing) = {"isMissing", (void*)&isMissingImpl, t::int_sexpsexp};
-    get_(Id::isFactor) = {"isFactor", (void*)&isFactorImpl,
-                          llvm::FunctionType::get(t::i1, {t::SEXP}, false)};
+    get_(Id::isFactor) = {"isFactor",
+                          (void*)&isFactorImpl,
+                          llvm::FunctionType::get(t::i1, {t::SEXP}, false),
+                          {llvm::Attribute::ReadOnly,
+                           llvm::Attribute::Speculatable,
+                           llvm::Attribute::ArgMemOnly}};
     get_(Id::asSwitchIdx) = {"asSwitchIdx", (void*)&asSwitchIdxImpl,
                              llvm::FunctionType::get(t::Int, {t::SEXP}, false)};
     get_(Id::checkTrueFalse) = {"checkTrueFalse", (void*)&checkTrueFalseImpl,
@@ -2097,7 +2101,9 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::length) = {"length",
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
-                        {}};
+                        {llvm::Attribute::ReadOnly,
+                         llvm::Attribute::Speculatable,
+                         llvm::Attribute::ArgMemOnly}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(
