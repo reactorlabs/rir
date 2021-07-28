@@ -1298,7 +1298,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         }
         const auto pos = finger;
         BC bc = BC::advance(&finger, srcCode);
-        const auto nextPos = finger; // cppcheck-suppress[variableScope]
+        // cppcheck-suppress variableScope
+        const auto nextPos = finger;
 
         assert(pos != end);
         if (bc.isJmp()) {
