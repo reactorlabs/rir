@@ -309,7 +309,6 @@ test_big_inline:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - bin/tests
     - ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:

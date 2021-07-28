@@ -2101,9 +2101,7 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::length) = {"length",
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
-                        {llvm::Attribute::ReadOnly,
-                         llvm::Attribute::Speculatable,
-                         llvm::Attribute::ArgMemOnly}};
+                        {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(
