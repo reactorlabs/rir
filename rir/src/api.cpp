@@ -9,6 +9,7 @@
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
+#include "compiler/pir/closure.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
@@ -307,14 +308,25 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                            logger.flush();
                            cmp.optimizeModule();
 
-                           auto fun = backend.getOrCompile(c);
-
-                           // Install
                            if (dryRun)
                                return;
 
-                           Protect p(fun->container());
-                           DispatchTable::unpack(BODY(what))->insert(fun);
+                           auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+                               auto fun = backend.getOrCompile(c);
+                               Protect p(fun->container());
+                               DispatchTable::unpack(body)->insert(fun);
+                           };
+                           bool done = false;
+                           m->eachPirClosureVersion(
+                               [&](pir::ClosureVersion* c) {
+                                   if (c->owner()->hasOriginClosure()) {
+                                       apply(BODY(c->owner()->rirClosure()), c);
+                                       if (c->owner()->rirClosure() == what)
+                                           done = true;
+                                   }
+                               });
+                           if (!done)
+                               apply(BODY(what), c);
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
