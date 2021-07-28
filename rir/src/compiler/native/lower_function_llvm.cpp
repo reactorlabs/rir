@@ -80,7 +80,7 @@ class NativeAllocator : public SSAAllocator {
         // Ensure we preserve slots for variables with typefeedback to make them
         // accessible to the runtime profiler.
         // TODO: this needs to be replaced by proper mapping of slots.
-        if (a != b && (a->typeFeedback.origin || b->typeFeedback.origin))
+        if (a != b && (a->typeFeedback().origin || b->typeFeedback().origin))
             return true;
         return SSAAllocator::interfere(a, b);
     }
@@ -5896,13 +5896,13 @@ void LowerFunctionLLVM::compile() {
         auto i = var.first;
         if (Representation::Of(i) != Representation::Sexp)
             continue;
-        if (!i->typeFeedback.origin)
+        if (!i->typeFeedback().origin)
             continue;
         if (!var.second.initialized)
             continue;
         if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
-            codes.insert(i->typeFeedback.srcCode);
-            variableMapping.emplace(var.second.stackSlot, i->typeFeedback);
+            codes.insert(i->typeFeedback().srcCode);
+            variableMapping.emplace(var.second.stackSlot, i->typeFeedback());
 #ifdef DEBUG_REGISTER_MAP
             assert(!usedSlots.count(var.second.stackSlot));
             usedSlots.insert(var.second.stackSlot);

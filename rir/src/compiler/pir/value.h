@@ -22,12 +22,12 @@ class Code;
  */
 class Value {
   public:
-    PirType type;
     Tag tag;
-    Value(PirType type, Tag tag) : type(type), tag(tag) {}
+    PirType type;
+
+    Value(PirType type, Tag tag) : tag(tag), type(type) {}
     virtual void printRef(std::ostream& out) const = 0;
     void printRef() const { printRef(std::cerr); }
-    virtual bool isInstruction() { return false; }
     virtual const Value* cFollowCasts() const { return this; }
     virtual const Value* cFollowCastsAndForce() const { return this; }
     Value* followCasts() {
@@ -55,6 +55,8 @@ class Value {
 
     void callArgTypeToContext(Context&, unsigned arg) const;
 };
+
+static_assert(sizeof(Value) <= 16, "");
 
 } // namespace pir
 } // namespace rir

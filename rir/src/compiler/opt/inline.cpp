@@ -200,8 +200,8 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 if (hasDotslistArg)
                     weight *= 0.4;
-                if (!(*it)->typeFeedback.type.isVoid() &&
-                    (*it)->typeFeedback.type.unboxable())
+                if (!(*it)->typeFeedback().type.isVoid() &&
+                    (*it)->typeFeedback().type.unboxable())
                     weight *= 0.9;
 
                 // No recursive inlining

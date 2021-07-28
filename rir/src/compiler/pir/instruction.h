@@ -124,7 +124,7 @@ enum class Effect : uint8_t {
     FIRST = Visibility,
     LAST = MutatesArgument,
 };
-typedef EnumSet<Effect> Effects;
+typedef EnumSet<Effect, uint16_t> Effects;
 
 // Controlflow of instruction.
 enum class Controlflow : uint8_t {
@@ -161,7 +161,8 @@ class Instruction : public Value {
     };
 
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
-        : Value(t, tag), effects(effects), srcIdx(srcIdx) {}
+        : Value(t, tag), effects(effects), typeFeedback_(nullptr),
+          srcIdx(srcIdx) {}
 
     Effects effects;
 
@@ -176,7 +177,22 @@ class Instruction : public Value {
         return effects.contains(Effect::Reflection);
     }
 
-    TypeFeedback typeFeedback;
+    std::shared_ptr<TypeFeedback> typeFeedback_;
+    const TypeFeedback& typeFeedback() const {
+        if (typeFeedback_.get())
+            return *typeFeedback_;
+        const static TypeFeedback none;
+        return none;
+    }
+    TypeFeedback& updateTypeFeedback() {
+        if (typeFeedback_.get())
+            return *typeFeedback_;
+        typeFeedback_.reset(new TypeFeedback());
+        return updateTypeFeedback();
+    }
+    void typeFeedback(const TypeFeedback& feedback) {
+        typeFeedback_.reset(new TypeFeedback(feedback));
+    }
 
     Effects getObservableEffects() const {
         auto e = effects;
@@ -254,7 +270,6 @@ class Instruction : public Value {
 
     const Value* cFollowCasts() const override final;
     const Value* cFollowCastsAndForce() const override final;
-    bool isInstruction() override final { return true; }
     virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;
@@ -527,6 +542,7 @@ class Instruction : public Value {
         return -1;
     }
 };
+static_assert(sizeof(Instruction) <= 56, "Bloated instructions...");
 
 template <Tag ITAG, class Base, Effects::StoreType INITIAL_EFFECTS,
           HasEnvSlot ENV, Controlflow CF, class ArgStore>

@@ -122,8 +122,8 @@ enum class TypeFlags : uint8_t {
 
 struct PirType {
     typedef EnumSet<RType, uint32_t> RTypeSet;
-    typedef EnumSet<NativeType, uint32_t> NativeTypeSet;
-    typedef EnumSet<TypeFlags, uint32_t> FlagSet;
+    typedef EnumSet<NativeType, uint8_t> NativeTypeSet;
+    typedef EnumSet<TypeFlags, uint16_t> FlagSet;
 
     FlagSet flags_;
 
