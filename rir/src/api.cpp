@@ -323,8 +323,16 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                                        auto cls = c->owner()->rirClosure();
                                        auto body = BODY(cls);
                                        auto dt = DispatchTable::unpack(body);
-                                       if (!dt->contains(c->context()))
-                                           apply(body, c);
+                                       if (dt->contains(c->context()) &&
+                                           dt->dispatch(c->context())
+                                               ->body()
+                                               ->isCompiled())
+                                           return;
+                                       if (dt->size() == 1 &&
+                                           dt->baseline()->invocationCount() <
+                                               pir::Parameter::RIR_WARMUP)
+                                           return;
+                                       apply(body, c);
                                        if (cls == what)
                                            done = true;
                                    }

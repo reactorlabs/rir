@@ -72,7 +72,25 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
                      size_t locals, size_t bindingCache);
     static Code* New(Immediate ast);
 
-    NativeCode nativeCode;
+  private:
+    std::string lazyCodeHandle_ = "";
+    NativeCode nativeCode_;
+    NativeCode lazyCompile();
+
+  public:
+    void lazyCodeHandle(const std::string& h) { lazyCodeHandle_ = h; }
+    NativeCode nativeCode() {
+        if (nativeCode_)
+            return nativeCode_;
+        if (lazyCodeHandle_ == "")
+            return nullptr;
+        return lazyCompile();
+    }
+
+    bool isCompiled() {
+        assert(lazyCodeHandle_ != "");
+        return nativeCode_ != nullptr;
+    }
 
     static unsigned pad4(unsigned sizeInBytes) {
         unsigned x = sizeInBytes % 4;

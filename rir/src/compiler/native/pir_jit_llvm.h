@@ -10,6 +10,7 @@
 #include "compiler/pir/promise.h"
 #include "compiler/util/visitor.h"
 
+#include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -40,6 +41,7 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 // addresses for PIR builtins.
 class PirJitLLVM {
   public:
+    static std::unique_ptr<llvm::orc::LLJIT> JIT;
     explicit PirJitLLVM(const std::string& name);
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
@@ -86,7 +88,7 @@ class PirJitLLVM {
         return ss.str();
     }
 
-    std::unordered_map<Code*, std::pair<rir::Code*, std::string>> jitFixup;
+    std::unordered_map<Code*, std::pair<rir::Code*, llvm::StringRef>> jitFixup;
     void finalizeAndFixup();
 
     static size_t nModules;
