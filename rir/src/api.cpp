@@ -311,34 +311,40 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                            if (dryRun)
                                return;
 
+                           rir::Function* done = nullptr;
                            auto apply = [&](SEXP body, pir::ClosureVersion* c) {
                                auto fun = backend.getOrCompile(c);
                                Protect p(fun->container());
                                DispatchTable::unpack(body)->insert(fun);
+                               if (body == BODY(what))
+                                   done = fun;
                            };
-                           bool done = false;
                            m->eachPirClosureVersion(
                                [&](pir::ClosureVersion* c) {
                                    if (c->owner()->hasOriginClosure()) {
                                        auto cls = c->owner()->rirClosure();
                                        auto body = BODY(cls);
                                        auto dt = DispatchTable::unpack(body);
-                                       if (dt->contains(c->context()) &&
-                                           dt->dispatch(c->context())
-                                               ->body()
-                                               ->isCompiled())
-                                           return;
+                                       if (dt->contains(c->context())) {
+                                           auto other =
+                                               dt->dispatch(c->context());
+                                           assert(other != dt->baseline());
+                                           assert(other->context() ==
+                                                  c->context());
+                                           if (other->body()->isCompiled())
+                                               return;
+                                       }
                                        if (dt->size() == 1 &&
                                            dt->baseline()->invocationCount() <
                                                pir::Parameter::RIR_WARMUP)
                                            return;
                                        apply(body, c);
-                                       if (cls == what)
-                                           done = true;
                                    }
                                });
                            if (!done)
                                apply(BODY(what), c);
+                           // Eagerly compile the main function
+                           done->body()->nativeCode();
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))

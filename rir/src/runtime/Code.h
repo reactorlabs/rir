@@ -78,7 +78,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     NativeCode lazyCompile();
 
   public:
-    void lazyCodeHandle(const std::string& h) { lazyCodeHandle_ = h; }
+    void lazyCodeHandle(const std::string& h) {
+        assert(h != "");
+        lazyCodeHandle_ = h;
+    }
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
@@ -88,8 +91,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     bool isCompiled() {
-        assert(lazyCodeHandle_ != "");
-        return nativeCode_ != nullptr;
+        return lazyCodeHandle_ != "" && nativeCode_ != nullptr;
     }
 
     static unsigned pad4(unsigned sizeInBytes) {
