@@ -320,8 +320,12 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                            m->eachPirClosureVersion(
                                [&](pir::ClosureVersion* c) {
                                    if (c->owner()->hasOriginClosure()) {
-                                       apply(BODY(c->owner()->rirClosure()), c);
-                                       if (c->owner()->rirClosure() == what)
+                                       auto cls = c->owner()->rirClosure();
+                                       auto body = BODY(cls);
+                                       auto dt = DispatchTable::unpack(body);
+                                       if (!dt->contains(c->context()))
+                                           apply(body, c);
+                                       if (cls == what)
                                            done = true;
                                    }
                                });
