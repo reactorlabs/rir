@@ -1034,10 +1034,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         maybeDead.insert(bb->getBranch(!condition));
         bb->convertBranchToJmp(condition);
     }
-    // // If we have two blocks A,B newly ending with Unreachable and originally
-    // // joining into C, then C is now dead. To find the block C dead, we have
-    // to
-    // // add A and B to the dominating set of dead blocks.
+    // If we have two blocks A,B newly ending with Unreachable and originally
+    // joining into C, then C is now dead. To find the block C dead, we have to
+    // add A and B to the dominating set of dead blocks.
     // DominanceGraph::BBSet toDelete;
     // if (unreachableEnd.empty()) {
     //     toDelete = DominanceGraph::dominatedSet(code, dead);

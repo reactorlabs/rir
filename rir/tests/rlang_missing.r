@@ -1,3 +1,9 @@
+if (Sys.getenv("INLINE_ALL_PROMS") == "1") {
+  print("test only works with eager semantics")
+  q()
+}
+
+
 # regression test for https://github.com/reactorlabs/rir/issues/998
 # see https://github.com/r-lib/rlang/blob/6dbcae3fc9af9e75b27053b28e7ae81e0717a387/R/arg.R
 # (is_missing in particular)
