@@ -73,7 +73,8 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
             fun == table->baseline() ||
-            (context.smaller(fun->context()) && context.isImproving(fun)) ||
+            (context.smaller(fun->context()) &&
+             context.isImproving(fun) > table->size()) ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
 
@@ -148,19 +149,19 @@ inline bool needsExpandedDots(SEXP callee) {
 SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx);
 
-inline void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
-    memset(&res, 0, sizeof(SEXPREC));
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
+inline void createFakeSEXP(SEXP res, SEXPTYPE t) {
+    memset(res, 0, sizeof(SEXPREC));
+    res->attrib = R_NilValue;
+    res->gengc_next_node = R_NilValue;
+    res->gengc_prev_node = R_NilValue;
+    res->sxpinfo.gcgen = 1;
+    res->sxpinfo.mark = 1;
+    res->sxpinfo.named = NAMEDMAX;
+    res->sxpinfo.type = t;
 }
 
 inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
-    createFakeSEXP(res, LISTSXP);
+    createFakeSEXP(&res, LISTSXP);
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
@@ -168,12 +169,22 @@ inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
 
 inline SEXPREC createFakeCONS(SEXP cdr) {
     SEXPREC res;
-    createFakeSEXP(res, LISTSXP);
+    createFakeSEXP(&res, LISTSXP);
     res.u.listsxp.carval = R_NilValue;
     res.u.listsxp.tagval = R_NilValue;
     res.u.listsxp.cdrval = cdr;
     return res;
 }
+
+#define MATERIALIZE_IF_OBJ1(res, a1)                                           \
+    if (isObject(a1)) {                                                        \
+        res = CONS_NR(a1, R_NilValue);                                         \
+    }
+
+#define MATERIALIZE_IF_OBJ2(res, a1, a2)                                       \
+    if (isObject(a1) || isObject(a2)) {                                        \
+        res = CONS_NR(a1, CONS_NR(a2, R_NilValue));                            \
+    }
 
 #define FAKE_ARGS1(res, a1)                                                    \
     SEXPREC __a1__cell__;                                                      \

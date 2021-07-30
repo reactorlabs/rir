@@ -73,12 +73,14 @@ static void approximateNeedsLdVarForUpdate(
         // These are builtins which ignore value semantics...
         case Tag::CallBuiltin: {
             auto b = CallBuiltin::Cast(i);
-            if (b->builtinId == blt(".Call")) {
+            bool dotCall = b->builtinId == blt(".Call");
+            if (dotCall || b->builtinId == blt("class<-")) {
                 if (auto l = LdVar::Cast(
                         b->callArg(0).val()->followCastsAndForce())) {
                     static std::unordered_set<SEXP> block = {
-                        Rf_install("C_R_set_slot")};
-                    if (block.count(l->varName)) {
+                        Rf_install("C_R_set_slot"),
+                        Rf_install("C_R_set_class")};
+                    if (!dotCall || block.count(l->varName)) {
                         apply(i, l);
                     }
                 }

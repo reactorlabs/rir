@@ -366,6 +366,11 @@ REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
 }
 
 REXPORT SEXP pirTests() {
+    if (pir::Parameter::PIR_OPT_LEVEL < 2) {
+        Rf_warning("pirCheck only runs with opt level 2");
+        return R_FalseValue;
+    }
+
     PirTests::run();
     return R_NilValue;
 }

@@ -910,9 +910,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::for_seq_size_:
-        push(insert(new ForSeqSize(top())));
+    case Opcode::for_seq_size_: {
+        push(insert(new ToForSeq(pop())));
+        push(insert(new Length(top())));
         break;
+    }
 
     case Opcode::length_:
         push(insert(new Length(pop())));
@@ -1096,6 +1098,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::missing_:
         push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
+        break;
+
+    case Opcode::as_switch_idx_:
+        push(insert(new AsSwitchIdx(pop())));
         break;
 
     case Opcode::is_:

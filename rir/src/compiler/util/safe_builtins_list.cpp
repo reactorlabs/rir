@@ -101,6 +101,8 @@ bool SafeBuiltinsList::returnsObj(int builtin) {
     switch (builtin) {
     case blt("stdout"):
     case blt("stderr"):
+    // In case input is obj
+    case blt("as.vector"):
         return true;
     default: {}
     };
@@ -128,6 +130,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
     case blt("dim"):
     case blt("names"):
 
+    case blt("$"):
     case blt("c"):
     case blt("["):
     case blt("[["):

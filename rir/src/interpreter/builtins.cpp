@@ -9,6 +9,9 @@
 
 extern "C" {
 extern Rboolean R_Visible;
+SEXP R_subset3_dflt(SEXP, SEXP, SEXP);
+int R_DispatchOrEvalSP(SEXP call, SEXP op, const char* generic, SEXP args,
+                       SEXP rho, SEXP* ans);
 }
 
 namespace rir {
@@ -122,13 +125,50 @@ static IsVectorCheck whichIsVectorCheck(SEXP str) {
     return IsVectorCheck::unsupported;
 }
 
-SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
+SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
     auto nargs = call.passedArgs;
     switch (call.callee->u.primsxp.offset) {
     case blt("substitute"): {
         if (nargs != 1 || call.hasNames())
             return nullptr;
         return Rf_substitute(call.stackArg(0), call.callerEnv);
+    }
+    case blt("$"): {
+        auto x = call.stackArg(0);
+        auto s = call.stackArg(1);
+        if (TYPEOF(s) != PROMSXP)
+            return nullptr;
+        s = PREXPR(s);
+        if (auto c = Code::check(s))
+            s = c->trivialExpr;
+        if (TYPEOF(s) == SYMSXP)
+            s = PRINTNAME(s);
+        else if (TYPEOF(s) == STRSXP && XLENGTH(s) > 0)
+            s = STRING_ELT(s, 0);
+
+        if (nargs == 2 && s && TYPEOF(s) == CHARSXP) {
+            if (TYPEOF(x) == PROMSXP)
+                x = evaluatePromise(x, ctx, nullptr, true);
+
+            if (isObject(x)) {
+                ENSURE_NAMEDMAX(x);
+                SEXP ss = PROTECT(allocVector(STRSXP, 1));
+                SET_STRING_ELT(ss, 0, s);
+                auto args = CONS_NR(x, CONS_NR(ss, R_NilValue));
+                PROTECT(args);
+                SEXP ans;
+                if (R_DispatchOrEvalSP(call.ast, call.callee, "$", args,
+                                       materializeCallerEnv(call, ctx), &ans)) {
+                    UNPROTECT(2); /* args */
+                    if (NAMED(ans))
+                        ENSURE_NAMEDMAX(ans);
+                    return (ans);
+                }
+                UNPROTECT(2);
+            }
+            return R_subset3_dflt(x, s, call.ast);
+        }
+        return nullptr;
     }
     case blt("forceAndCall"): {
 
@@ -215,13 +255,6 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     // bad way. This can be changing contents and assume they are protected, or
     // leaking cons cells of the arglist (e.g. through the gengc_next pointers).
     switch (b->u.primsxp.offset) {
-    // Protect issue due to unprotected SETCAR
-    case blt("%*%"):
-    case blt("crossprod"):
-    case blt("tcrossprod"):
-    case blt("match"):
-    case blt("unclass"):
-    case blt("call"):
     // misc
     case blt("registerNamespace"):
     case blt("...length"):
@@ -256,6 +289,38 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     case blt("stop"):
     case blt(".dfltStop"):
     case blt(".signalCondition"):
+    // SETCAR
+    case blt("%*%"):
+    case blt("match"):
+    case blt("crossprod"):
+    case blt("tcrossprod"):
+    case blt("comment<-"):
+    case blt("oldClass<-"):
+    case blt("names<-"):
+    case blt("dimnames<-"):
+    case blt("dim<-"):
+    case blt("levels<-"):
+    case blt("makeLazy"):
+    case blt("args"):
+    case blt("as.function.default"):
+    case blt("as.call"):
+    case blt("do.call"):
+    case blt("call"):
+    case blt("class<-"):
+    case blt("debug"):
+    case blt("undebug"):
+    case blt("isdebugged"):
+    case blt("debugonce"):
+    case blt("dump"):
+    case blt("browser"):
+    case blt("unclass"):
+    case blt("save"):
+    case blt("saveToConn"):
+    case blt("[<-"):
+    case blt("[[<-"):
+    // SET_TAG
+    case blt("cbind"):
+    case blt("rbind"):
         return false;
     default: {}
     }
@@ -1012,6 +1077,7 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     case blt("col"):
     case blt("row"):
     case blt("dim"):
+    case blt("$"):
         return true;
     default: {}
     }

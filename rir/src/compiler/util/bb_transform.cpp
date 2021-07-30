@@ -381,10 +381,6 @@ void BBTransform::removeDeadInstrs(Code* fun, uint8_t maxBurstSize) {
                 seen.insert(cur);
                 const auto& uses = phiUses[cur];
 
-                // Phis not used by any other instruction have already been
-                // removed.
-                assert(!uses.empty());
-
                 for (const auto& i : uses) {
                     if (auto p = Phi::Cast(i)) {
                         todo.push_back(p);

@@ -457,6 +457,17 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 FOLD_BINARY_EITHER(Neq, [&](SEXP carg, Value* varg) {
                     return foldLglCmp(carg, varg, false);
                 });
+                FOLD_UNARY(Minus, [&](SEXP arg) {
+                    auto t = TYPEOF(arg);
+                    if (!isObject(arg) &&
+                        (t == INTSXP || t == LGLSXP || t == REALSXP)) {
+                        auto res =
+                            Rf_eval(Rf_lang2(symbol::Sub, arg), R_BaseEnv);
+                        auto c = new LdConst(res);
+                        i->replaceUsesAndSwapWith(c, ip);
+                        iterAnyChange = true;
+                    }
+                });
                 FOLD_UNARY(AsLogical, [&](SEXP arg) {
                     if (convertsToLogicalWithoutWarning(arg)) {
                         auto res = Rf_asLogical(arg);
@@ -993,14 +1004,13 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     });
 
-                    if (!done &&
+                    if (!done && i->effects.includes(Effect::Error) &&
                         castRhs->arg(0).val()->type.isA(
                             PirType(RType::integer).notNAOrNaN()) &&
                         castRhs->arg(1).val()->type.isA(
                             PirType(RType::integer).notNAOrNaN())) {
                         iterAnyChange = true;
-                        i->replaceUsesWith(castRhs->arg(0).val());
-                        next = bb->remove(ip);
+                        i->effects.reset(Effect::Error);
                     }
                 }
                 ip = next;

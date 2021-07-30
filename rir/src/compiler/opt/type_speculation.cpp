@@ -96,6 +96,12 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
              speculate[typecheckPos].count(speculateOn)))
             return;
 
+        // leave this for scope analysis
+        if (auto ld = LdVar::Cast(speculateOn))
+            if (auto mk = MkEnv::Cast(ld->env()))
+                if (mk->contains(ld->varName))
+                    return;
+
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
