@@ -72,26 +72,33 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
                      size_t locals, size_t bindingCache);
     static Code* New(Immediate ast);
 
+    constexpr static size_t MAX_CODE_HANDLE_LENGTH = 56;
+
   private:
-    std::string lazyCodeHandle_ = "";
+    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
   public:
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
-        lazyCodeHandle_ = h;
+        auto l = h.length() + 1;
+        if (l > MAX_CODE_HANDLE_LENGTH) {
+            assert(false);
+            l = MAX_CODE_HANDLE_LENGTH;
+        }
+        memcpy(&lazyCodeHandle_, h.c_str(), l);
     }
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
-        if (lazyCodeHandle_ == "")
+        if (*lazyCodeHandle_ == '\0')
             return nullptr;
         return lazyCompile();
     }
 
     bool isCompiled() {
-        return lazyCodeHandle_ != "" && nativeCode_ != nullptr;
+        return *lazyCodeHandle_ != '\0' && nativeCode_ != nullptr;
     }
 
     static unsigned pad4(unsigned sizeInBytes) {

@@ -69,14 +69,14 @@ class PirJitLLVM {
     // Directory of all functions and builtins
     std::unordered_map<Code*, llvm::Function*> funs;
 
-    // We prepend `rsh_` to all user functions, as a mechanism to
-    // differentiate them from builtins. We also append `.N` to all
-    // definitions in module N. Builtins will be declared in the module with
+    // We prepend `rshN_` to all user functions, as a mechanism to
+    // differentiate them from builtins. `N` denotes that the definition
+    // belongs to module N. Builtins will be declared in the module with
     // their original names (Note: LLVM might still rename things in the
     // same module to make the names unique)
     static std::string makeName(Code* c) {
         std::stringstream ss;
-        ss << "rsh_";
+        ss << "rsh" << nModules << "_";
         if (auto cls = ClosureVersion::Cast(c)) {
             ss << cls->name();
         } else if (auto p = Promise::Cast(c)) {
@@ -84,8 +84,7 @@ class PirJitLLVM {
         } else {
             assert(false);
         }
-        ss << "." << nModules;
-        return ss.str();
+        return ss.str().substr(0, rir::Code::MAX_CODE_HANDLE_LENGTH - 5);
     }
 
     std::unordered_map<Code*, std::pair<rir::Code*, llvm::StringRef>> jitFixup;
