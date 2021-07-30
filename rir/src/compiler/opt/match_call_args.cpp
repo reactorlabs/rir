@@ -135,20 +135,6 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             }
                             i++;
                         });
-                        // if (!failed) {
-                        //    Rf_PrintValue(formals);
-                        //    std::cout << "+++++++++++++++++++\n";
-                        //    for (auto& e : usemethodTargetArgs) {
-                        //        Rf_PrintValue(e.first);
-                        //        if (auto j = Instruction::Cast(e.second))
-                        //          j->printRecursive(std::cout, 1);
-                        //        else {
-                        //          e.second->printRef(std::cout);
-                        //          std::cout << "\n";
-                        //        }
-                        //    }
-                        //    std::cout << "+++++++++++++++++++\n";
-                        //}
                     }
                     staticallyArgmatched =
                         !failed &&

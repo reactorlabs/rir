@@ -142,6 +142,16 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 return false;
                             }
                         }
+                        if (auto c = LdConst::Cast(i)) {
+                            if (TYPEOF(c->c()) == SPECIALSXP ||
+                                TYPEOF(c->c()) == BUILTINSXP) {
+                                if (!SafeBuiltinsList::forInline(
+                                        c->c()->u.primsxp.offset)) {
+                                    allowInline = SafeToInline::No;
+                                    return false;
+                                }
+                            }
+                        }
                         if (auto call = CallBuiltin::Cast(i)) {
                             if (!SafeBuiltinsList::forInline(call->builtinId)) {
                                 allowInline = SafeToInline::No;
