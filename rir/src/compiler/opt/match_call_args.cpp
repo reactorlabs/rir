@@ -204,7 +204,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 [&](ClosureVersion* fun) { target = fun; },
                                 []() {}, {});
                     } else if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
-                        if (auto dt = DispatchTable::check(BODY(cnst->c())))
+                        if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
                             if (dt->baseline()->body()->codeSize <
                                 Parameter::RECOMPILE_THRESHOLD)
                                 cmp.compileClosure(
@@ -212,6 +212,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     false,
                                     [&](ClosureVersion* fun) { target = fun; },
                                     []() {}, {});
+                        }
                     } else if (auto mk =
                                    MkFunCls::Cast(calli->tryGetClsArg())) {
                         if (auto cls = mk->tryGetCls())

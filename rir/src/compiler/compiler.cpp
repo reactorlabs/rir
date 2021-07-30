@@ -347,7 +347,7 @@ size_t Parameter::MAX_INPUT_SIZE =
     getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 12000;
 size_t Parameter::RECOMPILE_THRESHOLD =
     getenv("PIR_RECOMPILE_THRESHOLD") ? atoi(getenv("PIR_RECOMPILE_THRESHOLD"))
-                                      : 600;
+                                      : 2000;
 
 } // namespace pir
 } // namespace rir
