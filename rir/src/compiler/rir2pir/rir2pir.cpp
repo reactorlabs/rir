@@ -694,9 +694,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // have static calls with lazily compiled PIR targtets, so we can
             // defer compilation to the point where we e.g. want to analyze or
             // inline the callee...
-            if (dt->size() > 1 && dt->baseline()->body()->codeSize >
-                                      Parameter::RECOMPILE_THRESHOLD) {
-                monomorphicClosure = false;
+            if (dt->baseline()->body()->codeSize >
+                Parameter::RECOMPILE_THRESHOLD) {
+                auto cls = insert.function->owner();
+                // exclude recursive calls
+                if (!cls->hasOriginClosure() ||
+                    ti.monomorphic != cls->rirClosure())
+                    monomorphicClosure = false;
             }
         }
 

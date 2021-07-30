@@ -205,9 +205,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 []() {}, {});
                     } else if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c())))
-                            if (dt->size() == 1 || !dt->contains(asmpt) ||
-                                dt->baseline()->body()->codeSize <
-                                    Parameter::RECOMPILE_THRESHOLD)
+                            if (dt->baseline()->body()->codeSize <
+                                Parameter::RECOMPILE_THRESHOLD)
                                 cmp.compileClosure(
                                     cnst->c(), "unknown--fromConstant", asmpt,
                                     false,
@@ -220,9 +219,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto dt = mk->originalBody;
                         if (!target && dt) {
                             auto srcRef = mk->srcRef;
-                            if (dt->size() == 1 || !dt->contains(asmpt) ||
-                                dt->baseline()->body()->codeSize <
-                                    Parameter::RECOMPILE_THRESHOLD)
+                            if (dt->baseline()->body()->codeSize <
+                                Parameter::RECOMPILE_THRESHOLD)
                                 cmp.compileFunction(dt, "unknown--fromMkFunCls",
                                                     formals, srcRef, asmpt,
                                                     [&](ClosureVersion* fun) {
