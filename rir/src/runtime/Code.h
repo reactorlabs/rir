@@ -83,11 +83,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
         auto l = h.length() + 1;
-        if (l > MAX_CODE_HANDLE_LENGTH) {
+        if (l > MAX_CODE_HANDLE_LENGTH - 1) {
             assert(false);
-            l = MAX_CODE_HANDLE_LENGTH;
+            l = MAX_CODE_HANDLE_LENGTH - 1;
         }
         memcpy(&lazyCodeHandle_, h.c_str(), l);
+        lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH - 1] = '\0';
     }
     NativeCode nativeCode() {
         if (nativeCode_)
