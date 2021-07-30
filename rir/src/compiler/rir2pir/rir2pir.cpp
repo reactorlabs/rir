@@ -1282,6 +1282,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+    addCheckpoint(srcCode, finger, cur.stack, insert);
+
     while (finger != end || !worklist.empty()) {
         if (finger == end)
             finger = popWorklist();

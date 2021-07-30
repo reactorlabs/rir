@@ -36,6 +36,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         TypeFeedback feedback;
         BB* typecheckPos = nullptr;
 
+        bool removesForce = false;
         if (auto force = Force::Cast(i)) {
             if (auto arg = Instruction::Cast(force->input()->followCasts())) {
                 // Blacklist of where it is not worthwhile
@@ -51,12 +52,14 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     // promises, better speculate on the input already.
                     switch (force->observed) {
                     case Force::ArgumentKind::value:
+                        removesForce = true;
                         speculateOn = arg;
                         guardPos = checkpoint.at(arg);
                         typecheckPos = arg->bb();
                         break;
                     case Force::ArgumentKind::evaluatedPromise:
                         if (!localLoad) {
+                            removesForce = true;
                             speculateOn = arg;
                             guardPos = checkpoint.at(arg);
                             typecheckPos = arg->bb();
@@ -99,10 +102,11 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             return;
 
         // leave this for scope analysis
-        if (auto ld = LdVar::Cast(speculateOn))
-            if (auto mk = MkEnv::Cast(ld->env()))
-                if (mk->contains(ld->varName))
-                    return;
+        if (!removesForce)
+            if (auto ld = LdVar::Cast(speculateOn))
+                if (auto mk = MkEnv::Cast(ld->env()))
+                    if (mk->contains(ld->varName))
+                        return;
 
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
