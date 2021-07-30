@@ -194,13 +194,14 @@ SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc) {
         SEXP val;
         if (PRSEEN(e)) {
             if (PRSEEN(e) == 1)
-                errorcall(NULL,
+                errorcall(R_NilValue,
                           "promise already under evaluation: recursive default "
                           "argument reference or earlier problems?");
             else {
                 /* set PRSEEN to 1 to avoid infinite recursion */
                 SET_PRSEEN(e, 1);
-                warningcall(NULL, "restarting interrupted promise evaluation");
+                warningcall(R_NilValue,
+                            "restarting interrupted promise evaluation");
             }
         }
         SET_PRSEEN(e, 1);
@@ -279,6 +280,7 @@ SEXP materialize(SEXP wrapper) {
     } else if (auto lazyEnv = LazyEnvironment::check(wrapper)) {
         assert(!lazyEnv->materialized());
 
+        PROTECT(wrapper);
         SEXP arglist = R_NilValue;
         auto names = lazyEnv->names;
         for (size_t i = 0; i < lazyEnv->nargs; ++i) {
@@ -291,7 +293,10 @@ SEXP materialize(SEXP wrapper) {
             // cons protects its args if needed
             arglist = CONS_NR(val, arglist);
             SET_TAG(arglist, name);
-            SET_MISSING(arglist, lazyEnv->missing[i] ? 2 : 0);
+            if (val == R_MissingArg)
+                SET_MISSING(arglist, 1);
+            else if (lazyEnv->missing[i])
+                SET_MISSING(arglist, 2);
         }
         res = Rf_NewEnvironment(R_NilValue, arglist, lazyEnv->getParent());
         lazyEnv->materialized(res);
@@ -305,13 +310,13 @@ SEXP materialize(SEXP wrapper) {
                 cur->sysparent = res;
             cur = cur->nextcontext;
         }
+        UNPROTECT(1);
     }
     assert(res);
     return res;
 }
 
-static SEXP materializeCallerEnv(CallContext& callCtx,
-                                 InterpreterInstance* ctx) {
+SEXP materializeCallerEnv(CallContext& callCtx, InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
         if (le->materialized())
             callCtx.callerEnv = le->materialized();
@@ -432,7 +437,8 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
-        if (recreateOriginalPromargs && arg == R_MissingArg && a == R_NilValue)
+        if (recreateOriginalPromargs && arg == R_MissingArg &&
+            expr == R_NilValue)
             continue;
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
@@ -581,6 +587,10 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         }
         break;
     }
+    case DeoptReason::DeadCall:
+        reason.srcCode->deadCallReached++;
+        // fall through
+        [[clang::fallthrough]];
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
@@ -670,8 +680,7 @@ static RIR_INLINE SEXP legacyCall(CallContext& call, InterpreterInstance* ctx) {
     return res;
 }
 
-static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
-                                   SEXP suppliedvars) {
+static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     SEXP op = call.callee;
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
@@ -687,13 +696,14 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
         hashed.  */
     SEXP newrho, a, f;
 
-    SEXP actuals = Rf_matchArgs(FORMALS(op), arglist, call.ast);
-    PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
+    SEXP actuals = arglist;
 
-    /* Turn on reference counting for the binding cells so local
-       assignments arguments increment REFCNT values */
-    for (a = actuals; a != R_NilValue; a = CDR(a))
-        ENABLE_REFCNT(a);
+    bool noArgmatchNeeded =
+        call.givenContext.includes(Assumption::StaticallyArgmatched);
+    if (!noArgmatchNeeded)
+        actuals = Rf_matchArgs(FORMALS(op), actuals, call.ast);
+
+    PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
 
     /*  Use the default code for unbound formals.  FIXME: It looks like
         this code should preceed the building of the environment so that
@@ -714,6 +724,10 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     Function* fun = DispatchTable::unpack(BODY(op))->baseline();
     size_t pos = 0;
     while (f != R_NilValue) {
+        /* Turn on reference counting for the binding cells so local
+           assignments arguments increment REFCNT values */
+        ENABLE_REFCNT(a);
+
         Code* c = fun->defaultArg(pos++);
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
@@ -726,13 +740,22 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
-        a = CDR(a);
+
+        // Statically matched arglist can have trailing missings, lets
+        // dyanmically match the length of actuals and formals.
+        if (noArgmatchNeeded && f != R_NilValue && CDR(a) == R_NilValue) {
+            SETCDR(a, CONS_NR(R_MissingArg, R_NilValue));
+            a = CDR(a);
+            SET_TAG(a, TAG(f));
+        } else {
+            a = CDR(a);
+        }
     }
 
     /*  Fix up any extras that were supplied by usemethod. */
 
-    if (suppliedvars != R_NilValue)
-        Rf_addMissingVarsToNewEnv(newrho, suppliedvars);
+    if (call.suppliedvars != R_NilValue)
+        Rf_addMissingVarsToNewEnv(newrho, call.suppliedvars);
 
     if (R_envHasNoSpecialSymbols(newrho))
         SET_NO_SPECIAL_SYMBOLS(newrho);
@@ -777,6 +800,16 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         given.add(Assumption::NotTooManyArguments);
         given.numMissing(formalNargs - call.suppliedArgs);
     }
+
+    // S3 dispatch adds additional arguments to the function environment. This
+    // is unfortunately not compatible with optimized code, since in PIR we need
+    // to know all the formals of a function.
+    // TODO: make S3 dispatch a context flag, so we can compile a version of the
+    // function that expects the additional suppliedvars on the stack. For now
+    // let's just prevent calling into optimized code by removing the
+    // notTooManyArguments assumption.
+    if (call.suppliedvars != R_NilValue)
+        given.remove(Assumption::NotTooManyArguments);
 
     given.add(Assumption::NoExplicitlyMissingArgs);
 
@@ -857,26 +890,21 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
             given.setNonRefl(i);
         }
 
-        // Eager in the context translates to the notLazy().notMissing()
-        // type in pir. Thus we need to ensure that we don't set it for
-        // wrapped missings.
-        if (arg != R_MissingArg) {
-            if (isEager) {
-                given.setEager(i);
-                SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
-                           PRVALUE(call.stackArg(i)) != R_UnboundValue);
-            }
+        if (isEager) {
+            given.setEager(i);
+            SLOWASSERT(TYPEOF(call.stackArg(i)) != PROMSXP ||
+                       PRVALUE(call.stackArg(i)) != R_UnboundValue);
+        }
 
-            // Without isEager, these are the results of executing a trivial
-            // expression, given no reflective change happens.
-            if (arg != R_UnboundValue) {
-                if (!isObject(arg))
-                    given.setNotObj(i);
-                if (IS_SIMPLE_SCALAR(arg, REALSXP))
-                    given.setSimpleReal(i);
-                if (IS_SIMPLE_SCALAR(arg, INTSXP))
-                    given.setSimpleInt(i);
-            }
+        // Without isEager, these are the results of executing a trivial
+        // expression, given no reflective change happens.
+        if (arg != R_UnboundValue && arg != R_MissingArg) {
+            if (!isObject(arg))
+                given.setNotObj(i);
+            if (IS_SIMPLE_SCALAR(arg, REALSXP))
+                given.setSimpleReal(i);
+            if (IS_SIMPLE_SCALAR(arg, INTSXP))
+                given.setSimpleInt(i);
         }
     };
 
@@ -885,7 +913,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
     auto sig =
         DispatchTable::unpack(BODY(call.callee))->baseline()->signature();
     if (tryArgmatch && given.includes(Assumption::NotTooManyArguments) &&
-        given.numMissing() == 0 && !sig.hasDotsFormals)
+        ((!sig.hasDotsFormals) || (call.suppliedArgs <= sig.dotsPosition)))
         given.add(Assumption::StaticallyArgmatched);
 
     SEXP formals = FORMALS(call.callee);
@@ -915,8 +943,6 @@ static RIR_INLINE void supplyMissingArgs(CallContext& call,
     assert(expected == call.suppliedArgs ||
            !context.includes(Assumption::NoExplicitlyMissingArgs));
     if (expected > call.suppliedArgs) {
-        // TODO: maybe we could also deal with ... here by pasing an empty dots
-        // list?
         for (size_t i = 0; i < expected - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
         call.passedArgs = expected;
@@ -943,7 +969,10 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     SEXP frame;
     SEXP promargs;
     if (call.arglist) {
-        promargs = frame = call.arglist;
+        promargs = call.arglist;
+        frame = Rf_shallow_duplicate(promargs);
+        PROTECT(promargs);
+        npreserved++;
     } else {
         // Wrap the passed args in a linked-list.
         frame = createEnvironmentFrameFromStackValues(call, ctx);
@@ -966,6 +995,7 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
         // some missing args might need to be supplied.
         if (!call.givenContext.includes(Assumption::NoExplicitlyMissingArgs) ||
             call.passedArgs != fun->nargs()) {
+
             auto f = formals;
             auto a = frame;
             SEXP prevA = nullptr;
@@ -986,8 +1016,11 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                         SET_MISSING(a, 2);
                     }
                 } else if (CAR(a) == R_MissingArg) {
-                    if (auto dflt = fun->defaultArg(pos))
+                    SET_MISSING(a, 1);
+                    if (auto dflt = fun->defaultArg(pos)) {
+                        SET_MISSING(a, 2);
                         SETCAR(a, createPromise(dflt, env));
+                    }
                 }
 
                 f = CDR(f);
@@ -996,10 +1029,13 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
                 pos++;
             }
         }
+
+        if (call.suppliedvars != R_NilValue)
+            Rf_addMissingVarsToNewEnv(env, call.suppliedvars);
     } else {
         // No need for lazy args if we have the non-modified list anyway
         promargs = frame;
-        env = closureArgumentAdaptor(call, frame, R_NilValue);
+        env = closureArgumentAdaptor(call, frame);
         PROTECT(env);
         npreserved++;
     }
@@ -1238,26 +1274,6 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
 enum class Binop { PLUSOP, MINUSOP, TIMESOP };
 enum class Unop { PLUSOP, MINUSOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
-
-static SEXPREC createFakeSEXP(SEXPTYPE t) {
-    SEXPREC res;
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
-    return res;
-}
-
-static SEXPREC createFakeCONS(SEXP cdr) {
-    auto res = createFakeSEXP(LISTSXP);
-    res.u.listsxp.carval = R_NilValue;
-    res.u.listsxp.tagval = R_NilValue;
-    res.u.listsxp.cdrval = cdr;
-    return res;
-}
 
 #define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
     do {                                                                       \
@@ -1765,7 +1781,6 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 }
             } else if (ellipsis == R_NilValue) {
             } else {
-                Rf_PrintValue(ellipsis);
                 assert(ellipsis == R_UnboundValue);
             }
         }
@@ -2076,8 +2091,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (res != R_NilValue) {
                 if (isLocal)
                     ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
+                else
+                    res = Rf_shallow_duplicate(res);
             }
 
             ostack_push(ctx, res);
@@ -2118,8 +2133,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             if (res != R_NilValue) {
                 if (isLocal)
                     ENSURE_NAMED(res);
-                else if (NAMED(res) < 2)
-                    SET_NAMED(res, 2);
+                else
+                    res = Rf_shallow_duplicate(res);
             }
 
             ostack_push(ctx, res);
@@ -2147,6 +2162,33 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_noforce_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            assert(!LazyEnvironment::check(env));
+            res = Rf_findVar(sym, env);
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
+            } else if (TYPEOF(res) == PROMSXP) {
+                // if already evaluated, return the value
+                if (PRVALUE(res) && PRVALUE(res) != R_UnboundValue) {
+                    res = PRVALUE(res);
+                    assert(TYPEOF(res) != PROMSXP);
+
+                    if (res != R_NilValue)
+                        ENSURE_NAMED(res);
+                }
+            }
 
             ostack_push(ctx, res);
             NEXT();
@@ -2313,7 +2355,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
                              n, ast, ostack_cell_at(ctx, (long)n - 1), env,
-                             given, ctx);
+                             R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2340,7 +2382,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             advanceImmediateN(n);
             CallContext call(ArglistOrder::NOT_REORDERED, c, ostack_at(ctx, n),
                              n, ast, ostack_cell_at(ctx, (long)n - 1), names,
-                             env, given, ctx);
+                             env, R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -2381,7 +2423,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
-                             given, ctx);
+                             R_NilValue, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1 + pushed);
             ostack_push(ctx, res);
@@ -2404,8 +2446,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
-                             ostack_cell_at(ctx, (long)n - 1), env, Context(),
-                             ctx);
+                             ostack_cell_at(ctx, (long)n - 1), env, R_NilValue,
+                             Context(), ctx);
             res = builtinCall(call, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
@@ -3813,26 +3855,11 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
     if (!names.empty()) {
         names.resize(nargs);
     }
-    // Add extra arguments from object dispatching
-    if (suppliedvars != R_NilValue) {
-        auto extra = RList(suppliedvars);
-        for (auto a = extra.begin(); a != extra.end(); ++a) {
-            if (a.hasTag()) {
-                auto var = Pool::insert(a.tag());
-                if (std::find(names.begin(), names.end(), var) == names.end()) {
-                    ostack_push(ctx, *a);
-                    names.resize(nargs + 1);
-                    names[nargs] = var;
-                    nargs++;
-                }
-            }
-        }
-    }
 
     CallContext call(ArglistOrder::NOT_REORDERED, nullptr, op, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1),
-                     names.empty() ? nullptr : names.data(), rho, Context(),
-                     ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1),
+                     names.empty() ? nullptr : names.data(), rho, suppliedvars,
+                     Context(), ctx);
     call.arglist = arglist;
     call.safeForceArgs();
 

@@ -9,10 +9,9 @@
 #include "compiler/native/types_llvm.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
+#include <llvm/IR/Instructions.h>
 
-#ifdef PIR_GDB_SUPPORT
 #include "llvm/IR/DIBuilder.h"
-#endif
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
 
@@ -27,6 +26,7 @@ typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
 struct Representation;
 class LowerFunctionLLVM {
 
+    std::string name;
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
@@ -38,7 +38,7 @@ class LowerFunctionLLVM {
     LivenessIntervals liveness;
     size_t numLocals;
     size_t numTemps;
-    constexpr static size_t MAX_TEMPS = 4;
+    size_t maxTemps;
     llvm::Value* basepointer = nullptr;
     llvm::Value* constantpool = nullptr;
     llvm::BasicBlock* entryBlock = nullptr;
@@ -65,12 +65,9 @@ class LowerFunctionLLVM {
 
     PirJitLLVM::GetModule getModule;
     PirJitLLVM::GetFunction getFunction;
-    PirJitLLVM::GetBuiltin getBuiltin;
 
-#ifdef PIR_GDB_SUPPORT
     PirJitLLVM::DebugInfo* DI;
     llvm::DIBuilder* DIB;
-#endif
 
     Protect p_;
 
@@ -84,27 +81,17 @@ class LowerFunctionLLVM {
         const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
-        const PirJitLLVM::GetFunction& getFunction,
-        const PirJitLLVM::GetBuiltin& getBuiltin
-#ifdef PIR_GDB_SUPPORT
-        ,
-        PirJitLLVM::DebugInfo* DI, llvm::DIBuilder* DIB
-#endif
-        )
+        const PirJitLLVM::GetFunction& getFunction, PirJitLLVM::DebugInfo* DI,
+        llvm::DIBuilder* DIB)
         : code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),
-          branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
+          maxTemps(0), branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
-          getModule(getModule), getFunction(getFunction), getBuiltin(getBuiltin)
-#ifdef PIR_GDB_SUPPORT
-          ,
-          DI(DI), DIB(DIB)
-#endif
-    {
+          getModule(getModule), getFunction(getFunction), DI(DI), DIB(DIB) {
 
         fun = declare(code, name, t::nativeFunction);
 
@@ -113,22 +100,20 @@ class LowerFunctionLLVM {
             auto mk = MkEnv::Cast(p->second.second->env());
             myPromenv = mk;
         }
+
+        if (LLVMDebugInfo()) {
+            DI->emitLocation(builder, DI->getCodeLoc(code));
+        }
     }
 
-    static llvm::Constant* convertToPointer(const void* what,
-                                            llvm::Type* ty = t::voidPtr) {
-        return llvm::ConstantExpr::getCast(
-            llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                   llvm::APInt(64, (std::uint64_t)what)),
-            ty);
-    }
-    static llvm::Constant* convertToPointer(SEXP what) {
-        return llvm::ConstantExpr::getCast(
-            llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                   llvm::APInt(64, (std::uint64_t)what)),
-            t::SEXP);
+    llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
+
+    llvm::FunctionCallee convertToFunction(const void* what,
+                                           llvm::FunctionType* ty);
+    llvm::Value* convertToPointer(const void* what, llvm::Type* ty,
+                                  bool constant = false);
+    llvm::Value* convertToPointer(SEXP what, bool constant = false) {
+        return convertToPointer(what, t::SEXPREC, constant);
     }
 
     struct Variable {
@@ -164,6 +149,7 @@ class LowerFunctionLLVM {
     class PhiBuilder {
         std::vector<std::pair<llvm::Value*, llvm::BasicBlock*>> inputs;
 
+        llvm::PHINode* phi_ = nullptr;
         llvm::Type* type;
         llvm::IRBuilder<>& builder;
         bool created = false;
@@ -174,21 +160,29 @@ class LowerFunctionLLVM {
 
         void addInput(llvm::Value* v);
         void addInput(llvm::Value* v, llvm::BasicBlock* b) {
-            assert(!created);
-
             assert(v->getType() == type);
             inputs.push_back({v, b});
         }
 
-        llvm::Value* operator()();
+        llvm::Value* operator()(size_t numInputs = 0);
 
-        ~PhiBuilder() { assert(created && "dangling PhiBuilder"); }
+        ~PhiBuilder() {
+            if (!created && inputs.size() == 0)
+                return;
+            assert(created && "dangling PhiBuilder");
+            if (!phi_ && inputs.size() == 1)
+                return;
+            assert(phi_);
+            for (auto& in : inputs)
+                phi_->addIncoming(in.first, in.second);
+        }
     };
 
     PhiBuilder phiBuilder(llvm::Type* type) {
         return PhiBuilder(builder, type);
     }
 
+    std::unordered_map<Instruction*, llvm::DILocalVariable*> diVariables_;
     std::unordered_map<Instruction*, Variable> variables_;
     void setVariable(Instruction* variable, llvm::Value* val,
                      bool volatile_ = false) {
@@ -272,7 +266,7 @@ class LowerFunctionLLVM {
 
     void setVisible(int i);
 
-    std::array<std::string, 4> argNames = {{"code", "args", "env", "closure"}};
+    std::array<std::string, 4> argNames = {"code", "args", "env", "closure"};
     std::vector<llvm::Value*> args;
     llvm::Value* paramCode() { return args[0]; }
     llvm::Value* paramArgs() { return args[1]; }
@@ -380,7 +374,7 @@ class LowerFunctionLLVM {
     void checkMissing(llvm::Value* v);
     void checkUnbound(llvm::Value* v);
 
-    llvm::Value* checkDoubleToInt(llvm::Value*);
+    llvm::Value* checkDoubleToInt(llvm::Value*, const PirType&);
 
     llvm::CallInst* call(const NativeBuiltin& builtin,
                          const std::vector<llvm::Value*>& args);
@@ -390,8 +384,8 @@ class LowerFunctionLLVM {
     llvm::Value* box(llvm::Value* v, PirType t, bool protect = true);
     llvm::Value* boxInt(llvm::Value* v, bool protect = true);
     llvm::Value* boxReal(llvm::Value* v, bool protect = true);
-    llvm::Value* boxLgl(llvm::Value* v, bool protect = true);
-    llvm::Value* boxTst(llvm::Value* v, bool protect = true);
+    llvm::Value* boxLgl(llvm::Value* v);
+    llvm::Value* boxTst(llvm::Value* v);
     void insn_assert(llvm::Value* v, const char* msg, llvm::Value* p = nullptr);
     llvm::Value* depromise(llvm::Value* arg, const PirType& t);
     llvm::Value* depromise(Value* v);

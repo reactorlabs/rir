@@ -32,6 +32,7 @@ namespace pir {
     V(PrintInstructionIds)                                                     \
     V(OmitDeoptBranches)                                                       \
     V(OnlyChanges)                                                             \
+    V(LLVMDebugInfo)                                                           \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 #define LIST_OF_DEBUG_STYLES(V)                                                \

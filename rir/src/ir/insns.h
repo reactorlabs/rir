@@ -33,6 +33,12 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
+ * ldvar_noforce_:: like ldvar.
+ * If a promise is found, it is not forced before it's returned
+ */
+DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
+
+/**
  * ldvar_:: like ldvar.
  * Stores an additional immediate with a unique number for the cache bindings.
  */

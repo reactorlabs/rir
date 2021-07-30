@@ -1,6 +1,7 @@
 #include "builtins.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
+#include "compiler/util/safe_builtins_list.h"
 #include "interp.h"
 #include "runtime/LazyArglist.h"
 #include <algorithm>
@@ -122,7 +123,13 @@ static IsVectorCheck whichIsVectorCheck(SEXP str) {
 }
 
 SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
+    auto nargs = call.passedArgs;
     switch (call.callee->u.primsxp.offset) {
+    case blt("substitute"): {
+        if (nargs != 1 || call.hasNames())
+            return nullptr;
+        return Rf_substitute(call.stackArg(0), call.callerEnv);
+    }
     case blt("forceAndCall"): {
 
         if (call.passedArgs < 2)
@@ -145,10 +152,36 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
         auto ast = LCONS(CADDR(call.ast), CDDDR(call.ast));
         PROTECT(ast);
         Context innerCtxt;
+        auto nargs = call.suppliedArgs - 2;
+        if (TYPEOF(fun) == CLOSXP) {
+            for (size_t i = 0; i < nargs && i < Context::NUM_TYPED_ARGS; ++i) {
+                if (call.givenContext.isEager(i + 2))
+                    innerCtxt.setEager(i);
+                if (call.givenContext.isSimpleInt(i + 2))
+                    innerCtxt.setSimpleInt(i);
+                if (call.givenContext.isSimpleReal(i + 2))
+                    innerCtxt.setSimpleReal(i);
+                if (call.givenContext.isNotObj(i + 2))
+                    innerCtxt.setNotObj(i);
+                if (call.givenContext.isNonRefl(i + 2))
+                    innerCtxt.setNonRefl(i);
+            }
+            if (call.givenContext.includes(Assumption::NoExplicitlyMissingArgs))
+                innerCtxt.add(Assumption::NoExplicitlyMissingArgs);
+            if (call.givenContext.includes(Assumption::CorrectOrderOfArguments))
+                innerCtxt.add(Assumption::CorrectOrderOfArguments);
+            if (auto dt = DispatchTable::check(BODY(fun))) {
+                auto f = dt->baseline();
+                if (f->nargs() >= nargs) {
+                    innerCtxt.add(Assumption::NotTooManyArguments);
+                    innerCtxt.numMissing(f->nargs() - nargs);
+                }
+            }
+        }
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
-                              call.suppliedArgs - 2, ast, call.stackArgs + 2,
+                              nargs, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
-                              call.callerEnv, innerCtxt, ctx);
+                              call.callerEnv, R_NilValue, innerCtxt, ctx);
 
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
             for (int i = 0; i < n; i++) {
@@ -172,28 +205,120 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     return nullptr;
 }
 
-SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(!call.hasNames());
+static constexpr size_t MAXARGS = 8;
 
-    static constexpr size_t MAXARGS = 8;
-    SEXP args[MAXARGS];
-    auto nargs = call.suppliedArgs;
+bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
+    if (nargs > 5)
+        return false;
 
-    if (nargs > MAXARGS)
-        return nullptr;
-
-    bool hasAttrib = false;
-    for (size_t i = 0; i < call.suppliedArgs; ++i) {
-        auto arg = call.stackArg(i);
-        if (TYPEOF(arg) == PROMSXP)
-            arg = evaluatePromise(arg);
-        if (arg == R_UnboundValue || arg == R_MissingArg)
-            return nullptr;
-        if (ATTRIB(arg) != R_NilValue)
-            hasAttrib = true;
-        args[i] = arg;
+    // This is a blocklist of builtins which tamper with the argslist in some
+    // bad way. This can be changing contents and assume they are protected, or
+    // leaking cons cells of the arglist (e.g. through the gengc_next pointers).
+    switch (b->u.primsxp.offset) {
+    // Protect issue due to unprotected SETCAR
+    case blt("%*%"):
+    case blt("crossprod"):
+    case blt("tcrossprod"):
+    case blt("match"):
+    case blt("unclass"):
+    case blt("call"):
+    // misc
+    case blt("registerNamespace"):
+    case blt("...length"):
+    case blt("...elt"):
+    case blt("strsplit"):
+    case blt("eval"):
+    // Injects args
+    case blt("standardGeneric"):
+    // because of fixup_NaRm
+    case blt("range"):
+    case blt("sum"):
+    case blt("min"):
+    case blt("max"):
+    case blt("prod"):
+    case blt("mean"):
+    case blt("any"):
+    case blt("all"):
+    // because of other SETCDR on the argslist
+    case blt("match.call"):
+    case blt(".subset"):
+    case blt(".subset2"):
+    case blt("$<-"):
+    case blt("NextMethod"):
+    case blt("options"):
+    case blt("&"):
+    case blt("|"):
+    case blt("attach"):
+    case blt("psort"):
+    // case blt("invisible"):
+    // because of longjmp
+    case blt("warning"):
+    case blt("stop"):
+    case blt(".dfltStop"):
+    case blt(".signalCondition"):
+        return false;
+    default: {}
     }
+    return true;
+}
 
+static bool doesNotAccessEnv(SEXP b) {
+    return pir::SafeBuiltinsList::nonObject(b->u.primsxp.offset);
+}
+
+SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
+                         size_t nargs, SEXP (&args)[MAXARGS]) {
+    assert(nargs <= 5);
+
+    {
+        SEXP arglist;
+        CCODE f = getBuiltin(call.callee);
+        SEXP res = nullptr;
+        auto env = doesNotAccessEnv(call.callee)
+                       ? R_BaseEnv
+                       : materializeCallerEnv(call, ctx);
+        switch (call.passedArgs) {
+        case 0: {
+            return f(call.ast, call.callee, R_NilValue, env);
+        }
+        case 1: {
+            FAKE_ARGS1(arglist, args[0]);
+            res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS1();
+            break;
+        }
+        case 2: {
+            FAKE_ARGS2(arglist, args[0], args[1]);
+            res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS2();
+            break;
+        }
+        case 3: {
+            FAKE_ARGS3(arglist, args[0], args[1], args[2]);
+            res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS3();
+            break;
+        }
+        case 4: {
+            FAKE_ARGS4(arglist, args[0], args[1], args[2], args[3]);
+            res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS4();
+            break;
+        }
+        case 5: {
+            FAKE_ARGS5(arglist, args[0], args[1], args[2], args[3], args[4]);
+            res = f(call.ast, call.callee, arglist, env);
+            CHECK_FAKE_ARGS5();
+            break;
+        }
+        }
+        return res;
+    }
+    return nullptr;
+}
+
+SEXP tryFastBuiltinCall1(const CallContext& call, InterpreterInstance* ctx,
+                         size_t nargs, bool hasAttrib, SEXP (&args)[MAXARGS]) {
     switch (call.callee->u.primsxp.offset) {
     case blt("is.logical"): {
         if (nargs != 1)
@@ -513,6 +638,9 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (TYPEOF(args[0]) == STRSXP) {
             SEXP r = args[0];
             return r;
+        }
+        if (TYPEOF(args[0]) == SYMSXP) {
+            return ScalarString(PRINTNAME(args[0]));
         }
         if (IS_SIMPLE_SCALAR(args[0], INTSXP)) {
             auto i = INTEGER(args[0])[0];
@@ -843,7 +971,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     return nullptr;
 }
 
-bool supportsFastBuiltinCall(SEXP b) {
+bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     switch (b->u.primsxp.offset) {
     case blt("nargs"):
     case blt("length"):
@@ -889,6 +1017,40 @@ bool supportsFastBuiltinCall(SEXP b) {
     default: {}
     }
     return false;
+}
+
+SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
+    SLOWASSERT(!call.hasNames());
+
+    SEXP args[MAXARGS];
+    auto nargs = call.suppliedArgs;
+
+    if (nargs > MAXARGS)
+        return nullptr;
+
+    bool hasAttrib = false;
+    for (size_t i = 0; i < call.suppliedArgs; ++i) {
+        auto arg = call.stackArg(i);
+        if (TYPEOF(arg) == PROMSXP)
+            arg = evaluatePromise(arg);
+        if (arg == R_UnboundValue || arg == R_MissingArg)
+            return nullptr;
+        if (ATTRIB(arg) != R_NilValue)
+            hasAttrib = true;
+        args[i] = arg;
+    }
+
+    auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args);
+    if (res)
+        return res;
+
+    if (hasAttrib)
+        return nullptr;
+
+    if (!supportsFastBuiltinCall2(call.callee, nargs))
+        return nullptr;
+
+    return tryFastBuiltinCall2(call, ctx, nargs, args);
 }
 
 } // namespace rir

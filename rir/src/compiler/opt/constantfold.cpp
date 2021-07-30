@@ -14,36 +14,45 @@
 #include <cmath>
 #include <iterator>
 #include <list>
+#include <memory>
 #include <unordered_set>
 
 namespace rir {
 namespace pir {
 
-static SEXP isConst(Value* instr) {
+static SEXP isConst(Value* instr, Preserve& p) {
     instr = instr->followCastsAndForce();
 
-    if (instr->asRValue())
+    if (auto cst = LdConst::Cast(instr))
+        return cst->c();
+
+    if (instr->asRValue() && instr != MissingArg::instance())
         return instr->asRValue();
 
-    if (auto cst = LdConst::Cast(instr)) {
-        return cst->c();
-    }
     return nullptr;
 }
+
+SEXP qt(SEXP c, Preserve& p) {
+    if (TYPEOF(c) == SYMSXP)
+        return p.operator()(Rf_lang2(symbol::quote, c));
+    return c;
+}
+
 #define FOLD_BINARY_NATIVE(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
-                if (auto rhs = isConst(instr->arg<1>().val())) {               \
-                    auto res =                                                 \
-                        Rf_eval(Rf_lang3(Operation, lhs, rhs), R_BaseEnv);     \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
+                if (auto rhs = isConst(instr->arg<1>().val(), p)) {            \
+                    auto res = Rf_eval(                                        \
+                        p(Rf_lang3(Operation, qt(lhs, p), qt(rhs, p))),        \
+                        R_BaseEnv);                                            \
                     if (res == R_TrueValue || res == R_FalseValue) {           \
                         instr->replaceUsesWith(                                \
                             res == R_TrueValue ? (Value*)True::instance()      \
                                                : (Value*)False::instance());   \
                         next = bb->remove(ip);                                 \
                     } else {                                                   \
-                        cmp.preserve(res);                                     \
+                        p(res);                                                \
                         auto resi = new LdConst(res);                          \
                         anyChange = true;                                      \
                         instr->replaceUsesWith(resi);                          \
@@ -56,15 +65,15 @@ static SEXP isConst(Value* instr) {
 #define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto arg = isConst(instr->arg<0>().val()))                     \
+            if (auto arg = isConst(instr->arg<0>().val(), p))                  \
                 Operation(arg);                                                \
         }                                                                      \
     } while (false)
 #define FOLD_BINARY(Instruction, Operation)                                    \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
-                if (auto rhs = isConst(instr->arg<1>().val())) {               \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
+                if (auto rhs = isConst(instr->arg<1>().val(), p)) {            \
                     Operation(lhs, rhs);                                       \
                 }                                                              \
             }                                                                  \
@@ -73,11 +82,11 @@ static SEXP isConst(Value* instr) {
 #define FOLD_BINARY_EITHER(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
-            if (auto lhs = isConst(instr->arg<0>().val())) {                   \
+            if (auto lhs = isConst(instr->arg<0>().val(), p)) {                \
                 if (Operation(lhs, instr->arg<1>().val()))                     \
                     break;                                                     \
             }                                                                  \
-            if (auto rhs = isConst(instr->arg<1>().val())) {                   \
+            if (auto rhs = isConst(instr->arg<1>().val(), p)) {                \
                 Operation(rhs, instr->arg<0>().val());                         \
             }                                                                  \
         }                                                                      \
@@ -152,14 +161,18 @@ static bool isStaticallyNA(Value* i) {
 }
 
 bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                         LogStream&) const {
+                         LogStream& log) const {
+    EarlyConstantfold cf;
+    cf.apply(cmp, cls, code, log);
+
     bool anyChange = false;
 
+    Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
 
-    DominanceGraph dom(code);
-    DominanceFrontier dfront(code, dom);
     {
+        DominanceGraph dom(code);
+        std::unique_ptr<DominanceFrontier> dfront;
         // Branch Elimination
         //
         // Given branch `a` and `b`, where both have the same
@@ -187,27 +200,23 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
             }
         });
-        std::unordered_set<Branch*> removed;
 
         for (auto& c : condition) {
-
-            removed.clear();
+            std::unordered_set<Branch*> removed;
             auto& uses = c.second;
             if (uses.size() > 1) {
-
                 for (auto a = uses.begin(); (a + 1) != uses.end(); a++) {
-
                     if (removed.count(*a))
                         continue;
 
-                    PhiPlacement* pl = nullptr;
                     auto phisPlaced = false;
+                    std::unique_ptr<PhiPlacement> pl;
                     std::unordered_map<BB*, Phi*> newPhisByBB;
                     newPhisByBB.clear();
                     for (auto b = a + 1; b != uses.end(); b++) {
-
                         if (removed.count(*b))
                             continue;
+
                         auto bb1 = (*a)->bb();
                         auto bb2 = (*b)->bb();
                         if (dom.dominates(bb1, bb2)) {
@@ -218,7 +227,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 anyChange = true;
                                 (*b)->arg(0).val() = False::instance();
                             } else {
-
                                 if (!phisPlaced) {
                                     // create and place phi
                                     std::unordered_map<BB*, Value*> inputs;
@@ -226,8 +234,14 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         True::instance();
                                     inputs[bb1->falseBranch()] =
                                         False::instance();
-                                    pl = new PhiPlacement(code, inputs, dom,
-                                                          dfront);
+                                    if (!dfront)
+                                        dfront =
+                                            std::make_unique<DominanceFrontier>(
+                                                code, dom);
+                                    assert(!pl);
+                                    pl = std::make_unique<PhiPlacement>(
+                                        code, inputs, dom, *dfront);
+                                    assert(pl);
 
                                     assert(pl->placement.size() > 0);
                                     anyChange = true;
@@ -265,25 +279,18 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     assert(pl->dominatingPhi.count(bb2) > 0);
                                     auto phi = newPhisByBB.at(
                                         pl->dominatingPhi.at(bb2));
-
                                     (*b)->arg(0).val() = phi;
                                 }
                             }
                         }
                         removed.insert(*b);
                     }
-
-                    if (pl != nullptr) {
-                        delete pl;
-                        pl = nullptr;
-                    }
                 }
             }
         }
     }
 
-    DominanceGraph::BBSet dead;
-    DominanceGraph::BBSet unreachableEnd;
+    DominanceGraph::BBSet newUnreachable;
     for (auto i = 0; i < 2; ++i) {
         bool iterAnyChange = false;
         Visitor::run(code->entry, [&](BB* bb) {
@@ -300,21 +307,12 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     ip = bb->insert(ip + 1, new Unreachable()) + 1;
                     while (ip != bb->end())
                         ip = bb->remove(ip);
-                    for (auto b : bb->successors()) {
-                        bool isdead = true;
-                        if (b->predecessors().size() != 1)
-                            for (auto p : b->predecessors())
-                                if (!dead.count(p))
-                                    isdead = false;
-                        if (isdead)
-                            dead.insert(b);
-                    }
-                    unreachableEnd.insert(bb);
+                    newUnreachable.insert(bb);
                     next = bb->end();
                 };
 
                 auto foldLglCmp = [&](SEXP carg, Value* varg, bool isEq) {
-                    if (!isConst(varg) && // If this is true, was already folded
+                    if (!isConst(varg, p) && // was already folded
                         IS_SIMPLE_SCALAR(carg, LGLSXP) &&
                         varg->type.isA(PirType::simpleScalarLogical())) {
                         int larg = *LOGICAL(carg);
@@ -372,9 +370,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                            : (Value*)False::instance();
                         i->replaceUsesWith(replace);
                         next = bb->remove(ip);
-                    } else if (isConst(a) &&
-                               convertsToLogicalWithoutWarning(isConst(a))) {
-                        auto replace = Rf_asLogical(isConst(a)) == TRUE
+                    } else if (isConst(a, p) &&
+                               convertsToLogicalWithoutWarning(isConst(a, p))) {
+                        auto replace = Rf_asLogical(isConst(a, p)) == TRUE
                                            ? (Value*)True::instance()
                                            : (Value*)False::instance();
                         i->replaceUsesWith(replace);
@@ -481,28 +479,28 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
                         }
-                    } else if (isConst(i->arg(0).val()) &&
-                               isConst(i->arg(0).val()) == R_TrueValue &&
+                    } else if (isConst(i->arg(0).val(), p) &&
+                               isConst(i->arg(0).val(), p) == R_TrueValue &&
                                i->arg(1).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         i->replaceUsesWith(i->arg(1).val());
                         next = bb->remove(ip);
-                    } else if (isConst(i->arg(1).val()) &&
-                               isConst(i->arg(1).val()) == R_TrueValue &&
+                    } else if (isConst(i->arg(1).val(), p) &&
+                               isConst(i->arg(1).val(), p) == R_TrueValue &&
                                i->arg(0).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         i->replaceUsesWith(i->arg(0).val());
                         next = bb->remove(ip);
-                    } else if (isConst(i->arg(0).val()) &&
-                               isConst(i->arg(0).val()) == R_FalseValue &&
+                    } else if (isConst(i->arg(0).val(), p) &&
+                               isConst(i->arg(0).val(), p) == R_FalseValue &&
                                i->arg(1).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         auto neg =
                             new Not(i->arg(1).val(), Env::elided(), i->srcIdx);
                         neg->type = PirType::test();
                         i->replaceUsesAndSwapWith(neg, ip);
-                    } else if (isConst(i->arg(1).val()) &&
-                               isConst(i->arg(1).val()) == R_FalseValue &&
+                    } else if (isConst(i->arg(1).val(), p) &&
+                               isConst(i->arg(1).val(), p) == R_FalseValue &&
                                i->arg(0).val()->type.isA(PirType::test())) {
                         iterAnyChange = true;
                         auto neg =
@@ -567,7 +565,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 }
                 if (auto cl = Colon::Cast(i)) {
-                    if (auto a = isConst(cl->arg(0).val())) {
+                    if (auto a = isConst(cl->arg(0).val(), p)) {
                         if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
                             REAL(a)[0] == (double)(int)REAL(a)[0]) {
                             iterAnyChange = true;
@@ -576,7 +574,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             ip++;
                         }
                     }
-                    if (auto a = isConst(cl->arg(1).val())) {
+                    if (auto a = isConst(cl->arg(1).val(), p)) {
                         if (TYPEOF(a) == REALSXP && Rf_length(a) == 1 &&
                             REAL(a)[0] == (double)(int)REAL(a)[0]) {
                             iterAnyChange = true;
@@ -620,6 +618,13 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesAndSwapWith(nargsC, ip);
                         }
+                    } else if (builtinId == blt("invisible") && nargs == 1) {
+                        i->replaceUsesWith(
+                            CallInstruction::CastCall(i)->callArg(0).val());
+                        bb->replace(ip, new Invisible());
+                    } else if (builtinId == blt("invisible") && nargs == 0) {
+                        i->replaceUsesWith(Nil::instance());
+                        bb->replace(ip, new Invisible());
                     } else if (builtinId == blt("length") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
                         if (t.isA(PirType::anySimpleScalar())) {
@@ -641,6 +646,12 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesAndSwapWith(new LdConst(list), ip);
                         }
+                    } else if (builtinId == blt("as.logical") && nargs == 1 &&
+                               !i->arg(0).val()->type.maybeObj() &&
+                               i->arg(0).val()->type.isScalar()) {
+                        i->replaceUsesAndSwapWith(
+                            new AsLogical(i->arg(0).val(), i->srcIdx), ip);
+                        iterAnyChange = true;
                     } else if (builtinId == blt("as.character") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
                         if (t.isA(PirType(RType::str)
@@ -649,12 +660,13 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesWith(i->arg(0).val());
                             next = bb->remove(ip);
-                        } else if (auto con = isConst(i->arg(0).val())) {
+                        } else if (auto con = isConst(i->arg(0).val(), p)) {
                             auto t = TYPEOF(con);
                             if (t == REALSXP || t == INTSXP || t == LGLSXP) {
-                                auto res = Rf_eval(
-                                    Rf_lang2(Rf_install("as.character"), con),
-                                    R_BaseEnv);
+                                auto res =
+                                    p(Rf_eval(p(Rf_lang2(symbol::ascharacter,
+                                                         qt(con, p))),
+                                              R_BaseEnv));
                                 iterAnyChange = true;
                                 i->replaceUsesAndSwapWith(new LdConst(res), ip);
                             }
@@ -667,7 +679,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             iterAnyChange = true;
                             i->replaceUsesWith(i->arg(0).val());
                             next = bb->remove(ip);
-                        } else if (auto con = isConst(i->arg(0).val())) {
+                        } else if (auto con = isConst(i->arg(0).val(), p)) {
                             if (IS_SIMPLE_SCALAR(con, REALSXP)) {
                                 if (REAL(con)[0] == REAL(con)[0]) {
                                     iterAnyChange = true;
@@ -864,7 +876,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
                 if (auto not_ = Not::Cast(i)) {
                     Value* arg = not_->arg<0>().val();
-                    if (auto carg = isConst(arg)) {
+                    if (auto carg = isConst(arg, p)) {
                         if (IS_SIMPLE_SCALAR(carg, LGLSXP) ||
                             IS_SIMPLE_SCALAR(carg, INTSXP) ||
                             IS_SIMPLE_SCALAR(carg, REALSXP)) {
@@ -1009,49 +1021,77 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             break;
         anyChange = true;
     }
+
+    DominanceGraph::BBSet maybeDead;
     // Find all dead basic blocks
     for (const auto& e : branchRemoval) {
-        const auto& branch = e.first;
+        const auto& bb = e.first;
         const auto& condition = e.second;
-        dead.insert(condition ? branch->falseBranch() : branch->trueBranch());
+        for (auto i : *bb->getBranch(!condition))
+            if (auto phi = Phi::Cast(i))
+                phi->removeInputs({bb});
+        bb->remove(bb->end() - 1);
+        maybeDead.insert(bb->getBranch(!condition));
+        bb->convertBranchToJmp(condition);
     }
-    // If we have two blocks A,B newly ending with Unreachable and originally
-    // joining into C, then C is now dead. To find the block C dead, we have to
-    // add A and B to the dominating set of dead blocks.
-    DominanceGraph::BBSet toDelete;
-    if (unreachableEnd.empty()) {
-        toDelete = DominanceGraph::dominatedSet(code, dead);
-    } else {
-        auto deadAndUnreachable = dead;
-        deadAndUnreachable.insert(unreachableEnd.begin(), unreachableEnd.end());
-        toDelete = DominanceGraph::dominatedSet(code, deadAndUnreachable);
-        for (auto u : unreachableEnd) {
-            if (!dead.count(u))
-                toDelete.erase(u);
+    // // If we have two blocks A,B newly ending with Unreachable and originally
+    // // joining into C, then C is now dead. To find the block C dead, we have
+    // to
+    // // add A and B to the dominating set of dead blocks.
+    // DominanceGraph::BBSet toDelete;
+    // if (unreachableEnd.empty()) {
+    //     toDelete = DominanceGraph::dominatedSet(code, dead);
+    // } else {
+    //     auto deadAndUnreachable = dead;
+    //     deadAndUnreachable.insert(unreachableEnd.begin(),
+    //     unreachableEnd.end()); toDelete = DominanceGraph::dominatedSet(code,
+    //     deadAndUnreachable); for (auto u : unreachableEnd) {
+    //         if (!dead.count(u))
+    //             toDelete.erase(u);
+    //     }
+    // }
+    // Visitor::run(code->entry, [&](Instruction* i) {
+    //     if (auto phi = Phi::Cast(i))
+    //         phi->removeInputs(toDelete);
+    // });
+
+    for (auto bb : newUnreachable) {
+        auto succ = bb->successors();
+        for (auto n : succ)
+            for (auto i : *n)
+                if (auto phi = Phi::Cast(i))
+                    phi->removeInputs({bb});
+        maybeDead.insert(succ.begin(), succ.end());
+        bb->deleteSuccessors();
+    }
+
+    DominanceGraph::BBSet reachable;
+    // Mark all still reachable BBs, the rest will be surely dead
+    Visitor::run(code->entry, [&](BB* bb) { reachable.insert(bb); });
+
+    DominanceGraph::BBSet dead;
+    for (auto bb : maybeDead) {
+        if (!reachable.count(bb)) {
+            Visitor::run(bb, [&](BB* bb) {
+                if (!reachable.count(bb))
+                    dead.insert(bb);
+            });
         }
     }
-    Visitor::run(code->entry, [&](Instruction* i) {
-        if (auto phi = Phi::Cast(i))
-            phi->removeInputs(toDelete);
-    });
 
-    for (const auto& bb : unreachableEnd)
-        bb->deleteSuccessors();
-
-    for (const auto& e : branchRemoval) {
-        const auto& branch = e.first;
-        const auto& condition = e.second;
-        for (auto i : *branch->getBranch(!condition))
-            if (auto phi = Phi::Cast(i))
-                phi->removeInputs({branch});
-        branch->remove(branch->end() - 1);
-        branch->convertBranchToJmp(condition);
-    }
     // Needs to happen in two steps in case dead bb point to dead bb
-    for (const auto& bb : toDelete)
+    for (const auto& bb : dead) {
+        for (auto n : bb->successors())
+            if (reachable.count(n))
+                for (auto i : *n)
+                    if (auto phi = Phi::Cast(i))
+                        phi->removeInputs({bb});
         bb->deleteSuccessors();
-    for (const auto& bb : toDelete)
+    }
+    for (auto bb : dead) {
+        assert(!reachable.count(bb));
         delete bb;
+    }
 
     return anyChange;
 }

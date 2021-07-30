@@ -77,8 +77,7 @@ class BB {
     bool before(Instruction*, Instruction*) const;
 
     void printPrologue(std::ostream&, bool tty);
-    // Returns true if it printed anything (for debugging src location purposes)
-    bool printEpilogue(std::ostream&, bool tty);
+    void printEpilogue(std::ostream&, bool tty, bool nl);
     void print(std::ostream&, bool tty);
     void printGraph(std::ostream&, bool omitDeoptBranches);
     void printBBGraph(std::ostream&, bool omitDeoptBranches);
@@ -211,7 +210,7 @@ class BB {
             return {res.next[1], nullptr};
         return res;
     }
-    const Successors successors() { return {next0, next1}; }
+    const Successors successors() const { return {next0, next1}; }
 
     void setSuccessors(const Successors& succ) {
         assert(!next0 && !next1);

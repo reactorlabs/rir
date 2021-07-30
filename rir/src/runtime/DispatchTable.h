@@ -4,6 +4,7 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "utils/random.h"
 
 namespace rir {
 
@@ -53,8 +54,9 @@ struct DispatchTable
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
                       << "\n";
 #endif
-            if (a.smaller(get(i)->context()))
-                return get(i);
+            auto e = get(i);
+            if (a.smaller(e->context()) && !e->body()->isDeoptimized)
+                return e;
         }
         return baseline();
     }
@@ -85,7 +87,6 @@ struct DispatchTable
         }
         if (i == size())
             return;
-        get(i)->flags.set(Function::Dead);
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
@@ -100,13 +101,14 @@ struct DispatchTable
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->context();
-        long i;
+        size_t i;
         for (i = size() - 1; i > 0; --i) {
-            if (get(i)->context() == assumptions) {
-                // If we override a version we should ensure that we don't call
-                // the old version anymore, or we might end up in a deopt loop.
+            auto old = get(i);
+            if (old->context() == assumptions) {
                 if (i != 0) {
-                    get(i)->flags.set(Function::Dead);
+                    // Remember deopt counts across recompilation to avoid
+                    // deopt loops
+                    fun->body()->deoptCount += old->body()->deoptCount;
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }
@@ -130,7 +132,7 @@ struct DispatchTable
             Rf_error("dispatch table overflow");
 #endif
             // Evict one element and retry
-            auto pos = 1 + (std::rand() % (size() - 1));
+            auto pos = 1 + (Random::singleton()() % (size() - 1));
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
@@ -139,7 +141,7 @@ struct DispatchTable
             return insert(fun);
         }
 
-        for (long j = size(); j > i; --j)
+        for (size_t j = size(); j > i; --j)
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());

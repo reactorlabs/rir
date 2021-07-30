@@ -153,8 +153,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         "is.raw",      "is.object",    "isS4",
                         "is.numeric",  "is.matrix",    "is.array",
                         "is.atomic",   "is.recursive", "is.call",
-                        "is.language", "is.function",  "is.single",
-                        "all",         "any"};
+                        "is.language", "is.function",  "all",
+                        "any"};
                     if (tests.count(name)) {
                         if (!getType(c->callArg(0).val()).maybeObj())
                             inferred = PirType(RType::logical)
@@ -238,7 +238,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 getType(e->idx()).isSimpleScalar()) {
                                 auto range = rangeAnalysis.before(e).range;
                                 if (range.count(e->idx())) {
-                                    if (range.at(e->idx()).first > 0) {
+                                    if (range.at(e->idx()) > 0) {
                                         // Negative numbers as indices make the
                                         // extract return a vector. Only
                                         // positive are safe.

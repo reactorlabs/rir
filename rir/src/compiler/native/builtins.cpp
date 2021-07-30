@@ -45,7 +45,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     if (val == R_MissingArg)
-        SET_MISSING(res, 2);
+        SET_MISSING(res, 1);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -53,7 +53,7 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
-    SET_MISSING(res, 2);
+    SET_MISSING(res, val == R_MissingArg ? 1 : 2);
     INCREMENT_NAMED(val);
     return res;
 }
@@ -104,8 +104,8 @@ SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
     if (res != R_NilValue) {
         if (isLocal)
             ENSURE_NAMED(res);
-        else if (NAMED(res) < 2)
-            SET_NAMED(res, 2);
+        else
+            res = Rf_shallow_duplicate(res);
     }
     return res;
 }
@@ -169,6 +169,8 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
             } else {
                 ENSURE_NAMED(val);
             }
+            if (MISSING(loc.cell))
+                SET_MISSING(loc.cell, 2);
             return;
         }
     }
@@ -194,7 +196,7 @@ void setTagImpl(SEXP x, SEXP y) {
     assert(x->sxpinfo.mark && "Use fastpath setTag");
     assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
            "use fast path setTag");
-    SETCAR(x, y);
+    SET_TAG(x, y);
 }
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
@@ -246,7 +248,8 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(), ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     Context(), ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -283,8 +286,8 @@ static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
                            unsigned long available, Immediate cache) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
@@ -303,8 +306,8 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env,
-                     Context(available), ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
+                     R_NilValue, Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -333,7 +336,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, nargs - 1), names, env, given, ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
+                     R_NilValue, given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -407,66 +411,6 @@ SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
     } while (false)
-
-static void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
-    memset(&res, 0, sizeof(SEXPREC));
-    res.attrib = R_NilValue;
-    res.gengc_next_node = R_NilValue;
-    res.gengc_prev_node = R_NilValue;
-    res.sxpinfo.gcgen = 1;
-    res.sxpinfo.mark = 1;
-    res.sxpinfo.named = 2;
-    res.sxpinfo.type = t;
-}
-
-static void createFakeCONS(SEXPREC& res, SEXP cdr) {
-    createFakeSEXP(res, LISTSXP);
-    res.u.listsxp.carval = R_NilValue;
-    res.u.listsxp.tagval = R_NilValue;
-    res.u.listsxp.cdrval = cdr;
-}
-
-#define FAKE_ARGS1(res, a1)                                                    \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, R_NilValue);                                  \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS2(res, a1, a2)                                                \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, R_NilValue);                                  \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS3(res, a1, a2, a3)                                            \
-    SEXPREC __a3__cell__;                                                      \
-    createFakeCONS(__a3__cell__, R_NilValue);                                  \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    __a3__cell__.u.listsxp.carval = a3;                                        \
-    res = &__a1__cell__
-
-#define FAKE_ARGS4(res, a1, a2, a3, a4)                                        \
-    SEXPREC __a4__cell__;                                                      \
-    createFakeCONS(__a4__cell__, R_NilValue);                                  \
-    SEXPREC __a3__cell__;                                                      \
-    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
-    SEXPREC __a2__cell__;                                                      \
-    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
-    SEXPREC __a1__cell__;                                                      \
-    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
-    __a1__cell__.u.listsxp.carval = a1;                                        \
-    __a2__cell__.u.listsxp.carval = a2;                                        \
-    __a3__cell__.u.listsxp.carval = a3;                                        \
-    __a4__cell__.u.listsxp.carval = a4;                                        \
-    res = &__a1__cell__
 
 static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
                         UnopKind op) {
@@ -771,26 +715,27 @@ int asLogicalImpl(SEXP a) {
 
 int lengthImpl(SEXP e) { return Rf_length(e); }
 
+std::vector<BC::PoolIdx> NativeBuiltins::targetCaches;
+
+// An empty function that is marked as deoptimized to use as sentinel e.g. in
+// invalidated caches.
+static FunctionSignature
+    deoptSentinelSig(FunctionSignature::Environment::CallerProvided,
+                     FunctionSignature::OptimizationLevel::Optimized);
+static Function* deoptSentinel;
+static SEXP deoptSentinelContainer = []() {
+    auto c = Code::New(0);
+    PROTECT(c->container());
+    SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
+    R_PreserveObject(store);
+    deoptSentinel = new (INTEGER(store))
+        Function(0, c->container(), {}, deoptSentinelSig, Context());
+    deoptSentinel->registerDeopt();
+    UNPROTECT(1);
+    return store;
+}();
+
 void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
-    if (!pir::Parameter::DEOPT_CHAOS) {
-        if (cls) {
-            // TODO: this version is still reachable from static call inline
-            // caches. Thus we need to preserve it forever. We need some
-            // dependency management here.
-            Pool::insert(c->container());
-            // remove the deoptimized function. Unless on deopt chaos,
-            // always recompiling would just blow testing time...
-            auto dt = DispatchTable::unpack(BODY(cls));
-            dt->remove(c);
-        } else {
-            // In some cases we don't know the callee here, so we can't properly
-            // remove the deoptimized code. But we can kill the native code,
-            // this will cause a fallback to rir, which will then be able to
-            // deoptimize properly.
-            // TODO: find a way to always know the closure in native code!
-            c->nativeCode = nullptr;
-        }
-    }
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -798,11 +743,18 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
     }
 
     c->registerDeopt();
+    // Invalidate target caches pointing to deoptimized version
+    for (auto idx : NativeBuiltins::targetCaches)
+        if (auto f = Function::check(Pool::get(idx)))
+            if (f->body() == c)
+                Pool::patch(idx, deoptSentinelContainer);
+
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
-                     (Immediate*)nullptr, env, Context(), globalContext());
+                     (Immediate*)nullptr, env, R_NilValue, Context(),
+                     globalContext());
 
     deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
                            m->numFrames - 1, stackHeight,
@@ -1160,15 +1112,15 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
-                     ostack_cell_at(ctx, nargs - 1), env, Context(available),
-                     ctx);
+                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     Context(available), ctx);
 
     auto fail = !call.givenContext.smaller(fun->context());
     if (fail) {
         inferCurrentContext(call, fun->nargs(), ctx);
         fail = !call.givenContext.smaller(fun->context());
     }
-    if (!fun->body()->nativeCode)
+    if (!fun->body()->nativeCode || fun->body()->isDeoptimized)
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));
@@ -1187,7 +1139,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     for (size_t i = 0; i < missing; ++i)
         ostack_push(globalContext(), R_MissingArg);
 
-    R_bcstack_t* args = ostack_cell_at(ctx, nargs + missing - 1);
+    R_bcstack_t* args = ostack_cell_at(ctx, (long)(nargs + missing) - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
     LazyArglistOnStack lazyArgs(call.callId,
@@ -1888,7 +1840,7 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
                             size_t nargs) {
     auto lazyArglist =
         LazyArglistOnHeap::New(callId, c->arglistOrderContainer(), nargs,
-                               ostack_cell_at(ctx, nargs - 1), ast);
+                               ostack_cell_at(ctx, (long)nargs - 1), ast);
     ostack_popn(globalContext(), nargs);
 
     auto global = (RCNTXT*)R_GlobalContext;

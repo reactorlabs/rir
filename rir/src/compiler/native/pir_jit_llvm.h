@@ -3,7 +3,6 @@
 
 #include "compiler/log/stream_logger.h"
 #include "compiler/native/builtins.h"
-#include "compiler/native/pir_debug_info.h"
 #include "compiler/pir/bb.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/instruction.h"
@@ -11,9 +10,7 @@
 #include "compiler/pir/promise.h"
 #include "compiler/util/visitor.h"
 
-#ifdef PIR_GDB_SUPPORT
 #include "llvm/IR/DIBuilder.h"
-#endif
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
@@ -30,6 +27,8 @@ struct Code;
 
 namespace pir {
 
+bool LLVMDebugInfo();
+
 struct NeedsRefcountAdjustment;
 using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 
@@ -41,11 +40,7 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 // addresses for PIR builtins.
 class PirJitLLVM {
   public:
-#ifdef PIR_GDB_SUPPORT
     explicit PirJitLLVM(const std::string& name);
-#else
-    PirJitLLVM();
-#endif
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
     ~PirJitLLVM();
@@ -64,12 +59,13 @@ class PirJitLLVM {
     static llvm::LLVMContext& getContext();
 
   private:
+    std::string name;
+
     // Initialized on the first call to compile
     std::unique_ptr<llvm::Module> M;
 
     // Directory of all functions and builtins
     std::unordered_map<Code*, llvm::Function*> funs;
-    std::unordered_map<std::string, std::pair<llvm::Function*, void*>> builtins;
 
     // We prepend `rsh_` to all user functions, as a mechanism to
     // differentiate them from builtins. We also append `.N` to all
@@ -97,7 +93,6 @@ class PirJitLLVM {
     static void initializeLLVM();
     static bool initialized;
 
-#ifdef PIR_GDB_SUPPORT
     // Support for debugging pir in gdb
   public:
     static std::string makeDbgFileName(const std::string& base) {
@@ -109,9 +104,7 @@ class PirJitLLVM {
         DebugInfo(const DebugInfo&) = delete;
         DebugInfo(const std::string& folder, const std::string& name)
             : CU(nullptr), File(nullptr), Folder(folder),
-              FileName(makeDbgFileName(name)), VoidPtrType(nullptr),
-              SEXPRECType(nullptr), SEXPType(nullptr), NativeCodeType(nullptr),
-              line(1) {}
+              FileName(makeDbgFileName(name)), line(1) {}
 
         llvm::DICompileUnit* CU;
         llvm::DIFile* File;
@@ -120,32 +113,34 @@ class PirJitLLVM {
         std::string FileName;
 
         std::vector<llvm::DIScope*> LexicalBlocks;
-        llvm::DIScope* getScope();
 
-        llvm::DIType* VoidPtrType;
-        llvm::DIType* getVoidPtrType(llvm::DIBuilder*);
-        llvm::DIType* SEXPRECType;
-        llvm::DIType* getSEXPRECType(llvm::DIBuilder*);
-        llvm::DIType* SEXPType;
-        llvm::DIType* getSEXPType(llvm::DIBuilder*);
-        llvm::DISubroutineType* NativeCodeType;
-        llvm::DISubroutineType* getNativeCodeType(llvm::DIBuilder*);
-        llvm::DIType* getInstrType(llvm::DIBuilder*, PirType);
+        llvm::DIType* UnspecifiedType = nullptr;
+        llvm::DIType* VoidType = nullptr;
+        llvm::DIType* IntType = nullptr;
+        llvm::DIType* UIntType = nullptr;
+        llvm::DIType* DoubleType = nullptr;
+        llvm::DIType* VoidPtrType = nullptr;
+        llvm::DIType* SEXPRECType = nullptr;
+        llvm::DIType* SEXPType = nullptr;
+        llvm::DISubroutineType* NativeCodeType = nullptr;
 
         std::unique_ptr<FileLogStream> log;
         size_t line;
         std::unordered_map<Code*, size_t> codeLoc;
         std::unordered_map<BB*, size_t> BBLoc;
         std::unordered_map<Instruction*, size_t> instLoc;
+
+        void initializeTypes(llvm::DIBuilder*);
+        llvm::DIScope* getScope();
         void addCode(Code* c);
         size_t getCodeLoc(Code* c) const { return codeLoc.at(c); }
         size_t getBBLoc(BB* bb) const { return BBLoc.at(bb); }
         size_t getInstLoc(Instruction* i) const { return instLoc.at(i); }
         void emitLocation(llvm::IRBuilder<>&, size_t);
+        void clearLocation(llvm::IRBuilder<>&);
     };
-    DebugInfo DI;
+    std::unique_ptr<DebugInfo> DI;
     std::unique_ptr<llvm::DIBuilder> DIB;
-#endif
 };
 
 } // namespace pir

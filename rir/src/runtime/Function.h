@@ -85,7 +85,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(DepromiseArgs)                                                           \
     V(NotOptimizable)                                                          \
     V(NotInlineable)                                                           \
-    V(Dead)                                                                    \
     V(InnerFunction)                                                           \
     V(DisableAllSpecialization)                                                \
     V(DisableArgumentTypeSpecialization)                                       \

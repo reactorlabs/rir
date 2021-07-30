@@ -326,6 +326,7 @@ BC_NOARGS(V, _)
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldvarNoForce(SEXP sym);
     inline static BC ldvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdateCached(SEXP sym, uint32_t cacheSlot);
     inline static BC ldvarForUpdate(SEXP sym);
@@ -552,6 +553,7 @@ BC_NOARGS(V, _)
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
         case Opcode::ldvar_super_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
@@ -587,12 +589,16 @@ BC_NOARGS(V, _)
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::brfalse_:
+            memcpy(&immediate.offset, pc, sizeof(immediate.offset));
+            break;
         case Opcode::beginloop_:
         case Opcode::popn_:
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+            memcpy(&immediate.i, pc, sizeof(immediate.i));
+            break;
         case Opcode::record_call_:
             memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;

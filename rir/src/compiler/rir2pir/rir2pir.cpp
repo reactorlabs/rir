@@ -374,14 +374,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_for_update_cache_: {
         if (bc.immediateConst() == symbol::c)
             compiler.seenC = true;
-        v = insert(new LdVar(bc.immediateConst(), env));
+        auto ld = new LdVar(bc.immediateConst(), env);
+        if (bc.bc == Opcode::ldvar_for_update_ ||
+            bc.bc == Opcode::ldvar_for_update_cache_)
+            ld->forUpdate = true;
+        v = insert(ld);
         // PIR LdVar corresponds to ldvar_noforce_ which does not change
         // visibility
         insert(new Visible());
         auto fs = inlining() ? (Value*)Tombstone::framestate()
                              : insert.registerFrameState(srcCode, nextPos,
+
                                                          stack, inPromise());
         push(insert(new Force(v, env, fs)));
+        break;
+    }
+
+    case Opcode::ldvar_noforce_: {
+        if (bc.immediateConst() == symbol::c)
+            compiler.seenC = true;
+        v = insert(new LdVar(bc.immediateConst(), env));
+
+        push(v);
         break;
     }
 
@@ -542,11 +556,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed. Might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            srcCode->funInvocationCount > 1) {
+            srcCode->funInvocationCount > 1 && srcCode->deadCallReached < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
             auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
-            DeoptReason reason = {DeoptReason::Calltarget, srcCode,
+            DeoptReason reason = {DeoptReason::DeadCall, srcCode,
                                   (uint32_t)offset};
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));
@@ -623,9 +637,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ti = checkCallTarget(callee, srcCode, callTargetFeedback);
 
         auto ldfun = LdFun::Cast(callee);
-        if (ldfun)
-            ldfun->hint =
-                ti.monomorphic ? ti.monomorphic : symbol::ambiguousCallTarget;
+        if (ldfun) {
+            if (ti.monomorphic) {
+                ldfun->hint = ti.monomorphic;
+                if (!ti.stableEnv)
+                    ldfun->hintIsInnerFunction = true;
+            } else {
+                ldfun->hint = symbol::ambiguousCallTarget;
+            }
+        }
 
         // Deopt in promise not possible
         if (inPromise())
@@ -1578,7 +1598,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
     if (auto last = insert.getCurrentBB()) {
         res = Return::Cast(last->last())->arg(0).val();
-        last->eraseLast();
+        last->remove(last->end() - 1);
     }
 
     Visitor::run(insert.code->entry, [&](Instruction* i) {

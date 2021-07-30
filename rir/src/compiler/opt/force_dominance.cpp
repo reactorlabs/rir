@@ -46,6 +46,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     bool anyChange = false;
 
     // Do this first so dead code elimination will remove the dependencies
+    // Do not depromise trivial MissingArg promises, as promised and depromised
+    // missing do not behave the same (see comment below)
     Visitor::run(code->entry, [&](Instruction* i) {
         // these are their own ast-expression, so substitute and
         // similar will not give us trouble
@@ -53,22 +55,30 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (c->kind == CastType::Upcast) {
                 if (auto mk = MkArg::Cast(c->arg(0).val())) {
                     if (mk->isEager() && mk->prom()->trivial()) {
-                        c->replaceUsesWith(mk->eagerArg());
-                        anyChange = true;
+                        auto eager = mk->eagerArg();
+                        if (eager != MissingArg::instance()) {
+                            c->replaceUsesWith(eager);
+                            anyChange = true;
+                        }
                     }
                 }
             }
         }
         if (auto mk = MkArg::Cast(i)) {
             if (mk->isEager() && mk->prom()->trivial()) {
-                i->replaceUsesWith(
-                    mk->eagerArg(),
-                    [&](Instruction* j, size_t a) {
-                        if (j->arg(a).type().isA(RType::prom))
-                            j->arg(a).type() = mk->eagerArg()->type;
-                    },
-                    [&](Instruction* j) { return j->tag != Tag::CastType; });
-                anyChange = true;
+                auto eager = mk->eagerArg();
+                if (eager != MissingArg::instance()) {
+                    i->replaceUsesWith(
+                        eager,
+                        [&](Instruction* j, size_t a) {
+                            if (j->arg(a).type().isA(RType::prom))
+                                j->arg(a).type() = eager->type;
+                        },
+                        [&](Instruction* j) {
+                            return j->tag != Tag::CastType;
+                        });
+                    anyChange = true;
+                }
             }
         }
     });
@@ -233,18 +243,21 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                         }
                                     }
                                 } else {
-                                    if (FrameState::Cast(*it))
-                                        next = bb->remove(it);
                                     // TODO: don't copy this to start with
                                     if ((*it)->frameState())
                                         (*it)->clearFrameState();
-                                    if (auto cp = Checkpoint::Cast(*it)) {
+                                    if (FrameState::Cast(*it)) {
+                                        next = bb->remove(it);
+                                    } else if (auto cp =
+                                                   Checkpoint::Cast(*it)) {
                                         auto n = cp->nextBB();
                                         auto d = cp->deoptBranch();
-                                        bb->eraseLast();
+                                        next = bb->remove(it);
                                         bb->overrideSuccessors({n});
-                                        delete d;
-                                        next = bb->end();
+                                        if (d->predecessors().size() == 0) {
+                                            assert(d->successors().size() == 0);
+                                            delete d;
+                                        }
                                     }
                                 }
                                 it = next;

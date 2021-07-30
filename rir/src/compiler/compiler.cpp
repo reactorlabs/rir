@@ -183,6 +183,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         logger.warn("Failed to compile default arg");
         logger.close(version);
         closure->erase(ctx);
+        delete version;
         return fail();
     }
 
@@ -203,12 +204,13 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     log.flush();
     logger.close(version);
     closure->erase(ctx);
+    delete version;
     return fail();
 }
 
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
-static void findUnreachable(Module* m) {
+static void findUnreachable(Module* m, StreamLogger& log) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
@@ -239,6 +241,7 @@ static void findUnreachable(Module* m) {
                             assert(call->tryDispatch());
                             found(call->tryDispatch());
                             found(call->tryOptimisticDispatch());
+                            found(call->hint);
                         } else if (auto call = CallInstruction::CastCall(i)) {
                             if (auto cls = call->tryGetCls())
                                 found(call->tryDispatch(cls));
@@ -263,8 +266,11 @@ static void findUnreachable(Module* m) {
     m->eachPirClosure([&](Closure* c) {
         const auto& reachableVersions = reachable[c];
         c->eachVersion([&](ClosureVersion* v) {
-            if (!reachableVersions.count(v->context()))
+            if (!reachableVersions.count(v->context())) {
                 toErase.push_back({v->owner(), v->context()});
+                log.close(v);
+                delete v;
+            }
         });
     });
 
@@ -280,7 +286,7 @@ void Compiler::optimizeModule() {
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
                 Measuring::startTimer("compiler.cpp: module cleanup");
-            findUnreachable(module);
+            findUnreachable(module, logger);
             if (MEASURE_COMPILER_PERF)
                 Measuring::countTimer("compiler.cpp: module cleanup");
         }

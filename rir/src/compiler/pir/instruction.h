@@ -287,8 +287,6 @@ class Instruction : public Value {
     void replaceDominatedUses(Instruction* replacement,
                               const DominanceGraph& dom,
                               const std::initializer_list<Tag>& skip = {});
-    void replaceDominatedUses(Instruction* replacement,
-                              const std::initializer_list<Tag>& skip = {});
     void
     replaceUsesIn(Value* val, BB* target,
                   const std::function<void(Instruction*, size_t)>& postAction =
@@ -924,6 +922,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
   public:
     SEXP varName;
     SEXP hint = nullptr;
+    bool hintIsInnerFunction = false;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
@@ -954,6 +953,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
 class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
   public:
     SEXP varName;
+    bool forUpdate = false;
 
     LdVar(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env),
@@ -1211,7 +1211,12 @@ class FLIE(MkFunCls, 1, Effects::None()) {
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), cls); }
+    size_t gvnBase() const override {
+        // Lazyly compiled cls might be still missing
+        if (!cls)
+            return 0;
+        return hash_combine(tagHash(), cls);
+    }
 };
 
 class FLIE(Force, 3, Effects::Any()) {
@@ -2078,6 +2083,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
          Value* fs, unsigned srcIdx);
 
     Value* cls() const { return arg(1).val(); }
+    void cls(Value * v) { arg(1).val() = v; }
 
     Value* tryGetClsArg() const override final {
         return cls()->followCastsAndForce();
@@ -2497,6 +2503,10 @@ class VLI(DotsList, Effect::LeakArg) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
+    RIR_INLINE void eachElement(LocalVarIt it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(names[i], arg(i).val());
+    }
     RIR_INLINE void eachElementRev(LocalVarIt it) const {
         for (long i = nargs() - 1; i >= 0; --i)
             it(names[i], arg(i).val());

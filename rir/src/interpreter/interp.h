@@ -19,6 +19,13 @@
 #define THREADED_CODE
 #endif
 
+#ifdef SANITIZE
+extern "C" void __asan_poison_memory_region(void const volatile* addr,
+                                            size_t size);
+extern "C" void __asan_unpoison_memory_region(void const volatile* addr,
+                                              size_t size);
+#endif
+
 namespace rir {
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
                    SEXP callerEnv, InterpreterInstance* ctx);
@@ -55,19 +62,17 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
     auto& flags = fun->flags;
     return (!flags.contains(Function::NotOptimizable) &&
             (flags.contains(Function::MarkOpt) ||
-             flags.contains(Function::Dead) ||
              (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
               ((fun != table->baseline() && fun->invocationCount() >= 2 &&
                 fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
                (fun->invocationCount() %
-                (factor * (fun->deoptCount() + pir::Parameter::RIR_WARMUP))) ==
-                   0))));
+                (factor * (pir::Parameter::RIR_WARMUP))) == 0))));
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) ||
-            fun->flags.contains(Function::Dead) || fun == table->baseline() ||
+            fun == table->baseline() ||
             (context.smaller(fun->context()) && context.isImproving(fun)) ||
             fun->body()->flags.contains(Code::Reoptimise));
 }
@@ -139,6 +144,225 @@ inline bool needsExpandedDots(SEXP callee) {
            // and expects expanded dots
            callee->u.primsxp.offset == blt("forceAndCall");
 }
+
+SEXP materializeCallerEnv(CallContext& callCtx, InterpreterInstance* ctx);
+
+inline void createFakeSEXP(SEXPREC& res, SEXPTYPE t) {
+    memset(&res, 0, sizeof(SEXPREC));
+    res.attrib = R_NilValue;
+    res.gengc_next_node = R_NilValue;
+    res.gengc_prev_node = R_NilValue;
+    res.sxpinfo.gcgen = 1;
+    res.sxpinfo.mark = 1;
+    res.sxpinfo.named = 2;
+    res.sxpinfo.type = t;
+}
+
+inline void createFakeCONS(SEXPREC& res, SEXP cdr) {
+    createFakeSEXP(res, LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+}
+
+inline SEXPREC createFakeCONS(SEXP cdr) {
+    SEXPREC res;
+    createFakeSEXP(res, LISTSXP);
+    res.u.listsxp.carval = R_NilValue;
+    res.u.listsxp.tagval = R_NilValue;
+    res.u.listsxp.cdrval = cdr;
+    return res;
+}
+
+#define FAKE_ARGS1(res, a1)                                                    \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, R_NilValue);                                  \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    res = &__a1__cell__
+
+#define CHECK_FAKE_ARGS1()                                                     \
+    SLOWASSERT(__a1__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a1/1");                            \
+    SLOWASSERT(__a1__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a1/1");                            \
+    SLOWASSERT(__a1__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a1/1");                                        \
+    SLOWASSERT(__a1__cell__.u.listsxp.cdrval == R_NilValue &&                  \
+               "broken cons a1/1")
+
+#define FAKE_ARGS2(res, a1, a2)                                                \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, R_NilValue);                                  \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    res = &__a1__cell__
+
+#define CHECK_FAKE_ARGS2()                                                     \
+    SLOWASSERT(__a1__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a1/2");                            \
+    SLOWASSERT(__a2__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a2/2");                            \
+    SLOWASSERT(__a1__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a1/2");                            \
+    SLOWASSERT(__a2__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a2/2");                            \
+    SLOWASSERT(__a1__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a1/2");                                        \
+    SLOWASSERT(__a2__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a2/2");                                        \
+    SLOWASSERT(__a1__cell__.u.listsxp.cdrval == &__a2__cell__ &&               \
+               "broken cons a1/2");                                            \
+    SLOWASSERT(__a2__cell__.u.listsxp.cdrval == R_NilValue &&                  \
+               "broken cons a2/2")
+
+#define FAKE_ARGS3(res, a1, a2, a3)                                            \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, R_NilValue);                                  \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    res = &__a1__cell__
+
+#define CHECK_FAKE_ARGS3()                                                     \
+    SLOWASSERT(__a1__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a1/3");                            \
+    SLOWASSERT(__a2__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a2/3");                            \
+    SLOWASSERT(__a3__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a3/3");                            \
+    SLOWASSERT(__a1__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a1/3");                            \
+    SLOWASSERT(__a2__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a2/3");                            \
+    SLOWASSERT(__a3__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a3/3");                            \
+    SLOWASSERT(__a1__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a1/3");                                        \
+    SLOWASSERT(__a2__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a2/3");                                        \
+    SLOWASSERT(__a3__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a3/3");                                        \
+    SLOWASSERT(__a1__cell__.u.listsxp.cdrval == &__a2__cell__ &&               \
+               "broken cons a1/3");                                            \
+    SLOWASSERT(__a2__cell__.u.listsxp.cdrval == &__a3__cell__ &&               \
+               "broken cons a2/3");                                            \
+    SLOWASSERT(__a3__cell__.u.listsxp.cdrval == R_NilValue &&                  \
+               "broken cons a3/3")
+
+#define FAKE_ARGS4(res, a1, a2, a3, a4)                                        \
+    SEXPREC __a4__cell__;                                                      \
+    createFakeCONS(__a4__cell__, R_NilValue);                                  \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    __a4__cell__.u.listsxp.carval = a4;                                        \
+    res = &__a1__cell__
+
+#define CHECK_FAKE_ARGS4()                                                     \
+    SLOWASSERT(__a1__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a1/4");                            \
+    SLOWASSERT(__a2__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a2/4");                            \
+    SLOWASSERT(__a3__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a3/4");                            \
+    SLOWASSERT(__a4__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a4/4");                            \
+    SLOWASSERT(__a1__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a1/4");                            \
+    SLOWASSERT(__a2__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a2/4");                            \
+    SLOWASSERT(__a3__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a3/4");                            \
+    SLOWASSERT(__a4__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a4/4");                            \
+    SLOWASSERT(__a1__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a1/4");                                        \
+    SLOWASSERT(__a2__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a2/4");                                        \
+    SLOWASSERT(__a3__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a3/4");                                        \
+    SLOWASSERT(__a4__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a4/4");                                        \
+    SLOWASSERT(__a1__cell__.u.listsxp.cdrval == &__a2__cell__ &&               \
+               "broken cons a1/4");                                            \
+    SLOWASSERT(__a2__cell__.u.listsxp.cdrval == &__a3__cell__ &&               \
+               "broken cons a2/4");                                            \
+    SLOWASSERT(__a3__cell__.u.listsxp.cdrval == &__a4__cell__ &&               \
+               "broken cons a3/4");                                            \
+    SLOWASSERT(__a4__cell__.u.listsxp.cdrval == R_NilValue &&                  \
+               "broken cons a4/4")
+
+#define FAKE_ARGS5(res, a1, a2, a3, a4, a5)                                    \
+    SEXPREC __a5__cell__;                                                      \
+    createFakeCONS(__a5__cell__, R_NilValue);                                  \
+    SEXPREC __a4__cell__;                                                      \
+    createFakeCONS(__a4__cell__, &__a5__cell__);                               \
+    SEXPREC __a3__cell__;                                                      \
+    createFakeCONS(__a3__cell__, &__a4__cell__);                               \
+    SEXPREC __a2__cell__;                                                      \
+    createFakeCONS(__a2__cell__, &__a3__cell__);                               \
+    SEXPREC __a1__cell__;                                                      \
+    createFakeCONS(__a1__cell__, &__a2__cell__);                               \
+    __a1__cell__.u.listsxp.carval = a1;                                        \
+    __a2__cell__.u.listsxp.carval = a2;                                        \
+    __a3__cell__.u.listsxp.carval = a3;                                        \
+    __a4__cell__.u.listsxp.carval = a4;                                        \
+    __a5__cell__.u.listsxp.carval = a5;                                        \
+    res = &__a1__cell__
+
+#define CHECK_FAKE_ARGS5()                                                     \
+    SLOWASSERT(__a1__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a1/5");                            \
+    SLOWASSERT(__a2__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a2/5");                            \
+    SLOWASSERT(__a3__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a3/5");                            \
+    SLOWASSERT(__a4__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a4/5");                            \
+    SLOWASSERT(__a5__cell__.gengc_next_node == R_NilValue &&                   \
+               "broken cons gengc_next_node a5/5");                            \
+    SLOWASSERT(__a1__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a1/5");                            \
+    SLOWASSERT(__a2__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a2/5");                            \
+    SLOWASSERT(__a3__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a3/5");                            \
+    SLOWASSERT(__a4__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a4/5");                            \
+    SLOWASSERT(__a5__cell__.gengc_prev_node == R_NilValue &&                   \
+               "broken cons gengc_prev_node a5/5");                            \
+    SLOWASSERT(__a1__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a1/5");                                        \
+    SLOWASSERT(__a2__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a2/5");                                        \
+    SLOWASSERT(__a3__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a3/5");                                        \
+    SLOWASSERT(__a4__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a4/5");                                        \
+    SLOWASSERT(__a5__cell__.u.listsxp.tagval == R_NilValue &&                  \
+               "broken cons tag a4/5");                                        \
+    SLOWASSERT(__a1__cell__.u.listsxp.cdrval == &__a2__cell__ &&               \
+               "broken cons a1/5");                                            \
+    SLOWASSERT(__a2__cell__.u.listsxp.cdrval == &__a3__cell__ &&               \
+               "broken cons a2/5");                                            \
+    SLOWASSERT(__a3__cell__.u.listsxp.cdrval == &__a4__cell__ &&               \
+               "broken cons a3/5");                                            \
+    SLOWASSERT(__a4__cell__.u.listsxp.cdrval == &__a5__cell__ &&               \
+               "broken cons a4/5");                                            \
+    SLOWASSERT(__a5__cell__.u.listsxp.cdrval == R_NilValue &&                  \
+               "broken cons a5/5")
 
 } // namespace rir
 #endif // RIR_INTERPRETER_C_H

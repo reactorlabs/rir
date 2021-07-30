@@ -7,13 +7,18 @@ set(R_HOME ${CMAKE_SOURCE_DIR}/external/custom-r)
 set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
-set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-11)
+set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-12)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
 include(${LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake OPTIONAL)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 set(LLVM_COMPONENTS_USED core orcjit native vectorize lto bitwriter)
+option(LLVM_USE_PERF "Include LLVM support for perf profiling." FALSE)
+if (${LLVM_USE_PERF})
+    set(LLVM_COMPONENTS_USED "${LLVM_COMPONENTS_USED}" PerfJITEvents)
+    add_definitions(-DPIR_USE_PERF)
+endif ()
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
@@ -31,6 +36,7 @@ add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
+set(CMAKE_CXX_FLAGS_RELEASESLOWASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 # with macOS GCC 9 we need to explicitly use libc++, since llvm does. See https://libcxx.llvm.org/docs/UsingLibcxx.html#using-libc-with-gcc
@@ -43,12 +49,13 @@ set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} ${CMAKE_CXX_FLAGS_LIBCXX} -Wall -Wuniniti
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_C_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
+set(CMAKE_C_FLAGS_RELEASESLOWASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
-set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
-set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
+set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
 
 MARK_AS_ADVANCED(
     CMAKE_CXX_FLAGS_SANITIZE
@@ -112,11 +119,13 @@ add_custom_target(setup-build-dir
 
 if(${MACOS_USE_GCC_9})
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh --macos_gcc9
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh --macos_gcc9
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh --macos_gcc9
     )
 else()
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
     )
 endif()
 

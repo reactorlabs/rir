@@ -16,8 +16,10 @@ class CFG {
     typedef std::vector<BB*> BBList;
 
     std::vector<BBList> predecessors_;
-    std::vector<BBList> transitivePredecessors;
+    std::vector<std::vector<size_t>> transitivePredecessors;
     BBList exits_;
+
+    void computeTransitivePreds(BB*);
 
   public:
     explicit CFG(Code*);
@@ -37,6 +39,7 @@ class DominanceGraph {
     // can be found by walking through this array. E.g., `idom[v->id]`
     // dominates `v`, `idom[idom[v->id]->id]` dominates `v`, and so on.
     BBList idom;
+    std::vector<unsigned> idomId;
 
   public:
     explicit DominanceGraph(Code*);

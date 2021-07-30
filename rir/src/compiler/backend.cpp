@@ -40,8 +40,51 @@ static void approximateRefcount(ClosureVersion* cls, Code* code,
 
 static void approximateNeedsLdVarForUpdate(
     Code* code, std::unordered_set<Instruction*>& needsLdVarForUpdate) {
+
+    auto apply = [&](Instruction* i, Value* vec_) {
+        if (auto vec = Instruction::Cast(vec_)) {
+            if (auto ld = LdVar::Cast(vec)) {
+                if (auto su = i->hasSingleUse()) {
+                    if (auto st = StVar::Cast(su)) {
+                        if (ld->env() != st->env())
+                            needsLdVarForUpdate.insert(vec);
+                        else if (ld->forUpdate && ld->hasSingleUse())
+                            ld->forUpdate = false;
+                        return;
+                    }
+                    if (StVarSuper::Cast(su)) {
+                        if (ld->forUpdate && ld->hasSingleUse())
+                            ld->forUpdate = false;
+                        return;
+                    }
+                }
+                if (auto mk = MkEnv::Cast(ld->env()))
+                    if (mk->stub && mk->arg(mk->indexOf(ld->varName)).val() !=
+                                        UnboundValue::instance())
+                        return;
+
+                needsLdVarForUpdate.insert(vec);
+            }
+        }
+    };
+
     Visitor::run(code->entry, [&](Instruction* i) {
         switch (i->tag) {
+        // These are builtins which ignore value semantics...
+        case Tag::CallBuiltin: {
+            auto b = CallBuiltin::Cast(i);
+            if (b->builtinId == blt(".Call")) {
+                if (auto l = LdVar::Cast(
+                        b->callArg(0).val()->followCastsAndForce())) {
+                    static std::unordered_set<SEXP> block = {
+                        Rf_install("C_R_set_slot")};
+                    if (block.count(l->varName)) {
+                        apply(i, l);
+                    }
+                }
+            }
+            break;
+        }
         case Tag::Subassign1_1D:
         case Tag::Subassign2_1D:
         case Tag::Subassign1_2D:
@@ -50,31 +93,15 @@ static void approximateNeedsLdVarForUpdate(
             // is 1. This is only valid, if we are sure that the vector
             // is local, ie. vector and subassign operation come from
             // the same lexical scope.
-            if (auto vec =
-                    Instruction::Cast(i->arg(1).val()->followCastsAndForce())) {
-                if (auto ld = LdVar::Cast(vec)) {
-                    if (auto su = i->hasSingleUse()) {
-                        if (auto st = StVar::Cast(su)) {
-                            if (ld->env() != st->env())
-                                needsLdVarForUpdate.insert(vec);
-                            break;
-                        }
-                        if (StVarSuper::Cast(su)) {
-                            break;
-                        }
-                    }
-                    if (auto mk = MkEnv::Cast(ld->env()))
-                        if (mk->stub &&
-                            mk->arg(mk->indexOf(ld->varName)).val() !=
-                                UnboundValue::instance())
-                            break;
-
-                    needsLdVarForUpdate.insert(vec);
-                }
-            }
+            apply(i, i->arg(1).val()->followCastsAndForce());
             break;
         default: {}
         }
+    });
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (auto l = LdVar::Cast(i))
+            if (l->forUpdate)
+                needsLdVarForUpdate.insert(l);
     });
 }
 
@@ -91,6 +118,7 @@ static void lower(Code* code) {
         DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
 
     Visitor::runPostChange(code->entry, [&](BB* bb) {
+
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
@@ -112,7 +140,6 @@ static void lower(Code* code) {
                         representAsReal.isDead(*it);
                     if (indistinguishable) {
                         b->type = b->type & PirType::simpleScalarReal();
-                        break;
                     }
                 }
             } else if (auto ldfun = LdFun::Cast(*it)) {
@@ -173,6 +200,7 @@ static void lower(Code* code) {
                 }
                 bb->replace(it, newDeopt);
                 next = it + 1;
+
             } else if (auto expect = Assume::Cast(*it)) {
                 if (expect->arg(0).val() == True::instance()) {
                     next = bb->remove(it);
@@ -210,6 +238,7 @@ static void lower(Code* code) {
         }
     });
 
+    std::vector<BB*> dead;
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
@@ -217,12 +246,19 @@ static void lower(Code* code) {
             if (FrameState::Cast(*it)) {
                 next = bb->remove(it);
             } else if (Checkpoint::Cast(*it)) {
+                auto d = bb->deoptBranch();
                 next = bb->remove(it);
                 bb->convertBranchToJmp(true);
+                if (d->predecessors().size() == 0) {
+                    assert(d->successors().size() == 0);
+                    dead.push_back(d);
+                }
             }
             it = next;
         }
     });
+    for (auto bb : dead)
+        delete bb;
 
     BBTransform::mergeRedundantBBs(code);
 

@@ -19,10 +19,15 @@
 #include "utils/Pool.h"
 
 #include "llvm/IR/Intrinsics.h"
+#include <llvm/IR/Constants.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/GlobalObject.h>
+#include <llvm/IR/GlobalValue.h>
+#include <llvm/IR/GlobalVariable.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -38,22 +43,24 @@ using namespace llvm;
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
 
-static_assert(sizeof(unsigned long) == sizeof(uint64_t), "sizeof(unsigned long) and sizeof(uint64_t) should match"); 
+static_assert(sizeof(unsigned long) == sizeof(uint64_t),
+              "sizeof(unsigned long) and sizeof(uint64_t) should match");
 
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
 }
-llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()() {
+llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     assert(!created);
     created = true;
-    assert(inputs.size() > 0);
-    if (inputs.size() == 1)
-        return inputs[0].first;
-    assert(builder.GetInsertBlock()->hasNPredecessors(inputs.size()));
-    auto phi = builder.CreatePHI(type, inputs.size());
-    for (auto& in : inputs)
-        phi->addIncoming(in.first, in.second);
-    return phi;
+    if (numInputs == 0) {
+        numInputs = inputs.size();
+        if (numInputs == 1)
+            return inputs[0].first;
+        assert(builder.GetInsertBlock()->hasNPredecessors(numInputs));
+    }
+    assert(numInputs > 0);
+    phi_ = builder.CreatePHI(type, inputs.size());
+    return phi_;
 }
 
 class NativeAllocator : public SSAAllocator {
@@ -87,8 +94,36 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                     llvm::GlobalValue::PrivateLinkage, init);
 }
 
+llvm::FunctionCallee
+LowerFunctionLLVM::getBuiltin(const rir::pir::NativeBuiltin& b) {
+    return getModule().getOrInsertFunction(b.name, b.llvmSignature);
+}
+
+llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
+                                                 llvm::Type* ty,
+                                                 bool constant) {
+    assert(what);
+    char name[17];
+    sprintf(name, "ept_%lx", (uintptr_t)what);
+    return getModule().getOrInsertGlobal(name, ty, [&]() {
+        return new llvm::GlobalVariable(
+            getModule(), ty, constant,
+            llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
+            nullptr, name, nullptr,
+            llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+    });
+}
+
+llvm::FunctionCallee
+LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
+    assert(what);
+    char name[17];
+    sprintf(name, "efn_%lx", (uintptr_t)what);
+    return getModule().getOrInsertFunction(name, ty);
+}
+
 void LowerFunctionLLVM::setVisible(int i) {
-    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::IntPtr));
+    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
 }
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
@@ -149,16 +184,13 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     if (p)
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-         {convertToPointer((void*)msg)});
-    builder.CreateRet(builder.CreateIntToPtr(c(nullptr), t::SEXP));
+         {convertToPointer((void*)msg, t::i8, true)});
 
+    builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
-    static std::unordered_set<SEXP> eternal = {
-        R_TrueValue,  R_NilValue,  R_FalseValue,     R_UnboundValue,
-        R_MissingArg, R_GlobalEnv, R_LogicalNAValue, R_EmptyEnv};
     if (needed == t::Int) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
@@ -209,8 +241,18 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
             co = R_TrueValue;
         }
     }
+
+    static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
+                                               R_BaseNamespace};
     if (TYPEOF(co) == SYMSXP || eternal.count(co))
         return convertToPointer(co);
+
+    static std::unordered_set<SEXP> eternalConst = {
+        R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
+        R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
+    if (TYPEOF(co) == BUILTINSXP || TYPEOF(co) == SPECIALSXP ||
+        eternalConst.count(co))
+        return convertToPointer(co, true);
 
     auto i = Pool::insert(co);
     llvm::Value* pos = builder.CreateLoad(constantpool);
@@ -234,7 +276,8 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto stackptr = nodestackPtr();
     // set type tag to 0
     builder.CreateMemSet(builder.CreateGEP(stackptr, c(-args.size())), c(0, 8),
-                         args.size() * sizeof(R_bcstack_t), MaybeAlign(1));
+                         args.size() * sizeof(R_bcstack_t),
+                         MaybeAlign(alignof(R_bcstack_t)));
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
@@ -246,7 +289,6 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
 }
 
 void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
-    assert(i < numLocals);
     assert(v->getType() == t::SEXP);
     auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
     builder.CreateStore(v, pos, true);
@@ -258,7 +300,8 @@ void LowerFunctionLLVM::incStack(int i, bool zero) {
     auto cur = nodestackPtr();
     auto offset = sizeof(R_bcstack_t) * i;
     if (zero)
-        builder.CreateMemSet(cur, c(0, 8), offset, MaybeAlign(1));
+        builder.CreateMemSet(cur, c(0, 8), offset,
+                             MaybeAlign(alignof(R_bcstack_t)));
     auto up = builder.CreateGEP(cur, c(i));
     builder.CreateStore(up, nodestackPtrAddr);
 }
@@ -275,7 +318,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                                              const std::vector<Value*>& args,
                                              int srcIdx, CCODE builtinFun,
                                              llvm::Value* env) {
-    if (supportsFastBuiltinCall(builtin)) {
+    if (supportsFastBuiltinCall(builtin, args.size())) {
         return withCallFrame(args, [&]() -> llvm::Value* {
             return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
@@ -288,12 +331,17 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         });
     }
 
-    auto fPtr = convertToPointer((void*)builtinFun, t::builtinFunctionPtr);
-    auto f = FunctionCallee(t::builtinFunction, fPtr);
+    auto f = convertToFunction((void*)builtinFun, t::builtinFunction);
+
+    std::stack<llvm::Value*> loadedArgs;
+    auto n = numTemps;
+    for (auto v : args)
+        loadedArgs.push(loadSxp(v));
 
     auto arglist = constant(R_NilValue, t::SEXP);
     for (auto v = args.rbegin(); v != args.rend(); v++) {
-        auto a = loadSxp(*v);
+        auto a = loadedArgs.top();
+        loadedArgs.pop();
 #ifdef ENABLE_SLOWASSERT
         insn_assert(builder.CreateICmpNE(sexptype(a), c(PROMSXP)),
                     "passing promise to builtin");
@@ -301,6 +349,9 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         arglist =
             call(NativeBuiltins::get(NativeBuiltins::Id::consNr), {a, arglist});
     }
+    // Once we protect the list, the individual elements do not need protection
+    // anymory, thus we can reset the numTemps.
+    numTemps = n;
     if (args.size() > 0)
         protectTemp(arglist);
 
@@ -377,7 +428,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
     } else if (val == OpaqueTrue::instance()) {
         static int one = 1;
         // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToPointer(&one, t::IntPtr));
+        res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
     } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
     } else {
@@ -523,9 +574,9 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     auto storeType = data.result->getType()->getPointerElementType();
     if (storeType != t::SEXP) {
         if (i->type.isA(PirType::test())) {
-            boxedRet = boxTst(ret, false);
+            boxedRet = boxTst(ret);
         } else if (i->type.isA(RType::logical)) {
-            boxedRet = boxLgl(ret, false);
+            boxedRet = boxLgl(ret);
         } else if (i->type.isA(RType::integer)) {
             boxedRet = boxInt(ret, false);
         } else if (i->type.isA(RType::real)) {
@@ -612,7 +663,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
                              didLongjmp);
     }
 
-    // Handle Incomming longjumps
+    // Handle incoming longjumps
     {
         builder.SetInsertPoint(didLongjmp);
         llvm::Value* returned = builder.CreateLoad(
@@ -630,14 +681,23 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
         // preserved them before the setjmp and then continue
         // execution
         builder.SetInsertPoint(longjmpRestart);
-        for (auto& v : savedLocals)
-            updateVariable(v.first, v.second.get(builder));
+        for (auto& v : savedLocals) {
+            auto loc = v.first;
+            auto val = v.second.get(builder);
+            if (LLVMDebugInfo() && diVariables_.count(loc)) {
+                DIB->insertDbgValueIntrinsic(val, diVariables_[loc],
+                                             DIB->createExpression(),
+                                             builder.getCurrentDebugLocation(),
+                                             builder.GetInsertBlock());
+            }
+            updateVariable(loc, val);
+        }
 
         // Also clear all binding caches
         for (const auto& be : bindingsCache)
             for (const auto& b : be.second)
                 builder.CreateStore(
-                    convertToPointer(nullptr, t::SEXP),
+                    llvm::ConstantPointerNull::get(t::SEXP),
                     builder.CreateGEP(bindingsCacheBase, c(b.second)));
         builder.CreateBr(cont);
 
@@ -837,12 +897,18 @@ void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
     if (!val->hasName())
         val->setName(i->getRef());
 
+    if (LLVMDebugInfo() && diVariables_.count(i)) {
+        DIB->insertDbgValueIntrinsic(
+            val, diVariables_[i], DIB->createExpression(),
+            builder.getCurrentDebugLocation(), builder.GetInsertBlock());
+    }
     setVariable(i, val, inPushContext && escapesInlineContext.count(i));
 }
 
 llvm::Value* LowerFunctionLLVM::isExternalsxp(llvm::Value* v, uint32_t magic) {
     assert(v->getType() == t::SEXP);
     auto isExternalsxp = builder.CreateICmpEQ(c(EXTERNALSXP), sexptype(v));
+
     auto es = builder.CreateBitCast(dataPtr(v, false),
                                     PointerType::get(t::RirRuntimeObject, 0));
     auto magicVal = builder.CreateLoad(builder.CreateGEP(es, {c(0), c(2)}));
@@ -872,8 +938,11 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
     checking = true;
     static std::vector<std::string> strings;
     strings.push_back(std::string("expected sexp got null ") + msg);
-    insn_assert(builder.CreateICmpNE(convertToPointer(nullptr, t::SEXP), v),
-                strings.back().c_str());
+
+    insn_assert(
+        builder.CreateICmpNE(llvm::ConstantPointerNull::get(t::SEXP), v),
+        strings.back().c_str());
+
     auto type = sexptype(v);
     auto validType =
         builder.CreateOr(builder.CreateICmpULE(type, c(EXTERNALSXP)),
@@ -887,9 +956,9 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
 llvm::Value* LowerFunctionLLVM::sxpinfoPtr(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     checkIsSexp(v, "in sxpinfoPtr");
-    auto sxpinfoPtr = builder.CreateGEP(t::SEXPREC, v, {c(0), c(0)});
+    auto sxpinfoPtr = builder.CreateGEP(t::SEXPREC, v, {c(0), c(0), c(0)});
     sxpinfoPtr->setName("sxpinfo");
-    return builder.CreateBitCast(sxpinfoPtr, t::i64ptr);
+    return sxpinfoPtr;
 }
 
 void LowerFunctionLLVM::setSexptype(llvm::Value* v, int t) {
@@ -1258,18 +1327,27 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
     builder.SetInsertPoint(notNa);
 }
 
-llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld) {
-    auto gt = builder.CreateFCmpOGT(ld, c((double)INT_MIN - 1));
-    auto lt = builder.CreateFCmpOLT(ld, c((double)INT_MAX + 1));
+llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld,
+                                                 const PirType& type) {
+    if (type.isA(RType::integer))
+        return builder.getTrue();
+
+    assert(INT_MIN == NA_INTEGER); // used for lower limit
+    auto lower = c((double)INT_MIN);
+    auto upper = c((double)INT_MAX + 1);
+    auto gt = type.maybeNAOrNaN() ? builder.CreateFCmpUGT(ld, lower)
+                                  : builder.CreateFCmpOGT(ld, lower);
+    auto lt = type.maybeNAOrNaN() ? builder.CreateFCmpULT(ld, upper)
+                                  : builder.CreateFCmpOLT(ld, upper);
     auto inrange = builder.CreateAnd(lt, gt);
     auto conv = createSelect2(inrange,
                               [&]() {
                                   // converting to signed int is not undefined
                                   // here since we first check that it does not
                                   // overflow
-                                  auto conv = builder.CreateFPToSI(ld, t::i64);
+                                  auto conv = builder.CreateFPToSI(ld, t::Int);
                                   conv = builder.CreateSIToFP(conv, t::Double);
-                                  return builder.CreateFCmpUEQ(ld, conv);
+                                  return builder.CreateFCmpOEQ(ld, conv);
                               },
                               [&]() { return builder.getFalse(); });
     return conv;
@@ -1315,13 +1393,6 @@ llvm::Value* LowerFunctionLLVM::container(llvm::Value* v) {
 
 llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
                                         const std::vector<llvm::Value*>& args) {
-#ifdef ENABLE_SLOWASSERT
-    // abuse BB label as comment
-    auto callBB =
-        BasicBlock::Create(PirJitLLVM::getContext(), builtin.name, fun);
-    builder.CreateBr(callBB);
-    builder.SetInsertPoint(callBB);
-#endif
     return builder.CreateCall(getBuiltin(builtin), args);
 }
 
@@ -1330,15 +1401,14 @@ llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     if (t.isA(PirType(RType::integer).notObject()))
         res = boxInt(v, protect);
     if (t.isA(PirType(RType::logical).notObject()))
-        res = boxLgl(v, protect);
+        res = boxLgl(v);
     if (t.isA(PirType(RType::real).notObject()))
         res = boxReal(v, protect);
     assert(res);
-    if (protect)
-        protectTemp(res);
     return res;
 }
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
+    llvm::Value* res = nullptr;
     if (v->getType() == t::Int) {
         // std::ostringstream dbg;
         // (*currentInstr)->printRecursive(dbg, 2);
@@ -1346,18 +1416,30 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
         // l->append(dbg.str());
         // return call(NativeBuiltins::get(NativeBuiltins::Id::newIntDebug),
         //             {v, c((unsigned long)l->data())});
-        return call(NativeBuiltins::get(NativeBuiltins::Id::newInt), {v});
+        res = call(NativeBuiltins::get(NativeBuiltins::Id::newInt), {v});
+    } else {
+        assert(v->getType() == t::Double);
+        res =
+            call(NativeBuiltins::get(NativeBuiltins::Id::newIntFromReal), {v});
     }
-    assert(v->getType() == t::Double);
-    return call(NativeBuiltins::get(NativeBuiltins::Id::newIntFromReal), {v});
+    if (protect)
+        protectTemp(res);
+    return res;
 }
-llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool potect) {
-    if (v->getType() == t::Double)
-        return call(NativeBuiltins::get(NativeBuiltins::Id::newReal), {v});
-    assert(v->getType() == t::Int);
-    return call(NativeBuiltins::get(NativeBuiltins::Id::newRealFromInt), {v});
+llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
+    llvm::Value* res = nullptr;
+    if (v->getType() == t::Double) {
+        res = call(NativeBuiltins::get(NativeBuiltins::Id::newReal), {v});
+    } else {
+        assert(v->getType() == t::Int);
+        res =
+            call(NativeBuiltins::get(NativeBuiltins::Id::newRealFromInt), {v});
+    }
+    if (protect)
+        protectTemp(res);
+    return res;
 }
-llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     if (v->getType() == t::Int) {
         insn_assert(
             builder.CreateOr(
@@ -1378,7 +1460,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v, bool protect) {
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
 }
-llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
+llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v) {
     assert(v->getType() == t::Int);
     return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
                                 constant(R_TrueValue, t::SEXP),
@@ -1386,8 +1468,10 @@ llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v, bool protect) {
 }
 
 void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
-    assert(numTemps < MAX_TEMPS);
-    setLocal(numLocals - 1 - numTemps++, val);
+    setLocal(numLocals + numTemps, val);
+    numTemps++;
+    if (numTemps > maxTemps)
+        maxTemps = numTemps;
 }
 
 llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
@@ -1494,7 +1578,7 @@ void LowerFunctionLLVM::compileRelop(
 
     builder.SetInsertPoint(done);
     if (rep == Representation::Sexp) {
-        setVal(i, boxLgl(res(), false));
+        setVal(i, boxLgl(res()));
     } else {
         setVal(i, res());
     }
@@ -1802,6 +1886,7 @@ void LowerFunctionLLVM::envStubSet(llvm::Value* x, int i, llvm::Value* y,
 #ifdef ENABLE_SLOWASSERT
             insn_assert(isExternalsxp(x, LAZY_ENVIRONMENT_MAGIC),
                         "envStubGet on something which is not an env stub");
+
 #endif
             auto le = builder.CreateBitCast(
                 dataPtr(x, false), PointerType::get(t::LazyEnvironment, 0));
@@ -1932,6 +2017,8 @@ void LowerFunctionLLVM::compile() {
         }
     }
 
+    std::vector<BasicBlock*> exitBlocks;
+
     std::unordered_map<BB*, BasicBlock*> blockMapping_;
     auto getBlock = [&](BB* bb) {
         auto b = blockMapping_.find(bb);
@@ -1945,8 +2032,27 @@ void LowerFunctionLLVM::compile() {
     };
     entryBlock = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     builder.SetInsertPoint(entryBlock);
-    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop,
-                                        PointerType::get(t::stackCellPtr, 0));
+
+    if (LLVMDebugInfo()) {
+        DI->emitLocation(builder, 0);
+        std::array<llvm::DIType*, 4> argDITypes = {
+            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
+        auto arg = fun->arg_begin();
+        for (size_t i = 0; i < argNames.size(); ++i) {
+            auto store =
+                builder.CreateAlloca(arg->getType(), nullptr, argNames[i]);
+            builder.CreateStore(arg, store);
+            DILocalVariable* D =
+                DIB->createParameterVariable(DI->getScope(), argNames[i], i + 1,
+                                             DI->File, 1, argDITypes[i], true);
+            DIB->insertDeclare(store, D, DIB->createExpression(),
+                               builder.getCurrentDebugLocation(),
+                               builder.GetInsertBlock());
+            arg++;
+        }
+    }
+
+    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
     basepointer = nodestackPtr();
 
     numLocals++;
@@ -2071,30 +2177,63 @@ void LowerFunctionLLVM::compile() {
         });
     }
 
-    numLocals += MAX_TEMPS;
-    if (numLocals > 1)
-        incStack(numLocals - 1, true);
-
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
-#ifdef PIR_GDB_SUPPORT
-    // For variable info, broken...
-    // size_t ArgIdx = 0;
-#endif
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         currentBB = bb;
 
         builder.SetInsertPoint(getBlock(bb));
         inPushContext = blockInPushContext.at(bb);
 
-#ifdef PIR_GDB_SUPPORT
-        DI->emitLocation(builder, DI->getBBLoc(bb));
-#endif
+        if (LLVMDebugInfo()) {
+            DI->emitLocation(builder, DI->getBBLoc(bb));
+        }
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             currentInstr = it;
             auto i = *it;
+
+            if (LLVMDebugInfo()) {
+                DI->emitLocation(builder, DI->getInstLoc(i));
+
+                if (variables_.count(i)) {
+                    auto makeName = [](Instruction* i) {
+                        std::stringstream n;
+                        auto id = i->id();
+                        char sep = '_';
+                        n << "pir" << sep << id.bb() << sep << id.idx();
+                        return n.str();
+                    };
+                    auto& v = variables_[i];
+                    auto store = v.slot;
+                    auto rep = Representation::Of(i);
+                    auto ditype = (rep == Representation::Sexp
+                                       ? DI->SEXPType
+                                       : (rep == Representation::Integer
+                                              ? DI->IntType
+                                              : (rep == Representation::Real
+                                                     ? DI->DoubleType
+                                                     : DI->UnspecifiedType)));
+                    assert(diVariables_.count(i) == 0);
+                    diVariables_[i] = DIB->createAutoVariable(
+                        DI->getScope(), makeName(i), DI->File,
+                        builder.getCurrentDebugLocation().getLine(), ditype,
+                        true);
+                    if (store) {
+                        if (rep == Representation::Sexp)
+                            DIB->insertDeclare(
+                                store, diVariables_[i], DIB->createExpression(),
+                                builder.getCurrentDebugLocation(),
+                                builder.GetInsertBlock());
+                        else
+                            DIB->insertDbgValueIntrinsic(
+                                store, diVariables_[i], DIB->createExpression(),
+                                builder.getCurrentDebugLocation(),
+                                builder.GetInsertBlock());
+                    }
+                }
+            }
 
             auto adjustRefcount = refcount.beforeUse.find(i);
             if (adjustRefcount != refcount.beforeUse.end()) {
@@ -2115,11 +2254,6 @@ void LowerFunctionLLVM::compile() {
                 });
             }
 
-#ifdef PIR_GDB_SUPPORT
-            auto line = DI->getInstLoc(i);
-            DI->emitLocation(builder, line);
-#endif
-
             switch (i->tag) {
             case Tag::ExpandDots: {
                 auto in = i->arg(0).val();
@@ -2131,8 +2265,12 @@ void LowerFunctionLLVM::compile() {
             case Tag::DotsList: {
                 auto mk = DotsList::Cast(i);
                 auto arglist = constant(R_NilValue, t::SEXP);
+                std::stack<llvm::Value*> argsLoaded;
+                mk->eachElement(
+                    [&](SEXP name, Value* v) { argsLoaded.push(loadSxp(v)); });
                 mk->eachElementRev([&](SEXP name, Value* v) {
-                    auto val = loadSxp(v);
+                    auto val = argsLoaded.top();
+                    argsLoaded.pop();
                     incrementNamed(val);
                     arglist =
                         call(NativeBuiltins::get(NativeBuiltins::Id::consNr),
@@ -2146,10 +2284,17 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::RecordDeoptReason: {
                 auto rec = RecordDeoptReason::Cast(i);
+                auto srcAddr = (Constant*)builder.CreateIntToPtr(
+                    llvm::ConstantInt::get(
+                        PirJitLLVM::getContext(),
+                        llvm::APInt(
+                            64, reinterpret_cast<uint64_t>(rec->reason.srcCode),
+                            false)),
+                    t::voidPtr);
                 auto reason = llvm::ConstantStruct::get(
                     t::DeoptReason, {
                                         c(rec->reason.reason, 32),
-                                        convertToPointer(rec->reason.srcCode),
+                                        srcAddr,
                                         c(rec->reason.originOffset),
                                     });
                 call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
@@ -2181,9 +2326,6 @@ void LowerFunctionLLVM::compile() {
                     setVal(i, load(in, Representation::Of(i)));
                 break;
             }
-
-            case Tag::Phi:
-                break;
 
             case Tag::LdArg:
                 setVal(i, argument(LdArg::Cast(i)->id));
@@ -2222,8 +2364,21 @@ void LowerFunctionLLVM::compile() {
                        ai->getType() != t::Double);
 
                 auto res = builder.CreateICmpEQ(ai, bi);
-                if (a->type.maybe(PirType::closure()) ||
-                    b->type.maybe(PirType::closure())) {
+
+                if (Representation::Of(b) == t::SEXP) {
+                    if (a->type.maybeLazy()) {
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpNE(
+                                     ai, constant(R_UnboundValue, t::SEXP)));
+                    } else if (b->type.maybeLazy()) {
+                        res = builder.CreateAnd(
+                            res, builder.CreateICmpNE(
+                                     bi, constant(R_UnboundValue, t::SEXP)));
+                    }
+                }
+
+                if (a->type.maybe(RType::closure) ||
+                    b->type.maybe(RType::closure)) {
                     res = createSelect2(
                         res, [&]() { return builder.getTrue(); },
                         [&]() {
@@ -2434,6 +2589,22 @@ void LowerFunctionLLVM::compile() {
                     };
 
                     switch (b->builtinId) {
+                    case blt("dim"): {
+                        if (!i->arg(0).val()->type.maybeObj()) {
+                            if (irep == t::SEXP) {
+                                setVal(
+                                    i,
+                                    call(NativeBuiltins::get(
+                                             NativeBuiltins::Id::getAttrb),
+                                         {a, constant(R_DimSymbol, t::SEXP)}));
+                            } else {
+                                setVal(i, constant(R_NilValue, orep));
+                            }
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    }
                     case blt("length"):
                         if (irep == t::SEXP &&
                             !b->callArg(0).val()->type.isA(
@@ -2517,15 +2688,13 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("abs"): {
-                        if (irep == Representation::Integer) {
-                            assert(orep == irep);
+                        if (irep == orep && irep == Representation::Integer) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateICmpSGE(a, c(0)), a,
                                           builder.CreateNeg(a)));
 
-                        } else if (irep == Representation::Real) {
-                            assert(orep == irep);
-
+                        } else if (irep == orep &&
+                                   irep == Representation::Real) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
@@ -2545,6 +2714,44 @@ void LowerFunctionLLVM::compile() {
                                    irep == Representation::Real) {
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
+                        } else if (irep == t::SEXP &&
+                                   i->arg(0).val()->type.isA(
+                                       PirType(RType::real))) {
+                            auto l = vectorLength(a);
+                            auto res = call(NativeBuiltins::get(
+                                                NativeBuiltins::Id::makeVector),
+                                            {c(REALSXP), l});
+
+                            auto idx = phiBuilder(t::i64);
+                            idx.addInput(c(0, 64));
+
+                            auto loopH = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "sqrt-loop-hd", fun);
+                            auto loopB = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            auto loopE = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+
+                            builder.CreateBr(loopH);
+                            builder.SetInsertPoint(loopH);
+
+                            auto idxPhi = idx(2);
+                            builder.CreateCondBr(
+                                builder.CreateICmpEQ(idxPhi, l), loopE, loopB);
+                            builder.SetInsertPoint(loopB);
+
+                            assignVector(
+                                res, idxPhi,
+                                builder.CreateIntrinsic(
+                                    Intrinsic::sqrt, {t::Double},
+                                    {accessVector(a, idxPhi,
+                                                  i->arg(0).val()->type)}),
+                                i->type);
+                            idx.addInput(builder.CreateAdd(idxPhi, c(1, 64)));
+                            builder.CreateBr(loopH);
+
+                            builder.SetInsertPoint(loopE);
+                            setVal(i, res);
                         } else {
                             done = false;
                         }
@@ -2644,6 +2851,39 @@ void LowerFunctionLLVM::compile() {
 
                         } else {
                             done = false;
+                        }
+                        break;
+                    case blt("as.character"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i, createSelect2(
+                                          builder.CreateAnd(
+                                              builder.CreateICmpEQ(
+                                                  attr(a), constant(R_NilValue,
+                                                                    t::SEXP)),
+                                              builder.CreateICmpEQ(sexptype(a),
+                                                                   c(STRSXP))),
+                                          [&]() { return a; },
+                                          [&]() { return callTheBuiltin(); }));
+                        } else {
+                            done = false;
+                        }
+                        break;
+                    case blt("as.vector"):
+                        if (irep == Representation::Sexp) {
+                            setVal(i,
+                                   createSelect2(
+                                       builder.CreateAnd(
+                                           builder.CreateNot(isObj(a)),
+                                           isVector(a)),
+                                       [&]() {
+                                           return builder.CreateSelect(
+                                               builder.CreateICmpEQ(
+                                                   vectorLength(a), c(0, 64)),
+                                               constant(R_NilValue, orep), a);
+                                       },
+                                       [&]() { return callTheBuiltin(); }));
+                        } else {
+                            setVal(i, convert(a, i->type));
                         }
                         break;
                     case blt("is.logical"):
@@ -2872,7 +3112,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     }
-                    case blt("is.vector"):
+                    case blt("is.vector"): {
                         auto cnst = LdConst::Cast(b->arg(1).val());
                         if (!cnst)
                             break;
@@ -2935,6 +3175,9 @@ void LowerFunctionLLVM::compile() {
                             setVal(i, constant(R_TrueValue, orep));
                         }
                         fastcase = true;
+                        break;
+                    }
+                    default:
                         break;
                     }
                     if (fastcase) {
@@ -3129,26 +3372,10 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
-                        // TODO: callId is not used here.. should it be?
-                        auto trg = getFunction(target);
-                        if (trg &&
-                            target->properties.includes(
-                                ClosureVersion::Property::NoReflection)) {
-                            auto code = builder.CreateIntToPtr(
-                                c(nativeTarget->body()), t::voidPtr);
-                            llvm::Value* arglist = nodestackPtr();
-                            auto rr = withCallFrame(args, [&]() {
-                                return builder.CreateCall(
-                                    trg, {code, arglist, loadSxp(i->env()),
-                                          constant(callee, t::SEXP)});
-                            });
-                            setVal(i, rr);
-                            break;
-                        }
-
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
+                        NativeBuiltins::targetCaches.push_back(idx);
                         Pool::patch(idx, nativeTarget->container());
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
@@ -3199,6 +3426,7 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::Phi:
             case Tag::LdConst:
             case Tag::Nop:
                 break;
@@ -3261,7 +3489,7 @@ void LowerFunctionLLVM::compile() {
                 withCallFrame(args, [&]() {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                {paramCode(), paramClosure(),
-                                convertToPointer(m), paramArgs()});
+                                convertToPointer(m, t::i8, true), paramArgs()});
                     return res;
                 });
                 builder.CreateUnreachable();
@@ -3289,6 +3517,7 @@ void LowerFunctionLLVM::compile() {
                              {parent, c((int)mkenv->nLocals()),
                               builder.CreateBitCast(namesStore, t::IntPtr),
                               c(mkenv->context)});
+                    protectTemp(env);
                     size_t pos = 0;
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
                         auto vn = loadSxp(v);
@@ -3302,19 +3531,26 @@ void LowerFunctionLLVM::compile() {
                     break;
                 }
 
+                // Need to load these first, to avoid protect issues
+                std::stack<llvm::Value*> args;
+                mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
+                    args.push(loadSxp(v));
+                });
+
                 auto arglist = constant(R_NilValue, t::SEXP);
                 mkenv->eachLocalVarRev([&](SEXP name, Value* v, bool miss) {
                     if (miss) {
                         arglist = call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::createMissingBindingCell),
-                            {loadSxp(v), constant(name, t::SEXP), arglist});
+                            {args.top(), constant(name, t::SEXP), arglist});
                     } else {
                         arglist = call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::createBindingCell),
-                            {loadSxp(v), constant(name, t::SEXP), arglist});
+                            {args.top(), constant(name, t::SEXP), arglist});
                     }
+                    args.pop();
                 });
 
                 setVal(i, call(NativeBuiltins::get(
@@ -3324,7 +3560,7 @@ void LowerFunctionLLVM::compile() {
                 if (bindingsCache.count(i))
                     for (auto b : bindingsCache.at(i))
                         builder.CreateStore(
-                            convertToPointer(nullptr, t::SEXP),
+                            llvm::ConstantPointerNull::get(t::SEXP),
                             builder.CreateGEP(bindingsCacheBase, c(b.second)));
                 break;
             }
@@ -3337,31 +3573,12 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Add: {
-
-#ifdef PIR_GDB_SUPPORT
-                // TODO: this is broken...
-                // auto decl = [&](llvm::Value* v) {
-                //     DILocalVariable* D = DIB->createParameterVariable(
-                //         DI->getScope(), "i", ++ArgIdx, DI->File, line,
-                //         DI->getInstrType(DIB, i->type), true);
-
-                //     DIB->insertDeclare(
-                //         v, D, DIB->createExpression(),
-                //         DILocation::get(DI->getScope()->getContext(), line,
-                //         0,
-                //                         DI->getScope()),
-                //         builder.GetInsertBlock());
-                // };
-#endif
+            case Tag::Add:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
                                  // TODO: Check NA
                                  auto res =
                                      builder.CreateAdd(a, b, "", false, true);
-#ifdef PIR_GDB_SUPPORT
-                    //  decl(res);
-#endif
                                  return res;
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3369,7 +3586,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::ADD);
                 break;
-            }
+
             case Tag::Sub:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3382,6 +3599,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::SUB);
                 break;
+
             case Tag::Mul:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3394,6 +3612,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::MUL);
                 break;
+
             case Tag::Div:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3405,6 +3624,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::DIV);
                 break;
+
             case Tag::Pow:
                 compileBinop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3414,9 +3634,8 @@ void LowerFunctionLLVM::compile() {
                                      {a->getType(), b->getType()}, {a, b});
                              },
                              [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::pow,
-                                     {a->getType(), b->getType()}, {a, b});
+                                 return builder.CreateBinaryIntrinsic(
+                                     Intrinsic::pow, a, b);
                              },
                              BinopKind::POW);
                 break;
@@ -3478,8 +3697,13 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = phiBuilder(t::Int);
 
-                res.addInput(builder.CreateZExt(
-                    builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
+                if (argumentRep == Representation::Real) {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateFCmpUEQ(argumentNative, c(0.0)), t::Int));
+                } else {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
+                }
                 builder.CreateBr(done);
 
                 builder.SetInsertPoint(isNa);
@@ -3489,7 +3713,7 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(done);
 
                 if (resultRep == Representation::Sexp) {
-                    setVal(i, boxLgl(res(), true));
+                    setVal(i, boxLgl(res()));
                 } else {
                     setVal(i, res());
                 }
@@ -3517,6 +3741,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LTE);
                 break;
+
             case Tag::Lt:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3527,6 +3752,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LT);
                 break;
+
             case Tag::Gte:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3537,6 +3763,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::GTE);
                 break;
+
             case Tag::Gt:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3547,6 +3774,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::GT);
                 break;
+
             case Tag::LAnd:
                 compileRelop(i,
                              [&](llvm::Value* a, llvm::Value* b) {
@@ -3583,6 +3811,7 @@ void LowerFunctionLLVM::compile() {
                              },
                              BinopKind::LAND, false);
                 break;
+
             case Tag::LOr:
                 compileRelop(
                     i,
@@ -3626,6 +3855,7 @@ void LowerFunctionLLVM::compile() {
                     },
                     BinopKind::LOR, false);
                 break;
+
             case Tag::IDiv:
                 compileBinop(
                     i,
@@ -3691,6 +3921,7 @@ void LowerFunctionLLVM::compile() {
                     },
                     BinopKind::IDIV);
                 break;
+
             case Tag::Mod: {
                 auto myfmod = [&](llvm::Value* a, llvm::Value* b) {
                     // from myfmod
@@ -3783,6 +4014,7 @@ void LowerFunctionLLVM::compile() {
                     myfmod, BinopKind::MOD);
                 break;
             }
+
             case Tag::Colon: {
                 assert(Representation::Of(i) == t::SEXP);
                 auto a = i->arg(0).val();
@@ -3809,8 +4041,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Return: {
                 auto res = loadSxp(Return::Cast(i)->arg<0>().val());
-                if (numLocals > 0)
-                    decStack(numLocals);
+                exitBlocks.push_back(builder.GetInsertBlock());
                 builder.CreateRet(res);
                 break;
             }
@@ -3844,8 +4075,8 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(isStub);
                 auto materialized = envStubGet(arg, -2, env->nLocals());
                 builder.CreateCondBr(
-                    builder.CreateICmpEQ(materialized,
-                                         convertToPointer(nullptr, t::SEXP)),
+                    builder.CreateICmpEQ(
+                        materialized, llvm::ConstantPointerNull::get(t::SEXP)),
                     isNotMaterialized, isNotStub, branchAlwaysTrue);
 
                 builder.SetInsertPoint(isNotMaterialized);
@@ -3960,7 +4191,8 @@ void LowerFunctionLLVM::compile() {
                         arg->type.maybe(RType::real) &&
                         !t->typeTest.maybe(RType::real)) {
                         setVal(i, builder.CreateZExt(
-                                      checkDoubleToInt(load(arg)), t::Int));
+                                      checkDoubleToInt(load(arg), arg->type),
+                                      t::Int));
                     } else {
                         setVal(i, c(1));
                     }
@@ -4303,12 +4535,12 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(miss);
-                    auto res0 = call(
+                    llvm::Value* res0 = call(
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarCacheMiss),
                         {constant(varName, t::SEXP), loadSxp(i->env()),
                          cachePtr});
                     if (needsLdVarForUpdate.count(i))
-                        ensureShared(res0);
+                        res0 = cloneIfShared(res0);
                     phi.addInput(res0);
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
@@ -4318,13 +4550,38 @@ void LowerFunctionLLVM::compile() {
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarGlobal),
                         {constant(varName, t::SEXP)});
                 } else {
-                    auto setter =
-                        needsLdVarForUpdate.count(i)
-                            ? NativeBuiltins::get(
-                                  NativeBuiltins::Id::ldvarForUpdate)
-                            : NativeBuiltins::get(NativeBuiltins::Id::ldvar);
-                    res = call(setter,
-                               {constant(varName, t::SEXP), loadSxp(i->env())});
+                    if (needsLdVarForUpdate.count(i)) {
+                        res = call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::ldvarForUpdate),
+                            {constant(varName, t::SEXP), loadSxp(i->env())});
+                    } else {
+                        res = nullptr;
+                        if (auto e = Env::Cast(i->env())) {
+                            if (e->rho == R_BaseNamespace ||
+                                e->rho == R_BaseEnv) {
+                                auto sym = constant(varName, t::SEXP);
+                                res = cdr(sym);
+                                res = createSelect2(
+                                    builder.CreateICmpNE(
+                                        res, constant(R_UnboundValue, t::SEXP)),
+                                    [&]() { return res; },
+                                    [&]() {
+                                        return call(
+                                            NativeBuiltins::get(
+                                                NativeBuiltins::Id::
+                                                    ldvarGlobal),
+                                            {constant(varName, t::SEXP)});
+                                    });
+                            }
+                        }
+                        if (!res) {
+                            res = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::ldvar),
+                                {constant(varName, t::SEXP),
+                                 loadSxp(i->env())});
+                        }
+                    }
                 }
                 res->setName(CHAR(PRINTNAME(varName)));
 
@@ -4504,14 +4761,16 @@ void LowerFunctionLLVM::compile() {
                 if (fastcase) {
                     auto fallback =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                    auto hit2 =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
                     done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(extract->vec());
 
                     if (Representation::Of(extract->vec()) == t::SEXP) {
+                        auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
@@ -4795,7 +5054,11 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* assign = nullptr;
                 auto irep = Representation::Of(subAssign->idx1());
                 auto vrep = Representation::Of(subAssign->val());
-                if (Representation::Of(subAssign->idx2()) == irep &&
+                // TODO: support unboxed logicals stored into e.g. vectors
+                bool noConfusion = vrep != t::Int ||
+                                   subAssign->val()->type.isA(RType::integer);
+                if (noConfusion &&
+                    Representation::Of(subAssign->idx2()) == irep &&
                     irep != t::SEXP && vrep != t::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
@@ -4987,7 +5250,10 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res0 = nullptr;
                 auto irep = Representation::Of(subAssign->idx());
                 auto vrep = Representation::Of(subAssign->val());
-                if (irep != t::SEXP && vrep != t::SEXP &&
+                // TODO: support unboxed logicals stored into e.g. vectors
+                bool noConfusion = vrep != t::Int ||
+                                   subAssign->val()->type.isA(RType::integer);
+                if (noConfusion && irep != t::SEXP && vrep != t::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
                     if (irep == t::Int && vrep == t::Int)
@@ -5084,7 +5350,7 @@ void LowerFunctionLLVM::compile() {
                         incrementNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
-                        builder.CreateBr(done);
+
                     } else {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
@@ -5192,6 +5458,9 @@ void LowerFunctionLLVM::compile() {
                     assert(cache->getType() == t::SEXP);
                     assert(newVal->getType() == t::SEXP);
                     setCar(cache, newVal);
+                    // Missingness needs not be updated here, because the cache
+                    // hit on the second store, i.e. after a slow-case starg
+                    // builtin, which already updated missingness
                     builder.CreateBr(done);
 
                     builder.SetInsertPoint(identical);
@@ -5291,9 +5560,9 @@ void LowerFunctionLLVM::compile() {
                 };
 
                 auto sequenceIsReal =
-                    Representation::Of(a) != Representation::Real
-                        ? builder.getFalse()
-                        : builder.CreateNot(checkDoubleToInt(load(a)));
+                    Representation::Of(a) == Representation::Real
+                        ? builder.CreateNot(checkDoubleToInt(load(a), a->type))
+                        : builder.getFalse();
 
                 auto res = createSelect2(
                     sequenceIsReal,
@@ -5304,8 +5573,9 @@ void LowerFunctionLLVM::compile() {
                     },
                     [&]() -> llvm::Value* {
                         auto sequenceIsAmbiguous =
-                            Representation::Of(b) == Representation::Real
-                                ? builder.CreateNot(checkDoubleToInt(load(b)))
+                            Representation::Of(a) == Representation::Real
+                                ? builder.CreateNot(
+                                      checkDoubleToInt(load(b), b->type))
                                 : builder.getFalse();
 
                         return createSelect2(
@@ -5473,7 +5743,7 @@ void LowerFunctionLLVM::compile() {
 
             // Here we directly access the variable to bypass liveness
             // checks when loading the variable. This is ok, since this is
-            // the current instructoin and we have already written to it...
+            // the current instruction and we have already written to it...
             assert(*currentInstr == i);
             assert(!variables_.count(i) || variables_.at(i).initialized);
             ++currentInstr;
@@ -5488,15 +5758,18 @@ void LowerFunctionLLVM::compile() {
                         !LdConst::Cast(i)) {
                         static std::vector<std::string> leaky;
                         const char* msg = nullptr;
+                        static const char* defaultMsg = "";
                         if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
                             i->printRecursive(str, 2);
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
+                        } else {
+                            msg = defaultMsg;
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {load(i), c((unsigned long) i->type.serialize()),
-                              convertToPointer(msg)});
+                             {load(i), c((unsigned long)i->type.serialize()),
+                              convertToPointer(msg, t::i8, true)});
                     }
                 }
                 if (i->type.isA(PirType::test())) {
@@ -5507,7 +5780,6 @@ void LowerFunctionLLVM::compile() {
                 }
             }
 
-            numTemps = 0;
         }
 
         // Copy of phi input values
@@ -5519,9 +5791,28 @@ void LowerFunctionLLVM::compile() {
                 auto r = Representation::Of(phi->type);
                 auto inpv = load(i, r);
                 ensureNamedIfNeeded(phi, inpv);
+                if (LLVMDebugInfo() && diVariables_.count(phi)) {
+                    DIB->insertDbgValueIntrinsic(
+                        inpv, diVariables_[phi], DIB->createExpression(),
+                        builder.getCurrentDebugLocation(),
+                        builder.GetInsertBlock());
+                }
                 updateVariable(phi, inpv);
             }
         }
+
+        // Clear the temp-protected space on the stack after every
+        // instruction to catch GC errors early
+        static bool CLEAR_TEMPS = getenv("PIR_TEST_CLEAR_TEMPS") &&
+                                  *getenv("PIR_TEST_CLEAR_TEMPS") == '1';
+        if (CLEAR_TEMPS && numTemps > 0 &&
+            (builder.GetInsertBlock()->empty() ||
+             !builder.GetInsertBlock()->back().isTerminator())) {
+            auto pos = builder.CreateGEP(basepointer, c(numLocals, 32));
+            builder.CreateMemSet(pos, c(0, 8), c(numTemps, 32),
+                                 MaybeAlign(alignof(R_bcstack_t)));
+        }
+        numTemps = 0;
 
         if (bb->isJmp())
             builder.CreateBr(getBlock(bb->next()));
@@ -5533,7 +5824,22 @@ void LowerFunctionLLVM::compile() {
     // Delayed insertion of the branch, so we can still easily add instructions
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
+    int sz = numLocals + maxTemps;
+    if (sz > 1) {
+        if (LLVMDebugInfo())
+            DI->clearLocation(builder);
+        incStack(sz - 1, true);
+    }
     builder.CreateBr(getBlock(code->entry));
+
+    for (auto bb : exitBlocks) {
+        auto pos = bb->end();
+        pos--;
+        builder.SetInsertPoint(bb, pos);
+        if (LLVMDebugInfo())
+            DI->clearLocation(builder);
+        decStack(sz);
+    }
 
     std::unordered_set<rir::Code*> codes;
     std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;

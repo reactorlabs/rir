@@ -111,9 +111,11 @@ class CompilerContext {
                 .first->second;
         }
         virtual bool loopIsLocal() { return !loops.empty(); }
+        virtual bool isPromiseContext() { return false; }
     };
 
     class PromiseContext : public CodeContext {
+
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : CodeContext(ast, fun, p) {}
@@ -124,6 +126,8 @@ class CompilerContext {
             }
             return true;
         }
+
+        bool isPromiseContext() override { return true; }
     };
 
     std::stack<CodeContext*> code;
@@ -164,13 +168,19 @@ class CompilerContext {
             new CodeContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
+    bool isInPromise() { return pushedPromiseContexts > 0; }
+
     void pushPromiseContext(SEXP ast) {
+        pushedPromiseContexts++;
+
         code.push(
             new PromiseContext(ast, fun, code.empty() ? nullptr : code.top()));
     }
 
     Code* pop() {
         Code* res = cs().finalize(0, code.top()->loadsSlotInCache.size());
+        if (code.top()->isPromiseContext())
+            pushedPromiseContexts--;
         delete code.top();
         code.pop();
         return res;
@@ -185,6 +195,9 @@ class CompilerContext {
              << BC::push(R_FalseValue) << BC::push(Rf_mkString(msg))
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
+
+  private:
+    unsigned int pushedPromiseContexts = 0;
 };
 
 struct LoadArgsResult {
@@ -192,16 +205,35 @@ struct LoadArgsResult {
     bool hasDots = false;
     std::vector<SEXP> names;
     Context assumptions;
-    int numArgs;
+    int numArgs = 0;
 };
 
 Code* compilePromise(CompilerContext& ctx, SEXP exp);
+Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp);
 // If we are in a void context, then compile expression will not leave a value
 // on the stack. For example in `{a; b}` the expression `a` is in a void
 // context, but `b` is not. In `while(...) {...}` all loop body expressions are
 // in a void context, since the loop as an expression is always nil.
 void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
-void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args, bool voidContext);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
+                 bool voidContext);
+
+// EAGER_PROMISE_FROM_TOS is for the special case when the expression has
+// already been evaluated: wrap the value at TOS into a promise. This is used in
+// particular for the complex assignment: the expression
+//    f(x) <- z
+// returns z, z must be evaluated first, and z must be passed as en eager
+// promise to `f<-` as its last argument.
+enum class ArgType {
+    PROMISE,
+    EAGER_PROMISE,
+    RAW_VALUE,
+    EAGER_PROMISE_FROM_TOS
+};
+
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
+                              LoadArgsResult& res);
+
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext,
                                       int skipArgs = 0, int eager = 0);
@@ -649,115 +681,316 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         }
 
-        // 3) Special case [ and [[
+        // 3) Special case f(a) <- b
 
+        // Only allow one level of nesting:
+        //     f(x) <- 1         ok
+        //     f(g(x)) <- 1      not supported
+        // TODO: compile nested complex assignments
         if (lhsParts.size() != 2) {
             return false;
         }
 
-        RList g(lhsParts[0]);
-        int dims = g.length() - 2;
-        if (dims < 1 || dims > 3) {
-            return false;
-        }
+        RList g(lhs);
+        // If assignment is
+        //       f(x, 2, 3) <- y
+        // g = `f`, `x`, 2, 3
 
-        SEXP fun2 = *g.begin();
-        RListIter idx = g.begin() + 2;
-        if ((fun2 != symbol::Bracket && fun2 != symbol::DoubleBracket) ||
-            !isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
-            (dims > 2 && !isRegularArg(idx + 2))) {
-            return false;
-        }
-        if (dims == 3 && fun2 == symbol::DoubleBracket)
-            return false;
+        // If we are here, it means that a complex assignment was requested
+        // i.e. g != `x`
+        assert(g.length() >= 2);
 
-        emitGuardForNamePrimitive(cs, fun);
+        SEXP fun2 = g[0]; // symbol `f`
+        SEXP dest = g[1]; // symbol `x`
 
-        if (maybeChanges(target, rhs)) {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::ldvarForUpdateCached(
-                    target, ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::ldvarForUpdate(target);
-            cs << BC::setShared() << BC::pop();
-        }
+        // 3.a) Special case [ and [[
+        if (fun2 == symbol::Bracket || fun2 == symbol::DoubleBracket) {
+            int dims = g.length() - 2;
+            if (dims < 1 || dims > 3) {
+                return false;
+            }
 
-        // First rhs (assign is right-associative)
-        compileExpr(ctx, rhs);
-        if (!voidContext) {
-            // Keep a copy of rhs since it's the result of this expression
-            cs << BC::dup();
-            if (!isConstant(rhs))
+            SEXP fun2 = *g.begin();
+            RListIter idx = g.begin() + 2;
+            if (!isRegularArg(idx) || (dims > 1 && !isRegularArg(idx + 1)) ||
+                (dims > 2 && !isRegularArg(idx + 2))) {
+                return false;
+            }
+            if (dims == 3 && fun2 == symbol::DoubleBracket)
+                return false;
+
+            emitGuardForNamePrimitive(cs, fun);
+
+            if (maybeChanges(target, rhs)) {
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::ldvarForUpdateCached(
+                        target, ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::ldvarForUpdate(target);
+                cs << BC::setShared() << BC::pop();
+            }
+
+            // First rhs (assign is right-associative)
+            compileExpr(ctx, rhs);
+            if (!voidContext) {
+                // Keep a copy of rhs since it's the result of this expression
+                cs << BC::dup();
+                if (!isConstant(rhs))
+                    cs << BC::setShared();
+            }
+
+            // Again, subassign bytecodes override objects with named count
+            // of 1. If the target is from the outer scope that would be wrong.
+            // For example
+            //
+            //     a <- 1
+            //     f <- function()
+            //         a[[1]] <- 2
+            //
+            // the f function should not override a.
+            // The ldvarForUpdate BC increments the named count if the target is
+            // not local to the current environment.
+
+            if (superAssign) {
+                cs << BC::ldvarSuper(target);
+            } else {
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::ldvarForUpdateCached(
+                        target, ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::ldvarForUpdate(target);
+            }
+
+            if (Compiler::profile)
+                cs << BC::recordType();
+
+            if (maybeChanges(target, *idx) ||
+                (dims > 1 && maybeChanges(target, *(idx + 1))) ||
+                (dims > 2 && maybeChanges(target, *(idx + 2))))
                 cs << BC::setShared();
-        }
 
-        // Again, subassign bytecodes override objects with named count of 1. If
-        // the target is from the outer scope that would be wrong. For example
-        //
-        //     a <- 1
-        //     f <- function()
-        //         a[[1]] <- 2
-        //
-        // the f function should not override a.
-        // The ldvarForUpdate BC increments the named count if the target is
-        // not local to the current environment.
+            // And index
+            compileExpr(ctx, *idx);
+            if (dims > 1)
+                compileExpr(ctx, *(idx + 1));
+            if (dims > 2)
+                compileExpr(ctx, *(idx + 2));
 
-        if (superAssign) {
-            cs << BC::ldvarSuper(target);
-        } else {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::ldvarForUpdateCached(
-                    target, ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::ldvarForUpdate(target);
-        }
-
-        if (Compiler::profile)
-            cs << BC::recordType();
-
-        if (maybeChanges(target, *idx) ||
-            (dims > 1 && maybeChanges(target, *(idx + 1))) ||
-            (dims > 2 && maybeChanges(target, *(idx + 2))))
-            cs << BC::setShared();
-
-        // And index
-        compileExpr(ctx, *idx);
-        if (dims > 1)
-            compileExpr(ctx, *(idx + 1));
-        if (dims > 2)
-            compileExpr(ctx, *(idx + 2));
-
-        if (dims == 3) {
-            assert(fun2 == symbol::Bracket);
-            cs << BC::subassign1_3();
-        } else if (dims == 2) {
-            if (fun2 == symbol::DoubleBracket) {
-                cs << BC::subassign2_2();
+            if (dims == 3) {
+                assert(fun2 == symbol::Bracket);
+                cs << BC::subassign1_3();
+            } else if (dims == 2) {
+                if (fun2 == symbol::DoubleBracket) {
+                    cs << BC::subassign2_2();
+                } else {
+                    cs << BC::subassign1_2();
+                }
             } else {
-                cs << BC::subassign1_2();
+                if (fun2 == symbol::DoubleBracket) {
+                    cs << BC::subassign2_1();
+                } else {
+                    cs << BC::subassign1_1();
+                }
             }
-        } else {
-            if (fun2 == symbol::DoubleBracket) {
-                cs << BC::subassign2_1();
+            cs.addSrc(ast);
+
+            // store the result as "target"
+            if (superAssign) {
+                cs << BC::stvarSuper(target);
             } else {
-                cs << BC::subassign1_1();
+                if (ctx.code.top()->isCached(target))
+                    cs << BC::stvarCached(target,
+                                          ctx.code.top()->cacheSlotFor(target));
+                else
+                    cs << BC::stvar(target);
             }
-        }
-        cs.addSrc(ast);
 
-        // store the result as "target"
-        if (superAssign) {
-            cs << BC::stvarSuper(target);
+            if (!voidContext)
+                cs << BC::invisible();
         } else {
-            if (ctx.code.top()->isCached(target))
-                cs << BC::stvarCached(target,
-                                      ctx.code.top()->cacheSlotFor(target));
-            else
-                cs << BC::stvar(target);
+            /*
+                3.b) Deal with all the other functions:
+                    f(x,y) <- z
+                i.e.
+                    <-(f(x,y), value=z)
+                will (almost) get rewritten into
+                    <-( x, value=f<-(x,y,value=z) )
+
+                This rewriting is theoretical. Indeed, there are some
+                specificities to complex assignments:
+                    - z is evaluated eagerly, followed by x
+                    - the other arguments are passed as promises, as usual
+                    - the complex assignment returns the value of z
+            */
+
+            std::string const fun2name = CHAR(PRINTNAME(fun2));
+
+            // "slot<-" ignores value semantics and modifies shared objects
+            // in-place, our implementation does not deal with this case.
+            if (fun2name == "slot") {
+                return false;
+            }
+
+            // We need to get the SEXP for `f<-` from the SEXP for `f`
+            std::string const fun2_replacement_name = fun2name + "<-";
+            SEXP farrow_sym = Rf_install(fun2_replacement_name.c_str());
+
+            /* Deal with special functions.
+             The issue with special functions is that they do not use the
+             arguments passed on the stack, but evaluate the arguments through
+             the AST. For normal functions, in the assignment
+                 f(x,a,b) <- z
+             we emit the bytecode that will lead to the evaluation of z and x,
+             and pass these values in evaluated promises on the object stack.
+
+             If we use the same strategy for special function, the arguments
+             will be evaluated a second time.
+
+             There are only a couple special assignment functions
+                - [[<-   (handled above)
+                - [ <-   (handled above)
+                - <-     (will not appear in a rewriting)
+                - <<-    (will not appear in a rewriting)
+                - @<-
+                - $<-
+             This leaves only two to deal with.
+
+             The simple solution is to give up trying to compile the complex
+             assignments for the two special assignment functions. In that case
+             we lose the opportunity of compiling the RHS ; it will get
+             interpreted by GNU R.
+
+             It would still be interesting to compile the RHS and somehow pass
+             the value to the special. The approach used in the GnuR BC compiler
+             is to add the special instruction SETTER_CALL to deal with this
+             situation at runtime: the AST of the RHS is replaced at runtime by
+             an AST containing just the value obtained from the evaluation of
+             the RHS. See
+                https://github.com/reactorlabs/gnur/blob/R-3-6-2-branch-rir-patch/src/main/eval.c#L7128
+            */
+
+            bool const maybe_special = (fun2name == "$" || fun2name == "@");
+            if (maybe_special) {
+                return false;
+            }
+
+            // Get the LISTSXP of args for f
+            SEXP f_args = CDR(CAR(args_));
+
+            // Make the ast for the call : f<-, x, y, value=z
+            // and protect it from GC
+            SEXP farrow_ast;
+            Protect farrow_ast_protect{farrow_ast =
+                                           Rf_lcons(farrow_sym, R_NilValue)};
+            // duplicate the args from the AST of the call to f into the AST for
+            // the call to `f<-` (directly linked in the AST so that everything
+            // is protected)
+            SETCDR(farrow_ast, Rf_duplicate(f_args));
+
+            SEXP last_farrow_cell = farrow_ast;
+            while (CDR(last_farrow_cell) != R_NilValue) {
+                last_farrow_cell = CDR(last_farrow_cell);
+            }
+
+            // We need to append "value = z" to the list of args for f<-
+            // Let's create the corresponding cell (directly linked in AST so
+            // that it is protected)
+            SETCDR(last_farrow_cell, Rf_lcons(rhs, R_NilValue));
+            SEXP new_z_cell = CDR(last_farrow_cell);
+            SET_TAG(new_z_cell, Rf_install("value"));
+
+            // The RHS must be evaluated before the LHS
+            // Additionnaly, the value of the RHS must be returned after the
+            // assignment (in non-void contexts). It will be kept on the stack
+            // before the call to `f<-`.
+            // A copy will be wrapped in an evaluated promise and passed to f<-.
+            compileExpr(ctx, rhs);
+
+            // Prepare the call to f<-(x, y1, <...>, yn, z)
+            cs << BC::ldfun(farrow_sym);
+
+            if (Compiler::profile)
+                cs << BC::recordCall();
+
+            // prepare x, yk, z as promises
+            LoadArgsResult load_arg_res;
+            SEXP farrow_args = CDR(farrow_ast);
+
+            // Load the value of x as a raw value
+            // Passing x as a raw value instead of an evaluated promise is valid
+            // in this case since R code is already discouraged from doing
+            // non-standard evaluation on the destination of a complex
+            // assignment. See "A Byte Code Compiler for R" p.76 for a
+            // discussion on how one package used to do NSE on the destination
+            // of complex assignments (by modifying `*tmp*` in the evaluation
+            // environment) but was asked to abandon this practice.
+            compileLoadOneArg(ctx, farrow_args, ArgType::RAW_VALUE,
+                              load_arg_res);
+
+            // load y1, <...>, yn
+
+            for (SEXP cur_arg_cell = CDR(farrow_args);
+                 cur_arg_cell != new_z_cell; cur_arg_cell = CDR(cur_arg_cell)) {
+                compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE,
+                                  load_arg_res);
+            }
+
+            // now, the value stack looks like this:
+
+            // N+2      N+1       N   N-1                 0
+            //  ??, z (raw),  `f<-`,    x,   y1,  <...>, yn
+
+            // where N is the number of arguments _already_ passed to `f<-`
+            // (load_arg_res.numArgs)
+            if (voidContext) {
+                // move the value of z to TOS
+                cs << BC::pick(load_arg_res.numArgs + 1);
+            } else {
+                // keep a copy before `f<-` to return after the assignment
+                cs << BC::pull(load_arg_res.numArgs + 1);
+            }
+
+            // after this instruction:
+
+            // N+2     N+1     N   N-1           1        0
+            //  ??,  `f<-`,    x,   y1,  <...>, yn, z (raw)
+
+            // Wrap the value of z in an evaluated promise:
+            compileLoadOneArg(ctx, new_z_cell, ArgType::EAGER_PROMISE_FROM_TOS,
+                              load_arg_res);
+
+            // call f<- with the arguments
+            if (load_arg_res.hasDots) {
+                cs << BC::callDots(load_arg_res.numArgs, load_arg_res.names,
+                                   farrow_ast, load_arg_res.assumptions);
+            } else {
+                assert(load_arg_res.hasNames);
+                cs << BC::call(load_arg_res.numArgs, load_arg_res.names,
+                               farrow_ast, load_arg_res.assumptions);
+            }
+
+            // Bind the result to x
+            if (superAssign) {
+                cs << BC::stvarSuper(dest);
+            } else {
+                if (ctx.code.top()->isCached(dest))
+                    cs << BC::stvarCached(dest,
+                                          ctx.code.top()->cacheSlotFor(dest));
+                else
+                    cs << BC::stvar(dest);
+            }
+
+            if (!voidContext) {
+                // The return value, RHS, is TOS
+                cs << BC::invisible();
+                if (Compiler::profile) {
+                    cs << BC::recordType();
+                }
+            }
+
+            return true;
         }
 
-        if (!voidContext)
-            cs << BC::invisible();
         return true;
     }
 
@@ -1301,8 +1534,18 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (TYPEOF(fun) == SYMSXP) {
             SEXP internal = fun->u.symsxp.internal;
-            int i = ((sexprec_rjit*)internal)->u.i;
 
+            // Check if the .Internal call is malformed:
+            //      .Internal(undefined_function())
+            // This can occur in normal R code as some internal functions are
+            // not defined on all platforms (see names.c). E.g.
+            //      .Internal(tzone_name())
+            // only works on win32.
+            if (internal == R_NilValue) {
+                return false;
+            }
+
+            int i = ((sexprec_rjit*)internal)->u.i;
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 emitGuardForNamePrimitive(cs, symbol::Internal);
@@ -1426,6 +1669,96 @@ static bool globallyInlineAllProms =
         ? (std::string("1") == getenv("INLINE_ALL_PROMS"))
         : false;
 
+// static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP
+// fun,
+//                                       SEXP args, bool voidContext, int
+//                                       skipArgs, int eager) {
+
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
+                              LoadArgsResult& res) {
+
+    // Prepare the argument arg for a function call.
+    // The bytecode generated will return the result either as a promise, an
+    // evaluated promise, or a raw value.
+
+    CodeStream& cs = ctx.cs();
+    int i = res.numArgs;
+    res.numArgs += 1;
+
+    if (CAR(arg) == R_DotsSymbol) {
+        cs << BC::push(R_DotsSymbol);
+        res.names.push_back(R_DotsSymbol);
+        res.hasDots = true;
+        return;
+    }
+    if (CAR(arg) == R_MissingArg) {
+        cs << BC::push(R_MissingArg);
+        res.names.push_back(R_NilValue);
+        return;
+    }
+
+    // remember if the argument had a name associated
+    res.names.push_back(TAG(arg));
+    if (TAG(arg) != R_NilValue) {
+        res.hasNames = true;
+    }
+
+    if (arg_type == ArgType::RAW_VALUE) {
+        compileExpr(ctx, CAR(arg), false);
+        return;
+    }
+
+    // if (i < eager || inlineAllProms) {
+    //     compileExpr(ctx, *arg, false);
+    //     res.assumptions.setEager(i);
+    //     continue;
+    // }
+    Code* prom;
+    if (arg_type == ArgType::EAGER_PROMISE) {
+        // Compile the expression to evaluate it eagerly, and
+        // wrap the return value in a promise without rir code
+        compileExpr(ctx, CAR(arg), false);
+        prom = compilePromiseNoRir(ctx, CAR(arg));
+    }
+
+    else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+        // The value we want to wrap in the argument's promise is
+        // already on TOS, no nead to compile the expression.
+        // Wrap it in a promise without rir code.
+        prom = compilePromiseNoRir(ctx, CAR(arg));
+    } else { // ArgType::PROMISE
+        // Compile the expression as a promise.
+        prom = compilePromise(ctx, CAR(arg));
+    }
+
+    size_t idx = cs.addPromise(prom);
+
+    if (arg_type == ArgType::EAGER_PROMISE ||
+        arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+        res.assumptions.setEager(i);
+        cs << BC::mkEagerPromise(idx);
+    } else {
+        // "safe force" the argument to get static assumptions
+        SEXP known = safeEval(CAR(arg));
+        // TODO: If we add more assumptions should probably abstract with
+        // testArg in interp.cpp. For now they're both much different though
+        if (known != R_UnboundValue) {
+            res.assumptions.setEager(i);
+            if (!isObject(known)) {
+                res.assumptions.setNotObj(i);
+                if (IS_SIMPLE_SCALAR(known, REALSXP))
+                    res.assumptions.setSimpleReal(i);
+                if (IS_SIMPLE_SCALAR(known, INTSXP))
+                    res.assumptions.setSimpleInt(i);
+            }
+            cs << BC::push(known);
+            cs << BC::mkEagerPromise(idx);
+        } else {
+            cs << BC::mkPromise(idx);
+        }
+    }
+}
+
 static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
                                       SEXP args, bool voidContext, int skipArgs,
                                       int eager) {
@@ -1464,83 +1797,73 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
         }
     }
 
-    CodeStream& cs = ctx.cs();
-
     // Process arguments:
     // Arguments can be optionally named
 
     LoadArgsResult res;
-    RList argsList(args);
-    RListIter arg = argsList.begin();
 
-    int i = skipArgs;
-    arg = arg + skipArgs;
-
-    for (; arg != RList::end(); ++i, ++arg) {
-        if (*arg == R_DotsSymbol) {
-            cs << BC::push(R_DotsSymbol);
-            res.names.push_back(R_DotsSymbol);
-            res.hasDots = true;
-            continue;
+    SEXP cur_cell = args;
+    int i = 0;
+    while (cur_cell != R_NilValue) {
+        if (i >= skipArgs) {
+            ArgType t = (i < eager || inlineAllProms) ? ArgType::RAW_VALUE
+                                                      : ArgType::PROMISE;
+            compileLoadOneArg(ctx, cur_cell, t, res);
         }
-        if (*arg == R_MissingArg) {
-            cs << BC::push(R_MissingArg);
-            res.names.push_back(R_NilValue);
-            continue;
-        }
-
-        // remember if the argument had a name associated
-        res.names.push_back(arg.tag());
-        if (arg.tag() != R_NilValue)
-            res.hasNames = true;
-
-        if (i < eager || inlineAllProms) {
-            compileExpr(ctx, *arg, false);
-            res.assumptions.setEager(i);
-            continue;
-        }
-
-        // Arguments are wrapped as Promises:
-        //     create a new Code object for the promise
-        Code* prom = compilePromise(ctx, *arg);
-        size_t idx = cs.addPromise(prom);
-
-        // "safe force" the argument to get static assumptions
-        SEXP known = safeEval(*arg);
-        // TODO: If we add more assumptions should probably abstract with
-        // testArg in interp.cpp. For now they're both much different though
-        if (known != R_UnboundValue) {
-            res.assumptions.setEager(i);
-            if (!isObject(known)) {
-                res.assumptions.setNotObj(i);
-                if (IS_SIMPLE_SCALAR(known, REALSXP))
-                    res.assumptions.setSimpleReal(i);
-                if (IS_SIMPLE_SCALAR(known, INTSXP))
-                    res.assumptions.setSimpleInt(i);
-            }
-            cs << BC::push(known);
-            cs << BC::mkEagerPromise(idx);
-        } else {
-            cs << BC::mkPromise(idx);
-        }
+        cur_cell = CDR(cur_cell);
+        i++;
     }
 
-    res.numArgs = i;
     return res;
 }
 
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext) {
+
     CodeStream& cs = ctx.cs();
 
     // application has the form:
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
+    bool speculateOnBuiltin = false;
+    BC::Label eager = 0;
+    BC::Label theEnd = 0;
+
     if (TYPEOF(fun) == SYMSXP) {
         if (compileSpecialCall(ctx, ast, fun, args, voidContext))
             return;
+
+        if (!ctx.isInPromise()) {
+
+            auto callHasDots = false;
+            for (RListIter arg = RList(args).begin(); arg != RList::end();
+                 ++arg) {
+
+                if (*arg == R_DotsSymbol) {
+                    callHasDots = true;
+                    break;
+                }
+            }
+
+            if (!callHasDots) {
+                auto builtin = Rf_findVar(fun, R_BaseEnv);
+                assert(builtin != R_NilValue);
+                auto likelyBuiltin = TYPEOF(builtin) == BUILTINSXP;
+                speculateOnBuiltin = likelyBuiltin;
+
+                if (speculateOnBuiltin) {
+                    eager = cs.mkLabel();
+                    theEnd = cs.mkLabel();
+                    cs << BC::push(builtin) << BC::dup()
+                       << BC::ldvarNoForce(fun) << BC::identicalNoforce()
+                       << BC::recordTest() << BC::brtrue(eager);
+
+                    cs << BC::pop();
+                }
+            }
+        }
 
         cs << BC::ldfun(fun);
     } else {
@@ -1551,6 +1874,17 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (Compiler::profile)
         cs << BC::recordCall();
 
+    auto compileCall = [&](LoadArgsResult& info) {
+        if (info.hasDots) {
+            cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
+        } else if (info.hasNames) {
+            cs << BC::call(info.numArgs, info.names, ast, info.assumptions);
+        } else {
+            info.assumptions.add(Assumption::CorrectOrderOfArguments);
+            cs << BC::call(info.numArgs, ast, info.assumptions);
+        }
+    };
+
     LoadArgsResult info;
     if (fun == symbol::forceAndCall) {
         // First arg certainly eager
@@ -1558,15 +1892,19 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     } else {
         info = compileLoadArgs(ctx, ast, fun, args, voidContext);
     }
+    compileCall(info);
 
-    if (info.hasDots) {
-        cs << BC::callDots(info.numArgs, info.names, ast, info.assumptions);
-    } else if (info.hasNames) {
-        cs << BC::call(info.numArgs, info.names, ast, info.assumptions);
-    } else {
-        info.assumptions.add(Assumption::CorrectOrderOfArguments);
-        cs << BC::call(info.numArgs, ast, info.assumptions);
+    if (speculateOnBuiltin) {
+        cs << BC::br(theEnd) << eager;
+
+        auto infoEager = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
+                                         RList(args).length());
+
+        compileCall(infoEager);
+
+        cs << theEnd;
     }
+
     if (voidContext)
         cs << BC::pop();
     else if (Compiler::profile)
@@ -1581,10 +1919,12 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
     } else if (name == R_MissingArg) {
         cs << BC::push(R_MissingArg);
     } else {
-        if (ctx.code.top()->isCached(name))
-            cs << BC::ldvarCached(name, ctx.code.top()->cacheSlotFor(name));
-        else
+        if (ctx.code.top()->isCached(name)) {
+            auto const cache_slot = ctx.code.top()->cacheSlotFor(name);
+            cs << BC::ldvarCached(name, cache_slot);
+        } else {
             cs << BC::ldvar(name);
+        }
         if (Compiler::profile)
             cs << BC::recordType();
     }
@@ -1650,6 +1990,16 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
+    return ctx.pop();
+}
+
+/* Create a promise code object without compiling the AST to RIR bytecode.
+   This is useful for evaluated promises: the bytecode is never used since
+   the value is already stored in the promise.
+*/
+Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
+    ctx.pushPromiseContext(exp);
+    ctx.cs() << BC::push(R_NilValue) << BC::ret();
     return ctx.pop();
 }
 

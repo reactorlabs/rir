@@ -94,8 +94,23 @@ static bool testNoExternalCalls(ClosureVersion* f) {
     });
 }
 
+static bool testUnboxedExtract(ClosureVersion* f) {
+    return Visitor::check(f->entry, [&](Instruction* i) {
+        switch (i->tag) {
+        case Tag::Extract1_1D:
+        case Tag::Extract1_2D:
+        case Tag::Extract1_3D:
+        case Tag::Extract2_1D:
+        case Tag::Extract2_2D:
+            return i->type.unboxable();
+        default: {}
+        }
+        return true;
+    });
+}
+
 static bool testReturns42L(ClosureVersion* f) {
-    if (!Query::noEnv(f))
+    if (!Query::noEnvSpec(f))
         return false;
     auto r = Query::returned(f);
     if (r.size() != 1)

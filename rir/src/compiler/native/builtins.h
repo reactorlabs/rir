@@ -3,10 +3,12 @@
 
 #include "R/r_incl.h"
 #include "R_ext/Boolean.h"
+#include "utils/Pool.h"
 
 #include "llvm/IR/Attributes.h"
 
 #include <cstddef>
+#include <unordered_map>
 #include <vector>
 
 extern "C" {
@@ -175,6 +177,8 @@ struct NativeBuiltins {
     }
 
     static void initializeBuiltins();
+
+    static std::vector<BC::PoolIdx> targetCaches;
 
   private:
     // For setting up - returns mutable reference
