@@ -100,11 +100,11 @@ void printPaddedIdTypeRef(std::ostream& out, const Instruction* i) {
     }
     std::ostringstream buf;
     buf << i->type;
-    if (!i->typeFeedback.type.isVoid()) {
-        if (i->type == i->typeFeedback.type)
+    if (!i->typeFeedback().type.isVoid()) {
+        if (i->type == i->typeFeedback().type)
             buf << "<>";
         else
-            buf << "<" << i->typeFeedback.type << ">";
+            buf << "<" << i->typeFeedback().type << ">";
     }
     out << std::left << std::setw(15) << buf.str() << " ";
     buf.str("");
@@ -238,10 +238,10 @@ bool Instruction::nonObjectArgs() {
 
         auto fb = PirType::bottom();
         if (auto j = Instruction::Cast(arg))
-            fb = j->typeFeedback.type;
+            fb = j->typeFeedback().type;
         if (fb.isVoid()) {
             if (auto j = Instruction::Cast(arg->followCastsAndForce()))
-                fb = j->typeFeedback.type;
+                fb = j->typeFeedback().type;
         }
 
         if (fb.isVoid() || fb.maybeObj())
@@ -361,11 +361,12 @@ void Instruction::replaceDominatedUses(Instruction* replace,
     });
 
     // Propagate typefeedback
-    if (auto rep = Instruction::Cast(replace)) {
-        if (!rep->type.isA(typeFeedback.type) &&
-            rep->typeFeedback.type.isVoid())
-            rep->typeFeedback = typeFeedback;
-    }
+    if (typeFeedback_.get())
+        if (auto rep = Instruction::Cast(replace)) {
+            if (!rep->type.isA(typeFeedback().type) &&
+                rep->typeFeedback().type.isVoid())
+                rep->typeFeedback(typeFeedback());
+        }
 }
 
 void Instruction::replaceUsesIn(
@@ -396,9 +397,10 @@ void Instruction::replaceUsesIn(
 
     // Propagate typefeedback
     if (auto rep = Instruction::Cast(replace)) {
-        if (!rep->type.isA(typeFeedback.type) &&
-            rep->typeFeedback.type.isVoid())
-            rep->typeFeedback = typeFeedback;
+        if (typeFeedback_.get())
+            if (!rep->type.isA(typeFeedback().type) &&
+                rep->typeFeedback().type.isVoid())
+                rep->typeFeedback(typeFeedback());
     }
 }
 

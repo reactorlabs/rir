@@ -27,8 +27,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
-        if (i->typeFeedback.used || i->typeFeedback.type.isVoid() ||
-            i->type.isA(i->typeFeedback.type))
+        if (i->typeFeedback().used || i->typeFeedback().type.isVoid() ||
+            i->type.isA(i->typeFeedback().type))
             return;
 
         Instruction* speculateOn = nullptr;
@@ -46,7 +46,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     bool localLoad =
                         LdVar::Cast(arg) && !Env::isStaticEnv(i->env());
 
-                    feedback = i->typeFeedback;
+                    feedback = i->typeFeedback();
                     // If this force was observed to receive evaluated
                     // promises, better speculate on the input already.
                     switch (force->observed) {
@@ -76,15 +76,17 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
             }
-        } else if ((!i->type.unboxable() && i->typeFeedback.type.unboxable()) ||
-                   (i->type.maybeLazy() && !i->typeFeedback.type.maybeLazy()) ||
+        } else if ((!i->type.unboxable() &&
+                    i->typeFeedback().type.unboxable()) ||
+                   (i->type.maybeLazy() &&
+                    !i->typeFeedback().type.maybeLazy()) ||
                    // Vector where Extract is unboxed if we speculate
                    (i->type.isA(PirType::num()) &&
                     !i->type.simpleScalar().unboxable() &&
-                    i->typeFeedback.type.simpleScalar().unboxable() &&
+                    i->typeFeedback().type.simpleScalar().unboxable() &&
                     maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
-            feedback = i->typeFeedback;
+            feedback = i->typeFeedback();
             guardPos = checkpoint.next(i, i, dom);
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
@@ -108,7 +110,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             [&](TypeTest::Info info) {
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
-                speculateOn->typeFeedback.used = true;
+                speculateOn->updateTypeFeedback().used = true;
             },
             []() {});
     });

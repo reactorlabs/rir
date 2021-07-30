@@ -132,7 +132,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     auto rirCode = version->owner()->rirFunction()->body();
     if (rirCode->flags.contains(rir::Code::NeedsFullEnv))
         mkenv->neverStub = true;
-    mkenv->typeFeedback.srcCode = rirCode;
+    mkenv->updateTypeFeedback().srcCode = rirCode;
     add(mkenv);
     this->env = mkenv;
 }

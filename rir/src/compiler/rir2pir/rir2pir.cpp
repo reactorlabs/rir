@@ -504,12 +504,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto v = feedback.seen == ObservedTest::OnlyTrue
                              ? (Value*)True::instance()
                              : (Value*)False::instance();
-                if (!i->typeFeedback.value) {
-                    i->typeFeedback.value = v;
-                    i->typeFeedback.srcCode = srcCode;
-                    i->typeFeedback.origin = pos;
-                } else if (i->typeFeedback.value != v) {
-                    i->typeFeedback.value = nullptr;
+                if (!i->typeFeedback().value) {
+                    auto& t = i->updateTypeFeedback();
+                    t.value = v;
+                    t.srcCode = srcCode;
+                    t.origin = pos;
+                } else if (i->typeFeedback().value != v) {
+                    i->updateTypeFeedback().value = nullptr;
                 }
             }
         }
@@ -536,9 +537,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         break;
                 }
                 // TODO: deal with multiple locations
-                i->typeFeedback.type.merge(feedback);
-                i->typeFeedback.srcCode = srcCode;
-                i->typeFeedback.origin = pos;
+                auto& t = i->updateTypeFeedback();
+                t.type.merge(feedback);
+                t.srcCode = srcCode;
+                t.origin = pos;
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
@@ -1321,11 +1323,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             case Opcode::brfalse_: {
                 auto v = branchCondition = cur.stack.pop();
                 if (auto c = Instruction::Cast(branchCondition)) {
-                    if (c->typeFeedback.value == True::instance()) {
+                    if (c->typeFeedback().value == True::instance()) {
                         assumeBB0 = bc.bc == Opcode::brtrue_;
                         deoptCondition = c;
                     }
-                    if (c->typeFeedback.value == False::instance()) {
+                    if (c->typeFeedback().value == False::instance()) {
                         assumeBB0 = bc.bc == Opcode::brfalse_;
                         deoptCondition = c;
                     }
@@ -1368,7 +1370,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 auto sp = insert.registerFrameState(
                     srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
                     inPromise());
-                auto offset = (uintptr_t)deoptCondition->typeFeedback.origin -
+                auto offset = (uintptr_t)deoptCondition->typeFeedback().origin -
                               (uintptr_t)srcCode;
                 DeoptReason reason = {DeoptReason::DeadBranchReached, srcCode,
                                       (uint32_t)offset};
@@ -1389,9 +1391,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                     if (auto j = Instruction::Cast(e)) {
                                         // In case the typefeedback is more
                                         // precise than the
-                                        if (!j->typeFeedback.type.isVoid() &&
+                                        if (!j->typeFeedback().type.isVoid() &&
                                             !tt->typeTest.isA(
-                                                j->typeFeedback.type))
+                                                j->typeFeedback().type))
                                             block = true;
                                     }
                                     if (!block) {

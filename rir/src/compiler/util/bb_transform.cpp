@@ -44,7 +44,7 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
                 phi->updateInputAt(j, bbs[phi->inputAt(j)->id]);
         }
         i->eachArg([&](InstrArg& arg) {
-            if (arg.val()->isInstruction()) {
+            if (Instruction::Cast(arg.val())) {
                 auto val = arg.val();
                 assert(relocation_table.count(val));
                 arg.val() = relocation_table.at(val);
