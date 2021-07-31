@@ -661,11 +661,26 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   // TODO implement support for call_builtin_
                                   // with names
                                   bc.bc == Opcode::call_;
-        if (monomorphicBuiltin) {
-            int arity = getBuiltinArity(ti.monomorphic);
+        SEXP staticCallee = nullptr;
+        if (auto ld = LdConst::Cast(callee))
+            staticCallee = ld->c();
+        bool staticMonomorphicBuiltin = staticCallee &&
+                                        TYPEOF(staticCallee) == BUILTINSXP &&
+                                        // TODO implement support for
+                                        // call_builtin_ with names
+                                        bc.bc == Opcode::call_;
+
+        auto checkArity = [&](SEXP builtin) {
+            int arity = getBuiltinArity(builtin);
             if (arity != -1 && arity != nargs)
-                monomorphicBuiltin = false;
-        }
+                return false;
+            return true;
+        };
+        if (monomorphicBuiltin)
+            monomorphicBuiltin = checkArity(ti.monomorphic);
+        if (staticMonomorphicBuiltin)
+            staticMonomorphicBuiltin = checkArity(staticCallee);
+
         const std::unordered_set<int> supportedSpecials = {blt("forceAndCall")};
         bool monomorphicSpecial =
             ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
@@ -692,8 +707,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         };
 
         // Insert a guard if we want to speculate
-        if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction || monomorphicSpecial) {
+        if (!staticMonomorphicBuiltin &&
+            (monomorphicBuiltin || monomorphicClosure ||
+             monomorphicInnerFunction || monomorphicSpecial)) {
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
@@ -704,33 +720,41 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 std::get<Opcode*>(callTargetFeedback.at(callee)));
         }
 
-        if (monomorphicBuiltin) {
-            for (size_t i = 0; i < args.size(); ++i) {
-                if (auto mk = MkArg::Cast(args[i])) {
-                    if (mk->isEager()) {
-                        args[i] = mk->eagerArg();
-                    } else {
-                        assert(at(nargs - 1 - i) == args[i]);
-                        args[i] =
-                            tryCreateArg(mk->prom()->rirSrc(), insert, true);
-                        if (!args[i]) {
-                            log.warn("Failed to compile a promise");
-                            return false;
-                        }
+        auto eagerEval = [&](Value*& arg, size_t i) {
+            if (auto mk = MkArg::Cast(arg)) {
+                if (mk->isEager()) {
+                    arg = mk->eagerArg();
+                } else {
+                    auto original = arg;
+                    arg = tryCreateArg(mk->prom()->rirSrc(), insert, true);
+                    if (!arg) {
+                        log.warn("Failed to compile a promise");
+                        return false;
+                    }
+                    if (i != (size_t)-1 && at(nargs - 1 - i) == original) {
                         // Inlined argument evaluation might have side effects.
                         // Let's have a checkpoint here. This checkpoint needs
                         // to capture the so far evaluated promises.
                         stack.at(nargs - 1 - i) =
-                            insert(new MkArg(mk->prom(), args[i], mk->env()));
+                            insert(new MkArg(mk->prom(), arg, mk->env()));
                         addCheckpoint(srcCode, pos, stack, insert);
                     }
                 }
             }
+            return true;
+        };
+
+        if (monomorphicBuiltin || staticMonomorphicBuiltin) {
+            for (size_t i = 0; i < args.size(); ++i)
+                if (!eagerEval(args[i], i))
+                    return false;
 
             popn(toPop);
-            auto bt =
-                insert(BuiltinCallFactory::New(env, ti.monomorphic, args, ast));
-            bt->effects.set(Effect::DependsOnAssume);
+            auto bt = insert(BuiltinCallFactory::New(
+                env, staticMonomorphicBuiltin ? staticCallee : ti.monomorphic,
+                args, ast));
+            if (!staticMonomorphicBuiltin)
+                bt->effects.set(Effect::DependsOnAssume);
             push(bt);
         } else if (monomorphicClosure || monomorphicInnerFunction) {
             // (1) Argument Matching
@@ -773,6 +797,37 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (!correctOrder || needed < matchedArgs.size()) {
                 emitGenericCall();
                 break;
+            }
+
+            // Specialcase for calling usemethod, the first argument is eager.
+            // This helps determine the object type of the caller.
+            if (monomorphicClosure) {
+                auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
+                auto ast =
+                    src_pool_at(globalContext(), dt->baseline()->body()->src);
+                auto isUseMethod = CAR(ast) == symbol::UseMethod &&
+                                   TYPEOF(CADR(ast)) == STRSXP &&
+                                   CDDR(ast) == R_NilValue;
+                if (isUseMethod) {
+                    if (auto d = DotsList::Cast(matchedArgs[0])) {
+                        if (d->nargs() > 0) {
+                            if (eagerEval(d->arg(0).val(), 0)) {
+                                d->arg(0).type() = d->arg(0).val()->type;
+                                // creation of dots list must come after eager
+                                // evaluation of content...
+                                auto clone = d->clone();
+                                matchedArgs[0] = clone;
+                                d->eraseAndRemove();
+                                insert(clone);
+                            } else {
+                                return false;
+                            }
+                        }
+                    } else {
+                        if (!eagerEval(matchedArgs[0], -1))
+                            return false;
+                    }
+                }
             }
 
             // Special case for the super nasty match.arg(x) pattern where the
