@@ -72,7 +72,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
                      size_t locals, size_t bindingCache);
     static Code* New(Immediate ast);
 
-    constexpr static size_t MAX_CODE_HANDLE_LENGTH = 56;
+    constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
     char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
@@ -83,9 +83,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
         auto l = h.length() + 1;
-        if (l > MAX_CODE_HANDLE_LENGTH - 1) {
+        if (l > MAX_CODE_HANDLE_LENGTH) {
             assert(false);
-            l = MAX_CODE_HANDLE_LENGTH - 1;
+            l = MAX_CODE_HANDLE_LENGTH;
         }
         memcpy(&lazyCodeHandle_, h.c_str(), l);
         lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH - 1] = '\0';

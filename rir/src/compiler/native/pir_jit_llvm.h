@@ -84,7 +84,7 @@ class PirJitLLVM {
         } else {
             assert(false);
         }
-        return ss.str().substr(0, rir::Code::MAX_CODE_HANDLE_LENGTH - 5);
+        return ss.str().substr(0, rir::Code::MAX_CODE_HANDLE_LENGTH - 6);
     }
 
     std::unordered_map<Code*, std::pair<rir::Code*, llvm::StringRef>> jitFixup;
