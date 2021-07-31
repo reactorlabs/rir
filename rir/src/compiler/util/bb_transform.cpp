@@ -129,7 +129,6 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
             if (pos->isCheckpoint()) {
                 auto cp = Checkpoint::Cast(pos->last());
                 cp->replaceUsesWith(entryCp);
-                pos->eraseLast();
                 auto del = pos->deoptBranch();
                 std::vector<BB*> toDel = {del};
                 while (del->successors().size()) {
@@ -138,6 +137,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
                     del = *del->successors().begin();
                 }
                 pos->overrideSuccessors(pos->nonDeoptSuccessors());
+                pos->eraseLast();
                 for (auto d : toDel)
                     delete d;
             }
