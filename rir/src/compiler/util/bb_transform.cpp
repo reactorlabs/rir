@@ -137,7 +137,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
                     del = *del->successors().begin();
                 }
                 pos->overrideSuccessors(pos->nonDeoptSuccessors());
-                pos->eraseLast();
+                pos->remove(pos->end() - 1);
                 for (auto d : toDel)
                     delete d;
             }
