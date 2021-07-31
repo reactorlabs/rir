@@ -102,9 +102,49 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     return split;
 }
 
-Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context) {
+Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
+                              Checkpoint* entryCp) {
     Value* found = nullptr;
     Instruction* ret;
+
+    if (entryCp) {
+        auto pos = inlinee;
+        while (true) {
+            for (auto i : *pos)
+                if (i->isDeoptBarrier())
+                    entryCp = nullptr;
+
+            // EntryCp no longer valid, giving up
+            if (!entryCp)
+                break;
+
+            // Only one successor, go there
+            if (pos->isJmp()) {
+                pos = pos->next();
+                continue;
+            }
+
+            // This is the first cp of the inlinee, lets replace it with the
+            // outer CP
+            if (pos->isCheckpoint()) {
+                auto cp = Checkpoint::Cast(pos->last());
+                cp->replaceUsesWith(entryCp);
+                pos->eraseLast();
+                auto del = pos->deoptBranch();
+                std::vector<BB*> toDel = {del};
+                while (del->successors().size()) {
+                    assert(del->successors().size() == 1);
+                    toDel.push_back(*del->successors().begin());
+                    del = *del->successors().begin();
+                }
+                pos->overrideSuccessors(pos->nonDeoptSuccessors());
+                for (auto d : toDel)
+                    delete d;
+            }
+            break;
+        }
+    }
+
     Visitor::run(inlinee, [&](BB* bb) {
         if (!bb->isExit())
             return;
