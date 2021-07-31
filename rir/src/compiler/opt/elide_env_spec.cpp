@@ -61,18 +61,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
                         TypeFeedback seen;
-                        if (argi) {
-                            // The case where force is acting on eager values is
-                            // better handled in the typeSpeculation pass
-                            if (auto f = Force::Cast(argi)) {
-                                if (f->observed !=
-                                    Force::ArgumentKind::promise) {
-                                    successful = false;
-                                    return;
-                                }
-                            }
+                        if (argi)
                             seen = argi->typeFeedback();
-                        }
                         if (auto j = Instruction::Cast(arg->followCasts()))
                             if (seen.type.isVoid() ||
                                 (!j->typeFeedback().type.isVoid() &&
