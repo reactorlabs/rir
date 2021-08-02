@@ -1,3 +1,7 @@
+# For some reason leak sanitizer crashes on this test...
+if (Sys.getenv("ASAN_SYMBOLIZER_PATH", unset="") != "")
+  quit()
+
 pkgname <- "grid"
 source(file.path(R.home("share"), "R", "examples-header.R"))
 options(warn = 1)
