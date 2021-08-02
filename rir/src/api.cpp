@@ -9,6 +9,7 @@
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
+#include "compiler/pir/closure.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
@@ -302,20 +303,47 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
     pir::Backend backend(logger, name);
-    cmp.compileClosure(what, name, assumptions, true,
-                       [&](pir::ClosureVersion* c) {
-                           logger.flush();
-                           cmp.optimizeModule();
+    auto compile = [&](pir::ClosureVersion* c) {
+        logger.flush();
+        cmp.optimizeModule();
 
-                           auto fun = backend.getOrCompile(c);
+        if (dryRun)
+            return;
 
-                           // Install
-                           if (dryRun)
-                               return;
+        rir::Function* done = nullptr;
+        auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+            auto fun = backend.getOrCompile(c);
+            Protect p(fun->container());
+            DispatchTable::unpack(body)->insert(fun);
+            if (body == BODY(what))
+                done = fun;
+        };
+        m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
+            if (c->owner()->hasOriginClosure()) {
+                auto cls = c->owner()->rirClosure();
+                auto body = BODY(cls);
+                auto dt = DispatchTable::unpack(body);
+                if (dt->contains(c->context())) {
+                    auto other = dt->dispatch(c->context());
+                    assert(other != dt->baseline());
+                    assert(other->context() == c->context());
+                    if (other->body()->isCompiled())
+                        return;
+                }
+                // Don't lower functions that have not been called often, as
+                // they have incomplete type-feedback.
+                if (dt->size() == 1 && dt->baseline()->invocationCount() < 2)
+                    return;
+                apply(body, c);
+            }
+        });
+        if (!done)
+            apply(BODY(what), c);
+        // Eagerly compile the main function
+        done->body()->nativeCode();
+    };
 
-                           Protect p(fun->container());
-                           DispatchTable::unpack(BODY(what))->insert(fun);
-                       },
+    cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";

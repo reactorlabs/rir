@@ -2,8 +2,12 @@
 #include "Function.h"
 #include "R/Printing.h"
 #include "R/Serialize.h"
+#include "compiler/native/pir_jit_llvm.h"
 #include "ir/BC.h"
 #include "utils/Pool.h"
+
+#include <llvm/ExecutionEngine/JITSymbol.h>
+#include <llvm/Support/Errno.h>
 
 #include <iomanip>
 #include <sstream>
@@ -18,7 +22,7 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      nativeCode(nullptr), funInvocationCount(0), deoptCount(0), src(srcIdx),
+      nativeCode_(nullptr), funInvocationCount(0), deoptCount(0), src(srcIdx),
       trivialExpr(nullptr), stackLength(0), localsCount(localsCnt),
       bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
       extraPoolSize(0) {
@@ -93,7 +97,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     SEXP store = Rf_allocVector(EXTERNALSXP, size);
     PROTECT(store);
     Code* code = new (DATAPTR(store)) Code;
-    code->nativeCode = nullptr; // not serialized for now
+    code->nativeCode_ = nullptr; // not serialized for now
     code->funInvocationCount = InInteger(inp);
     code->deoptCount = InInteger(inp);
     code->src = InInteger(inp);
@@ -235,8 +239,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         pc = BC::next(pc);
     }
 
-    if (nativeCode) {
-        out << "nativeCode " << (void*)nativeCode << "\n";
+    if (nativeCode_) {
+        out << "nativeCode " << (void*)nativeCode_ << "\n";
     }
 
     if (auto a = arglistOrder()) {
@@ -296,6 +300,14 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
     }
     SET_VECTOR_ELT(cur, extraPoolSize, v);
     return extraPoolSize++;
+}
+
+llvm::ExitOnError ExitOnErr;
+
+NativeCode Code::lazyCompile() {
+    auto symbol = ExitOnErr(pir::PirJitLLVM::JIT->lookup(lazyCodeHandle_));
+    nativeCode_ = (NativeCode)symbol.getAddress();
+    return nativeCode_;
 }
 
 } // namespace rir

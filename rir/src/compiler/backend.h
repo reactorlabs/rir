@@ -25,6 +25,7 @@ class Backend {
 
   private:
     struct LastDestructor {
+        LastDestructor();
         ~LastDestructor();
     };
     LastDestructor firstMember_;

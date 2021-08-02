@@ -407,7 +407,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
     if (MEASURE_COMPILER_BACKEND_PERF) {
         Measuring::countTimer("backend.cpp: pir2llvm");
-        Measuring::startTimer("backend.cpp: llvm");
     }
 
     log.finalPIR(cls);
@@ -419,7 +418,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
 Backend::LastDestructor::~LastDestructor() {
     if (MEASURE_COMPILER_BACKEND_PERF) {
-        Measuring::countTimer("backend.cpp: llvm");
+        Measuring::countTimer("backend.cpp: overal");
+    }
+}
+Backend::LastDestructor::LastDestructor() {
+    if (MEASURE_COMPILER_BACKEND_PERF) {
+        Measuring::startTimer("backend.cpp: overal");
     }
 }
 

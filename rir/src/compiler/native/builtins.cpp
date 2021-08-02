@@ -1087,12 +1087,12 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
             code->registerInvocation();
-            return code->nativeCode(code, args, env, callee);
+            return code->nativeCode()(code, args, env, callee);
         } else {
             return R_ReturnedValue;
         }
     }
-    return code->nativeCode(code, args, env, callee);
+    return code->nativeCode()(code, args, env, callee);
 }
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
@@ -1133,7 +1133,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         inferCurrentContext(call, fun->nargs(), ctx);
         fail = !call.givenContext.smaller(fun->context());
     }
-    if (!fun->body()->nativeCode || fun->body()->isDeoptimized)
+    if (!fun->body()->nativeCode() || fun->body()->isDeoptimized)
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));

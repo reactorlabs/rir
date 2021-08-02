@@ -21,6 +21,8 @@ struct Parameter {
     static size_t INLINER_INITIAL_FUEL;
     static size_t INLINER_INLINE_UNLIKELY;
 
+    static size_t RECOMPILE_THRESHOLD;
+
     static bool RIR_PRESERVE;
     static unsigned RIR_SERIALIZE_CHAOS;
 
