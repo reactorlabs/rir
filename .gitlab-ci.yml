@@ -270,7 +270,7 @@ test_benchmarks:
   needs:
     - benchmark_container
   script:
-    - INLINE_ALL_PROMS=0 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+    - INLINE_ALL_PROMS=1 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:
   stage: Deploy
@@ -325,7 +325,7 @@ benchmark_llvm:
   script:
     - "sed -i 's/invocations: 1/invocations: 4/' /opt/rbenchmarking/rebench.conf"
     - "sed -i 's/iterations: 15/iterations: 25/' /opt/rbenchmarking/rebench.conf"
-    - INLINE_ALL_PROMS=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - INLINE_ALL_PROMS=0 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
     - benchmarks.data
