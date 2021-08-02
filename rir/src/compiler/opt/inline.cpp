@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/parameter.h"
 #include "compiler/util/bb_transform.h"
@@ -371,6 +372,12 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         rir::Function::NotInlineable);
                 } else {
                     anyChange = true;
+                    Checkpoint* cpAtCall = nullptr;
+                    {
+                        AvailableCheckpoints cp(cls, code, log);
+                        cpAtCall = cp.at(theCall);
+                    }
+
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner version
@@ -407,7 +414,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     });
 
                     auto inlineeRes = BBTransform::forInline(
-                        copy, split, inlineeCls->closureEnv());
+                        copy, split, inlineeCls->closureEnv(), cpAtCall);
 
                     bool noNormalReturn = false;
                     if (inlineeRes == Tombstone::unreachable()) {

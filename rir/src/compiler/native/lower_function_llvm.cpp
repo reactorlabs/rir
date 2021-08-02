@@ -2575,6 +2575,7 @@ void LowerFunctionLLVM::compile() {
                 if (b->nargs() == 1) {
                     auto a = load(b->callArg(0).val());
                     auto irep = Representation::Of(b->arg(0).val());
+                    auto itype = b->callArg(0).val()->type;
                     auto orep = Representation::Of(i);
                     bool done = true;
 
@@ -2649,7 +2650,6 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("names"): {
-                        auto itype = b->callArg(0).val()->type;
                         if (Representation::Of(b->callArg(0).val()) !=
                             t::SEXP) {
                             setVal(i, constant(R_NilValue, t::SEXP));
@@ -2764,7 +2764,7 @@ void LowerFunctionLLVM::compile() {
                     case blt("prod"): {
                         if (irep == Representation::Integer ||
                             irep == Representation::Real) {
-                            setVal(i, convert(a, i->type));
+                            setVal(i, box(a, itype));
                         } else if (orep == Representation::Real ||
                                    orep == Representation::Integer) {
                             assert(irep == Representation::Sexp);
@@ -2886,7 +2886,7 @@ void LowerFunctionLLVM::compile() {
                                        },
                                        [&]() { return callTheBuiltin(); }));
                         } else {
-                            setVal(i, convert(a, i->type));
+                            setVal(i, box(a, itype));
                         }
                         break;
                     case blt("is.logical"):

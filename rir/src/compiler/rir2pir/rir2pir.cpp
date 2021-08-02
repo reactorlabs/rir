@@ -1355,6 +1355,17 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+    bool anyReflective = false;
+    for (size_t i = 0; i < cls->nargs(); ++i)
+        if (!cls->context().isNonRefl(i) && !cls->context().isEager(i))
+            anyReflective = true;
+    // If there are args that might be reflective it is helpful to have a
+    // checkpoint before forcing the first arg. Otherwise it is typically just
+    // inhibiting.
+    if (cls->rirSrc() == srcCode && anyReflective) {
+        addCheckpoint(srcCode, finger, cur.stack, insert);
+    }
+
     while (finger != end || !worklist.empty()) {
         if (finger == end)
             finger = popWorklist();
