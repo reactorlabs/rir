@@ -5,6 +5,9 @@
 
 #include <R.h>
 #include <Rinterface.h>
+
+#define SIZEOF_DOUBLE 8
+
 #define USE_RINTERNALS
 #include <Rinternals.h>
 

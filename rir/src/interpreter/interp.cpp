@@ -704,7 +704,7 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     bool noArgmatchNeeded =
         call.givenContext.includes(Assumption::StaticallyArgmatched);
     if (!noArgmatchNeeded)
-        actuals = Rf_matchArgs(FORMALS(op), actuals, call.ast);
+        actuals = Rf_matchArgs_RC(FORMALS(op), actuals, call.ast);
 
     PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
 
@@ -3787,8 +3787,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ensure_named_) {
-            SEXP val = ostack_top(ctx);
-            ENSURE_NAMED(val);
+            // SEXP val = ostack_top(ctx);
+            // ENSURE_NAMED(val);
             NEXT();
         }
 
