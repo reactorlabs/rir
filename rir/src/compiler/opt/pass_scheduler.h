@@ -1,11 +1,15 @@
 #ifndef PIR_PASS_SCHEDULER_H
 #define PIR_PASS_SCHEDULER_H
 
+#include "utils/Set.h"
+
 #include <set>
 #include <string>
 
 #include "pass.h"
+#include "pass_definitions.h"
 
+// #define PIR_PASS_SCHEDULER_REPORT_SKIPS
 #ifdef PIR_PASS_SCHEDULER_REPORT_SKIPS
 #include "utils/measuring.h"
 #endif
@@ -36,6 +40,8 @@ class PassScheduler {
 
     void run(const std::function<bool(const Pass*)>& apply) const {
         std::vector<size_t> lastRun(detail::IDCounter::nextId, 0);
+        // These passes "lie" about not changing anything
+        SmallSet<size_t> blacklist {Constantfold::_id()};
         size_t lastChange = 1, now = 1;
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
@@ -51,15 +57,20 @@ class PassScheduler {
                         budget -= pass->cost();
                     }
                     now++;
-                    if (lastRun.size() <= pass->id())
-                        lastRun.resize(pass->id() + 1);
-                    if (!pass->isPhaseMarker() &&
-                        lastChange > lastRun[pass->id()]) {
-                        lastRun[pass->id()] = now;
+                    auto pid = pass->id();
+                    if (lastRun.size() <= pid)
+                        lastRun.resize(pid + 1);
+                    if (lastChange > lastRun[pid]) {
+                        lastRun[pid] = now;
+#ifdef PIR_PASS_SCHEDULER_REPORT_SKIPS
+                        Measuring::countEvent("run");
+#endif
                         if (apply(pass.get())) {
                             changed = true;
                             lastChange = now;
                         }
+                        if (blacklist.includes(pid))
+                            lastChange = now;
                     }
 #ifdef PIR_PASS_SCHEDULER_REPORT_SKIPS
                     else {
