@@ -5,6 +5,12 @@
 namespace rir {
 namespace pir {
 
+namespace detail {
+
+size_t IDCounter::nextId = 0;
+
+} // namespace detail
+
 bool Pass::apply(Compiler& cmp, ClosureVersion* function,
                  LogStream& log) const {
     bool res = apply(cmp, function, function, log);
