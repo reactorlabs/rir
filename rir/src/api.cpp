@@ -579,13 +579,6 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP rirLeak() {
-    char* leak = new char[42];
-    std::cout << "rirLeak: " << *leak << "\n";
-    leak = 0;
-    return R_NilValue;
-}
-
 bool startup() {
     initializeRuntime();
     return true;
