@@ -418,20 +418,19 @@ void PirJitLLVM::compile(
 
     funCompiler.compile();
 
-#ifndef NDEBUG
-
-    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
-        assert(false &&
-               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
-    }
-#endif
-
     assert(jitFixup.count(code) == 0);
 
     if (LLVMDebugInfo()) {
         DI->LexicalBlocks.pop_back();
         DIB->finalizeSubprogram(SP);
     }
+
+#ifndef NDEBUG
+    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
+        assert(false &&
+               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
+    }
+#endif
 
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
