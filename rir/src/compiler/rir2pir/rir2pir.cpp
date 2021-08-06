@@ -1245,6 +1245,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::vapply_: {
+        auto useNames = pop();
+        auto value = pop();
+        auto fun = pop();
+        auto XX = pop();
+        push(insert(new Vapply(Pool::get(bc.immediate.pool), XX, fun, value,
+                               useNames, insert.env)));
+        break;
+    }
+
     case Opcode::names_:
         push(insert(new Names(pop())));
         break;
@@ -1291,7 +1301,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
-    case Opcode::vapply_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
     }

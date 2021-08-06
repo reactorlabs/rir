@@ -101,6 +101,7 @@
     V(Names)                                                                   \
     V(SetNames)                                                                \
     V(PirCopy)                                                                 \
+    V(Vapply)                                                                  \
     V(RecordDeoptReason)                                                       \
     V(Nop)
 

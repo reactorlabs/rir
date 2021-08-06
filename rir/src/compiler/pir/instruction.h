@@ -2548,6 +2548,18 @@ class VLI(DotsList, Effect::LeakArg) {
     }
 };
 
+class FLIE(Vapply, 5, Effects::Any()) {
+  public:
+    SEXP X;
+    explicit Vapply(SEXP X, Value* XX, Value* fun, Value* value,
+                    Value* useNames, Value* env)
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
+                                         {{PirType::val(), PirType::any(),
+                                           PirType::val(), PirType::val()}},
+                                         {{XX, fun, value, useNames}}, env),
+          X(X) {}
+};
+
 class VLI(Phi, Effects::None()) {
     std::vector<BB*> input;
 
