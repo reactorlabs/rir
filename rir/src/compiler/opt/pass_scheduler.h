@@ -41,7 +41,7 @@ class PassScheduler {
     void run(const std::function<bool(const Pass*)>& apply) const {
         std::vector<size_t> lastRun(detail::IDCounter::nextId, 0);
         // These passes "lie" about not changing anything
-        SmallSet<size_t> blacklist {Constantfold::_id()};
+        SmallSet<size_t> blacklist {Constantfold::_id(), GVN::_id()};
         size_t lastChange = 1, now = 1;
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
