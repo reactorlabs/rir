@@ -1666,6 +1666,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
                 return true;
             }
+
+            if (fun == symbol::vapply && args.length() == 4) {
+                compileExpr(ctx, args[0]);
+                cs << BC::push(args[1]);
+                compileExpr(ctx, args[2]);
+                compileExpr(ctx, args[3]);
+
+                cs << BC::vapply(args[0]);
+
+                if (voidContext)
+                    cs << BC::pop();
+
+                return true;
+            }
         }
     }
 

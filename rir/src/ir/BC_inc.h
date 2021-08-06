@@ -358,6 +358,8 @@ BC_NOARGS(V, _)
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
 
+    inline static BC vapply(SEXP X);
+
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
         cur.decodeFixlen(pc);
@@ -561,6 +563,7 @@ BC_NOARGS(V, _)
         case Opcode::stvar_super_:
         case Opcode::ldvar_for_update_:
         case Opcode::missing_:
+        case Opcode::vapply_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
         case Opcode::ldvar_cached_:

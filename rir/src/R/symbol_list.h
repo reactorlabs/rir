@@ -58,6 +58,7 @@
     V(Missing, "missing")                                                      \
     V(seq, "seq")                                                              \
     V(lapply, "lapply")                                                        \
+    V(vapply, "vapply")                                                        \
     V(aslist, "as.list")                                                       \
     V(ascharacter, "as.character")                                             \
     V(isvector, "is.vector")                                                   \

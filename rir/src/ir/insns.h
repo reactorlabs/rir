@@ -447,6 +447,8 @@ DEF_INSTR(return_, 0, 1, 0, 0)
  */
 DEF_INSTR(ret_, 0, 1, 0, 1)
 
+DEF_INSTR(vapply_, 1, 4, 1, 0)
+
 /*
  * recording bytecodes are used to collect information
  * They keep a struct from RuntimeFeedback.h inline, that's why they are quite
