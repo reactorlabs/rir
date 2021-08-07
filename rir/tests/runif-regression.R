@@ -1,7 +1,3 @@
-# For some reason leak sanitizer crashes on this test...
-if (Sys.getenv("ASAN_SYMBOLIZER_PATH", unset="") != "")
-  quit()
-
 s = 42
 
 for(type in c("Wichmann-Hill", "Marsaglia-Multicarry", "Super-Duper",
