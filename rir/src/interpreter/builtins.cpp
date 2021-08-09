@@ -1119,8 +1119,6 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
 }
 
 SEXP vapply(SEXP X, SEXP XX, SEXP FUN, SEXP value, SEXP useNames_, SEXP env) {
-    SEXP R_fcall, ans, names = R_NilValue, rowNames = R_NilValue, dim_v;
-
     R_xlen_t i, n;
     int commonLen;
     int useNames,
@@ -1149,11 +1147,13 @@ SEXP vapply(SEXP X, SEXP XX, SEXP FUN, SEXP value, SEXP useNames_, SEXP env) {
         commonType != INTSXP && commonType != LGLSXP && commonType != RAWSXP &&
         commonType != STRSXP && commonType != VECSXP)
         Rf_error(("type '%s' is not supported"), type2char(commonType));
-    dim_v = getAttrib(value, R_DimSymbol);
+    auto dim_v = getAttrib(value, R_DimSymbol);
     array_value = (TYPEOF(dim_v) == INTSXP && LENGTH(dim_v) >= 1);
-    PROTECT(ans = allocVector(commonType, n * commonLen));
+    auto ans = PROTECT(allocVector(commonType, n * commonLen));
+    SEXP rowNames = nullptr;
+    SEXP names = nullptr;
     if (useNames) {
-        PROTECT(names = getAttrib(XX, R_NamesSymbol));
+        names = PROTECT(getAttrib(XX, R_NamesSymbol));
         if (isNull(names) && TYPEOF(XX) == STRSXP) {
             UNPROTECT(1);
             PROTECT(names = XX);
@@ -1168,7 +1168,7 @@ SEXP vapply(SEXP X, SEXP XX, SEXP FUN, SEXP value, SEXP useNames_, SEXP env) {
        using the evaluated version.
     */
     {
-        SEXP ind, tmp;
+        SEXP ind;
         /* Build call: FUN(XX[[<ind>]], ...) */
 
         SEXP isym = install("i");
@@ -1180,10 +1180,10 @@ SEXP vapply(SEXP X, SEXP XX, SEXP FUN, SEXP value, SEXP useNames_, SEXP env) {
            allocation and not PROTECT the result (LCONS does memory
            protection of its args internally), but not both of them,
            since the computation of one may destroy the other */
-        PROTECT(tmp =
-                    LCONS(R_Bracket2Symbol, LCONS(X, LCONS(isym, R_NilValue))));
-        PROTECT(R_fcall =
-                    LCONS(FUN, LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue))));
+        auto tmp =
+            PROTECT(LCONS(R_Bracket2Symbol, LCONS(X, LCONS(isym, R_NilValue))));
+        auto R_fcall =
+            PROTECT(LCONS(FUN, LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue))));
 
         int common_len_offset = 0;
         for (i = 0; i < n; i++) {
