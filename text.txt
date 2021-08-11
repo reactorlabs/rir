@@ -1,0 +1,1938 @@
+
+╞══════════════════════════════╡  Compiling h1  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a68c0330]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;NonRefl0,!Obj0,SimpleReal0           │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h1[0x5565a68c0330]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5b3a950+9: [], env=e1.1
+  real$-<>        %1.4  = Force<lazy>        !r    %1.0, %1.3, 
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  val?^           %2.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %2.2  = FrameState         lRL   0x5565a5b3a950+23: [%1.4], env=e1.1
+  val?<real$->    %2.3  = Force<wrapped>     !     %2.0, %2.2, e1.1
+  cp              %2.4  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5b3a950+9: [%1.4], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5b3a950+23: [%1.4, %2.3], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?<real$->    %6.0  = Add                !     %1.4, %2.3, e1.1
+  cp              %6.1  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5b3a950+28: [%1.4, %2.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  void                    Return                   %6.0
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5b3a950+29: [%6.0], env=e1.1
+  void                    Deopt              !     %9.0
+│ h1[0x5565a68c0330]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a68c0330]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;NonRefl0,!Obj0,SimpleReal0           │
+│ Properties:  Eager, !Reflection, ForceOrd: 0                                 │
+├────── Final PIR Version
+h1[0x5565a68c0330]
+BB0
+  val^            %0.0  = LdArg                    0
+  real$-<>        %0.1  = Force!<lazy>       !vr   %0.0, 
+  real$-<>        %0.2  = Add                vd    %0.1, %0.1, elided
+  void                    Return                   %0.2
+
+│ h1[0x5565a68c0330]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+╞══════════════════════════════╡  Compiling h2  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a68c0330]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;NonRefl0,!Obj0,SimpleReal0           │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h2[0x5565a68c0330]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5f8e6d0+9: [], env=e1.1
+  real$-<>        %1.4  = Force<lazy>        !r    %1.0, %1.3, 
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  val?^           %2.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %2.2  = FrameState         lRL   0x5565a5f8e6d0+23: [%1.4], env=e1.1
+  val?<real$->    %2.3  = Force<wrapped>     !     %2.0, %2.2, e1.1
+  cp              %2.4  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5f8e6d0+9: [%1.4], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5f8e6d0+23: [%1.4, %2.3], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?<real$->    %6.0  = Add                !     %1.4, %2.3, e1.1
+  cp              %6.1  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5f8e6d0+28: [%1.4, %2.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  void                    Return                   %6.0
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5f8e6d0+29: [%6.0], env=e1.1
+  void                    Deopt              !     %9.0
+│ h2[0x5565a68c0330]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a68c0330]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;NonRefl0,!Obj0,SimpleReal0           │
+│ Properties:  Eager, !Reflection, ForceOrd: 0                                 │
+├────── Final PIR Version
+h2[0x5565a68c0330]
+BB0
+  val^            %0.0  = LdArg                    0
+  real$-<>        %0.1  = Force!<lazy>       !vr   %0.0, 
+  real$-<>        %0.2  = Add                vd    %0.1, %0.1, elided
+  void                    Return                   %0.2
+
+│ h2[0x5565a68c0330]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+[1] 22
+
+╞═══════════════════════════════╡  Compiling g  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a68c0330]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h1[0x5565a68c0330]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5b3a950+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5b3a950+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5b3a950+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<wrapped>     !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5b3a950+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5b3a950+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5b3a950+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5b3a950+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h1[0x5565a68c0330]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a6fbdb70]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h2[0x5565a6fbdb70]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5f8e6d0+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5f8e6d0+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<wrapped>     !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5f8e6d0+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5f8e6d0+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5f8e6d0+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h2[0x5565a6fbdb70]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a7000b00]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a7000b00]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h1, e1.1
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  prom-           %6.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %6.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %6.6  = StaticCall         !     h1[0x5565a68c0330](%6.4) %6.5, e1.1
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+44: [%6.6], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    h1, e1.1
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %12.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %12.6 = StaticCall         !     h1[0x5565a68c0330](%12.4) %12.5, e1.1
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+89: [%12.6], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  cp              %16.0 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  val?^           %18.0 = LdVar              eR    h2, e1.1
+  cls$-           %18.1 = LdConst                  function (a) 
+  lgl$#-          %18.2 = Identical                %18.0, %18.1
+  void                    Assume             D     %18.2, %16.0
+  prom-           %18.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %18.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %18.6 = StaticCall         !     h2[0x5565a6fbdb70](%18.4) %18.5, e1.1
+  cp              %18.7 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+134: [%18.6], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  cp              %22.0 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  val?^           %24.0 = LdVar              eR    h2, e1.1
+  cls$-           %24.1 = LdConst                  function (a) 
+  lgl$#-          %24.2 = Identical                %24.0, %24.1
+  void                    Assume             D     %24.2, %22.0
+  prom-           %24.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %24.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %24.6 = StaticCall         !     h2[0x5565a6fbdb70](%24.4) %24.5, e1.1
+  cp              %24.7 = Checkpoint                -> BB26 (default) | BB27 (if assume failed)
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %25.0
+BB26   <- [24]
+  void                    Return                   %24.6
+BB27   <- [24]
+  fs              %27.0 = FrameState         lRL   0x5565a5d31c90+179: [%24.6], env=e1.1
+  void                    Deopt              !     %27.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a7000b00]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a7000b00]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Final PIR Version
+g[0x5565a7000b00]
+BB0
+  val^            %0.0  = LdArg                    0
+  val?^           %0.1  = LdVar              eR    h1, GlobalEnv
+  cls$-           %0.2  = LdConst                  function (a) 
+  lgl$#-          %0.3  = Identical                %0.1, %0.2
+  void                    Branch                   %0.3 -> BB6 (if true) | BB7 (if false)
+BB6   <- [0]
+  env             e6.0  = (MkEnv)            l     a=%0.0, parent=GlobalEnv, context 1
+  val?<real$->    %6.1  = Force!<lazy>       !vL   %0.0, e6.0
+  lgl$#-          %6.2  = IsType                   %6.1 isA real$-
+  lgl$#-          %6.3  = IsEnvStub          R     , e6.0
+  void                    Branch                   %6.3 -> BB8 (if true) | BB9 (if false)
+BB7   <- [0]
+  void                    RecordDeoptReason  m     %0.1
+  env             e7.1  = MKEnv              l     a=%0.0, parent=GlobalEnv, context 1
+  void                    ScheduledDeopt           0x5565a5d31c90+0: [], env=e7.1
+BB8   <- [6]
+  void                    Branch                   %6.2 -> BB10 (if true) | BB11 (if false)
+BB9   <- [6]
+  void                    RecordDeoptReason  m     e6.0
+  goto BB3
+BB10   <- [8]
+  val?^           %10.0 = LdVar              eRd   h1, GlobalEnv
+  lgl$#-          %10.1 = Identical                %10.0, %0.2
+  void                    Branch                   %10.1 -> BB12 (if true) | BB13 (if false)
+BB11   <- [8]
+  void                    RecordDeoptReason  m     %6.1
+  goto BB3
+BB3   <- [9, 11, 13, 15, 17]
+  env             e3.0  = MaterializeEnv           , e6.0
+  prom-           %3.1  = MkArg                    unboundValue, Prom(0), e3.0
+  val^            %3.2  = CastType                 up %3.1
+  env             e3.3  = MKEnv              l     a=%3.2, parent=GlobalEnv, context 0
+  void                    ScheduledDeopt           0x5565a5d31c90+44: [], env=e3.0; 0x5565a5b3a950+9: [], env=e3.3; 0x5565a6031ec0+5: [%6.1], env=e3.0
+BB12   <- [10]
+  val~            %12.0 = ChkMissing         e     %6.1
+  val?<real$->    %12.1 = Force!<wrapped>    d     %12.0, 
+  lgl$#-          %12.2 = IsType                   %12.1 isA real$-
+  void                    Branch                   %12.2 -> BB14 (if true) | BB15 (if false)
+BB13   <- [10]
+  void                    RecordDeoptReason  m     %10.0
+  goto BB3
+BB14   <- [12]
+  val?^           %14.0 = LdVar              eRd   h2, GlobalEnv
+  lgl$#-          %14.1 = Identical                %14.0, %0.2
+  void                    Branch                   %14.1 -> BB16 (if true) | BB17 (if false)
+BB15   <- [12]
+  void                    RecordDeoptReason  m     %12.1
+  goto BB3
+BB16   <- [14]
+  real$-          %16.0 = CastType           d     dn %6.1
+  real$-          %16.1 = CastType           d     dn %12.1
+  real$-<>        %16.2 = Add                vd    %16.0, %16.1, elided
+  void                    Return                   %16.2
+BB17   <- [14]
+  void                    RecordDeoptReason  m     %14.0
+  goto BB3
+Prom 0:
+BB0
+  env             e0.0  = LdFunctionEnv            
+  val?^           %0.1  = LdVar              eR    a, e0.0
+  void                    Visible            v     
+  val?<real$->    %0.3  = Force<lazy>        !     %0.1, e0.0
+  void                    Return                   %0.3
+
+│ g[0x5565a7000b00]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+[1] 22
+
+╞═══════════════════════════════╡  Compiling g  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a6fdfa00]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h1[0x5565a6fdfa00]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5b3a950+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5b3a950+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5b3a950+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<lazy>        !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5b3a950+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5b3a950+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5b3a950+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5b3a950+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h1[0x5565a6fdfa00]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a702ac20]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h2[0x5565a702ac20]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5f8e6d0+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5f8e6d0+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<wrapped>     !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5f8e6d0+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5f8e6d0+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5f8e6d0+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h2[0x5565a702ac20]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a6fbdb70]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a6fbdb70]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h1, e1.1
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  prom-           %6.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %6.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %6.6  = StaticCall         !     h1[0x5565a6fdfa00](%6.4) %6.5, e1.1
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+44: [%6.6], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    h1, e1.1
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %12.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %12.6 = StaticCall         !     h1[0x5565a6fdfa00](%12.4) %12.5, e1.1
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+89: [%12.6], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  cp              %16.0 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  val?^           %18.0 = LdVar              eR    h2, e1.1
+  cls$-           %18.1 = LdConst                  function (a) 
+  lgl$#-          %18.2 = Identical                %18.0, %18.1
+  void                    Assume             D     %18.2, %16.0
+  prom-           %18.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %18.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %18.6 = StaticCall         !     h2[0x5565a702ac20](%18.4) %18.5, e1.1
+  cp              %18.7 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+134: [%18.6], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  cp              %22.0 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  val?^           %24.0 = LdVar              eR    h2, e1.1
+  cls$-           %24.1 = LdConst                  function (a) 
+  lgl$#-          %24.2 = Identical                %24.0, %24.1
+  void                    Assume             D     %24.2, %22.0
+  prom-           %24.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %24.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %24.6 = StaticCall         !     h2[0x5565a702ac20](%24.4) %24.5, e1.1
+  cp              %24.7 = Checkpoint                -> BB26 (default) | BB27 (if assume failed)
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %25.0
+BB26   <- [24]
+  void                    Return                   %24.6
+BB27   <- [24]
+  fs              %27.0 = FrameState         lRL   0x5565a5d31c90+179: [%24.6], env=e1.1
+  void                    Deopt              !     %27.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a6fbdb70]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a6fbdb70]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Final PIR Version
+g[0x5565a6fbdb70]
+BB0
+  val^            %0.0  = LdArg                    0
+  val?^           %0.1  = LdVar              eR    h1, GlobalEnv
+  cls$-           %0.2  = LdConst                  function (a) 
+  lgl$#-          %0.3  = Identical                %0.1, %0.2
+  void                    Branch                   %0.3 -> BB6 (if true) | BB7 (if false)
+BB6   <- [0]
+  env             e6.0  = (MkEnv)            l     a=%0.0, parent=GlobalEnv, context 1
+  val?<real$->    %6.1  = Force!<lazy>       !vL   %0.0, e6.0
+  lgl$#-          %6.2  = IsType                   %6.1 isA real$-
+  lgl$#-          %6.3  = IsEnvStub          R     , e6.0
+  void                    Branch                   %6.3 -> BB8 (if true) | BB9 (if false)
+BB7   <- [0]
+  void                    RecordDeoptReason  m     %0.1
+  env             e7.1  = MKEnv              l     a=%0.0, parent=GlobalEnv, context 1
+  void                    ScheduledDeopt           0x5565a5d31c90+0: [], env=e7.1
+BB8   <- [6]
+  void                    Branch                   %6.2 -> BB10 (if true) | BB11 (if false)
+BB9   <- [6]
+  void                    RecordDeoptReason  m     e6.0
+  goto BB3
+BB10   <- [8]
+  val?^           %10.0 = LdVar              eRd   h1, GlobalEnv
+  lgl$#-          %10.1 = Identical                %10.0, %0.2
+  void                    Branch                   %10.1 -> BB12 (if true) | BB13 (if false)
+BB11   <- [8]
+  void                    RecordDeoptReason  m     %6.1
+  goto BB3
+BB3   <- [9, 11, 13, 15, 17]
+  env             e3.0  = MaterializeEnv           , e6.0
+  prom-           %3.1  = MkArg                    unboundValue, Prom(0), e3.0
+  val^            %3.2  = CastType                 up %3.1
+  env             e3.3  = MKEnv              l     a=%3.2, parent=GlobalEnv, context 0
+  void                    ScheduledDeopt           0x5565a5d31c90+44: [], env=e3.0; 0x5565a5b3a950+9: [], env=e3.3; 0x5565a6031ec0+5: [%6.1], env=e3.0
+BB12   <- [10]
+  val~            %12.0 = ChkMissing         e     %6.1
+  val?<real$->    %12.1 = Force!<lazy>       d     %12.0, 
+  lgl$#-          %12.2 = IsType                   %12.1 isA real$-
+  void                    Branch                   %12.2 -> BB14 (if true) | BB15 (if false)
+BB13   <- [10]
+  void                    RecordDeoptReason  m     %10.0
+  goto BB3
+BB14   <- [12]
+  val?^           %14.0 = LdVar              eRd   h2, GlobalEnv
+  lgl$#-          %14.1 = Identical                %14.0, %0.2
+  void                    Branch                   %14.1 -> BB16 (if true) | BB17 (if false)
+BB15   <- [12]
+  void                    RecordDeoptReason  m     %12.1
+  goto BB3
+BB16   <- [14]
+  real$-          %16.0 = CastType           d     dn %6.1
+  real$-          %16.1 = CastType           d     dn %12.1
+  real$-<>        %16.2 = Add                vd    %16.0, %16.1, elided
+  void                    Return                   %16.2
+BB17   <- [14]
+  void                    RecordDeoptReason  m     %14.0
+  goto BB3
+Prom 0:
+BB0
+  env             e0.0  = LdFunctionEnv            
+  val?^           %0.1  = LdVar              eR    a, e0.0
+  void                    Visible            v     
+  val?<real$->    %0.3  = Force<lazy>        !     %0.1, e0.0
+  void                    Return                   %0.3
+
+│ g[0x5565a6fbdb70]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+[1] 22
+
+╞═══════════════════════════════╡  Compiling h  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a7158190]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h1[0x5565a7158190]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5b3a950+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5b3a950+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5b3a950+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<lazy>        !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5b3a950+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5b3a950+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5b3a950+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5b3a950+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h1[0x5565a7158190]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a70caba0]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h2[0x5565a70caba0]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5f8e6d0+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5f8e6d0+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<wrapped>     !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5f8e6d0+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5f8e6d0+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5f8e6d0+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h2[0x5565a70caba0]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a7160f60]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;Eager0,NonRefl0,!Obj0,SimpleReal0    │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a7160f60]
+BB0
+  goto BB1
+BB1   <- [0]
+  real$~-         %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    h1, e1.1
+  cls$-           %4.1  = LdConst                  function (a) 
+  lgl$#-          %4.2  = Identical                %4.0, %4.1
+  void                    Assume             D     %4.2, %2.0
+  prom-           %4.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %4.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %4.6  = StaticCall         !     h1[0x5565a7158190](%4.4) %4.5, e1.1
+  cp              %4.7  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+44: [%4.6], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  val?^           %10.0 = LdVar              eR    h1, e1.1
+  cls$-           %10.1 = LdConst                  function (a) 
+  lgl$#-          %10.2 = Identical                %10.0, %10.1
+  void                    Assume             D     %10.2, %8.0
+  prom-           %10.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %10.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %10.6 = StaticCall         !     h1[0x5565a7158190](%10.4) %10.5, e1.1
+  cp              %10.7 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  cp              %12.0 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+89: [%10.6], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  val?^           %16.0 = LdVar              eR    h2, e1.1
+  cls$-           %16.1 = LdConst                  function (a) 
+  lgl$#-          %16.2 = Identical                %16.0, %16.1
+  void                    Assume             D     %16.2, %14.0
+  prom-           %16.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %16.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %16.6 = StaticCall         !     h2[0x5565a70caba0](%16.4) %16.5, e1.1
+  cp              %16.7 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  cp              %18.0 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+134: [%16.6], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  val?^           %22.0 = LdVar              eR    h2, e1.1
+  cls$-           %22.1 = LdConst                  function (a) 
+  lgl$#-          %22.2 = Identical                %22.0, %22.1
+  void                    Assume             D     %22.2, %20.0
+  prom-           %22.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %22.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %22.6 = StaticCall         !     h2[0x5565a70caba0](%22.4) %22.5, e1.1
+  cp              %22.7 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  void                    Return                   %22.6
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+179: [%22.6], env=e1.1
+  void                    Deopt              !     %25.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a7160f60]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a701be60]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a701be60]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h1, e1.1
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  prom-           %6.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %6.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %6.6  = StaticCall         !     h1[0x5565a7158190](%6.4) %6.5, e1.1
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+44: [%6.6], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    h1, e1.1
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %12.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %12.6 = StaticCall         !     h1[0x5565a7158190](%12.4) %12.5, e1.1
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+89: [%12.6], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  cp              %16.0 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  val?^           %18.0 = LdVar              eR    h2, e1.1
+  cls$-           %18.1 = LdConst                  function (a) 
+  lgl$#-          %18.2 = Identical                %18.0, %18.1
+  void                    Assume             D     %18.2, %16.0
+  prom-           %18.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %18.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %18.6 = StaticCall         !     h2[0x5565a70caba0](%18.4) %18.5, e1.1
+  cp              %18.7 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+134: [%18.6], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  cp              %22.0 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  val?^           %24.0 = LdVar              eR    h2, e1.1
+  cls$-           %24.1 = LdConst                  function (a) 
+  lgl$#-          %24.2 = Identical                %24.0, %24.1
+  void                    Assume             D     %24.2, %22.0
+  prom-           %24.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %24.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %24.6 = StaticCall         !     h2[0x5565a70caba0](%24.4) %24.5, e1.1
+  cp              %24.7 = Checkpoint                -> BB26 (default) | BB27 (if assume failed)
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %25.0
+BB26   <- [24]
+  void                    Return                   %24.6
+BB27   <- [24]
+  fs              %27.0 = FrameState         lRL   0x5565a5d31c90+179: [%24.6], env=e1.1
+  void                    Deopt              !     %27.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a701be60]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h[0x5565a702f440]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch miss: 1                              │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h[0x5565a702f440]
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = MKEnv              l     a(miss)=missingArg, parent=GlobalEnv, context 1
+  cp              %1.1  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    g, e1.0
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  real$#-         %6.4  = LdConst                  1
+  fs              %6.5  = FrameState         lRL   0x5565a70f2130+44: [], env=e1.0
+  val?            %6.6  = StaticCall         !     g[0x5565a7160f60](%6.4) %6.5, e1.0
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a70f2130+44: [%6.6], env=e1.0
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a70f2130+45: [], env=e1.0
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    g, e1.0
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(0), e1.0
+  fs              %12.5 = FrameState         lRL   0x5565a70f2130+89: [], env=e1.0
+  val?<real$->    %12.6 = StaticCall         !     g[0x5565a701be60](%12.4) %12.5, e1.0
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a70f2130+45: [], env=e1.0
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  void                    Return                   %12.6
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a70f2130+89: [%12.6], env=e1.0
+  void                    Deopt              !     %15.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  cp              %1.1  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cls             %2.0  = LdFun              !     c, <0x5565a50b3b98>, e1.0
+  cp              %2.1  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6fe37a0+0(pr): [], env=e1.0
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  real$#-         %4.0  = LdConst                  11
+  fs              %4.1  = FrameState         lRL   0x5565a6fe37a0+44(pr): [], env=e1.0
+  val?<real$->    %4.2  = Call               !     %2.0(%4.0) %4.1, e1.0
+  cp              %4.3  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a6fe37a0+0(pr): [], env=e1.0
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  void                    Return                   %4.2
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a6fe37a0+44(pr): [%4.2], env=e1.0
+  void                    Deopt              !     %7.0
+│ h[0x5565a702f440]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h[0x5565a702f440]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch miss: 1                              │
+│ Properties:  Eager                                                           │
+├────── Final PIR Version
+h[0x5565a702f440]
+BB0
+  val?^           %0.0  = LdVar              eR    g, GlobalEnv
+  cls$-           %0.1  = LdConst                  function (a) 
+  lgl$#-          %0.2  = Identical                %0.0, %0.1
+  void                    Branch                   %0.2 -> BB4 (if true) | BB5 (if false)
+BB4   <- [0]
+  val?^           %4.0  = LdVar              eR    h1, GlobalEnv
+  cls$-           %4.1  = LdConst                  function (a) 
+  lgl$#-          %4.2  = Identical                %4.0, %4.1
+  void                    Branch                   %4.2 -> BB6 (if true) | BB7 (if false)
+BB5   <- [0]
+  void                    RecordDeoptReason  m     %0.0
+  goto BB3
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h2, GlobalEnv
+  lgl$#-          %6.1  = Identical                %6.0, %4.1
+  void                    Branch                   %6.1 -> BB8 (if true) | BB9 (if false)
+BB7   <- [4]
+  void                    RecordDeoptReason  m     %4.0
+  goto BB3
+BB3   <- [5, 7, 9, 11]
+  env             e3.0  = MKEnv              l     a(miss)=missingArg, parent=GlobalEnv, context 1
+  void                    ScheduledDeopt           0x5565a70f2130+0: [], env=e3.0
+BB8   <- [6]
+  cls$-           %8.0  = LdConst                  .Primitive("c")
+  val?^           %8.1  = LdVar              eR    c, GlobalEnv
+  lgl$#-          %8.2  = Identical                %8.1, %8.0
+  void                    Branch                   %8.2 -> BB10 (if true) | BB11 (if false)
+BB9   <- [6]
+  void                    RecordDeoptReason  m     %6.0
+  goto BB3
+BB10   <- [8]
+  real$#-         %10.0 = LdConst                  11
+  real$#-<real$-> %10.1 = CallSafeBuiltin    wed   c(%10.0) 
+  real$#-<real$-> %10.2 = Add                vd    %10.1, %10.1, elided
+  void                    Return                   %10.2
+BB11   <- [8]
+  void                    Nop                !     
+  goto BB3
+
+│ h[0x5565a702f440]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+[1] 22
+[1] 22
+
+╞═══════════════════════════════╡  Compiling h  ╞══════════════════════════════╡
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h1[0x5565a70edbd0]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h1[0x5565a70edbd0]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5b3a950+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5b3a950+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5b3a950+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<lazy>        !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5b3a950+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5b3a950+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5b3a950+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5b3a950+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h1[0x5565a70edbd0]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h2[0x5565a7160db0]                                                           │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h2[0x5565a7160db0]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Visible            v     
+  fs              %2.1  = FrameState         lRL   0x5565a5f8e6d0+9: [], env=e1.1
+  val?<real$->    %2.2  = Force<lazy>        !     %1.0, %2.1, e1.1
+  cp              %2.3  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5f8e6d0+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    a, e1.1
+  void                    Visible            v     
+  fs              %4.2  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2], env=e1.1
+  val?<real$->    %4.3  = Force<wrapped>     !     %4.0, %4.2, e1.1
+  cp              %4.4  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5f8e6d0+9: [%2.2], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5f8e6d0+23: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  val?<real$->    %8.0  = Add                !     %2.2, %4.3, e1.1
+  cp              %8.1  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5f8e6d0+28: [%2.2, %4.3], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  void                    Return                   %8.0
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5f8e6d0+29: [%8.0], env=e1.1
+  void                    Deopt              !     %11.0
+│ h2[0x5565a7160db0]                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a6fd8c80]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch;Eager0,NonRefl0,!Obj0,SimpleReal0    │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a6fd8c80]
+BB0
+  goto BB1
+BB1   <- [0]
+  real$~-         %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  val?^           %4.0  = LdVar              eR    h1, e1.1
+  cls$-           %4.1  = LdConst                  function (a) 
+  lgl$#-          %4.2  = Identical                %4.0, %4.1
+  void                    Assume             D     %4.2, %2.0
+  prom-           %4.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %4.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %4.6  = StaticCall         !     h1[0x5565a70edbd0](%4.4) %4.5, e1.1
+  cp              %4.7  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  cp              %6.0  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+44: [%4.6], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  val?^           %10.0 = LdVar              eR    h1, e1.1
+  cls$-           %10.1 = LdConst                  function (a) 
+  lgl$#-          %10.2 = Identical                %10.0, %10.1
+  void                    Assume             D     %10.2, %8.0
+  prom-           %10.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %10.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %10.6 = StaticCall         !     h1[0x5565a70edbd0](%10.4) %10.5, e1.1
+  cp              %10.7 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  cp              %12.0 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+89: [%10.6], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  val?^           %16.0 = LdVar              eR    h2, e1.1
+  cls$-           %16.1 = LdConst                  function (a) 
+  lgl$#-          %16.2 = Identical                %16.0, %16.1
+  void                    Assume             D     %16.2, %14.0
+  prom-           %16.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %16.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %16.6 = StaticCall         !     h2[0x5565a7160db0](%16.4) %16.5, e1.1
+  cp              %16.7 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  cp              %18.0 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+134: [%16.6], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  val?^           %22.0 = LdVar              eR    h2, e1.1
+  cls$-           %22.1 = LdConst                  function (a) 
+  lgl$#-          %22.2 = Identical                %22.0, %22.1
+  void                    Assume             D     %22.2, %20.0
+  prom-           %22.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %22.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %22.6 = StaticCall         !     h2[0x5565a7160db0](%22.4) %22.5, e1.1
+  cp              %22.7 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  void                    Return                   %22.6
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+179: [%22.6], env=e1.1
+  void                    Deopt              !     %25.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a6fd8c80]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ g[0x5565a7020d50]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch                                      │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+g[0x5565a7020d50]
+BB0
+  goto BB1
+BB1   <- [0]
+  val^            %1.0  = LdArg                    0
+  env             e1.1  = MKEnv              l     a=%1.0, parent=GlobalEnv, context 1
+  cp              %1.2  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h1, e1.1
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  prom-           %6.4  = MkArg                    unboundValue, Prom(0), e1.1
+  fs              %6.5  = FrameState         lRL   0x5565a5d31c90+44: [], env=e1.1
+  val?            %6.6  = StaticCall         !     h1[0x5565a70edbd0](%6.4) %6.5, e1.1
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a5d31c90+0: [], env=e1.1
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a5d31c90+44: [%6.6], env=e1.1
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    h1, e1.1
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(1), e1.1
+  fs              %12.5 = FrameState         lRL   0x5565a5d31c90+89: [], env=e1.1
+  val?            %12.6 = StaticCall         !     h1[0x5565a70edbd0](%12.4) %12.5, e1.1
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a5d31c90+45: [], env=e1.1
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  cp              %14.0 = Checkpoint                -> BB16 (default) | BB17 (if assume failed)
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a5d31c90+89: [%12.6], env=e1.1
+  void                    Deopt              !     %15.0
+BB16   <- [14]
+  cp              %16.0 = Checkpoint                -> BB18 (default) | BB19 (if assume failed)
+BB17   <- [14]
+  fs              %17.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %17.0
+BB18   <- [16]
+  val?^           %18.0 = LdVar              eR    h2, e1.1
+  cls$-           %18.1 = LdConst                  function (a) 
+  lgl$#-          %18.2 = Identical                %18.0, %18.1
+  void                    Assume             D     %18.2, %16.0
+  prom-           %18.4 = MkArg                    unboundValue, Prom(2), e1.1
+  fs              %18.5 = FrameState         lRL   0x5565a5d31c90+134: [], env=e1.1
+  val?            %18.6 = StaticCall         !     h2[0x5565a7160db0](%18.4) %18.5, e1.1
+  cp              %18.7 = Checkpoint                -> BB20 (default) | BB21 (if assume failed)
+BB19   <- [16]
+  fs              %19.0 = FrameState         lRL   0x5565a5d31c90+90: [], env=e1.1
+  void                    Deopt              !     %19.0
+BB20   <- [18]
+  cp              %20.0 = Checkpoint                -> BB22 (default) | BB23 (if assume failed)
+BB21   <- [18]
+  fs              %21.0 = FrameState         lRL   0x5565a5d31c90+134: [%18.6], env=e1.1
+  void                    Deopt              !     %21.0
+BB22   <- [20]
+  cp              %22.0 = Checkpoint                -> BB24 (default) | BB25 (if assume failed)
+BB23   <- [20]
+  fs              %23.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %23.0
+BB24   <- [22]
+  val?^           %24.0 = LdVar              eR    h2, e1.1
+  cls$-           %24.1 = LdConst                  function (a) 
+  lgl$#-          %24.2 = Identical                %24.0, %24.1
+  void                    Assume             D     %24.2, %22.0
+  prom-           %24.4 = MkArg                    unboundValue, Prom(3), e1.1
+  fs              %24.5 = FrameState         lRL   0x5565a5d31c90+179: [], env=e1.1
+  val?<real$->    %24.6 = StaticCall         !     h2[0x5565a7160db0](%24.4) %24.5, e1.1
+  cp              %24.7 = Checkpoint                -> BB26 (default) | BB27 (if assume failed)
+BB25   <- [22]
+  fs              %25.0 = FrameState         lRL   0x5565a5d31c90+135: [], env=e1.1
+  void                    Deopt              !     %25.0
+BB26   <- [24]
+  void                    Return                   %24.6
+BB27   <- [24]
+  fs              %27.0 = FrameState         lRL   0x5565a5d31c90+179: [%24.6], env=e1.1
+  void                    Deopt              !     %27.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6031ec0+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<lazy>        !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6031ec0+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 1:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a5c50a10+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a5c50a10+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 2:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a572a090+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a572a090+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+Prom 3:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  val?^           %1.1  = LdVar              eR    a, e1.0
+  void                    Visible            v     
+  fs              %1.3  = FrameState         lRL   0x5565a6292420+5(pr): [], env=e1.0
+  val?<real$->    %1.4  = Force<wrapped>     !     %1.1, %1.3, e1.0
+  cp              %1.5  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  void                    Return                   %1.4
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6292420+5(pr): [%1.4], env=e1.0
+  void                    Deopt              !     %3.0
+│ g[0x5565a7020d50]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h[0x5565a70d8be0]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch miss: 1                              │
+│ Properties:                                                                  │
+├────── Compiled to PIR Version
+h[0x5565a70d8be0]
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = MKEnv              l     a(miss)=missingArg, parent=GlobalEnv, context 1
+  cp              %1.1  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cp              %2.0  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  cp              %4.0  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    g, e1.0
+  cls$-           %6.1  = LdConst                  function (a) 
+  lgl$#-          %6.2  = Identical                %6.0, %6.1
+  void                    Assume             D     %6.2, %4.0
+  real$#-         %6.4  = LdConst                  1
+  fs              %6.5  = FrameState         lRL   0x5565a70f2130+44: [], env=e1.0
+  val?            %6.6  = StaticCall         !     g[0x5565a6fd8c80](%6.4) %6.5, e1.0
+  cp              %6.7  = Checkpoint                -> BB8 (default) | BB9 (if assume failed)
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a70f2130+0: [], env=e1.0
+  void                    Deopt              !     %7.0
+BB8   <- [6]
+  cp              %8.0  = Checkpoint                -> BB10 (default) | BB11 (if assume failed)
+BB9   <- [6]
+  fs              %9.0  = FrameState         lRL   0x5565a70f2130+44: [%6.6], env=e1.0
+  void                    Deopt              !     %9.0
+BB10   <- [8]
+  cp              %10.0 = Checkpoint                -> BB12 (default) | BB13 (if assume failed)
+BB11   <- [8]
+  fs              %11.0 = FrameState         lRL   0x5565a70f2130+45: [], env=e1.0
+  void                    Deopt              !     %11.0
+BB12   <- [10]
+  val?^           %12.0 = LdVar              eR    g, e1.0
+  cls$-           %12.1 = LdConst                  function (a) 
+  lgl$#-          %12.2 = Identical                %12.0, %12.1
+  void                    Assume             D     %12.2, %10.0
+  prom-           %12.4 = MkArg                    unboundValue, Prom(0), e1.0
+  fs              %12.5 = FrameState         lRL   0x5565a70f2130+89: [], env=e1.0
+  val?<real$->    %12.6 = StaticCall         !     g[0x5565a7020d50](%12.4) %12.5, e1.0
+  cp              %12.7 = Checkpoint                -> BB14 (default) | BB15 (if assume failed)
+BB13   <- [10]
+  fs              %13.0 = FrameState         lRL   0x5565a70f2130+45: [], env=e1.0
+  void                    Deopt              !     %13.0
+BB14   <- [12]
+  void                    Return                   %12.6
+BB15   <- [12]
+  fs              %15.0 = FrameState         lRL   0x5565a70f2130+89: [%12.6], env=e1.0
+  void                    Deopt              !     %15.0
+Prom 0:
+BB0
+  goto BB1
+BB1   <- [0]
+  env             e1.0  = LdFunctionEnv            
+  cp              %1.1  = Checkpoint                -> BB2 (default) | BB3 (if assume failed)
+BB2   <- [1]
+  cls             %2.0  = LdFun              !     c, <0x5565a50b3b98>, e1.0
+  cp              %2.1  = Checkpoint                -> BB4 (default) | BB5 (if assume failed)
+BB3   <- [1]
+  fs              %3.0  = FrameState         lRL   0x5565a6fe37a0+0(pr): [], env=e1.0
+  void                    Deopt              !     %3.0
+BB4   <- [2]
+  real$#-         %4.0  = LdConst                  11
+  fs              %4.1  = FrameState         lRL   0x5565a6fe37a0+44(pr): [], env=e1.0
+  val?<real$->    %4.2  = Call               !     %2.0(%4.0) %4.1, e1.0
+  cp              %4.3  = Checkpoint                -> BB6 (default) | BB7 (if assume failed)
+BB5   <- [2]
+  fs              %5.0  = FrameState         lRL   0x5565a6fe37a0+0(pr): [], env=e1.0
+  void                    Deopt              !     %5.0
+BB6   <- [4]
+  void                    Return                   %4.2
+BB7   <- [4]
+  fs              %7.0  = FrameState         lRL   0x5565a6fe37a0+44(pr): [%4.2], env=e1.0
+  void                    Deopt              !     %7.0
+│ h[0x5565a70d8be0]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ h[0x5565a70d8be0]                                                            │
+│ Context: !ExpMi,CorrOrd,!TMany,Argmatch miss: 1                              │
+│ Properties:  Eager                                                           │
+├────── Final PIR Version
+h[0x5565a70d8be0]
+BB0
+  val?^           %0.0  = LdVar              eR    g, GlobalEnv
+  cls$-           %0.1  = LdConst                  function (a) 
+  lgl$#-          %0.2  = Identical                %0.0, %0.1
+  void                    Branch                   %0.2 -> BB4 (if true) | BB5 (if false)
+BB4   <- [0]
+  val?^           %4.0  = LdVar              eR    h1, GlobalEnv
+  cls$-           %4.1  = LdConst                  function (a) 
+  lgl$#-          %4.2  = Identical                %4.0, %4.1
+  void                    Branch                   %4.2 -> BB6 (if true) | BB7 (if false)
+BB5   <- [0]
+  void                    RecordDeoptReason  m     %0.0
+  goto BB3
+BB6   <- [4]
+  val?^           %6.0  = LdVar              eR    h2, GlobalEnv
+  lgl$#-          %6.1  = Identical                %6.0, %4.1
+  void                    Branch                   %6.1 -> BB8 (if true) | BB9 (if false)
+BB7   <- [4]
+  void                    RecordDeoptReason  m     %4.0
+  goto BB3
+BB3   <- [5, 7, 9, 11]
+  env             e3.0  = MKEnv              l     a(miss)=missingArg, parent=GlobalEnv, context 1
+  void                    ScheduledDeopt           0x5565a70f2130+0: [], env=e3.0
+BB8   <- [6]
+  cls$-           %8.0  = LdConst                  .Primitive("c")
+  val?^           %8.1  = LdVar              eR    c, GlobalEnv
+  lgl$#-          %8.2  = Identical                %8.1, %8.0
+  void                    Branch                   %8.2 -> BB10 (if true) | BB11 (if false)
+BB9   <- [6]
+  void                    RecordDeoptReason  m     %6.0
+  goto BB3
+BB10   <- [8]
+  real$#-         %10.0 = LdConst                  11
+  real$#-<real$-> %10.1 = CallSafeBuiltin    wed   c(%10.0) 
+  real$#-<real$-> %10.2 = Add                vd    %10.1, %10.1, elided
+  void                    Return                   %10.2
+BB11   <- [8]
+  void                    Nop                !     
+  goto BB3
+
+│ h[0x5565a70d8be0]                                                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+[1] 22
