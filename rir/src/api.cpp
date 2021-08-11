@@ -85,6 +85,72 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     }
 }
 
+void printSYMSXP(SEXP what) {
+    auto pname = PRINTNAME(what);
+    auto value = SYMVALUE(what);
+    auto internal = INTERNAL(what);
+    std::cout << "________" << std::endl;
+    std::cout << "_SYMSXP_" << std::endl;
+    std::cout << "PNAME ::" << TYPEOF(pname) << std::endl;
+    if (TYPEOF(pname) == CHARSXP) {
+        std::cout << "->" << CHAR(pname) << std::endl;
+    }
+    std::cout << "VALUE ::" << TYPEOF(value) << std::endl;
+    std::cout << "INTERNAL ::" << TYPEOF(internal)  << std::endl;
+    std::cout << "________" << std::endl;
+}
+
+void printLISTSXP(SEXP what) {
+    auto tag = TAG(what);
+    auto car = CAR(what);
+    auto cdr = CDR(what);
+    std::cout << "LISTSXP ::" << std::endl;
+    std::cout << "TAG ::" << TYPEOF(tag) << std::endl;
+    if (TYPEOF(tag) == SYMSXP) {
+        printSYMSXP(tag);
+    }
+    std::cout << "CAR :: " << TYPEOF(car) << std::endl;
+    if (TYPEOF(car) == SYMSXP) {
+        printSYMSXP(car);
+    }
+    std::cout << "CDR :: " << TYPEOF(cdr) << std::endl;
+    if (TYPEOF(cdr) == LISTSXP) {
+        printLISTSXP(cdr);
+    }
+
+}
+
+REXPORT SEXP rirLogg(SEXP what, SEXP env) {
+    std::cout << TYPEOF(what) << " : ";
+    if (TYPEOF(what) == CLOSXP) {
+        std::cout << "__CLOSXP__" << std::endl;
+        // auto formals = FORMALS(what);
+        // formals are LISTSXP
+        // if (TYPEOF(formals) == LISTSXP) {
+        //     printLISTSXP(formals);
+        // }
+        std::cout << TYPEOF(BODY(what)) << std::endl;
+        if (DispatchTable::check(BODY(what))) {
+            std::cout << "Got dispatcher";
+        } else {
+            // auto table = DispatchTable::unpack(BODY(what));
+            std::cout << "No dispatcher";
+        }
+
+        std::cout << "__________" << std::endl;
+    } else if (TYPEOF(what) == BUILTINSXP) {
+        std::cout << "BUILTINSXP";
+    } else if (TYPEOF(what) == SPECIALSXP) {
+        std::cout << "SPECIALSXP";
+    } else if (TYPEOF(what) == SYMSXP) {
+        std::cout << "SYMSXP";
+    } else {
+        std::cout << "OTHER";
+    }
+    std::cout << std::endl;
+    return what;
+}
+
 REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
                              SEXP forceInline_, SEXP disableInline_,
                              SEXP disableSpecialization_,
