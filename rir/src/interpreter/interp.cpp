@@ -19,6 +19,8 @@
 #include <set>
 #include <unordered_set>
 
+#include <chrono>
+
 #define NOT_IMPLEMENTED assert(false)
 
 #undef eval
@@ -1051,9 +1053,60 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     return res;
 }
 
+#if LOGG > 0
+class Timer {
+private:
+    std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::_V2::steady_clock::duration> tick, tock;
+		std::chrono::duration<double, std::milli> runtime;
+public:
+    Timer(const CallContext& call) : tick(std::chrono::steady_clock::now()) {
+				std::ofstream & logg = Measuring::getLogStream();
+				SEXP const lhs = CAR(call.ast);
+				static const SEXP double_colons = Rf_install("::");
+    		static const SEXP triple_colons = Rf_install(":::");
+
+        logg << "=,\"" << reinterpret_cast<size_t>(BODY(call.callee)) << "\",";
+        // Function Header
+        if (TYPEOF(lhs) == SYMSXP) {
+						// case 1: function call of the form f(x,y,z)
+						logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
+				} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
+						// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
+						SEXP const fun1 = CAR(lhs);
+						SEXP const pkg = CADR(lhs);
+						SEXP const fun2 = CADDR(lhs);
+						assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
+						logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
+				} else {
+            logg << "\"AN_" << reinterpret_cast<size_t>(BODY(call.callee)) << "\"";
+        }
+        logg << "\n";
+    }
+
+    ~Timer() {
+				std::ofstream & logg = Measuring::getLogStream();
+        tock = std::chrono::steady_clock::now();
+        runtime = tock - tick;
+        logg << runtime.count() << "\n";
+    }
+private:
+    void* operator new(size_t);
+    void* operator new[](size_t);
+    void operator delete(void*);
+    void operator delete[](void*);
+};
+#endif
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
+
+    #if LOGG > 0
+    Timer t(call);
+    std::ofstream & logg =  Measuring::getLogStream();
+    #endif
+
+
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         serializeCounter++;
         if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
@@ -1120,6 +1173,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         UNPROTECT(1);
     }
+    #if LOGG > 0
+    logg << "!," << "\"" << fun->context() << "\",";
+    #endif
     assert(result);
     assert(!fun->flags.contains(Function::Deopt));
     return result;
