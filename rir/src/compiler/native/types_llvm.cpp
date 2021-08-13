@@ -67,7 +67,8 @@ void initializeTypes(LLVMContext& context) {
     t::RirRuntimeObject->setBody(fields);
 
     t::stackCell = StructType::create(context, "R_bcstack_t");
-    fields = {t::Int, t::SEXP};
+    // struct { int tag; int flags; union { ival, dval, sxpval} }
+    fields = {t::Int, t::Int, t::SEXP};
     t::stackCell->setBody(fields, false);
 
     t::stackCellPtr = PointerType::get(t::stackCell, 0);
@@ -103,7 +104,7 @@ void initializeTypes(LLVMContext& context) {
         t::SEXP,       t::SEXP,    t::SEXP,         t::SEXP,    t::SEXP,
         t::SEXP,       t::voidPtr, t::voidPtr,      t::voidPtr, t::Int,
         t::Int,        t::Int,     t::SEXP,         t::voidPtr, t::SEXP,
-        t::SEXP,       t::voidPtr, t::stackCellPtr, t::SEXP,    t::Int,
+        t::SEXP,       t::voidPtr, t::stackCellPtr, t::stackCellPtr, t::SEXP,    t::Int,
         t::SEXP,       t::voidPtr, t::Int,
     };
     t::RCNTXT->setBody(fields);

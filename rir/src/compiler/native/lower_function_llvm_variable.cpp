@@ -25,7 +25,7 @@ LowerFunctionLLVM::Variable::RVariable(Instruction* i, size_t pos,
     assert(i->producesRirResult());
     assert(!LdConst::Cast(i));
     assert(Representation::Of(i) == Representation::Sexp);
-    auto ptr = builder.CreateGEP(basepointer, {c(pos), c(1)});
+    auto ptr = builder.CreateGEP(basepointer, {c(pos), c(2)});
     ptr->setName(i->getRef());
     return {ImmutableLocalRVariable, ptr, false, pos};
 }

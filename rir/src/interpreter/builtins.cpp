@@ -321,6 +321,7 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     // SET_TAG
     case blt("cbind"):
     case blt("rbind"):
+    case blt("c"):
         return false;
     default: {}
     }
@@ -634,7 +635,7 @@ SEXP tryFastBuiltinCall1(const CallContext& call, InterpreterInstance* ctx,
 
         auto combination = (TYPEOF(args[0]) << 8) + TYPEOF(args[1]);
 
-#define CMP(a, b) ((call.callee->u.primsxp.offset == 301) ? a < b : b < a)
+#define CMP(a, b) ((call.callee->u.primsxp.offset == blt("min")) ? a < b : b < a)
 
         switch (combination) {
         case (INTSXP << 8) + INTSXP:

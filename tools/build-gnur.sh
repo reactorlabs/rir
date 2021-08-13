@@ -51,7 +51,7 @@ function build_r {
         if [ $USING_OSX -eq 1 ]; then
             ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
-            ./configure
+            CFLAGS="-Og -g -DSWITCH_TO_NAMED=1" ./configure
         fi
     fi
 
