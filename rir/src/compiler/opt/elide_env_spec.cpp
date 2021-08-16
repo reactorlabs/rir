@@ -129,6 +129,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         !arg->type.maybeMissing()) {
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
+                        anyChange = true;
                     }
                 }
             }
@@ -283,6 +284,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             BBTransform::insertAssume(condition, cp, true,
                                                       env->typeFeedback.srcCode,
                                                       nullptr);
+                            anyChange = true;
                             assert(cp->bb()->trueBranch() != bb);
                         }
                     }
@@ -301,6 +303,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     for (auto n : additionalEntries[env]) {
                         env->varName.push_back(n);
                         env->pushArg(UnboundValue::instance(), PirType::any());
+                        anyChange = true;
                     }
                     // After eliding an env we must ensure to add a
                     // materialization before every usage in deopt branches
@@ -331,17 +334,20 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             !i->effects.contains(Effect::DependsOnAssume) &&
             MkEnv::Cast(i->env()) && MkEnv::Cast(i->env())->stub) {
             i->effects.set(Effect::DependsOnAssume);
+            anyChange = true;
         }
         if (auto is = IsEnvStub::Cast(i)) {
             if (!materializableStubs.count(i->env())) {
                 is->replaceUsesWith(True::instance());
                 is->effects.reset();
+                anyChange = true;
             }
         }
         if (auto mk = MkArg::Cast(i)) {
             if (materializableStubs.count(mk->env())) {
                 if (auto e = mk->prom()->env()) {
                     e->stub = true;
+                    anyChange = true;
                 }
             }
         }
