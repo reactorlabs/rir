@@ -52,6 +52,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
+    case Opcode::vapply_:
         cs.insert(immediate.pool);
         return;
 
@@ -141,6 +142,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+        case Opcode::vapply_:
             i.pool = Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::ldvar_cached_:
@@ -237,6 +239,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+        case Opcode::vapply_:
             WriteItem(Pool::get(i.pool), refTable, out);
             break;
         case Opcode::ldvar_cached_:
@@ -395,6 +398,10 @@ void BC::print(std::ostream& out) const {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
         out << CHAR(PRINTNAME(name))
             << " == " << Pool::get(immediate.guard_fun_args.expected);
+        break;
+    }
+    case Opcode::vapply_: {
+        out << Pool::get(immediate.pool);
         break;
     }
     case Opcode::popn_:

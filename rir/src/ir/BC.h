@@ -256,6 +256,12 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
+BC BC::vapply(SEXP X) {
+    ImmediateArguments im;
+    im.pool = Pool::insert(X);
+    return BC(Opcode::vapply_, im);
+}
+
 BC BC::clearBindingCache(CacheIdx start, unsigned size) {
     ImmediateArguments im;
     im.cacheIdx.start = start;

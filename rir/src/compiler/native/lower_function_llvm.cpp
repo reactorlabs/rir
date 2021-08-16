@@ -5760,6 +5760,20 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::Vapply: {
+                auto v = Vapply::Cast(i);
+                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::vapply),
+                               {
+                                   constant(v->X, t::SEXP),
+                                   loadSxp(i->arg(0).val()),
+                                   loadSxp(i->arg(1).val()),
+                                   loadSxp(i->arg(2).val()),
+                                   loadSxp(i->arg(3).val()),
+                                   loadSxp(i->env()),
+                               }));
+                break;
+            }
+
             case Tag::Unreachable:
                 builder.CreateUnreachable();
                 break;

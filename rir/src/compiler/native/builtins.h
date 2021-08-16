@@ -147,6 +147,7 @@ struct NativeBuiltins {
         colonInputEffects,
         colonCastLhs,
         colonCastRhs,
+        vapply,
         names,
         setNames,
         xlength,

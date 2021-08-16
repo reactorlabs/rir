@@ -5,6 +5,7 @@
 #include "cache.h"
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"
+#include "interpreter/builtins.h"
 #include "ir/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -2338,6 +2339,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP t = ostack_top(ctx);
             feedback->record(t);
             pc += sizeof(ObservedValues);
+            NEXT();
+        }
+
+        INSTRUCTION(vapply_) {
+            SEXP X = cp_pool_at(ctx, readImmediate());
+            advanceImmediate();
+            res = vapply(X, ostack_at(ctx, 3), ostack_at(ctx, 2),
+                         ostack_at(ctx, 1), ostack_at(ctx, 0), env);
+            ostack_popn(ctx, 4);
+            ostack_push(ctx, res);
             NEXT();
         }
 

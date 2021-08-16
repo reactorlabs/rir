@@ -2,6 +2,7 @@
 
 #include "compiler/native/types_llvm.h"
 #include "compiler/parameter.h"
+#include "interpreter/builtins.h"
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
@@ -2299,6 +2300,13 @@ void NativeBuiltins::initializeBuiltins() {
                                   (void*)&Rf_shallow_duplicate,
                                   t::sexp_sexp,
                                   {llvm::Attribute::NoAlias}};
+    get_(Id::vapply) = {"vapply",
+                        (void*)&rir::vapply,
+                        llvm::FunctionType::get(t::SEXP,
+                                                {t::SEXP, t::SEXP, t::SEXP,
+                                                 t::SEXP, t::SEXP, t::SEXP},
+                                                false),
+                        {}};
 #ifdef __APPLE__
     get_(Id::sigsetjmp) = {
         "sigsetjmp", (void*)&sigsetjmp,
