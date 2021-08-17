@@ -25,8 +25,7 @@ struct bitShiftR {
 };
 
 template <class Func>
-static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
-                                 bool testLimits) {
+static SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs, bool testLimits) {
     if (TYPEOF(lhs) != REALSXP && TYPEOF(lhs) != INTSXP)
         return nullptr;
     if (TYPEOF(rhs) != REALSXP && TYPEOF(rhs) != INTSXP)

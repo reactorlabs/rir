@@ -166,12 +166,3 @@ f(2147483646, 2147483647)
 f(2147483646, 2147483647)
 f(2147483646, 2147483647)
 f(1, 2)
-
-scalarFor <- function(n) {
-  for (i in 1:n) {
-    
-  }
-  FALSE
-}
-
-stopifnot(tryCatch(scalarFor(10000000000L), error=function(err) TRUE))
