@@ -49,9 +49,9 @@ function build_r {
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
-            CFLAGS="-Og -g -DSWITCH_TO_NAMED=1" ./configure
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure
         fi
     fi
 
