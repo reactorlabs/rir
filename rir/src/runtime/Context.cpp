@@ -145,21 +145,21 @@ void Context::setSpecializationLevel(int level) {
     }
 }
 
-bool Context::isImproving(Function* f) const {
+unsigned Context::isImproving(Function* f) const {
     return isImproving(f->context(), f->signature().hasDotsFormals,
                        f->signature().hasDefaultArgs);
 }
-bool Context::isImproving(pir::ClosureVersion* f) const {
+unsigned Context::isImproving(pir::ClosureVersion* f) const {
     return isImproving(f->context(), f->owner()->formals().hasDots(),
                        f->owner()->formals().hasDefaultArgs());
 }
 
-bool Context::isImproving(const Context& other, bool hasDotsFormals,
-                          bool hasDefaultArgs) const {
+unsigned Context::isImproving(const Context& other, bool hasDotsFormals,
+                              bool hasDefaultArgs) const {
     assert(smaller(other));
 
     if (other == *this)
-        return false;
+        return 0;
     auto normalized = *this;
 
     if (!hasDotsFormals)
@@ -172,13 +172,13 @@ bool Context::isImproving(const Context& other, bool hasDotsFormals,
 
     if (hasDotsFormals || hasDefaultArgs) {
         if (normalized.numMissing() != other.numMissing())
-            return true;
+            return 20;
     } else {
         normalized.numMissing(other.numMissing());
     }
 
-    normalized = normalized | other;
-    return normalized != other;
+    auto diff = normalized.toI() & (~other.toI());
+    return 2 * __builtin_popcount(diff);
 }
 
 } // namespace rir

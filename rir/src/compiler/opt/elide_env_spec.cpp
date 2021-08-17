@@ -62,18 +62,18 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         assert(!arg->type.maybePromiseWrapped());
                         TypeFeedback seen;
                         if (argi)
-                            seen = argi->typeFeedback;
+                            seen = argi->typeFeedback();
                         if (auto j = Instruction::Cast(arg->followCasts()))
                             if (seen.type.isVoid() ||
-                                (!j->typeFeedback.type.isVoid() &&
-                                 !seen.type.isA(j->typeFeedback.type)))
-                                seen = j->typeFeedback;
+                                (!j->typeFeedback().type.isVoid() &&
+                                 !seen.type.isA(j->typeFeedback().type)))
+                                seen = j->typeFeedback();
                         if (auto j =
                                 Instruction::Cast(arg->followCastsAndForce()))
                             if (seen.type.isVoid() ||
-                                (!j->typeFeedback.type.isVoid() &&
-                                 !seen.type.isA(j->typeFeedback.type)))
-                                seen = j->typeFeedback;
+                                (!j->typeFeedback().type.isVoid() &&
+                                 !seen.type.isA(j->typeFeedback().type)))
+                                seen = j->typeFeedback();
 
                         auto required = arg->type.notObject();
                         auto suggested = required;
@@ -281,9 +281,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     for (auto env : check.second) {
                         if (!bannedEnvs.count(env)) {
                             auto condition = new IsEnvStub(env);
-                            BBTransform::insertAssume(condition, cp, true,
-                                                      env->typeFeedback.srcCode,
-                                                      nullptr);
+                            BBTransform::insertAssume(
+                                condition, cp, true,
+                                env->typeFeedback().srcCode, nullptr);
                             anyChange = true;
                             assert(cp->bb()->trueBranch() != bb);
                         }

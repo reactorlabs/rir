@@ -152,10 +152,8 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
         flags_.reset(TypeFlags::maybeObject);
     if (fastVeceltOk(e))
         flags_.reset(TypeFlags::maybeNotFastVecelt);
-    if (ATTRIB(e) == R_NilValue && !Rf_isObject(e)) {
-        assert(fastVeceltOk(e));
+    if (ATTRIB(e) == R_NilValue)
         flags_.reset(TypeFlags::maybeAttrib);
-    }
     if (Rf_xlength(e) == 1)
         flags_.reset(TypeFlags::maybeNotScalar);
 

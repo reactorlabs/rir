@@ -7,6 +7,7 @@
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/opt/pass_definitions.h"
+#include "compiler/parameter.h"
 #include "compiler/pir/builder.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
@@ -505,12 +506,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto v = feedback.seen == ObservedTest::OnlyTrue
                              ? (Value*)True::instance()
                              : (Value*)False::instance();
-                if (!i->typeFeedback.value) {
-                    i->typeFeedback.value = v;
-                    i->typeFeedback.srcCode = srcCode;
-                    i->typeFeedback.origin = pos;
-                } else if (i->typeFeedback.value != v) {
-                    i->typeFeedback.value = nullptr;
+                if (!i->typeFeedback().value) {
+                    auto& t = i->updateTypeFeedback();
+                    t.value = v;
+                    t.srcCode = srcCode;
+                    t.origin = pos;
+                } else if (i->typeFeedback().value != v) {
+                    i->updateTypeFeedback().value = nullptr;
                 }
             }
         }
@@ -537,9 +539,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         break;
                 }
                 // TODO: deal with multiple locations
-                i->typeFeedback.type.merge(feedback);
-                i->typeFeedback.srcCode = srcCode;
-                i->typeFeedback.origin = pos;
+                auto& t = i->updateTypeFeedback();
+                t.type.merge(feedback);
+                t.srcCode = srcCode;
+                t.origin = pos;
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
@@ -663,15 +666,47 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   // TODO implement support for call_builtin_
                                   // with names
                                   bc.bc == Opcode::call_;
-        if (monomorphicBuiltin) {
-            int arity = getBuiltinArity(ti.monomorphic);
+        SEXP staticCallee = nullptr;
+        if (auto ld = LdConst::Cast(callee))
+            staticCallee = ld->c();
+        bool staticMonomorphicBuiltin = staticCallee &&
+                                        TYPEOF(staticCallee) == BUILTINSXP &&
+                                        // TODO implement support for
+                                        // call_builtin_ with names
+                                        bc.bc == Opcode::call_;
+
+        auto checkArity = [&](SEXP builtin) {
+            int arity = getBuiltinArity(builtin);
             if (arity != -1 && arity != nargs)
-                monomorphicBuiltin = false;
-        }
+                return false;
+            return true;
+        };
+        if (monomorphicBuiltin)
+            monomorphicBuiltin = checkArity(ti.monomorphic);
+        if (staticMonomorphicBuiltin)
+            staticMonomorphicBuiltin = checkArity(staticCallee);
+
         const std::unordered_set<int> supportedSpecials = {blt("forceAndCall")};
         bool monomorphicSpecial =
             ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
             supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
+        if (monomorphicClosure && !monomorphicInnerFunction) {
+            auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
+            // Let's not re-translate already optimized functions if they are
+            // huge.
+            // TODO: this is more of a temporary measure. Long term we should
+            // have static calls with lazily compiled PIR targtets, so we can
+            // defer compilation to the point where we e.g. want to analyze or
+            // inline the callee...
+            if (dt->baseline()->body()->codeSize >
+                Parameter::RECOMPILE_THRESHOLD) {
+                auto cls = insert.function->owner();
+                // exclude recursive calls
+                if (!cls->hasOriginClosure() ||
+                    ti.monomorphic != cls->rirClosure())
+                    monomorphicClosure = false;
+            }
+        }
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto emitGenericCall = [&]() {
@@ -694,8 +729,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         };
 
         // Insert a guard if we want to speculate
-        if (monomorphicBuiltin || monomorphicClosure ||
-            monomorphicInnerFunction || monomorphicSpecial) {
+        if (!staticMonomorphicBuiltin &&
+            (monomorphicBuiltin || monomorphicClosure ||
+             monomorphicInnerFunction || monomorphicSpecial)) {
             auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
@@ -706,33 +742,41 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 std::get<Opcode*>(callTargetFeedback.at(callee)));
         }
 
-        if (monomorphicBuiltin) {
-            for (size_t i = 0; i < args.size(); ++i) {
-                if (auto mk = MkArg::Cast(args[i])) {
-                    if (mk->isEager()) {
-                        args[i] = mk->eagerArg();
-                    } else {
-                        assert(at(nargs - 1 - i) == args[i]);
-                        args[i] =
-                            tryCreateArg(mk->prom()->rirSrc(), insert, true);
-                        if (!args[i]) {
-                            log.warn("Failed to compile a promise");
-                            return false;
-                        }
+        auto eagerEval = [&](Value*& arg, size_t i) {
+            if (auto mk = MkArg::Cast(arg)) {
+                if (mk->isEager()) {
+                    arg = mk->eagerArg();
+                } else {
+                    auto original = arg;
+                    arg = tryCreateArg(mk->prom()->rirSrc(), insert, true);
+                    if (!arg) {
+                        log.warn("Failed to compile a promise");
+                        return false;
+                    }
+                    if (i != (size_t)-1 && at(nargs - 1 - i) == original) {
                         // Inlined argument evaluation might have side effects.
                         // Let's have a checkpoint here. This checkpoint needs
                         // to capture the so far evaluated promises.
                         stack.at(nargs - 1 - i) =
-                            insert(new MkArg(mk->prom(), args[i], mk->env()));
+                            insert(new MkArg(mk->prom(), arg, mk->env()));
                         addCheckpoint(srcCode, pos, stack, insert);
                     }
                 }
             }
+            return true;
+        };
+
+        if (monomorphicBuiltin || staticMonomorphicBuiltin) {
+            for (size_t i = 0; i < args.size(); ++i)
+                if (!eagerEval(args[i], i))
+                    return false;
 
             popn(toPop);
-            auto bt =
-                insert(BuiltinCallFactory::New(env, ti.monomorphic, args, ast));
-            bt->effects.set(Effect::DependsOnAssume);
+            auto bt = insert(BuiltinCallFactory::New(
+                env, staticMonomorphicBuiltin ? staticCallee : ti.monomorphic,
+                args, ast));
+            if (!staticMonomorphicBuiltin)
+                bt->effects.set(Effect::DependsOnAssume);
             push(bt);
         } else if (monomorphicClosure || monomorphicInnerFunction) {
             // (1) Argument Matching
@@ -775,6 +819,37 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (!correctOrder || needed < matchedArgs.size()) {
                 emitGenericCall();
                 break;
+            }
+
+            // Specialcase for calling usemethod, the first argument is eager.
+            // This helps determine the object type of the caller.
+            if (monomorphicClosure) {
+                auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
+                auto ast =
+                    src_pool_at(globalContext(), dt->baseline()->body()->src);
+                auto isUseMethod = CAR(ast) == symbol::UseMethod &&
+                                   TYPEOF(CADR(ast)) == STRSXP &&
+                                   CDDR(ast) == R_NilValue;
+                if (isUseMethod) {
+                    if (auto d = DotsList::Cast(matchedArgs[0])) {
+                        if (d->nargs() > 0) {
+                            if (eagerEval(d->arg(0).val(), 0)) {
+                                d->arg(0).type() = d->arg(0).val()->type;
+                                // creation of dots list must come after eager
+                                // evaluation of content...
+                                auto clone = d->clone();
+                                matchedArgs[0] = clone;
+                                d->eraseAndRemove();
+                                insert(clone);
+                            } else {
+                                return false;
+                            }
+                        }
+                    } else {
+                        if (!eagerEval(matchedArgs[0], -1))
+                            return false;
+                    }
+                }
             }
 
             // Special case for the super nasty match.arg(x) pattern where the
@@ -914,9 +989,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::for_seq_size_:
-        push(insert(new ForSeqSize(top())));
+    case Opcode::for_seq_size_: {
+        push(insert(new ToForSeq(pop())));
+        push(insert(new Length(top())));
         break;
+    }
 
     case Opcode::length_:
         push(insert(new Length(pop())));
@@ -1102,6 +1179,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
         break;
 
+    case Opcode::as_switch_idx_:
+        push(insert(new AsSwitchIdx(pop())));
+        break;
+
     case Opcode::is_:
         if (bc.immediate.typecheck == BC::RirTypecheck::isNonObject) {
             push(insert(
@@ -1278,6 +1359,17 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+    bool anyReflective = false;
+    for (size_t i = 0; i < cls->nargs(); ++i)
+        if (!cls->context().isNonRefl(i) && !cls->context().isEager(i))
+            anyReflective = true;
+    // If there are args that might be reflective it is helpful to have a
+    // checkpoint before forcing the first arg. Otherwise it is typically just
+    // inhibiting.
+    if (cls->rirSrc() == srcCode && anyReflective) {
+        addCheckpoint(srcCode, finger, cur.stack, insert);
+    }
+
     while (finger != end || !worklist.empty()) {
         if (finger == end)
             finger = popWorklist();
@@ -1325,7 +1417,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
             if (!inPromise()) {
                 if (auto c = Instruction::Cast(branchCondition)) {
-                    auto likely = c->typeFeedback.value;
+                    auto likely = c->typeFeedback().value;
                     if (likely == True::instance() ||
                         likely == False::instance()) {
                         if (auto cp = addCheckpoint(srcCode, pos, cur.stack,
@@ -1351,10 +1443,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                                                         Instruction::Cast(e)) {
                                                     // In case the typefeedback
                                                     // is more precise than the
-                                                    if (!j->typeFeedback.type
-                                                             .isVoid() &&
+                                                    if (!j->typeFeedback()
+                                                             .type.isVoid() &&
                                                         !checkedType.isA(
-                                                            j->typeFeedback
+                                                            j->typeFeedback()
                                                                 .type))
                                                         block = true;
                                                 }

@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/parameter.h"
 #include "compiler/util/bb_transform.h"
@@ -142,6 +143,16 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 return false;
                             }
                         }
+                        if (auto c = LdConst::Cast(i)) {
+                            if (TYPEOF(c->c()) == SPECIALSXP ||
+                                TYPEOF(c->c()) == BUILTINSXP) {
+                                if (!SafeBuiltinsList::forInline(
+                                        c->c()->u.primsxp.offset)) {
+                                    allowInline = SafeToInline::No;
+                                    return false;
+                                }
+                            }
+                        }
                         if (auto call = CallBuiltin::Cast(i)) {
                             if (!SafeBuiltinsList::forInline(call->builtinId)) {
                                 allowInline = SafeToInline::No;
@@ -200,8 +211,8 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 if (hasDotslistArg)
                     weight *= 0.4;
-                if (!(*it)->typeFeedback.type.isVoid() &&
-                    (*it)->typeFeedback.type.unboxable())
+                if (!(*it)->typeFeedback().type.isVoid() &&
+                    (*it)->typeFeedback().type.unboxable())
                     weight *= 0.9;
 
                 // No recursive inlining
@@ -361,6 +372,12 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                         rir::Function::NotInlineable);
                 } else {
                     anyChange = true;
+                    Checkpoint* cpAtCall = nullptr;
+                    {
+                        AvailableCheckpoints cp(cls, code, log);
+                        cpAtCall = cp.at(theCall);
+                    }
+
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner version
@@ -397,7 +414,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                     });
 
                     auto inlineeRes = BBTransform::forInline(
-                        copy, split, inlineeCls->closureEnv());
+                        copy, split, inlineeCls->closureEnv(), cpAtCall);
 
                     bool noNormalReturn = false;
                     if (inlineeRes == Tombstone::unreachable()) {

@@ -7,6 +7,7 @@
 
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
+    V(NESTED, as_switch_idx, as_switch_idx)                                    \
     V(NESTED, nop, nop)                                                        \
     V(NESTED, ret, ret)                                                        \
     V(NESTED, pop, pop)                                                        \
@@ -36,7 +37,7 @@
     V(NESTED, sub, sub)                                                        \
     V(NESTED, uplus, uplus)                                                    \
     V(NESTED, uminus, uminus)                                                  \
-    V(NESTED, not_, not)                                                       \
+    V(NESTED, not_, not )                                                      \
     V(NESTED, lt, lt)                                                          \
     V(NESTED, gt, gt)                                                          \
     V(NESTED, le, le)                                                          \

@@ -318,6 +318,7 @@ BC_NOARGS(V, _)
     inline static BC recordBinop();
     inline static BC recordType();
     inline static BC recordTest();
+    inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);

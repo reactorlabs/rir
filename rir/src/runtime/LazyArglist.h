@@ -126,7 +126,7 @@ struct LazyArglistOnStack {
         fakeSEXP.gengc_prev_node = R_NilValue;
         fakeSEXP.sxpinfo.gcgen = 1;
         fakeSEXP.sxpinfo.mark = 1;
-        fakeSEXP.sxpinfo.named = 2;
+        fakeSEXP.sxpinfo.named = NAMEDMAX;
         fakeSEXP.sxpinfo.type = EXTERNALSXP;
         PROTECT(arglistOrder);
     }

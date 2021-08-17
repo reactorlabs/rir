@@ -21,12 +21,15 @@ struct Parameter {
     static size_t INLINER_INITIAL_FUEL;
     static size_t INLINER_INLINE_UNLIKELY;
 
+    static size_t RECOMPILE_THRESHOLD;
+
     static bool RIR_PRESERVE;
     static unsigned RIR_SERIALIZE_CHAOS;
 
     static unsigned RIR_CHECK_PIR_TYPES;
 
     static unsigned PIR_LLVM_OPT_LEVEL;
+    static unsigned PIR_OPT_LEVEL;
 
     static bool ENABLE_PIR2RIR;
 };

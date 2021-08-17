@@ -297,8 +297,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
 
                         // Create a return value phi of the promise
-                        auto promRes =
-                            BBTransform::forInline(prom_copy, split, nullptr);
+                        auto promRes = BBTransform::forInline(prom_copy, split,
+                                                              nullptr, nullptr);
 
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());

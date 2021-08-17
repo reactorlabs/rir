@@ -80,6 +80,14 @@ stopifnot(!pir.check(function(...) {
   print("PIR does support dotdotdot")
 }, IsPirCompilable))
 stopifnot(pir.check(function() 42L, Returns42L))
+
+
+if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 1) {
+  warning("skipping rest of test since opt level < 2")
+  q()
+}
+
+
 stopifnot(pir.check(function() {
   f <- function() 42L
   f()
@@ -208,6 +216,13 @@ stopifnot(pir.check(function(a) {
   }
   q
 }, NoLoad))
+
+if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 2) {
+  warning("skipping rest of test since opt level < 2")
+  q()
+}
+
+
 stopifnot(pir.check(function() {
   f <- function() 42L
   (function(x) x())(f)

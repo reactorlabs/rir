@@ -190,7 +190,7 @@ restart:
 }
 
 bool LivenessIntervals::live(Instruction* where, Value* what) const {
-    if (!what->isInstruction() || count(what) == 0)
+    if (!Instruction::Cast(what) || count(what) == 0)
         return false;
     const auto& bbLiveness = intervals.at(what)[where->bb()->id];
     if (!bbLiveness.live)
@@ -201,7 +201,7 @@ bool LivenessIntervals::live(Instruction* where, Value* what) const {
 
 bool LivenessIntervals::live(const BB::Instrs::iterator& where,
                              Value* what) const {
-    if (!what->isInstruction() || count(what) == 0)
+    if (!Instruction::Cast(what) || count(what) == 0)
         return false;
     const auto& bbLiveness = intervals.at(what)[(*where)->bb()->id];
     if (!bbLiveness.live)

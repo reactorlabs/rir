@@ -124,7 +124,7 @@ enum class Effect : uint8_t {
     FIRST = Visibility,
     LAST = MutatesArgument,
 };
-typedef EnumSet<Effect> Effects;
+typedef EnumSet<Effect, uint16_t> Effects;
 
 // Controlflow of instruction.
 enum class Controlflow : uint8_t {
@@ -161,7 +161,8 @@ class Instruction : public Value {
     };
 
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
-        : Value(t, tag), effects(effects), srcIdx(srcIdx) {}
+        : Value(t, tag), effects(effects), typeFeedback_(nullptr),
+          srcIdx(srcIdx) {}
 
     Effects effects;
 
@@ -176,7 +177,22 @@ class Instruction : public Value {
         return effects.contains(Effect::Reflection);
     }
 
-    TypeFeedback typeFeedback;
+    std::shared_ptr<TypeFeedback> typeFeedback_;
+    const TypeFeedback& typeFeedback() const {
+        if (typeFeedback_.get())
+            return *typeFeedback_;
+        const static TypeFeedback none;
+        return none;
+    }
+    TypeFeedback& updateTypeFeedback() {
+        if (typeFeedback_.get())
+            return *typeFeedback_;
+        typeFeedback_.reset(new TypeFeedback());
+        return updateTypeFeedback();
+    }
+    void typeFeedback(const TypeFeedback& feedback) {
+        typeFeedback_.reset(new TypeFeedback(feedback));
+    }
 
     Effects getObservableEffects() const {
         auto e = effects;
@@ -254,7 +270,6 @@ class Instruction : public Value {
 
     const Value* cFollowCasts() const override final;
     const Value* cFollowCastsAndForce() const override final;
-    bool isInstruction() override final { return true; }
     virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;
@@ -527,6 +542,7 @@ class Instruction : public Value {
         return -1;
     }
 };
+static_assert(sizeof(Instruction) <= 56, "Bloated instructions...");
 
 template <Tag ITAG, class Base, Effects::StoreType INITIAL_EFFECTS,
           HasEnvSlot ENV, Controlflow CF, class ArgStore>
@@ -968,13 +984,22 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     int minReferenceCount() const override { return 1; }
 };
 
-class FLI(ForSeqSize, 1, Effect::Error) {
+class FLI(ToForSeq, 1, Effect::Error) {
   public:
-    explicit ForSeqSize(Value* val)
-        : FixedLenInstruction(
-              PirType(RType::integer).simpleScalar().notObject(),
-              {{PirType::val()}}, {{val}}) {}
+    explicit ToForSeq(Value* val)
+        : FixedLenInstruction(val->type.maybeObj()
+                                  ? val->type.notObject().orT(RType::chr)
+                                  : val->type,
+                              {{PirType::val()}}, {{val}}) {}
+
     size_t gvnBase() const override { return tagHash(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        auto it = getType(arg(0).val());
+        if (it.maybeObj())
+            return type & it.notObject().orT(RType::chr);
+        return type & it;
+    }
 };
 
 class FLI(Length, 1, Effects::None()) {
@@ -1320,6 +1345,16 @@ class FLI(AsLogical, 1, Effect::Error) {
         }
         return effects;
     }
+    size_t gvnBase() const override { return tagHash(); }
+};
+
+class FLI(AsSwitchIdx, 1, Effects::None()) {
+  public:
+    Value* val() const { return arg<0>().val(); }
+    explicit AsSwitchIdx(Value* in)
+        : FixedLenInstruction(PirType::simpleScalarInt(), {{PirType::val()}},
+                              {{in}}) {}
+
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -2179,7 +2214,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
   public:
     StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
                const std::vector<Value*>& args,
-               ArglistOrder::CallArglistOrder&& argOrderOrig, Value* fs,
+               const ArglistOrder::CallArglistOrder& argOrderOrig, Value* fs,
                unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
 
     Context givenContext;

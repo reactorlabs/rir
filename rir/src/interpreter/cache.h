@@ -36,7 +36,10 @@ static RIR_INLINE void clearCache(BindingCache* cache) {
 static RIR_INLINE SEXP cachedGetBindingCell(Immediate cacheIdx,
                                             BindingCache* cache) {
     SLOWASSERT(cacheIdx < cache->length);
-    return cache->entry[cacheIdx];
+    auto cell = cache->entry[cacheIdx];
+    if (cell && CAR(cell) == R_UnboundValue)
+        cell = cache->entry[cacheIdx] = nullptr;
+    return cell;
 }
 
 static RIR_INLINE void

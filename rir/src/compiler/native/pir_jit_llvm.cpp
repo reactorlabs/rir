@@ -18,9 +18,12 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_os_ostream.h"
+#include <memory>
 
 namespace rir {
 namespace pir {
+
+std::unique_ptr<llvm::orc::LLJIT> PirJitLLVM::JIT;
 
 size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
@@ -32,7 +35,6 @@ bool LLVMDebugInfo() {
 namespace {
 
 llvm::ExitOnError ExitOnErr;
-std::unique_ptr<llvm::orc::LLJIT> JIT;
 llvm::orc::ThreadSafeContext TSC;
 
 std::string dbgFolder;
@@ -318,11 +320,8 @@ void PirJitLLVM::finalizeAndFixup() {
     //       to allow concurrent compilation?
     auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
     ExitOnErr(JIT->addIRModule(std::move(TSM)));
-    for (auto& fix : jitFixup) {
-        auto symbol = ExitOnErr(JIT->lookup(fix.second.second));
-        void* native = (void*)symbol.getAddress();
-        fix.second.first->nativeCode = (NativeCode)native;
-    }
+    for (auto& fix : jitFixup)
+        fix.second.first->lazyCodeHandle(fix.second.second.str());
 }
 
 void PirJitLLVM::compile(
@@ -419,14 +418,6 @@ void PirJitLLVM::compile(
 
     funCompiler.compile();
 
-#ifndef NDEBUG
-
-    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
-        assert(false &&
-               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
-    }
-#endif
-
     assert(jitFixup.count(code) == 0);
 
     if (LLVMDebugInfo()) {
@@ -434,13 +425,18 @@ void PirJitLLVM::compile(
         DIB->finalizeSubprogram(SP);
     }
 
+#ifndef NDEBUG
+    if (llvm::verifyFunction(*funCompiler.fun, &llvm::errs())) {
+        assert(false &&
+               "Error in llvm::verifyFunction() called from pir_jit_llvm.cpp");
+    }
+#endif
+
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
     if (funCompiler.hasArgReordering())
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
-    // can we use llvm::StringRefs?
-    jitFixup.emplace(code,
-                     std::make_pair(target, funCompiler.fun->getName().str()));
+    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
         bool debug = true;
