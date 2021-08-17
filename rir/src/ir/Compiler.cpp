@@ -652,7 +652,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         }
 
-        MARK_ASSIGNMENT_CALL(ast);
+        if (!superAssign)
+            MARK_ASSIGNMENT_CALL(ast);
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
         if (TYPEOF(lhs) == SYMSXP) {
@@ -912,6 +913,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             while (CDR(last_farrow_cell) != R_NilValue) {
                 last_farrow_cell = CDR(last_farrow_cell);
             }
+            MARK_ASSIGNMENT_CALL(farrow_ast);
 
             // We need to append "value = z" to the list of args for f<-
             // Let's create the corresponding cell (directly linked in AST so
