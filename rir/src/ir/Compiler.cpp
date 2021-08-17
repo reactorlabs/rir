@@ -652,6 +652,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         }
 
+        MARK_ASSIGNMENT_CALL(ast);
+
         // 2) Specialcalse normal assignment (ie. "i <- expr")
         if (TYPEOF(lhs) == SYMSXP) {
             emitGuardForNamePrimitive(cs, fun);
