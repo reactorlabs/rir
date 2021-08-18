@@ -996,6 +996,7 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
             goto fallbackToLegacyCall;
 
+        R_CheckStack();
         SEXP body = BODY(call.callee);
         if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
             serializeCounter++;

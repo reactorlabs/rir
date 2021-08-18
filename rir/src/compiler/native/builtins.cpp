@@ -1117,6 +1117,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         }
     }
 
+    R_CheckStack();
     auto t = R_BCNodeStackTop;
 
     auto missing = fun->nargs() - nargs;
