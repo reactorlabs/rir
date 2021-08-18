@@ -4,6 +4,15 @@ To give it a spin try
 
     docker run -it registry.gitlab.com/rirvm/rir_mirror:master /opt/rir/build/release/bin/R
 
+## Runtime viz
+
+Runtime vizualizer is used to understand the properties of the R program under Ř JIT, such as amount of
+specialization, relative runtimes, most popular versions, etc.
+
+1. Create .logg files for the programs using LOGG=filename ./bin/Rscript program.r
+2. Compress/Convert the logg files to JSON using https://github.com/CompL-IITMandi/rtCompressorCpp
+3. visit https://compl-iitmandi.github.io/r-viz/ and upload the JSON file to view it
+
 ## Building from Source
 
 This is currently only tested on Ubuntu.
@@ -107,14 +116,14 @@ R with Ř patches is a submodule under external/custom-r. This is how you edit:
     # creating commits.
     git checkout R-3.5.1-rir-patch
     git pull origin R-3.5.1-rir-patch
-    # edit some stuff ... 
+    # edit some stuff ...
     git commit
     git push origin R-3.5.1-rir-patch
     cd ../..
-    # now the updated submodule needs to be commited to rir 
+    # now the updated submodule needs to be commited to rir
     git commit external/custom-r -m "bump R module version"
     git push my-rir-remote my-rir-feature-branch
-    # Now you can create a PR with the R changes & potential Ř 
+    # Now you can create a PR with the R changes & potential Ř
     # changes in my-feature-branch
 
 If you want to test your R changes on ci, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
@@ -147,6 +156,6 @@ If you want to test your R changes on ci, before pushing to the main branch on t
 Fetch updated R:
 
     git submodule update
-    cd external/custom-r && make -j4 
+    cd external/custom-r && make -j4
 
 Or use `make setup`
