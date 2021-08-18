@@ -1057,15 +1057,17 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
 class Timer {
 private:
     std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::_V2::steady_clock::duration> tick, tock;
-		std::chrono::duration<double, std::milli> runtime;
+    std::chrono::duration<double, std::milli> runtime;
+    size_t fun_id;
 public:
     Timer(const CallContext& call) : tick(std::chrono::steady_clock::now()) {
 				std::ofstream & logg = Measuring::getLogStream();
 				SEXP const lhs = CAR(call.ast);
 				static const SEXP double_colons = Rf_install("::");
     		static const SEXP triple_colons = Rf_install(":::");
+				fun_id = reinterpret_cast<size_t>(BODY(call.callee));
 
-        logg << "=,\"" << reinterpret_cast<size_t>(BODY(call.callee)) << "\",";
+        logg << "=,\"" << fun_id << "\",";
         // Function Header
         if (TYPEOF(lhs) == SYMSXP) {
 						// case 1: function call of the form f(x,y,z)
@@ -1087,7 +1089,7 @@ public:
 				std::ofstream & logg = Measuring::getLogStream();
         tock = std::chrono::steady_clock::now();
         runtime = tock - tick;
-        logg << runtime.count() << "\n";
+        logg << runtime.count() << "," << fun_id << "\n";
     }
 private:
     void* operator new(size_t);

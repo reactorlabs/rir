@@ -37,8 +37,4 @@ benchmarks/
 external/*
 !external/custom-r
 .history
-Benchmarks
-fasta
-runner.sh
-aloi-8d.csv.gz
-outputs
+*logg
