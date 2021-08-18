@@ -216,9 +216,9 @@ void Measuring::countEvent(const std::string& name, size_t n) {
     m->shouldOutput = true;
     m->events[name] += n;
 }
-
+#if LOGG > 0
 std::ofstream & Measuring::getLogStream() {
     return m->logg_stream;
 }
-
+#endif
 } // namespace rir
