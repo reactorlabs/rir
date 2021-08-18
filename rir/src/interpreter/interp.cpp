@@ -30,6 +30,11 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+static SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
+                        const CallContext* callContext,
+                        Opcode* initialPc = nullptr,
+                        BindingCache* cache = nullptr);
+
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
 #ifdef PRINT_INTERP
@@ -165,9 +170,6 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     cntxt->returnValue = result;
     Rf_endcontext(cntxt);
 }
-
-SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
-                 BindingCache*);
 
 static SEXP createPromise(Code* code, SEXP env) {
     SEXP p = Rf_mkPROMISE(code->container(), env);
@@ -3815,11 +3817,6 @@ eval_done:
 
 SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env) {
     return evalRirCode(c, ctx, env, nullptr);
-}
-
-SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
-                 const CallContext* callCtxt) {
-    return evalRirCode(c, ctx, env, callCtxt, nullptr, nullptr);
 }
 
 SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,

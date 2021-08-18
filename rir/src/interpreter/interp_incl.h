@@ -28,8 +28,6 @@ InterpreterInstance* globalContext();
 Configurations* pirConfigurations();
 
 SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
-SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
-                 const CallContext* callContext);
 
 SEXP rirEval(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
