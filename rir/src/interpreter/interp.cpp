@@ -932,14 +932,17 @@ class SlowcaseCounter {
 };
 #endif
 
-SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
+SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
     case SPECIALSXP: {
         SEXP res = tryFastSpecialCall(call, ctx);
-        if (res)
+        if (res) {
+            if (popArgs)
+                ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
             return res;
+        }
 #ifdef DEBUG_SLOWCASES
         SlowcaseCounter::count("special", call, ctx);
 #endif
@@ -954,6 +957,8 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
                         materializeCallerEnv(call, ctx));
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
+        if (popArgs)
+            ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
         return result;
     }
     case BUILTINSXP: {
@@ -963,6 +968,8 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
                 int flag = getFlag(call.callee);
                 if (flag < 2)
                     R_Visible = static_cast<Rboolean>(flag != 1);
+                if (popArgs)
+                    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
                 return res;
             }
 #ifdef DEBUG_SLOWCASES
@@ -1127,12 +1134,13 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
         }
         assert(result);
         assert(!fun->flags.contains(Function::Deopt));
+        if (popArgs)
+            ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
         return result;
     }
     default:
         Rf_error("Invalid Callee");
     };
-    return R_NilValue;
 
 fallbackToLegacyCall:
     SEXP arglist = createPromargsFromStackValues(call, ctx);
@@ -1158,6 +1166,8 @@ fallbackToLegacyCall:
                               materializeCallerEnv(call, ctx), R_NilValue);
     }
     UNPROTECT(1);
+    if (popArgs)
+        ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
     return res;
 }
 

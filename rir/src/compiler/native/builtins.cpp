@@ -282,9 +282,7 @@ static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
-    auto res = doCall(call, globalContext());
-    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
+    return doCall(call, globalContext(), true);
 }
 
 static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
@@ -297,9 +295,7 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
-    auto res = doCall(call, ctx);
-    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
+    return doCall(call, ctx, true);
 }
 
 static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
@@ -1114,10 +1110,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         if (fail || RecompileCondition(dt, fun, Context(available))) {
             fun->unregisterInvocation();
 
-            auto res = doCall(call, globalContext());
+            auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
-            ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
             return res;
         }
     }
