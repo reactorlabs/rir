@@ -1,6 +1,6 @@
 #ifndef MEASURING_H
 #define MEASURING_H
-#define LOGG 2
+#define LOGG 0
 
 #include <string>
 

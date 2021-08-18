@@ -9,6 +9,10 @@ To give it a spin try
 Runtime vizualizer is used to understand the properties of the R program under Ř JIT, such as amount of
 specialization, relative runtimes, most popular versions, etc.
 
+To enable the runtime logger define LOGG to 1 or 2, can be found at rir/src/utils/measuring.h
+Log Level 1: No distinction between compilation runs and other runs
+Log Level 2: Capture data like compilation time, opt time, bb count, promises count, etc.
+
 1. Create .logg files for the programs using LOGG=filename ./bin/Rscript program.r
 2. Compress/Convert the logg files to JSON using https://github.com/CompL-IITMandi/rtCompressorCpp
 3. visit https://compl-iitmandi.github.io/r-viz/ and upload the JSON file to view it
