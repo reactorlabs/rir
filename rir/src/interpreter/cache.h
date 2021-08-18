@@ -37,7 +37,7 @@ static inline SEXP cachedGetBindingCell(Immediate cacheIdx,
                                         BindingCache* cache) {
     SLOWASSERT(cacheIdx < cache->length);
     auto cell = cache->entry[cacheIdx];
-    if (cell && CAR(cell) == R_UnboundValue)
+    if (cell && (CAR(cell) == R_UnboundValue || IS_ACTIVE_BINDING(cell)))
         cell = cache->entry[cacheIdx] = nullptr;
     return cell;
 }

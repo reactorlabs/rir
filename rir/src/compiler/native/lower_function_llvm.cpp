@@ -4565,6 +4565,7 @@ void LowerFunctionLLVM::compile() {
                     auto done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
+                    // TODO: check active binding
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64),
