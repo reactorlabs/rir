@@ -155,6 +155,25 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class Opcode : uint8_t;
 
+struct FeedbackOrigin {
+
+    Code* srcCode;
+    uint32_t originOffset;
+
+    FeedbackOrigin() {}
+
+    FeedbackOrigin(rir::Code* src, uint32_t originOffset) {
+
+        this->srcCode = src;
+        this->originOffset = originOffset;
+    }
+
+    FeedbackOrigin(rir::Code* src, Opcode* originOffset)
+        : FeedbackOrigin(src, (uintptr_t)originOffset - (uintptr_t)src) {}
+
+    inline Opcode* opcode() const { return (Opcode*)srcCode + originOffset; }
+};
+
 struct DeoptReason {
     enum Reason : uint32_t {
         None,
@@ -164,26 +183,27 @@ struct DeoptReason {
         EnvStubMaterialized,
         DeadBranchReached,
     };
-    Reason reason;
-    Code* srcCode;
+    DeoptReason::Reason reason;
+    Code* src;
     uint32_t originOffset;
 
-    DeoptReason(rir::Code* src, uint32_t originOffset,
-                DeoptReason::Reason reason = DeoptReason::None) {
-        // assert((uintptr_t)origin.second > (uintptr_t)origin.first);
-        this->srcCode = src;
-        this->originOffset = originOffset;
+    DeoptReason() {}
+
+    DeoptReason(const FeedbackOrigin& origin, DeoptReason::Reason reason)
+        : DeoptReason(origin.srcCode, origin.originOffset, reason) {}
+
+    DeoptReason(Code* srcCode, uint32_t offset, DeoptReason::Reason reason) {
+
+        this->src = srcCode;
+        this->originOffset = offset;
         this->reason = reason;
     }
 
-    DeoptReason(rir::Code* src, Opcode* originOffset,
-                DeoptReason::Reason reason = DeoptReason::None)
-        : DeoptReason(src, (uintptr_t)originOffset - (uintptr_t)src, reason) {}
+    inline uint32_t offset() const { return originOffset; }
 
-    Opcode* opcode() const {
-        // (Opcode*)((uintptr_t)srcCode + (uintptr_t)originOffset);
-        return (Opcode*)srcCode + originOffset;
-    }
+    inline Code* srcCode() const { return src; }
+
+    inline Opcode* opcode() const { return (Opcode*)src + originOffset; }
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");

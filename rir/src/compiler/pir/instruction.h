@@ -2643,7 +2643,9 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
 
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
-    std::vector<DeoptReason> feedbackOrigin;
+    std::vector<FeedbackOrigin> feedbackOrigin;
+    DeoptReason::Reason deoptReason = DeoptReason::Reason::None;
+
     bool assumeTrue = true;
 
     Assume(Value* test, Value* checkpoint)

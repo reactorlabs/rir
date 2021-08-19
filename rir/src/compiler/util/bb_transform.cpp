@@ -171,12 +171,14 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
     return found;
 }
 
-BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Assume* assume, bool condition, BB* deoptBlock_,
+BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
+                             BB::Instrs::iterator position, Assume* assume,
+                             bool condition, BB* deoptBlock_,
                              const std::string& debugMessage,
                              bool triggerAnyway) {
 
-    auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
+    auto split =
+        BBTransform::split(code->nextBBId++, srcBlock, position + 1, code);
 
     BB* deoptBlock = new BB(code, code->nextBBId++);
     deoptBlock->setNext(deoptBlock_);
@@ -199,79 +201,41 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 
     if (!assume->feedbackOrigin.empty()) {
 
-        for (auto& origin : assume->feedbackOrigin) {
-            Value* src = nullptr;
-            auto cond = assume->condition();
-            // unsigned long offset;
-            // rir::Opcode o;
+        auto r = DeoptReason::None;
+        Value* src = nullptr;
+        auto cond = assume->condition();
 
-            auto r = DeoptReason::None;
+        if (assume->deoptReason == DeoptReason::DeadBranchReached) {
+            r = DeoptReason::DeadBranchReached;
+            src = cond;
 
-            if (origin.reason == DeoptReason::DeadBranchReached) {
-                r = DeoptReason::DeadBranchReached;
-                src = cond;
+        } else {
 
+            if (auto t = IsType::Cast(cond)) {
+                r = DeoptReason::Typecheck;
+                src = t->arg<0>().val();
+
+            } else if (auto t = Identical::Cast(cond)) {
+                src = t->arg<0>().val();
+                if (LdConst::Cast(src))
+                    src = t->arg<1>().val();
+                assert(!LdConst::Cast(src));
+                r = DeoptReason::Calltarget;
+
+            } else if (auto t = IsEnvStub::Cast(cond)) {
+                src = t->arg(0).val();
+                r = DeoptReason::EnvStubMaterialized;
             } else {
+                if (auto c = Instruction::Cast(cond)) {
 
-                if (auto t = IsType::Cast(cond)) {
-                    r = DeoptReason::Typecheck;
-                    src = t->arg<0>().val();
-
-                    // offset = origin.offset();
-                    // o = *((Opcode*)origin.first + offset);
-                    // determine DeoptReason based on the opcode too.
-                    // if (o == Opcode::record_test_)
-                    // r = DeoptReason::DeadBranchReached;
-
-                } else if (auto t = Identical::Cast(cond)) {
-                    src = t->arg<0>().val();
-                    if (LdConst::Cast(src))
-                        src = t->arg<1>().val();
-                    assert(!LdConst::Cast(src));
-                    r = DeoptReason::Calltarget;
-
-                    // offset = (uintptr_t)origin.second -
-                    // (uintptr_t)origin.first; o = *((Opcode*)origin.first +
-                    // offset);
-
-                    // determine DeoptReason based on the opcode too.
-                    // if (o == Opcode::record_test_)
-                    //     r = DeoptReason::DeadBranchReached;
-
-                } else if (auto t = IsEnvStub::Cast(cond)) {
-                    src = t->arg(0).val();
-                    r = DeoptReason::EnvStubMaterialized;
-                    // } else if (auto t = ColonInputEffects::Cast(cond)) {
-                    //     src = t->arg(0).val();
-                    //     r = DeoptReason::DeadBranchReached;
-                    // } else if (auto t = CheckTrueFalse::Cast(cond)) {
-                    //     src = t->arg(0).val();
-                    //     r = DeoptReason::DeadBranchReached;
-                    // } else if (auto t = Not::Cast(cond)) {
-                    //     src = t->arg(0).val();
-                    //     r = DeoptReason::DeadBranchReached;
-                    // } else if (auto t = Lte::Cast(cond)) {
-                    //     src = t->arg(0).val();
-                    //     r = DeoptReason::DeadBranchReached;
-                    // } else if (auto t = Neq::Cast(cond)) {
-                    //     src = t->arg(0).val();
-                    //     r = DeoptReason::DeadBranchReached;
-
-                    // } else if (LdConst::Cast(cond)) {
-                    //     // src = t->arg(0).val();
-                    //     src = cond;
-                    //     r = DeoptReason::DeadBranchReached;
-                    //     // r = DeoptReason::None;
-
-                } else {
-                    if (auto c = Instruction::Cast(cond)) {
-
-                        c->print(std::cerr);
-                        std::cerr << "\n";
-                        assert(src && "Don't know how to report deopt reason");
-                    }
+                    c->print(std::cerr);
+                    std::cerr << "\n";
+                    assert(src && "Don't know how to report deopt reason");
                 }
             }
+        }
+
+        for (auto& origin : assume->feedbackOrigin) {
 
             switch (r) {
             case DeoptReason::Typecheck:
@@ -286,8 +250,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                 assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
                        o == Opcode::record_test_);
 
-                auto rec = new RecordDeoptReason(
-                    DeoptReason(origin.srcCode, origin.originOffset, r), src);
+                auto rec = new RecordDeoptReason(DeoptReason(origin, r), src);
 
                 deoptBlock->append(rec);
                 break;
@@ -310,17 +273,17 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         test = condition ? (Value*)False::instance() : (Value*)True::instance();
     }
 
-    src->replace(position, new Branch(test));
+    srcBlock->replace(position, new Branch(test));
     if (condition)
-        src->overrideSuccessors({split, deoptBlock});
+        srcBlock->overrideSuccessors({split, deoptBlock});
     else
-        src->overrideSuccessors({deoptBlock, split});
+        srcBlock->overrideSuccessors({deoptBlock, split});
 
     // If visibility was tainted between the last checkpoint and the bailout,
     // we try (best-effort) to recover the correct setting, by scanning for the
     // last known-good setting.
     bool wrongViz = false;
-    for (auto i : *src) {
+    for (auto i : *srcBlock) {
         if (i->effects.contains(Effect::Visibility))
             wrongViz = true;
     }
@@ -356,8 +319,7 @@ void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
     position = bb->insert(position, condition);
     auto assume = new Assume(condition, cp);
     if (srcCode)
-        // assume->feedbackOrigin.push_back({srcCode, origin});
-        assume->feedbackOrigin.push_back(DeoptReason(srcCode, origin));
+        assume->feedbackOrigin.push_back(FeedbackOrigin(srcCode, origin));
     if (!assumePositive)
         assume->Not();
     position = bb->insert(position + 1, assume);

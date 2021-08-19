@@ -2292,14 +2292,15 @@ void LowerFunctionLLVM::compile() {
                     llvm::ConstantInt::get(
                         PirJitLLVM::getContext(),
                         llvm::APInt(
-                            64, reinterpret_cast<uint64_t>(rec->reason.srcCode),
+                            64,
+                            reinterpret_cast<uint64_t>(rec->reason.srcCode()),
                             false)),
                     t::voidPtr);
                 auto reason = llvm::ConstantStruct::get(
                     t::DeoptReason, {
                                         c(rec->reason.reason, 32),
                                         srcAddr,
-                                        c(rec->reason.originOffset),
+                                        c(rec->reason.offset()),
                                     });
                 call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
                      {loadSxp(rec->arg<0>().val()), globalConst(reason)});

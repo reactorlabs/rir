@@ -568,7 +568,7 @@ void checkUserInterrupt() {
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     // Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
-    Opcode* pos = reason.opcode();
+    auto pos = reason.opcode();
 
     switch (reason.reason) {
     case DeoptReason::DeadBranchReached: {
@@ -593,18 +593,18 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         break;
     }
     case DeoptReason::DeadCall:
-        reason.srcCode->deadCallReached++;
+        reason.srcCode()->deadCallReached++;
         // fall through
         [[clang::fallthrough]];
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
-        feedback->record(reason.srcCode, val);
+        feedback->record(reason.srcCode(), val);
         assert(feedback->taken > 0);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
-        reason.srcCode->flags.set(Code::NeedsFullEnv);
+        reason.srcCode()->flags.set(Code::NeedsFullEnv);
         break;
     }
     case DeoptReason::None:

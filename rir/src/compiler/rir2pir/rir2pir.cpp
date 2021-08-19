@@ -296,7 +296,7 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
 
     auto assumption = new Assume(t, cp);
     // assumption->feedbackOrigin.push_back({srcCode, pc});
-    assumption->feedbackOrigin.push_back(DeoptReason(srcCode, pc));
+    assumption->feedbackOrigin.push_back(FeedbackOrigin(srcCode, pc));
     pos = bb->insert(pos, assumption) + 1;
 
     if (trg.stableEnv)
@@ -566,8 +566,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
             // DeoptReason reason = {DeoptReason::DeadCall, srcCode,
             //                       (uint32_t)offset};
-            DeoptReason reason =
-                DeoptReason(srcCode, pos, DeoptReason::DeadCall);
+            DeoptReason reason = DeoptReason(FeedbackOrigin(srcCode, pos),
+                                             DeoptReason::DeadCall);
 
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));
@@ -1425,7 +1425,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                             bool expectBranch = likely == branchReason;
                             if (expectBranch)
                                 finger = trg;
-                            insert(new Assume(asBool, cp, expectBranch));
+
+                            auto assume = new Assume(asBool, cp, expectBranch);
+                            assume->deoptReason =
+                                DeoptReason::Reason::DeadBranchReached;
+                            insert(assume);
 
                             // If we deopt on a typecheck, then we should record
                             // that information by casting the value.
