@@ -80,7 +80,8 @@ class NativeAllocator : public SSAAllocator {
         // Ensure we preserve slots for variables with typefeedback to make them
         // accessible to the runtime profiler.
         // TODO: this needs to be replaced by proper mapping of slots.
-        if (a != b && (a->typeFeedback().origin || b->typeFeedback().origin))
+        if (a != b && (a->typeFeedback().feedbackOrigin.pc() ||
+                       b->typeFeedback().feedbackOrigin.pc()))
             return true;
         return SSAAllocator::interfere(a, b);
     }
@@ -2297,11 +2298,9 @@ void LowerFunctionLLVM::compile() {
                             false)),
                     t::voidPtr);
                 auto reason = llvm::ConstantStruct::get(
-                    t::DeoptReason, {
-                                        c(rec->reason.reason, 32),
-                                        srcAddr,
-                                        c(rec->reason.offset()),
-                                    });
+                    t::DeoptReason,
+                    {c(rec->reason.reason, 32),
+                     c(rec->reason.origin.offset(), 32), srcAddr});
                 call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
                      {loadSxp(rec->arg<0>().val()), globalConst(reason)});
                 break;
@@ -5898,12 +5897,12 @@ void LowerFunctionLLVM::compile() {
         auto i = var.first;
         if (Representation::Of(i) != Representation::Sexp)
             continue;
-        if (!i->typeFeedback().origin)
+        if (!i->typeFeedback().feedbackOrigin.pc())
             continue;
         if (!var.second.initialized)
             continue;
         if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
-            codes.insert(i->typeFeedback().srcCode);
+            codes.insert(i->typeFeedback().feedbackOrigin.srcCode());
             variableMapping.emplace(var.second.stackSlot, i->typeFeedback());
 #ifdef DEBUG_REGISTER_MAP
             assert(!usedSlots.count(var.second.stackSlot));

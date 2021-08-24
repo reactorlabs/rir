@@ -272,7 +272,7 @@ class TheVerifier {
         }
         if (auto assume = Assume::Cast(i)) {
             if (IsType::Cast(assume->arg(0).val())) {
-                if (assume->feedbackOrigin.empty()) {
+                if (!assume->reason.pc()) {
                     std::cerr << "Error: instruction '";
                     i->print(std::cerr);
                     std::cerr << "' typecheck without origin information\n";

@@ -18,16 +18,22 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                        LogStream& log) const {
     AvailableCheckpoints checkpoint(cls, code, log);
 
+    struct Speculation {
+        SEXP builtin;
+        Checkpoint* cp;
+        FeedbackOrigin origin;
+    };
+
     auto replaceLdFunBuiltinWithDeopt = [&](BB* bb, BB::Instrs::iterator ip,
-                                            Checkpoint* cp, SEXP builtin,
+                                            const Speculation& speculation,
                                             LdFun* ldfun) {
         assert(LdFun::Cast(*ip));
-        assert(cp);
+        assert(speculation.cp);
 
         // skip ldfun
         ++ip;
 
-        auto expected = new LdConst(builtin);
+        auto expected = new LdConst(speculation.builtin);
         ip = bb->insert(ip, expected);
         ++ip;
         Instruction* given = ldfun;
@@ -54,7 +60,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         ip = bb->insert(ip, test);
         ++ip;
 
-        auto assume = new Assume(test, cp);
+        auto assume = new Assume(
+            test, speculation.cp,
+            DeoptReason(speculation.origin, DeoptReason::Calltarget));
         ip = bb->insert(ip, assume);
         ++ip;
 
@@ -105,7 +113,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     };
 
     // Search for calls that likely point to a builtin.
-    std::unordered_map<LdFun*, std::pair<SEXP, Checkpoint*>> needsGuard;
+    std::unordered_map<LdFun*, Speculation> needsGuard;
+
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -144,8 +153,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     Effect::DependsOnAssume));
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
-                        if (ldfun->hint && !ldfun->hintIsInnerFunction) {
-                            auto kind = TYPEOF(ldfun->hint);
+                        if (ldfun->hint() && !ldfun->hintIsInnerFunction) {
+                            auto kind = TYPEOF(ldfun->hint());
                             // We also speculate on calls to CLOSXPs, these will
                             // be picked up by MatchArgs opt pass and turned
                             // into a static call. TODO, for inner functions we
@@ -157,9 +166,10 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 if (auto cp = checkpoint.at(ldfun)) {
                                     if (kind == BUILTINSXP) {
                                         ip = replaceCallWithCallBuiltin(
-                                            bb, ip, call, ldfun->hint, true);
+                                            bb, ip, call, ldfun->hint(), true);
                                     }
-                                    needsGuard[ldfun] = {ldfun->hint, cp};
+                                    needsGuard[ldfun] = {ldfun->hint(), cp,
+                                                         ldfun->hintOrigin()};
                                 }
                             }
                         } else {
@@ -218,8 +228,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (auto ldfun = LdFun::Cast(*ip)) {
                 auto r = needsGuard.find(ldfun);
                 if (r != needsGuard.end()) {
-                    ip = replaceLdFunBuiltinWithDeopt(bb, ip, r->second.second,
-                                                      r->second.first, ldfun);
+                    ip = replaceLdFunBuiltinWithDeopt(bb, ip, r->second, ldfun);
                     needsGuard.erase(r);
                     continue;
                 }

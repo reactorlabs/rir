@@ -12,8 +12,7 @@ class TypeTest {
         PirType result;
         Instruction* test;
         bool expectation;
-        rir::Code* srcCode;
-        Opcode* origin;
+        FeedbackOrigin feedbackOrigin;
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
@@ -31,14 +30,14 @@ class TypeTest {
                 return failed();
         }
 
-        assert(feedback.origin);
+        assert(feedback.feedbackOrigin.pc());
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
             return action({expected, new IsType(expected, i), true,
-                           feedback.srcCode, feedback.origin});
+                           feedback.feedbackOrigin});
         }
 
         // Second try to test for object-ness, or attribute-ness.
@@ -53,14 +52,14 @@ class TypeTest {
             assert(!expected.maybeObj());
             assert(!expected.maybeHasAttrs());
             return action({checkFor, new IsType(checkFor, i), true,
-                           feedback.srcCode, feedback.origin});
+                           feedback.feedbackOrigin});
         }
 
         checkFor = i->type.notLazy().notObject();
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
             return action({checkFor, new IsType(checkFor, i), true,
-                           feedback.srcCode, feedback.origin});
+                           feedback.feedbackOrigin});
         }
 
         if (i->type.isA(required))

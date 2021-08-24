@@ -199,74 +199,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
                                     Tombstone::framestate(), 0));
     }
 
-    if (!assume->feedbackOrigin.empty()) {
-
-        auto r = DeoptReason::None;
-        Value* src = nullptr;
-        auto cond = assume->condition();
-
-        if (assume->deoptReason == DeoptReason::DeadBranchReached) {
-            r = DeoptReason::DeadBranchReached;
-            src = cond;
-
-        } else {
-
-            if (auto t = IsType::Cast(cond)) {
-                r = DeoptReason::Typecheck;
-                src = t->arg<0>().val();
-
-            } else if (auto t = Identical::Cast(cond)) {
-                src = t->arg<0>().val();
-                if (LdConst::Cast(src))
-                    src = t->arg<1>().val();
-                assert(!LdConst::Cast(src));
-                r = DeoptReason::Calltarget;
-
-            } else if (auto t = IsEnvStub::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::EnvStubMaterialized;
-            } else {
-                if (auto c = Instruction::Cast(cond)) {
-
-                    c->print(std::cerr);
-                    std::cerr << "\n";
-                    assert(src && "Don't know how to report deopt reason");
-                }
-            }
-        }
-
-        for (auto& origin : assume->feedbackOrigin) {
-
-            switch (r) {
-            case DeoptReason::Typecheck:
-            case DeoptReason::DeadCall:
-            case DeoptReason::Calltarget:
-            case DeoptReason::DeadBranchReached: {
-
-                // offset = (uintptr_t)origin.second - (uintptr_t)origin.first;
-                // o = *((Opcode*)origin.first + offset);
-                auto o = *origin.opcode();
-                assert(origin.originOffset > 0);
-                assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
-                       o == Opcode::record_test_);
-
-                auto rec = new RecordDeoptReason(DeoptReason(origin, r), src);
-
-                deoptBlock->append(rec);
-                break;
-            }
-            case DeoptReason::EnvStubMaterialized: {
-                // auto rec = new RecordDeoptReason({r, origin.first, 0}, src);
-                auto rec = new RecordDeoptReason(
-                    DeoptReason(origin.srcCode, (uint32_t)0, r), src);
-                deoptBlock->append(rec);
-                break;
-            }
-            case DeoptReason::None:
-                break;
-            }
-        }
-    }
+    if (assume->valueUnderTest())
+        deoptBlock->append(
+            new RecordDeoptReason(assume->reason, assume->valueUnderTest()));
 
     Value* test = assume->condition();
     if (triggerAnyway) {
@@ -312,27 +247,24 @@ BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
     return split;
 }
 
-void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
-                               BB::Instrs::iterator& position,
-                               bool assumePositive, rir::Code* srcCode,
-                               Opcode* origin) {
+void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
+                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               DeoptReason::Reason reason, BB* bb,
+                               BB::Instrs::iterator& position) {
     position = bb->insert(position, condition);
-    auto assume = new Assume(condition, cp);
-    if (srcCode)
-        assume->feedbackOrigin.push_back(FeedbackOrigin(srcCode, origin));
-    if (!assumePositive)
-        assume->Not();
+    auto assume =
+        new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
     position = bb->insert(position + 1, assume);
     position++;
 };
 
-void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
-                               bool assumePositive, rir::Code* srcCode,
-                               Opcode* origin) {
+void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
+                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               DeoptReason::Reason reason) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive, srcCode,
-                 origin);
+    insertAssume(condition, assumePositive, cp, origin, reason, contBB,
+                 contBegin);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {

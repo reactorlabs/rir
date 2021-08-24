@@ -190,6 +190,7 @@ struct TargetInfo {
     SEXP monomorphic;
     size_t taken;
     bool stableEnv;
+    FeedbackOrigin feedbackOrigin;
 };
 static TargetInfo
 checkCallTarget(Value* callee, rir::Code* srcCode,
@@ -203,6 +204,8 @@ checkCallTarget(Value* callee, rir::Code* srcCode,
         auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
         result.taken = feedback.taken;
         if (result.taken > 1) {
+            result.feedbackOrigin =
+                FeedbackOrigin(srcCode, std::get<Opcode*>(feedbackIt->second));
             if (feedback.numTargets == 1) {
                 result.monomorphic = feedback.getTarget(srcCode, 0);
                 result.stableEnv = true;
@@ -294,9 +297,9 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
     auto t = new Identical(calleeForGuard, expected, PirType::any());
     pos = bb->insert(pos, t) + 1;
 
-    auto assumption = new Assume(t, cp);
-    // assumption->feedbackOrigin.push_back({srcCode, pc});
-    assumption->feedbackOrigin.push_back(FeedbackOrigin(srcCode, pc));
+    auto assumption = new Assume(
+        t, cp,
+        DeoptReason(FeedbackOrigin(srcCode, pc), DeoptReason::Calltarget));
     pos = bb->insert(pos, assumption) + 1;
 
     if (trg.stableEnv)
@@ -509,8 +512,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (!i->typeFeedback().value) {
                     auto& t = i->updateTypeFeedback();
                     t.value = v;
-                    t.srcCode = srcCode;
-                    t.origin = pos;
+                    t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
                 } else if (i->typeFeedback().value != v) {
                     i->updateTypeFeedback().value = nullptr;
                 }
@@ -541,8 +543,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 // TODO: deal with multiple locations
                 auto& t = i->updateTypeFeedback();
                 t.type.merge(feedback);
-                t.srcCode = srcCode;
-                t.origin = pos;
+                t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
@@ -646,11 +647,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ldfun = LdFun::Cast(callee);
         if (ldfun) {
             if (ti.monomorphic) {
-                ldfun->hint = ti.monomorphic;
+                ldfun->hint(ti.monomorphic, ti.feedbackOrigin);
                 if (!ti.stableEnv)
                     ldfun->hintIsInnerFunction = true;
             } else {
-                ldfun->hint = symbol::ambiguousCallTarget;
+                ldfun->hint(symbol::ambiguousCallTarget, {});
             }
         }
 
@@ -1426,9 +1427,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                             if (expectBranch)
                                 finger = trg;
 
-                            auto assume = new Assume(asBool, cp, expectBranch);
-                            assume->deoptReason =
-                                DeoptReason::Reason::DeadBranchReached;
+                            auto assume = new Assume(
+                                asBool, cp,
+                                DeoptReason(c->typeFeedback().feedbackOrigin,
+                                            DeoptReason::DeadBranchReached),
+                                expectBranch);
                             insert(assume);
 
                             // If we deopt on a typecheck, then we should record

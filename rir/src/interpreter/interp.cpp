@@ -568,7 +568,7 @@ void checkUserInterrupt() {
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     // Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
-    auto pos = reason.opcode();
+    auto pos = reason.pc();
 
     switch (reason.reason) {
     case DeoptReason::DeadBranchReached: {
@@ -607,9 +607,6 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         reason.srcCode()->flags.set(Code::NeedsFullEnv);
         break;
     }
-    case DeoptReason::None:
-        assert(false);
-        break;
     }
 }
 

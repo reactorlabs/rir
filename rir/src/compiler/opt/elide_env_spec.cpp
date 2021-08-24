@@ -87,8 +87,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
                                 BBTransform::insertAssume(
-                                    info.test, cp, bb, ip, info.expectation,
-                                    info.srcCode, info.origin);
+                                    info.test, info.expectation, cp,
+                                    info.feedbackOrigin, DeoptReason::Typecheck,
+                                    bb, ip);
 
                                 if (argi) {
                                     auto cast = new CastType(
@@ -282,8 +283,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (!bannedEnvs.count(env)) {
                             auto condition = new IsEnvStub(env);
                             BBTransform::insertAssume(
-                                condition, cp, true,
-                                env->typeFeedback().srcCode, nullptr);
+                                condition, true, cp,
+                                env->typeFeedback().feedbackOrigin,
+                                DeoptReason::EnvStubMaterialized);
                             anyChange = true;
                             assert(cp->bb()->trueBranch() != bb);
                         }

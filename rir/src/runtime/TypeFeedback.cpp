@@ -26,4 +26,31 @@ SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
     return code->getExtraPoolEntry(targets[pos]);
 }
 
+FeedbackOrigin::FeedbackOrigin(rir::Code* src, Opcode* p)
+    : offset_((uintptr_t)p - (uintptr_t)src), srcCode_(src) {
+    assert(p);
+    assert(p >= src->code());
+    assert(p < src->endCode());
+    assert(pc() == p);
+}
+
+DeoptReason::DeoptReason(const FeedbackOrigin& origin,
+                         DeoptReason::Reason reason)
+    : reason(reason), origin(origin) {
+    switch (reason) {
+    case DeoptReason::Typecheck:
+    case DeoptReason::DeadCall:
+    case DeoptReason::Calltarget:
+    case DeoptReason::DeadBranchReached: {
+        assert(pc());
+        auto o = *pc();
+        assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
+               o == Opcode::record_test_);
+        break;
+    }
+    case DeoptReason::EnvStubMaterialized:
+        break;
+    }
+}
+
 } // namespace rir

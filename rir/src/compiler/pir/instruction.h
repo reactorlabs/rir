@@ -19,6 +19,7 @@
 #include <deque>
 #include <functional>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <unordered_set>
 
@@ -143,8 +144,7 @@ enum class VisibilityFlag : uint8_t {
 struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
-    rir::Code* srcCode = nullptr;
-    Opcode* origin = nullptr;
+    FeedbackOrigin feedbackOrigin;
     bool used = false;
 };
 
@@ -935,9 +935,18 @@ class VLIE(FrameState,
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
+  private:
+    SEXP hint_ = nullptr;
+    FeedbackOrigin hintOrigin_;
+
   public:
+    SEXP hint() { return hint_; }
+    const FeedbackOrigin& hintOrigin() { return hintOrigin_; }
+    void hint(SEXP hint, const FeedbackOrigin& hintOrigin) {
+        hint_ = hint;
+        hintOrigin_ = hintOrigin;
+    }
     SEXP varName;
-    SEXP hint = nullptr;
     bool hintIsInnerFunction = false;
 
     LdFun(const char* name, Value* env)
@@ -2643,28 +2652,21 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
 
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
-    std::vector<FeedbackOrigin> feedbackOrigin;
-    DeoptReason::Reason deoptReason = DeoptReason::Reason::None;
+    const bool assumeTrue = true;
+    const DeoptReason reason;
 
-    bool assumeTrue = true;
-
-    Assume(Value* test, Value* checkpoint)
+    Assume(Value* test, Value* checkpoint, const DeoptReason& reason,
+           bool expectation = true)
         : FixedLenInstruction(PirType::voyd(),
                               {{PirType::test(), NativeType::checkpoint}},
-                              {{test, checkpoint}}) {}
-    Assume(Value* test, Value* checkpoint, bool expectation)
-        : Assume(test, checkpoint) {
-        if (!expectation)
-            assumeTrue = false;
+                              {{test, checkpoint}}),
+          assumeTrue(expectation), reason(reason) {
+        assert(reason.reason != DeoptReason::DeadCall);
     }
 
     Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }
     void checkpoint(Checkpoint* cp) { arg(1).val() = cp; }
     Value* condition() const { return arg(0).val(); }
-    Assume* Not() {
-        assumeTrue = !assumeTrue;
-        return this;
-    }
     std::string name() const override {
         return assumeTrue ? "Assume" : "AssumeNot";
     }
@@ -2675,6 +2677,8 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
             assumeTrue ? (Value*)True::instance() : (Value*)False::instance();
         return arg(0).val() == pirBool;
     }
+
+    Value* valueUnderTest() const;
 };
 
 class ScheduledDeopt

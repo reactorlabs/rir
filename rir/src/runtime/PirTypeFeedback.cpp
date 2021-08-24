@@ -39,18 +39,18 @@ PirTypeFeedback::PirTypeFeedback(
         auto typeFeedback = s.second;
         assert(slot < MAX_SLOT_IDX);
 
-        auto e = reverseMapping.find(typeFeedback.origin);
+        auto e = reverseMapping.find(typeFeedback.feedbackOrigin.pc());
         if (e != reverseMapping.end()) {
             entry[slot] = e->second;
             assert(mdEntries()[e->second].previousType == typeFeedback.type);
         } else {
-            assert(codes.count(typeFeedback.srcCode));
+            assert(codes.count(typeFeedback.feedbackOrigin.srcCode()));
             new (&mdEntries()[idx]) MDEntry;
-            mdEntries()[idx].srcCode = srcCodeMap.at(typeFeedback.srcCode);
-            mdEntries()[idx].offset =
-                typeFeedback.origin - typeFeedback.srcCode->code();
+            mdEntries()[idx].srcCode =
+                srcCodeMap.at(typeFeedback.feedbackOrigin.srcCode());
+            mdEntries()[idx].offset = typeFeedback.feedbackOrigin.offset();
             mdEntries()[idx].previousType = typeFeedback.type;
-            reverseMapping[typeFeedback.origin] = idx;
+            reverseMapping[typeFeedback.feedbackOrigin.pc()] = idx;
             entry[slot] = idx++;
         }
     }
