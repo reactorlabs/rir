@@ -2655,12 +2655,12 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     const bool assumeTrue = true;
     const DeoptReason reason;
 
-    Assume(Value* test, Value* checkpoint, const DeoptReason& reason,
+    Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)
         : FixedLenInstruction(PirType::voyd(),
                               {{PirType::test(), NativeType::checkpoint}},
                               {{test, checkpoint}}),
-          assumeTrue(expectation), reason(reason) {
+          assumeTrue(expectation), reason(r) {
         assert(reason.reason != DeoptReason::DeadCall);
     }
 
