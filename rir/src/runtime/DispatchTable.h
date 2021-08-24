@@ -5,7 +5,7 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 #include "utils/random.h"
-
+#define BLACKLIST_SIZE 15
 namespace rir {
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
@@ -21,6 +21,7 @@ typedef SEXP DispatchTableEntry;
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
+    int hast;
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
@@ -213,6 +214,22 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
+    void blacklistContext(unsigned long con) {
+        if (blacklistIndex_ < BLACKLIST_SIZE) {
+            contextBlacklist_[blacklistIndex_++] = con;
+        }
+    }
+
+    bool isBlacklisted(const Context & c) {
+        unsigned long con = c.toI();
+        for(int i = 0; i < blacklistIndex_; i++){
+            if(contextBlacklist_[i] == con) {
+                return true;
+            }
+        }
+        return false;
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
@@ -224,6 +241,8 @@ struct DispatchTable
 
     size_t size_ = 0;
     Context userDefinedContext_;
+    int blacklistIndex_ = 0;
+    unsigned long contextBlacklist_[BLACKLIST_SIZE];
 };
 #pragma pack(pop)
 } // namespace rir

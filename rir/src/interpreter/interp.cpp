@@ -1060,14 +1060,14 @@ private:
     std::chrono::duration<double, std::milli> runtime;
     size_t fun_id;
 public:
-    Timer(const CallContext& call) : tick(std::chrono::steady_clock::now()) {
+    Timer(const CallContext& call, int hast) : tick(std::chrono::steady_clock::now()) {
 				std::ofstream & logg = Measuring::getLogStream();
 				SEXP const lhs = CAR(call.ast);
 				static const SEXP double_colons = Rf_install("::");
     		static const SEXP triple_colons = Rf_install(":::");
 				fun_id = reinterpret_cast<size_t>(BODY(call.callee));
 
-        logg << "=,\"" << fun_id << "\",";
+        logg << "=,\"" << fun_id << "\"," << hast << ",";
         // Function Header
         if (TYPEOF(lhs) == SYMSXP) {
 						// case 1: function call of the form f(x,y,z)
@@ -1103,12 +1103,6 @@ private:
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
 
-    #if LOGG > 0
-    Timer t(call);
-    std::ofstream & logg =  Measuring::getLogStream();
-    #endif
-
-
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         serializeCounter++;
         if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
@@ -1120,6 +1114,11 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     assert(DispatchTable::check(body));
 
     auto table = DispatchTable::unpack(body);
+
+    #if LOGG > 0
+    Timer t(call,table->hast);
+    std::ofstream & logg =  Measuring::getLogStream();
+    #endif
 
     inferCurrentContext(call, table->baseline()->signature().formalNargs(),
                         ctx);
@@ -1133,7 +1132,6 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
             if (given.includes(pir::Compiler::minimalContext)) {
@@ -1176,7 +1174,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         UNPROTECT(1);
     }
     #if LOGG > 0
-    logg << "!," << "\"" << fun->context() << "\",";
+    logg << "!," << "\"" << fun->context() << "\"," << (fun->context()).toI() << ",";
     #endif
     assert(result);
     assert(!fun->flags.contains(Function::Deopt));

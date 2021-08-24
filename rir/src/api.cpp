@@ -22,6 +22,8 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <sstream>
+#include <set>
 
 using namespace rir;
 
@@ -34,6 +36,8 @@ static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
 static bool oldDeoptChaos = false;
+
+std::unordered_map<int, std::set<unsigned long>> conMap;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -67,14 +71,47 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+int charToInt(const char* p) {
+    int result = 0;
+    for (size_t i = 0; i < strlen(p); ++i) {
+        result += p[i];
+    }
+    return result;
+}
+
+void hash_ast(SEXP ast, int & hast) {
+    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        if (TYPEOF(CAR(ast)) == SYMSXP) {
+            const char * pname = CHAR(PRINTNAME(CAR(ast)));
+            hast += charToInt(pname);
+            return hash_ast(CDR(ast), ++hast);
+        }
+        hash_ast(CAR(ast), ++hast);
+        hash_ast(CDR(ast), ++hast);
+    }
+}
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
+        int hast = 0;
+
+        if (TYPEOF(body) == BCODESXP) {
+            body = VECTOR_ELT(CDR(body), 0); // get ast if bytecode
+        }
+        hash_ast(body, hast);
+
         // Change the input closure inplace
         Compiler::compileClosure(what);
+        DispatchTable* vtable = DispatchTable::unpack(BODY(what));
+        vtable->hast = hast;
+
+        for (auto & con : conMap[hast]) {
+            vtable->blacklistContext(con);
+        }
 
         return what;
     } else {
@@ -607,6 +644,32 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 }
 
 bool startup() {
+    if (getenv("BINN") != NULL) { // load blacklisted contexts
+        std::ifstream binfile;
+        std::string binId = getenv("BINN");
+        binfile.open(binId + ".bin");
+        if (binfile.is_open()) {
+            std::string line;
+            while (std::getline(binfile, line)) {
+                size_t pos = 0;
+                std::string token, del = ",";
+                int index = 0;
+                int id = 0;
+                while ((pos = line.find(del)) != std::string::npos) {
+                    token = line.substr(0, pos);
+
+                    if (index == 0) {
+                        id = std::stoi(token);
+                    } else {
+                        conMap[id].insert(std::stoul(token));
+                    }
+                    line.erase(0, pos + del.length());
+                    index++;
+                }
+            }
+        }
+        binfile.close();
+    }
     initializeRuntime();
     return true;
 }
