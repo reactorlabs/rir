@@ -124,7 +124,7 @@ struct ObservedValues {
 
     RIR_INLINE void record(SEXP e) {
 
-        // Set attribs flag for every object even if the SEXP does not
+        // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
         // the case in some very specific cases:
