@@ -19,6 +19,8 @@
 #include <set>
 #include <unordered_set>
 
+#include <chrono>
+
 #define NOT_IMPLEMENTED assert(false)
 
 #undef eval
@@ -1050,9 +1052,56 @@ static SEXP rirCallCallerProvidedEnv(CallContext& call, Function* fun,
     return res;
 }
 
+#if LOGG > 0
+class Timer {
+private:
+    std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::_V2::steady_clock::duration> tick, tock;
+    std::chrono::duration<double, std::milli> runtime;
+    size_t fun_id;
+public:
+    void start(const CallContext& call, int hast) {
+		tick = std::chrono::steady_clock::now();
+		std::ofstream & logg = Measuring::getLogStream();
+		SEXP const lhs = CAR(call.ast);
+		static const SEXP double_colons = Rf_install("::");
+		static const SEXP triple_colons = Rf_install(":::");
+		fun_id = reinterpret_cast<size_t>(BODY(call.callee));
+        logg << "=,\"" << fun_id << "\"," << hast << ",";
+        // Function Header
+        if (TYPEOF(lhs) == SYMSXP) {
+			// case 1: function call of the form f(x,y,z)
+			logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
+		} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
+			// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
+			SEXP const fun1 = CAR(lhs);
+			SEXP const pkg = CADR(lhs);
+			SEXP const fun2 = CADDR(lhs);
+			assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
+			logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
+		} else {
+			logg << "\"AN_" << fun_id << "\"";
+        }
+        logg << "\n";
+    }
+
+    void end(const Context & context) {
+		std::ofstream & logg = Measuring::getLogStream();
+        tock = std::chrono::steady_clock::now();
+        runtime = tock - tick;
+		logg << "!," << "\"" << context << "\"," << context.toI() << "," << runtime.count() << "," << fun_id << "\n";
+    }
+private:
+    void* operator new(size_t);
+    void* operator new[](size_t);
+    void operator delete(void*);
+    void operator delete[](void*);
+};
+#endif
+
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
+
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         serializeCounter++;
         if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
@@ -1065,19 +1114,33 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
+    #if LOGG > 0
+	Timer t;
+    t.start(call,table->hast);
+    #endif
+
     inferCurrentContext(call, table->baseline()->signature().formalNargs(),
                         ctx);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
+	#if LOGG > 0
+	Context assumptions = call.givenContext;
+	fun->clearDisabledAssumptions(assumptions);
+    assumptions = table->combineContextWith(assumptions);
+	#endif
+
+    if (
+		#if LOGG > 0
+		!table->isBlacklisted(assumptions) &&
+		#endif
+		!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Context given = call.givenContext;
         // addDynamicAssumptionForOneTarget compares arguments with the
         // signature of the current dispatch target. There the number of
         // arguments might be off. But we want to force compiling a new version
         // exactly for this number of arguments, thus we need to add this as an
         // explicit assumption.
-
         fun->clearDisabledAssumptions(given);
         if (RecompileCondition(table, fun, given)) {
             if (given.includes(pir::Compiler::minimalContext)) {
@@ -1119,6 +1182,9 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
         UNPROTECT(1);
     }
+    #if LOGG > 0
+    t.end(fun->context());
+    #endif
     assert(result);
     assert(!fun->flags.contains(Function::Deopt));
     return result;

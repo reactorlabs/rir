@@ -15,12 +15,15 @@
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
+#include "utils/measuring.h"
 
 #include <cassert>
 #include <cstdio>
 #include <list>
 #include <memory>
 #include <string>
+#include <sstream>
+#include <set>
 
 using namespace rir;
 
@@ -33,6 +36,8 @@ static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
 static bool oldDeoptChaos = false;
+
+std::unordered_map<int, std::set<unsigned long>> conMap;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -66,14 +71,47 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+int charToInt(const char* p) {
+    int result = 0;
+    for (size_t i = 0; i < strlen(p); ++i) {
+        result += p[i];
+    }
+    return result;
+}
+
+void hash_ast(SEXP ast, int & hast) {
+    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        if (TYPEOF(CAR(ast)) == SYMSXP) {
+            const char * pname = CHAR(PRINTNAME(CAR(ast)));
+            hast += charToInt(pname);
+            return hash_ast(CDR(ast), ++hast);
+        }
+        hash_ast(CAR(ast), ++hast);
+        hash_ast(CDR(ast), ++hast);
+    }
+}
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
+        int hast = 0;
+
+        if (TYPEOF(body) == BCODESXP) {
+            body = VECTOR_ELT(CDR(body), 0); // get ast if bytecode
+        }
+        hash_ast(body, hast);
+
         // Change the input closure inplace
         Compiler::compileClosure(what);
+        DispatchTable* vtable = DispatchTable::unpack(BODY(what));
+        vtable->hast = hast;
+
+        for (auto & con : conMap[hast]) {
+            vtable->blacklistContext(con);
+        }
 
         return what;
     } else {
@@ -303,8 +341,22 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
     pir::Backend backend(logger, name);
+    #if LOGG > 1
+    std::ofstream & logg =  Measuring::getLogStream();
+    auto cmp_start = std::chrono::steady_clock::now();
+    #endif
     auto compile = [&](pir::ClosureVersion* c) {
+        #if LOGG > 1
+        auto cmp_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> cmp_time = cmp_end - cmp_start;
+        logg << "@,true," << cmp_time.count() <<",";
+        #endif
+
         logger.flush();
+        #if LOGG > 1
+        auto opt_start = std::chrono::steady_clock::now();
+        #endif
+
         cmp.optimizeModule();
 
         if (dryRun)
@@ -341,12 +393,24 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             apply(BODY(what), c);
         // Eagerly compile the main function
         done->body()->nativeCode();
+        #if LOGG > 1
+        auto opt_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> opt_time = opt_end - opt_start;
+        int bb_count = 0;
+        rir::pir::BreadthFirstVisitor::run(c->entry, [&](pir::BB* bb) {bb_count++;});
+        logg << opt_time.count() <<"," << bb_count <<"," << c->promises().size() << "," << reinterpret_cast<size_t>(BODY(what)) <<"\n";
+        #endif
     };
 
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
-                           if (debug.includes(pir::DebugFlag::ShowWarnings))
-                               std::cerr << "Compilation failed\n";
+                            #if LOGG > 1
+                            auto cmp_end = std::chrono::steady_clock::now();
+                            std::chrono::duration<double, std::milli> fail_time = cmp_end - cmp_start;
+                            logg << "@,false," << fail_time.count() <<"\n";
+                            #endif
+                            if (debug.includes(pir::DebugFlag::ShowWarnings))
+                                std::cerr << "Compilation failed\n";
                        },
                        {});
 
@@ -580,6 +644,32 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 }
 
 bool startup() {
+    if (getenv("BLACKLIST") != NULL) { // load blacklisted contexts
+        std::ifstream binfile;
+        std::string binId = getenv("BLACKLIST");
+        binfile.open(binId + ".blacklist");
+        if (binfile.is_open()) {
+            std::string line;
+            while (std::getline(binfile, line)) {
+                size_t pos = 0;
+                std::string token, del = ",";
+                int index = 0;
+                int id = 0;
+                while ((pos = line.find(del)) != std::string::npos) {
+                    token = line.substr(0, pos);
+
+                    if (index == 0) {
+                        id = std::stoi(token);
+                    } else {
+                        conMap[id].insert(std::stoul(token));
+                    }
+                    line.erase(0, pos + del.length());
+                    index++;
+                }
+            }
+        }
+        binfile.close();
+    }
     initializeRuntime();
     return true;
 }
