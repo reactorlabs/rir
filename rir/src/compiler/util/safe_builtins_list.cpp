@@ -680,8 +680,6 @@ bool SafeBuiltinsList::forInlineByName(SEXP name) {
 #define V(name) Rf_install(#name),
         UNSAFE_BUILTINS_FOR_INLINE(V)
 #undef V
-        // TODO: this is probably hiding some other bug...
-        Rf_install("deparse"),
     };
 
     return std::find(std::begin(unsafeBuiltins), std::end(unsafeBuiltins),
