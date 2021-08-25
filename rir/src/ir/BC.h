@@ -50,11 +50,6 @@ BC BC::push(int constant) {
     i.pool = Pool::getInt(constant);
     return BC(Opcode::push_, i);
 }
-BC BC::push_from_pool(PoolIdx idx) {
-    ImmediateArguments i;
-    i.pool = idx;
-    return BC(Opcode::push_, i);
-}
 
 BC BC::ldfun(SEXP sym) {
     ImmediateArguments i;
@@ -150,6 +145,20 @@ BC BC::missing(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
+}
+BC BC::get_attr(SEXP name) {
+    assert(TYPEOF(name) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(name))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(name);
+    return BC(Opcode::get_attr_, i);
+}
+BC BC::set_attr(SEXP name) {
+    assert(TYPEOF(name) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(name))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(name);
+    return BC(Opcode::set_attr_, i);
 }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
@@ -255,12 +264,24 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     im.callBuiltinFixedArgs.builtin = Pool::insert(builtin);
     return BC(Opcode::call_builtin_, im);
 }
+BC BC::error(const char* msg, Errors::Signature signature) {
+    ImmediateArguments im;
+    im.errorArgs.msg = Pool::insert(Rf_mkChar(msg));
+    im.errorArgs.signature = static_cast<Immediate>(signature);
+    return BC(Opcode::error_, im);
+}
 
 BC BC::clearBindingCache(CacheIdx start, unsigned size) {
     ImmediateArguments im;
     im.cacheIdx.start = start;
     im.cacheIdx.size = size;
     return BC(Opcode::clear_binding_cache_, im);
+}
+
+BC BC::snippet(Snippets::Snippet s) {
+    ImmediateArguments i;
+    i.i = Snippets::toImmediate(s);
+    return BC(Opcode::snippet_, i);
 }
 
 } // namespace rir

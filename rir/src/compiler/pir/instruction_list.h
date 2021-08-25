@@ -61,6 +61,7 @@
     V(Unreachable)                                                             \
     V(Return)                                                                  \
     V(NonLocalReturn)                                                          \
+    V(Error)                                                                   \
     V(MkArg)                                                                   \
     V(UpdatePromise)                                                           \
     V(MkFunCls)                                                                \
@@ -98,10 +99,11 @@
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
-    V(Names)                                                                   \
-    V(SetNames)                                                                \
+    V(GetAttr)                                                                 \
+    V(SetAttr)                                                                 \
     V(PirCopy)                                                                 \
     V(RecordDeoptReason)                                                       \
+    V(Snippet)                                                                 \
     V(Nop)
 
 #endif

@@ -10,6 +10,8 @@
 #include "../compiler/pir/type.h"
 #include "R/r.h"
 #include "common.h"
+#include "utils/errors.h"
+#include "utils/snippets.h"
 
 #include <array>
 #include <vector>
@@ -97,6 +99,10 @@ class BC {
         Immediate ast;
         Immediate builtin;
     };
+    struct ErrorArgs {
+        PoolIdx msg;
+        Immediate signature;
+    };
     struct GuardFunArgs {
         Immediate name;
         Immediate expected;
@@ -131,7 +137,8 @@ class BC {
 
         isNonObject = 200,
         isVector = 201,
-        isFactor = 202
+        isFactor = 202,
+        isNumber = 203
     };
     static constexpr std::array<RirTypecheck, 8> isVectorTypes = {
         RirTypecheck::isLGLSXP,  RirTypecheck::isINTSXP,
@@ -147,6 +154,7 @@ class BC {
     union ImmediateArguments {
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
+        ErrorArgs errorArgs;
         GuardFunArgs guard_fun_args;
         PoolIdx pool;
         FunIdx fun;
@@ -211,6 +219,11 @@ class BC {
             return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::call_builtin_)
             return immediate.callBuiltinFixedArgs.nargs;
+        if (bc == Opcode::error_)
+            return Errors::signatureNargs(
+                static_cast<Errors::Signature>(immediate.errorArgs.signature));
+        if (bc == Opcode::snippet_)
+            return Snippets::nargs(immediate.i);
         if (bc == Opcode::popn_)
             return immediate.i;
         return popCount(bc);
@@ -271,9 +284,10 @@ class BC {
 
     bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
-    bool isPure() { return isPure(bc); }
-
-    bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
+    bool isExit() const {
+        return bc == Opcode::ret_ || bc == Opcode::return_ ||
+               bc == Opcode::error_;
+    }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
@@ -323,7 +337,6 @@ BC_NOARGS(V, _)
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
-    inline static BC push_from_pool(PoolIdx idx);
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
@@ -339,6 +352,8 @@ BC_NOARGS(V, _)
     inline static BC stvarCached(SEXP sym, uint32_t cacheSlot);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
+    inline static BC get_attr(SEXP name);
+    inline static BC set_attr(SEXP name);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -356,7 +371,11 @@ BC_NOARGS(V, _)
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast, const Context& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
+    inline static BC
+    error(const char* msg,
+          Errors::Signature signature = Errors::Signature::NoArgs);
     inline static BC clearBindingCache(CacheIdx start, unsigned size);
+    inline static BC snippet(Snippets::Snippet s);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -487,7 +506,7 @@ BC_NOARGS(V, _)
 
     static unsigned RIR_INLINE fixedSize(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return imm * sizeof(Immediate) + 1;
 #include "insns.h"
@@ -498,7 +517,7 @@ BC_NOARGS(V, _)
 
     static char const* name(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return #name;
 #include "insns.h"
@@ -509,7 +528,7 @@ BC_NOARGS(V, _)
 
     static unsigned pushCount(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return opush;
 #include "insns.h"
@@ -521,22 +540,10 @@ BC_NOARGS(V, _)
 
     static unsigned popCount(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         assert(opop != -1);                                                    \
         return opop;
-#include "insns.h"
-        default:
-            assert(false);
-            return 0;
-        }
-    }
-
-    static unsigned isPure(Opcode bc) {
-        switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
-    case Opcode::name:                                                         \
-        return pure;
 #include "insns.h"
         default:
             assert(false);
@@ -561,6 +568,8 @@ BC_NOARGS(V, _)
         case Opcode::stvar_super_:
         case Opcode::ldvar_for_update_:
         case Opcode::missing_:
+        case Opcode::get_attr_:
+        case Opcode::set_attr_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
         case Opcode::ldvar_cached_:
@@ -574,6 +583,10 @@ BC_NOARGS(V, _)
         case Opcode::call_dots_:
             memcpy(&immediate.callFixedArgs,
                    reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
+            break;
+        case Opcode::error_:
+            memcpy(&immediate.errorArgs, reinterpret_cast<ErrorArgs*>(pc),
+                   sizeof(ErrorArgs));
             break;
         case Opcode::call_builtin_:
             memcpy(&immediate.callBuiltinFixedArgs, pc,
@@ -598,6 +611,7 @@ BC_NOARGS(V, _)
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+        case Opcode::snippet_:
             memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
         case Opcode::record_call_:

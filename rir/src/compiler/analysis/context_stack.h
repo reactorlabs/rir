@@ -54,7 +54,7 @@ class ContextStack : public StaticAnalysis<ContextStackState> {
             return AbstractResult::Updated;
         }
 
-        if (Deopt::Cast(i) || Unreachable::Cast(i)) {
+        if (Deopt::Cast(i) || Unreachable::Cast(i) || Error::Cast(i)) {
             state.contextStack.clear();
             return AbstractResult::Updated;
         }

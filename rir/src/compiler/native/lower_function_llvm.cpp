@@ -17,6 +17,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
+#include "utils/errors.h"
 
 #include "llvm/IR/Intrinsics.h"
 #include <llvm/IR/Constants.h>
@@ -1366,7 +1367,8 @@ void LowerFunctionLLVM::checkMissing(llvm::Value* v) {
     auto msg =
         builder.CreateGlobalString("argument is missing, with no default");
     call(NativeBuiltins::get(NativeBuiltins::Id::error),
-         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+         {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+          c(static_cast<Immediate>(Errors::Signature::NoArgs))});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -1381,7 +1383,8 @@ void LowerFunctionLLVM::checkUnbound(llvm::Value* v) {
     builder.SetInsertPoint(nok);
     auto msg = builder.CreateGlobalString("object not found");
     call(NativeBuiltins::get(NativeBuiltins::Id::error),
-         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+         {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+          c(static_cast<Immediate>(Errors::Signature::NoArgs))});
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
@@ -4282,6 +4285,16 @@ void LowerFunctionLLVM::compile() {
                                        {loadSxp(arg)});
                         }
                         break;
+
+                    case BC::RirTypecheck::isNumber:
+                        if (Representation::Of(arg) != t::SEXP) {
+                            res = builder.getTrue();
+                        } else {
+                            res = call(NativeBuiltins::get(
+                                           NativeBuiltins::Id::isNumber),
+                                       {loadSxp(arg)});
+                        }
+                        break;
                     }
                 } else {
                     assert(i->type.isA(RType::integer) ||
@@ -4359,13 +4372,48 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(isNa);
                     auto msg = builder.CreateGlobalString(
                         "missing value where TRUE/FALSE needed");
-                    call(NativeBuiltins::get(NativeBuiltins::Id::error),
-                         {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                    call(
+                        NativeBuiltins::get(NativeBuiltins::Id::error),
+                        {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+                         c(static_cast<Immediate>(Errors::Signature::NoArgs))});
                     builder.CreateUnreachable();
 
                     builder.SetInsertPoint(done);
                 }
                 setVal(i, builder.CreateZExt(res, t::Int));
+                break;
+            }
+
+            case Tag::Error: {
+                auto e = Error::Cast(i);
+                auto nargs = e->nargs();
+                incStack(nargs, false);
+                std::vector<llvm::Value*> jitArgs;
+                e->eachArg([&](Value* v) {
+                    jitArgs.push_back(load(v, Representation::Sexp));
+                });
+                stack(jitArgs);
+
+                auto msg = builder.CreateGlobalString(CHAR(e->msg));
+                call(NativeBuiltins::get(NativeBuiltins::Id::error),
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+                      c(e->signature)});
+
+                builder.CreateUnreachable();
+                break;
+            }
+
+            case Tag::Snippet: {
+                auto s = Snippet::Cast(i);
+
+                std::vector<Value*> args;
+                s->eachArg([&](Value* v) { args.push_back(v); });
+
+                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                           return call(
+                               NativeBuiltins::get(NativeBuiltins::Id::snippet),
+                               {c(s->kind)});
+                       }));
                 break;
             }
 
@@ -5660,7 +5708,8 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(naBr);
                 auto msg = builder.CreateGlobalString("NA/NaN argument");
                 call(NativeBuiltins::get(NativeBuiltins::Id::error),
-                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+                      c(static_cast<Immediate>(Errors::Signature::NoArgs))});
                 builder.CreateUnreachable();
 
                 builder.SetInsertPoint(contBr);
@@ -5691,7 +5740,8 @@ void LowerFunctionLLVM::compile() {
                 builder.SetInsertPoint(naBr);
                 auto msg = builder.CreateGlobalString("NA/NaN argument");
                 call(NativeBuiltins::get(NativeBuiltins::Id::error),
-                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)})});
+                     {builder.CreateInBoundsGEP(msg, {c(0), c(0)}),
+                      c(static_cast<Immediate>(Errors::Signature::NoArgs))});
                 builder.CreateUnreachable();
 
                 builder.SetInsertPoint(contBr);
@@ -5728,17 +5778,22 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Names:
-                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::names),
-                               {loadSxp(i->arg(0).val())}));
+            case Tag::GetAttr: {
+                auto attr = GetAttr::Cast(i);
+                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::getAttr),
+                               {loadSxp(attr->vector()),
+                                constant(attr->name, t::SEXP)}));
                 break;
+            }
 
-            case Tag::SetNames:
-                setVal(
-                    i,
-                    call(NativeBuiltins::get(NativeBuiltins::Id::setNames),
-                         {loadSxp(i->arg(0).val()), loadSxp(i->arg(1).val())}));
+            case Tag::SetAttr: {
+                auto attr = SetAttr::Cast(i);
+                setVal(i, call(NativeBuiltins::get(NativeBuiltins::Id::setAttr),
+                               {loadSxp(attr->vector()),
+                                constant(attr->name, t::SEXP),
+                                loadSxp(attr->value())}));
                 break;
+            }
 
             case Tag::Length: {
                 assert(Representation::Of(i) == t::Int);

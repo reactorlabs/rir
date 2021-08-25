@@ -82,6 +82,7 @@ struct NativeBuiltins {
         chkfun,
         warn,
         error,
+        snippet,
         callBuiltin,
         call,
         namedCall,
@@ -105,6 +106,7 @@ struct NativeBuiltins {
         colon,
         isMissing,
         isFactor,
+        isNumber,
         asSwitchIdx,
         checkTrueFalse,
         asLogicalBlt,
@@ -147,8 +149,8 @@ struct NativeBuiltins {
         colonInputEffects,
         colonCastLhs,
         colonCastRhs,
-        names,
-        setNames,
+        getAttr,
+        setAttr,
         xlength,
         getAttrb,
         nonLocalReturn,
@@ -156,6 +158,7 @@ struct NativeBuiltins {
         checkType,
         shallowDuplicate,
         sigsetjmp,
+        // Warning: keep LAST in sync!
 
         // book keeping
         NUM_BUILTINS,

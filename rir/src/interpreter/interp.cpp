@@ -11,7 +11,9 @@
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
+#include "utils/errors.h"
 #include "utils/measuring.h"
+#include "utils/snippets.h"
 
 #include <assert.h>
 #include <deque>
@@ -2927,17 +2929,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
-            // TODO
-            // 1. currently aslogical_ is used for &&, || only, and this checking
-            //    is to mimic the behavior of builtin &&, ||. Technically asLogical
-            //    is less strict than this.
-            // 2. the error message also doesn't suggest which argument is wrong, or
-            //    which boolean operation it was. To achieve the exact behavior, one
-            //    could potentially compile this check in `ir/Compiler.cpp`
-            if (!Rf_isNumber(val)) {
-                SEXP call = getSrcAt(c, pc - 1, ctx);
-                Rf_errorcall(call, "argument has the wrong type for && or ||");
-            }
             int x1 = Rf_asLogical(val);
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             res = Rf_ScalarLogical(x1);
@@ -3056,6 +3047,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 break;
             case BC::RirTypecheck::isVector:
                 res = Rf_isVector(val);
+                break;
+            case BC::RirTypecheck::isNumber:
+                res = Rf_isNumber(val);
                 break;
 #ifdef ENABLE_SLOWASSERT
             default:
@@ -3721,14 +3715,18 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(names_) {
-            ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), R_NamesSymbol));
+        INSTRUCTION(get_attr_) {
+            SEXP name = readConst(ctx, readImmediate());
+            advanceImmediate();
+            ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), name));
             NEXT();
         }
 
-        INSTRUCTION(set_names_) {
-            SEXP names = ostack_pop(ctx);
-            Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, names);
+        INSTRUCTION(set_attr_) {
+            SEXP name = readConst(ctx, readImmediate());
+            advanceImmediate();
+            SEXP value = ostack_pop(ctx);
+            Rf_setAttrib(ostack_top(ctx), name, value);
             NEXT();
         }
 
@@ -3799,6 +3797,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(snippet_) {
+            Immediate kind = readImmediate();
+            advanceImmediate();
+            SEXP res = Snippets::execute(kind);
+            ostack_popn(ctx, Snippets::nargs(kind));
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(beginloop_) {
             SLOWASSERT(env);
             int offset = readJumpOffset();
@@ -3812,6 +3819,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(endloop_) { return loopTrampolineMarker; }
+
+        INSTRUCTION(error_) {
+            SEXP msg = readConst(ctx, readImmediate());
+            advanceImmediate();
+            assert(TYPEOF(msg) == CHARSXP);
+
+            Immediate signature = readImmediate();
+            advanceImmediate();
+
+            Errors::makeCall(CHAR(msg),
+                             static_cast<Errors::Signature>(signature));
+
+            // not reached
+            assert(false);
+        }
 
         INSTRUCTION(return_) {
             res = ostack_pop(ctx);

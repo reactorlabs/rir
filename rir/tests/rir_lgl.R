@@ -44,14 +44,13 @@ f <- rir.compile(function() {
     a22 <- !((1:5 %% 2) == 0)
     stopifnot(a22 == c(TRUE, FALSE, TRUE, FALSE, TRUE))
 
-    fail <- function(expr) {
-      msg <- "argument has the wrong type for && or ||"
+    fail <- function(expr, msg) {
       tryCatch(expr, error=function(e) { stopifnot(e[1] == msg) })
     }
-    fail("foo" || -42)
-    fail(c("one", "two") || 1)
-    fail(42 && "")
-    fail(TRUE && "bad")
+    fail("foo" || -42, "invalid 'x' type in 'x || y'")
+    fail(0 || c("one", "two"), "invalid 'y' type in 'x || y'")
+    fail(42 && "", "invalid 'y' type in 'x && y'")
+    fail("bad" && TRUE, "invalid 'x' type in 'x && y'")
 
     # short circuit could prevent error from occurring
     a23 <- TRUE || "bad"
