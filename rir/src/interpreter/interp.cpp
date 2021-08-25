@@ -1060,36 +1060,36 @@ private:
     std::chrono::duration<double, std::milli> runtime;
     size_t fun_id;
 public:
-    Timer(const CallContext& call, int hast) : tick(std::chrono::steady_clock::now()) {
-				std::ofstream & logg = Measuring::getLogStream();
-				SEXP const lhs = CAR(call.ast);
-				static const SEXP double_colons = Rf_install("::");
-    		static const SEXP triple_colons = Rf_install(":::");
-				fun_id = reinterpret_cast<size_t>(BODY(call.callee));
-
+    void start(const CallContext& call, int hast) {
+		tick = std::chrono::steady_clock::now();
+		std::ofstream & logg = Measuring::getLogStream();
+		SEXP const lhs = CAR(call.ast);
+		static const SEXP double_colons = Rf_install("::");
+		static const SEXP triple_colons = Rf_install(":::");
+		fun_id = reinterpret_cast<size_t>(BODY(call.callee));
         logg << "=,\"" << fun_id << "\"," << hast << ",";
         // Function Header
         if (TYPEOF(lhs) == SYMSXP) {
-						// case 1: function call of the form f(x,y,z)
-						logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
-				} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
-						// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
-						SEXP const fun1 = CAR(lhs);
-						SEXP const pkg = CADR(lhs);
-						SEXP const fun2 = CADDR(lhs);
-						assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
-						logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
-				} else {
-            logg << "\"AN_" << reinterpret_cast<size_t>(BODY(call.callee)) << "\"";
+			// case 1: function call of the form f(x,y,z)
+			logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
+		} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
+			// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
+			SEXP const fun1 = CAR(lhs);
+			SEXP const pkg = CADR(lhs);
+			SEXP const fun2 = CADDR(lhs);
+			assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
+			logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
+		} else {
+			logg << "\"AN_" << fun_id << "\"";
         }
         logg << "\n";
     }
 
-    ~Timer() {
-				std::ofstream & logg = Measuring::getLogStream();
+    void end(const Context & context) {
+		std::ofstream & logg = Measuring::getLogStream();
         tock = std::chrono::steady_clock::now();
         runtime = tock - tick;
-        logg << runtime.count() << "," << fun_id << "\n";
+		logg << "!," << "\"" << context << "\"," << context.toI() << "," << runtime.count() << "," << fun_id << "\n";
     }
 private:
     void* operator new(size_t);
@@ -1116,8 +1116,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     auto table = DispatchTable::unpack(body);
 
     #if LOGG > 0
-    Timer t(call,table->hast);
-    std::ofstream & logg =  Measuring::getLogStream();
+	Timer t;
+    t.start(call,table->hast);
     #endif
 
     inferCurrentContext(call, table->baseline()->signature().formalNargs(),
@@ -1125,7 +1125,17 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
+	#if LOGG > 0
+	Context assumptions = call.givenContext;
+	fun->clearDisabledAssumptions(assumptions);
+    assumptions = table->combineContextWith(assumptions);
+	#endif
+
+    if (
+		#if LOGG > 0
+		!table->isBlacklisted(assumptions) &&
+		#endif
+		!isDeoptimizing() && RecompileHeuristic(table, fun)) {
         Context given = call.givenContext;
         // addDynamicAssumptionForOneTarget compares arguments with the
         // signature of the current dispatch target. There the number of
@@ -1174,7 +1184,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
         UNPROTECT(1);
     }
     #if LOGG > 0
-    logg << "!," << "\"" << fun->context() << "\"," << (fun->context()).toI() << ",";
+    t.end(fun->context());
     #endif
     assert(result);
     assert(!fun->flags.contains(Function::Deopt));

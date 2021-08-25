@@ -398,7 +398,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         std::chrono::duration<double, std::milli> opt_time = opt_end - opt_start;
         int bb_count = 0;
         rir::pir::BreadthFirstVisitor::run(c->entry, [&](pir::BB* bb) {bb_count++;});
-        logg << opt_time.count() <<"," << bb_count <<"," << c->promises().size() <<"\n";
+        logg << opt_time.count() <<"," << bb_count <<"," << c->promises().size() << "," << reinterpret_cast<size_t>(BODY(what)) <<"\n";
         #endif
     };
 
@@ -644,10 +644,10 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 }
 
 bool startup() {
-    if (getenv("BINN") != NULL) { // load blacklisted contexts
+    if (getenv("BLACKLIST") != NULL) { // load blacklisted contexts
         std::ifstream binfile;
-        std::string binId = getenv("BINN");
-        binfile.open(binId + ".bin");
+        std::string binId = getenv("BLACKLIST");
+        binfile.open(binId + ".blacklist");
         if (binfile.is_open()) {
             std::string line;
             while (std::getline(binfile, line)) {
