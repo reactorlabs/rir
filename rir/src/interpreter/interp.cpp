@@ -567,7 +567,7 @@ void checkUserInterrupt() {
 }
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
-    // Opcode* pos = (Opcode*)reason.srcCode + reason.originOffset;
+
     auto pos = reason.pc();
 
     switch (reason.reason) {
