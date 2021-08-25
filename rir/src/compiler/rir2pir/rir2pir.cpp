@@ -190,6 +190,7 @@ struct TargetInfo {
     SEXP monomorphic;
     size_t taken;
     bool stableEnv;
+    FeedbackOrigin feedbackOrigin;
 };
 static TargetInfo
 checkCallTarget(Value* callee, rir::Code* srcCode,
@@ -203,6 +204,8 @@ checkCallTarget(Value* callee, rir::Code* srcCode,
         auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
         result.taken = feedback.taken;
         if (result.taken > 1) {
+            result.feedbackOrigin =
+                FeedbackOrigin(srcCode, std::get<Opcode*>(feedbackIt->second));
             if (feedback.numTargets == 1) {
                 result.monomorphic = feedback.getTarget(srcCode, 0);
                 result.stableEnv = true;
@@ -294,8 +297,9 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
     auto t = new Identical(calleeForGuard, expected, PirType::any());
     pos = bb->insert(pos, t) + 1;
 
-    auto assumption = new Assume(t, cp);
-    assumption->feedbackOrigin.push_back({srcCode, pc});
+    auto assumption = new Assume(
+        t, cp,
+        DeoptReason(FeedbackOrigin(srcCode, pc), DeoptReason::Calltarget));
     pos = bb->insert(pos, assumption) + 1;
 
     if (trg.stableEnv)
@@ -508,8 +512,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (!i->typeFeedback().value) {
                     auto& t = i->updateTypeFeedback();
                     t.value = v;
-                    t.srcCode = srcCode;
-                    t.origin = pos;
+                    t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
                 } else if (i->typeFeedback().value != v) {
                     i->updateTypeFeedback().value = nullptr;
                 }
@@ -540,8 +543,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 // TODO: deal with multiple locations
                 auto& t = i->updateTypeFeedback();
                 t.type.merge(feedback);
-                t.srcCode = srcCode;
-                t.origin = pos;
+                t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
@@ -562,9 +564,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             srcCode->funInvocationCount > 1 && srcCode->deadCallReached < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
-            auto offset = (uintptr_t)pos - (uintptr_t)srcCode;
-            DeoptReason reason = {DeoptReason::DeadCall, srcCode,
-                                  (uint32_t)offset};
+
+            DeoptReason reason = DeoptReason(FeedbackOrigin(srcCode, pos),
+                                             DeoptReason::DeadCall);
+
             insert(new RecordDeoptReason(reason, target));
             insert(new Deopt(sp));
             stack.clear();
@@ -642,11 +645,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ldfun = LdFun::Cast(callee);
         if (ldfun) {
             if (ti.monomorphic) {
-                ldfun->hint = ti.monomorphic;
+                ldfun->hint(ti.monomorphic, ti.feedbackOrigin);
                 if (!ti.stableEnv)
                     ldfun->hintIsInnerFunction = true;
             } else {
-                ldfun->hint = symbol::ambiguousCallTarget;
+                ldfun->hint(symbol::ambiguousCallTarget, {});
             }
         }
 
@@ -1386,6 +1389,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         }
         const auto pos = finger;
         BC bc = BC::advance(&finger, srcCode);
+        // cppcheck-suppress variableScope
         const auto nextPos = finger;
 
         assert(pos != end);
@@ -1396,105 +1400,91 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 continue;
             }
 
-            bool swapTrueFalse = false;
-            Instruction* deoptCondition = nullptr;
-            Value* branchCondition;
-            bool assumeBB0 = false;
-
-            // Conditional jump
-            switch (bc.bc) {
-            case Opcode::brtrue_:
-            case Opcode::brfalse_: {
-                auto v = branchCondition = cur.stack.pop();
-                if (auto c = Instruction::Cast(branchCondition)) {
-                    if (c->typeFeedback().value == True::instance()) {
-                        assumeBB0 = bc.bc == Opcode::brtrue_;
-                        deoptCondition = c;
-                    }
-                    if (c->typeFeedback().value == False::instance()) {
-                        assumeBB0 = bc.bc == Opcode::brfalse_;
-                        deoptCondition = c;
-                    }
-                }
-
-                if (!branchCondition->type.isA(PirType::test())) {
-                    v = insert(new Identical(branchCondition,
-                                             bc.bc == Opcode::brtrue_
-                                                 ? (Value*)True::instance()
-                                                 : (Value*)False::instance(),
-                                             PirType::val()));
-                } else {
-                    swapTrueFalse = bc.bc == Opcode::brfalse_;
-                }
-                insert(new Branch(v));
-                break;
-            }
-            case Opcode::beginloop_:
+            if (bc.bc == Opcode::beginloop_) {
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
                 return nullptr;
-            default:
-                assert(false);
             }
+
+            // Conditional jump
+            assert(bc.isCondJmp());
+            auto branchCondition = cur.stack.top();
+            auto branchReason = bc.bc == Opcode::brtrue_
+                                    ? (Value*)True::instance()
+                                    : (Value*)False::instance();
+            auto asBool = insert(
+                new Identical(branchCondition, branchReason, PirType::val()));
+
+            if (!inPromise()) {
+                if (auto c = Instruction::Cast(branchCondition)) {
+                    auto likely = c->typeFeedback().value;
+                    if (likely == True::instance() ||
+                        likely == False::instance()) {
+                        if (auto cp = addCheckpoint(srcCode, pos, cur.stack,
+                                                    insert)) {
+                            bool expectBranch = likely == branchReason;
+                            if (expectBranch)
+                                finger = trg;
+
+                            auto assume = new Assume(
+                                asBool, cp,
+                                DeoptReason(c->typeFeedback().feedbackOrigin,
+                                            DeoptReason::DeadBranchReached),
+                                expectBranch);
+                            insert(assume);
+
+                            // If we deopt on a typecheck, then we should record
+                            // that information by casting the value.
+                            // TODO: also do this for negative type checks
+                            if (expectBranch)
+                                if (auto tt = IsType::Cast(branchCondition)) {
+                                    auto checkedValue = tt->arg<0>().val();
+                                    auto checkedType = checkedValue->type;
+
+                                    for (auto& e : cur.stack) {
+                                        if (e == checkedValue) {
+                                            if (!e->type.isA(checkedType)) {
+                                                bool block = false;
+                                                if (auto j =
+                                                        Instruction::Cast(e)) {
+                                                    // In case the typefeedback
+                                                    // is more precise than the
+                                                    if (!j->typeFeedback()
+                                                             .type.isVoid() &&
+                                                        !checkedType.isA(
+                                                            j->typeFeedback()
+                                                                .type))
+                                                        block = true;
+                                                }
+                                                if (!block) {
+                                                    auto cast =
+                                                        insert(new CastType(
+                                                            e,
+                                                            CastType::Downcast,
+                                                            PirType::any(),
+                                                            checkedType));
+                                                    cast->effects.set(
+                                                        Effect::
+                                                            DependsOnAssume);
+                                                    e = cast;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            cur.stack.pop();
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            cur.stack.pop();
+            insert(new Branch(asBool));
 
             BB* branch = insert.createBB();
             BB* fall = insert.createBB();
 
-            if (swapTrueFalse) {
-                insert.setBranch(fall, branch);
-                assumeBB0 = !assumeBB0;
-            } else {
-                insert.setBranch(branch, fall);
-            }
-
-            if (deoptCondition && !inPromise() && !inlining()) {
-                auto deopt = assumeBB0 ? insert.getCurrentBB()->falseBranch()
-                                       : insert.getCurrentBB()->trueBranch();
-                insert.enterBB(deopt);
-
-                auto sp = insert.registerFrameState(
-                    srcCode, (deopt == fall) ? nextPos : trg, cur.stack,
-                    inPromise());
-                auto offset = (uintptr_t)deoptCondition->typeFeedback().origin -
-                              (uintptr_t)srcCode;
-                DeoptReason reason = {DeoptReason::DeadBranchReached, srcCode,
-                                      (uint32_t)offset};
-                insert(new RecordDeoptReason(reason, deoptCondition));
-                insert(new Deopt(sp));
-
-                insert.enterBB(deopt == fall ? branch : fall);
-                finger = (deopt == fall) ? trg : nextPos;
-
-                // If we deopt on a typecheck, then we should record that
-                // information by casting the value.
-                if (assumeBB0)
-                    if (auto tt = IsType::Cast(branchCondition)) {
-                        for (auto& e : cur.stack) {
-                            if (tt->arg<0>().val() == e) {
-                                if (!e->type.isA(tt->typeTest)) {
-                                    bool block = false;
-                                    if (auto j = Instruction::Cast(e)) {
-                                        // In case the typefeedback is more
-                                        // precise than the
-                                        if (!j->typeFeedback().type.isVoid() &&
-                                            !tt->typeTest.isA(
-                                                j->typeFeedback().type))
-                                            block = true;
-                                    }
-                                    if (!block) {
-                                        auto cast = insert(new CastType(
-                                            e, CastType::Downcast,
-                                            PirType::any(), tt->typeTest));
-                                        cast->effects.set(
-                                            Effect::DependsOnAssume);
-                                        e = cast;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                continue;
-            }
+            insert.setBranch(branch, fall);
 
             pushWorklist(branch, trg);
             insert.enterBB(fall);

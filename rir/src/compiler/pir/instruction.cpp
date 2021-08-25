@@ -615,8 +615,8 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
         guessedBinding()->printRef(out);
         out << ">, ";
     }
-    if (hint && hint != symbol::ambiguousCallTarget) {
-        out << "<" << hint << ">, ";
+    if (hint_ && hint_ != symbol::ambiguousCallTarget) {
+        out << "<" << hint_ << ">, ";
     }
 }
 
@@ -1279,6 +1279,45 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 BB* Checkpoint::nextBB() { return bb()->trueBranch(); }
+
+Value* Assume::valueUnderTest() const {
+    switch (reason.reason) {
+    case DeoptReason::Typecheck: {
+        if (auto t = IsType::Cast(condition()))
+            return t->arg<0>().val();
+        break;
+    }
+    case DeoptReason::Calltarget: {
+        if (auto t = Identical::Cast(condition())) {
+            auto value = t->arg<0>().val();
+            if (LdConst::Cast(value))
+                value = t->arg<1>().val();
+            assert(!LdConst::Cast(value));
+            return value;
+        }
+        break;
+    }
+    case DeoptReason::EnvStubMaterialized: {
+        if (auto t = IsEnvStub::Cast(condition()))
+            return t->arg(0).val();
+        break;
+    }
+    case DeoptReason::DeadBranchReached: {
+        return condition();
+    }
+    // DeadCall is an unconditional deopt and never associated with an
+    // assume.
+    case DeoptReason::DeadCall:
+        assert(false);
+    }
+
+    if (Instruction::Cast(condition())) {
+        printRecursive(std::cerr, 2);
+        assert(false && "Unexpected condition for this kind of assumption");
+    }
+
+    return nullptr;
+}
 
 PirType Colon::inferType(const GetType& getType) const {
     auto convertsToInt = [](Value* a) {

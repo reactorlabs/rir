@@ -203,7 +203,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 false,
                                 [&](ClosureVersion* fun) { target = fun; },
                                 []() {}, {});
-                    } else if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
+                    } else if (auto cnst =
+                                   LdConst::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
                             if (dt->baseline()->body()->codeSize <
                                 Parameter::RECOMPILE_THRESHOLD)
@@ -222,14 +223,14 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             auto srcRef = mk->srcRef;
                             if (dt->baseline()->body()->codeSize <
                                 Parameter::RECOMPILE_THRESHOLD)
-                                cmp.compileFunction(dt, "unknown--fromMkFunCls",
-                                                    formals, srcRef, asmpt,
-                                                    [&](ClosureVersion* fun) {
-                                                        mk->setCls(
-                                                            fun->owner());
-                                                        target = fun;
-                                                    },
-                                                    []() {}, {});
+                                cmp.compileFunction(
+                                    dt, "unknown--fromMkFunCls", formals,
+                                    srcRef, asmpt,
+                                    [&](ClosureVersion* fun) {
+                                        mk->setCls(fun->owner());
+                                        target = fun;
+                                    },
+                                    []() {}, {});
                         }
                     }
                 }

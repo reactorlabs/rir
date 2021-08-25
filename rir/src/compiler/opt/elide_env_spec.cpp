@@ -87,8 +87,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
                                 BBTransform::insertAssume(
-                                    info.test, cp, bb, ip, info.expectation,
-                                    info.srcCode, info.origin);
+                                    info.test, info.expectation, cp,
+                                    info.feedbackOrigin, DeoptReason::Typecheck,
+                                    bb, ip);
 
                                 if (argi) {
                                     auto cast = new CastType(
@@ -129,6 +130,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         !arg->type.maybeMissing()) {
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
+                        anyChange = true;
                     }
                 }
             }
@@ -281,8 +283,10 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (!bannedEnvs.count(env)) {
                             auto condition = new IsEnvStub(env);
                             BBTransform::insertAssume(
-                                condition, cp, true,
-                                env->typeFeedback().srcCode, nullptr);
+                                condition, true, cp,
+                                env->typeFeedback().feedbackOrigin,
+                                DeoptReason::EnvStubMaterialized);
+                            anyChange = true;
                             assert(cp->bb()->trueBranch() != bb);
                         }
                     }
@@ -301,6 +305,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     for (auto n : additionalEntries[env]) {
                         env->varName.push_back(n);
                         env->pushArg(UnboundValue::instance(), PirType::any());
+                        anyChange = true;
                     }
                     // After eliding an env we must ensure to add a
                     // materialization before every usage in deopt branches
@@ -331,17 +336,20 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             !i->effects.contains(Effect::DependsOnAssume) &&
             MkEnv::Cast(i->env()) && MkEnv::Cast(i->env())->stub) {
             i->effects.set(Effect::DependsOnAssume);
+            anyChange = true;
         }
         if (auto is = IsEnvStub::Cast(i)) {
             if (!materializableStubs.count(i->env())) {
                 is->replaceUsesWith(True::instance());
                 is->effects.reset();
+                anyChange = true;
             }
         }
         if (auto mk = MkArg::Cast(i)) {
             if (materializableStubs.count(mk->env())) {
                 if (auto e = mk->prom()->env()) {
                     e->stub = true;
+                    anyChange = true;
                 }
             }
         }

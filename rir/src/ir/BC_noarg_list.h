@@ -37,7 +37,7 @@
     V(NESTED, sub, sub)                                                        \
     V(NESTED, uplus, uplus)                                                    \
     V(NESTED, uminus, uminus)                                                  \
-    V(NESTED, not_, not)                                                       \
+    V(NESTED, not_, not )                                                      \
     V(NESTED, lt, lt)                                                          \
     V(NESTED, gt, gt)                                                          \
     V(NESTED, le, le)                                                          \

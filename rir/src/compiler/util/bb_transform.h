@@ -4,6 +4,7 @@
 #include "../pir/bb.h"
 #include "../pir/pir.h"
 #include "compiler/analysis/cfg.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
 
@@ -29,13 +30,13 @@ class BBTransform {
                            bool condition, BB* deoptBlock,
                            const std::string& debugMesage,
                            bool triggerAnyway = false);
-    static void insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
-                             BB::Instrs::iterator& position,
-                             bool assumePositive, rir::Code* srcCode,
-                             Opcode* origin = nullptr);
-    static void insertAssume(Instruction* condition, Checkpoint* cp,
-                             bool assumePositive, rir::Code* srcCode,
-                             Opcode* origin = nullptr);
+    static void insertAssume(Instruction* condition, bool assumePositive,
+                             Checkpoint* cp, const FeedbackOrigin& origin,
+                             DeoptReason::Reason reason, BB* bb,
+                             BB::Instrs::iterator& position);
+    static void insertAssume(Instruction* condition, bool assumePositive,
+                             Checkpoint* cp, const FeedbackOrigin& origin,
+                             DeoptReason::Reason reason);
 
     static void mergeRedundantBBs(Code* closure);
 

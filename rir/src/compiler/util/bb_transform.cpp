@@ -171,18 +171,21 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
     return found;
 }
 
-BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Assume* assume, bool condition, BB* deoptBlock_,
+BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
+                             BB::Instrs::iterator position, Assume* assume,
+                             bool condition, BB* deoptBlock_,
                              const std::string& debugMessage,
                              bool triggerAnyway) {
-    auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
 
-    static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
+    auto split =
+        BBTransform::split(code->nextBBId++, srcBlock, position + 1, code);
 
     BB* deoptBlock = new BB(code, code->nextBBId++);
     deoptBlock->setNext(deoptBlock_);
 
     if (debugMessage.size() != 0) {
+        static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
+
         SEXP msg = Rf_mkString(debugMessage.c_str());
         auto ldprint = new LdConst(print);
         Instruction* ldmsg = new LdConst(msg);
@@ -196,75 +199,26 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                                     Tombstone::framestate(), 0));
     }
 
-    if (!assume->feedbackOrigin.empty()) {
-        for (auto& origin : assume->feedbackOrigin) {
-            Value* src = nullptr;
-            auto cond = assume->condition();
-            auto r = DeoptReason::None;
-            if (auto t = IsType::Cast(cond)) {
-                r = DeoptReason::Typecheck;
-                src = t->arg<0>().val();
-            } else if (auto t = Identical::Cast(cond)) {
-                src = t->arg<0>().val();
-                if (LdConst::Cast(src))
-                    src = t->arg<1>().val();
-                assert(!LdConst::Cast(src));
-                r = DeoptReason::Calltarget;
-            } else if (auto t = IsEnvStub::Cast(cond)) {
-                src = t->arg(0).val();
-                r = DeoptReason::EnvStubMaterialized;
-            } else {
-                if (auto c = Instruction::Cast(cond)) {
-                    c->print(std::cerr);
-                    assert(src && "Don't know how to report deopt reason");
-                }
-            }
-            switch (r) {
-            case DeoptReason::Typecheck:
-            case DeoptReason::DeadCall:
-            case DeoptReason::Calltarget: {
-                auto offset =
-                    (uintptr_t)origin.second - (uintptr_t)origin.first;
-                auto o = *((Opcode*)origin.first + offset);
-                assert(o == Opcode::record_call_ || o == Opcode::record_type_ ||
-                       o == Opcode::record_test_);
-                assert((uintptr_t)origin.second > (uintptr_t)origin.first);
-                auto rec = new RecordDeoptReason(
-                    {r, origin.first, (uint32_t)offset}, src);
-                deoptBlock->append(rec);
-                break;
-            }
-            case DeoptReason::EnvStubMaterialized: {
-                auto rec = new RecordDeoptReason({r, origin.first, 0}, src);
-                deoptBlock->append(rec);
-                break;
-            }
-            case DeoptReason::DeadBranchReached: {
-                assert(false);
-                break;
-            }
-            case DeoptReason::None:
-                break;
-            }
-        }
-    }
+    if (assume->valueUnderTest())
+        deoptBlock->append(
+            new RecordDeoptReason(assume->reason, assume->valueUnderTest()));
 
     Value* test = assume->condition();
     if (triggerAnyway) {
         test = condition ? (Value*)False::instance() : (Value*)True::instance();
     }
 
-    src->replace(position, new Branch(test));
+    srcBlock->replace(position, new Branch(test));
     if (condition)
-        src->overrideSuccessors({split, deoptBlock});
+        srcBlock->overrideSuccessors({split, deoptBlock});
     else
-        src->overrideSuccessors({deoptBlock, split});
+        srcBlock->overrideSuccessors({deoptBlock, split});
 
     // If visibility was tainted between the last checkpoint and the bailout,
     // we try (best-effort) to recover the correct setting, by scanning for the
     // last known-good setting.
     bool wrongViz = false;
-    for (auto i : *src) {
+    for (auto i : *srcBlock) {
         if (i->effects.contains(Effect::Visibility))
             wrongViz = true;
     }
@@ -293,27 +247,24 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     return split;
 }
 
-void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp, BB* bb,
-                               BB::Instrs::iterator& position,
-                               bool assumePositive, rir::Code* srcCode,
-                               Opcode* origin) {
+void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
+                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               DeoptReason::Reason reason, BB* bb,
+                               BB::Instrs::iterator& position) {
     position = bb->insert(position, condition);
-    auto assume = new Assume(condition, cp);
-    if (srcCode)
-        assume->feedbackOrigin.push_back({srcCode, origin});
-    if (!assumePositive)
-        assume->Not();
+    auto assume =
+        new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
     position = bb->insert(position + 1, assume);
     position++;
 };
 
-void BBTransform::insertAssume(Instruction* condition, Checkpoint* cp,
-                               bool assumePositive, rir::Code* srcCode,
-                               Opcode* origin) {
+void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
+                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               DeoptReason::Reason reason) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
-    insertAssume(condition, cp, contBB, contBegin, assumePositive, srcCode,
-                 origin);
+    insertAssume(condition, assumePositive, cp, origin, reason, contBB,
+                 contBegin);
 }
 
 void BBTransform::mergeRedundantBBs(Code* closure) {
