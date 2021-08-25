@@ -20,36 +20,44 @@ struct AAssumption {
     }
     explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
         auto cond = a->condition();
-        if (auto t = IsType::Cast(cond)) {
-            kind = Typecheck;
-            c.typecheck = {t->arg(0).val(), t->typeTest};
-        } else if (auto t = Identical::Cast(cond)) {
-            kind = Equality;
-            c.equality = {t->arg(0).val(), t->arg(1).val()};
-        } else if (auto t = IsEnvStub::Cast(cond)) {
-            kind = IsEnvStub;
-            c.env = t->env();
-        } else {
-            kind = Other;
-            c.misc = cond;
+        switch (a->reason.reason) {
+        case DeoptReason::Typecheck: {
+            if (auto t = IsType::Cast(cond)) {
+                c.typecheck = {t->arg(0).val(), t->typeTest};
+                kind = Typecheck;
+                return;
+            }
+            break;
         }
-    }
-    explicit AAssumption(Branch* b, bool yesNo) : yesNo(yesNo) {
-        auto cond = b->arg(0).val();
-        if (auto t = IsType::Cast(cond)) {
-            kind = Typecheck;
-            c.typecheck = {t->arg(0).val(), t->typeTest};
-        } else if (auto t = Identical::Cast(cond)) {
-            kind = Equality;
-            c.equality = {t->arg(0).val(), t->arg(1).val()};
-        } else if (auto t = IsEnvStub::Cast(cond)) {
-            kind = IsEnvStub;
-            c.env = t->env();
-        } else {
-            kind = Other;
-            c.misc = cond;
+        case DeoptReason::Calltarget: {
+            if (auto t = Identical::Cast(cond)) {
+                c.equality = {t->arg(0).val(), t->arg(1).val()};
+                kind = Equality;
+                return;
+            }
+            break;
         }
+        case DeoptReason::EnvStubMaterialized: {
+            if (auto t = IsEnvStub::Cast(cond)) {
+                c.env = t->env();
+                kind = IsEnvStub;
+                return;
+            }
+            break;
+        }
+        case DeoptReason::DeadBranchReached:
+            break;
+        case DeoptReason::DeadCall:
+            assert(false);
+            break;
+        }
+
+        // Fallthrough generic case. Assumptions are identified by the concrete
+        // condition alone.
+        kind = Other;
+        c.misc = cond;
     }
+
     AAssumption& operator=(const AAssumption& o) {
         yesNo = o.yesNo;
         kind = o.kind;
@@ -253,14 +261,6 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                 return false;
             };
 
-            if (auto br = Branch::Cast(instr)) {
-                if (assumptionsIncludes(AAssumption(br, true))) {
-                    br->arg(0).val() = True::instance();
-                } else if (assumptionsIncludes(AAssumption(br, false))) {
-                    br->arg(0).val() = False::instance();
-                }
-            }
-
             if (auto assume = Assume::Cast(instr)) {
                 if (assumptionsIncludes(AAssumption(assume))) {
                     anyChange = true;
@@ -327,11 +327,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
             if (h != hoistAssume.end()) {
                 auto g = h->second;
                 ip++;
-                auto assume = new Assume(std::get<0>(g), std::get<1>(g));
-                assume->feedbackOrigin.insert(
-                    assume->feedbackOrigin.end(),
-                    std::get<2>(g)->feedbackOrigin.begin(),
-                    std::get<2>(g)->feedbackOrigin.end());
+                auto assume = new Assume(std::get<Instruction*>(g),
+                                         std::get<Checkpoint*>(g),
+                                         std::get<Assume*>(g)->reason);
                 ip = bb->insert(ip, assume);
                 anyChange = true;
             }

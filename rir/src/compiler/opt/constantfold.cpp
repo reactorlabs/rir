@@ -302,7 +302,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto next = ip + 1;
 
                 auto killUnreachable = [&]() {
-                    if (ip == bb->end() || Unreachable::Cast(*(ip + 1)))
+                    if (ip == bb->end() || Unreachable::Cast(bb->last()))
                         return;
                     ip = bb->insert(ip + 1, new Unreachable()) + 1;
                     while (ip != bb->end())

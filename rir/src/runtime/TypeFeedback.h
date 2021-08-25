@@ -124,7 +124,7 @@ struct ObservedValues {
 
     RIR_INLINE void record(SEXP e) {
 
-        // Set attribs flag for every object even if the SEXP does not
+        // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
         // the case in some very specific cases:
@@ -155,18 +155,42 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class Opcode : uint8_t;
 
+struct FeedbackOrigin {
+  private:
+    uint32_t offset_ = 0;
+    Code* srcCode_ = nullptr;
+
+  public:
+    FeedbackOrigin() {}
+    FeedbackOrigin(rir::Code* src, Opcode* pc);
+
+    Opcode* pc() const {
+        if (offset_ == 0)
+            return nullptr;
+        return (Opcode*)((uintptr_t)srcCode() + offset_);
+    }
+    uint32_t offset() const { return offset_; }
+    Code* srcCode() const { return srcCode_; }
+    void srcCode(Code* src) { srcCode_ = src; }
+};
+
 struct DeoptReason {
     enum Reason : uint32_t {
-        None,
         Typecheck,
         DeadCall,
         Calltarget,
         EnvStubMaterialized,
         DeadBranchReached,
     };
-    Reason reason;
-    Code* srcCode;
-    uint32_t originOffset;
+
+    DeoptReason::Reason reason;
+    FeedbackOrigin origin;
+
+    DeoptReason() = delete;
+    DeoptReason(const FeedbackOrigin& origin, DeoptReason::Reason reason);
+
+    Code* srcCode() const { return origin.srcCode(); }
+    Opcode* pc() const { return origin.pc(); }
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");

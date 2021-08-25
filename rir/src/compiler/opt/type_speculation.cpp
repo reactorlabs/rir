@@ -130,8 +130,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto cp = sp.second.first;
             TypeTest::Info& info = sp.second.second;
 
-            BBTransform::insertAssume(info.test, cp, bb, ip, info.expectation,
-                                      info.srcCode, info.origin);
+            BBTransform::insertAssume(info.test, info.expectation, cp,
+                                      info.feedbackOrigin,
+                                      DeoptReason::Typecheck, bb, ip);
 
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);
