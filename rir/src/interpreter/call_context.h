@@ -117,7 +117,7 @@ struct CallContext {
                 SEXP each = CAR(c);
                 if (TYPEOF(each) == PROMSXP) {
                     auto v = forcePromise(each);
-                    CAR(c) = v;
+                    SETCAR(c, v);
                 }
             }
         }

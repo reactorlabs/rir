@@ -255,8 +255,8 @@ class VisitorImplementation {
     }
 
     template <bool PROCESS_NEW_NODES, typename Scheduler, typename ActionKind>
-    static bool RIR_INLINE genericRun(BB* bb, BB* stop, Scheduler& scheduleNext,
-                                      const ActionKind& action) {
+    static bool inline genericRun(BB* bb, BB* stop, Scheduler& scheduleNext,
+                                  const ActionKind& action) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 

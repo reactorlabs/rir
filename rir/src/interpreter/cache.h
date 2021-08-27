@@ -29,21 +29,21 @@ static_assert((sizeof(BindingCache) +
                   0,
               "Cache should be cache line sized");
 
-static RIR_INLINE void clearCache(BindingCache* cache) {
+static inline void clearCache(BindingCache* cache) {
     memset(cache->entry, 0, sizeof(BindingCacheEntry) * cache->length);
 }
 
-static RIR_INLINE SEXP cachedGetBindingCell(Immediate cacheIdx,
-                                            BindingCache* cache) {
+static inline SEXP cachedGetBindingCell(Immediate cacheIdx,
+                                        BindingCache* cache) {
     SLOWASSERT(cacheIdx < cache->length);
     auto cell = cache->entry[cacheIdx];
-    if (cell && CAR(cell) == R_UnboundValue)
+    if (cell && (CAR(cell) == R_UnboundValue || IS_ACTIVE_BINDING(cell)))
         cell = cache->entry[cacheIdx] = nullptr;
     return cell;
 }
 
-static RIR_INLINE void
-cachedSetBindingCell(Immediate cacheIdx, BindingCache* cache, R_varloc_t loc) {
+static inline void cachedSetBindingCell(Immediate cacheIdx, BindingCache* cache,
+                                        R_varloc_t loc) {
     SLOWASSERT(cacheIdx < cache->length);
     cache->entry[cacheIdx] = loc.cell;
 }
@@ -175,10 +175,10 @@ static inline void rirDefineVarWrapper(SEXP symbol, T value, SEXP rho) {
     SET_TAG(FRAME(rho), symbol);
 }
 
-static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,
-                                        Immediate cacheIdx,
-                                        InterpreterInstance* ctx,
-                                        BindingCache* cache) {
+static inline SEXP getCellFromCache(SEXP env, Immediate poolIdx,
+                                    Immediate cacheIdx,
+                                    InterpreterInstance* ctx,
+                                    BindingCache* cache) {
     if (env != R_BaseEnv && env != R_BaseNamespace) {
         SEXP cell = cachedGetBindingCell(cacheIdx, cache);
         if (!cell) {
@@ -196,10 +196,8 @@ static RIR_INLINE SEXP getCellFromCache(SEXP env, Immediate poolIdx,
     return nullptr;
 }
 
-static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
-                                    Immediate cacheIdx,
-                                    InterpreterInstance* ctx,
-                                    BindingCache* cache) {
+static inline SEXP cachedGetVar(SEXP env, Immediate poolIdx, Immediate cacheIdx,
+                                InterpreterInstance* ctx, BindingCache* cache) {
     SEXP cell = getCellFromCache(env, poolIdx, cacheIdx, ctx, cache);
     if (cell) {
         SEXP res = CAR(cell);
@@ -211,11 +209,9 @@ static RIR_INLINE SEXP cachedGetVar(SEXP env, Immediate poolIdx,
     return Rf_findVar(sym, env);
 }
 
-static RIR_INLINE void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
-                                    Immediate cacheIdx,
-                                    InterpreterInstance* ctx,
-                                    BindingCache* cache,
-                                    bool keepMissing = false) {
+static inline void cachedSetVar(SEXP val, SEXP env, Immediate poolIdx,
+                                Immediate cacheIdx, InterpreterInstance* ctx,
+                                BindingCache* cache, bool keepMissing = false) {
     SEXP loc = getCellFromCache(env, poolIdx, cacheIdx, ctx, cache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);

@@ -266,24 +266,14 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
     SLOWASSERT(TYPEOF(env) == ENVSXP || LazyEnvironment::check(env));
     SLOWASSERT(ctx);
-    auto res = builtinCall(call, ctx);
+    auto res = doCall(call, ctx);
     SLOWASSERT(res);
     return res;
 }
 
-static SEXP callImplCached(CallContext& call, Immediate cache) {
-    auto res = doCall(call, globalContext());
-    if (cache != 0) {
-        auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
-        Pool::patch(cache, trg->container());
-    }
-    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
-}
-
-static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
-                           Immediate ast, SEXP callee, SEXP env, size_t nargs,
-                           unsigned long available, Immediate cache) {
+static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
+                     SEXP callee, SEXP env, size_t nargs,
+                     unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
@@ -292,13 +282,7 @@ static SEXP callImplCached(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
     SLOWASSERT(ctx);
-    return callImplCached(call, cache);
-}
-
-static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
-                     SEXP callee, SEXP env, size_t nargs,
-                     unsigned long available) {
-    return callImplCached(callId, c, ast, callee, env, nargs, available, 0);
+    return doCall(call, globalContext(), true);
 }
 
 static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
@@ -311,9 +295,7 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
-    auto res = doCall(call, ctx);
-    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
+    return doCall(call, ctx, true);
 }
 
 static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
@@ -1080,21 +1062,6 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
     return res;
 }
 
-static SEXP rirCallTrampoline_(RCNTXT& cntxt, Code* code, R_bcstack_t* args,
-                               SEXP env, SEXP callee) {
-    if ((SETJMP(cntxt.cjmpbuf))) {
-        if (R_ReturnedValue == R_RestartToken) {
-            cntxt.callflag = CTXT_RETURN; /* turn restart off */
-            R_ReturnedValue = R_NilValue; /* remove restart token */
-            code->registerInvocation();
-            return code->nativeCode()(code, args, env, callee);
-        } else {
-            return R_ReturnedValue;
-        }
-    }
-    return code->nativeCode()(code, args, env, callee);
-}
-
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
     /*  If we have a generic function we need to use the sysparent of
@@ -1142,10 +1109,15 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     if (fail || RecompileHeuristic(dt, fun, 6)) {
         if (fail || RecompileCondition(dt, fun, Context(available))) {
             fun->unregisterInvocation();
-            return callImplCached(call, target);
+
+            auto res = doCall(call, globalContext(), true);
+            auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
+            Pool::patch(target, trg->container());
+            return res;
         }
     }
 
+    R_CheckStack();
     auto t = R_BCNodeStackTop;
 
     auto missing = fun->nargs() - nargs;
@@ -1174,7 +1146,20 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     // TODO debug
 
-    SEXP result = rirCallTrampoline_(cntxt, fun->body(), args, env, callee);
+    SEXP result;
+    auto code = fun->body();
+    if ((SETJMP(cntxt.cjmpbuf))) {
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt.callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue; /* remove restart token */
+            code->registerInvocation();
+            result = code->nativeCode()(code, args, env, callee);
+        } else {
+            result = R_ReturnedValue;
+        }
+    } else {
+        result = code->nativeCode()(code, args, env, callee);
+    }
 
     endClosureContext(&cntxt, result);
 

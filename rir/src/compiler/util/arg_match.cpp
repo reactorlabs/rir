@@ -141,7 +141,7 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
             std::cout << CHAR(PRINTNAME(f.tag())) << "=";
         if (a.kind == ActualArg::Index) {
             argOrderOrig[a.arg.index] =
-                ArglistOrder::encodeArg(pos++, a.arg.name != R_NilValue);
+                ArglistOrder::encodeArg(pos++, a.arg.name != R_NilValue, false);
             matchedArgs.push_back(a.arg.value);
             if (DEBUG)
                 a.arg.value->printRef(std::cout);
@@ -159,8 +159,8 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
                 std::cout << "(";
             for (auto d = dots.begin(); d != dots.end(); ++d) {
                 assert(d->kind == ActualArg::Index);
-                argOrderOrig[d->arg.index] =
-                    ArglistOrder::encodeArg(pos++, d->arg.name != R_NilValue);
+                argOrderOrig[d->arg.index] = ArglistOrder::encodeArg(
+                    pos++, d->arg.name != R_NilValue, true);
                 conv->addInput(d->arg.name, d->arg.value);
                 if (DEBUG) {
                     if (d->arg.name != R_NilValue)

@@ -4,8 +4,6 @@
 #include <cassert>
 #include <cstdint>
 
-#define RIR_INLINE inline
-
 extern void printCBacktrace();
 extern void printRBacktrace();
 extern void printBacktrace();

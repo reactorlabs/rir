@@ -304,50 +304,50 @@ struct PirType {
     // Note: This includes any R type, but not native types
     static constexpr PirType any() { return val().orLazy(); }
 
-    RIR_INLINE constexpr bool maybeMissing() const {
+    inline constexpr bool maybeMissing() const {
         if (!isRType())
             return false;
         return t_.r.includes(RType::missing);
     }
-    RIR_INLINE constexpr bool maybeLazy() const {
+    inline constexpr bool maybeLazy() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::lazy);
     }
-    RIR_INLINE constexpr bool maybePromiseWrapped() const {
+    inline constexpr bool maybePromiseWrapped() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::promiseWrapped) ||
                flags_.includes(TypeFlags::lazy);
     }
-    RIR_INLINE constexpr bool maybeNAOrNaN() const {
+    inline constexpr bool maybeNAOrNaN() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::maybeNAOrNaN);
     }
-    RIR_INLINE constexpr bool isSimpleScalar() const {
+    inline constexpr bool isSimpleScalar() const {
         return isScalar() && !maybeHasAttrs();
     }
 
-    RIR_INLINE constexpr bool isScalar() const {
+    inline constexpr bool isScalar() const {
         if (!isRType())
             return true;
         return !flags_.includes(TypeFlags::maybeNotScalar);
     }
-    RIR_INLINE constexpr bool isRType() const {
+    inline constexpr bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
-    RIR_INLINE constexpr bool isRType(const RType& o) const {
+    inline constexpr bool isRType(const RType& o) const {
         return isRType() && t_.r == o;
     }
-    RIR_INLINE constexpr bool maybe(PirType type) const {
+    inline constexpr bool maybe(PirType type) const {
         auto inter = (*this & type);
         return !inter.isVoid();
     }
-    RIR_INLINE constexpr bool maybe(RType type) const {
+    inline constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    RIR_INLINE constexpr bool maybeObj() const {
+    inline constexpr bool maybeObj() const {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);
@@ -356,7 +356,7 @@ struct PirType {
         return res;
     }
 
-    RIR_INLINE constexpr bool maybeNotFastVecelt() const {
+    inline constexpr bool maybeNotFastVecelt() const {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeNotFastVecelt);
@@ -364,7 +364,7 @@ struct PirType {
         return res;
     }
 
-    RIR_INLINE constexpr bool maybeHasAttrs() const {
+    inline constexpr bool maybeHasAttrs() const {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeAttrib);
@@ -373,7 +373,7 @@ struct PirType {
         return res;
     }
 
-    RIR_INLINE constexpr PirType operator|(const PirType& o) const {
+    inline constexpr PirType operator|(const PirType& o) const {
         assert(isRType() == o.isRType());
 
         PirType r;
@@ -386,7 +386,7 @@ struct PirType {
         return r;
     }
 
-    RIR_INLINE constexpr PirType operator&(const PirType& o) const {
+    inline constexpr PirType operator&(const PirType& o) const {
         assert(isRType() == o.isRType());
 
         PirType r;
@@ -424,83 +424,83 @@ struct PirType {
         return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
     }
 
-    RIR_INLINE constexpr PirType notNAOrNaN() const {
+    inline constexpr PirType notNAOrNaN() const {
         assert(isRType());
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNAOrNaN));
     }
 
-    RIR_INLINE constexpr PirType scalar() const {
+    inline constexpr PirType scalar() const {
         assert(isRType());
         return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
     }
 
-    RIR_INLINE constexpr PirType simpleScalar() const {
+    inline constexpr PirType simpleScalar() const {
         return scalar().noAttribsOrObject();
     }
 
-    RIR_INLINE constexpr PirType notT(RType t) const {
+    inline constexpr PirType notT(RType t) const {
         assert(isRType());
         return PirType(t_.r & ~RTypeSet(t), flags_);
     }
 
-    RIR_INLINE constexpr PirType orT(RType t) const {
+    inline constexpr PirType orT(RType t) const {
         assert(isRType());
         return PirType(t_.r | t, flags_);
     }
 
-    RIR_INLINE constexpr PirType orNAOrNaN() const {
+    inline constexpr PirType orNAOrNaN() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeNAOrNaN);
     }
 
-    RIR_INLINE constexpr PirType orNotScalar() const {
+    inline constexpr PirType orNotScalar() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
     }
 
-    RIR_INLINE constexpr PirType orPromiseWrapped() const {
+    inline constexpr PirType orPromiseWrapped() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
     }
 
-    RIR_INLINE constexpr PirType orLazy() const {
+    inline constexpr PirType orLazy() const {
         assert(isRType());
         return PirType(t_.r,
                        flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
     }
 
-    RIR_INLINE constexpr PirType orObject() const {
+    inline constexpr PirType orObject() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeObject |
                                  TypeFlags::maybeAttrib |
                                  TypeFlags::maybeNotFastVecelt);
     }
 
-    RIR_INLINE constexpr PirType orNotFastVecelt() const {
+    inline constexpr PirType orNotFastVecelt() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeNotFastVecelt |
                                  TypeFlags::maybeAttrib);
     }
 
-    RIR_INLINE constexpr PirType orAttribsOrObj() const {
+    inline constexpr PirType orAttribsOrObj() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
                                  TypeFlags::maybeNotFastVecelt |
                                  TypeFlags::maybeObject);
     }
 
-    RIR_INLINE constexpr PirType orNameAttrs() const {
+    inline constexpr PirType orNameAttrs() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
                                  TypeFlags::maybeNotFastVecelt);
     }
 
-    RIR_INLINE constexpr PirType orFastVecelt() const {
+    inline constexpr PirType orFastVecelt() const {
         assert(isRType());
         return orAttribsOrObj().orAttribsOrObj().fastVecelt();
     }
 
-    RIR_INLINE constexpr PirType fastVecelt() const {
+    inline constexpr PirType fastVecelt() const {
         assert(isRType());
         return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeObject |
                                         TypeFlags::maybeNotFastVecelt));
@@ -524,7 +524,7 @@ struct PirType {
             flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
     }
 
-    RIR_INLINE constexpr PirType baseType() const {
+    inline constexpr PirType baseType() const {
         assert(isRType());
         return PirType(t_.r);
     }
@@ -585,7 +585,6 @@ struct PirType {
             return RType::nil;
         } else if (isA(num() | RType::str | RType::nil)) {
             PirType t = *this;
-            t.t_.r.reset(RType::nil);
             if (numArgs > 1) {
                 // The orNAOrNaN is only needed because we don't check NA or NaN
                 // on vectors, technically the vector doesn't contain NA or NaN
@@ -610,13 +609,13 @@ struct PirType {
     void fromContext(const Context&, unsigned arg, unsigned nargs,
                      bool forced = false);
 
-    RIR_INLINE bool operator==(const NativeType& o) const {
+    inline bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
     }
 
-    RIR_INLINE bool operator!=(const PirType& o) const { return !(*this == o); }
+    inline bool operator!=(const PirType& o) const { return !(*this == o); }
 
-    RIR_INLINE bool operator==(const PirType& o) const {
+    inline bool operator==(const PirType& o) const {
         return flags_ == o.flags_ &&
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }

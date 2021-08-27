@@ -1,0 +1,6 @@
+x = quote({1})
+f = function() all.equal(x,x)
+stopifnot(f())
+stopifnot(f())
+stopifnot(f())
+stopifnot(f())

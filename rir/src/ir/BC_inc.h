@@ -278,7 +278,7 @@ class BC {
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
     // This is important, as it is very performance critical.
-    RIR_INLINE static unsigned size(rir::Opcode* pc) {
+    inline static unsigned size(rir::Opcode* pc) {
         auto bc = *pc;
         switch (bc) {
         // First handle the varlength BCs. In all three cases the number of
@@ -298,7 +298,7 @@ class BC {
         return fixedSize(bc);
     }
 
-    RIR_INLINE static Opcode* next(rir::Opcode* pc) { return pc + size(pc); }
+    inline static Opcode* next(rir::Opcode* pc) { return pc + size(pc); }
 
     // If the decoded BC is not needed, you should use next, since it is much
     // faster.
@@ -485,7 +485,7 @@ BC_NOARGS(V, _)
         allocExtraInformation();
     }
 
-    static unsigned RIR_INLINE fixedSize(Opcode bc) {
+    static unsigned inline fixedSize(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case Opcode::name:                                                         \

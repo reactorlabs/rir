@@ -103,10 +103,10 @@ struct Context {
         return m;
     }
 
-    RIR_INLINE void add(Assumption a) { flags.set(a); }
-    RIR_INLINE void remove(Assumption a) { flags.reset(a); }
-    RIR_INLINE bool includes(Assumption a) const { return flags.includes(a); }
-    RIR_INLINE bool includes(const Flags& a) const { return flags.includes(a); }
+    inline void add(Assumption a) { flags.set(a); }
+    inline void remove(Assumption a) { flags.reset(a); }
+    inline bool includes(Assumption a) const { return flags.includes(a); }
+    inline bool includes(const Flags& a) const { return flags.includes(a); }
 
 #define TYPE_ASSUMPTIONS(Type)                                                 \
     static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS>                \
@@ -115,17 +115,17 @@ struct Context {
              TypeAssumption::Arg2Is##Type##_, TypeAssumption::Arg3Is##Type##_, \
              TypeAssumption::Arg4Is##Type##_,                                  \
              TypeAssumption::Arg5Is##Type##_}};                                \
-    RIR_INLINE bool is##Type(size_t i) const {                                 \
+    inline bool is##Type(size_t i) const {                                     \
         if (i < NUM_TYPED_ARGS)                                                \
             if (typeFlags.includes(Type##Context[i]))                          \
                 return true;                                                   \
         return false;                                                          \
     }                                                                          \
-    RIR_INLINE void reset##Type(size_t i) {                                    \
+    inline void reset##Type(size_t i) {                                        \
         if (i < NUM_TYPED_ARGS)                                                \
             typeFlags.reset(Type##Context[i]);                                 \
     }                                                                          \
-    RIR_INLINE void set##Type(size_t i) {                                      \
+    inline void set##Type(size_t i) {                                          \
         if (i < NUM_TYPED_ARGS)                                                \
             typeFlags.set(Type##Context[i]);                                   \
     }
@@ -149,20 +149,18 @@ struct Context {
         return a.typeFlags;
     }
 
-    RIR_INLINE uint8_t numMissing() const { return missing; }
+    inline uint8_t numMissing() const { return missing; }
 
-    RIR_INLINE void numMissing(long i) {
+    inline void numMissing(long i) {
         assert(i < 255);
         missing = i;
     }
 
-    RIR_INLINE bool empty() const {
+    inline bool empty() const {
         return flags.empty() && typeFlags.empty() && missing == 0;
     }
 
-    RIR_INLINE size_t count() const {
-        return flags.count() + typeFlags.count();
-    }
+    inline size_t count() const { return flags.count() + typeFlags.count(); }
 
     constexpr Context operator|(const Flags& other) const {
         return Context(other | flags, typeFlags, missing);
@@ -201,7 +199,7 @@ struct Context {
                        missing);
     }
 
-    RIR_INLINE bool operator<(const Context& other) const {
+    inline bool operator<(const Context& other) const {
         if (*this == other)
             return false;
 
@@ -224,12 +222,12 @@ struct Context {
         return typeFlags.to_i() > other.typeFlags.to_i();
     }
 
-    RIR_INLINE bool operator!=(const Context& other) const {
+    inline bool operator!=(const Context& other) const {
         return flags != other.flags || typeFlags != other.typeFlags ||
                missing != other.missing;
     }
 
-    RIR_INLINE bool operator==(const Context& other) const {
+    inline bool operator==(const Context& other) const {
         return flags == other.flags && typeFlags == other.typeFlags &&
                missing == other.missing;
     }

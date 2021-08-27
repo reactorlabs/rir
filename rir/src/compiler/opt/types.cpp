@@ -74,7 +74,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num().orAttribsOrObj();
+                                auto lub = PirType::num().orAttribsOrObj();
+                                // Min/max support string comparison
+                                if (name == "min" || name == "max")
+                                    lub = lub | RType::str;
+                                inferred = m & lub;
 
                                 if (inferred.maybe(RType::logical))
                                     inferred = inferred.orT(RType::integer)
@@ -168,6 +172,17 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if ("c" == name) {
                         inferred = i->mergedInputType(getType).collectionType(
                             c->nCallArgs());
+                        // If at least one arg is non-nil, then the result is
+                        // also not nil
+                        if (inferred.maybe(RType::nil)) {
+                            auto notNil = false;
+                            i->eachArg([&](Value* v) {
+                                if (!v->type.maybe(RType::nil))
+                                    notNil = true;
+                            });
+                            if (notNil)
+                                inferred = inferred.notT(RType::nil);
+                        }
                         break;
                     }
 
