@@ -12,9 +12,10 @@ struct Snippets {
         Rf_coerceVector,
         Rf_type2char,
         Rf_PrintValue,
-        INTinc,
-        REALinc,
+        REALINTinc,
         VapplyDimAndNames,
+        VapplyOffsetInc,
+        VapplySubassign,
     };
     static size_t nargs(Snippet s) {
         switch (s) {
@@ -24,9 +25,11 @@ struct Snippets {
             return 1;
         case Snippet::Rf_allocVector:
         case Snippet::Rf_coerceVector:
-        case Snippet::INTinc:
-        case Snippet::REALinc:
+        case Snippet::REALINTinc:
+        case Snippet::VapplyOffsetInc:
             return 2;
+        case Snippet::VapplySubassign:
+            return 6;
         case Snippet::VapplyDimAndNames:
             return 9;
         }
@@ -44,12 +47,14 @@ struct Snippets {
             return "Rf_type2char";
         case Snippet::Rf_PrintValue:
             return "Rf_PrintValue";
-        case Snippet::INTinc:
-            return "INTinc";
-        case Snippet::REALinc:
-            return "REALinc";
+        case Snippet::REALINTinc:
+            return "REALINTinc";
         case Snippet::VapplyDimAndNames:
             return "VapplyDimAndNames";
+        case Snippet::VapplyOffsetInc:
+            return "VapplyOffsetInc";
+        case Snippet::VapplySubassign:
+            return "VapplySubassign";
         }
         assert(false);
     }

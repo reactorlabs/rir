@@ -108,9 +108,15 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
                             }
                             args.push_back(a);
                         }
-                        auto newCall =
-                            new Call(call->env(), callee, args,
-                                     call->frameState(), call->srcIdx);
+                        // Rewrite the ast in case the callee is a special
+                        auto origSrc =
+                            cp_pool_at(globalContext(), call->srcIdx);
+                        auto newSrc =
+                            PROTECT(LCONS(CADDR(origSrc), CDDDR(origSrc)));
+                        auto newSrcIdx = cp_pool_add(globalContext(), newSrc);
+                        UNPROTECT(1);
+                        auto newCall = new Call(call->env(), callee, args,
+                                                call->frameState(), newSrcIdx);
                         call->replaceUsesAndSwapWith(newCall, ip);
                         next = ip + 1;
                     }

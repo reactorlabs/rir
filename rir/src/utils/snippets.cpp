@@ -39,20 +39,15 @@ SEXP Snippets::execute(Snippet s) {
         auto cstr = Rf_type2char(INTEGER(type)[0]);
         return Rf_mkChar(cstr);
     }
-    case Snippet::INTinc: {
+    case Snippet::REALINTinc: {
         auto ind = ostack_at(ctx, 1);
-        assert(IS_SIMPLE_SCALAR(ind, INTSXP));
+        assert(IS_SIMPLE_SCALAR(ind, REALSXP) || IS_SIMPLE_SCALAR(ind, INTSXP));
         auto i = ostack_at(ctx, 0);
         assert(IS_SIMPLE_SCALAR(i, INTSXP));
-        INTEGER(ind)[0] = (int)(INTEGER(i)[0]);
-        return R_NilValue;
-    }
-    case Snippet::REALinc: {
-        auto ind = ostack_at(ctx, 1);
-        assert(IS_SIMPLE_SCALAR(ind, REALSXP));
-        auto i = ostack_at(ctx, 0);
-        assert(IS_SIMPLE_SCALAR(i, INTSXP));
-        REAL(ind)[0] = (double)(INTEGER(i)[0]);
+        if (TYPEOF(ind) == REALSXP)
+            REAL(ind)[0] = (double)(INTEGER(i)[0] + 1);
+        else
+            INTEGER(ind)[0] = (int)(INTEGER(i)[0] + 1);
         return R_NilValue;
     }
     case Snippet::VapplyDimAndNames: {
@@ -111,6 +106,92 @@ SEXP Snippets::execute(Snippet s) {
                     setAttrib(ans, R_DimNamesSymbol, dimnames);
                     UNPROTECT(1);
                 }
+            }
+        }
+
+        return ans;
+    }
+    case Snippet::VapplyOffsetInc: {
+        // [common_len_offset, commonLen]
+        auto common_len_offset = ostack_at(ctx, 1);
+        assert(IS_SIMPLE_SCALAR(common_len_offset, INTSXP));
+        auto commonLen = ostack_at(ctx, 0);
+        assert(IS_SIMPLE_SCALAR(commonLen, INTSXP));
+
+        if (MAYBE_REFERENCED(common_len_offset)) {
+            int i = INTEGER(common_len_offset)[0];
+            SEXP n = Rf_allocVector(INTSXP, 1);
+            INTEGER(n)[0] = i + INTEGER(commonLen)[0];
+            return n;
+        }
+        INTEGER(common_len_offset)[0] += INTEGER(commonLen)[0];
+        return common_len_offset;
+    }
+    case Snippet::VapplySubassign: {
+        // [val, ans, commonLen, commonType, i, common_len_offset]
+        SEXP val = ostack_at(ctx, 5);
+        SEXP ans = ostack_at(ctx, 4);
+        int commonLen = INTEGER(ostack_at(ctx, 3))[0];
+        int commonType = INTEGER(ostack_at(ctx, 2))[0];
+        R_xlen_t i = INTEGER(ostack_at(ctx, 1))[0];
+        int common_len_offset = INTEGER(ostack_at(ctx, 0))[0];
+
+        if (commonLen == 1) { // common case
+            switch (commonType) {
+            case CPLXSXP:
+                COMPLEX(ans)[i] = COMPLEX(val)[0];
+                break;
+            case REALSXP:
+                REAL(ans)[i] = REAL(val)[0];
+                break;
+            case INTSXP:
+                INTEGER(ans)[i] = INTEGER(val)[0];
+                break;
+            case LGLSXP:
+                LOGICAL(ans)[i] = LOGICAL(val)[0];
+                break;
+            case RAWSXP:
+                RAW(ans)[i] = RAW(val)[0];
+                break;
+            case STRSXP:
+                SET_STRING_ELT(ans, i, STRING_ELT(val, 0));
+                break;
+            case VECSXP:
+                SET_VECTOR_ELT(ans, i, VECTOR_ELT(val, 0));
+                break;
+            }
+        } else { // commonLen > 1 (typically, or == 0) :
+            switch (commonType) {
+            case REALSXP:
+                memcpy(REAL(ans) + common_len_offset, REAL(val),
+                       commonLen * sizeof(double));
+                break;
+            case INTSXP:
+                memcpy(INTEGER(ans) + common_len_offset, INTEGER(val),
+                       commonLen * sizeof(int));
+                break;
+            case LGLSXP:
+                memcpy(LOGICAL(ans) + common_len_offset, LOGICAL(val),
+                       commonLen * sizeof(int));
+                break;
+            case RAWSXP:
+                memcpy(RAW(ans) + common_len_offset, RAW(val),
+                       commonLen * sizeof(Rbyte));
+                break;
+            case CPLXSXP:
+                memcpy(COMPLEX(ans) + common_len_offset, COMPLEX(val),
+                       commonLen * sizeof(Rcomplex));
+                break;
+            case STRSXP:
+                for (int j = 0; j < commonLen; j++)
+                    SET_STRING_ELT(ans, common_len_offset + j,
+                                   STRING_ELT(val, j));
+                break;
+            case VECSXP:
+                for (int j = 0; j < commonLen; j++)
+                    SET_VECTOR_ELT(ans, common_len_offset + j,
+                                   VECTOR_ELT(val, j));
+                break;
             }
         }
 
