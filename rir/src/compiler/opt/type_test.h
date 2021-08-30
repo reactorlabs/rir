@@ -20,7 +20,7 @@ class TypeTest {
                        const std::function<void()>& failed) {
         auto expected = i->type & feedback.type;
 
-        if (i->type.isA(expected))
+        if (i->type.isA(expected) && i->type.isA(required))
             return;
 
         if (expected.isVoid() || expected.maybeLazy()) {
