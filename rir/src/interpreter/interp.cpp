@@ -767,7 +767,19 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                                     prom->u.promsxp.env)) {
                                 v = le->getArg(sym);
                             } else {
-                                v = Rf_findVar(sym, PRENV(prom));
+                                auto env = PRENV(prom);
+                                while (env != R_NilValue) {
+                                    R_varloc_t loc =
+                                        R_findVarLocInFrame(PRENV(prom), sym);
+                                    if (R_VARLOC_IS_NULL(loc)) {
+                                        env = ENCLOS(env);
+                                        continue;
+                                    }
+                                    if (IS_ACTIVE_BINDING(loc.cell))
+                                        break;
+                                    v = CAR(loc.cell);
+                                    break;
+                                }
                             }
                         }
                     }
