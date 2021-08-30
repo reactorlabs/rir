@@ -320,6 +320,7 @@ bool supportsFastBuiltinCall2(SEXP b, size_t nargs) {
     // SET_TAG
     case blt("cbind"):
     case blt("rbind"):
+    case blt("c"):
         return false;
     default: {}
     }
