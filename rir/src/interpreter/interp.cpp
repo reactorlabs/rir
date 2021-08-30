@@ -703,7 +703,7 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     bool noArgmatchNeeded =
         call.givenContext.includes(Assumption::StaticallyArgmatched);
     if (!noArgmatchNeeded)
-        actuals = Rf_matchArgs(FORMALS(op), actuals, call.ast);
+        actuals = Rf_matchArgs_NR(FORMALS(op), actuals, call.ast);
 
     PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
 

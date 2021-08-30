@@ -117,3 +117,5 @@ extern int R_PPStackTop;
     } while (0)
 
 #endif
+
+#undef R_CheckStack

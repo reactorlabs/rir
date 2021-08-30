@@ -39,22 +39,7 @@ function build_r {
         sleep 1
     fi
 
-    # unpack cache of recommended packages
-    cd src/library/Recommended/
-    tar xf ../../../../custom-r/cache_recommended.tar
-    cd ../../..
-    # tools/rsync-recommended || true
-
-    # There is a test that times out due to the compiler triggering in the
-    # wrong moment in the matrix package. There doesn't seem to be a good solution
-    # other than just patching it.
-    cd src/library/Recommended
-    tar xzf Matrix_1.2-18.tar.gz
-    sed -i -e 's/^stopifnot((st <- system.time(show(M)))\[1\] < 1.0)/((st <- system.time(show(M)))[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
-    rm Matrix_1.2-18.tar.gz
-    tar czf Matrix_1.2-18.tar.gz Matrix
-    rm -rf Matrix
-    cd ../../../
+    tools/rsync-recommended
 
     if [[ "$GNUR_BRANCH" != "" ]]; then
         git checkout $GNUR_BRANCH
@@ -64,9 +49,9 @@ function build_r {
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
-            ./configure
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure
         fi
     fi
 

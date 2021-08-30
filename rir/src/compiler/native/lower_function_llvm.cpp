@@ -271,7 +271,7 @@ llvm::Value* LowerFunctionLLVM::nodestackPtr() {
 
 llvm::Value* LowerFunctionLLVM::stack(int i) {
     auto offset = -(i + 1);
-    auto pos = builder.CreateGEP(nodestackPtr(), {c(offset), c(1)});
+    auto pos = builder.CreateGEP(nodestackPtr(), {c(offset), c(2)});
     return builder.CreateLoad(t::SEXP, pos);
 }
 
@@ -284,7 +284,7 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
     auto pos = -args.size();
     for (auto arg = args.begin(); arg != args.end(); arg++) {
         // store the value
-        auto valS = builder.CreateGEP(stackptr, {c(pos), c(1)});
+        auto valS = builder.CreateGEP(stackptr, {c(pos), c(2)});
         builder.CreateStore(*arg, valS);
         pos++;
     }
@@ -293,7 +293,7 @@ void LowerFunctionLLVM::stack(const std::vector<llvm::Value*>& args) {
 
 void LowerFunctionLLVM::setLocal(size_t i, llvm::Value* v) {
     assert(v->getType() == t::SEXP);
-    auto pos = builder.CreateGEP(basepointer, {c(i), c(1)});
+    auto pos = builder.CreateGEP(basepointer, {c(i), c(2)});
     builder.CreateStore(v, pos, true);
 }
 
@@ -850,9 +850,12 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
 }
 
 llvm::Value* LowerFunctionLLVM::argument(int i) {
-    auto pos = builder.CreateGEP(paramArgs(), c(i));
-    pos = builder.CreateGEP(pos, {c(0), c(1)});
-    return builder.CreateLoad(t::SEXP, pos);
+    auto pos = builder.CreateGEP(paramArgs(), {c(i), c(0)});
+    insn_assert(builder.CreateICmpEQ(builder.CreateLoad(pos), c(0)),
+                "Expected boxed arg");
+    pos = builder.CreateGEP(paramArgs(), {c(i), c(2)});
+    insn_assert(builder.CreateIsNotNull(builder.CreateLoad(pos)), "null arg");
+    return builder.CreateLoad(pos);
 }
 
 AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
@@ -4564,6 +4567,7 @@ void LowerFunctionLLVM::compile() {
                     auto done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
+                    // TODO: check active binding
                     builder.CreateCondBr(
                         builder.CreateICmpULE(
                             builder.CreatePtrToInt(cache, t::i64),
