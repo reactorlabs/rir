@@ -74,7 +74,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 m = m.mergeWithConversion(
                                     getType(c->callArg(i).val()));
                             if (!m.maybeObj()) {
-                                inferred = m & PirType::num().orAttribsOrObj();
+                                auto lub = PirType::num().orAttribsOrObj();
+                                // Min/max support string comparison
+                                if (name == "min" || name == "max")
+                                    lub = lub | RType::str;
+                                inferred = m & lub;
 
                                 if (inferred.maybe(RType::logical))
                                     inferred = inferred.orT(RType::integer)
