@@ -52,7 +52,7 @@ class EnumSet {
     static_assert(!std::is_same<Element, Store>::value, "That is confusing");
     constexpr explicit EnumSet(const Store& s) : set_(s) {}
 
-    RIR_INLINE Element max() const {
+    inline Element max() const {
         for (size_t i = static_cast<size_t>(Element::LAST) - 1;
              i >= static_cast<size_t>(Element::FIRST); i--) {
             Element e = static_cast<Element>(i);
@@ -62,44 +62,42 @@ class EnumSet {
         assert(false && "EnumSet has no max because it's empty");
     }
 
-    RIR_INLINE bool contains(const Element& e) const {
+    inline bool contains(const Element& e) const {
         assert(boundscheck(e));
         return !(*this & EnumSet(e)).empty();
     }
 
-    RIR_INLINE void set(const Element& e) {
+    inline void set(const Element& e) {
         assert(boundscheck(e));
         set_ |= 1UL << static_cast<size_t>(e);
     }
 
-    RIR_INLINE void reset() { set_ = 0; }
+    inline void reset() { set_ = 0; }
 
-    RIR_INLINE void reset(const Element& e) {
+    inline void reset(const Element& e) {
         assert(boundscheck(e));
         set_ &= ~(1UL << static_cast<size_t>(e));
     }
 
-    RIR_INLINE bool intersects(const EnumSet& s) const {
+    inline bool intersects(const EnumSet& s) const {
         return !EnumSet(s.set_ & set_).empty();
     }
 
-    RIR_INLINE bool constexpr includes(const EnumSet& s) const {
+    inline bool constexpr includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
     }
 
-    RIR_INLINE bool constexpr includes(const Element& e) const {
+    inline bool constexpr includes(const Element& e) const {
         return (EnumSet(e).set_ & set_) == EnumSet(e).set_;
     }
 
-    RIR_INLINE bool operator==(const Element& t) const {
+    inline bool operator==(const Element& t) const {
         return EnumSet(t).set_ == set_;
     }
 
-    RIR_INLINE bool operator==(const EnumSet& s) const {
-        return set_ == s.set_;
-    }
+    inline bool operator==(const EnumSet& s) const { return set_ == s.set_; }
 
-    constexpr RIR_INLINE EnumSet operator~() const {
+    constexpr inline EnumSet operator~() const {
         return EnumSet(~set_ & static_cast<Store>(Any()));
     }
 
@@ -107,23 +105,21 @@ class EnumSet {
         return *this & ~other;
     }
 
-    RIR_INLINE bool operator!=(const EnumSet& s) const {
-        return set_ != s.set_;
-    }
+    inline bool operator!=(const EnumSet& s) const { return set_ != s.set_; }
 
-    RIR_INLINE bool operator!=(const Element& t) const {
+    inline bool operator!=(const Element& t) const {
         return EnumSet(t) != set_;
     }
 
-    constexpr RIR_INLINE EnumSet operator&(const EnumSet& s) const {
+    constexpr inline EnumSet operator&(const EnumSet& s) const {
         return EnumSet(s.set_ & set_);
     }
 
-    constexpr RIR_INLINE EnumSet operator|(const EnumSet& s) const {
+    constexpr inline EnumSet operator|(const EnumSet& s) const {
         return EnumSet(s.set_ | set_);
     }
 
-    constexpr RIR_INLINE EnumSet operator|(const Element& t) const {
+    constexpr inline EnumSet operator|(const Element& t) const {
         return *this | EnumSet(t);
     }
 
@@ -131,9 +127,9 @@ class EnumSet {
 
     explicit constexpr operator Store() const { return set_; }
 
-    RIR_INLINE constexpr bool empty() const { return set_ == 0; }
+    inline constexpr bool empty() const { return set_ == 0; }
 
-    RIR_INLINE std::size_t count() const { return __builtin_popcount(set_); }
+    inline std::size_t count() const { return __builtin_popcount(set_); }
 
     struct Iterator {
       private:

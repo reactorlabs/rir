@@ -49,7 +49,7 @@ struct ObservedTest {
 
     ObservedTest() : seen(0), unused(0) {}
 
-    RIR_INLINE void record(SEXP e) {
+    inline void record(SEXP e) {
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
@@ -122,7 +122,7 @@ struct ObservedValues {
         }
     };
 
-    RIR_INLINE void record(SEXP e) {
+    inline void record(SEXP e) {
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no

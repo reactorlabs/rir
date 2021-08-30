@@ -2386,7 +2386,7 @@ class VLIE(MkEnv, Effect::LeakArg) {
     typedef std::function<void(SEXP name, InstrArg&, bool& missing)>
         MutableLocalVarIt;
 
-    RIR_INLINE void eachLocalVar(MutableLocalVarIt it) {
+    inline void eachLocalVar(MutableLocalVarIt it) {
         for (size_t i = 0; i < envSlot(); ++i) {
             bool m = missing[i];
             it(varName[i], arg(i), m);
@@ -2394,12 +2394,12 @@ class VLIE(MkEnv, Effect::LeakArg) {
         }
     }
 
-    RIR_INLINE void eachLocalVar(LocalVarIt it) const {
+    inline void eachLocalVar(LocalVarIt it) const {
         for (size_t i = 0; i < envSlot(); ++i)
             it(varName[i], arg(i).val(), missing[i]);
     }
 
-    RIR_INLINE void eachLocalVarRev(LocalVarIt it) const {
+    inline void eachLocalVarRev(LocalVarIt it) const {
         for (long i = envSlot() - 1; i >= 0; --i)
             it(varName[i], arg(i).val(), missing[i]);
     }
@@ -2547,11 +2547,11 @@ class VLI(DotsList, Effect::LeakArg) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
-    RIR_INLINE void eachElement(LocalVarIt it) const {
+    inline void eachElement(LocalVarIt it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(names[i], arg(i).val());
     }
-    RIR_INLINE void eachElementRev(LocalVarIt it) const {
+    inline void eachElementRev(LocalVarIt it) const {
         for (long i = nargs() - 1; i >= 0; --i)
             it(names[i], arg(i).val());
     }

@@ -50,7 +50,7 @@ extern SEXP R_LogicalNAValue;
 // Performance critical stuff copied from Rinlinedfun.h
 
 #ifdef ENABLE_SLOWASSERT
-RIR_INLINE void CHKVEC(SEXP x) {
+inline void CHKVEC(SEXP x) {
     switch (TYPEOF(x)) {
     case CHARSXP:
     case LGLSXP:
@@ -74,7 +74,7 @@ RIR_INLINE void CHKVEC(SEXP x) {
     } while (0)
 #endif
 
-RIR_INLINE void* DATAPTR(SEXP x) {
+inline void* DATAPTR(SEXP x) {
     CHKVEC(x);
     if (ALTREP(x))
         return ALTVEC_DATAPTR(x);
@@ -92,7 +92,7 @@ RIR_INLINE void* DATAPTR(SEXP x) {
         return STDVEC_DATAPTR(x);
 }
 
-RIR_INLINE R_xlen_t XLENGTH_EX(SEXP x) {
+inline R_xlen_t XLENGTH_EX(SEXP x) {
     return ALTREP(x) ? ALTREP_LENGTH(x) : STDVEC_LENGTH(x);
 }
 
