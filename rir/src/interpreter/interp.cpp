@@ -341,50 +341,27 @@ struct ArglistView {
   public:
     ArglistView(ArglistOrder::CallId id, size_t length,
                 const R_bcstack_t* stackArgs, SEXP* heapArgs,
-                const Immediate* names, SEXP ast, ArglistOrder* reordering,
-                bool recreateOriginalPromargs, InterpreterInstance* ctx)
+                const Immediate* names, ArglistOrder* reordering,
+                InterpreterInstance* ctx)
         : id(id), onStack(stackArgs), stackArgs(stackArgs), heapArgs(heapArgs),
-          names(names), ast(ast), reordering(reordering),
-          recreateOriginalPromargs(recreateOriginalPromargs), ctx(ctx) {
-        for (size_t i = 0; i < length; ++i) {
-            auto arg = getArgFromStore(i);
-            if (TYPEOF(arg) == DOTSXP) {
-                assert(!haveDots);
-                haveDots = true;
-                dots = RList(arg);
-                dotsRange.first = i;
-                auto dotsLength = dots.length();
-                dotsRange.second = i + dotsLength;
-                lengthWithDots += dotsLength;
-            } else {
-                lengthWithDots++;
-            }
-        }
+          names(names), reordering(reordering), ctx(ctx) {}
+
+    bool isStaticallyMatchedDots(size_t i) {
+        return reordering->isStaticallyMatchedDots(reordering->index(id, i));
     }
 
-    std::pair<SEXP, SEXP> getArgAndName(size_t i, SEXP a, bool reorder) {
-        bool omitName =
-            reorder && !ArglistOrder::isArgNamed(reordering->index(id, i));
-        if (reorder)
+    std::pair<SEXP, SEXP> getArgAndName(size_t i, bool reorder, SEXP astName) {
+        if (reorder) {
+            if (i >= reordering->originalArglistLength(id))
+                return {R_MissingArg, R_NilValue};
             i = ArglistOrder::decodeArg(reordering->index(id, i));
-        if (i >= lengthWithDots)
-            return std::make_pair(R_MissingArg, R_NilValue);
-        bool inDots = false;
-        if (recreateOriginalPromargs && haveDots) {
-            if (dotsRange.first <= i && i < dotsRange.second) {
-                i -= dotsRange.first;
-                inDots = true;
-            } else if (i >= dotsRange.second) {
-                i -= (dotsRange.second - dotsRange.first - 1);
-            }
         }
-        auto arg = inDots ? *(dots.begin() + i) : getArgFromStore(i);
-        auto name = inDots ? (dots.begin() + i).tag()
-                           : (names ? cp_pool_at(ctx, names[i])
-                                    : (ast ? TAG(a) : R_NilValue));
-        if (omitName)
-            name = R_NilValue;
-        return std::make_pair(arg, name);
+        auto arg = getArgFromStore(i);
+
+        // Sometimes we loose the name and have to restore it from the ast
+        // TODO: why? and why do we even keep the names separately then?
+        auto name = names ? cp_pool_at(ctx, names[i]) : astName;
+        return {arg, name};
     }
 
     ArglistOrder::CallId id;
@@ -392,15 +369,8 @@ struct ArglistView {
     const R_bcstack_t* stackArgs;
     SEXP* heapArgs;
     const Immediate* names;
-    SEXP ast;
     ArglistOrder* reordering;
-    bool recreateOriginalPromargs;
     InterpreterInstance* ctx;
-
-    bool haveDots = false;
-    RList dots = RList(R_NilValue);
-    std::pair<unsigned, unsigned> dotsRange = std::make_pair(0, 0);
-    size_t lengthWithDots = 0;
 };
 
 SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
@@ -416,55 +386,48 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    SEXP a = nullptr;
-    if (ast)
-        a = CDR(ast);
-
     bool reorder =
         recreateOriginalPromargs && id != ArglistOrder::NOT_REORDERED;
 
-    ArglistView args(id, length, stackArgs, heapArgs, names, ast, reordering,
-                     recreateOriginalPromargs, ctx);
+    ArglistView args(id, length, stackArgs, heapArgs, names, reordering, ctx);
 
-    size_t nargs = reorder ? reordering->originalArglistLength(id) : length;
-    for (size_t i = 0; i < nargs; ++i) {
-        auto getArg = args.getArgAndName(i, a, reorder);
+    size_t actualLength = (reorder && id != ArglistOrder::NOT_REORDERED)
+                              ? reordering->originalArglistLength(id)
+                              : length;
+    auto a = ast;
+    for (size_t i = 0; i < length; ++i) {
+        a = CDR(a);
+        auto getArg = args.getArgAndName(i, reorder, TAG(a));
         auto arg = getArg.first;
         auto name = getArg.second;
-
-        SEXP expr = R_NilValue;
-        if (ast) {
-            expr = CAR(a);
-            a = CDR(a);
-        }
 
         // This can happen if context dispatch padded the call with "synthetic"
         // missings to be able to call a version which expects more args
         if (recreateOriginalPromargs && arg == R_MissingArg &&
-            expr == R_NilValue)
+            i >= actualLength)
             continue;
 
-        if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-            arg = evaluatePromise(arg, ctx);
-        }
-
         // This can happen if we materialize the lazy arglist of a statically
-        // argmatched call, where dots gets pre-created by the caller. Under
-        // normal conditions the only legal way of passing a DOTSXP is by
-        // passing the expression `...` as an argument.
-        if (recreateOriginalPromargs && !reorder && TYPEOF(arg) == DOTSXP &&
-            expr != R_DotsSymbol) {
+        // argmatched call, where dots gets pre-created by the caller.
+        if (recreateOriginalPromargs && TYPEOF(arg) == DOTSXP && reorder &&
+            args.isStaticallyMatchedDots(i)) {
+            i--;
             while (arg != R_NilValue) {
+                i++;
                 auto v = CAR(arg);
                 if (eagerCallee && TYPEOF(v) == PROMSXP)
                     v = evaluatePromise(v, ctx);
                 if (TYPEOF(v) != PROMSXP)
                     ENSURE_NAMED(v);
+                assert(TYPEOF(v) != DOTSXP);
                 __listAppend(&result, &pos, v, TAG(arg));
                 arg = CDR(arg);
             }
             continue;
         }
+
+        if (eagerCallee && TYPEOF(arg) == PROMSXP)
+            arg = evaluatePromise(arg, ctx);
 
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.
@@ -481,10 +444,10 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
 
 SEXP createPromargsFromStackValues(CallContext& call,
                                    InterpreterInstance* ctx) {
-    return createLegacyArglist(
-        call.callId, call.suppliedArgs, call.stackArgs, nullptr, call.names,
-        call.ast, call.caller->arglistOrder(), call.hasEagerCallee(),
-        call.givenContext.includes(Assumption::StaticallyArgmatched), ctx);
+    return createLegacyArglist(call.callId, call.suppliedArgs, call.stackArgs,
+                               nullptr, call.names, call.ast,
+                               call.caller->arglistOrder(),
+                               call.hasEagerCallee(), false, ctx);
 }
 
 SEXP createEnvironmentFrameFromStackValues(CallContext& call,
