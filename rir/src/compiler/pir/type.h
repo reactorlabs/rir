@@ -585,7 +585,6 @@ struct PirType {
             return RType::nil;
         } else if (isA(num() | RType::str | RType::nil)) {
             PirType t = *this;
-            t.t_.r.reset(RType::nil);
             if (numArgs > 1) {
                 // The orNAOrNaN is only needed because we don't check NA or NaN
                 // on vectors, technically the vector doesn't contain NA or NaN

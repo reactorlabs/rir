@@ -172,6 +172,17 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if ("c" == name) {
                         inferred = i->mergedInputType(getType).collectionType(
                             c->nCallArgs());
+                        // If at least one arg is non-nil, then the result is
+                        // also not nil
+                        if (inferred.maybe(RType::nil)) {
+                            auto notNil = false;
+                            i->eachArg([&](Value* v) {
+                                if (!v->type.maybe(RType::nil))
+                                    notNil = true;
+                            });
+                            if (notNil)
+                                inferred = inferred.notT(RType::nil);
+                        }
                         break;
                     }
 
