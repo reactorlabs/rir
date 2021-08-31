@@ -1241,7 +1241,7 @@ void LowerFunctionLLVM::ensureNamedIfNeeded(Instruction* i, llvm::Value* val) {
             } else if (adjust->second == NeedsRefcountAdjustment::EnsureNamed) {
                 if (!val)
                     val = load(i);
-                ensureShared(val);
+                ensureNamed(val);
             }
         }
     }
@@ -3213,7 +3213,7 @@ void LowerFunctionLLVM::compile() {
                             ensureNamed(vn);
                             builder.CreateCondBr(isNamed(vn), isnamed, cont);
                             builder.SetInsertPoint(isnamed);
-                            ensureShared(vn);
+                            ensureNamed(vn);
                             builder.CreateBr(cont);
                             builder.SetInsertPoint(cont);
                         }

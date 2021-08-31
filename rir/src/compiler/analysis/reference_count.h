@@ -286,9 +286,11 @@ class StaticReferenceCount
         case Tag::MkArg:
         case Tag::UpdatePromise:
         case Tag::PopContext:
+        case Tag::Extract2_1D:
         case Tag::Extract2_2D:
         case Tag::ColonCastLhs:
         case Tag::ColonCastRhs:
+        case Tag::FrameState:
             break;
 
         // Those may override the vector (which is arg 1)
@@ -328,7 +330,6 @@ class StaticReferenceCount
 
         // Default: instructions which might update in-place, if named
         // count is 0
-        case Tag::Extract2_1D:
         default:
             i->eachArg([&](Value* v) {
                 if (auto j = Instruction::Cast(v->followCasts())) {
