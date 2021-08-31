@@ -189,35 +189,41 @@ class StaticReferenceCount
         // Check if this instruction uses a tainted value. If so, we need to
         // record the fact that there is a adjustment needed.
         // We collect the result in the global state.
-        i->eachArg([&](Value* v) {
-            if (auto j = Instruction::Cast(v->followCasts())) {
-                assert(!PirCopy::Cast(j));
-                if (i == j || j->minReferenceCount() > 1)
+        if (!Phi::Cast(i) && !CastType::Cast(i))
+            i->eachArg([&](Value* v) {
+                // DeoptTrigger value is best effort. We should not duplicate
+                // just for that.
+                if (Deopt::Cast(i) && v == Deopt::Cast(i)->deoptTrigger())
                     return;
-                if (auto taint = state.isTainted(j)) {
-                    NeedsRefcountAdjustment::Kind k =
-                        NeedsRefcountAdjustment::EnsureNamed;
-                    if (taint->kind == AbstractValueTaint::Taint::Override)
-                        k = NeedsRefcountAdjustment::SetShared;
-                    else
-                        assert(taint->kind == AbstractValueTaint::Taint::Reuse);
+                if (auto j = Instruction::Cast(v->followCasts())) {
+                    assert(!PirCopy::Cast(j));
+                    if (i == j || j->minReferenceCount() > 1)
+                        return;
+                    if (auto taint = state.isTainted(j)) {
+                        NeedsRefcountAdjustment::Kind k =
+                            NeedsRefcountAdjustment::EnsureNamed;
+                        if (taint->kind == AbstractValueTaint::Taint::Override)
+                            k = NeedsRefcountAdjustment::SetShared;
+                        else
+                            assert(taint->kind ==
+                                   AbstractValueTaint::Taint::Reuse);
 
-                    if (taint->origin) {
-                        if (globalState->beforeUse[taint->origin][j] < k) {
-                            globalState->beforeUse[taint->origin][j] = k;
-                        }
-                    } else {
-                        auto exists = globalState->atCreation.find(j);
-                        if (exists != globalState->atCreation.end()) {
-                            if (exists->second < k)
-                                exists->second = k;
+                        if (taint->origin) {
+                            if (globalState->beforeUse[taint->origin][j] < k) {
+                                globalState->beforeUse[taint->origin][j] = k;
+                            }
                         } else {
-                            globalState->atCreation[j] = k;
+                            auto exists = globalState->atCreation.find(j);
+                            if (exists != globalState->atCreation.end()) {
+                                if (exists->second < k)
+                                    exists->second = k;
+                            } else {
+                                globalState->atCreation[j] = k;
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
 
         switch (i->tag) {
 
