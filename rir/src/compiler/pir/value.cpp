@@ -1,6 +1,7 @@
 #include "value.h"
 #include "instruction.h"
 #include "pir_impl.h"
+#include <unordered_map>
 
 namespace rir {
 namespace pir {

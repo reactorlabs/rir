@@ -8,25 +8,30 @@
 namespace rir {
 namespace pir {
 
-struct Representation {
+struct Rep {
     enum Type {
         Bottom,
-        Integer,
-        Real,
-        Sexp,
+        i32,
+        f64,
+        SEXP,
+        DeoptReason,
+        Invalid,
     };
-    Representation() : t(Bottom) {}
+    Rep() : t(Bottom) {}
     // cppcheck-suppress noExplicitConstructor
-    Representation(Type t) : t(t) {}
-    explicit Representation(llvm::Type* jt) {
+    Rep(Type t) : t(t) {}
+
+    explicit Rep(llvm::Type* jt) {
         if (jt == t::Void)
             t = Bottom;
         else if (jt == t::Int)
-            t = Integer;
+            t = i32;
         else if (jt == t::Double)
-            t = Real;
+            t = f64;
         else if (jt == t::SEXP)
-            t = Sexp;
+            t = SEXP;
+        else if (jt == t::DeoptReasonPtr)
+            t = DeoptReason;
         else {
             jt->print(llvm::outs());
             llvm::outs() << "\n";
@@ -34,35 +39,67 @@ struct Representation {
         }
     }
     Type t;
-    operator llvm::Type*() {
+
+    llvm::Type* toLlvm() const {
         switch (t) {
-        case Representation::Bottom:
-            return t::Void;
-        case Representation::Integer:
+        case Rep::i32:
             return t::Int;
-        case Representation::Real:
+        case Rep::f64:
             return t::Double;
-        case Representation::Sexp:
+        case Rep::SEXP:
             return t::SEXP;
+        case Rep::DeoptReason:
+            return t::DeoptReasonPtr;
+        case Rep::Bottom:
+        case Rep::Invalid:
+            break;
         }
         assert(false);
         return nullptr;
     }
-    bool merge(const Representation& other) {
+
+    bool merge(const Rep& other) {
         if (t < other.t) {
+            if (t == Rep::DeoptReason) {
+                t = Rep::Invalid;
+                return false;
+            }
             t = other.t;
             return true;
         }
         return false;
     }
-    bool operator<(const Representation& other) const { return t < other.t; }
-    bool operator==(const Representation& other) const { return t == other.t; }
-    bool operator!=(const Representation& other) const {
-        return !(*this == other);
-    }
 
-    static Representation Of(PirType t);
-    static Representation Of(pir::Value* v);
+    bool operator<(const Rep& other) const { return t < other.t; }
+    bool operator==(const Rep& other) const { return t == other.t; }
+    bool operator!=(const Rep& other) const { return !(*this == other); }
+
+    static Rep Of(PirType t);
+    static Rep Of(pir::Value* v);
+
+    friend std::ostream& operator<<(std::ostream& out, const Rep& r) {
+        switch (r.t) {
+        case Rep::Bottom:
+            out << "?";
+            break;
+        case Rep::i32:
+            out << "i32";
+            break;
+        case Rep::f64:
+            out << "f64";
+            break;
+        case Rep::SEXP:
+            out << "SEXP";
+            break;
+        case Rep::DeoptReason:
+            out << "DeoptReason*";
+            break;
+        case Rep::Invalid:
+            out << "invalid";
+            break;
+        }
+        return out;
+    }
 };
 
 } // namespace pir

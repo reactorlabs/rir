@@ -568,8 +568,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             DeoptReason reason = DeoptReason(FeedbackOrigin(srcCode, pos),
                                              DeoptReason::DeadCall);
 
-            insert(new RecordDeoptReason(reason, target));
-            insert(new Deopt(sp));
+            auto d = insert(new Deopt(sp));
+            d->setDeoptReason(compiler.module->deoptReasonValue(reason),
+                              target);
             stack.clear();
         } else {
             std::get<ObservedCallees>(callTargetFeedback[target]) =

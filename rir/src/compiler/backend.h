@@ -16,8 +16,8 @@ namespace pir {
 
 class Backend {
   public:
-    Backend(StreamLogger& logger, const std::string& name)
-        : jit(name), logger(logger) {}
+    Backend(Module* m, StreamLogger& logger, const std::string& name)
+        : module(m), jit(name), logger(logger) {}
     Backend(const Backend&) = delete;
     Backend& operator=(const Backend&) = delete;
 
@@ -30,6 +30,8 @@ class Backend {
     };
     LastDestructor firstMember_;
     Preserve preserve;
+
+    Module* module;
     PirJitLLVM jit;
     std::unordered_map<ClosureVersion*, Function*> done;
     StreamLogger& logger;

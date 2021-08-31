@@ -302,7 +302,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
-    pir::Backend backend(logger, name);
+    pir::Backend backend(m, logger, name);
     auto compile = [&](pir::ClosureVersion* c) {
         logger.flush();
         cmp.optimizeModule();

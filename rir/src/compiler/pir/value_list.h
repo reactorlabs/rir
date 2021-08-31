@@ -6,10 +6,12 @@
     V(False)                                                                   \
     V(OpaqueTrue)                                                              \
     V(NaLogical)                                                               \
+    V(UnknownDeoptTrigger)                                                     \
     V(Tombstone)                                                               \
     V(MissingArg)                                                              \
     V(UnboundValue)                                                            \
     V(Env)                                                                     \
-    V(Nil)
+    V(Nil)                                                                     \
+    V(DeoptReason)
 
 #endif

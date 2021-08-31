@@ -69,12 +69,14 @@ class NativeAllocator : public SSAAllocator {
         : SSAAllocator(code, livenessIntervals) {}
 
     bool needsAVariable(Value* v) const {
-        return v->producesRirResult() && !LdConst::Cast(v) &&
+        auto producesValue = !v->type.isVoid() && !v->type.isVirtualValue() &&
+                             !v->type.isCompositeValue();
+        return producesValue && !LdConst::Cast(v) &&
                !(CastType::Cast(v) &&
                  LdConst::Cast(CastType::Cast(v)->arg(0).val()));
     }
     bool needsASlot(Value* v) const override final {
-        return needsAVariable(v) && Representation::Of(v) == t::SEXP;
+        return needsAVariable(v) && Rep::Of(v) == Rep::SEXP;
     }
     bool interfere(Instruction* a, Instruction* b) const override final {
         // Ensure we preserve slots for variables with typefeedback to make them
@@ -194,7 +196,11 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
-    if (needed == t::Int) {
+    return constant(co, Rep(needed));
+}
+
+llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
+    if (needed == Rep::i32) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP)
             return llvm::ConstantInt::get(PirJitLLVM::getContext(),
@@ -211,7 +217,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
                                           llvm::APInt(32, LOGICAL(co)[0]));
     }
 
-    if (needed == t::Double) {
+    if (needed == Rep::f64) {
         assert(Rf_length(co) == 1);
         if (TYPEOF(co) == INTSXP) {
             if (INTEGER(co)[0] == NA_INTEGER)
@@ -232,7 +238,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
         }
     }
 
-    assert(needed == t::SEXP);
+    assert(needed == Rep::SEXP);
     // Normalize scalar logicals
     if (IS_SIMPLE_SCALAR(co, LGLSXP)) {
         auto t = LOGICAL(co)[0];
@@ -382,7 +388,7 @@ LowerFunctionLLVM::withCallFrame(const std::vector<Value*>& args,
     incStack(nargs, false);
     std::vector<llvm::Value*> jitArgs;
     for (auto& arg : args)
-        jitArgs.push_back(load(arg, Representation::Sexp));
+        jitArgs.push_back(load(arg, Rep::SEXP));
     stack(jitArgs);
     auto res = theCall();
     if (pop)
@@ -390,19 +396,16 @@ LowerFunctionLLVM::withCallFrame(const std::vector<Value*>& args,
     return res;
 }
 
-llvm::Value* LowerFunctionLLVM::load(Value* v, Representation r) {
+llvm::Value* LowerFunctionLLVM::load(Value* v, Rep r) {
     return load(v, v->type, r);
 }
 
 llvm::Value* LowerFunctionLLVM::load(Value* v) {
-    return load(v, v->type, Representation::Of(v));
+    return load(v, v->type, Rep::Of(v));
 }
-llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) {
-    return load(v, Representation::Sexp);
-}
+llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) { return load(v, Rep::SEXP); }
 
-llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
-                                     Representation needed) {
+llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     llvm::Value* res;
     auto vali = Instruction::Cast(val);
 
@@ -434,12 +437,25 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
     } else if (auto ld = LdConst::Cast(val)) {
         res = constant(ld->c(), needed);
+    } else if (val->tag == Tag::DeoptReason) {
+        auto dr = (DeoptReasonWrapper*)val;
+        auto srcAddr = (Constant*)builder.CreateIntToPtr(
+            llvm::ConstantInt::get(
+                PirJitLLVM::getContext(),
+                llvm::APInt(64,
+                            reinterpret_cast<uint64_t>(dr->reason.srcCode()),
+                            false)),
+            t::voidPtr);
+        auto drs = llvm::ConstantStruct::get(
+            t::DeoptReason, {c(dr->reason.reason, 32),
+                             c(dr->reason.origin.offset(), 32), srcAddr});
+        res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
         assert(false);
     }
 
-    if (res->getType() == t::SEXP && needed != t::SEXP) {
+    if (res->getType() == t::SEXP && needed != Rep::SEXP) {
         if (type.isA(PirType::simpleScalarInt())) {
             res = unboxInt(res);
             assert(res->getType() == t::Int);
@@ -469,14 +485,14 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         // unboxing
     }
 
-    if (res->getType() == t::Int && needed == t::Double) {
+    if (res->getType() == t::Int && needed == Rep::f64) {
         // TODO should we deal with na here?
         res = builder.CreateSIToFP(res, t::Double);
-    } else if (res->getType() == t::Double && needed == t::Int) {
+    } else if (res->getType() == t::Double && needed == Rep::i32) {
         // TODO should we deal with na here?
         res = builder.CreateFPToSI(res, t::Int);
     } else if ((res->getType() == t::Int || res->getType() == t::Double) &&
-               needed == t::SEXP) {
+               needed == Rep::SEXP) {
         if (type.isA(PirType() | RType::integer)) {
             res = boxInt(res);
         } else if (type.isA(PirType::test())) {
@@ -494,7 +510,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type,
         }
     }
 
-    if (res->getType() != needed) {
+    if (needed.toLlvm() != res->getType()) {
         std::cout << "Failed to load ";
         if (auto i = Instruction::Cast(val))
             i->print(std::cout, true);
@@ -514,20 +530,20 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
     BasicBlock* hit1 = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     BasicBlock* hit = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-    auto representation = Representation::Of(index);
+    auto representation = Rep::Of(index);
     llvm::Value* nativeIndex = load(index);
 
-    if (representation == Representation::Sexp) {
-        if (Representation::Of(index->type) == Representation::Integer) {
+    if (representation == Rep::SEXP) {
+        if (Rep::Of(index->type) == Rep::i32) {
             nativeIndex = unboxInt(nativeIndex);
-            representation = Representation::Integer;
+            representation = Rep::i32;
         } else {
             nativeIndex = unboxRealIntLgl(nativeIndex, index->type);
-            representation = Representation::Real;
+            representation = Rep::f64;
         }
     }
 
-    if (representation == Representation::Real) {
+    if (representation == Rep::f64) {
         auto indexUnderRange = builder.CreateFCmpULT(nativeIndex, c(1.0));
         auto indexOverRange =
             builder.CreateFCmpUGE(nativeIndex, c((double)ULONG_MAX));
@@ -540,7 +556,7 @@ llvm::Value* LowerFunctionLLVM::computeAndCheckIndex(Value* index,
 
         nativeIndex = builder.CreateFPToUI(nativeIndex, t::i64);
     } else {
-        assert(representation == Representation::Integer);
+        assert(representation == Rep::i32);
         auto indexUnderRange = builder.CreateICmpSLT(nativeIndex, c(1));
         auto indexNa = builder.CreateICmpEQ(nativeIndex, c(NA_INTEGER));
         auto fail = builder.CreateOr(indexUnderRange, indexNa);
@@ -568,7 +584,7 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     auto data = contexts.at(popc->push());
     auto res = popc->result();
 
-    builder.CreateStore(load(res, Representation::Of(i)), data.result);
+    builder.CreateStore(load(res, Rep::Of(i)), data.result);
     builder.CreateBr(data.popContextTarget);
 
     builder.SetInsertPoint(data.popContextTarget);
@@ -591,7 +607,7 @@ void LowerFunctionLLVM::compilePopContext(Instruction* i) {
     call(NativeBuiltins::get(NativeBuiltins::Id::endClosureContext),
          {data.rcntxt, boxedRet});
     inPushContext--;
-    setVal(i, Representation::Of(i) == t::SEXP ? boxedRet : ret);
+    setVal(i, Rep::Of(i) == Rep::SEXP ? boxedRet : ret);
 }
 
 void LowerFunctionLLVM::compilePushContext(Instruction* i) {
@@ -634,14 +650,14 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
                 continue;
             auto j = v.first;
             if (liveness.live(i, j)) {
-                if (Representation::Of(j) == t::SEXP) {
+                if (Rep::Of(j) == Rep::SEXP) {
                     savedLocals.push_back({j, Variable::MutableRVariable(
                                                   j, data.savedSexpPos.at(j),
                                                   builder, basepointer)});
                 } else {
                     savedLocals.push_back(
-                        {j, Variable::Mutable(
-                                j, topAlloca(Representation::Of(j)))});
+                        {j,
+                         Variable::Mutable(j, topAlloca(Rep::Of(j).toLlvm()))});
                 }
             }
         }
@@ -772,8 +788,10 @@ llvm::Value* LowerFunctionLLVM::accessVector(llvm::Value* vector,
 llvm::Value* LowerFunctionLLVM::assignVector(llvm::Value* vector,
                                              llvm::Value* position,
                                              llvm::Value* value, PirType type) {
+#ifdef ENABLE_SLOWASSERT
     insn_assert(builder.CreateNot(shared(vector)),
                 "assigning to shared vector");
+#endif
     return builder.CreateStore(value,
                                vectorPositionPtr(vector, position, type));
 }
@@ -868,24 +886,24 @@ AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {
 
 llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
                                         bool protect) {
-    auto to = Representation::Of(toType);
+    auto to = Rep::Of(toType);
     auto from = val->getType();
-    if (from == to)
+    if (to.toLlvm() == from)
         return val;
 
-    if (from == t::SEXP && to == t::Int)
+    if (from == t::SEXP && to == Rep::i32)
         return unboxIntLgl(val);
-    if (from == t::SEXP && to == t::Double)
+    if (from == t::SEXP && to == Rep::f64)
         return unboxRealIntLgl(val, toType);
-    if (from != t::SEXP && to == t::SEXP)
+    if (from != t::SEXP && to == Rep::SEXP)
         return box(val, toType, protect);
 
-    if (from == t::Int && to == t::Double) {
+    if (from == t::Int && to == Rep::f64) {
         return builder.CreateSelect(builder.CreateICmpEQ(val, c(NA_INTEGER)),
                                     c(NA_REAL),
                                     builder.CreateSIToFP(val, t::Double));
     }
-    if (from == t::Double && to == t::Int) {
+    if (from == t::Double && to == Rep::i32) {
         return builder.CreateSelect(builder.CreateFCmpUNE(val, val),
                                     c(NA_INTEGER),
                                     builder.CreateFPToSI(val, t::Int));
@@ -898,7 +916,6 @@ llvm::Value* LowerFunctionLLVM::convert(llvm::Value* val, PirType toType,
 }
 
 void LowerFunctionLLVM::setVal(Instruction* i, llvm::Value* val) {
-    assert(i->producesRirResult() && !PushContext::Cast(i));
     val = convert(val, i->type, false);
     if (!val->hasName())
         val->setName(i->getRef());
@@ -1212,8 +1229,8 @@ llvm::Value* LowerFunctionLLVM::cloneIfShared(llvm::Value* v) {
 }
 
 void LowerFunctionLLVM::ensureNamedIfNeeded(Instruction* i, llvm::Value* val) {
-    if ((Representation::Of(i) == t::SEXP && variables_.count(i) &&
-         variables_.at(i).initialized)) {
+    if (Rep::Of(i) == Rep::SEXP && variables_.count(i) &&
+        variables_.at(i).initialized) {
 
         auto adjust = refcount.atCreation.find(i);
         if (adjust != refcount.atCreation.end()) {
@@ -1519,7 +1536,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
 llvm::Value* LowerFunctionLLVM::depromise(Value* v) {
     if (!v->type.maybePromiseWrapped())
         return loadSxp(v);
-    assert(Representation::Of(v) == t::SEXP);
+    assert(Rep::Of(v) == Rep::SEXP);
     return depromise(loadSxp(v), v->type);
 }
 
@@ -1528,12 +1545,12 @@ void LowerFunctionLLVM::compileRelop(
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     BinopKind kind, bool testNa) {
-    auto rep = Representation::Of(i);
+    auto rep = Rep::Of(i);
     auto lhs = i->arg(0).val();
     auto rhs = i->arg(1).val();
-    auto lhsRep = Representation::Of(lhs);
-    auto rhsRep = Representation::Of(rhs);
-    if (lhsRep == Representation::Sexp || rhsRep == Representation::Sexp) {
+    auto lhsRep = Rep::Of(lhs);
+    auto rhsRep = Rep::Of(rhs);
+    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP) {
         auto a = loadSxp(lhs);
         auto b = loadSxp(rhs);
 
@@ -1583,7 +1600,7 @@ void LowerFunctionLLVM::compileRelop(
     }
 
     builder.SetInsertPoint(done);
-    if (rep == Representation::Sexp) {
+    if (rep == Rep::SEXP) {
         setVal(i, boxLgl(res()));
     } else {
         setVal(i, res());
@@ -1595,13 +1612,12 @@ void LowerFunctionLLVM::compileBinop(
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     BinopKind kind) {
-    auto rep = Representation::Of(i);
-    auto lhsRep = Representation::Of(lhs);
-    auto rhsRep = Representation::Of(rhs);
+    auto rep = Rep::Of(i);
+    auto lhsRep = Rep::Of(lhs);
+    auto rhsRep = Rep::Of(rhs);
 
-    if (lhsRep == Representation::Sexp || rhsRep == Representation::Sexp ||
-        (!fpInsert && (lhsRep != Representation::Integer ||
-                       rhsRep != Representation::Integer))) {
+    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP ||
+        (!fpInsert && (lhsRep != Rep::i32 || rhsRep != Rep::i32))) {
         auto a = loadSxp(lhs);
         auto b = loadSxp(rhs);
 
@@ -1622,17 +1638,15 @@ void LowerFunctionLLVM::compileBinop(
     BasicBlock* isNaBr = nullptr;
     auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-    auto r = (lhsRep == Representation::Real || rhsRep == Representation::Real)
-                 ? t::Double
-                 : t::Int;
+    auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64) ? t::Double : t::Int;
 
     auto res = phiBuilder(r);
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* llvmValue, PirType type, Representation r) {
+    auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
         if (type.maybeNAOrNaN()) {
-            if (r == Representation::Integer) {
+            if (r == Rep::i32) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
                                                 "isNa", fun);
@@ -1654,8 +1668,7 @@ void LowerFunctionLLVM::compileBinop(
     }
     builder.CreateBr(done);
 
-    if (lhsRep == Representation::Integer ||
-        rhsRep == Representation::Integer) {
+    if (lhsRep == Rep::i32 || rhsRep == Rep::i32) {
         if (isNaBr) {
             builder.SetInsertPoint(isNaBr);
 
@@ -1669,7 +1682,7 @@ void LowerFunctionLLVM::compileBinop(
     }
 
     builder.SetInsertPoint(done);
-    if (rep == Representation::Sexp) {
+    if (rep == Rep::SEXP) {
         setVal(i, box(res(), lhs->type.mergeWithConversion(rhs->type), false));
     } else {
         setVal(i, res());
@@ -1680,9 +1693,9 @@ void LowerFunctionLLVM::compileUnop(
     Instruction* i, Value* arg,
     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*)>& fpInsert, UnopKind kind) {
-    auto argRep = Representation::Of(arg);
+    auto argRep = Rep::Of(arg);
 
-    if (argRep == Representation::Sexp) {
+    if (argRep == Rep::SEXP) {
         auto a = loadSxp(arg);
 
         llvm::Value* res = nullptr;
@@ -1702,14 +1715,14 @@ void LowerFunctionLLVM::compileUnop(
     BasicBlock* isNaBr = nullptr;
     auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-    auto r = (argRep == Representation::Real) ? t::Double : t::Int;
+    auto r = (argRep == Rep::f64) ? t::Double : t::Int;
 
     auto res = phiBuilder(r);
     auto a = load(arg, argRep);
 
-    auto checkNa = [&](llvm::Value* value, PirType type, Representation r) {
+    auto checkNa = [&](llvm::Value* value, PirType type, Rep r) {
         if (type.maybeNAOrNaN()) {
-            if (r == Representation::Integer) {
+            if (r == Rep::i32) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
                                                 "isNa", fun);
@@ -1726,7 +1739,7 @@ void LowerFunctionLLVM::compileUnop(
     }
     builder.CreateBr(done);
 
-    if (argRep == Representation::Integer) {
+    if (argRep == Rep::i32) {
         if (isNaBr) {
             builder.SetInsertPoint(isNaBr);
 
@@ -2102,7 +2115,7 @@ void LowerFunctionLLVM::compile() {
         numLocals += allocator.slots();
 
         auto createVariable = [&](Instruction* i, bool mut) -> void {
-            if (Representation::Of(i) == Representation::Sexp) {
+            if (Rep::Of(i) == Rep::SEXP) {
                 if (mut)
                     variables_[i] = Variable::MutableRVariable(
                         i, allocator[i] + numLocalsBase, builder, basepointer);
@@ -2112,7 +2125,7 @@ void LowerFunctionLLVM::compile() {
             } else {
                 if (mut)
                     variables_[i] =
-                        Variable::Mutable(i, topAlloca(Representation::Of(i)));
+                        Variable::Mutable(i, topAlloca(Rep::Of(i).toLlvm()));
                 else
                     variables_[i] = Variable::Immutable(i);
             }
@@ -2149,10 +2162,10 @@ void LowerFunctionLLVM::compile() {
                 PopContext* pop = nullptr;
                 if (popI != contextResTy.end())
                     pop = popI->second;
-                Representation resRep = Representation::Sexp;
+                Rep resRep = Rep::SEXP;
                 if (pop)
-                    resRep = Representation::Of(pop);
-                auto resStore = topAlloca(resRep);
+                    resRep = Rep::Of(pop);
+                auto resStore = topAlloca(resRep.toLlvm());
                 auto rcntxt = topAlloca(t::RCNTXT);
                 contexts[push] = {
                     rcntxt, resStore,
@@ -2163,8 +2176,7 @@ void LowerFunctionLLVM::compile() {
                 // mutable, to be able to restore on restart
                 Visitor::run(code->entry, [&](Instruction* j) {
                     if (allocator.needsAVariable(j)) {
-                        if (Representation::Of(j) == t::SEXP &&
-                            liveness.live(push, j)) {
+                        if (Rep::Of(j) == Rep::SEXP && liveness.live(push, j)) {
                             contexts[push].savedSexpPos[j] = numLocals++;
                         }
                         if (!liveness.live(push, j) && pop &&
@@ -2215,21 +2227,21 @@ void LowerFunctionLLVM::compile() {
                     };
                     auto& v = variables_[i];
                     auto store = v.slot;
-                    auto rep = Representation::Of(i);
-                    auto ditype = (rep == Representation::Sexp
-                                       ? DI->SEXPType
-                                       : (rep == Representation::Integer
-                                              ? DI->IntType
-                                              : (rep == Representation::Real
-                                                     ? DI->DoubleType
-                                                     : DI->UnspecifiedType)));
+                    auto rep = Rep::Of(i);
+                    auto ditype =
+                        (rep == Rep::SEXP
+                             ? DI->SEXPType
+                             : (rep == Rep::i32
+                                    ? DI->IntType
+                                    : (rep == Rep::f64 ? DI->DoubleType
+                                                       : DI->UnspecifiedType)));
                     assert(diVariables_.count(i) == 0);
                     diVariables_[i] = DIB->createAutoVariable(
                         DI->getScope(), makeName(i), DI->File,
                         builder.getCurrentDebugLocation().getLine(), ditype,
                         true);
                     if (store) {
-                        if (rep == Representation::Sexp)
+                        if (rep == Rep::SEXP)
                             DIB->insertDeclare(
                                 store, diVariables_[i], DIB->createExpression(),
                                 builder.getCurrentDebugLocation(),
@@ -2246,7 +2258,7 @@ void LowerFunctionLLVM::compile() {
             auto adjustRefcount = refcount.beforeUse.find(i);
             if (adjustRefcount != refcount.beforeUse.end()) {
                 i->eachArg([&](Value* v) {
-                    if (Representation::Of(v) != t::SEXP)
+                    if (Rep::Of(v) != Rep::SEXP)
                         return;
                     if (auto j = Instruction::Cast(v->followCasts())) {
                         auto needed = adjustRefcount->second.find(j);
@@ -2290,25 +2302,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::RecordDeoptReason: {
-                auto rec = RecordDeoptReason::Cast(i);
-                auto srcAddr = (Constant*)builder.CreateIntToPtr(
-                    llvm::ConstantInt::get(
-                        PirJitLLVM::getContext(),
-                        llvm::APInt(
-                            64,
-                            reinterpret_cast<uint64_t>(rec->reason.srcCode()),
-                            false)),
-                    t::voidPtr);
-                auto reason = llvm::ConstantStruct::get(
-                    t::DeoptReason,
-                    {c(rec->reason.reason, 32),
-                     c(rec->reason.origin.offset(), 32), srcAddr});
-                call(NativeBuiltins::get(NativeBuiltins::Id::recordDeopt),
-                     {loadSxp(rec->arg<0>().val()), globalConst(reason)});
-                break;
-            }
-
             case Tag::PushContext: {
                 compilePushContext(i);
                 break;
@@ -2323,14 +2316,14 @@ void LowerFunctionLLVM::compile() {
                 auto in = i->arg(0).val();
                 if (LdConst::Cast(i->followCasts()) || deadMove(in, i))
                     break;
-                setVal(i, load(in, i->type, Representation::Of(i)));
+                setVal(i, load(in, i->type, Rep::Of(i)));
                 break;
             }
 
             case Tag::PirCopy: {
                 auto in = i->arg(0).val();
                 if (!deadMove(in, i))
-                    setVal(i, load(in, Representation::Of(i)));
+                    setVal(i, load(in, Rep::Of(i)));
                 break;
             }
 
@@ -2354,16 +2347,12 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
 
-                auto rep = Representation::Of(a) < Representation::Of(b)
-                               ? Representation::Of(b)
-                               : Representation::Of(a);
+                auto rep = Rep::Of(a) < Rep::Of(b) ? Rep::Of(b) : Rep::Of(a);
                 auto ai = load(a, rep);
                 auto bi = load(b, rep);
-                if (Representation::Of(a) == t::SEXP &&
-                    a->type.maybePromiseWrapped())
+                if (Rep::Of(a) == Rep::SEXP && a->type.maybePromiseWrapped())
                     ai = depromise(ai, a->type);
-                if (Representation::Of(b) == t::SEXP &&
-                    b->type.maybePromiseWrapped())
+                if (Rep::Of(b) == Rep::SEXP && b->type.maybePromiseWrapped())
                     bi = depromise(bi, b->type);
 
                 // Not needed so far. Needs some care to ensure NA == NA holds
@@ -2372,15 +2361,15 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = builder.CreateICmpEQ(ai, bi);
 
-                if (Representation::Of(b) == t::SEXP) {
+                if (Rep::Of(b) == Rep::SEXP) {
                     if (a->type.maybeLazy()) {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpNE(
-                                     ai, constant(R_UnboundValue, t::SEXP)));
+                                     ai, constant(R_UnboundValue, Rep::SEXP)));
                     } else if (b->type.maybeLazy()) {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpNE(
-                                     bi, constant(R_UnboundValue, t::SEXP)));
+                                     bi, constant(R_UnboundValue, Rep::SEXP)));
                     }
                 }
 
@@ -2434,12 +2423,12 @@ void LowerFunctionLLVM::compile() {
 
                 // TODO: this should probably go somewhere else... This is
                 // an inlined version of bitwise builtins
-                if (Representation::Of(b) == Representation::Integer) {
+                if (Rep::Of(b) == Rep::i32) {
                     if (b->nargs() == 2) {
                         auto x = b->arg(0).val();
                         auto y = b->arg(1).val();
-                        auto xRep = Representation::Of(x);
-                        auto yRep = Representation::Of(y);
+                        auto xRep = Rep::Of(x);
+                        auto yRep = Rep::Of(y);
 
                         static auto bitwise = {
                             blt("bitwiseShiftL"), blt("bitwiseShiftR"),
@@ -2454,15 +2443,12 @@ void LowerFunctionLLVM::compile() {
                                  RType::real)
                                     .simpleScalar();
 
-                            if (xRep == Representation::Sexp &&
-                                x->type.isA(num))
-                                xRep = Representation::Real;
-                            if (yRep == Representation::Sexp &&
-                                y->type.isA(num))
-                                yRep = Representation::Real;
+                            if (xRep == Rep::SEXP && x->type.isA(num))
+                                xRep = Rep::f64;
+                            if (yRep == Rep::SEXP && y->type.isA(num))
+                                yRep = Rep::f64;
 
-                            if (xRep != Representation::Sexp &&
-                                yRep != Representation::Sexp) {
+                            if (xRep != Rep::SEXP && yRep != Rep::SEXP) {
 
                                 BasicBlock* isNaBr = nullptr;
                                 auto done = BasicBlock::Create(
@@ -2470,13 +2456,13 @@ void LowerFunctionLLVM::compile() {
 
                                 auto res = phiBuilder(t::Int);
 
-                                auto xInt = load(x, Representation::Integer);
-                                auto yInt = load(y, Representation::Integer);
+                                auto xInt = load(x, Rep::i32);
+                                auto yInt = load(y, Rep::i32);
 
                                 auto naCheck = [&](Value* v, llvm::Value* asInt,
-                                                   Representation rep) {
+                                                   Rep rep) {
                                     if (v->type.maybeNAOrNaN()) {
-                                        if (rep == Representation::Real) {
+                                        if (rep == Rep::f64) {
                                             auto vv = load(v, rep);
                                             if (!isNaBr)
                                                 isNaBr = BasicBlock::Create(
@@ -2484,8 +2470,7 @@ void LowerFunctionLLVM::compile() {
                                                     "isNa", fun);
                                             nacheck(vv, v->type, isNaBr);
                                         } else {
-                                            assert(rep ==
-                                                   Representation::Integer);
+                                            assert(rep == Rep::i32);
                                             if (!isNaBr)
                                                 isNaBr = BasicBlock::Create(
                                                     PirJitLLVM::getContext(),
@@ -2578,13 +2563,13 @@ void LowerFunctionLLVM::compile() {
 
                 if (b->nargs() == 1) {
                     auto a = load(b->callArg(0).val());
-                    auto irep = Representation::Of(b->arg(0).val());
+                    auto irep = Rep::Of(b->arg(0).val());
                     auto itype = b->callArg(0).val()->type;
-                    auto orep = Representation::Of(i);
+                    auto orep = Rep::Of(i);
                     bool done = true;
 
                     auto doTypetest = [&](int type) {
-                        if (irep == t::SEXP) {
+                        if (irep == Rep::SEXP) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateICmpEQ(sexptype(a),
                                                                c(type)),
@@ -2599,7 +2584,7 @@ void LowerFunctionLLVM::compile() {
                     switch (b->builtinId) {
                     case blt("dim"): {
                         if (!i->arg(0).val()->type.maybeObj()) {
-                            if (irep == t::SEXP) {
+                            if (irep == Rep::SEXP) {
                                 setVal(
                                     i,
                                     call(NativeBuiltins::get(
@@ -2614,7 +2599,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("length"):
-                        if (irep == t::SEXP &&
+                        if (irep == Rep::SEXP &&
                             !b->callArg(0).val()->type.isA(
                                 PirType::anySimpleScalar())) {
                             auto callLengthBuiltin = [&]() {
@@ -2630,7 +2615,7 @@ void LowerFunctionLLVM::compile() {
                             } else {
                                 r = callLengthBuiltin();
                             }
-                            if (orep == t::SEXP) {
+                            if (orep == Rep::SEXP) {
                                 r = createSelect2(
                                     builder.CreateICmpUGT(r, c(INT_MAX, 64)),
                                     [&]() {
@@ -2642,10 +2627,10 @@ void LowerFunctionLLVM::compile() {
                                             builder.CreateTrunc(r, t::Int));
                                     });
 
-                            } else if (orep == t::Double) {
+                            } else if (orep == Rep::f64) {
                                 r = builder.CreateUIToFP(r, t::Double);
                             } else {
-                                assert(orep == Representation::Integer);
+                                assert(orep == Rep::i32);
                                 r = builder.CreateTrunc(r, t::Int);
                             }
                             setVal(i, r);
@@ -2654,9 +2639,8 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("names"): {
-                        if (Representation::Of(b->callArg(0).val()) !=
-                            t::SEXP) {
-                            setVal(i, constant(R_NilValue, t::SEXP));
+                        if (Rep::Of(b->callArg(0).val()) != Rep::SEXP) {
+                            setVal(i, constant(R_NilValue, Rep::SEXP));
                         } else if (itype.isA(
                                        PirType::vecs().orAttribsOrObj())) {
                             if (!itype.maybeNotFastVecelt() ||
@@ -2695,13 +2679,12 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("abs"): {
-                        if (irep == orep && irep == Representation::Integer) {
+                        if (irep == orep && irep == Rep::i32) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateICmpSGE(a, c(0)), a,
                                           builder.CreateNeg(a)));
 
-                        } else if (irep == orep &&
-                                   irep == Representation::Real) {
+                        } else if (irep == orep && irep == Rep::f64) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUGE(a, c(0.0)), a,
                                           builder.CreateFNeg(a)));
@@ -2712,16 +2695,14 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("sqrt"): {
-                        if (orep == Representation::Real &&
-                            irep == Representation::Integer) {
+                        if (orep == Rep::f64 && irep == Rep::i32) {
                             a = convert(a, i->type);
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
-                        } else if (orep == irep &&
-                                   irep == Representation::Real) {
+                        } else if (orep == irep && irep == Rep::f64) {
                             setVal(i, builder.CreateIntrinsic(
                                           Intrinsic::sqrt, {t::Double}, {a}));
-                        } else if (irep == t::SEXP &&
+                        } else if (irep == Rep::SEXP &&
                                    i->arg(0).val()->type.isA(
                                        PirType(RType::real))) {
                             auto l = vectorLength(a);
@@ -2766,12 +2747,10 @@ void LowerFunctionLLVM::compile() {
                     }
                     case blt("sum"):
                     case blt("prod"): {
-                        if (irep == Representation::Integer ||
-                            irep == Representation::Real) {
+                        if (irep == Rep::i32 || irep == Rep::f64) {
                             setVal(i, box(a, itype));
-                        } else if (orep == Representation::Real ||
-                                   orep == Representation::Integer) {
-                            assert(irep == Representation::Sexp);
+                        } else if (orep == Rep::f64 || orep == Rep::i32) {
+                            assert(irep == Rep::SEXP);
                             auto itype = b->callArg(0).val()->type;
                             if (itype.isA(PirType::intReal())) {
                                 auto trg = b->builtinId == blt("sum")
@@ -2780,7 +2759,7 @@ void LowerFunctionLLVM::compile() {
                                                : NativeBuiltins::get(
                                                      NativeBuiltins::Id::prodr);
                                 llvm::Value* res = call(trg, {a});
-                                if (orep == Representation::Integer)
+                                if (orep == Rep::i32)
                                     res = convert(res, i->type);
                                 setVal(i, res);
                             } else {
@@ -2792,8 +2771,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("as.logical"):
-                        if (irep == Representation::Integer &&
-                            orep == Representation::Integer) {
+                        if (irep == Rep::i32 && orep == Rep::i32) {
                             setVal(i,
                                    builder.CreateSelect(
                                        builder.CreateICmpEQ(a, c(NA_INTEGER)),
@@ -2803,9 +2781,8 @@ void LowerFunctionLLVM::compile() {
                                            constant(R_FalseValue, orep),
                                            constant(R_TrueValue, orep))));
 
-                        } else if (irep == Representation::Real &&
-                                   (orep == Representation::Integer ||
-                                    orep == Representation::Real)) {
+                        } else if (irep == Rep::f64 &&
+                                   (orep == Rep::i32 || orep == Rep::f64)) {
 
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUNE(a, a),
@@ -2820,18 +2797,15 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("as.integer"):
-                        if (irep == Representation::Integer &&
-                            orep == Representation::Integer) {
+                        if (irep == Rep::i32 && orep == Rep::i32) {
                             setVal(i, a);
-                        } else if (irep == Representation::Real &&
-                                   orep == Representation::Integer) {
+                        } else if (irep == Rep::f64 && orep == Rep::i32) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUNE(a, a),
                                           c(NA_INTEGER),
                                           builder.CreateFPToSI(a, t::Int)));
 
-                        } else if (irep == Representation::Real &&
-                                   orep == Representation::Real) {
+                        } else if (irep == Rep::f64 && orep == Rep::f64) {
 
                             setVal(i, createSelect2(
                                           builder.CreateFCmpUNE(a, a),
@@ -2842,7 +2816,7 @@ void LowerFunctionLLVM::compile() {
                                                   {a->getType()}, {a});
                                           }));
 
-                        } else if (irep == t::SEXP) {
+                        } else if (irep == Rep::SEXP) {
                             auto isSimpleInt = builder.CreateAnd(
                                 builder.CreateICmpEQ(
                                     attr(a), constant(R_NilValue, t::SEXP)),
@@ -2861,7 +2835,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("as.character"):
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             setVal(i, createSelect2(
                                           builder.CreateAnd(
                                               builder.CreateICmpEQ(
@@ -2876,7 +2850,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("as.vector"):
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             setVal(i,
                                    createSelect2(
                                        builder.CreateAnd(
@@ -2918,7 +2892,7 @@ void LowerFunctionLLVM::compile() {
                         doTypetest(LANGSXP);
                         break;
                     case blt("is.function"): {
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             auto t = sexptype(a);
                             auto is = builder.CreateOr(
                                 builder.CreateICmpEQ(t, c(CLOSXP)),
@@ -2936,13 +2910,13 @@ void LowerFunctionLLVM::compile() {
                     }
                     case blt("anyNA"):
                     case blt("is.na"):
-                        if (irep == Representation::Integer) {
+                        if (irep == Rep::i32) {
                             setVal(i,
                                    builder.CreateSelect(
                                        builder.CreateICmpEQ(a, c(NA_INTEGER)),
                                        constant(R_TrueValue, orep),
                                        constant(R_FalseValue, orep)));
-                        } else if (irep == Representation::Real) {
+                        } else if (irep == Rep::f64) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUNE(a, a),
                                           constant(R_TrueValue, orep),
@@ -2952,7 +2926,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("is.object"):
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             setVal(i, builder.CreateSelect(
                                           isObj(a), constant(R_TrueValue, orep),
                                           constant(R_FalseValue, orep)));
@@ -2961,7 +2935,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("is.array"):
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             setVal(i,
                                    builder.CreateSelect(
                                        isArray(a), constant(R_TrueValue, orep),
@@ -2971,7 +2945,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("is.atomic"):
-                        if (irep == Representation::Sexp) {
+                        if (irep == Rep::SEXP) {
                             auto t = sexptype(a);
                             auto isatomic = builder.CreateOr(
                                 builder.CreateICmpEQ(t, c(NILSXP)),
@@ -3002,7 +2976,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         break;
                     case blt("bodyCode"): {
-                        assert(irep == Representation::Sexp && orep == irep);
+                        assert(irep == Rep::SEXP && orep == irep);
                         llvm::Value* res = nullptr;
                         if (i->arg(0).val()->type.isA(PirType::closure())) {
                             res = cdr(a);
@@ -3022,7 +2996,7 @@ void LowerFunctionLLVM::compile() {
                             done = false;
                             break;
                         }
-                        assert(irep == Representation::Sexp && orep == irep);
+                        assert(irep == Rep::SEXP && orep == irep);
                         setVal(i, tag(a));
                         break;
                     default:
@@ -3036,9 +3010,9 @@ void LowerFunctionLLVM::compile() {
 
                 if (b->nargs() == 2) {
                     bool fastcase = false;
-                    auto arep = Representation::Of(b->arg(0).val());
-                    auto brep = Representation::Of(b->arg(1).val());
-                    auto orep = Representation::Of(b);
+                    auto arep = Rep::Of(b->arg(0).val());
+                    auto brep = Rep::Of(b->arg(1).val());
+                    auto orep = Rep::Of(b);
                     auto aval = load(b->arg(0).val());
                     auto bval = load(b->arg(1).val());
 
@@ -3062,20 +3036,16 @@ void LowerFunctionLLVM::compile() {
                                     case RAWSXP:
                                         setVal(
                                             i,
-                                            call(
-                                                NativeBuiltins::get(
-                                                    NativeBuiltins::Id::
-                                                        makeVector),
-                                                {c(type),
-                                                 Representation::Of(l) ==
-                                                         Representation::Real
-                                                     ? builder.CreateFPToUI(
-                                                           load(l), t::i64)
-                                                     : builder.CreateZExt(
-                                                           load(l,
-                                                                Representation::
-                                                                    Integer),
-                                                           t::i64)}));
+                                            call(NativeBuiltins::get(
+                                                     NativeBuiltins::Id::
+                                                         makeVector),
+                                                 {c(type),
+                                                  Rep::Of(l) == Rep::f64
+                                                      ? builder.CreateFPToUI(
+                                                            load(l), t::i64)
+                                                      : builder.CreateZExt(
+                                                            load(l, Rep::i32),
+                                                            t::i64)}));
                                         fastcase = true;
                                         break;
                                     default: {}
@@ -3088,31 +3058,29 @@ void LowerFunctionLLVM::compile() {
                     case blt("min"):
                     case blt("max"): {
                         bool isMin = b->builtinId == blt("min");
-                        if (arep == Representation::Integer &&
-                            brep == Representation::Integer &&
-                            orep != Representation::Real) {
+                        if (arep == Rep::i32 && brep == Rep::i32 &&
+                            orep != Rep::f64) {
                             auto res = builder.CreateSelect(
                                 isMin ? builder.CreateICmpSLT(bval, aval)
                                       : builder.CreateICmpSLT(aval, bval),
                                 bval, aval);
-                            if (orep == Representation::Integer) {
+                            if (orep == Rep::i32) {
                                 setVal(i, res);
                             } else {
-                                assert(orep == Representation::Sexp);
+                                assert(orep == Rep::SEXP);
                                 setVal(i, boxInt(res, false));
                             }
                             fastcase = true;
-                        } else if (arep == Representation::Real &&
-                                   brep == Representation::Real &&
-                                   orep != Representation::Integer) {
+                        } else if (arep == Rep::f64 && brep == Rep::f64 &&
+                                   orep != Rep::i32) {
                             auto res = builder.CreateSelect(
                                 isMin ? builder.CreateFCmpUGT(bval, aval)
                                       : builder.CreateFCmpUGT(aval, bval),
                                 aval, bval);
-                            if (orep == Representation::Real) {
+                            if (orep == Rep::f64) {
                                 setVal(i, res);
                             } else {
-                                assert(orep == Representation::Sexp);
+                                assert(orep == Rep::SEXP);
                                 setVal(i, boxReal(res, false));
                             }
                             fastcase = true;
@@ -3132,7 +3100,7 @@ void LowerFunctionLLVM::compile() {
                         if (std::string("any") != CHAR(kind))
                             break;
 
-                        if (arep == Representation::Sexp) {
+                        if (arep == Rep::SEXP) {
                             llvm::Value* res;
                             auto isvec = isVector(aval);
                             auto v = b->arg(0).val();
@@ -3447,8 +3415,8 @@ void LowerFunctionLLVM::compile() {
             case Tag::Inc: {
                 auto arg = i->arg(0).val();
                 llvm::Value* res = nullptr;
-                assert(Representation::Of(arg) == Representation::Integer);
-                res = load(arg, Representation::Integer);
+                assert(Rep::Of(arg) == Rep::i32);
+                res = load(arg, Rep::i32);
                 res = builder.CreateAdd(res, c(1), "", true, true);
                 setVal(i, res);
                 break;
@@ -3461,7 +3429,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::ToForSeq: {
                 auto a = i->arg(0).val();
-                if (Representation::Of(a) != t::SEXP) {
+                if (Rep::Of(a) != Rep::SEXP) {
                     setVal(i, load(a));
                     break;
                 }
@@ -3473,7 +3441,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Branch: {
-                auto cond = load(i->arg(0).val(), Representation::Integer);
+                auto cond = load(i->arg(0).val(), Rep::i32);
                 cond = builder.CreateICmpNE(cond, c(0));
 
                 auto t = bb->trueBranch();
@@ -3488,37 +3456,45 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::ScheduledDeopt: {
+            case Tag::Deopt: {
                 // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
+                auto deopt = Deopt::Cast(i);
+                std::vector<Value*> args;
                 {
-                    auto deopt = ScheduledDeopt::Cast(i);
-                    size_t nframes = deopt->frames.size();
+                    std::vector<FrameState*> frames;
+
+                    auto fs = deopt->frameState();
+                    while (fs) {
+                        frames.push_back(fs);
+                        fs = fs->next();
+                    }
+
+                    size_t nframes = frames.size();
                     SEXP store =
                         Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
                                                    nframes * sizeof(FrameInfo));
                     m = new (DATAPTR(store)) DeoptMetadata;
                     m->numFrames = nframes;
 
-                    size_t i = 0;
-                    // Frames in the ScheduledDeopt are in pir argument
-                    // order (from left to right). On the other hand frames
-                    // in the rir deopt_ instruction are in stack order,
-                    // from tos down.
-                    for (auto fi = deopt->frames.rbegin();
-                         fi != deopt->frames.rend(); fi++)
-                        m->frames[i++] = *fi;
+                    int frameNr = nframes - 1;
+                    for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                        auto fs = *f;
+                        for (size_t pos = 0; pos < fs->stackSize; pos++)
+                            args.push_back(fs->arg(pos).val());
+                        args.push_back(fs->env());
+                        m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
+                                                fs->inPromise};
+                    }
                     Pool::insert(store);
                 }
 
-                std::vector<Value*> args;
-                i->eachArg([&](Value* v) { args.push_back(v); });
-                llvm::CallInst* res;
                 withCallFrame(args, [&]() {
-                    res = call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
-                               {paramCode(), paramClosure(),
-                                convertToPointer(m, t::i8, true), paramArgs()});
-                    return res;
+                    return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
+                                {paramCode(), paramClosure(),
+                                 convertToPointer(m, t::i8, true), paramArgs(),
+                                 load(deopt->deoptReason()),
+                                 loadSxp(deopt->deoptTrigger())});
                 });
                 builder.CreateUnreachable();
                 break;
@@ -3694,10 +3670,10 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Not: {
-                auto resultRep = Representation::Of(i);
+                auto resultRep = Rep::Of(i);
                 auto argument = i->arg(0).val();
-                auto argumentRep = Representation::Of(argument);
-                if (argumentRep == Representation::Sexp) {
+                auto argumentRep = Rep::Of(argument);
+                if (argumentRep == Rep::SEXP) {
                     auto argumentNative = loadSxp(argument);
 
                     llvm::Value* res = nullptr;
@@ -3725,7 +3701,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = phiBuilder(t::Int);
 
-                if (argumentRep == Representation::Real) {
+                if (argumentRep == Rep::f64) {
                     res.addInput(builder.CreateZExt(
                         builder.CreateFCmpUEQ(argumentNative, c(0.0)), t::Int));
                 } else {
@@ -3740,7 +3716,7 @@ void LowerFunctionLLVM::compile() {
                 builder.CreateBr(done);
                 builder.SetInsertPoint(done);
 
-                if (resultRep == Representation::Sexp) {
+                if (resultRep == Rep::SEXP) {
                     setVal(i, boxLgl(res()));
                 } else {
                     setVal(i, res());
@@ -4044,7 +4020,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Colon: {
-                assert(Representation::Of(i) == t::SEXP);
+                assert(Rep::Of(i) == Rep::SEXP);
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
                 llvm::Value* res;
@@ -4054,8 +4030,7 @@ void LowerFunctionLLVM::compile() {
                         call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                              {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
                               c((int)BinopKind::COLON)});
-                } else if (Representation::Of(a) == Representation::Integer &&
-                           Representation::Of(b) == Representation::Integer) {
+                } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
                                {load(a), load(b)});
                 } else {
@@ -4094,8 +4069,8 @@ void LowerFunctionLLVM::compile() {
                 auto done =
                     BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-                auto r = Representation::Of(i);
-                auto res = phiBuilder(r);
+                auto r = Rep::Of(i);
+                auto res = phiBuilder(r.toLlvm());
 
                 builder.CreateCondBr(isExternalsxp(arg, LAZY_ENVIRONMENT_MAGIC),
                                      isStub, isNotStub, branchAlwaysTrue);
@@ -4149,11 +4124,11 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::IsType: {
-                assert(Representation::Of(i) == Representation::Integer);
+                assert(Rep::Of(i) == Rep::i32);
 
                 auto t = IsType::Cast(i);
                 auto arg = i->arg(0).val();
-                if (Representation::Of(arg) == Representation::Sexp) {
+                if (Rep::Of(arg) == Rep::SEXP) {
                     auto a = loadSxp(arg);
                     if (t->typeTest.maybePromiseWrapped())
                         a = depromise(a, arg->type);
@@ -4214,7 +4189,7 @@ void LowerFunctionLLVM::compile() {
                     }
                     setVal(i, builder.CreateZExt(res, t::Int));
                 } else {
-                    if (Representation::Of(arg) == t::Double &&
+                    if (Rep::Of(arg) == Rep::f64 &&
                         arg->type.maybe(RType::real) &&
                         !t->typeTest.maybe(RType::real)) {
                         setVal(i, builder.CreateZExt(
@@ -4228,11 +4203,11 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Is: {
-                assert(Representation::Of(i) == Representation::Integer);
+                assert(Rep::Of(i) == Rep::i32);
                 auto is = Is::Cast(i);
                 auto arg = i->arg(0).val();
                 llvm::Value* res;
-                if (Representation::Of(arg) == Representation::Sexp) {
+                if (Rep::Of(arg) == Rep::SEXP) {
                     auto argNative = loadSxp(arg);
                     switch (is->typecheck) {
                     case BC::RirTypecheck::isNILSXP:
@@ -4278,7 +4253,7 @@ void LowerFunctionLLVM::compile() {
                         break;
 
                     case BC::RirTypecheck::isFactor:
-                        if (Representation::Of(arg) != t::SEXP) {
+                        if (Rep::Of(arg) != Rep::SEXP) {
                             res = builder.getFalse();
                         } else {
                             res = call(NativeBuiltins::get(
@@ -4291,8 +4266,7 @@ void LowerFunctionLLVM::compile() {
                     assert(i->type.isA(RType::integer) ||
                            i->type.isA(RType::logical) ||
                            i->type.isA(RType::real));
-                    assert(Representation::Of(i) == Representation::Integer ||
-                           Representation::Of(i) == Representation::Real);
+                    assert(Rep::Of(i) == Rep::i32 || Rep::Of(i) == Rep::f64);
 
                     bool matchInt =
                         (is->typecheck == BC::RirTypecheck::isINTSXP) &&
@@ -4315,8 +4289,8 @@ void LowerFunctionLLVM::compile() {
             case Tag::AsSwitchIdx: {
                 auto arg = i->arg(0).val();
                 llvm::Value* res;
-                auto rep = Representation::Of(i->arg(0).val());
-                if (rep == t::Int) {
+                auto rep = Rep::Of(i->arg(0).val());
+                if (rep == Rep::i32) {
                     auto a = load(arg);
                     res = builder.CreateSelect(
                         builder.CreateICmpEQ(c(NA_INTEGER), a), c(-1), a);
@@ -4330,31 +4304,31 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::CheckTrueFalse: {
-                assert(Representation::Of(i) == Representation::Integer);
+                assert(Rep::Of(i) == Rep::i32);
 
                 auto arg = i->arg(0).val();
                 llvm::Value* res;
 
-                if (Representation::Of(arg) == Representation::Sexp) {
+                if (Rep::Of(arg) == Rep::SEXP) {
                     auto a = loadSxp(arg);
                     res = call(
                         NativeBuiltins::get(NativeBuiltins::Id::checkTrueFalse),
                         {a});
                 } else {
-                    auto r = Representation::Of(arg);
+                    auto r = Rep::Of(arg);
 
                     auto done =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     auto isNa = BasicBlock::Create(PirJitLLVM::getContext(),
                                                    "asTestIsNa", fun);
 
-                    if (r == Representation::Real) {
+                    if (r == Rep::f64) {
                         auto narg = load(arg, r);
                         nacheck(narg, arg->type, isNa);
                         res = builder.CreateFCmpUNE(c(0.0), narg);
                         builder.CreateBr(done);
                     } else {
-                        auto narg = load(arg, Representation::Integer);
+                        auto narg = load(arg, Rep::i32);
                         nacheck(narg, arg->type, isNa);
                         res = builder.CreateICmpNE(c(0), narg);
                         builder.CreateBr(done);
@@ -4376,17 +4350,17 @@ void LowerFunctionLLVM::compile() {
             case Tag::AsLogical: {
                 auto arg = i->arg(0).val();
 
-                auto r1 = Representation::Of(arg);
-                auto r2 = Representation::Of(i);
+                auto r1 = Rep::Of(arg);
+                auto r2 = Rep::Of(i);
 
-                assert(r2 == Representation::Integer);
+                assert(r2 == Rep::i32);
 
                 llvm::Value* res;
-                if (r1 == Representation::Sexp) {
+                if (r1 == Rep::SEXP) {
                     res = call(
                         NativeBuiltins::get(NativeBuiltins::Id::asLogicalBlt),
                         {loadSxp(arg)});
-                } else if (r1 == Representation::Real) {
+                } else if (r1 == Rep::f64) {
                     auto phi = phiBuilder(t::Int);
                     auto nin = load(arg);
 
@@ -4413,7 +4387,7 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(done);
                     res = phi();
                 } else {
-                    assert(r1 == Representation::Integer);
+                    assert(r1 == Rep::i32);
                     res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
                         res = builder.CreateSelect(
@@ -4435,7 +4409,7 @@ void LowerFunctionLLVM::compile() {
                 auto arg = f->arg<0>().val();
                 if (!f->effects.includes(Effect::Force)) {
                     if (!arg->type.maybePromiseWrapped()) {
-                        setVal(i, load(arg, Representation::Of(i)));
+                        setVal(i, load(arg, Rep::Of(i)));
                     } else {
                         auto res = depromise(arg);
                         setVal(i, res);
@@ -4653,7 +4627,7 @@ void LowerFunctionLLVM::compile() {
                                 extract->idx()->type.isA(
                                     PirType::intReal().notObject().scalar());
                 BasicBlock* done;
-                auto res = phiBuilder(Representation::Of(i));
+                auto res = phiBuilder(Rep::Of(i).toLlvm());
 
                 if (fastcase) {
                     auto fallback =
@@ -4663,7 +4637,7 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* vector = load(extract->vec());
 
-                    if (Representation::Of(extract->vec()) == t::SEXP) {
+                    if (Rep::Of(extract->vec()) == Rep::SEXP) {
                         auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
@@ -4723,7 +4697,7 @@ void LowerFunctionLLVM::compile() {
                                     PirType::intReal().notObject().scalar());
 
                 BasicBlock* done;
-                auto res = phiBuilder(Representation::Of(i));
+                auto res = phiBuilder(Rep::Of(i).toLlvm());
 
                 if (fastcase) {
                     auto fallback =
@@ -4733,7 +4707,7 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* vector = load(extract->vec());
 
-                    if (Representation::Of(extract->vec()) == t::SEXP) {
+                    if (Rep::Of(extract->vec()) == Rep::SEXP) {
                         auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
@@ -4806,7 +4780,7 @@ void LowerFunctionLLVM::compile() {
                                     PirType::intReal().notObject().scalar());
 
                 BasicBlock* done;
-                auto res = phiBuilder(Representation::Of(i));
+                auto res = phiBuilder(Rep::Of(i).toLlvm());
 
                 if (fastcase) {
                     auto fallback =
@@ -4817,7 +4791,7 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* vector = load(extract->vec());
 
-                    if (Representation::Of(extract->vec()) == t::SEXP) {
+                    if (Rep::Of(extract->vec()) == Rep::SEXP) {
                         auto hit2 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
 
@@ -4838,16 +4812,16 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto irep = Representation::Of(extract->idx());
+                auto irep = Rep::Of(extract->idx());
                 llvm::Value* res0;
 
-                if (irep != t::SEXP) {
+                if (irep != Rep::SEXP) {
                     NativeBuiltin getter;
-                    if (irep == t::Int) {
+                    if (irep == Rep::i32) {
                         getter =
                             NativeBuiltins::get(NativeBuiltins::Id::extract21i);
                     } else {
-                        assert(irep == t::Double);
+                        assert(irep == Rep::f64);
                         getter =
                             NativeBuiltins::get(NativeBuiltins::Id::extract21r);
                     }
@@ -4905,7 +4879,7 @@ void LowerFunctionLLVM::compile() {
                                     PirType::intReal().notObject().scalar());
 
                 BasicBlock* done;
-                auto res = phiBuilder(Representation::Of(i));
+                auto res = phiBuilder(Rep::Of(i).toLlvm());
 
                 if (fastcase) {
                     auto fallback =
@@ -4917,7 +4891,7 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* vector = load(extract->vec());
 
-                    if (Representation::Of(extract->vec()) == t::SEXP) {
+                    if (Rep::Of(extract->vec()) == Rep::SEXP) {
                         builder.CreateCondBr(isAltrep(vector), fallback, hit2,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit2);
@@ -4953,17 +4927,16 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(fallback);
                 }
 
-                auto irep = Representation::Of(extract->idx1());
+                auto irep = Rep::Of(extract->idx1());
                 llvm::Value* res0;
 
-                if (irep != t::SEXP &&
-                    Representation::Of(extract->idx2()) == irep) {
+                if (irep != Rep::SEXP && Rep::Of(extract->idx2()) == irep) {
                     NativeBuiltin getter;
-                    if (irep == t::Int) {
+                    if (irep == Rep::i32) {
                         getter = NativeBuiltins::get(
                             NativeBuiltins::Id::extract22ii);
                     } else {
-                        assert(irep == t::Double);
+                        assert(irep == Rep::f64);
                         getter = NativeBuiltins::get(
                             NativeBuiltins::Id::extract22rr);
                     }
@@ -5038,7 +5011,7 @@ void LowerFunctionLLVM::compile() {
                 auto vecType = subAssign->vec()->type;
 
                 BasicBlock* done = nullptr;
-                auto res = phiBuilder(Representation::Of(i));
+                auto res = phiBuilder(Rep::Of(i).toLlvm());
 
                 // Missing cases: store int into double matrix / store double
                 // into int matrix
@@ -5052,8 +5025,8 @@ void LowerFunctionLLVM::compile() {
                       valType.isA(RType::real)));
 
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->vec()) != t::SEXP &&
-                    Representation::Of(i) == t::SEXP)
+                if (Rep::Of(subAssign->vec()) != Rep::SEXP &&
+                    Rep::Of(i) == Rep::SEXP)
                     fastcase = false;
 
                 if (fastcase) {
@@ -5063,7 +5036,7 @@ void LowerFunctionLLVM::compile() {
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vec());
-                    if (Representation::Of(subAssign->vec()) == t::SEXP)
+                    if (Rep::Of(subAssign->vec()) == Rep::SEXP)
                         vector = cloneIfShared(vector);
 
                     auto ncol = builder.CreateZExt(
@@ -5082,7 +5055,7 @@ void LowerFunctionLLVM::compile() {
                         subAssign->idx2(), vector, fallback, ncol);
 
                     auto val = load(subAssign->val());
-                    if (Representation::Of(i) == Representation::Sexp) {
+                    if (Rep::Of(i) == Rep::SEXP) {
                         llvm::Value* index =
                             builder.CreateMul(nrow, index2, "", true, true);
                         index =
@@ -5102,27 +5075,26 @@ void LowerFunctionLLVM::compile() {
                 auto idx2 = loadSxp(subAssign->idx2());
 
                 llvm::Value* assign = nullptr;
-                auto irep = Representation::Of(subAssign->idx1());
-                auto vrep = Representation::Of(subAssign->val());
+                auto irep = Rep::Of(subAssign->idx1());
+                auto vrep = Rep::Of(subAssign->val());
                 // TODO: support unboxed logicals stored into e.g. vectors
-                bool noConfusion = vrep != t::Int ||
+                bool noConfusion = vrep != Rep::i32 ||
                                    subAssign->val()->type.isA(RType::integer);
-                if (noConfusion &&
-                    Representation::Of(subAssign->idx2()) == irep &&
-                    irep != t::SEXP && vrep != t::SEXP &&
+                if (noConfusion && Rep::Of(subAssign->idx2()) == irep &&
+                    irep != Rep::SEXP && vrep != Rep::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
-                    if (irep == t::Int && vrep == t::Int)
+                    if (irep == Rep::i32 && vrep == Rep::i32)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22iii);
-                    else if (irep == t::Double && vrep == t::Int)
+                    else if (irep == Rep::f64 && vrep == Rep::i32)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22rri);
-                    else if (irep == t::Int && vrep == t::Double)
+                    else if (irep == Rep::i32 && vrep == Rep::f64)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22iir);
                     else {
-                        assert(irep == t::Double && vrep == t::Double);
+                        assert(irep == Rep::f64 && vrep == Rep::f64);
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22rrr);
                     }
@@ -5160,8 +5132,8 @@ void LowerFunctionLLVM::compile() {
                 auto idxType = subAssign->idx()->type;
 
                 BasicBlock* done = nullptr;
-                auto resultRep = Representation::Of(i);
-                auto res = phiBuilder(resultRep);
+                auto resultRep = Rep::Of(i);
+                auto res = phiBuilder(resultRep.toLlvm());
 
                 // Missing cases: store int into double vect / store double into
                 // int vect
@@ -5174,8 +5146,8 @@ void LowerFunctionLLVM::compile() {
                      (vecType.isA(PirType(RType::real).orFastVecelt()) &&
                       valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->vec()) != t::SEXP &&
-                    Representation::Of(i) == t::SEXP)
+                if (Rep::Of(subAssign->vec()) != Rep::SEXP &&
+                    Rep::Of(i) == Rep::SEXP)
                     fastcase = false;
 
                 if (fastcase) {
@@ -5185,7 +5157,7 @@ void LowerFunctionLLVM::compile() {
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vec());
-                    if (Representation::Of(subAssign->vec()) == t::SEXP) {
+                    if (Rep::Of(subAssign->vec()) == Rep::SEXP) {
                         auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
@@ -5208,7 +5180,7 @@ void LowerFunctionLLVM::compile() {
                                                               vector, fallback);
 
                     auto val = load(subAssign->val());
-                    if (Representation::Of(i) == Representation::Sexp) {
+                    if (Rep::Of(i) == Rep::SEXP) {
                         assignVector(vector, index, val,
                                      subAssign->vec()->type);
                         res.addInput(convert(vector, i->type));
@@ -5247,8 +5219,8 @@ void LowerFunctionLLVM::compile() {
                 auto idxType = subAssign->idx()->type;
 
                 BasicBlock* done = nullptr;
-                auto resultRep = Representation::Of(i);
-                auto res = phiBuilder(resultRep);
+                auto resultRep = Rep::Of(i);
+                auto res = phiBuilder(resultRep.toLlvm());
 
                 // Missing cases: store int into double vect / store double into
                 // int vect
@@ -5260,8 +5232,8 @@ void LowerFunctionLLVM::compile() {
                      (vecType.isA(PirType(RType::real).orFastVecelt()) &&
                       valType.isA(RType::real)));
                 // Conversion from scalar to vector. eg. `a = 1; a[10] = 2`
-                if (Representation::Of(subAssign->vec()) != t::SEXP &&
-                    Representation::Of(i) == t::SEXP)
+                if (Rep::Of(subAssign->vec()) != Rep::SEXP &&
+                    Rep::Of(i) == Rep::SEXP)
                     fastcase = false;
 
                 if (fastcase) {
@@ -5271,7 +5243,7 @@ void LowerFunctionLLVM::compile() {
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vec());
-                    if (Representation::Of(subAssign->vec()) == t::SEXP) {
+                    if (Rep::Of(subAssign->vec()) == Rep::SEXP) {
                         auto hit1 = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
@@ -5284,7 +5256,7 @@ void LowerFunctionLLVM::compile() {
                                                               vector, fallback);
 
                     auto val = load(subAssign->val());
-                    if (Representation::Of(i) == Representation::Sexp) {
+                    if (Rep::Of(i) == Rep::SEXP) {
                         assignVector(vector, index, val,
                                      subAssign->vec()->type);
                         res.addInput(convert(vector, i->type));
@@ -5298,25 +5270,25 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 llvm::Value* res0 = nullptr;
-                auto irep = Representation::Of(subAssign->idx());
-                auto vrep = Representation::Of(subAssign->val());
+                auto irep = Rep::Of(subAssign->idx());
+                auto vrep = Rep::Of(subAssign->val());
                 // TODO: support unboxed logicals stored into e.g. vectors
-                bool noConfusion = vrep != t::Int ||
+                bool noConfusion = vrep != Rep::i32 ||
                                    subAssign->val()->type.isA(RType::integer);
-                if (noConfusion && irep != t::SEXP && vrep != t::SEXP &&
+                if (noConfusion && irep != Rep::SEXP && vrep != Rep::SEXP &&
                     subAssign->val()->type.isA(subAssign->vec()->type)) {
                     NativeBuiltin setter;
-                    if (irep == t::Int && vrep == t::Int)
+                    if (irep == Rep::i32 && vrep == Rep::i32)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21ii);
-                    else if (irep == t::Double && vrep == t::Int)
+                    else if (irep == Rep::f64 && vrep == Rep::i32)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21ri);
-                    else if (irep == t::Int && vrep == t::Double)
+                    else if (irep == Rep::i32 && vrep == Rep::f64)
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21ir);
                     else {
-                        assert(irep == t::Double && vrep == t::Double);
+                        assert(irep == Rep::f64 && vrep == Rep::f64);
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21rr);
                     }
@@ -5357,15 +5329,14 @@ void LowerFunctionLLVM::compile() {
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
                     auto cur = envStubGet(e, idx, environment->nLocals());
 
-                    if (Representation::Of(st->val()) != t::SEXP) {
+                    if (Rep::Of(st->val()) != Rep::SEXP) {
                         auto fastcase = BasicBlock::Create(
                             PirJitLLVM::getContext(), "", fun);
                         auto fallback = BasicBlock::Create(
                             PirJitLLVM::getContext(), "", fun);
 
-                        auto expected = Representation::Of(st->val()) == t::Int
-                                            ? INTSXP
-                                            : REALSXP;
+                        auto expected =
+                            Rep::Of(st->val()) == Rep::i32 ? INTSXP : REALSXP;
                         auto reuse =
                             builder.CreateAnd(isSimpleScalar(cur, expected),
                                               builder.CreateNot(shared(cur)));
@@ -5382,7 +5353,7 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     auto val = loadSxp(st->val());
-                    if (Representation::Of(st->val()) == t::SEXP) {
+                    if (Rep::Of(st->val()) == Rep::SEXP) {
                         auto same = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         auto different = BasicBlock::Create(
@@ -5405,7 +5376,6 @@ void LowerFunctionLLVM::compile() {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
-
                     }
 
                     builder.CreateBr(done);
@@ -5414,12 +5384,10 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 auto pirVal = st->arg<0>().val();
-                bool integerValueCase =
-                    Representation::Of(pirVal) == Representation::Integer &&
-                    pirVal->type.isA(RType::integer);
-                bool realValueCase =
-                    Representation::Of(pirVal) == Representation::Real &&
-                    pirVal->type.isA(RType::real);
+                bool integerValueCase = Rep::Of(pirVal) == Rep::i32 &&
+                                        pirVal->type.isA(RType::integer);
+                bool realValueCase = Rep::Of(pirVal) == Rep::f64 &&
+                                     pirVal->type.isA(RType::real);
                 auto setter = NativeBuiltins::get(NativeBuiltins::Id::stvar);
                 if (st->isStArg)
                     setter = NativeBuiltins::get(NativeBuiltins::Id::starg);
@@ -5561,7 +5529,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Missing: {
-                assert(Representation::Of(i) == Representation::Integer);
+                assert(Rep::Of(i) == Rep::i32);
                 auto missing = Missing::Cast(i);
                 setVal(i,
                        call(NativeBuiltins::get(NativeBuiltins::Id::isMissing),
@@ -5572,10 +5540,9 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::ChkMissing: {
                 auto arg = i->arg(0).val();
-                if (Representation::Of(arg) == Representation::Sexp)
+                if (Rep::Of(arg) == Rep::SEXP)
                     checkMissing(loadSxp(arg));
-                setVal(i, load(arg, arg->type.notMissing(),
-                               Representation::Of(i)));
+                setVal(i, load(arg, arg->type.notMissing(), Rep::Of(i)));
                 break;
             }
 
@@ -5592,8 +5559,7 @@ void LowerFunctionLLVM::compile() {
             case Tag::ColonInputEffects: {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                if (Representation::Of(a) == t::SEXP ||
-                    Representation::Of(b) == t::SEXP) {
+                if (Rep::Of(a) == Rep::SEXP || Rep::Of(b) == Rep::SEXP) {
                     setVal(i, call(NativeBuiltins::get(
                                        NativeBuiltins::Id::colonInputEffects),
                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
@@ -5602,16 +5568,16 @@ void LowerFunctionLLVM::compile() {
 
                 // Native version of colonInputEffects
                 auto checkRhs = [&]() -> llvm::Value* {
-                    if (Representation::Of(b) == Representation::Real) {
+                    if (Rep::Of(b) == Rep::f64) {
                         auto ld = builder.CreateFPToSI(load(b), t::i64);
                         return builder.CreateICmpNE(ld, c(INT_MAX, 64));
                     }
-                    assert(Representation::Of(b) == Representation::Integer);
+                    assert(Rep::Of(b) == Rep::i32);
                     return builder.CreateICmpNE(load(b), c(INT_MAX));
                 };
 
                 auto sequenceIsReal =
-                    Representation::Of(a) == Representation::Real
+                    Rep::Of(a) == Rep::f64
                         ? builder.CreateNot(checkDoubleToInt(load(a), a->type))
                         : builder.getFalse();
 
@@ -5624,7 +5590,7 @@ void LowerFunctionLLVM::compile() {
                     },
                     [&]() -> llvm::Value* {
                         auto sequenceIsAmbiguous =
-                            Representation::Of(a) == Representation::Real
+                            Rep::Of(a) == Rep::f64
                                 ? builder.CreateNot(
                                       checkDoubleToInt(load(b), b->type))
                                 : builder.getFalse();
@@ -5647,8 +5613,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::ColonCastLhs: {
                 auto a = i->arg(0).val();
-                if (Representation::Of(a) == t::SEXP ||
-                    Representation::Of(i) == t::SEXP) {
+                if (Rep::Of(a) == Rep::SEXP || Rep::Of(i) == Rep::SEXP) {
                     setVal(i, call(NativeBuiltins::get(
                                        NativeBuiltins::Id::colonCastLhs),
                                    {loadSxp(a)}));
@@ -5676,9 +5641,8 @@ void LowerFunctionLLVM::compile() {
             case Tag::ColonCastRhs: {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
-                if (Representation::Of(a) == t::SEXP ||
-                    Representation::Of(b) == t::SEXP ||
-                    Representation::Of(i) == t::SEXP) {
+                if (Rep::Of(a) == Rep::SEXP || Rep::Of(b) == Rep::SEXP ||
+                    Rep::Of(i) == Rep::SEXP) {
                     setVal(i, call(NativeBuiltins::get(
                                        NativeBuiltins::Id::colonCastRhs),
                                    {loadSxp(a), loadSxp(b)}));
@@ -5746,7 +5710,7 @@ void LowerFunctionLLVM::compile() {
                 break;
 
             case Tag::Length: {
-                assert(Representation::Of(i) == t::Int);
+                assert(Rep::Of(i) == Rep::i32);
 
                 auto a = loadSxp(i->arg(0).val());
                 auto callLengthBuiltin = [&]() {
@@ -5765,6 +5729,9 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::FrameState:
+                break;
+
             case Tag::Unreachable:
                 builder.CreateUnreachable();
                 break;
@@ -5778,10 +5745,8 @@ void LowerFunctionLLVM::compile() {
                 assert(false && "Invalid instruction tag");
                 break;
 
-            case Tag::FrameState:
             case Tag::Checkpoint:
             case Tag::Assume:
-            case Tag::Deopt:
                 assert(false && "Expected scheduled deopt");
                 break;
 
@@ -5803,7 +5768,7 @@ void LowerFunctionLLVM::compile() {
 
             if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid() &&
                 variables_.count(i)) {
-                if (Representation::Of(i) == t::SEXP) {
+                if (Rep::Of(i) == Rep::SEXP) {
                     if (i->type != RType::expandedDots &&
                         i->type != NativeType::context && !CastType::Cast(i) &&
                         !LdConst::Cast(i)) {
@@ -5823,12 +5788,14 @@ void LowerFunctionLLVM::compile() {
                               convertToPointer(msg, t::i8, true)});
                     }
                 }
+#ifdef ENABLE_SLOWASSERT
                 if (i->type.isA(PirType::test())) {
                     auto ok =
                         builder.CreateOr(builder.CreateICmpEQ(load(i), c(0)),
                                          builder.CreateICmpEQ(load(i), c(1)));
                     insn_assert(ok, "Variable of type test has invalid range");
                 }
+#endif
             }
 
         }
@@ -5839,7 +5806,7 @@ void LowerFunctionLLVM::compile() {
                 auto phi = phis.at(i);
                 if (deadMove(i, phi))
                     continue;
-                auto r = Representation::Of(phi->type);
+                auto r = Rep::Of(phi->type);
                 auto inpv = load(i, r);
                 ensureNamedIfNeeded(phi, inpv);
                 if (LLVMDebugInfo() && diVariables_.count(phi)) {
@@ -5899,7 +5866,7 @@ void LowerFunctionLLVM::compile() {
 #endif
     for (auto& var : variables_) {
         auto i = var.first;
-        if (Representation::Of(i) != Representation::Sexp)
+        if (Rep::Of(i) != Rep::SEXP)
             continue;
         if (!i->typeFeedback().feedbackOrigin.pc())
             continue;

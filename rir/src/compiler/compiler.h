@@ -42,8 +42,9 @@ class Compiler {
 
     void preserve(SEXP c) { preserve_(c); }
 
-  private:
     Module* module;
+
+  private:
     StreamLogger& logger;
 
     void compileClosure(Closure* closure, rir::Function* optFunction,

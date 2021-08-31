@@ -22,9 +22,9 @@ LowerFunctionLLVM::Variable
 LowerFunctionLLVM::Variable::RVariable(Instruction* i, size_t pos,
                                        llvm::IRBuilder<>& builder,
                                        llvm::Value* basepointer) {
-    assert(i->producesRirResult());
+    assert(i->type.isRType());
     assert(!LdConst::Cast(i));
-    assert(Representation::Of(i) == Representation::Sexp);
+    assert(Rep::Of(i) == Rep::SEXP);
     auto ptr = builder.CreateGEP(basepointer, {c(pos), c(2)});
     ptr->setName(i->getRef());
     return {ImmutableLocalRVariable, ptr, false, pos};
@@ -33,18 +33,20 @@ LowerFunctionLLVM::Variable::RVariable(Instruction* i, size_t pos,
 LowerFunctionLLVM::Variable
 LowerFunctionLLVM::Variable::Mutable(Instruction* i,
                                      llvm::AllocaInst* location) {
-    assert(i->producesRirResult());
-    auto r = Representation::Of(i);
-    assert(r != Representation::Sexp);
+    assert(!i->type.isVoid() && !i->type.isVirtualValue() &&
+           !i->type.isCompositeValue());
+    auto r = Rep::Of(i);
+    assert(r != Rep::SEXP);
     location->setName(i->getRef());
     return {MutablePrimitive, location, false, (size_t)-1};
 }
 
 LowerFunctionLLVM::Variable
 LowerFunctionLLVM::Variable::Immutable(Instruction* i) {
-    assert(i->producesRirResult());
-    auto r = Representation::Of(i);
-    assert(r != Representation::Sexp);
+    assert(!i->type.isVoid() && !i->type.isVirtualValue() &&
+           !i->type.isCompositeValue());
+    auto r = Rep::Of(i);
+    assert(r != Rep::SEXP);
     return {ImmutablePrimitive, nullptr, false, (size_t)-1};
 }
 

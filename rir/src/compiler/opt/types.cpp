@@ -24,7 +24,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
         bool done = false;
         auto apply = [&]() {
             Visitor::run(code->entry, [&](Instruction* i) {
-                if (!i->producesRirResult())
+                if (!i->type.isRType())
                     return;
 
                 auto getType = [&](Value* v) {
@@ -263,7 +263,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                             }
                         }
                         break;
-                }
+                    }
 
                 default:
                     inferred = i->inferType(getType);
@@ -285,7 +285,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
     }
 
     Visitor::run(code->entry, [&](Instruction* i) {
-        if (!i->producesRirResult())
+        if (!i->type.isRType())
             return;
         if (types.count(i))
             i->type = types.at(i);

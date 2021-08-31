@@ -172,10 +172,16 @@ struct FeedbackOrigin {
     uint32_t offset() const { return offset_; }
     Code* srcCode() const { return srcCode_; }
     void srcCode(Code* src) { srcCode_ = src; }
+
+    bool operator==(const FeedbackOrigin& other) const {
+        return offset_ == other.offset_ && srcCode_ == other.srcCode_;
+    }
 };
 
 struct DeoptReason {
+  public:
     enum Reason : uint32_t {
+        Unknown,
         Typecheck,
         DeadCall,
         Calltarget,
@@ -186,11 +192,46 @@ struct DeoptReason {
     DeoptReason::Reason reason;
     FeedbackOrigin origin;
 
-    DeoptReason() = delete;
     DeoptReason(const FeedbackOrigin& origin, DeoptReason::Reason reason);
 
     Code* srcCode() const { return origin.srcCode(); }
     Opcode* pc() const { return origin.pc(); }
+
+    bool operator==(const DeoptReason& other) const {
+        return reason == other.reason && origin == other.origin;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const DeoptReason& reason) {
+        switch (reason.reason) {
+        case Typecheck:
+            out << "Typecheck";
+            break;
+        case DeadCall:
+            out << "DeadCall";
+            break;
+        case Calltarget:
+            out << "CallTarget";
+            break;
+        case EnvStubMaterialized:
+            out << "EnvStubMaterialized";
+            break;
+        case DeadBranchReached:
+            out << "DeadBranchReached";
+            break;
+        case Unknown:
+            out << "Unknown";
+            break;
+        }
+        out << "@" << ((char*)reason.pc() - (char*)reason.srcCode());
+        return out;
+    }
+
+    static DeoptReason unknown() {
+        return DeoptReason(FeedbackOrigin(0, 0), Unknown);
+    }
+
+    DeoptReason() = delete;
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");

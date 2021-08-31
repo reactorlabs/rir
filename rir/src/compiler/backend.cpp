@@ -114,7 +114,7 @@ static bool coinFlip() {
     return coin(gen);
 };
 
-static void lower(Code* code) {
+static void lower(Module* module, Code* code) {
     DeadInstructions representAsReal(
         code, 1, Effects::Any(),
         DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
@@ -173,11 +173,6 @@ static void lower(Code* code) {
                 if (mk && mk->stub)
                     assert(mk->contains(st->varName));
             } else if (auto deopt = Deopt::Cast(*it)) {
-                // Lower Deopt instructions + their FrameStates to a
-                // ScheduledDeopt.
-                auto newDeopt = new ScheduledDeopt();
-                newDeopt->consumeFrameStates(deopt);
-
                 if (Parameter::DEBUG_DEOPTS) {
                     std::stringstream msgs;
                     msgs << "DEOPT:\n";
@@ -198,11 +193,8 @@ static void lower(Code* code) {
                     it =
                         bb->insert(it, new Call(Env::global(), ldprint, {ldmsg},
                                                 Tombstone::framestate(), 0));
-                    it++;
+                    next = it + 2;
                 }
-                bb->replace(it, newDeopt);
-                next = it + 1;
-
             } else if (auto expect = Assume::Cast(*it)) {
                 if (expect->triviallyHolds()) {
                     next = bb->remove(it);
@@ -226,7 +218,7 @@ static void lower(Code* code) {
                         debugMessage += " failed\n";
                     }
                     BBTransform::lowerExpect(
-                        code, bb, it, expect, expectation,
+                        module, code, bb, it, expect, expectation,
                         expect->checkpoint()->bb()->falseBranch(), debugMessage,
                         Parameter::DEOPT_CHAOS && coinFlip());
                     // lowerExpect splits the bb from current position. There
@@ -245,15 +237,18 @@ static void lower(Code* code) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (FrameState::Cast(*it)) {
-                next = bb->remove(it);
-            } else if (Checkpoint::Cast(*it)) {
+            if (Checkpoint::Cast(*it)) {
                 auto d = bb->deoptBranch();
                 next = bb->remove(it);
                 bb->convertBranchToJmp(true);
                 if (d->predecessors().size() == 0) {
                     assert(d->successors().size() == 0);
                     dead.push_back(d);
+                }
+            } else if (auto p = Phi::Cast(*it)) {
+                if (p->nargs() == 1) {
+                    p->replaceUsesWith(p->arg(0).val());
+                    next = bb->remove(it);
                 }
             }
             it = next;
@@ -296,15 +291,13 @@ static void toCSSA(Code* code) {
                         pred = BBTransform::splitEdge(code->nextBBId++, pred,
                                                       split, code);
                     }
-                    if (Instruction* iav =
-                            Instruction::Cast(phi->arg(i).val())) {
-                        auto copy = pred->insert(pred->end(), new PirCopy(iav));
-                        phi->arg(i).val() = *copy;
-                    } else {
-
+                    if (phi->arg(i).val()->asRValue()) {
                         auto val = phi->arg(i).val()->asRValue();
                         auto copy = pred->insert(pred->end(), new LdConst(val));
-
+                        phi->arg(i).val() = *copy;
+                    } else {
+                        auto copy = pred->insert(
+                            pred->end(), new PirCopy(phi->arg(i).val()));
                         phi->arg(i).val() = *copy;
                     }
                 }
@@ -349,7 +342,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     std::function<void(Code*)> lowerAndScanForPromises = [&](Code* c) {
         if (promMap.count(c))
             return;
-        lower(c);
+        lower(module, c);
         toCSSA(c);
         log.CSSA(c);
 #ifdef FULLVERIFIER

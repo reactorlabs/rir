@@ -275,7 +275,7 @@ class VisitorImplementation {
                     return;
                 if (ORDER == Order::Lowering) {
                     bool deoptBranch =
-                        !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
+                        !bb->isEmpty() && Deopt::Cast(bb->last());
                     bool returnBranch =
                         !bb->isEmpty() && (NonLocalReturn::Cast(bb->last()) ||
                                            Return::Cast(bb->last()));

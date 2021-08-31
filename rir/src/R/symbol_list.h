@@ -5,6 +5,7 @@
 #define SYMBOLS_SIMPLE_INSTRUCTION_V(V, name, _) V(name, "." #name)
 
 #define SYMBOLS(V)                                                             \
+    V(UnknownDeoptTrigger, ".unknownDeoptTrigger")                             \
     V(SuperAssignBracket, "[<<-")                                              \
     V(SuperAssignDoubleBracket, "[[<<-")                                       \
     V(AssignBracket, "[<-")                                                    \

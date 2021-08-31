@@ -1,6 +1,7 @@
 #include "stream_logger.h"
 #include "compiler/opt/pass.h"
-#include "compiler/pir/pir_impl.h"
+#include "compiler/pir/closure.h"
+#include "compiler/pir/closure_version.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"

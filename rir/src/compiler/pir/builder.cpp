@@ -52,7 +52,6 @@ void Builder::add(Instruction* i) {
     case Tag::_UNUSED_:
         assert(false && "Invalid instruction");
     case Tag::PirCopy:
-    case Tag::ScheduledDeopt:
         assert(false && "This instruction is only allowed during lowering");
     default: {}
     }

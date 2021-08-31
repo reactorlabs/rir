@@ -1,6 +1,7 @@
 #ifndef COMPILER_SINGLETON_VALUES_H
 #define COMPILER_SINGLETON_VALUES_H
 
+#include "R/Symbols.h"
 #include "instruction_list.h"
 #include "tag.h"
 #include "value.h"
@@ -108,6 +109,18 @@ class NaLogical : public SingletonValue<NaLogical> {
     friend class SingletonValue;
     NaLogical()
         : SingletonValue(PirType::simpleScalarLogical(), Tag::NaLogical) {}
+};
+
+class UnknownDeoptTrigger : public SingletonValue<UnknownDeoptTrigger> {
+  public:
+    void printRef(std::ostream& out) const override final { out << "unknown"; }
+
+    SEXP asRValue() const override final { return symbol::UnknownDeoptTrigger; }
+
+  private:
+    friend class SingletonValue;
+    UnknownDeoptTrigger()
+        : SingletonValue(RType::sym, Tag::UnknownDeoptTrigger) {}
 };
 
 class Tombstone : public Value {

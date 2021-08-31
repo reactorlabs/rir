@@ -21,6 +21,8 @@ struct AAssumption {
     explicit AAssumption(Assume* a) : yesNo(a->assumeTrue) {
         auto cond = a->condition();
         switch (a->reason.reason) {
+        case DeoptReason::Unknown:
+            break;
         case DeoptReason::Typecheck: {
             if (auto t = IsType::Cast(cond)) {
                 c.typecheck = {t->arg(0).val(), t->typeTest};
@@ -293,6 +295,29 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     }
                 }
             }
+
+            // A Checkpoint where the normal continue branch ends in a deopt is
+            // unnecessary. We remove it by unconditionally going into the deopt
+            // branch.
+            if (auto d = Deopt::Cast(*ip)) {
+                if (auto c = checkpoint.at(d))
+                    if (!c->deleted)
+                        if (c->bb()->trueBranch() == d->bb()) {
+                            auto deoptBranch = c->bb()->deoptBranch();
+
+                            assert(ip + 1 == bb->cend());
+                            auto actualDeopt = Deopt::Cast(deoptBranch->last());
+                            actualDeopt->setDeoptReason(d->deoptReason(),
+                                                        d->deoptTrigger());
+                            c->bb()->overrideSuccessors({bb});
+                            c->bb()->remove(c->bb()->end() - 1);
+
+                            bb->remove(ip);
+                            bb->setNext(deoptBranch);
+                            next = bb->end();
+                        }
+            }
+
             ip = next;
         }
 

@@ -28,10 +28,11 @@ SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
 
 FeedbackOrigin::FeedbackOrigin(rir::Code* src, Opcode* p)
     : offset_((uintptr_t)p - (uintptr_t)src), srcCode_(src) {
-    assert(p);
-    assert(p >= src->code());
-    assert(p < src->endCode());
-    assert(pc() == p);
+    if (p) {
+        assert(p >= src->code());
+        assert(p < src->endCode());
+        assert(pc() == p);
+    }
 }
 
 DeoptReason::DeoptReason(const FeedbackOrigin& origin,
@@ -48,6 +49,7 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                o == Opcode::record_test_);
         break;
     }
+    case DeoptReason::Unknown:
     case DeoptReason::EnvStubMaterialized:
         break;
     }

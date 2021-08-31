@@ -521,10 +521,11 @@ void checkUserInterrupt() {
 }
 
 void recordDeoptReason(SEXP val, const DeoptReason& reason) {
-
     auto pos = reason.pc();
 
     switch (reason.reason) {
+    case DeoptReason::Unknown:
+        break;
     case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
@@ -533,6 +534,8 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     }
     case DeoptReason::Typecheck: {
         assert(*pos == Opcode::record_type_);
+        if (val == symbol::UnknownDeoptTrigger)
+            break;
         ObservedValues* feedback = (ObservedValues*)(pos + 1);
         feedback->record(val);
         if (TYPEOF(val) == PROMSXP) {
@@ -552,6 +555,8 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         [[clang::fallthrough]];
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
+        if (val == symbol::UnknownDeoptTrigger)
+            break;
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
         feedback->record(reason.srcCode(), val);
         assert(feedback->taken > 0);

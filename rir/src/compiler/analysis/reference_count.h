@@ -256,7 +256,6 @@ class StaticReferenceCount
 
         // Instructions which never reuse SEXPS can be ignored
         case Tag::PirCopy:
-        case Tag::RecordDeoptReason:
         case Tag::Return:
         case Tag::Colon:
         case Tag::CastType:
@@ -286,7 +285,6 @@ class StaticReferenceCount
         case Tag::MkEnv:
         case Tag::MkArg:
         case Tag::UpdatePromise:
-        case Tag::ScheduledDeopt:
         case Tag::PopContext:
         case Tag::Extract2_2D:
         case Tag::ColonCastLhs:
