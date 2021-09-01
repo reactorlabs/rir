@@ -64,7 +64,7 @@ function run_test {
   
   TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
-  echo "sys.source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
+  echo "source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
   
   LOG=$(mktemp /tmp/r-test.XXXXXX)

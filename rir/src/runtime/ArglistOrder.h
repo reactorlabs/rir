@@ -23,15 +23,28 @@ struct ArglistOrder
     using CallArglistOrder = std::vector<ArgIdx>;
 
     static constexpr ArgIdx ARG_NAMED_MASK = 1ULL << ((8 * sizeof(ArgIdx)) - 1);
+    static constexpr ArgIdx STATIC_DOTS_MASK = 1ULL
+                                               << ((8 * sizeof(ArgIdx)) - 2);
     static constexpr CallId NOT_REORDERED = -1;
 
-    static ArgIdx encodeArg(ArgIdx val, bool named) {
-        return named ? val | ARG_NAMED_MASK : val;
+    static ArgIdx encodeArg(ArgIdx val, bool named,
+                            bool staticallyMatchedDots) {
+        auto res = val;
+        if (named)
+            res = res | ARG_NAMED_MASK;
+        if (staticallyMatchedDots)
+            res = res | STATIC_DOTS_MASK;
+        return res;
     }
 
-    static ArgIdx decodeArg(ArgIdx val) { return val & ~ARG_NAMED_MASK; }
+    static ArgIdx decodeArg(ArgIdx val) {
+        return val & ~(ARG_NAMED_MASK | STATIC_DOTS_MASK);
+    }
 
     static bool isArgNamed(ArgIdx val) { return val & ARG_NAMED_MASK; }
+    static bool isStaticallyMatchedDots(ArgIdx val) {
+        return val & STATIC_DOTS_MASK;
+    }
 
     static size_t size(std::vector<CallArglistOrder> const& reordering) {
         size_t sz = 0;

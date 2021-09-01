@@ -67,7 +67,8 @@ void initializeTypes(LLVMContext& context) {
     t::RirRuntimeObject->setBody(fields);
 
     t::stackCell = StructType::create(context, "R_bcstack_t");
-    fields = {t::Int, t::SEXP};
+    // struct { int tag; int flags; union { ival, dval, sxpval} }
+    fields = {t::Int, t::Int, t::SEXP};
     t::stackCell->setBody(fields, false);
 
     t::stackCellPtr = PointerType::get(t::stackCell, 0);
@@ -99,12 +100,12 @@ void initializeTypes(LLVMContext& context) {
     t::RCNTXT = StructType::create(context, "struct.RCNTXT");
     t::RCNTXT_ptr = PointerType::get(t::RCNTXT, 0);
     fields = {
-        t::RCNTXT_ptr, t::Int,     t::setjmp_buf,   t::Int,     t::Int,
-        t::SEXP,       t::SEXP,    t::SEXP,         t::SEXP,    t::SEXP,
-        t::SEXP,       t::voidPtr, t::voidPtr,      t::voidPtr, t::Int,
-        t::Int,        t::Int,     t::SEXP,         t::voidPtr, t::SEXP,
-        t::SEXP,       t::voidPtr, t::stackCellPtr, t::SEXP,    t::Int,
-        t::SEXP,       t::voidPtr, t::Int,
+        t::RCNTXT_ptr, t::Int,     t::setjmp_buf,   t::Int,          t::Int,
+        t::SEXP,       t::SEXP,    t::SEXP,         t::SEXP,         t::SEXP,
+        t::SEXP,       t::voidPtr, t::voidPtr,      t::voidPtr,      t::Int,
+        t::Int,        t::Int,     t::SEXP,         t::voidPtr,      t::SEXP,
+        t::SEXP,       t::voidPtr, t::stackCellPtr, t::stackCellPtr, t::SEXP,
+        t::Int,        t::SEXP,    t::voidPtr,      t::Int,
     };
     t::RCNTXT->setBody(fields);
 

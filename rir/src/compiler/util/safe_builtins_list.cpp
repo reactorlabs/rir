@@ -87,7 +87,6 @@ bool SafeBuiltinsList::always(int builtin) {
     case blt("strsplit"):
 
     case blt("seq_len"):
-    case blt("rep_len"):
         return true;
     default: {}
     };
@@ -319,6 +318,8 @@ bool SafeBuiltinsList::nonObject(int builtin) {
 
     case blt("seq.int"):
     case blt("rep.int"):
+
+    case blt("rep_len"):
 
     case blt("inherits"):
     case blt("anyNA"):

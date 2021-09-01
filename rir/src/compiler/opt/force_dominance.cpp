@@ -382,6 +382,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 // stripping the promise anyway.
                                 if (eager == MissingArg::instance())
                                     return false;
+                                if (ChkMissing::Cast(i) &&
+                                    eager->type.maybeMissing())
+                                    return false;
                                 return true;
                             };
                             cast->replaceUsesIn(eager, bb,
