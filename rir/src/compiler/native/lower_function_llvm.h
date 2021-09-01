@@ -188,7 +188,7 @@ class LowerFunctionLLVM {
     void setVariable(Instruction* variable, llvm::Value* val,
                      bool volatile_ = false) {
         // silently drop dead variables...
-        if (!liveness.count(variable))
+        if (variable->type.isVoid() || !liveness.count(variable))
             return;
         assert(liveness.live(currentInstr, variable));
         variables_.at(variable).set(builder, val, volatile_);
