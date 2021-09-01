@@ -115,7 +115,7 @@ static bool testReturns42L(ClosureVersion* f) {
     auto r = Query::returned(f);
     if (r.size() != 1)
         return false;
-    auto ld = LdConst::Cast((*r.begin()));
+    auto ld = Const::Cast((*r.begin()));
     if (ld == nullptr || TYPEOF(ld->c()) != INTSXP || *INTEGER(ld->c()) != 42)
         return false;
     return true;

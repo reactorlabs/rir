@@ -81,7 +81,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         formals = cls->formals().original();
                     }
                     if (!target) {
-                        if (auto cnst = LdConst::Cast(calli->tryGetClsArg())) {
+                        if (auto cnst = Const::Cast(calli->tryGetClsArg())) {
                             if (TYPEOF(cnst->c()) == CLOSXP)
                                 formals = FORMALS(cnst->c());
                         }
@@ -113,9 +113,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         TYPEOF(def) != SYMSXP &&
                                         TYPEOF(def) != BCODESXP &&
                                         TYPEOF(def) != EXTERNALSXP) {
-                                        auto defA = new LdConst(def);
-                                        ip = bb->insert(ip, defA) + 1;
-                                        next = ip + 1;
+                                        auto defA = cmp.module->c(def);
                                         usemethodTargetArgs.push_back(
                                             {myFormals.names().at(i), defA});
                                     } else {
@@ -173,8 +171,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         if (!DispatchTable::check(BODY(usemethodTarget)))
                             rir::Compiler::compileClosure(usemethodTarget);
 
-                        LdConst cls(usemethodTarget);
-                        Call fake(i->env(), &cls, matchedArgs,
+                        auto cls = cmp.module->c(usemethodTarget);
+                        Call fake(i->env(), cls, matchedArgs,
                                   Tombstone::framestate(), i->srcIdx);
                         asmpt = fake.inferAvailableAssumptions();
                     } else {
@@ -203,8 +201,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 false,
                                 [&](ClosureVersion* fun) { target = fun; },
                                 []() {}, {});
-                    } else if (auto cnst =
-                                   LdConst::Cast(calli->tryGetClsArg())) {
+                    } else if (auto cnst = Const::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
                             if (dt->baseline()->body()->codeSize <
                                 Parameter::RECOMPILE_THRESHOLD)
@@ -253,10 +250,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = staticCall) {
                         assert(usemethodTarget);
-                        ip = bb->insert(ip, new LdConst(usemethodTarget));
-                        auto cls = *ip;
-                        ip++;
-                        next = ip + 1;
+                        auto cls = cmp.module->c(usemethodTarget);
                         auto nc = new StaticCall(
                             c->env(), target->owner(), asmpt, matchedArgs,
                             argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);

@@ -21,7 +21,7 @@ namespace rir {
 namespace pir {
 
 static SEXP isStaticInternal(Call* call, const char* name) {
-    if (auto c = LdConst::Cast(call->cls())) {
+    if (auto c = Const::Cast(call->cls())) {
         if ((TYPEOF(c->c()) == SPECIALSXP || TYPEOF(c->c()) == BUILTINSXP) &&
             c->c()->u.primsxp.offset == blt(name))
             return c->c();
@@ -32,7 +32,7 @@ static SEXP isStaticInternal(Call* call, const char* name) {
 static long isStaticForceAndCall(Call* call) {
     if (isStaticInternal(call, "forceAndCall")) {
         if (call->nCallArgs() >= 2) {
-            if (auto n = LdConst::Cast(call->callArg(0).val())) {
+            if (auto n = Const::Cast(call->callArg(0).val())) {
                 if (TYPEOF(n->c()) == INTSXP || TYPEOF(n->c()) == REALSXP) {
                     unsigned nForce = 0;
                     if (Rf_length(n->c()) > 0) {

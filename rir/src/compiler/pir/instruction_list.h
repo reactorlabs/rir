@@ -41,7 +41,6 @@
     VECTOR_RW_INSTRUCTIONS(V)                                                  \
     V(LdFun)                                                                   \
     V(LdVar)                                                                   \
-    V(LdConst)                                                                 \
     V(LdArg)                                                                   \
     V(LdDots)                                                                  \
     V(StVarSuper)                                                              \

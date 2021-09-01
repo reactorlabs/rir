@@ -2,8 +2,8 @@
 #define BB_TRANSFORM_H
 
 #include "../pir/bb.h"
-#include "../pir/deopt_reason.h"
 #include "../pir/pir.h"
+#include "../pir/values.h"
 #include "compiler/analysis/cfg.h"
 #include "runtime/TypeFeedback.h"
 

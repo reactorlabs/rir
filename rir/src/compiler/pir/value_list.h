@@ -2,6 +2,7 @@
 #define COMPILER_VALUE_LIST_H
 
 #define COMPILER_VALUES(V)                                                     \
+    V(Constant)                                                                \
     V(True)                                                                    \
     V(False)                                                                   \
     V(OpaqueTrue)                                                              \

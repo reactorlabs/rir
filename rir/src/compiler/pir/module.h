@@ -36,12 +36,18 @@ class Module {
     void eachPirClosureVersion(PirClosureVersionIterator it);
 
     DeoptReasonWrapper* deoptReasonValue(const DeoptReason&);
+    Value* c(SEXP s);
+    Const* c(int s);
+    Const* c(double s);
 
     ~Module();
   private:
     typedef std::pair<Function*, Env*> Idx;
     std::map<Idx, Closure*> closures;
+
+    Const* c(BC::PoolIdx, PirType t);
     std::unordered_set<DeoptReasonWrapper*> deoptReasons;
+    std::unordered_map<BC::PoolIdx, Const*> constants;
 };
 
 }

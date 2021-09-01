@@ -7,6 +7,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/compiler.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -33,9 +34,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         // skip ldfun
         ++ip;
 
-        auto expected = new LdConst(speculation.builtin);
-        ip = bb->insert(ip, expected);
-        ++ip;
+        auto expected = cmp.module->c(speculation.builtin);
         Instruction* given = ldfun;
 
         given->replaceUsesWith(expected);
@@ -145,7 +144,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         dots = true;
                 });
                 if (!dots) {
-                    if (auto ldcn = LdConst::Cast(call->cls())) {
+                    if (auto ldcn = Const::Cast(call->cls())) {
                         if (TYPEOF(ldcn->c()) == BUILTINSXP) {
                             ip = replaceCallWithCallBuiltin(
                                 bb, ip, call, ldcn->c(),

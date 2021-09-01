@@ -188,7 +188,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     if ("vector" == name) {
                         bool handled = false;
-                        if (auto con = LdConst::Cast(c->arg(0).val())) {
+                        if (auto con = Const::Cast(c->arg(0).val())) {
                             if (TYPEOF(con->c()) == STRSXP &&
                                 XLENGTH(con->c()) == 1) {
                                 handled = true;

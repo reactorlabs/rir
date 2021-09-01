@@ -6,6 +6,7 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "compiler/analysis/context_stack.h"
+#include "compiler/compiler.h"
 #include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
 #include "utils/Set.h"
@@ -93,7 +94,7 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
 namespace rir {
 namespace pir {
 
-bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
+bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             LogStream& log) const {
 
     DominanceGraph dom(code);
@@ -685,8 +686,9 @@ bool ScopeResolution::apply(Compiler&, ClosureVersion* cls, Code* code,
                                             TYPEOF(value) == BUILTINSXP ||
                                             TYPEOF(value) == SPECIALSXP ||
                                             TYPEOF(value) == CLOSXP) {
-                                            auto con = new LdConst(value);
-                                            i->replaceUsesAndSwapWith(con, ip);
+                                            i->replaceUsesWith(
+                                                cmp.module->c(value));
+                                            next = bb->remove(ip);
                                             changed = true;
                                             return;
                                         }

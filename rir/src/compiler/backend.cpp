@@ -160,8 +160,8 @@ static void lower(Module* module, Code* code) {
                         break;
                 }
             } else if (auto id = Identical::Cast(*it)) {
-                if (auto ld1 = LdConst::Cast(id->arg(0).val())) {
-                    if (auto ld2 = LdConst::Cast(id->arg(1).val())) {
+                if (auto ld1 = Const::Cast(id->arg(0).val())) {
+                    if (auto ld2 = Const::Cast(id->arg(1).val())) {
                         id->replaceUsesWith(ld1->c() == ld2->c()
                                                 ? (Value*)True::instance()
                                                 : (Value*)False::instance());
@@ -182,17 +182,15 @@ static void lower(Module* module, Code* code) {
                     SEXP msg = Rf_mkString(leak.back().c_str());
                     static SEXP print =
                         Rf_findFun(Rf_install("cat"), R_GlobalEnv);
-                    auto ldprint = new LdConst(print);
-                    Instruction* ldmsg = new LdConst(msg);
-                    it = bb->insert(it, ldmsg) + 1;
-                    it = bb->insert(it, ldprint) + 1;
+                    auto ldprint = module->c(print);
+                    auto ldmsg = module->c(msg);
                     // Hack to silence the verifier.
-                    ldmsg = new CastType(ldmsg, CastType::Downcast,
-                                         PirType::any(), RType::prom);
-                    it = bb->insert(it, ldmsg) + 1;
-                    it =
-                        bb->insert(it, new Call(Env::global(), ldprint, {ldmsg},
-                                                Tombstone::framestate(), 0));
+                    auto ldmsg2 = new CastType(ldmsg, CastType::Downcast,
+                                               PirType::any(), RType::prom);
+                    it = bb->insert(it, ldmsg2) + 1;
+                    it = bb->insert(it,
+                                    new Call(Env::global(), ldprint, {ldmsg2},
+                                             Tombstone::framestate(), 0));
                     next = it + 2;
                 }
             } else if (auto expect = Assume::Cast(*it)) {
@@ -291,15 +289,9 @@ static void toCSSA(Code* code) {
                         pred = BBTransform::splitEdge(code->nextBBId++, pred,
                                                       split, code);
                     }
-                    if (phi->arg(i).val()->asRValue()) {
-                        auto val = phi->arg(i).val()->asRValue();
-                        auto copy = pred->insert(pred->end(), new LdConst(val));
-                        phi->arg(i).val() = *copy;
-                    } else {
-                        auto copy = pred->insert(
-                            pred->end(), new PirCopy(phi->arg(i).val()));
-                        phi->arg(i).val() = *copy;
-                    }
+                    auto copy = pred->insert(pred->end(),
+                                             new PirCopy(phi->arg(i).val()));
+                    phi->arg(i).val() = *copy;
                 }
                 auto phiCopy = new PirCopy(phi);
                 phi->replaceUsesWith(phiCopy);

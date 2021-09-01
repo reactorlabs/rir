@@ -85,6 +85,22 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (v->type.isVoid())
                 return;
 
+            if (auto ld = Const::Cast(v)) {
+                SEXP constant = ld->c();
+                for (auto& c : constants) {
+                    if (R_compute_identical(c.first, constant, 0)) {
+                        number[v] = c.second;
+                        changed = true;
+                        return;
+                    }
+                }
+                while (classes.count(nextNumber))
+                    nextNumber++;
+                constants.emplace(constant, nextNumber);
+                storeNumber(v, nextNumber, {nextNumber});
+                return;
+            }
+
             auto i = Instruction::Cast(v);
             if (!i) {
                 assignNumber(v);
@@ -93,22 +109,6 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code,
 
             if (i->gvnBase() == 0) {
                 assignNumber(i);
-                return;
-            }
-
-            if (auto ld = LdConst::Cast(i)) {
-                SEXP constant = ld->c();
-                for (auto& c : constants) {
-                    if (R_compute_identical(c.first, constant, 0)) {
-                        number[i] = c.second;
-                        changed = true;
-                        return;
-                    }
-                }
-                while (classes.count(nextNumber))
-                    nextNumber++;
-                constants.emplace(constant, nextNumber);
-                storeNumber(i, nextNumber, {nextNumber});
                 return;
             }
 

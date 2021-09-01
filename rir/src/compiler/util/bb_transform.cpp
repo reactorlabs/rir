@@ -188,15 +188,13 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
         static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
 
         SEXP msg = Rf_mkString(debugMessage.c_str());
-        auto ldprint = new LdConst(print);
-        Instruction* ldmsg = new LdConst(msg);
-        deoptBlock->append(ldmsg);
-        deoptBlock->append(ldprint);
+        auto ldprint = m->c(print);
+        auto ldmsg = m->c(msg);
         // Hack to silence the verifier.
-        ldmsg = new CastType(ldmsg, CastType::Downcast, PirType::any(),
-                             RType::prom);
-        deoptBlock->append(ldmsg);
-        deoptBlock->append(new Call(Env::global(), ldprint, {ldmsg},
+        Instruction* ldmsg2 = new CastType(ldmsg, CastType::Downcast,
+                                           PirType::any(), RType::prom);
+        deoptBlock->append(ldmsg2);
+        deoptBlock->append(new Call(Env::global(), ldprint, {ldmsg2},
                                     Tombstone::framestate(), 0));
     }
 
