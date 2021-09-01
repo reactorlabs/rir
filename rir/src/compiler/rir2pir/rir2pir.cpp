@@ -1386,6 +1386,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
             cur.createMergepoint(insert);
             other = State(cur, true, insert.getCurrentBB(), finger);
+            addCheckpoint(srcCode, finger, cur.stack, insert);
         }
         const auto pos = finger;
         BC bc = BC::advance(&finger, srcCode);
