@@ -22,8 +22,6 @@ Const::Const(BC::PoolIdx idx, PirType type) : ValueImpl(type), idx(idx) {}
 
 SEXP Const::c() const { return Pool::get(idx); }
 
-SEXP Const::operator()() const { return c(); }
-
 void Const::printRef(std::ostream& out) const {
     if (c() == R_UnboundValue) {
         out << "unboundValue";

@@ -264,7 +264,7 @@ static void lower(Module* module, Code* code) {
     });
 }
 
-static void toCSSA(Code* code) {
+static void toCSSA(Module* m, Code* code) {
 
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
@@ -289,8 +289,8 @@ static void toCSSA(Code* code) {
                         pred = BBTransform::splitEdge(code->nextBBId++, pred,
                                                       split, code);
                     }
-                    auto copy = pred->insert(pred->end(),
-                                             new PirCopy(phi->arg(i).val()));
+                    auto v = phi->arg(i).val();
+                    auto copy = pred->insert(pred->end(), new PirCopy(v));
                     phi->arg(i).val() = *copy;
                 }
                 auto phiCopy = new PirCopy(phi);
@@ -335,7 +335,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         if (promMap.count(c))
             return;
         lower(module, c);
-        toCSSA(c);
+        toCSSA(module, c);
         log.CSSA(c);
 #ifdef FULLVERIFIER
         Verify::apply(cls, "Error after lowering", true);

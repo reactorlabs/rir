@@ -69,11 +69,8 @@ class NativeAllocator : public SSAAllocator {
         : SSAAllocator(code, livenessIntervals) {}
 
     bool needsAVariable(Value* v) const {
-        auto producesValue = !v->type.isVoid() && !v->type.isVirtualValue() &&
-                             !v->type.isCompositeValue();
-        return producesValue && !Const::Cast(v) &&
-               !(CastType::Cast(v) &&
-                 Const::Cast(CastType::Cast(v)->arg(0).val()));
+        return Instruction::Cast(v) && !v->type.isVoid() &&
+               !v->type.isVirtualValue() && !v->type.isCompositeValue();
     }
     bool needsASlot(Value* v) const override final {
         return needsAVariable(v) && Rep::Of(v) == Rep::SEXP;

@@ -374,7 +374,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 } else {
                     anyChange = true;
                     Checkpoint* cpAtCall = nullptr;
-                    {
+                    if (allowInline != SafeToInline::NeedsContext) {
                         AvailableCheckpoints cp(cls, code, log);
                         cpAtCall = cp.at(theCall);
                     }

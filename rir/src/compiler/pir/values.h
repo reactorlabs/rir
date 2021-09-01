@@ -48,8 +48,9 @@ class Const : public ValueImpl<Const, Tag::Constant> {
   public:
     void printRef(std::ostream& out) const override final;
 
-    SEXP operator()() const;
     SEXP c() const;
+    SEXP operator()() const { return c(); }
+    SEXP asRValue() const override final { return c(); }
 
     friend class Module;
 };
