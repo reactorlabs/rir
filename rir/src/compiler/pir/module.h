@@ -2,6 +2,7 @@
 #define PIR_MODULE_H
 
 #include "R/r.h"
+#include "runtime/TypeFeedback.h"
 #include <functional>
 #include <iostream>
 #include <map>
@@ -46,7 +47,7 @@ class Module {
     std::map<Idx, Closure*> closures;
 
     Const* c(BC::PoolIdx, PirType t);
-    std::unordered_set<DeoptReasonWrapper*> deoptReasons;
+    std::unordered_map<DeoptReason, DeoptReasonWrapper*> deoptReasons;
     std::unordered_map<BC::PoolIdx, Const*> constants;
 };
 
