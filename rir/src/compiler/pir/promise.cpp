@@ -32,7 +32,6 @@ bool Promise::trivial() const {
         bb = bb->next();
     for (auto i : *bb) {
         switch (i->tag) {
-        case Tag::LdConst:
         case Tag::Visible:
         case Tag::Return:
             break;

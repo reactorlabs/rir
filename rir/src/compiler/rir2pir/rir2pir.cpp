@@ -238,9 +238,9 @@ checkCallTarget(Value* callee, rir::Code* srcCode,
     return result;
 }
 
-static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
-                               bool replaceLdfunWithLdVar, Checkpoint* cp,
-                               rir::Code* srcCode, Opcode* pc) {
+static Value* insertLdFunGuard(Compiler& compiler, const TargetInfo& trg,
+                               Value* callee, bool replaceLdfunWithLdVar,
+                               Checkpoint* cp, rir::Code* srcCode, Opcode* pc) {
     // We use ldvar instead of ldfun for the guard. The reason is that
     // ldfun can force promises, which is a pain for our optimizer to
     // deal with. If we use a ldvar here, the actual ldfun will be
@@ -290,9 +290,8 @@ static Value* insertLdFunGuard(const TargetInfo& trg, Value* callee,
         calleeForGuard = body;
     }
 
-    auto expected = trg.stableEnv ? new LdConst(trg.monomorphic)
-                                  : new LdConst(BODY(trg.monomorphic));
-    pos = bb->insert(pos, expected) + 1;
+    auto expected = trg.stableEnv ? compiler.module->c(trg.monomorphic)
+                                  : compiler.module->c(BODY(trg.monomorphic));
 
     auto t = new Identical(calleeForGuard, expected, PirType::any());
     pos = bb->insert(pos, t) + 1;
@@ -368,7 +367,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto d = insert(new LdDots(insert.env));
             push(insert(new ExpandDots(d)));
         } else {
-            push(insert(new LdConst(bc.immediateConst())));
+            push(compiler.module->c(bc.immediateConst()));
         }
         break;
     }
@@ -667,7 +666,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   // with names
                                   bc.bc == Opcode::call_;
         SEXP staticCallee = nullptr;
-        if (auto ld = LdConst::Cast(callee))
+        if (auto ld = Const::Cast(callee))
             staticCallee = ld->c();
         bool staticMonomorphicBuiltin = staticCallee &&
                                         TYPEOF(staticCallee) == BUILTINSXP &&
@@ -738,7 +737,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             bool replaceLdfunWithLdVar =
                 ldfun && (ldfun->varName != symbol::c || !compiler.seenC);
             callee = insertLdFunGuard(
-                ti, callee, replaceLdfunWithLdVar, cp, srcCode,
+                compiler, ti, callee, replaceLdfunWithLdVar, cp, srcCode,
                 std::get<Opcode*>(callTargetFeedback.at(callee)));
         }
 
@@ -882,7 +881,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                             auto optionList =
                                                 Rf_eval(ast, R_GlobalEnv);
                                             auto opt =
-                                                insert(new LdConst(optionList));
+                                                compiler.module->c(optionList);
                                             matchedArgs.push_back(opt);
                                         }
                                     }
@@ -1387,6 +1386,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
             }
             cur.createMergepoint(insert);
             other = State(cur, true, insert.getCurrentBB(), finger);
+            addCheckpoint(srcCode, finger, cur.stack, insert);
         }
         const auto pos = finger;
         BC bc = BC::advance(&finger, srcCode);

@@ -5,6 +5,7 @@
 #include "../pir/closure.h"
 #include "../pir/closure_version.h"
 #include "../pir/pir.h"
+#include "../pir/values.h"
 #include "abstract_value.h"
 
 #include <unordered_map>
@@ -120,6 +121,22 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
     RangeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
         : StaticAnalysis("Range", cls, code, log) {}
 
+    std::pair<bool, Range> getRange(RangeAnalysisState& state, Value* v) const {
+        auto f = state.range.find(v);
+        if (f != state.range.end())
+            return {true, f->second};
+        if (auto ld = Const::Cast(v)) {
+            if (IS_SIMPLE_SCALAR(ld->c(), INTSXP)) {
+                auto r = INTEGER(ld->c())[0];
+                return {true, Range::get(r, r)};
+            } else if (IS_SIMPLE_SCALAR(ld->c(), REALSXP)) {
+                auto r = REAL(ld->c())[0];
+                return {true, Range::get(r, r)};
+            }
+        }
+        return {false, Range::get(0, 0)};
+    }
+
     AbstractResult applyEntry(RangeAnalysisState& state,
                               BB* bb) const override {
         AbstractResult res = AbstractResult::None;
@@ -164,27 +181,34 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                         rhs = t;
                     }
 
-                    if (!state.range.count(lhs))
-                        state.range.emplace(lhs, Range::MAX);
-                    if (!state.range.count(rhs))
-                        state.range.emplace(rhs, Range::MAX);
+                    auto lhsCur = getRange(state, lhs);
+                    auto rhsCur = getRange(state, rhs);
+                    if (!lhsCur.first)
+                        lhsCur.second = Range::MAX;
+                    if (!rhsCur.first)
+                        rhsCur.second = Range::MAX;
 
-                    auto& lhsCur = state.range.at(lhs);
-                    auto& rhsCur = state.range.at(rhs);
-
-                    auto i1 = lhsCur.begin();
-                    auto i2 = lhsCur.end();
-                    auto i3 = rhsCur.begin();
-                    auto i4 = rhsCur.end();
+                    auto i1 = lhsCur.second.begin();
+                    auto i2 = lhsCur.second.end();
+                    auto i3 = rhsCur.second.begin();
+                    auto i4 = rhsCur.second.end();
                     auto lhsNew = getLhs(i1, i2, i3, i4);
                     auto rhsNew = getRhs(i1, i2, i3, i4);
-                    if (lhsCur != lhsNew) {
-                        lhsCur = lhsNew;
+                    if (lhsCur.second != lhsNew) {
+                        auto f = state.range.find(lhs);
+                        if (f == state.range.end())
+                            state.range.emplace(lhs, lhsNew);
+                        else
+                            f->second = lhsNew;
                         res.update();
                     }
-                    if (rhsCur != rhsNew) {
+                    if (rhsCur.second != rhsNew) {
+                        auto f = state.range.find(rhs);
+                        if (f == state.range.end())
+                            state.range.emplace(rhs, rhsNew);
+                        else
+                            f->second = rhsNew;
                         res.update();
-                        rhsCur = rhsNew;
                     }
                 };
 
@@ -239,13 +263,16 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
     AbstractResult apply(RangeAnalysisState& state,
                          Instruction* i) const override {
         AbstractResult res = AbstractResult::None;
+
         auto binop = [&](const std::function<int(int, int)> apply) {
             if (i->effects.contains(Effect::ExecuteCode))
                 return;
-            if (state.range.count(i->arg(0).val()) &&
-                state.range.count(i->arg(1).val())) {
-                auto a = state.range.at(i->arg(0).val());
-                auto b = state.range.at(i->arg(1).val());
+
+            auto stateA = getRange(state, i->arg(0).val());
+            auto stateB = getRange(state, i->arg(1).val());
+            if (stateA.first && stateB.first) {
+                auto a = stateA.second;
+                auto b = stateB.second;
 
                 auto lower = a.begin() == INT_MIN || b.begin() == INT_MIN
                                  ? INT_MIN
@@ -269,22 +296,6 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
         };
 
         switch (i->tag) {
-        case Tag::LdConst: {
-            auto ld = LdConst::Cast(i);
-            if (!state.range.count(i)) {
-                if (IS_SIMPLE_SCALAR(ld->c(), INTSXP)) {
-                    auto r = INTEGER(ld->c())[0];
-                    state.range.emplace(i, Range::get(r, r));
-                    res.update();
-                } else if (IS_SIMPLE_SCALAR(ld->c(), REALSXP)) {
-                    auto r = REAL(ld->c())[0];
-                    state.range.emplace(i, Range::get(r, r));
-                    res.update();
-                }
-            }
-            break;
-        }
-
         case Tag::Add:
             binop([&](int a, int b) { return a + b; });
             break;
@@ -300,12 +311,12 @@ class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
             bool first = true;
 
             p->eachArg([&](BB*, Value* v) {
-                if (state.range.count(v)) {
-                    auto r = state.range.at(v);
+                auto r = getRange(state, v);
+                if (r.first) {
                     if (first)
-                        m = r;
+                        m = r.second;
                     else
-                        m = m.merge(r);
+                        m = m.merge(r.second);
                 } else {
                     if (state.seen.count(p)) {
                         state.range.emplace(v, Range::MAX);

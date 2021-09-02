@@ -21,6 +21,7 @@ class Module;
 class MkEnv;
 class MkArg;
 class LogStream;
+class Const;
 }
 }
 

@@ -69,11 +69,8 @@ class NativeAllocator : public SSAAllocator {
         : SSAAllocator(code, livenessIntervals) {}
 
     bool needsAVariable(Value* v) const {
-        auto producesValue = !v->type.isVoid() && !v->type.isVirtualValue() &&
-                             !v->type.isCompositeValue();
-        return producesValue && !LdConst::Cast(v) &&
-               !(CastType::Cast(v) &&
-                 LdConst::Cast(CastType::Cast(v)->arg(0).val()));
+        return Instruction::Cast(v) && !v->type.isVoid() &&
+               !v->type.isVirtualValue() && !v->type.isCompositeValue();
     }
     bool needsASlot(Value* v) const override final {
         return needsAVariable(v) && Rep::Of(v) == Rep::SEXP;
@@ -410,7 +407,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     auto vali = Instruction::Cast(val);
 
     if (auto ct = CastType::Cast(val)) {
-        if (LdConst::Cast(ct->arg(0).val())) {
+        if (Const::Cast(ct->arg(0).val())) {
             return load(ct->arg(0).val(), type, needed);
         }
     }
@@ -435,7 +432,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         static int one = 1;
         // Something that is always true, but llvm does not know about
         res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
-    } else if (auto ld = LdConst::Cast(val)) {
+    } else if (auto ld = Const::Cast(val)) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
         auto dr = (DeoptReasonWrapper*)val;
@@ -2314,7 +2311,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::CastType: {
                 auto in = i->arg(0).val();
-                if (LdConst::Cast(i->followCasts()) || deadMove(in, i))
+                if (Const::Cast(i->followCasts()) || deadMove(in, i))
                     break;
                 setVal(i, load(in, i->type, Rep::Of(i)));
                 break;
@@ -3020,7 +3017,7 @@ void LowerFunctionLLVM::compile() {
                     case blt("vector"): {
                         auto l = b->arg(1).val();
                         if (l->type.isA(PirType::anySimpleScalar())) {
-                            if (auto con = LdConst::Cast(b->arg(0).val())) {
+                            if (auto con = Const::Cast(b->arg(0).val())) {
                                 if (TYPEOF(con->c()) == STRSXP &&
                                     XLENGTH(con->c()) == 1) {
                                     SEXPTYPE type =
@@ -3088,7 +3085,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("is.vector"): {
-                        auto cnst = LdConst::Cast(b->arg(1).val());
+                        auto cnst = Const::Cast(b->arg(1).val());
                         if (!cnst)
                             break;
 
@@ -3423,7 +3420,6 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Phi:
-            case Tag::LdConst:
             case Tag::Nop:
                 break;
 
@@ -5770,8 +5766,7 @@ void LowerFunctionLLVM::compile() {
                 variables_.count(i)) {
                 if (Rep::Of(i) == Rep::SEXP) {
                     if (i->type != RType::expandedDots &&
-                        i->type != NativeType::context && !CastType::Cast(i) &&
-                        !LdConst::Cast(i)) {
+                        i->type != NativeType::context && !CastType::Cast(i)) {
                         static std::vector<std::string> leaky;
                         const char* msg = nullptr;
                         static const char* defaultMsg = "";

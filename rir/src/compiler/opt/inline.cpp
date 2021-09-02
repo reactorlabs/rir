@@ -7,6 +7,7 @@
 #include "R/r.h"
 #include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/compiler.h"
 #include "compiler/parameter.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
@@ -19,7 +20,7 @@
 namespace rir {
 namespace pir {
 
-bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
+bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                    LogStream& log) const {
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
@@ -143,13 +144,17 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 return false;
                             }
                         }
-                        if (auto c = LdConst::Cast(i)) {
-                            if (TYPEOF(c->c()) == SPECIALSXP ||
-                                TYPEOF(c->c()) == BUILTINSXP) {
-                                if (!SafeBuiltinsList::forInline(
-                                        c->c()->u.primsxp.offset)) {
-                                    allowInline = SafeToInline::No;
-                                    return false;
+                        if (auto call = CallInstruction::CastCall(i)) {
+                            if (auto trg = call->tryGetClsArg()) {
+                                if (auto c = Const::Cast(trg)) {
+                                    if (TYPEOF(c->c()) == SPECIALSXP ||
+                                        TYPEOF(c->c()) == BUILTINSXP) {
+                                        if (!SafeBuiltinsList::forInline(
+                                                c->c()->u.primsxp.offset)) {
+                                            allowInline = SafeToInline::No;
+                                            return false;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -435,17 +440,14 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 Tombstone::closure()) {
                                 op = call->runtimeClosure();
                             } else {
-                                auto ld =
-                                    new LdConst(call->cls()->rirClosure());
-                                prologue->append(ld);
-                                op = ld;
+                                op = cmp.module->c(call->cls()->rirClosure());
                             }
                         }
                         assert(op);
-                        auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));
+                        auto ast =
+                            cmp.module->c(rir::Pool::get(theCall->srcIdx));
                         auto ctx = new PushContext(ast, op, theCallInstruction,
                                                    theCall->env());
-                        prologue->append(ast);
                         prologue->append(ctx);
 
                         auto popc = new PopContext(inlineeRes, ctx);
@@ -484,7 +486,7 @@ bool Inline::apply(Compiler&, ClosureVersion* cls, Code* code,
         });
 
     return anyChange;
-    }
+}
 
 // TODO: maybe implement something more resonable to pass in those constants.
 // For now it seems a simple env variable is just fine.

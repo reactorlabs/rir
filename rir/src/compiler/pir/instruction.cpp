@@ -504,27 +504,6 @@ bool Instruction::envOnlyForObj() {
     return false;
 }
 
-LdConst::LdConst(SEXP c, PirType t)
-    : FixedLenInstruction(t), idx(Pool::insert(c)) {}
-LdConst::LdConst(SEXP c)
-    : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
-LdConst::LdConst(int num)
-    : FixedLenInstruction(PirType(RType::integer).simpleScalar().notNAOrNaN()),
-      idx(Pool::getInt(num)) {}
-LdConst::LdConst(double num)
-    : FixedLenInstruction(PirType(RType::integer).simpleScalar().notNAOrNaN()),
-      idx(Pool::getNum(num)) {}
-
-SEXP LdConst::c() const { return Pool::get(idx); }
-
-void LdConst::printArgs(std::ostream& out, bool tty) const {
-    if (c() == R_UnboundValue) {
-        out << "unboundValue";
-        return;
-    }
-    out << Print::dumpSexp(Pool::get(idx), 40);
-}
-
 void Branch::printArgs(std::ostream& out, bool tty) const {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (if true) | BB"
@@ -535,7 +514,7 @@ PirType Extract1_1D::inferType(const GetType& getType) const {
     auto res = ifNonObjectArgs(
         getType, type & getType(vec()).subsetType(getType(idx())), type);
     if (res.isA(PirType::num())) {
-        if (auto c = LdConst::Cast(idx())) {
+        if (auto c = Const::Cast(idx())) {
             if (IS_SIMPLE_SCALAR(c->c(), INTSXP)) {
                 if (INTEGER(c->c())[0] >= 1)
                     res = res.simpleScalar();
@@ -975,7 +954,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
             if (auto mk = MkFunCls::Cast(clsArg)) {
                 localFun = mk->originalBody->baseline();
                 formals = mk->formals;
-            } else if (auto ld = LdConst::Cast(clsArg)) {
+            } else if (auto ld = Const::Cast(clsArg)) {
                 if (TYPEOF(ld->c()) == CLOSXP) {
                     if (auto dt = DispatchTable::check(BODY(ld->c()))) {
                         localFun = dt->baseline();
@@ -1061,7 +1040,7 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
     // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
                    PirType::val();
-    if (auto con = LdConst::Cast(fun))
+    if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
 
@@ -1083,7 +1062,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
                    PirType::val();
-    if (auto con = LdConst::Cast(fun))
+    if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
 
@@ -1109,7 +1088,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     // that's why those calls go through the normal call BC.
     auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
                    PirType::val();
-    if (auto con = LdConst::Cast(fun))
+    if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
 
@@ -1265,9 +1244,9 @@ Value* Assume::valueUnderTest() const {
     case DeoptReason::Calltarget: {
         if (auto t = Identical::Cast(condition())) {
             auto value = t->arg<0>().val();
-            if (LdConst::Cast(value))
+            if (Const::Cast(value))
                 value = t->arg<1>().val();
-            assert(!LdConst::Cast(value));
+            assert(!Const::Cast(value));
             return value;
         }
         break;
@@ -1300,7 +1279,7 @@ PirType Colon::inferType(const GetType& getType) const {
         if (a->type.isA(RType::integer))
             return true;
         if (a->type.isA(RType::real)) {
-            if (auto ld = LdConst::Cast(a)) {
+            if (auto ld = Const::Cast(a)) {
                 if (IS_SIMPLE_SCALAR(ld->c(), REALSXP)) {
                     auto v = *REAL(ld->c());
                     if ((double)(int)v == v) {

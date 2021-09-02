@@ -1,8 +1,9 @@
 #include "module.h"
 
-#include "deopt_reason.h"
 #include "pir_impl.h"
 #include "runtime/TypeFeedback.h"
+#include "utils/Pool.h"
+#include "values.h"
 
 namespace rir {
 namespace pir {
@@ -72,6 +73,8 @@ Module::~Module() {
         delete cs.second;
     for (auto dr : deoptReasons)
         delete dr;
+    for (auto c : constants)
+        delete c.second;
 }
 
 DeoptReasonWrapper* Module::deoptReasonValue(const DeoptReason& reason) {
@@ -79,6 +82,45 @@ DeoptReasonWrapper* Module::deoptReasonValue(const DeoptReason& reason) {
         if (dr->reason == reason)
             return dr;
     return *deoptReasons.emplace(new DeoptReasonWrapper(reason)).first;
+}
+
+Value* Module::c(SEXP s) {
+    if (IS_SIMPLE_SCALAR(s, LGLSXP)) {
+        if (*LOGICAL(s) == NA_LOGICAL)
+            return NaLogical::instance();
+        return *LOGICAL(s) ? (Value*)True::instance() : False::instance();
+    }
+    if (s == R_MissingArg)
+        return MissingArg::instance();
+    if (s == R_UnboundValue)
+        return UnboundValue::instance();
+    if (s == R_NilValue)
+        return Nil::instance();
+    auto idx = Pool::insert(s);
+    return c(idx, PirType(s));
+}
+
+Const* Module::c(int i) {
+    auto idx = Pool::getInt(i);
+    auto t = PirType(RType::integer).simpleScalar();
+    if (i != NA_INTEGER)
+        t = t.notNAOrNaN();
+    return c(idx, t);
+}
+
+Const* Module::c(double d) {
+    auto idx = Pool::getNum(d);
+    auto t = PirType(RType::real).simpleScalar();
+    if (d == d)
+        t = t.notNAOrNaN();
+    return c(idx, t);
+}
+
+Const* Module::c(BC::PoolIdx idx, PirType t) {
+    auto f = constants.find(idx);
+    if (f != constants.end())
+        return f->second;
+    return constants.emplace(idx, new Const(idx, t)).first->second;
 }
 }
 }

@@ -814,20 +814,6 @@ extern std::ostream& operator<<(std::ostream& out,
                                  static_cast<Effects::StoreType>(Effects(io)), \
                                  HasEnvSlot::Yes>
 
-class FLI(LdConst, 0, Effects::None()) {
-  public:
-    BC::PoolIdx idx;
-    SEXP c() const;
-    LdConst(SEXP c, PirType t);
-    explicit LdConst(SEXP c);
-    explicit LdConst(int i);
-    explicit LdConst(double i);
-    void printArgs(std::ostream& out, bool tty) const override;
-    int minReferenceCount() const override { return MAX_REFCOUNT; }
-    SEXP asRValue() const override { return c(); }
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 struct RirStack {
   private:
     typedef std::deque<Value*> Stack;

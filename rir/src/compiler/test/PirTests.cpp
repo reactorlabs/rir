@@ -108,7 +108,7 @@ bool test42(const std::string& input) {
     auto r = Query::returned(f);
     CHECK(r.size() == 1);
 
-    auto ld = LdConst::Cast((*r.begin()));
+    auto ld = Const::Cast((*r.begin()));
     CHECK(ld);
     CHECK(TYPEOF(ld->c()) == INTSXP);
     CHECK(INTEGER(ld->c())[0] == 42);

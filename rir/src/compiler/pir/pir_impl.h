@@ -8,7 +8,6 @@
 #include "bb.h"
 #include "closure.h"
 #include "closure_version.h"
-#include "deopt_reason.h"
 #include "env.h"
 #include "instruction.h"
 #include "module.h"
@@ -16,5 +15,6 @@
 #include "promise.h"
 #include "singleton_values.h"
 #include "type.h"
+#include "values.h"
 
 #endif

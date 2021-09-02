@@ -23,7 +23,6 @@ LowerFunctionLLVM::Variable::RVariable(Instruction* i, size_t pos,
                                        llvm::IRBuilder<>& builder,
                                        llvm::Value* basepointer) {
     assert(i->type.isRType());
-    assert(!LdConst::Cast(i));
     assert(Rep::Of(i) == Rep::SEXP);
     auto ptr = builder.CreateGEP(basepointer, {c(pos), c(2)});
     ptr->setName(i->getRef());
