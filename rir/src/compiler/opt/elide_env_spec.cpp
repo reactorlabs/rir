@@ -146,15 +146,20 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
     static constexpr auto allowed = {
         Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
         Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
-        Tag::StaticCall, Tag::LdDots};
-    static constexpr auto allowedInProm = {Tag::LdVar, Tag::StVar,
-                                           Tag::StVarSuper, Tag::LdDots};
+        Tag::StaticCall, Tag::LdDots,      Tag::Add,        Tag::Sub,
+        Tag::Mul,        Tag::IDiv,        Tag::Div,        Tag::Eq,
+        Tag::Neq,        Tag::Gt,          Tag::Lt,         Tag::Lte,
+        Tag::Gte,        Tag::LAnd,        Tag::LOr,        Tag::Colon,
+        Tag::Mod,        Tag::Pow,         Tag::Minus,      Tag::Plus,
+        Tag::Missing};
+    static constexpr auto allowedInProm = {
+        Tag::LdVar, Tag::StVar, Tag::StVarSuper, Tag::LdDots, Tag::FrameState};
     // Those do not materialize the stub in any case. PushContext doesn't
     // materialize itself but it makes the environment accessible, so it's
     // not on this list.
-    static constexpr auto dontMaterialize = {Tag::LdVar,      Tag::StVar,
-                                             Tag::StVarSuper, Tag::FrameState,
-                                             Tag::IsEnvStub,  Tag::LdDots};
+    static constexpr auto dontMaterialize = {
+        Tag::LdVar,     Tag::StVar,  Tag::StVarSuper, Tag::FrameState,
+        Tag::IsEnvStub, Tag::LdDots, Tag::Missing};
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {

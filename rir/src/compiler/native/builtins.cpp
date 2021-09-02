@@ -400,6 +400,14 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
     SEXP arglist = CONS_NR(argument, R_NilValue);
     SEXP call = src_pool_at(globalContext(), srcIdx);
     PROTECT(arglist);
+    if (isObject(argument)) {
+        if (auto e = LazyEnvironment::check(env)) {
+            if (!e->materialized())
+                env = materialize(env);
+            else
+                env = e->materialized();
+        }
+    }
     switch (op) {
     case UnopKind::MINUS:
         OPERATION_FALLBACK("-");
@@ -466,8 +474,15 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     FAKE_ARGS2(arglist, lhs, rhs);
     MATERIALIZE_IF_OBJ2(arglist, lhs, rhs);
     SEXP call = src_pool_at(globalContext(), srcIdx);
-
     PROTECT(arglist);
+    if (isObject(lhs) || isObject(rhs)) {
+        if (auto e = LazyEnvironment::check(env)) {
+            if (!e->materialized())
+                env = materialize(env);
+            else
+                env = e->materialized();
+        }
+    }
     switch (kind) {
     case BinopKind::ADD:
         OPERATION_FALLBACK("+");
@@ -655,6 +670,17 @@ SEXP colonImpl(int from, int to) {
 
 int isMissingImpl(SEXP symbol, SEXP environment) {
     // TODO: Send the proper src
+    if (auto e = LazyEnvironment::check(environment)) {
+        if (e->materialized()) {
+            environment = e->materialized();
+        } else {
+            auto idx = e->getArgIdx(symbol);
+            if (idx == e->nargs)
+                Rf_errorcall(R_NilValue,
+                             "'missing' can only be used for arguments");
+            return e->isMissing(idx);
+        }
+    }
     return rir::isMissing(symbol, environment, nullptr, nullptr);
 }
 

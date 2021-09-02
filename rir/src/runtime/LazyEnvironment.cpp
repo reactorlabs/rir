@@ -24,6 +24,11 @@ bool LazyEnvironment::isMissing(SEXP n) {
     auto i = getArgIdx(n);
     if (i == nargs)
         return false;
+    return isMissing(i);
+}
+
+bool LazyEnvironment::isMissing(size_t i) {
+    assert(i < nargs);
     return missing[i] || getArg(i) == R_MissingArg;
 }
 
