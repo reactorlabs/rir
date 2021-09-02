@@ -13,6 +13,7 @@
 #include "compiler/util/visitor.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
+#include "interpreter/profiler.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -79,8 +80,9 @@ class NativeAllocator : public SSAAllocator {
         // Ensure we preserve slots for variables with typefeedback to make them
         // accessible to the runtime profiler.
         // TODO: this needs to be replaced by proper mapping of slots.
-        if (a != b && (a->typeFeedback().feedbackOrigin.pc() ||
-                       b->typeFeedback().feedbackOrigin.pc()))
+        if (RuntimeProfiler::enabled() && a != b &&
+            (a->typeFeedback().feedbackOrigin.pc() ||
+             b->typeFeedback().feedbackOrigin.pc()))
             return true;
         return SSAAllocator::interfere(a, b);
     }
@@ -2073,11 +2075,14 @@ void LowerFunctionLLVM::compile() {
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
     basepointer = nodestackPtr();
 
-    numLocals++;
-    // Store the code object as the first element of our frame, for the value
-    // profiler to find it.
-    incStack(1, false);
-    stack({container(paramCode())});
+    size_t additionalStackSlots = 0;
+    if (RuntimeProfiler::enabled()) {
+        // Store the code object as the first element of our frame, for the
+        // value profiler to find it.
+        incStack(1, false);
+        stack({container(paramCode())});
+        additionalStackSlots++;
+    }
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -5839,10 +5844,10 @@ void LowerFunctionLLVM::compile() {
     // to the entry block while compiling
     builder.SetInsertPoint(entryBlock);
     int sz = numLocals + maxTemps;
-    if (sz > 1) {
+    if (sz > 0) {
         if (LLVMDebugInfo())
             DI->clearLocation(builder);
-        incStack(sz - 1, true);
+        incStack(sz, true);
     }
     builder.CreateBr(getBlock(code->entry));
 
@@ -5852,11 +5857,12 @@ void LowerFunctionLLVM::compile() {
         builder.SetInsertPoint(bb, pos);
         if (LLVMDebugInfo())
             DI->clearLocation(builder);
-        decStack(sz);
+        decStack(sz + additionalStackSlots);
     }
 
-    std::unordered_set<rir::Code*> codes;
-    std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;
+    if (RuntimeProfiler::enabled()) {
+        std::unordered_set<rir::Code*> codes;
+        std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;
 #ifdef DEBUG_REGISTER_MAP
     std::unordered_set<size_t> usedSlots;
 #endif
@@ -5888,6 +5894,7 @@ void LowerFunctionLLVM::compile() {
             assert(origin == m.second.second);
         }
 #endif
+    }
     }
 }
 
