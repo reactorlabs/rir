@@ -90,6 +90,12 @@ Value* Module::c(SEXP s) {
             return NaLogical::instance();
         return *LOGICAL(s) ? (Value*)True::instance() : False::instance();
     }
+    if (s == R_MissingArg)
+        return MissingArg::instance();
+    if (s == R_UnboundValue)
+        return UnboundValue::instance();
+    if (s == R_NilValue)
+        return Nil::instance();
     auto idx = Pool::insert(s);
     return c(idx, PirType(s));
 }

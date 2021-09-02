@@ -331,26 +331,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         return false;
                     }
                 };
-                if (auto ld = Const::Cast(i)) {
-                    auto c = ld->c();
-                    Value* r = nullptr;
-                    if (c == R_NilValue)
-                        r = Nil::instance();
-                    else if (c == R_TrueValue)
-                        r = True::instance();
-                    else if (c == R_FalseValue)
-                        r = False::instance();
-                    else if (c == R_MissingArg)
-                        r = MissingArg::instance();
-                    else if (c == R_UnboundValue)
-                        r = UnboundValue::instance();
-                    else if (c == R_LogicalNAValue)
-                        r = NaLogical::instance();
-                    if (r) {
-                        i->replaceUsesWith(r);
-                        next = bb->remove(ip);
-                    }
-                }
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
                     if (isStaticallyNA(a)) {

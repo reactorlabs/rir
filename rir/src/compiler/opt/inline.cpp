@@ -144,13 +144,17 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 return false;
                             }
                         }
-                        if (auto c = Const::Cast(i)) {
-                            if (TYPEOF(c->c()) == SPECIALSXP ||
-                                TYPEOF(c->c()) == BUILTINSXP) {
-                                if (!SafeBuiltinsList::forInline(
-                                        c->c()->u.primsxp.offset)) {
-                                    allowInline = SafeToInline::No;
-                                    return false;
+                        if (auto call = CallInstruction::CastCall(i)) {
+                            if (auto trg = call->tryGetClsArg()) {
+                                if (auto c = Const::Cast(trg)) {
+                                    if (TYPEOF(c->c()) == SPECIALSXP ||
+                                        TYPEOF(c->c()) == BUILTINSXP) {
+                                        if (!SafeBuiltinsList::forInline(
+                                                c->c()->u.primsxp.offset)) {
+                                            allowInline = SafeToInline::No;
+                                            return false;
+                                        }
+                                    }
                                 }
                             }
                         }

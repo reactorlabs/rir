@@ -8,11 +8,23 @@
 namespace rir {
 namespace pir {
 
+class Instruction;
+
 template <typename Base, Tag TAG>
 class ValueImpl : public Value {
   public:
     explicit ValueImpl(PirType type) : Value(type, TAG) {}
     virtual ~ValueImpl(){};
+
+    static const Base* Cast(const Instruction* i) {
+        assert(false && "Non-sensical down-cast from instruction to value");
+        return nullptr;
+    }
+
+    static Base* Cast(Instruction* i) {
+        assert(false && "Non-sensical down-cast from instruction to value");
+        return nullptr;
+    }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == TAG)
