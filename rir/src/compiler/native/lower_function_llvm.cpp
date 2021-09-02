@@ -3482,7 +3482,8 @@ void LowerFunctionLLVM::compile() {
                         m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
                                                 fs->inPromise};
                     }
-                    Pool::insert(store);
+
+                    target->addExtraPoolEntry(store);
                 }
 
                 withCallFrame(args, [&]() {

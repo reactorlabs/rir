@@ -26,7 +26,7 @@ typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
 struct Rep;
 
 class LowerFunctionLLVM {
-
+    rir::Code* target;
     std::string name;
     Code* code;
     BB::Instrs::iterator currentInstr;
@@ -78,13 +78,13 @@ class LowerFunctionLLVM {
     MkEnv* myPromenv = nullptr;
 
     LowerFunctionLLVM(
-        const std::string& name, Code* code, const PromMap& promMap,
-        const NeedsRefcountAdjustment& refcount,
+        rir::Code* target, const std::string& name, Code* code,
+        const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
         const PirJitLLVM::GetFunction& getFunction, PirJitLLVM::DebugInfo* DI,
         llvm::DIBuilder* DIB)
-        : code(code), promMap(promMap), refcount(refcount),
+        : target(target), code(code), promMap(promMap), refcount(refcount),
           needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),

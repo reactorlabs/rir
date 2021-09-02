@@ -374,7 +374,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         auto res = done[c] = rir::Code::New(c->rirSrc()->src);
         // Can we do better?
         preserve(res->container());
-        jit.compile(res, c, promMap.at(c), refcount, needsLdVarForUpdate, log);
         auto& pm = promMap.at(c);
         // Order of prms in the extra pool must equal id in promMap
         std::vector<Code*> proms(pm.size());
@@ -386,6 +385,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 res->flags.set(rir::Code::NoReflection);
             res->addExtraPoolEntry(code->container());
         }
+        jit.compile(res, c, promMap.at(c), refcount, needsLdVarForUpdate, log);
         return res;
     };
     auto body = compile(cls);
