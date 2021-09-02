@@ -81,6 +81,7 @@ enum class NativeType : uint8_t {
 
     checkpoint,
     frameState,
+    deoptReason,
     context,
 
     FIRST = checkpoint,
@@ -166,7 +167,9 @@ struct PirType {
     constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
 
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const NativeType& t) : t_(NativeTypeSet(t)) {}
+    constexpr PirType(const NativeType& t) : t_(NativeTypeSet(t)) {
+        assert(!isRType());
+    }
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const NativeTypeSet& t) : t_(t) {}
 
@@ -650,6 +653,17 @@ struct PirType {
         return hash_combine(flags_.to_i(),
                             isRType() ? t_.r.to_i() : t_.n.to_i());
     }
+
+    // Composite values are pseudo instruction that produce a "logical" PIR
+    // value. At runtime it is represented by all the PIR argument values
+    // individually.
+    bool isCompositeValue() { return isA(NativeType::frameState); }
+
+    // Some PIR instructions produce PIR values that have no runtime
+    // representation at all. E.g. contexts.
+    bool isVirtualValue() {
+        return isA(NativeType::context) || isA(NativeType::checkpoint);
+    }
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
@@ -662,6 +676,9 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
         break;
     case NativeType::frameState:
         out << "fs";
+        break;
+    case NativeType::deoptReason:
+        out << "dr";
         break;
     case NativeType::_UNUSED_:
         assert(false);

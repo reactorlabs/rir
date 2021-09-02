@@ -92,7 +92,6 @@
     V(Checkpoint)                                                              \
     V(Assume)                                                                  \
     V(Deopt)                                                                   \
-    V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(Missing)                                                                 \
@@ -101,7 +100,6 @@
     V(Names)                                                                   \
     V(SetNames)                                                                \
     V(PirCopy)                                                                 \
-    V(RecordDeoptReason)                                                       \
     V(Nop)
 
 #endif

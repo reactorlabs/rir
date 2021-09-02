@@ -8,6 +8,7 @@
 #include "ir/Deoptimization.h"
 #include "pir.h"
 #include "runtime/ArglistOrder.h"
+#include "runtime/TypeFeedback.h"
 #include "singleton_values.h"
 #include "tag.h"
 #include "value.h"
@@ -859,14 +860,6 @@ struct RirStack {
     Stack::const_iterator end() const { return stack.cend(); }
     Stack::iterator begin() { return stack.begin(); }
     Stack::iterator end() { return stack.end(); }
-};
-
-class FLI(RecordDeoptReason, 1, Effect(Effect::UpdatesMetadata)) {
-  public:
-    DeoptReason reason;
-    RecordDeoptReason(const DeoptReason& r, Value* value)
-        : FixedLenInstruction(PirType::voyd(), {{value->type}}, {{value}}),
-          reason(r) {}
 };
 
 /*
@@ -2562,6 +2555,7 @@ class VLI(Phi, Effects::None()) {
 
   public:
     Phi() : VarLenInstruction(PirType::any()) {}
+    explicit Phi(const PirType& t) : VarLenInstruction(t) {}
     explicit Phi(const std::initializer_list<std::pair<BB*, Value*>>& inputs)
         : VarLenInstruction(PirType::any()) {
         for (auto a : inputs)
@@ -2636,14 +2630,28 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
  * code at the point the framestate stores
  */
 
-class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
+class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
-    explicit Deopt(FrameState* frameState)
-        : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
-                              {{frameState}}) {}
+    explicit Deopt(FrameState* frameState);
 
     Value* frameStateOrTs() const override final { return arg<0>().val(); }
+    FrameState* frameState() const {
+        return FrameState::Cast(frameStateOrTs());
+    }
+
+    bool hasDeoptReason() const;
+
+    Value* deoptReason() const { return arg<1>().val(); }
+    Value* deoptTrigger() const { return arg<2>().val(); }
+
+    void setDeoptReason(Value* dr, Value* dt) {
+        assert(!hasDeoptReason());
+        arg<1>().val() = dr;
+        arg<2>().val() = dt;
+    }
+
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 /*
@@ -2652,7 +2660,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effects::AnyI(),
 
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
-    const bool assumeTrue = true;
+    bool assumeTrue = true;
     const DeoptReason reason;
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
@@ -2661,7 +2669,8 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
                               {{PirType::test(), NativeType::checkpoint}},
                               {{test, checkpoint}}),
           assumeTrue(expectation), reason(r) {
-        assert(reason.reason != DeoptReason::DeadCall);
+        assert(reason.reason != DeoptReason::DeadCall &&
+               reason.reason != DeoptReason::Unknown);
     }
 
     Checkpoint* checkpoint() const { return Checkpoint::Cast(arg(1).val()); }
@@ -2672,23 +2681,13 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     }
 
     bool triviallyHolds() const {
-
         auto pirBool =
             assumeTrue ? (Value*)True::instance() : (Value*)False::instance();
         return arg(0).val() == pirBool;
     }
 
     Value* valueUnderTest() const;
-};
 
-class ScheduledDeopt
-    : public VarLenInstruction<Tag::ScheduledDeopt, ScheduledDeopt,
-                               Effects::NoneI(), HasEnvSlot::No,
-                               Controlflow::Exit> {
-  public:
-    std::vector<FrameInfo> frames;
-    ScheduledDeopt() : VarLenInstruction(PirType::voyd()) {}
-    void consumeFrameStates(Deopt* deopt);
     void printArgs(std::ostream& out, bool tty) const override;
 };
 

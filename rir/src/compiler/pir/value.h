@@ -43,10 +43,6 @@ class Value {
         return nullptr;
     }
 
-    bool producesRirResult() const {
-        return type != PirType::voyd() && type.isRType();
-    }
-
     static constexpr int MAX_REFCOUNT = 2;
 
     virtual int minReferenceCount() const {
@@ -55,7 +51,6 @@ class Value {
 
     void callArgTypeToContext(Context&, unsigned arg) const;
 };
-
 static_assert(sizeof(Value) <= 16, "");
 
 } // namespace pir

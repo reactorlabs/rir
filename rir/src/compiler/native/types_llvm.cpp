@@ -112,6 +112,7 @@ void initializeTypes(LLVMContext& context) {
     t::DeoptReason = StructType::create(context, "DeoptReason");
     fields = {t::i32, t::i32, t::voidPtr};
     t::DeoptReason->setBody(fields, true);
+    t::DeoptReasonPtr = llvm::PointerType::get(t::DeoptReason, 0);
 
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
@@ -176,6 +177,7 @@ StructType* RCNTXT;
 PointerType* RCNTXT_ptr;
 
 StructType* DeoptReason;
+PointerType* DeoptReasonPtr;
 
 Type* t_void;
 Type* voidPtr;

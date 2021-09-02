@@ -36,6 +36,7 @@ extern llvm::StructType* RirRuntimeObject;
 extern llvm::StructType* LazyEnvironment;
 
 extern llvm::StructType* DeoptReason;
+extern llvm::PointerType* DeoptReasonPtr;
 
 extern llvm::StructType* RCNTXT;
 extern llvm::PointerType* RCNTXT_ptr;

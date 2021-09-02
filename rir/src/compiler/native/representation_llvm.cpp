@@ -4,28 +4,31 @@
 namespace rir {
 namespace pir {
 
-Representation Representation::Of(PirType t) {
+Rep Rep::Of(PirType t) {
     // Combined types like integer|real cannot be unbox, since we do not know
     // how to re-box again.
     if (!t.maybeMissing() && !t.maybePromiseWrapped()) {
+        if (t.isA(NativeType::deoptReason)) {
+            return Rep::DeoptReason;
+        }
         if (t.isA(PirType(RType::logical).simpleScalar().notObject())) {
             assert(t.unboxable());
-            return Representation::Integer;
+            return Rep::i32;
         }
         if (t.isA(PirType(RType::integer).simpleScalar().notObject())) {
             assert(t.unboxable());
-            return Representation::Integer;
+            return Rep::i32;
         }
         if (t.isA(PirType(RType::real).simpleScalar().notObject())) {
             assert(t.unboxable());
-            return Representation::Real;
+            return Rep::f64;
         }
     }
     assert(!t.unboxable());
-    return Representation::Sexp;
+    return Rep::SEXP;
 }
 
-Representation Representation::Of(Value* v) { return Of(v->type); }
+Rep Rep::Of(Value* v) { return Of(v->type); }
 
 } // namespace pir
 } // namespace rir

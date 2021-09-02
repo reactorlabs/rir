@@ -61,9 +61,7 @@ class SSAAllocator {
         computed = true;
     }
 
-    virtual bool needsASlot(Value* val) const {
-        return val->producesRirResult();
-    }
+    virtual bool needsASlot(Value* val) const { return val->type.isRType(); }
 
     virtual bool interfere(Instruction* i, Instruction* j) const {
         return livenessIntervals.interfere(i, j);

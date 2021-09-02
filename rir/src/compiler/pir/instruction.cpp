@@ -862,52 +862,27 @@ void FrameState::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
-    std::vector<FrameState*> frameStates;
-    {
-        auto sp = deopt->frameState();
-        do {
-            frameStates.push_back(sp);
-            sp = sp->next();
-        } while (sp);
-    }
-    assert(!frameStates.back()->inPromise);
-    for (auto spi = frameStates.rbegin(); spi != frameStates.rend(); spi++) {
-        auto sp = *spi;
-        frames.emplace_back(sp->pc, sp->code, sp->stackSize, sp->inPromise);
-        for (size_t i = 0; i < sp->stackSize; i++)
-            pushArg(sp->arg(i).val());
-        pushArg(sp->env());
-    }
+void Assume::printArgs(std::ostream& out, bool tty) const {
+    InstructionImplementation::printArgs(out, tty);
+    out << " (" << reason << ")";
 }
 
-void ScheduledDeopt::printArgs(std::ostream& out, bool tty) const {
-    size_t n = 0;
-    for (auto& f : frames)
-        n += f.stackSize + 1;
-    assert(n == nargs());
+Deopt::Deopt(FrameState* frameState)
+    : FixedLenInstruction(
+          PirType::voyd(),
+          {{NativeType::frameState, NativeType::deoptReason, PirType::any()}},
+          {{frameState, DeoptReasonWrapper::unknown(),
+            UnknownDeoptTrigger::instance()}}) {}
 
-    size_t argpos = 0;
-    for (auto& f : frames) {
-        out << f.code << "+" << f.pc - f.code->code();
-        out << ": [";
-        long s = f.stackSize;
-        while (s) {
-            s--;
-            arg(argpos++).val()->printRef(out);
-            if (s)
-                out << ", ";
-        }
-        out << "], env=";
-        if (tty)
-            ConsoleColor::magenta(out);
-        arg(argpos++).val()->printRef(out);
-        if (tty)
-            ConsoleColor::clear(out);
-        if (argpos < nargs()) {
-            out << "; ";
-        }
-    }
+void Deopt::printArgs(std::ostream& out, bool tty) const {
+    if (hasDeoptReason())
+        InstructionImplementation::printArgs(out, tty);
+    else
+        arg(0).val()->printRef(out);
+}
+
+bool Deopt::hasDeoptReason() const {
+    return deoptReason() != DeoptReasonWrapper::unknown();
 }
 
 MkFunCls::MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
@@ -1307,6 +1282,7 @@ Value* Assume::valueUnderTest() const {
     }
     // DeadCall is an unconditional deopt and never associated with an
     // assume.
+    case DeoptReason::Unknown:
     case DeoptReason::DeadCall:
         assert(false);
     }

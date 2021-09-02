@@ -85,6 +85,11 @@ class BB {
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
 
+    Instrs::const_iterator begin() const { return instrs.cbegin(); }
+    Instrs::const_iterator end() const { return instrs.cend(); }
+    Instrs::const_iterator cbegin() const { return instrs.cbegin(); }
+    Instrs::const_iterator cend() const { return instrs.cend(); }
+
     Instrs::reverse_iterator rbegin() { return instrs.rbegin(); }
     Instrs::reverse_iterator rend() { return instrs.rend(); }
 

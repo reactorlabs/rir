@@ -14,6 +14,8 @@
 namespace rir {
 namespace pir {
 
+class DeoptReasonWrapper;
+
 class Module {
     std::unordered_map<SEXP, Env*> environments;
 
@@ -33,10 +35,13 @@ class Module {
     void eachPirClosure(PirClosureIterator it);
     void eachPirClosureVersion(PirClosureVersionIterator it);
 
+    DeoptReasonWrapper* deoptReasonValue(const DeoptReason&);
+
     ~Module();
   private:
     typedef std::pair<Function*, Env*> Idx;
     std::map<Idx, Closure*> closures;
+    std::unordered_set<DeoptReasonWrapper*> deoptReasons;
 };
 
 }

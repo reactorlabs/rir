@@ -103,9 +103,7 @@ void BB::printBBGraph(std::ostream& out, bool omitDeoptBranches) {
     out << "\n";
 }
 
-bool BB::isDeopt() const {
-    return !isEmpty() && (Deopt::Cast(last()) || ScheduledDeopt::Cast(last()));
-}
+bool BB::isDeopt() const { return !isEmpty() && Deopt::Cast(last()); }
 
 bool BB::isEndUnreachable() const {
     return !isEmpty() && (Unreachable::Cast(last()));

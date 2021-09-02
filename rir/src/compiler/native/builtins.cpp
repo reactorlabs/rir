@@ -730,7 +730,10 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args) {
+void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+               DeoptReason* deoptReason, SEXP deoptTrigger) {
+    recordDeoptReason(deoptTrigger, *deoptReason);
+
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -2087,18 +2090,14 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
-    get_(Id::deopt) = {"deopt",
-                       (void*)&deoptImpl,
-                       llvm::FunctionType::get(
-                           t::t_void,
-                           {t::voidPtr, t::SEXP, t::voidPtr, t::stackCellPtr},
-                           false),
-                       {llvm::Attribute::NoReturn}};
-    get_(Id::recordDeopt) = {
-        "recordDeopt", (void*)&recordDeoptReason,
-        llvm::FunctionType::get(
-            t::t_void, {t::SEXP, llvm::PointerType::get(t::DeoptReason, 0)},
-            false)};
+    get_(Id::deopt) = {
+        "deopt",
+        (void*)&deoptImpl,
+        llvm::FunctionType::get(t::t_void,
+                                {t::voidPtr, t::SEXP, t::voidPtr,
+                                 t::stackCellPtr, t::DeoptReasonPtr, t::SEXP},
+                                false),
+        {llvm::Attribute::NoReturn}};
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,
                             t::void_voidPtr,

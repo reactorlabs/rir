@@ -76,11 +76,20 @@ restart:
                             accumulatedPhiInput[in].insert(v);
                     });
                 } else {
-                    i->eachArg([&](Value* v) {
-                        if (markIfNotSeen(v)) {
-                            accumulated.insert(v);
-                        }
-                    });
+                    std::function<void(Value*)> apply = [&](Value* v) {
+                        auto i = Instruction::Cast(v);
+                        if (!i)
+                            return;
+                        i->eachArg([&](Value* v) {
+                            // Pseudo-instruction must keep all its inputs live
+                            // individually until used.
+                            if (v->type.isCompositeValue())
+                                apply(v);
+                            else if (markIfNotSeen(v))
+                                accumulated.insert(v);
+                        });
+                    };
+                    apply(i);
                 }
 
                 // Mark the end of the current instructions liveness

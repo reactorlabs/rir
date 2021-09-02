@@ -1,6 +1,7 @@
 #include "bb_transform.h"
 
 #include "R/Funtab.h"
+#include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/dead.h"
 #include "compiler/pir/pir_impl.h"
@@ -171,7 +172,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
     return found;
 }
 
-BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
+BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
                              BB::Instrs::iterator position, Assume* assume,
                              bool condition, BB* deoptBlock_,
                              const std::string& debugMessage,
@@ -199,9 +200,21 @@ BB* BBTransform::lowerExpect(Code* code, BB* srcBlock,
                                     Tombstone::framestate(), 0));
     }
 
-    if (assume->valueUnderTest())
-        deoptBlock->append(
-            new RecordDeoptReason(assume->reason, assume->valueUnderTest()));
+    auto deoptReason = m->deoptReasonValue(assume->reason);
+    auto deoptTrigger = assume->valueUnderTest();
+    if (!deoptTrigger)
+        deoptTrigger = UnknownDeoptTrigger::instance();
+
+    auto d = Deopt::Cast(deoptBlock_->last());
+    if (d->deoptReason() == DeoptReasonWrapper::unknown()) {
+        auto newDr = new Phi(NativeType::deoptReason);
+        auto newDt = new Phi();
+        deoptBlock_->insert(deoptBlock_->begin(), newDr);
+        deoptBlock_->insert(deoptBlock_->begin(), newDt);
+        d->setDeoptReason(newDr, newDt);
+    }
+    Phi::Cast(d->deoptReason())->addInput(deoptBlock, deoptReason);
+    Phi::Cast(d->deoptTrigger())->addInput(deoptBlock, deoptTrigger);
 
     Value* test = assume->condition();
     if (triggerAnyway) {

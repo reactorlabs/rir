@@ -1,5 +1,8 @@
 #include "module.h"
+
+#include "deopt_reason.h"
 #include "pir_impl.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
 namespace pir {
@@ -67,6 +70,15 @@ Module::~Module() {
         delete e.second;
     for (auto& cs : closures)
         delete cs.second;
+    for (auto dr : deoptReasons)
+        delete dr;
+}
+
+DeoptReasonWrapper* Module::deoptReasonValue(const DeoptReason& reason) {
+    for (auto dr : deoptReasons)
+        if (dr->reason == reason)
+            return dr;
+    return *deoptReasons.emplace(new DeoptReasonWrapper(reason)).first;
 }
 }
 }

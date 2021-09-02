@@ -110,7 +110,6 @@ struct NativeBuiltins {
         asLogicalBlt,
         length,
         deopt,
-        recordDeopt,
         assertFail,
         printValue,
         extract11,

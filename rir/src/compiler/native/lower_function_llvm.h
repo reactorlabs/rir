@@ -23,7 +23,8 @@ namespace rir {
 namespace pir {
 
 typedef std::unordered_map<Code*, std::pair<unsigned, MkArg*>> PromMap;
-struct Representation;
+struct Rep;
+
 class LowerFunctionLLVM {
 
     std::string name;
@@ -187,7 +188,7 @@ class LowerFunctionLLVM {
     void setVariable(Instruction* variable, llvm::Value* val,
                      bool volatile_ = false) {
         // silently drop dead variables...
-        if (!liveness.count(variable))
+        if (variable->type.isVoid() || !liveness.count(variable))
             return;
         assert(liveness.live(currentInstr, variable));
         variables_.at(variable).set(builder, val, volatile_);
@@ -228,6 +229,7 @@ class LowerFunctionLLVM {
         return variables_.at(variable).get(builder);
     }
 
+    llvm::Value* constant(SEXP co, const Rep& needed);
     llvm::Value* constant(SEXP co, llvm::Type* needed);
     llvm::Value* nodestackPtr();
     llvm::Value* nodestackPtrAddr = nullptr;
@@ -239,10 +241,10 @@ class LowerFunctionLLVM {
     llvm::Value* withCallFrame(const std::vector<Value*>& args,
                                const std::function<llvm::Value*()>& theCall,
                                bool pop = true);
-    llvm::Value* load(Value* v, Representation r);
+    llvm::Value* load(Value* v, Rep r);
     llvm::Value* load(Value* v);
     llvm::Value* loadSxp(Value* v);
-    llvm::Value* load(Value* val, PirType type, Representation needed);
+    llvm::Value* load(Value* val, PirType type, Rep needed);
     llvm::Value* dataPtr(llvm::Value* v, bool enableAsserts = true);
     llvm::Value* accessVector(llvm::Value* vector, llvm::Value* position,
                               PirType type);
