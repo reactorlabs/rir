@@ -45,13 +45,18 @@ function build_r {
         git checkout $GNUR_BRANCH
     fi
 
+    SND=1
+    if [[ "$DONT_SWITCH_TO_NAMED" == "1" ]]; then
+        SND=0
+    fi
+
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=$SND" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no || cat config.log
         else
-            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=1" ./configure
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=$SND" ./configure
         fi
     fi
 
