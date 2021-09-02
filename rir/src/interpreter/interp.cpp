@@ -681,31 +681,6 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     return newrho;
 }
 
-static SEXP findRootPromise(SEXP p) {
-    if (TYPEOF(p) == PROMSXP) {
-        while (TYPEOF(PREXPR(p)) == PROMSXP) {
-            p = PREXPR(p);
-        }
-    }
-    return p;
-}
-
-static SEXP getSymbolIfTrivialPromise(SEXP val) {
-    auto pr = PREXPR(val);
-    auto ppr = Code::check(pr);
-    SEXP sym = nullptr;
-    if (isSymbol(pr)) {
-        sym = pr;
-    } else if (ppr) {
-        if (ppr->trivialExpr && isSymbol(ppr->trivialExpr)) {
-            sym = ppr->trivialExpr;
-        }
-    }
-    if (!sym)
-        SLOWASSERT(!isSymbol(R_PromiseExpr(val)));
-    return sym;
-}
-
 void inferCurrentContext(CallContext& call, size_t formalNargs,
                          InterpreterInstance* ctx) {
     Context& given = call.givenContext;
@@ -1530,7 +1505,10 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
         if (sym == R_MissingArg)
             return true;
         if (auto le = LazyEnvironment::check(val->u.promsxp.env)) {
-            return le->isMissing(sym);
+            if (le->materialized())
+                SET_PRENV(val, le->materialized());
+            else
+                return le->isMissing(sym);
         }
         return R_isMissing(sym, PRENV(val));
     }

@@ -3528,8 +3528,25 @@ void LowerFunctionLLVM::compile() {
                     mkenv->eachLocalVar([&](SEXP name, Value* v, bool miss) {
                         auto vn = loadSxp(v);
                         envStubSet(env, pos, vn, mkenv->nLocals(), false);
-                        if (miss)
+                        if (miss) {
                             envStubSetMissing(env, pos);
+                        } else {
+                            if (v->type.maybeMissing() &&
+                                vn->getType() == t::SEXP) {
+                                auto isMissing = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
+                                auto done = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "", fun);
+                                builder.CreateCondBr(
+                                    builder.CreateICmpEQ(
+                                        vn, constant(R_MissingArg, Rep::SEXP)),
+                                    isMissing, done);
+                                builder.SetInsertPoint(isMissing);
+                                envStubSetMissing(env, pos);
+                                builder.CreateBr(done);
+                                builder.SetInsertPoint(done);
+                            }
+                        }
                         pos++;
                         incrementNamed(vn);
                     });
@@ -5356,24 +5373,24 @@ void LowerFunctionLLVM::compile() {
 
                     auto val = loadSxp(st->val());
                     if (Rep::Of(st->val()) == Rep::SEXP) {
-                        auto same = BasicBlock::Create(PirJitLLVM::getContext(),
-                                                       "", fun);
-                        auto different = BasicBlock::Create(
-                            PirJitLLVM::getContext(), "", fun);
-                        builder.CreateCondBr(builder.CreateICmpEQ(val, cur),
-                                             same, different);
+                        if (!st->isStArg) {
+                            auto same = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            auto different = BasicBlock::Create(
+                                PirJitLLVM::getContext(), "", fun);
+                            builder.CreateCondBr(builder.CreateICmpEQ(val, cur),
+                                                 same, different);
 
-                        builder.SetInsertPoint(same);
-                        ensureNamed(val);
-                        if (!st->isStArg)
+                            builder.SetInsertPoint(same);
+                            ensureNamed(val);
                             envStubSetNotMissing(e, idx);
-                        builder.CreateBr(done);
+                            builder.CreateBr(done);
 
-                        builder.SetInsertPoint(different);
+                            builder.SetInsertPoint(different);
+                        }
                         incrementNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),
                                    !st->isStArg);
-
                     } else {
                         ensureNamed(val);
                         envStubSet(e, idx, val, environment->nLocals(),

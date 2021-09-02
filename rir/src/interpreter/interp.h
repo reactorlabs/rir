@@ -148,6 +148,31 @@ inline bool needsExpandedDots(SEXP callee) {
 SEXP materializeCallerEnv(CallContext& callCtx,
                                  InterpreterInstance* ctx);
 
+inline SEXP findRootPromise(SEXP p) {
+    if (TYPEOF(p) == PROMSXP) {
+        while (TYPEOF(PREXPR(p)) == PROMSXP) {
+            p = PREXPR(p);
+        }
+    }
+    return p;
+}
+
+inline SEXP getSymbolIfTrivialPromise(SEXP val) {
+    auto pr = PREXPR(val);
+    auto ppr = Code::check(pr);
+    SEXP sym = nullptr;
+    if (isSymbol(pr)) {
+        sym = pr;
+    } else if (ppr) {
+        if (ppr->trivialExpr && isSymbol(ppr->trivialExpr)) {
+            sym = ppr->trivialExpr;
+        }
+    }
+    if (!sym)
+        SLOWASSERT(!isSymbol(R_PromiseExpr(val)));
+    return sym;
+}
+
 inline void createFakeSEXP(SEXP res, SEXPTYPE t) {
     memset(res, 0, sizeof(SEXPREC));
     res->attrib = R_NilValue;

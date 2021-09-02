@@ -675,10 +675,33 @@ int isMissingImpl(SEXP symbol, SEXP environment) {
             environment = e->materialized();
         } else {
             auto idx = e->getArgIdx(symbol);
-            if (idx == e->nargs)
+            if (idx == e->nargs) {
                 Rf_errorcall(R_NilValue,
                              "'missing' can only be used for arguments");
-            return e->isMissing(idx);
+            }
+            if (e->isMissing(idx))
+                return true;
+
+            auto val = e->getArg(idx);
+            assert(val != R_MissingArg);
+            if (TYPEOF(val) != PROMSXP)
+                return false;
+
+            val = findRootPromise(val);
+            auto sym = getSymbolIfTrivialPromise(val);
+            if (!sym) {
+                return false;
+            } else {
+                if (sym == R_MissingArg)
+                    return true;
+                if (auto le = LazyEnvironment::check(val->u.promsxp.env)) {
+                    if (le->materialized())
+                        SET_PRENV(val, le->materialized());
+                    else
+                        return le->isMissing(sym);
+                }
+                return R_isMissing(sym, PRENV(val));
+            }
         }
     }
     return rir::isMissing(symbol, environment, nullptr, nullptr);
