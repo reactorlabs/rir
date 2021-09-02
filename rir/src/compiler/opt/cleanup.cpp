@@ -14,8 +14,8 @@
 namespace rir {
 namespace pir {
 
-bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
-                    LogStream&) const {
+bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+                    size_t) const {
     std::unordered_set<size_t> usedProms;
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
     std::deque<Promise*> todoUsedProms;

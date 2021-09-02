@@ -10,8 +10,8 @@
 namespace rir {
 namespace pir {
 
-bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code,
-                LogStream& log) const {
+bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream& log,
+                size_t) const {
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
     {

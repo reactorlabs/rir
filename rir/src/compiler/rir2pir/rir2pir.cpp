@@ -1672,11 +1672,11 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     if (!inPromise()) {
         // EarlyConstantfold is used to expand specials such as forceAndCall
         // which can be expressed in PIR.
-        ecf.apply(compiler, cls, insert.code, log.out());
+        ecf.apply(compiler, cls, insert.code, log.out(), 0);
         // This early pass of scope resolution helps to find local call targets
         // and thus leads to better assumptions in the delayed compilation
         // below.
-        sr.apply(compiler, cls, insert.code, log.out());
+        sr.apply(compiler, cls, insert.code, log.out(), 0);
     }
 
     if (auto last = insert.getCurrentBB()) {

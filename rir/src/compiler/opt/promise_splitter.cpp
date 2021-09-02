@@ -9,7 +9,7 @@ namespace rir {
 namespace pir {
 
 bool PromiseSplitter::apply(Compiler&, ClosureVersion* cls, Code* code,
-                            LogStream&) const {
+                            LogStream&, size_t) const {
 
     bool anyChange = false;
     SmallSet<CastType*> candidates;

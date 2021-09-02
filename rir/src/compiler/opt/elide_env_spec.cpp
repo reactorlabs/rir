@@ -16,7 +16,7 @@ namespace rir {
 namespace pir {
 
 bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
-                         LogStream& log) const {
+                         LogStream& log, size_t iteration) const {
 
     constexpr bool debug = false;
     AvailableCheckpoints checkpoint(cls, code, log);
@@ -146,12 +146,14 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
     static constexpr auto allowed = {
         Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
         Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
-        Tag::StaticCall, Tag::LdDots,      Tag::Add,        Tag::Sub,
-        Tag::Mul,        Tag::IDiv,        Tag::Div,        Tag::Eq,
-        Tag::Neq,        Tag::Gt,          Tag::Lt,         Tag::Lte,
-        Tag::Gte,        Tag::LAnd,        Tag::LOr,        Tag::Colon,
-        Tag::Mod,        Tag::Pow,         Tag::Minus,      Tag::Plus,
-        Tag::Missing};
+        Tag::StaticCall, Tag::LdDots,      Tag::Missing};
+    // These are only stubbed on the second try, since they seem to be better
+    // covered by type speculation pass.
+    static constexpr auto allowedExtra = {
+        Tag::Add, Tag::Sub,   Tag::Mul, Tag::IDiv, Tag::Div,   Tag::Eq,
+        Tag::Neq, Tag::Gt,    Tag::Lt,  Tag::Lte,  Tag::Gte,   Tag::LAnd,
+        Tag::LOr, Tag::Colon, Tag::Mod, Tag::Pow,  Tag::Minus, Tag::Plus,
+    };
     static constexpr auto allowedInProm = {
         Tag::LdVar, Tag::StVar, Tag::StVarSuper, Tag::LdDots, Tag::FrameState};
     // Those do not materialize the stub in any case. PushContext doesn't
@@ -174,8 +176,11 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 if (!m->stub && !bannedEnvs.count(m)) {
                     auto bt = CallBuiltin::Cast(i);
-                    if (std::find(allowed.begin(), allowed.end(), i->tag) ==
-                            allowed.end() ||
+                    if ((std::find(allowed.begin(), allowed.end(), i->tag) ==
+                             allowed.end() &&
+                         (iteration == 0 ||
+                          std::find(allowedExtra.begin(), allowedExtra.end(),
+                                    i->tag) == allowedExtra.end())) ||
                         !i->hasEnv() || i->env() != m ||
                         (bt && !supportsFastBuiltinCall(bt->builtinSexp,
                                                         bt->nCallArgs()))) {

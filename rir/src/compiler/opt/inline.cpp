@@ -21,7 +21,7 @@ namespace rir {
 namespace pir {
 
 bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                   LogStream& log) const {
+                   LogStream& log, size_t) const {
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 

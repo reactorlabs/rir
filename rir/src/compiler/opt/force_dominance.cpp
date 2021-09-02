@@ -40,7 +40,7 @@ namespace pir {
  */
 
 bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
-                           LogStream& log) const {
+                           LogStream& log, size_t) const {
     bool anyChange = false;
 
     // Do this first so dead code elimination will remove the dependencies

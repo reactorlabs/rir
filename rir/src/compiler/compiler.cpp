@@ -281,7 +281,8 @@ static void findUnreachable(Module* m, StreamLogger& log) {
 void Compiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
-    PassScheduler::instance().run([&](const Pass* translation) {
+    PassScheduler::instance().run([&](const Pass* translation,
+                                      size_t iteration) {
         bool changed = false;
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
@@ -299,7 +300,7 @@ void Compiler::optimizeModule() {
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (translation->apply(*this, v, log.out()))
+                if (translation->apply(*this, v, log.out(), iteration))
                     changed = true;
                 if (MEASURE_COMPILER_PERF)
                     Measuring::countTimer("compiler.cpp: " +
