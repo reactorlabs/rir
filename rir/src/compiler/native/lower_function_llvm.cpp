@@ -5766,8 +5766,7 @@ void LowerFunctionLLVM::compile() {
                 variables_.count(i)) {
                 if (Rep::Of(i) == Rep::SEXP) {
                     if (i->type != RType::expandedDots &&
-                        i->type != NativeType::context && !CastType::Cast(i) &&
-                        !Const::Cast(i)) {
+                        i->type != NativeType::context && !CastType::Cast(i)) {
                         static std::vector<std::string> leaky;
                         const char* msg = nullptr;
                         static const char* defaultMsg = "";
