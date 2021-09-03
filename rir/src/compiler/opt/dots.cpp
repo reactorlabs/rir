@@ -115,6 +115,10 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             auto nc =
                                 new NamedCall(i->env(), c->cls(), args, names,
                                               c->frameStateOrTs(), i->srcIdx);
+                            // TODO: stub envs not supported in named calls,
+                            // needs to be added
+                            if (auto e = MkEnv::Cast(i->env()))
+                                e->stub = false;
                             i->replaceUsesAndSwapWith(nc, ip);
                         } else if (auto c = NamedCall::Cast(i)) {
                             auto nc =
