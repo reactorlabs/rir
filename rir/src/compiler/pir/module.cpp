@@ -72,16 +72,17 @@ Module::~Module() {
     for (auto& cs : closures)
         delete cs.second;
     for (auto dr : deoptReasons)
-        delete dr;
+        delete dr.second;
     for (auto c : constants)
         delete c.second;
 }
 
 DeoptReasonWrapper* Module::deoptReasonValue(const DeoptReason& reason) {
-    for (auto dr : deoptReasons)
-        if (dr->reason == reason)
-            return dr;
-    return *deoptReasons.emplace(new DeoptReasonWrapper(reason)).first;
+    auto f = deoptReasons.find(reason);
+    if (f != deoptReasons.end())
+        return f->second;
+    return deoptReasons.emplace(reason, new DeoptReasonWrapper(reason))
+        .first->second;
 }
 
 Value* Module::c(SEXP s) {

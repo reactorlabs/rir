@@ -18,7 +18,7 @@ extern void printBacktrace();
 // from boost
 #include <functional>
 template <class T>
-inline size_t hash_combine(size_t seed, const T& v) {
+inline std::size_t hash_combine(std::size_t seed, const T& v) {
     std::hash<T> hasher;
     return hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }

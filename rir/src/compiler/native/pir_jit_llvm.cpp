@@ -368,7 +368,7 @@ void PirJitLLVM::compile(
     std::string mangledName = JIT->mangle(makeName(code));
 
     LowerFunctionLLVM funCompiler(
-        mangledName, code, promMap, refcount, needsLdVarForUpdate,
+        target, mangledName, code, promMap, refcount, needsLdVarForUpdate,
         // declare
         [&](Code* c, const std::string& name, llvm::FunctionType* signature) {
             assert(!funs.count(c));

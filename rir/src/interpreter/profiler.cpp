@@ -111,8 +111,12 @@ static void dump() {
               << "triggered " << compilations << " recompilations\n";
 }
 
+static bool ENABLE_PROFILER = false;
+
+bool RuntimeProfiler::enabled() { return ENABLE_PROFILER; }
+
 void RuntimeProfiler::initProfiler() {
-    bool ENABLE_PROFILER = getenv("PIR_ENABLE_PROFILER") ? true : false;
+    ENABLE_PROFILER = getenv("PIR_ENABLE_PROFILER") ? true : false;
     if (!ENABLE_PROFILER) {
         return;
     }

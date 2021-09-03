@@ -41,6 +41,17 @@ function build_r {
 
     tools/rsync-recommended
 
+    # There is a test that times out due to the compiler triggering in the
+    # wrong moment in the matrix package. There doesn't seem to be a good solution
+    # other than just patching it.
+    cd src/library/Recommended/
+    tar xzf Matrix_1.3-4.tar.gz
+    sed -i -e 's/^stopifnot(st[1] < 1.0)/(st[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
+    rm Matrix_1.3-4.tar.gz
+    tar czf Matrix_1.3-4.tar.gz Matrix
+    rm -rf Matrix
+    cd ../../..
+
     if [[ "$GNUR_BRANCH" != "" ]]; then
         git checkout $GNUR_BRANCH
     fi

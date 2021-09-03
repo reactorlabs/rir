@@ -232,6 +232,9 @@ struct DeoptReason {
     }
 
     DeoptReason() = delete;
+
+  private:
+    friend struct std::hash<rir::DeoptReason>;
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
@@ -239,4 +242,14 @@ static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
 #pragma pack(pop)
 
 } // namespace rir
+
+namespace std {
+template <>
+struct hash<rir::DeoptReason> {
+    std::size_t operator()(const rir::DeoptReason& v) const {
+        return hash_combine(hash_combine(0, v.pc()), v.reason);
+    }
+};
+} // namespace std
+
 #endif
