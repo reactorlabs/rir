@@ -4,6 +4,7 @@
 #include "compiler/analysis/context_stack.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/bb_transform.h"
+#include "compiler/util/env_stub_info.h"
 #include "compiler/util/safe_builtins_list.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/builtins.h"
@@ -141,34 +142,12 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
     SmallSet<Value*> bannedEnvs;
     SmallSet<Value*> materializableStubs;
 
-    // If we only see these (and call instructions) then we stub an environment,
-    // since it can only be accessed reflectively.
-    static constexpr auto allowed = {
-        Tag::Force,      Tag::PushContext, Tag::LdVar,      Tag::StVar,
-        Tag::StVarSuper, Tag::Call,        Tag::FrameState, Tag::CallBuiltin,
-        Tag::StaticCall, Tag::LdDots,      Tag::Missing};
-    // These are only stubbed on the second try, since they seem to be better
-    // covered by type speculation pass.
-    static constexpr auto allowedExtra = {
-        Tag::Add, Tag::Sub,   Tag::Mul, Tag::IDiv, Tag::Div,   Tag::Eq,
-        Tag::Neq, Tag::Gt,    Tag::Lt,  Tag::Lte,  Tag::Gte,   Tag::LAnd,
-        Tag::LOr, Tag::Colon, Tag::Mod, Tag::Pow,  Tag::Minus, Tag::Plus,
-    };
-    static constexpr auto allowedInProm = {
-        Tag::LdVar, Tag::StVar, Tag::StVarSuper, Tag::LdDots, Tag::FrameState};
-    // Those do not materialize the stub in any case. PushContext doesn't
-    // materialize itself but it makes the environment accessible, so it's
-    // not on this list.
-    static constexpr auto dontMaterialize = {
-        Tag::LdVar,     Tag::StVar,  Tag::StVarSuper, Tag::FrameState,
-        Tag::IsEnvStub, Tag::LdDots, Tag::Missing};
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         i->eachArg([&](Value* val) {
             if (auto m = MkEnv::Cast(val)) {
+                auto stub = EnvStubInfo::of(i->tag);
                 if (m->stub && !materializableStubs.count(m)) {
-                    if (std::find(dontMaterialize.begin(),
-                                  dontMaterialize.end(),
-                                  i->tag) == dontMaterialize.end())
+                    if (!stub.allowedNotMaterializing)
                         materializableStubs.insert(m);
                 }
                 if (m->neverStub && !bannedEnvs.count(m)) {
@@ -176,11 +155,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 if (!m->stub && !bannedEnvs.count(m)) {
                     auto bt = CallBuiltin::Cast(i);
-                    if ((std::find(allowed.begin(), allowed.end(), i->tag) ==
-                             allowed.end() &&
-                         (iteration == 0 ||
-                          std::find(allowedExtra.begin(), allowedExtra.end(),
-                                    i->tag) == allowedExtra.end())) ||
+                    if (!stub.allowed || iteration < stub.priority ||
                         !i->hasEnv() || i->env() != m ||
                         (bt && !supportsFastBuiltinCall(bt->builtinSexp,
                                                         bt->nCallArgs()))) {
@@ -188,10 +163,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(
                                 mkarg->prom()->entry, [&](Instruction* i) {
-                                    return std::find(allowedInProm.begin(),
-                                                     allowedInProm.end(),
-                                                     i->tag) !=
-                                           allowedInProm.end();
+                                    return stub.allowedInPromise;
                                 });
                         }
                         if (!ok) {

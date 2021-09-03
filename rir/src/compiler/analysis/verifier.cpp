@@ -3,6 +3,7 @@
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/util/env_stub_info.h"
 
 /*
  * When does the verifier run, and is it the fast or slow version?
@@ -387,24 +388,7 @@ class TheVerifier {
             } while (fs);
         }
 
-        static std::unordered_set<Tag> allowStub{
-            Tag::LdVar,       Tag::Force,
-            Tag::PushContext, Tag::StVar,
-            Tag::StVarSuper,  Tag::FrameState,
-            Tag::IsEnvStub,   Tag::MaterializeEnv,
-            Tag::CallBuiltin, Tag::Call,
-            Tag::NamedCall,   Tag::StaticCall,
-            Tag::MkArg,       Tag::Add,
-            Tag::Sub,         Tag::Mul,
-            Tag::IDiv,        Tag::Div,
-            Tag::Eq,          Tag::Neq,
-            Tag::Gt,          Tag::Lt,
-            Tag::Lte,         Tag::Gte,
-            Tag::LAnd,        Tag::LOr,
-            Tag::Colon,       Tag::Mod,
-            Tag::Pow,         Tag::Minus,
-            Tag::Plus,        Tag::Missing};
-        if (i->hasEnv() && !allowStub.count(i->tag)) {
+        if (i->hasEnv() && !EnvStubInfo::of(i->tag).allowed) {
             auto env = MkEnv::Cast(i->env());
             if (env && env->stub) {
                 std::cerr << "Error at instruction '";

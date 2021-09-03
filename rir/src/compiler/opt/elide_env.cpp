@@ -3,6 +3,7 @@
 #include "R/r.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/analysis/query.h"
+#include "compiler/util/env_stub_info.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -14,6 +15,7 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                      size_t) const {
     bool anyChange = false;
     std::unordered_set<Value*> envNeeded;
+    std::unordered_set<Value*> envStubNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
     Visitor::run(code->entry, [&](BB* bb) {
@@ -33,8 +35,14 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                 }
 
                 if (envIsNeeded) {
-                    if (!StVar::Cast(i) && !IsEnvStub::Cast(i))
-                        envNeeded.insert(i->env());
+                    if (!StVar::Cast(i) && !IsEnvStub::Cast(i)) {
+                        if (MkEnv::Cast(i->env()) &&
+                            EnvStubInfo::of(i->tag).allowedNotMaterializing) {
+                            envStubNeeded.insert(i->env());
+                        } else {
+                            envNeeded.insert(i->env());
+                        }
+                    }
                     if (!Env::isPirEnv(i))
                         envDependency[i] = i->env();
                 }
@@ -59,8 +67,16 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
         if (i->hasEffect() || i->type != PirType::voyd() || Return::Cast(i) ||
             Deopt::Cast(i)) {
             i->eachArg([&](Value* v) {
-                if (envDependency.count(v))
-                    envNeeded.insert(envDependency.at(v));
+                if (envDependency.count(v)) {
+                    auto d = envDependency.at(v);
+                    auto di = Instruction::Cast(d);
+                    if (di && di->hasEnv() && MkEnv::Cast(di->env()) &&
+                        EnvStubInfo::of(d->tag).allowedNotMaterializing) {
+                        envStubNeeded.insert(d);
+                    } else {
+                        envNeeded.insert(d);
+                    }
+                }
             });
         }
     });
@@ -71,13 +87,22 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
             Instruction* i = *ip;
             if (Env::isPirEnv(i)) {
                 if (envNeeded.find(i) == envNeeded.end()) {
-                    ip = bb->remove(ip);
-                    anyChange = true;
+                    if (envStubNeeded.find(i) != envStubNeeded.end()) {
+                        if (!MkEnv::Cast(i)->neverStub) {
+                            MkEnv::Cast(i)->stub = true;
+                            anyChange = true;
+                        }
+                        ip++;
+                    } else {
+                        ip = bb->remove(ip);
+                        anyChange = true;
+                    }
                 } else {
                     ip++;
                 }
             } else if (i->hasEnv() && Env::isPirEnv(i->env()) &&
-                       envNeeded.find(i->env()) == envNeeded.end()) {
+                       envNeeded.find(i->env()) == envNeeded.end() &&
+                       envStubNeeded.find(i->env()) == envStubNeeded.end()) {
                 ip = bb->remove(ip);
                 anyChange = true;
             } else {
