@@ -7,8 +7,8 @@
 namespace rir {
 namespace pir {
 
-bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code,
-                     LogStream&) const {
+bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+                     size_t) const {
     UsesTree uses(code);
 
     auto willDefinitelyNotOverflow = [&](Instruction* instr) {

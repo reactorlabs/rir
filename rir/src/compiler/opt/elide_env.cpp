@@ -10,8 +10,8 @@
 namespace rir {
 namespace pir {
 
-bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
-                     LogStream&) const {
+bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+                     size_t) const {
     bool anyChange = false;
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
@@ -33,7 +33,7 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
 
                 if (envIsNeeded) {
-                    if (!StVar::Cast(i))
+                    if (!StVar::Cast(i) && !IsEnvStub::Cast(i))
                         envNeeded.insert(i->env());
                     if (!Env::isPirEnv(i))
                         envDependency[i] = i->env();

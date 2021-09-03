@@ -95,7 +95,7 @@ namespace rir {
 namespace pir {
 
 bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                            LogStream& log) const {
+                            LogStream& log, size_t) const {
 
     DominanceGraph dom(code);
     DominanceFrontier dfront(code, dom);

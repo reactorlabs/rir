@@ -388,11 +388,22 @@ class TheVerifier {
         }
 
         static std::unordered_set<Tag> allowStub{
-            Tag::LdVar,     Tag::Force,          Tag::PushContext,
-            Tag::StVar,     Tag::StVarSuper,     Tag::FrameState,
-            Tag::IsEnvStub, Tag::MaterializeEnv, Tag::CallBuiltin,
-            Tag::Call,      Tag::NamedCall,      Tag::StaticCall,
-            Tag::MkArg};
+            Tag::LdVar,       Tag::Force,
+            Tag::PushContext, Tag::StVar,
+            Tag::StVarSuper,  Tag::FrameState,
+            Tag::IsEnvStub,   Tag::MaterializeEnv,
+            Tag::CallBuiltin, Tag::Call,
+            Tag::NamedCall,   Tag::StaticCall,
+            Tag::MkArg,       Tag::Add,
+            Tag::Sub,         Tag::Mul,
+            Tag::IDiv,        Tag::Div,
+            Tag::Eq,          Tag::Neq,
+            Tag::Gt,          Tag::Lt,
+            Tag::Lte,         Tag::Gte,
+            Tag::LAnd,        Tag::LOr,
+            Tag::Colon,       Tag::Mod,
+            Tag::Pow,         Tag::Minus,
+            Tag::Plus,        Tag::Missing};
         if (i->hasEnv() && !allowStub.count(i->tag)) {
             auto env = MkEnv::Cast(i->env());
             if (env && env->stub) {

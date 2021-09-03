@@ -7,8 +7,8 @@
 namespace rir {
 namespace pir {
 
-bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code,
-                       LogStream&) const {
+bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+                       size_t) const {
     bool anyChange = false;
 
     auto isTarget = [](Instruction* j) {

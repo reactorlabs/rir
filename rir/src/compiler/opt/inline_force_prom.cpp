@@ -25,7 +25,7 @@ namespace rir {
 namespace pir {
 
 bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
-                                LogStream& log) const {
+                                LogStream& log, size_t) const {
 
     bool anyChange = false;
 

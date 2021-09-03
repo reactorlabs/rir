@@ -30,10 +30,11 @@ class PassScheduler {
         return i;
     }
 
-    void run(const std::function<bool(const Pass*)>& apply) const {
+    void run(const std::function<bool(const Pass*, size_t)>& apply) const {
         for (auto& phase : schedule_.phases) {
             auto budget = phase.budget;
             bool changed = false;
+            int iteration = 0;
             do {
                 changed = false;
                 for (auto& pass : phase.passes) {
@@ -44,10 +45,11 @@ class PassScheduler {
                         }
                         budget -= pass->cost();
                     }
-                    if (apply(pass.get())) {
+                    if (apply(pass.get(), iteration)) {
                         changed = true;
                     }
                 }
+                iteration++;
             } while (changed && budget && !phase.once);
         }
     }

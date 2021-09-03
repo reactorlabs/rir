@@ -53,7 +53,7 @@ static long isStaticForceAndCall(Call* call) {
 }
 
 bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
-                              LogStream&) const {
+                              LogStream&, size_t) const {
     bool anyChange = false;
 
     Visitor::run(code->entry, [&](BB* bb) {

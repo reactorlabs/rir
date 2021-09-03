@@ -46,6 +46,7 @@ struct LazyEnvironment
     }
     SEXP getArg(SEXP n);
     bool isMissing(SEXP n);
+    bool isMissing(size_t i);
     size_t getArgIdx(SEXP n);
 
     SEXP getParent() { return getEntry(1); }

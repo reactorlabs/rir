@@ -6,7 +6,10 @@ namespace rir {
 size_t LazyEnvironment::getArgIdx(SEXP n) {
     size_t i = 0;
     while (i < nargs) {
-        if (Pool::get(names[i]) == n)
+        auto name = Pool::get(names[i]);
+        if (TYPEOF(name) == LISTSXP)
+            name = CAR(name);
+        if (name == n)
             break;
         i++;
     }
@@ -24,6 +27,11 @@ bool LazyEnvironment::isMissing(SEXP n) {
     auto i = getArgIdx(n);
     if (i == nargs)
         return false;
+    return isMissing(i);
+}
+
+bool LazyEnvironment::isMissing(size_t i) {
+    assert(i < nargs);
     return missing[i] || getArg(i) == R_MissingArg;
 }
 

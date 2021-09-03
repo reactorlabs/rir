@@ -144,7 +144,7 @@ static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
 }
 
 bool LoopInvariant::apply(Compiler&, ClosureVersion* cls, Code* code,
-                          LogStream& log) const {
+                          LogStream& log, size_t) const {
     LoopDetection loops(code);
     bool anyChange = false;
 
