@@ -46,7 +46,7 @@ function build_r {
     # other than just patching it.
     cd src/library/Recommended/
     tar xzf Matrix_1.3-4.tar.gz
-    sed -i -e 's/^stopifnot(st[1] < 1.0)/(st[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
+    sed -i -e 's/^stopifnot(st\[1\] < 1.0)/(st[1] < 1.0)/' Matrix/man/printSpMatrix.Rd
     rm Matrix_1.3-4.tar.gz
     tar czf Matrix_1.3-4.tar.gz Matrix
     rm -rf Matrix
