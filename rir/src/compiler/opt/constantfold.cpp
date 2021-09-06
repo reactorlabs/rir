@@ -46,7 +46,7 @@ SEXP qt(SEXP c, Preserve& p) {
                     auto res = Rf_eval(                                        \
                         p(Rf_lang3(Operation, qt(lhs, p), qt(rhs, p))),        \
                         R_BaseEnv);                                            \
-                    anyChange = true;                                          \
+                    iterAnyChange = true;                                      \
                     instr->replaceUsesWith(cmp.module->c(res));                \
                     next = bb->remove(ip);                                     \
                 }                                                              \
@@ -154,9 +154,7 @@ static bool isStaticallyNA(Value* i) {
 bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          LogStream& log, size_t iteration) const {
     EarlyConstantfold cf;
-    cf.apply(cmp, cls, code, log, iteration);
-
-    bool anyChange = false;
+    bool anyChange = cf.apply(cmp, cls, code, log, iteration);
 
     Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
@@ -1056,6 +1054,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     }
     for (auto bb : dead) {
         assert(!reachable.count(bb));
+        anyChange = true;
         delete bb;
     }
 

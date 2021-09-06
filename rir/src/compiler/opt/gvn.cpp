@@ -12,6 +12,7 @@ namespace pir {
 
 bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream& log,
                 size_t) const {
+    bool changed = false;
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
     {
@@ -213,6 +214,8 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream& log,
                 auto i = Instruction::Cast(*p);
                 p++;
                 if (i && i != firstInstr) {
+                    if (i->bb() != firstInstr->bb())
+                        changed = true;
                     if (!firstInstr->type.isA(i->type))
                         continue;
                     if (i->bb() == firstInstr->bb()) {
@@ -269,10 +272,7 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream& log,
     // Sometimes a dead instruction will trip the verifier.
     BBTransform::removeDeadInstrs(code, 1);
 
-    // The current implementation of GVN almost always finds something to
-    // change. We use the changed flag to determine when to stop optimizing and
-    // it is thus just too noisy.
-    return false;
+    return changed;
 }
 
 } // namespace pir
