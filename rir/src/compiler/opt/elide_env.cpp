@@ -7,6 +7,7 @@
 #include "pass_definitions.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -35,8 +36,9 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                 }
 
                 if (envIsNeeded) {
+                    auto mk = MkEnv::Cast(i->env());
                     if (!StVar::Cast(i) && !IsEnvStub::Cast(i)) {
-                        if (MkEnv::Cast(i->env()) &&
+                        if (mk && !mk->neverStub &&
                             EnvStubInfo::of(i->tag).allowedNotMaterializing) {
                             envStubNeeded.insert(i->env());
                         } else {
@@ -81,6 +83,7 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
         }
     });
 
+    std::unordered_set<MkEnv*> newStub;
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -88,8 +91,10 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
             if (Env::isPirEnv(i)) {
                 if (envNeeded.find(i) == envNeeded.end()) {
                     if (envStubNeeded.find(i) != envStubNeeded.end()) {
-                        if (!MkEnv::Cast(i)->neverStub) {
-                            MkEnv::Cast(i)->stub = true;
+                        auto mk = MkEnv::Cast(i);
+                        if (!mk->neverStub && !mk->stub) {
+                            mk->stub = true;
+                            newStub.insert(mk);
                             anyChange = true;
                         }
                         ip++;
@@ -110,6 +115,20 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
             }
         }
     });
+    if (!newStub.empty()) {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto st = StVar::Cast(i)) {
+                if (auto mk = MkEnv::Cast(st->env())) {
+                    if (mk->stub && newStub.count(mk)) {
+                        if (!mk->contains(st->varName)) {
+                            mk->pushArg(UnboundValue::instance());
+                            mk->varName.push_back(st->varName);
+                        }
+                    }
+                }
+            }
+        });
+    }
 
     return anyChange;
 }
