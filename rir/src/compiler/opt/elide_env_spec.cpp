@@ -166,6 +166,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     return stub.allowedInPromise;
                                 });
                         }
+                        if (auto mk = MkEnv::Cast(i))
+                            ok = mk->stub;
                         if (!ok) {
                             if (debug) {
                                 std::cout << "Environment:";

@@ -223,7 +223,7 @@ struct DeoptReason {
             out << "Unknown";
             break;
         }
-        out << "@" << ((char*)reason.pc() - (char*)reason.srcCode());
+        out << "@" << (void*)reason.pc();
         return out;
     }
 

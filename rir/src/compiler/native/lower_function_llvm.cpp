@@ -4497,7 +4497,11 @@ void LowerFunctionLLVM::compile() {
             case Tag::LdVarSuper: {
                 auto ld = LdVarSuper::Cast(i);
 
-                auto env = cdr(loadSxp(ld->env()));
+                llvm::Value* env;
+                if (auto mk = MkEnv::Cast(i->env()))
+                    env = loadSxp(mk->env());
+                else
+                    env = cdr(loadSxp(ld->env()));
 
                 auto res = call(NativeBuiltins::get(NativeBuiltins::Id::ldvar),
                                 {constant(ld->varName, t::SEXP), env});
