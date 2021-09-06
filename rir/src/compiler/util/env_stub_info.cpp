@@ -18,9 +18,6 @@ static constexpr auto allowedExtra = {
     Tag::Neq, Tag::Gt,    Tag::Lt,  Tag::Lte,  Tag::Gte,   Tag::LAnd,
     Tag::LOr, Tag::Colon, Tag::Mod, Tag::Pow,  Tag::Minus, Tag::Plus,
 };
-static constexpr auto allowedInProm = {Tag::LdVar,  Tag::LdVarSuper,
-                                       Tag::StVar,  Tag::StVarSuper,
-                                       Tag::LdDots, Tag::FrameState};
 // Those do not materialize the stub in any case. PushContext doesn't
 // materialize itself but it makes the environment accessible, so it's
 // not on this list.
@@ -32,13 +29,10 @@ EnvStubInfo::Status EnvStubInfo::of(Tag t) {
     auto a1 = std::find(allowed.begin(), allowed.end(), t) != allowed.end();
     auto a2 = std::find(allowedExtra.begin(), allowedExtra.end(), t) !=
               allowedExtra.end();
-    auto p = std::find(allowedInProm.begin(), allowedInProm.end(), t) !=
-             allowedInProm.end();
-    assert(!p || (a1 || a2));
     auto m = std::find(dontMaterialize.begin(), dontMaterialize.end(), t) !=
              dontMaterialize.end();
     assert(!m || (a1 || a2));
-    return {a1 || a2, (unsigned)(a1 ? 0 : (a2 ? 1 : 2)), p, m};
+    return {a1 || a2, (unsigned)(a1 ? 0 : (a2 ? 1 : 2)), m};
 }
 } // namespace pir
 } // namespace rir
