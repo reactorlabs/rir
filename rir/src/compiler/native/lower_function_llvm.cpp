@@ -2316,7 +2316,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::CastType: {
                 auto in = i->arg(0).val();
-                if (Const::Cast(i->followCasts()) || deadMove(in, i))
+                if (!variables_.count(i))
                     break;
                 setVal(i, load(in, i->type, Rep::Of(i)));
                 break;
