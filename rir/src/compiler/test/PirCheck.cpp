@@ -30,7 +30,7 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
     auto table = DispatchTable::unpack(BODY(f));
     auto assumptions = table->best()->context() | pir::Compiler::minimalContext;
 
-    StreamLogger logger(PirDebug);
+    StreamLogger logger(DebugOptions::DefaultDebugOptions);
     logger.title("Pir Check");
     pir::Compiler cmp(m, logger);
     ClosureVersion* res = nullptr;

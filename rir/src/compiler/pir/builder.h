@@ -27,6 +27,7 @@ class Builder {
 
     Builder(ClosureVersion* fun, Promise* prom);
     Builder(ClosureVersion* fun, Value* enclos);
+    Builder(Continuation* fun, Value* enclos);
 
     Value* buildDefaultEnv(ClosureVersion* fun);
 

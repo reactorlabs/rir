@@ -8,6 +8,8 @@
 #include "runtime/Context.h"
 #include "runtime/Function.h"
 
+#include "deopt_context.h"
+
 #include <functional>
 #include <map>
 #include <sstream>
@@ -25,6 +27,7 @@ namespace pir {
  * (referred to by `LdArg`).
  *
  */
+
 class Closure {
   private:
     friend class Module;
@@ -44,6 +47,7 @@ class Closure {
     const FormalArgs formals_;
 
     std::map<const Context, ClosureVersion*> versions;
+    std::vector<Continuation*> continuations;
     Context userContext_;
 
   public:
@@ -73,6 +77,7 @@ class Closure {
 
     ClosureVersion* declareVersion(const Context&, bool root,
                                    rir::Function* optFunction);
+    Continuation* declareContinuation(const DeoptContext&);
     void erase(const Context& ctx) { versions.erase(ctx); }
 
     bool existsVersion(const Context& ctx) { return versions.count(ctx); }
@@ -85,10 +90,7 @@ class Closure {
                                          const MaybeClsVersion& change);
 
     typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
-    void eachVersion(ClosureVersionIterator it) const {
-        for (auto& v : versions)
-            it(v.second);
-    }
+    void eachVersion(ClosureVersionIterator it) const;
 
     ~Closure();
 };

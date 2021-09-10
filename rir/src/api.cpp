@@ -273,7 +273,7 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
-pir::DebugOptions PirDebug = {
+pir::DebugOptions pir::DebugOptions::DefaultDebugOptions = {
     getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
@@ -281,7 +281,8 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error(
             "pirSetDebugFlags expects an integer vector as second parameter");
-    PirDebug.flags = pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
+    pir::DebugOptions::DefaultDebugOptions.flags =
+        pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
     return R_NilValue;
 }
 
@@ -380,7 +381,7 @@ REXPORT SEXP pirCompileWrapper(SEXP what, SEXP name, SEXP debugFlags,
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
-    pir::DebugOptions opts = PirDebug;
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
 
     if (debugFlags != R_NilValue) {
         opts.flags = pir::DebugOptions::DebugFlags(*INTEGER(debugFlags));
@@ -455,7 +456,8 @@ SEXP rirOptDefaultOpts(SEXP closure, const Context& assumptions, SEXP name) {
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, assumptions, n, PirDebug);
+        return pirCompile(closure, assumptions, n,
+                          pir::DebugOptions::DefaultDebugOptions);
     else
         return closure;
 }
@@ -469,7 +471,8 @@ SEXP rirOptDefaultOptsDryrun(SEXP closure, const Context& assumptions,
     if (isValidClosureSEXP(closure))
         return pirCompile(
             closure, assumptions, n,
-            PirDebug | pir::DebugOptions::DebugFlags(pir::DebugFlag::DryRun));
+            pir::DebugOptions::DefaultDebugOptions |
+                pir::DebugOptions::DebugFlags(pir::DebugFlag::DryRun));
     else
         return closure;
 }

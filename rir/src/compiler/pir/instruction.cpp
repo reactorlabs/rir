@@ -52,7 +52,8 @@ extern std::ostream& operator<<(std::ostream& out,
 constexpr Effects Instruction::errorWarnVisible;
 
 static bool printInstructionId() {
-    return PirDebug.flags.contains(DebugFlag::PrintInstructionIds);
+    return DebugOptions::DefaultDebugOptions.flags.contains(
+        DebugFlag::PrintInstructionIds);
 };
 
 std::string Instruction::getRef() const {

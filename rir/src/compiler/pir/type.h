@@ -98,6 +98,7 @@ enum class TypeFlags : uint8_t {
     maybeObject,
     maybeNotFastVecelt,
     maybeAttrib,
+    notWrappedMissing,
 
     maybeNAOrNaN,
     rtype,
@@ -523,7 +524,9 @@ struct PirType {
             return *this;
         return PirType(
             // forcing can return the missing marker value
-            t_.r | RType::missing,
+            t_.r | (flags_.contains(TypeFlags::notWrappedMissing)
+                        ? t_.r
+                        : RTypeSet(RType::missing)),
             flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
     }
 

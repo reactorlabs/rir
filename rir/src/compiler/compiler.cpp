@@ -1,5 +1,6 @@
 #include "compiler.h"
 #include "R/RList.h"
+#include "pir/continuation.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
 #include "utils/Map.h"
@@ -70,6 +71,36 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
                    fail, outerFeedback);
+}
+
+void Compiler::compileContinuation(SEXP closure, const DeoptContext& ctx,
+                                   MaybeCnt success, Maybe fail) {
+
+    assert(isValidClosureSEXP(closure));
+
+    DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
+    auto fun = tbl->baseline();
+
+    auto pirClosure =
+        module->getOrDeclareRirClosure("deoptimizationless", closure, fun, {});
+    auto version = pirClosure->declareContinuation(ctx);
+
+    Builder builder(version, pirClosure->closureEnv());
+    auto& log = logger.begin(version);
+    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
+
+    if (rir2pir.tryCompileContinuation(builder, ctx.pc, ctx.stack)) {
+        log.compilationEarlyPir(version);
+        log.flush();
+        return success(version);
+    }
+
+    log.failed("rir2pir aborted");
+    log.flush();
+    logger.close(version);
+    //    closure->erase(ctx);
+    delete version;
+    return fail();
 }
 
 void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
