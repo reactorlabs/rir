@@ -8,6 +8,7 @@
 #include "bb.h"
 #include "closure.h"
 #include "closure_version.h"
+#include "continuation.h"
 #include "env.h"
 #include "instruction.h"
 #include "module.h"

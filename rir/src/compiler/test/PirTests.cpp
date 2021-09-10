@@ -366,6 +366,9 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
 class MockBB : public BB {
     class MockCode : public pir::Code {
       public:
+        void printName(std::ostream& out) const override {
+            out << "mockCode_" << this;
+        }
         MockCode(BB* e, size_t s) : Code() {
             entry = e;
             nextBBId = s;

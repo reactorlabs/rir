@@ -1301,18 +1301,29 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     return true;
 } // namespace pir
 
+bool Rir2Pir::tryCompileContinuation(Builder& insert, Opcode* start,
+                                     const std::vector<PirType>& initialStack) {
+    return tryCompile(cls->owner()->rirFunction()->body(), insert, start,
+                      initialStack);
+}
+
 bool Rir2Pir::tryCompile(Builder& insert) {
     return tryCompile(cls->owner()->rirFunction()->body(), insert);
 }
 
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
+    return tryCompile(srcCode, insert, srcCode->code(), {});
+}
+
+bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
+                         const std::vector<PirType>& initialStack) {
     if (auto mk = MkEnv::Cast(insert.env)) {
         mk->eachLocalVar([&](SEXP name, Value*, bool) {
             if (name == symbol::c)
                 compiler.seenC = true;
         });
     }
-    if (auto res = tryTranslate(srcCode, insert)) {
+    if (auto res = tryTranslate(srcCode, insert, start, initialStack)) {
         finalize(res, insert);
         return true;
     }
@@ -1330,6 +1341,11 @@ Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
 }
 
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
+    return tryTranslate(srcCode, insert, srcCode->code(), {});
+}
+
+Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
+                             const std::vector<PirType>& initialStack) {
     assert(!finalized);
 
     CallTargetFeedback callTargetFeedback;
@@ -1341,10 +1357,18 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 
     std::deque<State> worklist;
     State cur;
+    {
+        size_t num = 0;
+        for (auto t : initialStack) {
+            auto n = insert(new LdArg(num++));
+            n->type = t;
+            cur.stack.push(n);
+        }
+    }
     cur.seen = true;
 
     Opcode* end = srcCode->endCode();
-    Opcode* finger = srcCode->code();
+    Opcode* finger = start;
 
     auto popWorklist = [&]() {
         assert(!worklist.empty());
@@ -1365,7 +1389,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     // If there are args that might be reflective it is helpful to have a
     // checkpoint before forcing the first arg. Otherwise it is typically just
     // inhibiting.
-    if (cls->rirSrc() == srcCode && anyReflective) {
+    if (cls->rirSrc() == srcCode && anyReflective && start == srcCode->code()) {
         addCheckpoint(srcCode, finger, cur.stack, insert);
     }
 

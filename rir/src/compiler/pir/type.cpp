@@ -38,7 +38,7 @@ void PirType::merge(SEXPTYPE sexptype) {
     case PROMSXP:
         flags_.set(TypeFlags::lazy);
         flags_.set(TypeFlags::promiseWrapped);
-        t_.r = RTypeSet::Any();
+        t_.r = PirType::any().t_.r;
         break;
     case EXPRSXP:
         t_.r.set(RType::ast);
@@ -140,6 +140,15 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
     // these are set by merge below
     flags_.reset(TypeFlags::promiseWrapped);
     flags_.reset(TypeFlags::lazy);
+
+    if (TYPEOF(e) == PROMSXP) {
+        if (PRVALUE(e) != R_UnboundValue) {
+            e = PRVALUE(e);
+            flags_.set(TypeFlags::promiseWrapped);
+            if (e != R_MissingArg)
+                flags_.set(TypeFlags::notWrappedMissing);
+        }
+    }
 
     if (e == R_MissingArg)
         t_.r.set(RType::missing);

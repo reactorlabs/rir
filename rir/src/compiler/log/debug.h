@@ -83,6 +83,8 @@ struct DebugOptions {
         : flags(flags), passFilter(filter), functionFilter(functionFilter),
           style(style) {}
     DebugOptions() {}
+
+    static DebugOptions DefaultDebugOptions;
 };
 
 const static DebugOptions::DebugFlags PrintDebugPasses =

@@ -29,7 +29,8 @@ size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
 
 bool LLVMDebugInfo() {
-    return PirDebug.flags.contains(DebugFlag::LLVMDebugInfo);
+    return DebugOptions::DefaultDebugOptions.flags.contains(
+        DebugFlag::LLVMDebugInfo);
 }
 
 namespace {
