@@ -8,15 +8,10 @@ namespace pir {
 
 class LdFunctionEnv;
 
-class Promise : public CodeImpl<CodeTag::Promise, Promise> {
+class Promise : public Code {
   public:
     const unsigned id;
     ClosureVersion* owner;
-
-    friend std::ostream& operator<<(std::ostream& out, const Promise& p) {
-        out << "Prom(" << p.id << ")";
-        return out;
-    }
 
     unsigned srcPoolIdx() const;
     rir::Code* rirSrc() const override final { return rirSrc_; }
@@ -24,6 +19,8 @@ class Promise : public CodeImpl<CodeTag::Promise, Promise> {
     LdFunctionEnv* env() const;
 
     bool trivial() const;
+
+    void printName(std::ostream& out) const override;
 
   private:
     rir::Code* rirSrc_;

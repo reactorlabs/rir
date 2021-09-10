@@ -11,7 +11,9 @@
 
 namespace rir {
 struct DispatchTable;
+
 namespace pir {
+struct DeoptContext;
 
 class Compiler {
   public:
@@ -28,6 +30,7 @@ class Compiler {
 
     typedef std::function<void()> Maybe;
     typedef std::function<void(ClosureVersion*)> MaybeCls;
+    typedef std::function<void(Continuation*)> MaybeCnt;
 
     void compileClosure(SEXP, const std::string& name, const Context& ctx,
                         bool root, MaybeCls success, Maybe fail,
@@ -36,6 +39,9 @@ class Compiler {
                          SEXP formals, SEXP srcRef, const Context& ctx,
                          MaybeCls success, Maybe fail,
                          std::list<PirTypeFeedback*> outerFeedback);
+    void compileContinuation(SEXP closure, const DeoptContext& ctx,
+                             MaybeCnt success, Maybe fail);
+
     void optimizeModule();
 
     bool seenC = false;

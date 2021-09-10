@@ -10,6 +10,12 @@
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
+#include "R/Protect.h"
+
+#include "compiler/backend.h"
+#include "compiler/compiler.h"
+#include "compiler/pir/pir_impl.h"
+
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include <R_ext/RS.h> /* for Memzero */
@@ -802,7 +808,7 @@ static FunctionSignature
                      FunctionSignature::OptimizationLevel::Optimized);
 static Function* deoptSentinel;
 static SEXP deoptSentinelContainer = []() {
-    auto c = Code::New(0);
+    auto c = rir::Code::New(0);
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
     R_PreserveObject(store);
@@ -813,7 +819,7 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                DeoptReason* deoptReason, SEXP deoptTrigger) {
     recordDeoptReason(deoptTrigger, *deoptReason);
 
@@ -832,6 +838,77 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
+
+    static bool deoptless =
+        getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
+    if (m->numFrames == 1 && deoptless) {
+        assert(m->frames[0].inPromise == false);
+        auto le = LazyEnvironment::check(env);
+        if (le && !le->materialized()) {
+            auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
+            rir::Function* fun = nullptr;
+            RCNTXT* originalCntxt = findFunctionContextFor(env);
+            assert(originalCntxt);
+            auto closure = originalCntxt->callfun;
+
+            {
+                // compile to pir
+                pir::Module* module = new pir::Module;
+
+                pir::StreamLogger logger(DebugOptions::DefaultDebugOptions);
+                logger.title("Compiling continuation");
+                pir::Compiler cmp(module, logger);
+
+                // std::cout << "Deopt " << *deoptReason << "\n";
+                // Rf_PrintValue(deoptTrigger);
+                // std::cout << PirType(deoptTrigger) << "\n";
+                // std::cout << "Stack : [\n";
+
+                std::vector<PirType> types;
+                for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
+                    auto v = (base + i)->u.sxpval;
+                    // Rf_PrintValue(v);
+                    types.push_back(PirType(v));
+                }
+                // std::cout << "]\n";
+
+                pir::Backend backend(module, logger, "continuation");
+
+                cmp.compileContinuation(
+                    closure, DeoptContext(m->frames[0].pc, le, types),
+                    [&](Continuation* cnt) {
+                        cmp.optimizeModule();
+
+                        fun = backend.getOrCompile(cnt);
+                        Protect p(fun->container());
+
+                        assert(env == ostack_at(ctx, 0));
+
+                        ostack_pop(ctx);
+                        // std::cout << "Env : [\n";
+                        for (size_t i = 0; i < le->nargs; ++i) {
+                            // Rf_PrintValue(Pool::get(le->names[i]));
+                            // Rf_PrintValue(le->getArg(i));
+                            ostack_push(ctx, le->getArg(i));
+                        }
+                        // std::cout << "]\n";
+                    },
+                    [&]() {
+                        std::cerr << "Continuation compilation failed\n";
+                    });
+            }
+
+            // We have an optimized continuation, let's call it and then
+            // non-local return its result.
+            if (fun) {
+                auto nc = fun->body()->nativeCode();
+                auto res = nc(c, base, le->getParent(), closure);
+                Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
+                               originalCntxt->cloenv, res);
+                assert(false);
+            }
+        }
+    }
 
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,

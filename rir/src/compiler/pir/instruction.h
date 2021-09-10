@@ -1254,6 +1254,7 @@ class FLIE(Force, 3, Effects::Any()) {
                 effects.reset(Effect::Reflection);
             }
         }
+        assert(!type.isVoid());
         updateTypeAndEffects();
     }
     Value* input() const { return arg(0).val(); }
@@ -1277,7 +1278,9 @@ class FLIE(Force, 3, Effects::Any()) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     PirType inferType(const GetType& getType) const override final {
-        return type & getType(input()).forced();
+        auto res = type & getType(input()).forced();
+        assert(!res.isVoid());
+        return res;
     }
     Effects inferEffects(const GetType& getType) const override final {
         auto e = getType(input()).maybeLazy()

@@ -1,4 +1,5 @@
 #include "promise.h"
+#include "closure_version.h"
 #include "compiler/pir/bb.h"
 #include "compiler/pir/instruction.h"
 #include "compiler/util/visitor.h"
@@ -40,6 +41,10 @@ bool Promise::trivial() const {
         }
     }
     return true;
+}
+
+void Promise::printName(std::ostream& out) const {
+    out << owner->name() << "_p" << id;
 }
 
 } // namespace pir
