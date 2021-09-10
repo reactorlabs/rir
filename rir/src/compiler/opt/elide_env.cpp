@@ -71,9 +71,9 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
             i->eachArg([&](Value* v) {
                 if (envDependency.count(v)) {
                     auto d = envDependency.at(v);
-                    auto di = Instruction::Cast(d);
-                    if (di && di->hasEnv() && MkEnv::Cast(di->env()) &&
-                        EnvStubInfo::of(d->tag).allowedNotMaterializing) {
+                    auto vi = Instruction::Cast(v);
+                    if (vi && vi->hasEnv() && MkEnv::Cast(vi->env()) &&
+                        EnvStubInfo::of(vi->tag).allowedNotMaterializing) {
                         envStubNeeded.insert(d);
                     } else {
                         envNeeded.insert(d);
@@ -121,7 +121,8 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                 if (auto mk = MkEnv::Cast(st->env())) {
                     if (mk->stub && newStub.count(mk)) {
                         if (!mk->contains(st->varName)) {
-                            mk->pushArg(UnboundValue::instance());
+                            mk->pushArg(UnboundValue::instance(),
+                                        PirType::any());
                             mk->varName.push_back(st->varName);
                         }
                     }

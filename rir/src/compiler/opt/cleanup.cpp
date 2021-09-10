@@ -184,8 +184,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                         env->replaceUsesWith(Env::elided());
                         removed = true;
                         next = bb->remove(ip);
-                    } else if (bb->isDeopt() && env->stub) {
-                        env->stub = false;
                     }
                 } else if (auto m = MaterializeEnv::Cast(i)) {
                     if (auto mk = MkEnv::Cast(m->env())) {
