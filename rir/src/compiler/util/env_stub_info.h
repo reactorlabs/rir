@@ -12,7 +12,6 @@ struct EnvStubInfo {
     struct Status {
         bool allowed;
         unsigned priority;
-        bool allowedInPromise;
         bool allowedNotMaterializing;
     };
     static Status of(Tag);

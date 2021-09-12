@@ -300,7 +300,8 @@ SEXP materialize(SEXP wrapper) {
             else if (lazyEnv->missing[i])
                 SET_MISSING(arglist, 2);
         }
-        res = Rf_NewEnvironment(R_NilValue, arglist, lazyEnv->getParent());
+        auto parent = lazyEnv->getParent();
+        res = Rf_NewEnvironment(R_NilValue, arglist, parent);
         lazyEnv->materialized(res);
         Rf_setAttrib(res, symbol::delayedEnv, wrapper);
         lazyEnv->clear();
@@ -312,6 +313,11 @@ SEXP materialize(SEXP wrapper) {
                 cur->sysparent = res;
             cur = cur->nextcontext;
         }
+        if (LazyEnvironment::check(parent)) {
+            parent = materialize(parent);
+            SET_ENCLOS(res, parent);
+        }
+
         UNPROTECT(1);
     }
     assert(res);

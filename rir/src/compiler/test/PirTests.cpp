@@ -218,7 +218,7 @@ bool testDeadStore() {
         // anything that happens after exit.
         pir::Module m;
         auto res =
-            compile("", "f <- function(x) {leak(); y <- 1; foo(); y <- 2}", &m);
+            compile("", "f <- function(x) {leak(); y <- 1; foo(); y <- 2; foo(); y}", &m);
         auto f = res["f"];
         CHECK(hasAssign(f) == 2);
     }

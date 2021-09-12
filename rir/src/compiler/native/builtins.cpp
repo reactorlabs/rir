@@ -110,10 +110,22 @@ SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
     return res;
 }
 
-SEXP ldvarImpl(SEXP a, SEXP b) {
-    auto res = Rf_findVar(a, b);
-    // std::cout << CHAR(PRINTNAME(a)) << "=";
-    // Rf_PrintValue(res);
+SEXP ldvarImpl(SEXP n, SEXP env) {
+    auto e = LazyEnvironment::check(env);
+    while (e) {
+        if (e->materialized()) {
+            env = e->materialized();
+            break;
+        }
+        auto a = e->getArg(n);
+        if (a != R_UnboundValue) {
+            ENSURE_NAMED(a);
+            return a;
+        }
+        env = e->getParent();
+        e = LazyEnvironment::check(env);
+    }
+    auto res = Rf_findVar(n, env);
     ENSURE_NAMED(res);
     return res;
 }
@@ -227,7 +239,29 @@ SEXP chkfunImpl(SEXP sym, SEXP res) {
 }
 
 SEXP ldfunImpl(SEXP sym, SEXP env) {
-    SEXP res = Rf_findFun(sym, env);
+    auto e = LazyEnvironment::check(env);
+    SEXP res = nullptr;
+    while (e) {
+        if (e->materialized()) {
+            env = e->materialized();
+            break;
+        }
+        auto a = e->getArg(sym);
+        if (a != R_UnboundValue) {
+            if (TYPEOF(a) == PROMSXP)
+                a = evaluatePromise(a);
+            if (TYPEOF(a) == CLOSXP || TYPEOF(a) == BUILTINSXP ||
+                TYPEOF(a) == SPECIALSXP) {
+                res = a;
+                break;
+            }
+        }
+        env = e->getParent();
+        e = LazyEnvironment::check(env);
+    }
+
+    if (!res)
+        res = Rf_findFun(sym, env);
 
     // TODO something should happen here
     if (res == R_UnboundValue)
@@ -798,6 +832,7 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
+
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
                      (Immediate*)nullptr, env, R_NilValue, Context(),
