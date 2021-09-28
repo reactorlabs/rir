@@ -12,7 +12,8 @@ struct DeoptContext {
     LazyEnvironment* env;
     std::vector<PirType> stack;
 
-    DeoptContext(Opcode* pc, LazyEnvironment* env, std::vector<PirType> stack)
+    DeoptContext(Opcode* pc, LazyEnvironment* env,
+                 const std::vector<PirType>& stack)
         : pc(pc), env(env), stack(stack) {}
 
     bool operator==(const DeoptContext& other) const {
