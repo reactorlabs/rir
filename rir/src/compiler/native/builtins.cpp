@@ -845,6 +845,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     static bool deoptless =
         getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
+    static constexpr bool deoptlessDebug = false;
     if (m->numFrames == 1 && deoptless) {
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
@@ -863,18 +864,22 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 logger.title("Compiling continuation");
                 pir::Compiler cmp(module, logger);
 
-                // std::cout << "Deopt " << *deoptReason << "\n";
-                // Rf_PrintValue(deoptTrigger);
-                // std::cout << PirType(deoptTrigger) << "\n";
-                // std::cout << "Stack : [\n";
+                if (deoptlessDebug) {
+                    std::cout << "Deopt " << *deoptReason << "\n";
+                    Rf_PrintValue(deoptTrigger);
+                    std::cout << PirType(deoptTrigger) << "\n";
+                    std::cout << "Stack : [\n";
+                }
 
                 std::vector<PirType> types;
                 for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
                     auto v = (base + i)->u.sxpval;
-                    // Rf_PrintValue(v);
+                    if (deoptlessDebug)
+                        Rf_PrintValue(v);
                     types.push_back(PirType(v));
                 }
-                // std::cout << "]\n";
+                if (deoptlessDebug)
+                    std::cout << "]\n";
 
                 pir::Backend backend(module, logger, "continuation");
 
@@ -884,18 +889,25 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                         cmp.optimizeModule();
 
                         fun = backend.getOrCompile(cnt);
-                        Protect p(fun->container());
+                        PROTECT(fun->container());
 
                         assert(env == ostack_at(ctx, 0));
 
                         ostack_pop(ctx);
-                        // std::cout << "Env : [\n";
+                        if (deoptlessDebug)
+                            std::cout << "Env : [\n";
                         for (size_t i = 0; i < le->nargs; ++i) {
-                            // Rf_PrintValue(Pool::get(le->names[i]));
-                            // Rf_PrintValue(le->getArg(i));
+                            if (deoptlessDebug) {
+                                Rf_PrintValue(Pool::get(le->names[i]));
+                                if (le->getArg(i) == R_UnboundValue)
+                                    std::cout << "unbound\n";
+                                else
+                                    Rf_PrintValue(le->getArg(i));
+                            }
                             ostack_push(ctx, le->getArg(i));
                         }
-                        // std::cout << "]\n";
+                        if (deoptlessDebug)
+                            std::cout << "]\n";
                     },
                     [&]() {
                         std::cerr << "Continuation compilation failed\n";
