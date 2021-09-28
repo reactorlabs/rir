@@ -107,15 +107,18 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
 
     std::vector<Value*> args;
     std::vector<SEXP> names;
+    std::vector<bool> miss(cnt->deoptContext.env->nargs, false);
     auto h = cnt->deoptContext.stack.size();
     for (size_t i = 0; i < cnt->deoptContext.env->nargs; ++i) {
         auto r = this->operator()(new LdArg(h + i));
         r->type = PirType(cnt->deoptContext.env->getArg(i));
         args.push_back(r);
-        names.push_back(Pool::get(cnt->deoptContext.env->names[i]));
+        auto n = Pool::get(cnt->deoptContext.env->names[i]);
+        names.push_back(TYPEOF(n) == LISTSXP ? CAR(n) : n);
+        miss[i] = cnt->deoptContext.env->missing[i];
     }
     auto mkenv = new MkEnv(closureEnv, names, args.data());
-    mkenv->stub = true;
+    mkenv->missing = miss;
     auto rirCode = cnt->owner()->rirFunction()->body();
     assert(!rirCode->flags.contains(rir::Code::NeedsFullEnv));
     mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);

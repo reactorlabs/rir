@@ -48,6 +48,8 @@ static SEXP forcePromiseImpl(SEXP prom) {
 }
 
 static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    if (val == R_UnboundValue)
+        return rest;
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     if (val == R_MissingArg)
@@ -57,6 +59,8 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    if (val == R_UnboundValue)
+        return rest;
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     SET_MISSING(res, val == R_MissingArg ? 1 : 2);
