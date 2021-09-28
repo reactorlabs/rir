@@ -917,8 +917,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
             if (fun) {
-                auto nc = fun->body()->nativeCode();
-                auto res = nc(c, base, le->getParent(), closure);
+                auto code = fun->body();
+                auto nc = code->nativeCode();
+                auto res = nc(code, base, le->getParent(), closure);
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
                 assert(false);
