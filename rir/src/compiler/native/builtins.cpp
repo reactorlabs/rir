@@ -845,8 +845,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     static bool deoptless =
         getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
+    static int deoptlessCount = 0;
     static constexpr bool deoptlessDebug = false;
-    if (m->numFrames == 1 && deoptless) {
+    if (m->numFrames == 1 && deoptless && deoptlessCount < 10) {
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
         if (le && !le->materialized()) {
@@ -919,10 +920,13 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             if (fun) {
                 auto code = fun->body();
                 auto nc = code->nativeCode();
+                deoptlessCount++;
                 auto res = nc(code, base, le->getParent(), closure);
+                deoptlessCount--;
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
                 assert(false);
+                return;
             }
         }
     }
