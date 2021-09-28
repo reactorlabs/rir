@@ -339,14 +339,16 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 } else {
                                     // We need to cast from a promise to a lazy
                                     // value
-                                    auto type = mk->isEager()
-                                                    ? mk->eagerArg()
-                                                          ->type.forced()
-                                                          .orPromiseWrapped()
-                                                    : ld->type;
+                                    auto type = ld->type.notMissing();
+                                    if (mk->isEager()) {
+                                        auto inType = mk->eagerArg()->type;
+                                        type =
+                                            inType.forced().orPromiseWrapped();
+                                        if (!inType.maybeMissing())
+                                            type = type.notMissing();
+                                    }
                                     auto cast = new CastType(
-                                        a, CastType::Upcast, RType::prom,
-                                        type.notMissing());
+                                        a, CastType::Upcast, RType::prom, type);
                                     ip = bb->insert(ip + 1, cast);
                                     ip--;
                                     a = cast;

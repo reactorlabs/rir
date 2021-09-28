@@ -297,6 +297,15 @@ class TheVerifier {
             }
         }
 
+        if (auto ct = CastType::Cast(i)) {
+            if (ct->type.isVoid()) {
+                std::cerr << "PIR Verifier: Broken cast at ";
+                i->printRef(std::cerr);
+                std::cerr << "\n";
+                ok = false;
+            }
+        }
+
         if (i->branchOrExit())
             if (i != bb->last()) {
                 std::cerr

@@ -1,3 +1,6 @@
+if (Sys.getenv("LSAN_OPTIONS") != "")
+  q()
+
 require("Matrix")
 D5. <- Diagonal(x = 5:1)
 D5N <- D5.; D5N[5,5] <- NA
