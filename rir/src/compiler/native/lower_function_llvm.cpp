@@ -4522,10 +4522,10 @@ void LowerFunctionLLVM::compile() {
                 if (LdFunctionEnv::Cast(i->env()))
                     env = myPromenv;
 
+                llvm::Value* res;
                 if (env && env->stub) {
                     auto e = loadSxp(env);
-                    llvm::Value* res =
-                        envStubGet(e, env->indexOf(varName), env->nLocals());
+                    res = envStubGet(e, env->indexOf(varName), env->nLocals());
                     if (env->argNamed(varName).val() ==
                         UnboundValue::instance()) {
 
@@ -4542,12 +4542,7 @@ void LowerFunctionLLVM::compile() {
                             },
                             [&]() { return res; });
                     }
-                    setVal(i, res);
-                    break;
-                }
-
-                llvm::Value* res;
-                if (bindingsCache.count(i->env())) {
+                } else if (bindingsCache.count(i->env())) {
                     auto phi = phiBuilder(t::SEXP);
                     auto offset = bindingsCache.at(i->env()).at(varName);
 
@@ -4630,6 +4625,7 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                 }
+
                 res->setName(CHAR(PRINTNAME(varName)));
 
                 if (maybeLd) {
