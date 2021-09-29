@@ -479,6 +479,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
             SEXP fun = Compiler::compileFunction(args[1], args[0]);
+            Protect p(fun);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
             DispatchTable::check(fun)->baseline()->flags.set(
