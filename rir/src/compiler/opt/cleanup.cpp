@@ -54,11 +54,16 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                     removed = true;
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
-                    // Missing args produce error.
-                    if (!arg->type.maybePromiseWrapped() &&
-                        !arg->type.maybeMissing()) {
+                    assert(!MkArg::Cast(arg));
+                    auto mkArg =
+                        MkArg::Cast(force->input()->followCastsAndForce());
+                    if (!arg->type.maybePromiseWrapped()) {
                         removed = true;
                         force->replaceUsesWith(arg);
+                        next = bb->remove(ip);
+                    } else if (mkArg && mkArg->isEager()) {
+                        removed = true;
+                        force->replaceUsesWith(mkArg->eagerArg());
                         next = bb->remove(ip);
                     } else if (auto ld =
                                    LdArg::Cast(arg->followCastsAndForce())) {
