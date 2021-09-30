@@ -865,6 +865,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 logger.title("Compiling continuation");
                 pir::Compiler cmp(module, logger);
 
+                std::cout << "Deopt " << *deoptReason << "\n";
                 if (deoptlessDebug) {
                     std::cout << "Deopt " << *deoptReason << "\n";
                     Rf_PrintValue(deoptTrigger);
@@ -885,7 +886,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 pir::Backend backend(module, logger, "continuation");
 
                 cmp.compileContinuation(
-                    closure, DeoptContext(m->frames[0].pc, le, types),
+                    closure,
+                    DeoptContext(m->frames[0].pc, le, types, *deoptReason,
+                                 deoptTrigger),
                     [&](Continuation* cnt) {
                         cmp.optimizeModule();
 
