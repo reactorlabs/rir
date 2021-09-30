@@ -4528,13 +4528,15 @@ void LowerFunctionLLVM::compile() {
                 if (LdFunctionEnv::Cast(i->env()))
                     env = myPromenv;
 
+                bool maybeUnbound = true;
                 llvm::Value* res;
                 if (env && env->stub) {
                     auto e = loadSxp(env);
                     res = envStubGet(e, env->indexOf(varName), env->nLocals());
-                    if (env->argNamed(varName).val() ==
+                    if (env->argNamed(varName).val() !=
                         UnboundValue::instance()) {
-
+                        maybeUnbound = false;
+                    } else {
                         res = createSelect2(
                             builder.CreateICmpEQ(
                                 res, constant(R_UnboundValue, t::SEXP)),
@@ -4636,7 +4638,8 @@ void LowerFunctionLLVM::compile() {
 
                 if (maybeLd) {
                     checkMissing(res);
-                    checkUnbound(res);
+                    if (maybeUnbound)
+                        checkUnbound(res);
                 }
                 setVal(i, res);
                 break;
