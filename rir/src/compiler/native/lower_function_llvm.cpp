@@ -4182,6 +4182,18 @@ void LowerFunctionLLVM::compile() {
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::real).orPromiseWrapped())) {
                         res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
+                    } else if (t->typeTest.noAttribsOrObject().isA(
+                                   PirType(RType::closure)
+                                       .orPromiseWrapped())) {
+                        res = builder.CreateICmpEQ(sexptype(a), c(CLOSXP));
+                    } else if (t->typeTest.noAttribsOrObject().isA(
+                                   PirType(RType::builtin)
+                                       .orPromiseWrapped())) {
+                        res = builder.CreateICmpEQ(sexptype(a), c(BUILTINSXP));
+                    } else if (t->typeTest.noAttribsOrObject().isA(
+                                   PirType(RType::special)
+                                       .orPromiseWrapped())) {
+                        res = builder.CreateICmpEQ(sexptype(a), c(SPECIALSXP));
                     } else {
                         assert(arg->type.notMissing()
                                    .notPromiseWrapped()
