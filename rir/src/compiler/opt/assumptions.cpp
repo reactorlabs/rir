@@ -31,7 +31,8 @@ struct AAssumption {
             }
             break;
         }
-        case DeoptReason::Calltarget: {
+        case DeoptReason::ForceAndCall:
+        case DeoptReason::CallTarget: {
             if (auto t = Identical::Cast(cond)) {
                 c.equality = {t->arg(0).val(), t->arg(1).val()};
                 kind = Equality;

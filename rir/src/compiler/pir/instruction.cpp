@@ -1241,13 +1241,25 @@ Value* Assume::valueUnderTest() const {
             return t->arg<0>().val();
         break;
     }
-    case DeoptReason::Calltarget: {
+    case DeoptReason::CallTarget: {
         if (auto t = Identical::Cast(condition())) {
             auto value = t->arg<0>().val();
             if (Const::Cast(value))
                 value = t->arg<1>().val();
             assert(!Const::Cast(value));
             return value;
+        }
+        break;
+    }
+    case DeoptReason::ForceAndCall: {
+        if (auto t = Identical::Cast(condition())) {
+            auto value = t->arg<0>().val();
+            if (Const::Cast(value))
+                value = t->arg<1>().val();
+            assert(!Const::Cast(value));
+            return value;
+        } else if (auto t = IsType::Cast(condition())) {
+            return t->arg<0>().val();
         }
         break;
     }
