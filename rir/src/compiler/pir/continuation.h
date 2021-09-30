@@ -11,6 +11,7 @@ class Continuation : public ClosureVersion {
   public:
     DeoptContext deoptContext;
     Continuation(Closure* closure, const DeoptContext& deoptContext);
+    Continuation* isContinuation() override final { return this; }
 };
 
 } // namespace pir

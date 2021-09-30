@@ -179,6 +179,7 @@ class Instruction : public Value {
     }
 
     std::shared_ptr<TypeFeedback> typeFeedback_;
+    bool hasTypeFeedback() const { return typeFeedback_.get(); }
     const TypeFeedback& typeFeedback() const {
         if (typeFeedback_.get())
             return *typeFeedback_;

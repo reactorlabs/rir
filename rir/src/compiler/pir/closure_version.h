@@ -100,6 +100,8 @@ class ClosureVersion : public Code {
 
     rir::Code* rirSrc() const override final;
 
+    virtual Continuation* isContinuation() { return nullptr; }
+
     ~ClosureVersion();
 };
 
