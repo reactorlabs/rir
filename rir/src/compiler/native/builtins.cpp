@@ -8,6 +8,7 @@
 #include "ir/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 
 #include "R/Protect.h"
@@ -833,13 +834,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         stackHeight += m->frames[i].stackSize + 1;
     }
 
-    c->registerDeopt();
-    // Invalidate target caches pointing to deoptimized version
-    for (auto idx : NativeBuiltins::targetCaches)
-        if (auto f = Function::check(Pool::get(idx)))
-            if (f->body() == c)
-                Pool::patch(idx, deoptSentinelContainer);
-
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
@@ -857,31 +851,47 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             assert(originalCntxt);
             auto closure = originalCntxt->callfun;
 
-            {
+            if (deoptlessDebug) {
+                std::cout << "Deopt " << *deoptReason << "\n";
+                Rf_PrintValue(deoptTrigger);
+                std::cout << PirType(deoptTrigger) << "\n";
+                std::cout << "Stack : [\n";
+            }
+
+            std::vector<PirType> types;
+            for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
+                auto v = (base + i)->u.sxpval;
+                if (deoptlessDebug)
+                    Rf_PrintValue(v);
+                types.push_back(PirType(v));
+            }
+            if (deoptlessDebug)
+                std::cout << "]\n";
+
+            DeoptContext ctx(m->frames[0].pc, le, types, *deoptReason,
+                             deoptTrigger);
+            static std::unordered_map<
+                SEXP, std::vector<std::pair<DeoptContext, rir::Function*>>>
+                continuations;
+
+            // TODO: not fully sound because cls could be recycled. Still
+            // clashes very unlikely because of the context.
+            auto cnt = continuations.find(cls);
+            if (cnt != continuations.end()) {
+                for (auto e : cnt->second) {
+                    if (e.first == ctx) {
+                        fun = e.second;
+                    }
+                }
+            }
+
+            if (!fun) {
                 // compile to pir
                 pir::Module* module = new pir::Module;
 
                 pir::StreamLogger logger(DebugOptions::DefaultDebugOptions);
                 logger.title("Compiling continuation");
                 pir::Compiler cmp(module, logger);
-
-                std::cout << "Deopt " << *deoptReason << "\n";
-                if (deoptlessDebug) {
-                    std::cout << "Deopt " << *deoptReason << "\n";
-                    Rf_PrintValue(deoptTrigger);
-                    std::cout << PirType(deoptTrigger) << "\n";
-                    std::cout << "Stack : [\n";
-                }
-
-                std::vector<PirType> types;
-                for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
-                    auto v = (base + i)->u.sxpval;
-                    if (deoptlessDebug)
-                        Rf_PrintValue(v);
-                    types.push_back(PirType(v));
-                }
-                if (deoptlessDebug)
-                    std::cout << "]\n";
 
                 pir::Backend backend(module, logger, "continuation");
 
@@ -893,25 +903,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                         cmp.optimizeModule();
 
                         fun = backend.getOrCompile(cnt);
-                        PROTECT(fun->container());
+                        R_PreserveObject(fun->container());
+                        continuations[cls].push_back({ctx, fun});
 
-                        assert(env == ostack_at(ctx, 0));
-
-                        ostack_pop(ctx);
-                        if (deoptlessDebug)
-                            std::cout << "Env : [\n";
-                        for (size_t i = 0; i < le->nargs; ++i) {
-                            if (deoptlessDebug) {
-                                Rf_PrintValue(Pool::get(le->names[i]));
-                                if (le->getArg(i) == R_UnboundValue)
-                                    std::cout << "unbound\n";
-                                else
-                                    Rf_PrintValue(le->getArg(i));
-                            }
-                            ostack_push(ctx, le->getArg(i));
-                        }
-                        if (deoptlessDebug)
-                            std::cout << "]\n";
                     },
                     [&]() {
                         std::cerr << "Continuation compilation failed\n";
@@ -921,6 +915,23 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
             if (fun) {
+                assert(env == ostack_at(ctx, 0));
+                ostack_pop(ctx);
+                if (deoptlessDebug)
+                    std::cout << "Env : [\n";
+                for (size_t i = 0; i < le->nargs; ++i) {
+                    if (deoptlessDebug) {
+                        Rf_PrintValue(Pool::get(le->names[i]));
+                        if (le->getArg(i) == R_UnboundValue)
+                            std::cout << "unbound\n";
+                        else
+                            Rf_PrintValue(le->getArg(i));
+                    }
+                    ostack_push(ctx, le->getArg(i));
+                }
+                if (deoptlessDebug)
+                    std::cout << "]\n";
+
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessCount++;
@@ -933,6 +944,13 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             }
         }
     }
+
+    c->registerDeopt();
+    // Invalidate target caches pointing to deoptimized version
+    for (auto idx : NativeBuiltins::targetCaches)
+        if (auto f = Function::check(Pool::get(idx)))
+            if (f->body() == c)
+                Pool::patch(idx, deoptSentinelContainer);
 
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,

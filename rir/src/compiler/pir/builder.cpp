@@ -107,20 +107,19 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
 
     std::vector<Value*> args;
     std::vector<SEXP> names;
-    std::vector<bool> miss(cnt->deoptContext.env->nargs, false);
+    std::vector<bool> miss(cnt->deoptContext.env.size(), false);
     auto h = cnt->deoptContext.stack.size();
-    for (size_t i = 0; i < cnt->deoptContext.env->nargs; ++i) {
+    for (size_t i = 0; i < cnt->deoptContext.env.size(); ++i) {
         auto r = this->operator()(new LdArg(h + i));
-        r->type = PirType(cnt->deoptContext.env->getArg(i));
+        r->type = std::get<PirType>(cnt->deoptContext.env[i]);
         args.push_back(r);
-        auto n = Pool::get(cnt->deoptContext.env->names[i]);
-        names.push_back(TYPEOF(n) == LISTSXP ? CAR(n) : n);
-        miss[i] = cnt->deoptContext.env->missing[i];
+        auto n = std::get<SEXP>(cnt->deoptContext.env[i]);
+        names.push_back(n);
+        miss[i] = std::get<bool>(cnt->deoptContext.env[i]);
     }
     auto mkenv = new MkEnv(closureEnv, names, args.data());
     mkenv->missing = miss;
     auto rirCode = cnt->owner()->rirFunction()->body();
-    assert(!rirCode->flags.contains(rir::Code::NeedsFullEnv));
     mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
     add(mkenv);
     this->env = mkenv;

@@ -6,9 +6,10 @@ f = function(x) {
   s
 }
 
-for (i in 1:4)
+for (i in 1:5)
   print(system.time(print(f(10000000L))))
 
 q=1.1
 
-print(system.time(print(f(10000000L))))
+for (i in 1:5)
+  print(system.time(print(f(10000000L))))
