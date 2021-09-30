@@ -561,7 +561,8 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         reason.srcCode()->deadCallReached++;
         // fall through
         [[clang::fallthrough]];
-    case DeoptReason::Calltarget: {
+    case DeoptReason::ForceAndCall:
+    case DeoptReason::CallTarget: {
         assert(*pos == Opcode::record_call_);
         if (val == symbol::UnknownDeoptTrigger)
             break;
