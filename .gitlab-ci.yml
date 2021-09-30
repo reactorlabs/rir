@@ -19,12 +19,13 @@ variables:
 
 rir_container:
   stage: Build container
-  image: docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+      alias: docker
   before_script:
     - docker info
   script:
@@ -38,12 +39,13 @@ benchmark_container:
   stage: Build benchmark container
   needs:
     - rir_container
-  image: docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+      alias: docker
   before_script:
     - docker info
   tags:
@@ -356,12 +358,13 @@ deploy:
   stage: Deploy
   except:
     - schedules
-  image: docker:stable
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - docker:19.03.0-dind
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+      alias: docker
   before_script:
     - docker info
   variables:

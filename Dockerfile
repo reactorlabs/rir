@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
 ARG CI_COMMIT_SHA
 ADD . /opt/rir
 ENV LANG en_US.UTF-8
