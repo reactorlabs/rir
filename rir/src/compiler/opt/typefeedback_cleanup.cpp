@@ -17,7 +17,6 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
         return false;
 
     bool anyChange = false;
-    auto& ctx = version->deoptContext;
 
     SEXP changedVar = nullptr;
     TypeFeedback changedVarType;
@@ -27,6 +26,8 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (!i->hasTypeFeedback())
             return;
         if (auto pc = i->typeFeedback().feedbackOrigin.pc()) {
+            auto& ctx = version->deoptContext;
+
             if (pc == ctx.reason.pc()) {
                 if (ctx.reason.reason == DeoptReason::Typecheck) {
                     i->updateTypeFeedback().type = PirType(ctx.deoptTrigger);
