@@ -451,6 +451,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
+        if (auto i = Instruction::Cast(val))
+            i->printRecursive(std::cerr, 1);
+        else
+            val->printRef(std::cerr);
+        std::cerr << "\nCould not be loaded in:\n";
+        code->printCode(std::cerr, 1, 0);
         assert(false);
     }
 
