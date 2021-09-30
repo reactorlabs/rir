@@ -7,8 +7,11 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/analysis/available_checkpoints.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/compiler.h"
+#include "compiler/opt/type_test.h"
+#include "compiler/util/bb_transform.h"
 #include "interpreter/interp.h"
 #include "runtime/DispatchTable.h"
 
@@ -52,9 +55,11 @@ static long isStaticForceAndCall(Call* call) {
     return -1;
 }
 
-bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
-                              LogStream&, size_t) const {
+bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
+                              LogStream& log, size_t) const {
     bool anyChange = false;
+    AvailableCheckpoints checkpoint(cls, code, log);
+    DominanceGraph dom(code);
 
     Visitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
@@ -68,52 +73,137 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
             // known
             if (auto call = Call::Cast(i)) {
                 auto nForce = isStaticForceAndCall(call);
-                if (nForce != -1) {
 
-                    bool nodots = true;
-                    for (unsigned i = 2;
-                         i < call->nCallArgs() && i < nForce + 2; ++i) {
-                        if (call->callArg(i).val()->type.isA(
-                                RType::expandedDots)) {
-                            nodots = false;
+                if (nForce == -1) {
+                    ip = next;
+                    continue;
+                }
+
+                bool nodots = true;
+                for (unsigned i = 2; i < call->nCallArgs() && i < nForce + 2;
+                     ++i) {
+                    if (call->callArg(i).val()->type.isA(RType::expandedDots)) {
+                        nodots = false;
+                    }
+                }
+
+                if (!nodots) {
+                    ip = next;
+                    continue;
+                }
+
+                if (auto cp = checkpoint.at(call)) {
+
+                    auto given = Instruction::Cast(call->callArg(1).val());
+                    if (!given) {
+                        ip = next;
+                        continue;
+                    }
+
+                    auto fb = given->callFeedback();
+                    if (fb.used || fb.taken < 2 ||
+                        (fb.type != CLOSXP && fb.type != BUILTINSXP &&
+                         fb.type != SPECIALSXP)) {
+                        ip = next;
+                        continue;
+                    }
+                    assert(!fb.monomorphic ||
+                           TYPEOF(fb.monomorphic) == fb.type);
+
+                    anyChange = true;
+                    fb.used = true;
+
+                    Value* callee = given;
+                    if (fb.monomorphic) {
+                        callee = BBTransform::insertCalleeGuard(
+                            cmp, fb,
+                            DeoptReason(fb.feedbackOrigin,
+                                        DeoptReason::ForceAndCall),
+                            given, cp, bb, ip);
+                    } else {
+                        auto type =
+                            (fb.type == CLOSXP ? PirType::closure()
+                                               : (fb.type == BUILTINSXP
+                                                      ? PirType::builtin()
+                                                      : PirType::special()));
+
+                        BBTransform::insertAssume(new IsType(type, given), true,
+                                                  cp, fb.feedbackOrigin,
+                                                  DeoptReason::ForceAndCall, bb,
+                                                  ip);
+
+                        if (auto argi = Instruction::Cast(given)) {
+                            argi->updateTypeFeedback().used = true;
+                            auto cast = new CastType(argi, CastType::Downcast,
+                                                     PirType::val(), type);
+                            cast->effects.set(Effect::DependsOnAssume);
+                            ip = bb->insert(ip, cast);
+                            ip++;
+                            argi->replaceDominatedUses(cast, dom);
+                            callee = cast;
                         }
                     }
 
-                    if (nodots) {
-                        anyChange = true;
-                        ip = bb->insert(
-                            ip, new ChkFunction(call->callArg(1).val()));
-                        auto callee = *ip;
-                        ip++;
-                        std::vector<Value*> args;
-                        for (unsigned i = 2; i < call->nCallArgs(); ++i) {
-                            auto a = call->callArg(i).val();
-                            if (i - 2 < nForce) {
-                                if (a->type.isA(RType::prom)) {
-                                    ip = bb->insert(
-                                        ip, new CastType(a, CastType::Upcast,
-                                                         RType::prom,
-                                                         PirType::any()));
-                                    a = *ip;
-                                    ip++;
+                    // "inline" forceAndCall
+                    if (!callee->type.isA(PirType::function())) {
+                        auto chk = new ChkFunction(callee);
+                        ip = bb->insert(ip, chk);
+                        ++ip;
+                        callee = chk;
+                    }
+
+                    auto kind = fb.type;
+                    std::vector<Value*> args;
+                    for (unsigned i = 2; i < call->nCallArgs(); ++i) {
+                        auto a = call->callArg(i).val();
+                        if (kind != SPECIALSXP &&
+                            (kind == BUILTINSXP || i - 2 < nForce)) {
+                            if (a->type.isA(RType::prom) ||
+                                a->type.maybePromiseWrapped()) {
+                                auto mk = MkArg::Cast(a);
+                                if (mk && mk->isEager()) {
+                                    args.push_back(a);
+                                    continue;
                                 }
-                                if (a->type.isA(RType::prom) ||
-                                    a->type.maybePromiseWrapped()) {
-                                    ip = bb->insert(
-                                        ip, new Force(a, call->env(),
-                                                      Tombstone::framestate()));
+                                if (mk) {
+                                    auto cast = new CastType(
+                                        a, CastType::Upcast, RType::prom,
+                                        PirType::any());
+                                    ip = bb->insert(ip, cast);
                                     a = *ip;
-                                    ip++;
+                                    ++ip;
+                                }
+                                auto force = new Force(a, call->env(),
+                                                       Tombstone::framestate());
+                                ip = bb->insert(ip, force);
+                                a = *ip;
+                                ++ip;
+
+                                if (kind == CLOSXP) {
+                                    auto newMk =
+                                        new MkArg(mk->prom(), a, call->env());
+                                    ip = bb->insert(ip, newMk);
+                                    a = *ip;
+                                    ++ip;
                                 }
                             }
-                            args.push_back(a);
                         }
-                        auto newCall =
-                            new Call(call->env(), callee, args,
-                                     call->frameState(), call->srcIdx);
-                        call->replaceUsesAndSwapWith(newCall, ip);
-                        next = ip + 1;
+                        args.push_back(a);
                     }
+
+                    // rewrite the ast (essential if the callee is
+                    // special)
+                    auto origSrc = cp_pool_at(globalContext(), call->srcIdx);
+                    auto newSrc =
+                        PROTECT(LCONS(CADDR(origSrc), CDDDR(origSrc)));
+                    auto newSrcIdx = cp_pool_add(globalContext(), newSrc);
+                    UNPROTECT(1);
+
+                    // replace the old forceAndCall
+                    auto newCall = new Call(call->env(), callee, args,
+                                            call->frameState(), newSrcIdx);
+                    call->replaceUsesAndSwapWith(newCall, ip);
+                    next = ip + 1;
                 }
             }
 
@@ -123,5 +213,6 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     return anyChange;
 }
+
 } // namespace pir
 } // namespace rir
