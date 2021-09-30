@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "name": "Ř on PRL5",
+            "name": "Ř @ prl5",
             "includePath": [
                 "${workspaceFolder}/rir/src/**",
                 "${workspaceFolder}/external/custom-r/src/**",
@@ -11,11 +11,9 @@
             "defines": [
                 "ENABLE_SLOWASSERT"
             ],
-            "compilerPath": "/usr/bin/g++-8",
             "cStandard": "c11",
             "cppStandard": "c++14",
-            "intelliSenseMode": "gcc-x64",
-            "compileCommands": "${workspaceFolder}/build/debug/compile_commands.json"
+            "intelliSenseMode": "${default}"
         }
     ],
     "version": 4
