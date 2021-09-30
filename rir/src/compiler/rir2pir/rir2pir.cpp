@@ -11,6 +11,7 @@
 #include "compiler/pir/builder.h"
 #include "compiler/pir/pir_impl.h"
 #include "compiler/util/arg_match.h"
+#include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
 #include "insert_cast.h"
 #include "ir/BC.h"
@@ -186,142 +187,9 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
     return insert(new MkArg(prom, eagerVal, insert.env));
 }
 
-struct TargetInfo {
-    SEXP monomorphic;
-    size_t taken;
-    bool stableEnv;
-    FeedbackOrigin feedbackOrigin;
-};
-static TargetInfo
-checkCallTarget(Value* callee, rir::Code* srcCode,
-                const Rir2Pir::CallTargetFeedback& callTargetFeedback) {
-    TargetInfo result = {nullptr, 0, false};
-    // See if the call feedback suggests a monomorphic target
-    // TODO: Deopts in promises are not supported by the promise inliner. So
-    // currently it does not pay off to put any deopts in there.
-    auto feedbackIt = callTargetFeedback.find(callee);
-    if (feedbackIt != callTargetFeedback.end()) {
-        auto& feedback = std::get<ObservedCallees>(feedbackIt->second);
-        result.taken = feedback.taken;
-        if (result.taken > 1) {
-            result.feedbackOrigin =
-                FeedbackOrigin(srcCode, std::get<Opcode*>(feedbackIt->second));
-            if (feedback.numTargets == 1) {
-                result.monomorphic = feedback.getTarget(srcCode, 0);
-                result.stableEnv = true;
-            } else if (feedback.numTargets > 1) {
-                SEXP first = nullptr;
-                bool stableBody = true;
-                bool stableEnv = true;
-                for (size_t i = 0; i < feedback.numTargets; ++i) {
-                    SEXP b = feedback.getTarget(srcCode, i);
-                    if (TYPEOF(b) == CLOSXP) {
-                        if (!first) {
-                            first = b;
-                        } else {
-                            if (BODY(first) != BODY(b))
-                                stableBody = false;
-                            if (CLOENV(first) != CLOENV(b))
-                                stableEnv = false;
-                        }
-                    } else {
-                        stableBody = stableEnv = false;
-                    }
-                }
-                if (stableBody)
-                    result.monomorphic = first;
-                if (stableEnv)
-                    result.stableEnv = true;
-            }
-        }
-    }
-    return result;
-}
-
-static Value* insertLdFunGuard(Compiler& compiler, const TargetInfo& trg,
-                               Value* callee, bool replaceLdfunWithLdVar,
-                               Checkpoint* cp, rir::Code* srcCode, Opcode* pc) {
-    // We use ldvar instead of ldfun for the guard. The reason is that
-    // ldfun can force promises, which is a pain for our optimizer to
-    // deal with. If we use a ldvar here, the actual ldfun will be
-    // delayed into the deopt branch. Note that ldvar is conservative.
-    // If we find a non-function binding with the same name, we will
-    // deopt unneccessarily. In the case of `c` this is guaranteed to
-    // cause problems, since many variables are called "c". Therefore if
-    // we have seen any variable c we keep the ldfun in this case.
-    // TODO: Implement this with a dependency on the binding cell
-    // instead of an eager check.
-    auto bb = cp->nextBB();
-    auto pos = bb->begin();
-
-    auto calleeForGuard = callee;
-    if (replaceLdfunWithLdVar) {
-        auto ldfun = LdFun::Cast(callee);
-        assert(ldfun);
-        auto ldvar = new LdVar(ldfun->varName, ldfun->env());
-        pos = bb->insert(pos, ldvar);
-        pos++;
-        calleeForGuard = ldvar;
-    }
-    auto guardedCallee = calleeForGuard;
-
-    if (!trg.stableEnv) {
-        static SEXP b = nullptr;
-        if (!b) {
-            auto idx = blt("bodyCode");
-            b = Rf_allocSExp(BUILTINSXP);
-            b->u.primsxp.offset = idx;
-            R_PreserveObject(b);
-        }
-
-        // The "bodyCode" builtin will return R_NilValue for promises.
-        // It is therefore safe (ie. conservative with respect to the
-        // guard) to avoid forcing the result by casting it to a value.
-        auto casted = new CastType(calleeForGuard, CastType::Downcast,
-                                   PirType::any(), PirType::function());
-        pos = bb->insert(pos, casted);
-        pos++;
-
-        auto body = new CallSafeBuiltin(b, {casted}, 0);
-        body->effects.reset();
-        pos = bb->insert(pos, body);
-        pos++;
-
-        calleeForGuard = body;
-    }
-
-    auto expected = trg.stableEnv ? compiler.module->c(trg.monomorphic)
-                                  : compiler.module->c(BODY(trg.monomorphic));
-
-    auto t = new Identical(calleeForGuard, expected, PirType::any());
-    pos = bb->insert(pos, t) + 1;
-
-    auto assumption = new Assume(
-        t, cp,
-        DeoptReason(FeedbackOrigin(srcCode, pc), DeoptReason::Calltarget));
-    pos = bb->insert(pos, assumption) + 1;
-
-    if (trg.stableEnv)
-        return expected;
-
-    // The guard also ensures that this closure is not a promise thus we
-    // can force for free.
-    if (guardedCallee->type.maybePromiseWrapped()) {
-        auto forced =
-            new Force(guardedCallee, Env::elided(), Tombstone::framestate());
-        forced->effects.reset();
-        forced->effects.set(Effect::DependsOnAssume);
-        bb->insert(pos, forced);
-
-        guardedCallee = forced;
-    }
-
-    return guardedCallee;
-}
-
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
-                        CallTargetFeedback& callTargetFeedback) {
+                        CallTargetCheckpoints& callTargetCheckpoints) {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -453,8 +321,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is
         // to be able do move the ldfun into the deoptbranch later.
-        std::get<Checkpoint*>(callTargetFeedback[ld]) =
-            addCheckpoint(srcCode, pos, stack, insert);
+        callTargetCheckpoints[ld] = addCheckpoint(srcCode, pos, stack, insert);
         push(ld);
         break;
     }
@@ -571,10 +438,50 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             d->setDeoptReason(compiler.module->deoptReasonValue(reason),
                               target);
             stack.clear();
-        } else {
-            std::get<ObservedCallees>(callTargetFeedback[target]) =
-                bc.immediate.callFeedback;
-            std::get<Opcode*>(callTargetFeedback[target]) = pos;
+        } else if (auto i = Instruction::Cast(target)) {
+            // See if the call feedback suggests a monomorphic target
+            // TODO: Deopts in promises are not supported by the promise
+            // inliner. So currently it does not pay off to put any deopts in
+            // there.
+            auto& f = i->updateCallFeedback();
+            const auto& feedback = bc.immediate.callFeedback;
+            f.taken = feedback.taken;
+            if (f.taken > 1) {
+                f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+                if (feedback.numTargets == 1) {
+                    f.monomorphic = feedback.getTarget(srcCode, 0);
+                    f.type = TYPEOF(f.monomorphic);
+                    f.stableEnv = true;
+                } else if (feedback.numTargets > 1) {
+                    SEXP first = nullptr;
+                    bool stableType = true;
+                    bool stableBody = true;
+                    bool stableEnv = true;
+                    for (size_t i = 0; i < feedback.numTargets; ++i) {
+                        SEXP b = feedback.getTarget(srcCode, i);
+                        if (!first) {
+                            first = b;
+                        } else {
+                            if (TYPEOF(b) != TYPEOF(first))
+                                stableType = stableBody = stableEnv = false;
+                            else if (TYPEOF(b) == CLOSXP) {
+                                if (BODY(first) != BODY(b))
+                                    stableBody = false;
+                                if (CLOENV(first) != CLOENV(b))
+                                    stableEnv = false;
+                            } else {
+                                stableBody = stableEnv = false;
+                            }
+                        }
+                    }
+                    if (stableType)
+                        f.type = TYPEOF(first);
+                    if (stableBody)
+                        f.monomorphic = first;
+                    if (stableEnv)
+                        f.stableEnv = true;
+                }
+            }
         }
         break;
     }
@@ -640,7 +547,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (phi->nargs() == 1)
                 callee = phi->arg(0).val();
         }
-        auto ti = checkCallTarget(callee, srcCode, callTargetFeedback);
+        auto dummyCallFeedback = CallFeedback();
+        auto& ti = Instruction::Cast(callee)
+                       ? Instruction::Cast(callee)->updateCallFeedback()
+                       : dummyCallFeedback;
 
         auto ldfun = LdFun::Cast(callee);
         if (ldfun) {
@@ -731,14 +641,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (!staticMonomorphicBuiltin &&
             (monomorphicBuiltin || monomorphicClosure ||
              monomorphicInnerFunction || monomorphicSpecial)) {
-            auto cp = std::get<Checkpoint*>(callTargetFeedback.at(callee));
+            auto cp = callTargetCheckpoints.count(callee)
+                          ? callTargetCheckpoints.at(callee)
+                          : nullptr;
             if (!cp)
                 cp = addCheckpoint(srcCode, pos, stack, insert);
-            bool replaceLdfunWithLdVar =
-                ldfun && (ldfun->varName != symbol::c || !compiler.seenC);
-            callee = insertLdFunGuard(
-                compiler, ti, callee, replaceLdfunWithLdVar, cp, srcCode,
-                std::get<Opcode*>(callTargetFeedback.at(callee)));
+            auto bb = cp->nextBB();
+            auto dummyPos = bb->begin();
+            callee = BBTransform::insertCalleeGuard(
+                compiler, ti,
+                DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget), callee,
+                cp, bb, dummyPos);
         }
 
         auto eagerEval = [&](Value*& arg, size_t i) {
@@ -1332,7 +1245,7 @@ Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
     assert(!finalized);
 
-    CallTargetFeedback callTargetFeedback;
+    CallTargetCheckpoints callTargetCheckpoints;
     std::vector<ReturnSite> results;
 
     std::unordered_map<Opcode*, State> mergepoints;
@@ -1584,7 +1497,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
         if (!skip) {
             auto oldStack = cur.stack;
             if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert,
-                           callTargetFeedback)) {
+                           callTargetCheckpoints)) {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
