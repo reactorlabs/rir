@@ -5,6 +5,8 @@
 #include "../pir/pir.h"
 #include "../pir/values.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/compiler.h"
+#include "compiler/rir2pir/rir2pir.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -38,6 +40,10 @@ class BBTransform {
     static void insertAssume(Instruction* condition, bool assumePositive,
                              Checkpoint* cp, const FeedbackOrigin& origin,
                              DeoptReason::Reason reason);
+    static Value* insertCalleeGuard(Compiler& compiler, const CallFeedback& fb,
+                                    const DeoptReason& dr, Value* callee,
+                                    Checkpoint* cp, BB* bb,
+                                    BB::Instrs::iterator& pos);
 
     static void mergeRedundantBBs(Code* closure);
 

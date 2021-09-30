@@ -278,6 +278,87 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
                  contBegin);
 }
 
+Value* BBTransform::insertCalleeGuard(Compiler& compiler,
+                                      const CallFeedback& fb,
+                                      const DeoptReason& dr, Value* callee,
+                                      Checkpoint* cp, BB* bb,
+                                      BB::Instrs::iterator& pos) {
+    // We use ldvar instead of ldfun for the guard. The reason is that
+    // ldfun can force promises, which is a pain for our optimizer to
+    // deal with. If we use a ldvar here, the actual ldfun will be
+    // delayed into the deopt branch. Note that ldvar is conservative.
+    // If we find a non-function binding with the same name, we will
+    // deopt unneccessarily. In the case of `c` this is guaranteed to
+    // cause problems, since many variables are called "c". Therefore if
+    // we have seen any variable c we keep the ldfun in this case.
+    // TODO: Implement this with a dependency on the binding cell
+    // instead of an eager check.
+
+    auto calleeForGuard = callee;
+    if (auto ldfun = LdFun::Cast(callee)) {
+        if (ldfun->varName != symbol::c || !compiler.seenC) {
+            auto ldvar = new LdVar(ldfun->varName, ldfun->env());
+            pos = bb->insert(pos, ldvar) + 1;
+            calleeForGuard = ldvar;
+        }
+    }
+    auto guardedCallee = calleeForGuard;
+
+    assert(fb.monomorphic);
+
+    if (!fb.stableEnv) {
+        static SEXP b = nullptr;
+        if (!b) {
+            auto idx = blt("bodyCode");
+            b = Rf_allocSExp(BUILTINSXP);
+            b->u.primsxp.offset = idx;
+            R_PreserveObject(b);
+        }
+
+        // The "bodyCode" builtin will return R_NilValue for promises.
+        // It is therefore safe (ie. conservative with respect to the
+        // guard) to avoid forcing the result by casting it to a value.
+        if (calleeForGuard->type.maybeLazy()) {
+            auto casted = new CastType(calleeForGuard, CastType::Downcast,
+                                       PirType::any(), PirType::function());
+            calleeForGuard = casted;
+            pos = bb->insert(pos, casted) + 1;
+        }
+
+        auto body = new CallSafeBuiltin(b, {calleeForGuard}, 0);
+        body->effects.reset();
+        pos = bb->insert(pos, body) + 1;
+
+        calleeForGuard = body;
+    }
+
+    auto expected = fb.stableEnv ? compiler.module->c(fb.monomorphic)
+                                 : compiler.module->c(BODY(fb.monomorphic));
+
+    auto t = new Identical(calleeForGuard, expected, PirType::any());
+    pos = bb->insert(pos, t) + 1;
+
+    auto assumption = new Assume(t, cp, dr);
+    pos = bb->insert(pos, assumption) + 1;
+
+    if (fb.stableEnv)
+        return expected;
+
+    // The guard also ensures that this closure is not a promise thus we
+    // can force for free.
+    if (guardedCallee->type.maybePromiseWrapped()) {
+        auto forced =
+            new Force(guardedCallee, Env::elided(), Tombstone::framestate());
+        forced->effects.reset();
+        forced->effects.set(Effect::DependsOnAssume);
+        pos = bb->insert(pos, forced) + 1;
+
+        guardedCallee = forced;
+    }
+
+    return guardedCallee;
+}
+
 void BBTransform::mergeRedundantBBs(Code* closure) {
     // Aggregate all BBs that have 1 successor and that successor
     // only has 1 predecessor

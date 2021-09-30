@@ -24,9 +24,7 @@ class Rir2Pir {
     Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager)
         __attribute__((warn_unused_result));
 
-    typedef std::unordered_map<
-        Value*, std::tuple<Checkpoint*, ObservedCallees, Opcode*>>
-        CallTargetFeedback;
+    typedef std::unordered_map<Value*, Checkpoint*> CallTargetCheckpoints;
 
   private:
     Value* tryInlinePromise(rir::Code* srcCode, Builder& insert)
@@ -64,7 +62,7 @@ class Rir2Pir {
 
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
-                   CallTargetFeedback&);
+                   CallTargetCheckpoints&);
     virtual bool inPromise() const { return false; }
     virtual bool inlining() const { return false; }
 

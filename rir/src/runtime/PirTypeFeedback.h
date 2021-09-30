@@ -20,6 +20,7 @@ struct Code;
 
 namespace pir {
 struct TypeFeedback;
+struct CallFeedback;
 }
 
 struct PirTypeFeedback
