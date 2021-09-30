@@ -1035,6 +1035,10 @@ class FLI(ChkMissing, 1, Effect::Error) {
               in == MissingArg::instance() ? in->type : in->type.notMissing(),
               {{PirType::any()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        return getType(arg<0>().val()).notMissing();
+    }
 };
 
 class FLI(ChkFunction, 1, Effect::Error) {
