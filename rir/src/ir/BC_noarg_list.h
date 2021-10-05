@@ -18,8 +18,6 @@
     V(NESTED, subassign1_2, subassign1_2)                                      \
     V(NESTED, subassign2_2, subassign2_2)                                      \
     V(NESTED, subassign1_3, subassign1_3)                                      \
-    V(NESTED, names, names)                                                    \
-    V(NESTED, setNames, set_names)                                             \
     V(NESTED, asbool, asbool)                                                  \
     V(NESTED, endloop, endloop)                                                \
     V(NESTED, dup, dup)                                                        \

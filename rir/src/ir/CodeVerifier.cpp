@@ -51,7 +51,7 @@ class State {
         // themselves, so we can ignore leftover values on the stack. Note that
         // ret_ should not be added here, as it requires the stack to have
         // *only* the result value left.
-        if (bc.bc == Opcode::return_)
+        if (bc.bc == Opcode::return_ || bc.bc == Opcode::error_)
             ostack = 0;
         else
             ostack -= bc.popCount();

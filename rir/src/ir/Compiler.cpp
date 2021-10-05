@@ -13,6 +13,7 @@
 #include "../interpreter/safe_force.h"
 #include "interpreter/interp_incl.h"
 #include "utils/Pool.h"
+#include "utils/errors.h"
 
 #include "CodeVerifier.h"
 
@@ -571,8 +572,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::aslogical();
         cs.addSrc(args[0]);
-        cs << BC::dup()
-           << BC::brfalse(nextBranch);
+        cs << BC::dup() << BC::brfalse(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -596,8 +596,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::aslogical();
         cs.addSrc(ast);
-        cs << BC::dup()
-           << BC::brtrue(nextBranch);
+        cs << BC::dup() << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -1620,13 +1619,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 compileExpr(ctx, args[0]); // [X]
 
                 // get length and names of the vector X
-                cs << BC::dup() << BC::names() << BC::swap()
+                cs << BC::dup() << BC::get_attr(R_NamesSymbol) << BC::swap()
                    << BC::length_() // [names(X), length(X)]
                    << BC::dup() << BC::push(Rf_mkString("list")) << BC::swap()
                    << BC::callBuiltin(
                           2, symbol::tmp,
                           getBuiltinFun("vector")) // [names(X), length(X), ans]
-                   << BC::pick(2) << BC::setNames() << BC::swap()
+                   << BC::pick(2) << BC::set_attr(R_NamesSymbol) << BC::swap()
                    << BC::push((int)0); // [ans, length(X), i]
 
                 // loop invariant stack layout: [ans, length(X), i]
@@ -1668,6 +1667,390 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << nextBranch
                    << BC::pop()
                    << BC::pop()
+                   << BC::visible();
+
+                if (voidContext)
+                    cs << BC::pop();
+
+                return true;
+            }
+
+            // .Internal(vapply(X, FUN, FUN.VALUE, USE.NAMES))
+            if (fun == symbol::vapply && args.length() == 4) {
+
+                SEXP X = args[0];
+                SEXP FUN = args[1];
+                SEXP FUN_VALUE = args[2];
+                SEXP USE_NAMES = args[3];
+
+                compileExpr(ctx, X);
+                compileExpr(ctx, FUN_VALUE);
+                // [XX, value]
+
+                {
+                    // if (!isVector(value))
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::dup() << BC::is(BC::RirTypecheck::isVector)
+                       << BC::brtrue(contBranch)
+                       << BC::error("'FUN.VALUE' must be a vector")
+                       << contBranch;
+                }
+
+                compileExpr(ctx, USE_NAMES);
+                cs << BC::aslogical();
+                // [XX, value, useNames]
+
+                {
+                    // if (useNames == NA_LOGICAL)
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::dup() << BC::push(R_LogicalNAValue)
+                       << BC::identicalNoforce() << BC::brfalse(contBranch)
+                       << BC::push(Rf_mkChar("USE.NAMES"))
+                       << BC::error("invalid '%s' value",
+                                    Errors::Signature::Str)
+                       << contBranch;
+                }
+
+                cs << BC::pull(2) << BC::length_() << BC::ensureNamed();
+                // [XX, value, useNames, n]
+
+                {
+                    // if (n == NA_INTEGER)
+                    auto contBranch = cs.mkLabel();
+                    // compare to sth. non-NA, then check if result is NA
+                    cs << BC::dup() << BC::push(0) << BC::eq();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::push(R_LogicalNAValue) << BC::identicalNoforce()
+                       << BC::brfalse(contBranch) << BC::error("invalid length")
+                       << contBranch;
+                }
+
+                cs << BC::dup() << BC::push(INT_MAX) << BC::gt();
+                cs.addSrc(R_NilValue);
+                // [XX, value, useNames, n, realIndx]
+
+                cs << BC::pull(3) << BC::length_() << BC::ensureNamed();
+                // [XX, value, useNames, n, realIndx, commonLen]
+
+                {
+                    // if (commonLen > 1 && n > INT_MAX)
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::dup() << BC::push(1) << BC::gt();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::pull(1)
+                       << BC::brfalse(contBranch)
+                       << BC::error("long vectors are not supported for "
+                                    "matrix/array results")
+                       << contBranch;
+                }
+
+                cs << BC::pull(4) << BC::snippet(Snippets::Snippet::TYPEOF);
+                // [XX, value, useNames, n, realIndx, commonLen, commonType]
+
+                {
+                    // if (commonType != CPLXSXP && commonType != REALSXP &&
+                    //     commonType != INTSXP  && commonType != LGLSXP &&
+                    //     commonType != RAWSXP  && commonType != STRSXP &&
+                    //     commonType != VECSXP)
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::dup() << BC::push(CPLXSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(REALSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(INTSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(LGLSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(RAWSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(STRSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::push(VECSXP) << BC::ne();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch) << BC::dup()
+                       << BC::snippet(Snippets::Snippet::Rf_type2char)
+                       << BC::error("type '%s' is not supported",
+                                    Errors::Signature::Str)
+                       << contBranch;
+                }
+
+                cs << BC::pull(5) << BC::get_attr(R_DimSymbol);
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v]
+
+                {
+                    // (TYPEOF(dim_v) == INTSXP && LENGTH(dim_v) >= 1)
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::dup() << BC::is(BC::RirTypecheck::isINTSXP)
+                       << BC::dup() << BC::brfalse(contBranch) << BC::pop()
+                       << BC::dup() << BC::length_() << BC::push(1) << BC::ge();
+                    cs.addSrc(R_NilValue);
+                    cs << contBranch;
+                }
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value]
+
+                // cs << BC::pull(3) <<
+                // BC::snippet(Snippets::Snippet::Rf_PrintValue) << BC::pop();
+                // cs << BC::push(Rf_mkChar("LOOP END")) <<
+                // BC::snippet(Snippets::Snippet::Rf_PrintValue) << BC::pop();
+
+                cs << BC::pull(2) << BC::pull(6) << BC::pull(5) << BC::mul();
+                cs.addSrc(R_NilValue);
+
+                cs << BC::snippet(Snippets::Snippet::Rf_allocVector)
+                   << BC::push(R_NilValue) << BC::push(R_NilValue);
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value, ans, names, rowNames]
+
+                {
+                    // if (useNames)
+                    auto contBranch = cs.mkLabel();
+                    cs << BC::pull(9) << BC::brfalse(contBranch) << BC::swap()
+                       << BC::pop() << BC::pull(10)
+                       << BC::get_attr(R_NamesSymbol);
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, rowNames, names]
+
+                    {
+                        // if (isNull(names) && TYPEOF(XX) == STRSXP)
+                        auto contBranch = cs.mkLabel();
+                        cs << BC::dup() << BC::is(BC::RirTypecheck::isNILSXP)
+                           << BC::brfalse(contBranch) << BC::pull(11)
+                           << BC::is(BC::RirTypecheck::isSTRSXP)
+                           << BC::brfalse(contBranch) << BC::pop()
+                           << BC::pull(10) << contBranch;
+                    }
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, rowNames, names]
+
+                    {
+                        // getAttrib(value, array_value ? R_DimNamesSymbol :
+                        // R_NamesSymbol)
+                        auto trueBranch = cs.mkLabel(),
+                             contBranch = cs.mkLabel();
+                        cs << BC::swap() << BC::pop() << BC::pull(9)
+                           << BC::pull(3) << BC::brtrue(trueBranch)
+                           << BC::get_attr(R_NamesSymbol) << BC::br(contBranch)
+                           << trueBranch << BC::get_attr(R_DimNamesSymbol)
+                           << contBranch;
+                    }
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames]
+
+                    cs << contBranch;
+                }
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value, ans, names, rowNames]
+
+                cs << BC::push(0);
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value, ans, names, rowNames, common_len_offset]
+
+                {
+                    // ind = allocVector(realIndx ? REALSXP : INTSXP, 1)
+                    auto trueBranch = cs.mkLabel(), contBranch = cs.mkLabel();
+                    cs << BC::pull(8) << BC::brtrue(trueBranch)
+                       << BC::push(INTSXP) << BC::br(contBranch) << trueBranch
+                       << BC::push(REALSXP) << contBranch << BC::push(1)
+                       << BC::snippet(Snippets::Snippet::Rf_allocVector);
+                }
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value, ans, names, rowNames, common_len_offset,
+                // ind]
+
+                SEXP isym = Rf_install("i");
+                cs << BC::dup() << BC::stvar(isym);
+
+                {
+                    // for (i = 0; i < n; i++)
+                    BC::Label loopBranch = cs.mkLabel(),
+                              contBranch = cs.mkLabel();
+
+                    cs << BC::push(0);
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i]
+
+                    cs << loopBranch << BC::dup() << BC::pull(12) << BC::lt();
+                    cs.addSrc(R_NilValue);
+                    cs << BC::brfalse(contBranch);
+
+                    cs << BC::dup2()
+                       << BC::snippet(Snippets::Snippet::REALINTinc)
+                       << BC::pop();
+
+                    // Build call: forceAndCall(1, FUN, XX[[<ind>]], ...)
+                    SEXP one = Pool::get(Pool::getInt(1));
+                    SEXP tmp =
+                        PROTECT(LCONS(symbol::DoubleBracket,
+                                      LCONS(X, LCONS(isym, R_NilValue))));
+                    SEXP call = PROTECT(LCONS(
+                        symbol::forceAndCall,
+                        LCONS(one, LCONS(FUN, LCONS(tmp, LCONS(R_DotsSymbol,
+                                                               R_NilValue))))));
+
+                    compileCall(ctx, call, CAR(call), CDR(call), false);
+
+                    UNPROTECT(2); // tmp, call
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i, val]
+
+                    {
+                        // if (length(val) != commonLen)
+                        auto contBranch = cs.mkLabel();
+                        cs << BC::dup() << BC::length_() << BC::pull(11)
+                           << BC::ne();
+                        cs.addSrc(R_NilValue);
+                        cs << BC::brfalse(contBranch) << BC::pull(10)
+                           << BC::pull(2) << BC::push(1) << BC::add();
+                        cs.addSrc(R_NilValue);
+                        cs << BC::pull(2) << BC::length_()
+                           << BC::error("values must be length %d,\n but "
+                                        "FUN(X[[%d]]) result is length %d",
+                                        Errors::Signature::IntIntInt)
+                           << contBranch;
+                    }
+
+                    cs << BC::dup() << BC::snippet(Snippets::Snippet::TYPEOF);
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i, val, valType]
+
+                    {
+                        // if (valType != commonType)
+                        auto contBranch = cs.mkLabel();
+                        cs << BC::dup() << BC::pull(11) << BC::ne();
+                        cs.addSrc(R_NilValue);
+                        cs << BC::brfalse(contBranch);
+
+                        {
+                            // switch (commonType)
+                            auto complexBranch = cs.mkLabel(),
+                                 realBranch = cs.mkLabel(),
+                                 intBranch = cs.mkLabel(),
+                                 okayBranch = cs.mkLabel(),
+                                 errorBranch = cs.mkLabel();
+                            cs << BC::pull(10) << BC::push(CPLXSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(complexBranch) << BC::pull(10)
+                               << BC::push(REALSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(realBranch) << BC::pull(10)
+                               << BC::push(INTSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(intBranch) << BC::br(errorBranch)
+                               << complexBranch << BC::dup()
+                               << BC::push(REALSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(okayBranch) << realBranch
+                               << BC::dup() << BC::push(INTSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(okayBranch) << intBranch
+                               << BC::dup() << BC::push(LGLSXP) << BC::eq();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::brtrue(okayBranch) << errorBranch
+                               << BC::pull(10)
+                               << BC::snippet(Snippets::Snippet::Rf_type2char)
+                               << BC::pull(3) << BC::push(1) << BC::add();
+                            cs.addSrc(R_NilValue);
+                            cs << BC::pull(2)
+                               << BC::snippet(Snippets::Snippet::Rf_type2char)
+                               << BC::error("values must be type '%s',\n but "
+                                            "FUN(X[[%d]]) result is type '%s'",
+                                            Errors::Signature::StrIntStr)
+                               << okayBranch;
+                        }
+                        // [XX, value, useNames, n, realIndx, commonLen,
+                        // commonType, dim_v, array_value, ans, names, rowNames,
+                        // common_len_offset, ind, i, val, valType]
+
+                        cs << BC::swap() << BC::pull(10)
+                           << BC::snippet(Snippets::Snippet::Rf_coerceVector)
+                           << BC::swap() << contBranch << BC::pop();
+                    }
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i, val]
+
+                    {
+                        // if (i == 0 && useNames && isNull(rowNames))
+                        auto contBranch = cs.mkLabel();
+                        cs << BC::pull(1) << BC::push(0) << BC::eq();
+                        cs.addSrc(R_NilValue);
+                        cs << BC::brfalse(contBranch) << BC::pull(13)
+                           << BC::brfalse(contBranch) << BC::pull(4)
+                           << BC::is(BC::RirTypecheck::isNILSXP)
+                           << BC::brfalse(contBranch) << BC::pick(4)
+                           << BC::pop();
+                        // [XX, value, useNames, n, realIndx, commonLen,
+                        // commonType, dim_v, array_value, ans, names,
+                        // common_len_offset, ind, i, val]
+
+                        {
+                            // getAttrib(val, array_value ? R_DimNamesSymbol :
+                            // R_NamesSymbol)
+                            auto trueBranch = cs.mkLabel(),
+                                 contBranch = cs.mkLabel();
+                            cs << BC::dup() << BC::pull(7)
+                               << BC::brtrue(trueBranch)
+                               << BC::get_attr(R_NamesSymbol)
+                               << BC::br(contBranch) << trueBranch
+                               << BC::get_attr(R_DimNamesSymbol) << contBranch;
+                        }
+
+                        cs << BC::put(4) << contBranch;
+                    }
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i, val]
+
+                    cs << BC::pick(6) << BC::pull(10) << BC::pull(10)
+                       << BC::pull(4) << BC::pull(7)
+                       << BC::snippet(Snippets::Snippet::VapplySubassign)
+                       << BC::put(5);
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i]
+
+                    {
+                        // if (commonLen != 1)
+                        auto contBranch = cs.mkLabel();
+                        cs << BC::pull(9) << BC::push(1) << BC::ne();
+                        cs.addSrc(R_NilValue);
+                        cs << BC::brfalse(contBranch) << BC::pick(2)
+                           << BC::pull(9)
+                           << BC::snippet(Snippets::Snippet::VapplyOffsetInc)
+                           << BC::put(2) << contBranch;
+                    }
+                    // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                    // dim_v, array_value, ans, names, rowNames,
+                    // common_len_offset, ind, i]
+
+                    cs << BC::inc() << BC::br(loopBranch) << contBranch;
+                }
+                // [XX, value, useNames, n, realIndx, commonLen, commonType,
+                // dim_v, array_value, ans, names, rowNames,
+                // common_len_offset, ind, i]
+
+                cs << BC::popn(3) << BC::pick(5) << BC::pop() << BC::pick(6)
+                   << BC::pop() << BC::pick(8) << BC::pop() << BC::pick(8)
+                   << BC::pop();
+                // [useNames, n, commonLen, dim_v, array_value, ans, names,
+                // rowNames]
+
+                cs << BC::push(-1) << BC::ensureNamed();
+                // [useNames, n, commonLen, dim_v, array_value, ans, names,
+                // rowNames, rnk_v]
+
+                cs << BC::snippet(Snippets::Snippet::VapplyDimAndNames)
                    << BC::visible();
 
                 if (voidContext)

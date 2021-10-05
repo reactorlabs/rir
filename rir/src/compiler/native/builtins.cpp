@@ -9,6 +9,8 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
+#include "utils/errors.h"
+#include "utils/snippets.h"
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -275,7 +277,11 @@ SEXP ldfunImpl(SEXP sym, SEXP env) {
 
 static void warnImpl(const char* w) { Rf_warning(w); }
 
-static void errorImpl(const char* e) { Rf_error(e); }
+static void errorImpl(const char* msg, Immediate signature) {
+    Errors::makeCall(msg, static_cast<Errors::Signature>(signature));
+}
+
+static SEXP snippetImpl(Immediate kind) { return Snippets::execute(kind); }
 
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
@@ -1989,13 +1995,13 @@ double sumrImpl(SEXP v) {
     return res;
 }
 
-SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
+SEXP getAttrImpl(SEXP vec, SEXP name) { return Rf_getAttrib(vec, name); }
 
-SEXP setNamesImpl(SEXP val, SEXP names) {
-    // If names is R_NilValue, setAttrib doesn't return the val but rather
-    // R_NilValue, hence we cannot return val directly...
-    Rf_setAttrib(val, R_NamesSymbol, names);
-    return val;
+SEXP setAttrImpl(SEXP vec, SEXP name, SEXP val) {
+    // If name==R_NamesSymbol && val==R_NilValue, Rf_setAttrib returns
+    // R_NilValue, hence we cannot return it directly...
+    Rf_setAttrib(vec, name, val);
+    return vec;
 }
 
 size_t xlengthImpl(SEXP val) { return Rf_xlength(val); }
@@ -2094,10 +2100,15 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::chkfun) = {"chkfun", (void*)&chkfunImpl, t::sexp_sexpsexp};
     get_(Id::warn) = {"warn", (void*)&warnImpl,
                       llvm::FunctionType::get(t::t_void, {t::charPtr}, false)};
-    get_(Id::error) = {"error",
-                       (void*)&errorImpl,
-                       llvm::FunctionType::get(t::t_void, {t::charPtr}, false),
-                       {llvm::Attribute::NoReturn}};
+    get_(Id::error) = {
+        "error",
+        (void*)&errorImpl,
+        llvm::FunctionType::get(t::t_void, {t::charPtr, t::Int}, false),
+        {llvm::Attribute::NoReturn}};
+    get_(Id::snippet) = {"snippet",
+                         (void*)&snippetImpl,
+                         llvm::FunctionType::get(t::SEXP, {t::Int}, false),
+                         {}};
     get_(Id::callBuiltin) = {
         "callBuiltin", (void*)&callBuiltinImpl,
         llvm::FunctionType::get(
@@ -2337,11 +2348,8 @@ void NativeBuiltins::initializeBuiltins() {
         (void*)rir::colonCastRhs,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false),
         {llvm::Attribute::ReadOnly}};
-    get_(Id::names) = {"names", (void*)&namesImpl,
-                       llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
-    get_(Id::setNames) = {
-        "setNames", (void*)&setNamesImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+    get_(Id::getAttr) = {"getAttr", (void*)&getAttrImpl, t::sexp_sexpsexp};
+    get_(Id::setAttr) = {"setAttr", (void*)&setAttrImpl, t::sexp_sexpsexpsexp};
     get_(Id::xlength) = {"xlength",
                          (void*)&xlengthImpl,
                          llvm::FunctionType::get(t::i64, {t::SEXP}, false),

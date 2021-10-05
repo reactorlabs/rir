@@ -554,9 +554,9 @@ void PirJitLLVM::initializeLLVM() {
     // the host process.
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
-        Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
-                            JITDylibLookupFlags JDLookupFlags,
-                            const SymbolLookupSet& LookupSet) override {
+        llvm::Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
+                                  JITDylibLookupFlags JDLookupFlags,
+                                  const SymbolLookupSet& LookupSet) override {
             orc::SymbolMap NewSymbols;
             for (auto s : LookupSet) {
                 auto& Name = s.first;
@@ -578,7 +578,7 @@ void PirJitLLVM::initializeLLVM() {
                 }
             }
             if (NewSymbols.empty())
-                return Error::success();
+                return llvm::Error::success();
 
             return JD.define(absoluteSymbols(std::move(NewSymbols)));
         };

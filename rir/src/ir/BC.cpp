@@ -52,6 +52,8 @@ void BC::write(CodeStream& cs) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
+    case Opcode::get_attr_:
+    case Opcode::set_attr_:
         cs.insert(immediate.pool);
         return;
 
@@ -80,6 +82,10 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.callBuiltinFixedArgs);
         break;
 
+    case Opcode::error_:
+        cs.insert(immediate.errorArgs);
+        break;
+
     case Opcode::mk_promise_:
     case Opcode::mk_eager_promise_:
     case Opcode::push_code_:
@@ -98,6 +104,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::pull_:
     case Opcode::is_:
     case Opcode::put_:
+    case Opcode::snippet_:
         cs.insert(immediate.i);
         return;
 
@@ -141,6 +148,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+        case Opcode::get_attr_:
+        case Opcode::set_attr_:
             i.pool = Pool::insert(ReadItem(refTable, inp));
             break;
         case Opcode::ldvar_cached_:
@@ -176,6 +185,10 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.callBuiltinFixedArgs.builtin =
                 Pool::insert(ReadItem(refTable, inp));
             break;
+        case Opcode::error_:
+            i.errorArgs.msg = Pool::insert(ReadItem(refTable, inp));
+            i.errorArgs.signature = InInteger(inp);
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
@@ -191,6 +204,7 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+        case Opcode::snippet_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             InBytes(inp, code + 1, size - 1);
@@ -237,6 +251,8 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
+        case Opcode::get_attr_:
+        case Opcode::set_attr_:
             WriteItem(Pool::get(i.pool), refTable, out);
             break;
         case Opcode::ldvar_cached_:
@@ -268,6 +284,10 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
             WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
             break;
+        case Opcode::error_:
+            WriteItem(Pool::get(i.errorArgs.msg), refTable, out);
+            OutInteger(out, i.errorArgs.signature);
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
@@ -283,6 +303,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
+        case Opcode::snippet_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
@@ -371,6 +392,19 @@ void BC::print(std::ostream& out) const {
         out << nargs << " : " << Print::dumpSexp(target).c_str();
         break;
     }
+    case Opcode::error_: {
+        auto args = immediate.errorArgs;
+        auto msg = Pool::get(args.msg);
+        auto signature = static_cast<Errors::Signature>(args.signature);
+        auto nargs = Errors::signatureNargs(signature);
+        out << nargs << " (" << Errors::signature2char(signature)
+            << ") : " << Print::dumpSexp(msg).c_str();
+        break;
+    }
+    case Opcode::snippet_: {
+        out << " " << Snippets::str(immediate.i);
+        break;
+    }
     case Opcode::push_:
         out << Print::dumpSexp(immediateConst());
         break;
@@ -383,6 +417,8 @@ void BC::print(std::ostream& out) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
+    case Opcode::get_attr_:
+    case Opcode::set_attr_:
         out << CHAR(PRINTNAME(immediateConst()));
         break;
     case Opcode::ldvar_cached_:

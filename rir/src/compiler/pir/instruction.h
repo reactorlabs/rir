@@ -12,6 +12,7 @@
 #include "runtime/TypeFeedback.h"
 #include "singleton_values.h"
 #include "tag.h"
+#include "utils/errors.h"
 #include "value.h"
 
 #include <algorithm>
@@ -1173,6 +1174,33 @@ class Unreachable : public FixedLenInstruction<Tag::Unreachable, Unreachable, 0,
     explicit Unreachable() : FixedLenInstruction(PirType::voyd(), {{}}, {{}}) {}
 };
 
+class Error : public VarLenInstruction<Tag::Error, Error, Effects::AnyI(),
+                                       HasEnvSlot::No, Controlflow::Exit> {
+  public:
+    SEXP msg;
+    Immediate signature;
+
+    Error(SEXP msg, Immediate signature, const std::vector<Value*>& args)
+        : VarLenInstruction(PirType::voyd()), msg(msg), signature(signature) {
+        for (unsigned i = 0; i < args.size(); ++i)
+            pushArg(args[i], PirType::val());
+    }
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class Snippet : public VarLenInstruction<Tag::Snippet, Snippet, Effects::AnyI(),
+                                         HasEnvSlot::No> {
+  public:
+    Immediate kind;
+
+    Snippet(Immediate kind, const std::vector<Value*>& args)
+        : VarLenInstruction(PirType::val()), kind(kind) {
+        for (unsigned i = 0; i < args.size(); ++i)
+            pushArg(args[i], PirType::val());
+    }
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
 class Promise;
 class FLIE(MkArg, 2, Effects::None()) {
     Promise* prom_;
@@ -1784,20 +1812,29 @@ class FLI(Invisible, 0, Effect::Visibility) {
     }
 };
 
-class FLI(Names, 1, Effects::None()) {
+class FLI(GetAttr, 1, Effect::Error) {
   public:
-    explicit Names(Value* v)
+    SEXP name;
+    GetAttr(SEXP name_, Value* vec)
         : FixedLenInstruction(PirType(RType::str) | RType::nil,
-                              {{PirType::val()}}, {{v}}) {}
+                              {{PirType::val()}}, {{vec}}),
+          name(name_) {}
     size_t gvnBase() const override { return tagHash(); }
+    Value* vector() const { return arg(0).val(); }
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(SetNames, 2, Effect::Error) {
+class FLI(SetAttr, 2, Effect::Error) {
   public:
-    explicit SetNames(Value* v, Value* names)
-        : FixedLenInstruction(v->type, {{PirType::val(), PirType::val()}},
-                              {{v, names}}) {}
+    SEXP name;
+    SetAttr(SEXP name_, Value* vec, Value* value)
+        : FixedLenInstruction(vec->type, {{PirType::val(), PirType::val()}},
+                              {{vec, value}}),
+          name(name_) {}
     size_t gvnBase() const override { return tagHash(); }
+    Value* vector() const { return arg(0).val(); }
+    Value* value() const { return arg(1).val(); }
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(PirCopy, 1, Effects::None()) {

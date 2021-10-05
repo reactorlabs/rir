@@ -11,7 +11,9 @@
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "utils/Pool.h"
+#include "utils/errors.h"
 #include "utils/measuring.h"
+#include "utils/snippets.h"
 
 #include <assert.h>
 #include <deque>
@@ -3661,14 +3663,18 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(names_) {
-            ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), R_NamesSymbol));
+        INSTRUCTION(get_attr_) {
+            SEXP name = readConst(ctx, readImmediate());
+            advanceImmediate();
+            ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), name));
             NEXT();
         }
 
-        INSTRUCTION(set_names_) {
-            SEXP names = ostack_pop(ctx);
-            Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, names);
+        INSTRUCTION(set_attr_) {
+            SEXP name = readConst(ctx, readImmediate());
+            advanceImmediate();
+            SEXP value = ostack_pop(ctx);
+            Rf_setAttrib(ostack_top(ctx), name, value);
             NEXT();
         }
 
@@ -3739,6 +3745,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(snippet_) {
+            Immediate kind = readImmediate();
+            advanceImmediate();
+            SEXP res = Snippets::execute(kind);
+            ostack_popn(ctx, Snippets::nargs(kind));
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(beginloop_) {
             SLOWASSERT(env);
             int offset = readJumpOffset();
@@ -3752,6 +3767,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(endloop_) { return loopTrampolineMarker; }
+
+        INSTRUCTION(error_) {
+            SEXP msg = readConst(ctx, readImmediate());
+            advanceImmediate();
+            assert(TYPEOF(msg) == CHARSXP);
+
+            Immediate signature = readImmediate();
+            advanceImmediate();
+
+            Errors::makeCall(CHAR(msg),
+                             static_cast<Errors::Signature>(signature));
+
+            // not reached
+            assert(false);
+        }
 
         INSTRUCTION(return_) {
             res = ostack_pop(ctx);

@@ -151,7 +151,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
             return;
 
         if (bb->isDeopt() || bb->isEndUnreachable() ||
-            NonLocalReturn::Cast(bb->last()))
+            NonLocalReturn::Cast(bb->last()) || Error::Cast(bb->last()))
             return;
 
         ret = Return::Cast(bb->last());

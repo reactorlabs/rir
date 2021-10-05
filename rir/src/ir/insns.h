@@ -109,6 +109,11 @@ DEF_INSTR(call_dots_, 4, -1, 1)
 DEF_INSTR(call_builtin_, 3, -1, 1)
 
 /**
+ * error_::
+ */
+DEF_INSTR(error_, 2, -1, 0)
+
+/**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
 DEF_INSTR(close_, 0, 3, 1)
@@ -384,14 +389,19 @@ DEF_INSTR(guard_fun_, 3, 0, 0)
 DEF_INSTR(colon_, 0, 2, 1)
 
 /**
- * names_ :: read out names of a vector
+ * get_attr_ :: read out an attribute of a vector
+ *              name is immediate, pops vector, pushes attribute
  */
-DEF_INSTR(names_, 0, 1, 1)
+DEF_INSTR(get_attr_, 1, 1, 1)
 
 /**
- * set_names_ :: set names of a vector, takes vector and names, puts vector back
+ * set_attr_ :: set an attribute of a vector
+ *              name immediate, takes vector and attribute, puts vector back
+ * NOTE: Setting R_NamesSymbol to R_NilValue still leaves the vector on the
+ * stack, as opposed to GNU R's Rf_setAttrib which will instead return
+ * R_NilValue...
  */
-DEF_INSTR(set_names_, 0, 2, 1)
+DEF_INSTR(set_attr_, 1, 2, 1)
 
 /**
  * length_ :: get length of a small vector
@@ -458,5 +468,12 @@ DEF_INSTR(record_test_, 1, 1, 1)
 
 DEF_INSTR(int3_, 0, 0, 0)
 DEF_INSTR(printInvocation_, 0, 0, 0)
+
+/**
+ * snippet_:: execute snippet of C code, typically call some R internal function
+ * that we don't support in BC, passing args on the stack and leaving the result
+ * on the stack
+ */
+DEF_INSTR(snippet_, 1, -1, 1)
 
 #undef DEF_INSTR

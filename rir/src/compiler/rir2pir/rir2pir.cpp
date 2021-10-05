@@ -19,6 +19,8 @@
 #include "runtime/ArglistOrder.h"
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
+#include "utils/errors.h"
+#include "utils/snippets.h"
 
 #include <sstream>
 #include <unordered_map>
@@ -1161,14 +1163,26 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::names_:
-        push(insert(new Names(pop())));
+    case Opcode::get_attr_: {
+        push(insert(new GetAttr(Pool::get(bc.immediate.pool), pop())));
         break;
+    }
 
-    case Opcode::set_names_: {
-        Value* names = pop();
+    case Opcode::set_attr_: {
+        Value* value = pop();
         Value* vec = pop();
-        push(insert(new SetNames(vec, names)));
+        push(insert(new SetAttr(Pool::get(bc.immediate.pool), vec, value)));
+        break;
+    }
+
+    case Opcode::snippet_: {
+        auto kind = bc.immediate.i;
+        long nargs = Snippets::nargs(kind);
+        std::vector<Value*> args(nargs);
+        for (long i = 0; i < nargs; ++i)
+            args[nargs - i - 1] = at(i);
+        popn(nargs);
+        push(insert(new Snippet(kind, args)));
         break;
     }
 
@@ -1200,6 +1214,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::br_:
     case Opcode::ret_:
     case Opcode::return_:
+    case Opcode::error_:
         assert(false);
 
     // Unsupported opcodes:
@@ -1423,6 +1438,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
                 }
                 cur.stack.clear();
                 break;
+            case Opcode::error_: {
+                auto msg = Pool::get(bc.immediate.errorArgs.msg);
+                auto signature = bc.immediate.errorArgs.signature;
+                long nargs = Errors::signatureNargs(
+                    static_cast<Errors::Signature>(signature));
+                std::vector<Value*> args(nargs);
+                for (long i = 0; i < nargs; ++i)
+                    args[nargs - i - 1] = cur.stack.at(i);
+                insert(new Error(msg, bc.immediate.errorArgs.signature, args));
+                localReturn = false;
+                cur.stack.clear();
+                break;
+            }
             default:
                 assert(false);
             }

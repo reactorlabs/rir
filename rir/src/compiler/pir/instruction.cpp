@@ -819,6 +819,46 @@ void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) const {
     printCallArgs(out, this);
 }
 
+void Error::printArgs(std::ostream& out, bool tty) const {
+    long s = nargs();
+    out << Print::dumpSexp(msg).c_str() << " - " << s << " ("
+        << Errors::signature2char(static_cast<Errors::Signature>(signature))
+        << ") : ";
+    eachArg([&](Value* i) {
+        if (s) {
+            s--;
+            i->printRef(out);
+            if (s)
+                out << ", ";
+        }
+    });
+}
+
+void Snippet::printArgs(std::ostream& out, bool tty) const {
+    long s = nargs();
+    out << Snippets::str(kind) << " : ";
+    eachArg([&](Value* i) {
+        if (s) {
+            s--;
+            i->printRef(out);
+            if (s)
+                out << ", ";
+        }
+    });
+}
+
+void GetAttr::printArgs(std::ostream& out, bool tty) const {
+    out << Print::dumpSexp(name).c_str() << ", ";
+    vector()->printRef(out);
+}
+
+void SetAttr::printArgs(std::ostream& out, bool tty) const {
+    out << Print::dumpSexp(name).c_str() << ", ";
+    vector()->printRef(out);
+    out << " <- ";
+    value()->printRef(out);
+}
+
 void FrameState::printArgs(std::ostream& out, bool tty) const {
     out << code << "+" << pc - code->code();
     if (inPromise)
