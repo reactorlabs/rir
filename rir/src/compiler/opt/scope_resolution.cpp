@@ -620,7 +620,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (guess) {
                         // TODO: if !guess->maybe(closure) we know that the
                         // guess is wrong and could try the next binding.
-                        if (!guess->type.isA(PirType::closure())) {
+                        if (!guess->type.isA(PirType::function())) {
                             if (auto i = Instruction::Cast(guess)) {
                                 analysis.lookupAt(
                                     before, i,
@@ -630,7 +630,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     });
                             }
                         }
-                        if (guess->type.isA(PirType::closure()) &&
+                        if (guess->type.isA(PirType::function()) &&
                             guess->validIn(code)) {
                             guess = getReplacedValue(guess);
                             ldfun->replaceUsesWith(guess);

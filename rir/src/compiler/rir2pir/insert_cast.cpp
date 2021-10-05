@@ -9,7 +9,7 @@ Instruction* InsertCast::cast(Value* v, PirType t, Value* env) {
     if (v->type.maybePromiseWrapped() && !t.maybePromiseWrapped()) {
         return new Force(v, env, Tombstone::framestate());
     }
-    if (!v->type.isA(PirType::closure()) && t == PirType::closure()) {
+    if (!v->type.isA(PirType::function()) && t.isA(PirType::function())) {
         return new ChkFunction(v);
     }
 

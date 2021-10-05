@@ -1034,7 +1034,7 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1056,7 +1056,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1082,7 +1082,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1109,7 +1109,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(runtimeClosure, PirType::closure());
+    pushArg(runtimeClosure, PirType::function());
     for (unsigned i = 0; i < args.size(); ++i) {
         assert(!ExpandDots::Cast(args[i]) &&
                "Static Call cannot accept dynamic number of arguments");

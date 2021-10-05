@@ -2375,6 +2375,8 @@ void LowerFunctionLLVM::compile() {
                     }
                 }
 
+                // TODO: is it okay to ignore RType::builtin and RType::special
+                // here?
                 if (a->type.maybe(RType::closure) ||
                     b->type.maybe(RType::closure)) {
                     res = createSelect2(
@@ -2980,7 +2982,7 @@ void LowerFunctionLLVM::compile() {
                     case blt("bodyCode"): {
                         assert(irep == Rep::SEXP && orep == irep);
                         llvm::Value* res = nullptr;
-                        if (i->arg(0).val()->type.isA(PirType::closure())) {
+                        if (i->arg(0).val()->type.isA(PirType::function())) {
                             res = closxpBody(a);
                         } else {
                             res = createSelect2(
@@ -2994,7 +2996,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("environment"):
-                        if (!i->arg(0).val()->type.isA(PirType::closure())) {
+                        if (!i->arg(0).val()->type.isA(PirType::function())) {
                             done = false;
                             break;
                         }

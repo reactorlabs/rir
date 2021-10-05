@@ -193,12 +193,12 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
             const AbstractPirValue& res = envIt->second.get(e);
 
             // If it is a closure, we know we are good
-            if (res.type.isA(PirType::closure()))
+            if (res.type.isA(PirType::function()))
                 return AbstractLoad(env, res);
 
             // If it might be a closure, we can neither be sure, nor exclude
             // this binding...
-            if (res.type.maybe(PirType::closure()))
+            if (res.type.maybe(PirType::function()))
                 return AbstractLoad(env, AbstractPirValue::tainted());
 
             if (res.maybeUnboundValue())
