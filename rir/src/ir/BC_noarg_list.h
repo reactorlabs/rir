@@ -48,7 +48,7 @@
     V(NESTED, colon, colon)                                                    \
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \
-    V(NESTED, asLogical, aslogical)                                            \
+    V(NESTED, aslogical, aslogical)                                            \
     V(NESTED, lglOr, lgl_or)                                                   \
     V(NESTED, lglAnd, lgl_and)                                                 \
     V(NESTED, checkClosure, check_closure)                                     \
