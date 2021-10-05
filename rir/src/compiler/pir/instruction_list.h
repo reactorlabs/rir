@@ -65,7 +65,7 @@
     V(MkFunCls)                                                                \
     V(MkCls)                                                                   \
     V(ChkMissing)                                                              \
-    V(ChkClosure)                                                              \
+    V(ChkFunction)                                                             \
     V(Call)                                                                    \
     V(NamedCall)                                                               \
     V(StaticCall)                                                              \

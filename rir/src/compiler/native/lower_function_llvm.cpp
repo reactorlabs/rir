@@ -5570,10 +5570,10 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::ChkClosure: {
+            case Tag::ChkFunction: {
                 auto arg = loadSxp(i->arg(0).val());
                 call(NativeBuiltins::get(NativeBuiltins::Id::chkfun),
-                     {constant(Rf_install(ChkClosure::Cast(i)->name().c_str()),
+                     {constant(Rf_install(ChkFunction::Cast(i)->name().c_str()),
                                t::SEXP),
                       arg});
                 setVal(i, arg);

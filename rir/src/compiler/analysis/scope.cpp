@@ -466,7 +466,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
     }
 
-    if (!CallSafeBuiltin::Cast(i) && !ChkClosure::Cast(i) &&
+    if (!CallSafeBuiltin::Cast(i) && !ChkFunction::Cast(i) &&
         !CastType::Cast(i) && !Force::Cast(i)) {
         i->eachArg([&](Value* a) {
             // The env arg has special treatment below since it can only be

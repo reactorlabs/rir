@@ -1259,8 +1259,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::check_closure_:
-        push(insert(new ChkClosure(pop())));
+    case Opcode::check_function_:
+        push(insert(new ChkFunction(pop())));
         break;
 
 #define V(_, name, Name)                                                       \

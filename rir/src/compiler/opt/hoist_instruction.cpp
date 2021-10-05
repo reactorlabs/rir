@@ -51,7 +51,9 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             // Those are hoisted even if they have effects, but needs expensive
             // effect reordering checks
             static std::unordered_set<Tag> whitelist = {
-                Tag::Force, Tag::ChkMissing, Tag::ChkClosure,
+                Tag::Force,
+                Tag::ChkMissing,
+                Tag::ChkFunction,
             };
             // Those are never hoisted
             static std::unordered_set<Tag> blacklist = {

@@ -68,11 +68,11 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                             force->effects.reset(Effect::Reflection);
                         }
                     }
-                } else if (auto chkcls = ChkClosure::Cast(i)) {
-                    Value* arg = chkcls->arg<0>().val();
+                } else if (auto chkfun = ChkFunction::Cast(i)) {
+                    Value* arg = chkfun->arg<0>().val();
                     if (arg->type.isA(PirType::closure())) {
                         removed = true;
-                        chkcls->replaceUsesWith(arg);
+                        chkfun->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (auto b = CallBuiltin::Cast(i)) {
