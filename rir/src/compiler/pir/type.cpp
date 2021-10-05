@@ -135,7 +135,7 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
         return false;
     } else {
         // Not a type which can represent NaN
-        return true;
+        return false;
     }
 }
 
