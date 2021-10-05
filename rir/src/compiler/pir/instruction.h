@@ -1225,7 +1225,7 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     size_t gvnBase() const override {
-        // Lazyly compiled cls might be still missing
+        // Lazily compiled cls might be still missing
         if (!cls)
             return 0;
         return hash_combine(tagHash(), cls);
@@ -2414,7 +2414,7 @@ class VLIE(MkEnv, Effect::LeakArg) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
-    std::string name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
+    std::string name() const override { return stub ? "(MkEnv)" : "MkEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
 

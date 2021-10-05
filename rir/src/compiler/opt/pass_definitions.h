@@ -91,7 +91,7 @@ class PASS(ElideEnvSpec, false, false);
  */
 class PASS(Constantfold, true, false);
 
-// Constantfolding to be used in rir2pi
+// Constantfolding to be used in rir2pir
 class PASS(EarlyConstantfold, true, false);
 
 /*

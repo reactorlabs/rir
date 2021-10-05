@@ -524,7 +524,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
             if (auto i = Instruction::Cast(at(0))) {
-                // Search for the most specific feedabck for this location
+                // Search for the most specific feedback for this location
                 for (auto fb : outerFeedback) {
                     bool found = false;
                     // TODO: implement with a find method on register map

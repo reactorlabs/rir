@@ -155,6 +155,7 @@ struct NativeBuiltins {
         checkType,
         shallowDuplicate,
         sigsetjmp,
+        // Warning: keep LAST in sync!
 
         // book keeping
         NUM_BUILTINS,

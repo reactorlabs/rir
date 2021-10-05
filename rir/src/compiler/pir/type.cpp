@@ -238,5 +238,6 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
             type = type & PirType::simpleScalarInt().orPromiseWrapped();
     }
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

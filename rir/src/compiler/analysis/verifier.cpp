@@ -348,38 +348,38 @@ class TheVerifier {
                     }
                 }
             });
-                std::unordered_set<BB*> inp;
-                for (auto in : bb->predecessors())
-                    inp.insert(in);
-                phi->eachArg([&](BB* bb, Value*) {
-                    auto pos = inp.find(bb);
-                    if (pos == inp.end()) {
-                        std::cerr << "Error at instruction '";
-                        i->print(std::cerr);
-                        std::cerr << " input BB" << bb->id
-                                  << " is not a predecessor\n";
-                        ok = false;
-                    } else {
-                        inp.erase(pos);
-                    }
-                });
-                if (!inp.empty()) {
+            std::unordered_set<BB*> inp;
+            for (auto in : bb->predecessors())
+                inp.insert(in);
+            phi->eachArg([&](BB* bb, Value*) {
+                auto pos = inp.find(bb);
+                if (pos == inp.end()) {
                     std::cerr << "Error at instruction '";
                     i->print(std::cerr);
-                    std::cerr << " the following predecessor blocks are not "
-                                 "handled in phi: ";
-                    for (auto& in : inp)
-                        std::cerr << in->id << " ";
-                    std::cerr << "\n";
+                    std::cerr << "' input BB" << bb->id
+                              << " is not a predecessor\n";
                     ok = false;
+                } else {
+                    inp.erase(pos);
                 }
+            });
+            if (!inp.empty()) {
+                std::cerr << "Error at instruction '";
+                i->print(std::cerr);
+                std::cerr << "' the following predecessor blocks are not "
+                             "handled in phi: ";
+                for (auto& in : inp)
+                    std::cerr << in->id << " ";
+                std::cerr << "\n";
+                ok = false;
+            }
         }
 
         if (auto fs = FrameState::Cast(i)) {
             if (fs->env() == Env::elided()) {
                 std::cerr << "Error at instruction '";
                 i->print(std::cerr);
-                std::cerr << " framestate env cannot be elided\n";
+                std::cerr << "' framestate env cannot be elided\n";
                 ok = false;
             }
             std::unordered_set<Value*> envs;
@@ -388,7 +388,7 @@ class TheVerifier {
                     if (envs.count(fs->env())) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
-                        std::cerr << " same env occurs multiple times\n";
+                        std::cerr << "' same env occurs multiple times\n";
                         ok = false;
                     }
                     envs.insert(fs->env());
@@ -402,7 +402,7 @@ class TheVerifier {
             if (env && env->stub) {
                 std::cerr << "Error at instruction '";
                 i->print(std::cerr);
-                std::cerr << " that uses a stub environment\n";
+                std::cerr << "' that uses a stub environment\n";
                 ok = false;
             }
         }
@@ -440,9 +440,9 @@ class TheVerifier {
             if (!t.isSuper(v->type)) {
                 std::cerr << "Error at instruction '";
                 i->print(std::cerr);
-                std::cerr << "': Value ";
+                std::cerr << "': Value '";
                 v->printRef(std::cerr);
-                std::cerr << " has type " << v->type
+                std::cerr << "' has type " << v->type
                           << " which is not a subtype of " << t << "\n";
                 ok = false;
             }

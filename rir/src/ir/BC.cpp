@@ -482,7 +482,7 @@ std::ostream& operator<<(std::ostream& out, BC::RirTypecheck t) {
         out << "NonObject";
         break;
     case BC::RirTypecheck::isVector:
-        out << "NonObject";
+        out << "Vector";
         break;
     case BC::RirTypecheck::isNILSXP:
     case BC::RirTypecheck::isLGLSXP:

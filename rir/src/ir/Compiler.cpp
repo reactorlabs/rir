@@ -1608,6 +1608,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 return true;
             }
 
+            // .Internal(lapply(X, FUN))
             if (fun == symbol::lapply && args.length() == 2) {
 
                 BC::Label loopBranch = cs.mkLabel();
