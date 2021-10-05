@@ -2363,7 +2363,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = builder.CreateICmpEQ(ai, bi);
 
-                if (Rep::Of(b) == Rep::SEXP) {
+                if (rep == Rep::SEXP) {
                     if (a->type.maybeLazy()) {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpNE(
