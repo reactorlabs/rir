@@ -451,6 +451,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
+        if (auto i = Instruction::Cast(val))
+            i->printRecursive(std::cerr, 1);
+        else
+            val->printRef(std::cerr);
+        std::cerr << "\nCould not be loaded in:\n";
+        code->printCode(std::cerr, 1, 0);
         assert(false);
     }
 
@@ -4522,13 +4528,15 @@ void LowerFunctionLLVM::compile() {
                 if (LdFunctionEnv::Cast(i->env()))
                     env = myPromenv;
 
+                bool maybeUnbound = true;
+                llvm::Value* res;
                 if (env && env->stub) {
                     auto e = loadSxp(env);
-                    llvm::Value* res =
-                        envStubGet(e, env->indexOf(varName), env->nLocals());
-                    if (env->argNamed(varName).val() ==
+                    res = envStubGet(e, env->indexOf(varName), env->nLocals());
+                    if (env->argNamed(varName).val() !=
                         UnboundValue::instance()) {
-
+                        maybeUnbound = false;
+                    } else {
                         res = createSelect2(
                             builder.CreateICmpEQ(
                                 res, constant(R_UnboundValue, t::SEXP)),
@@ -4542,12 +4550,7 @@ void LowerFunctionLLVM::compile() {
                             },
                             [&]() { return res; });
                     }
-                    setVal(i, res);
-                    break;
-                }
-
-                llvm::Value* res;
-                if (bindingsCache.count(i->env())) {
+                } else if (bindingsCache.count(i->env())) {
                     auto phi = phiBuilder(t::SEXP);
                     auto offset = bindingsCache.at(i->env()).at(varName);
 
@@ -4630,11 +4633,13 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                 }
+
                 res->setName(CHAR(PRINTNAME(varName)));
 
                 if (maybeLd) {
                     checkMissing(res);
-                    checkUnbound(res);
+                    if (maybeUnbound)
+                        checkUnbound(res);
                 }
                 setVal(i, res);
                 break;
