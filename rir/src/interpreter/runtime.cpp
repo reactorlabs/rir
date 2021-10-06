@@ -27,7 +27,7 @@ void initializeRuntime() {
     // initialize the global context
     globalContext_ = context_create();
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
-                         rirDecompile, deserializeRir, serializeRir,
+                         rirDecompile, rirPrint, deserializeRir, serializeRir,
                          materialize);
     RuntimeProfiler::initProfiler();
 }

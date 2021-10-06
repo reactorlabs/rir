@@ -45,6 +45,8 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
 
 SEXP rirDecompile(SEXP s);
 
+void rirPrint(SEXP s);
+
 void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out);
 SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 // Will serialize and deserialize the SEXP, returning a deep copy.
