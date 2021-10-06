@@ -1136,7 +1136,7 @@ PirType StaticCall::inferType(const GetType& getType) const {
                 }
             }
         });
-        if (!t.isVoid())
+        if (!(type & t).isVoid())
             return type & t;
     }
     return type;
