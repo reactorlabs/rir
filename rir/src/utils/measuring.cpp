@@ -26,11 +26,29 @@ struct MeasuringImpl {
     std::unordered_map<std::string, size_t> events;
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
     std::chrono::time_point<std::chrono::high_resolution_clock> end;
+    #if LOGG > 0
+    std::ofstream logg_stream;
+    std::chrono::time_point<std::chrono::steady_clock> c_start, c_end;
+    #endif
     size_t threshold = 0;
     const unsigned width = 40;
     bool shouldOutput = false;
 
-    MeasuringImpl() : start(std::chrono::high_resolution_clock::now()) {}
+    MeasuringImpl() : start(std::chrono::high_resolution_clock::now()) {
+        #if LOGG > 0
+        c_start = std::chrono::steady_clock::now();
+
+        if(getenv("LOGG") != NULL) {
+            std::string binId = getenv("LOGG");
+            logg_stream.open(binId + ".logg");
+        } else {
+            time_t timenow = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+            std::stringstream runId_ss;
+            runId_ss << std::put_time( localtime( &timenow ), "%FT%T%z" ) << ".logg";
+            logg_stream.open(runId_ss.str());
+        }
+        #endif
+    }
 
     ~MeasuringImpl() {
         end = std::chrono::high_resolution_clock::now();
@@ -47,6 +65,12 @@ struct MeasuringImpl {
         } else {
             dump(std::cerr);
         }
+        #if LOGG > 0
+        c_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> total = end - start;
+        logg_stream << "##," << total.count();
+        logg_stream.close();
+        #endif
     }
 
     void dump(std::ostream& out) {
@@ -192,5 +216,10 @@ void Measuring::countEvent(const std::string& name, size_t n) {
     m->shouldOutput = true;
     m->events[name] += n;
 }
+#if LOGG > 0
+std::ofstream & Measuring::getLogStream() {
+    return m->logg_stream;
+}
+#endif
 
 } // namespace rir

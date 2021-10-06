@@ -12,7 +12,7 @@
 #include "safe_force.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
-
+#include <chrono>
 #include <assert.h>
 #include <deque>
 #include <libintl.h>
@@ -532,16 +532,29 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     auto pos = reason.pc();
 
     switch (reason.reason) {
-    case DeoptReason::Unknown:
+    case DeoptReason::Unknown: {
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: Unknown" << std::endl;
+        #endif
         break;
+    }
     case DeoptReason::DeadBranchReached: {
         assert(*pos == Opcode::record_test_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: DeadBranchReached" << std::endl;
+        #endif
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
         feedback->seen = ObservedTest::Both;
         break;
     }
     case DeoptReason::Typecheck: {
         assert(*pos == Opcode::record_type_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: Typecheck" << std::endl;
+        #endif
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedValues* feedback = (ObservedValues*)(pos + 1);
@@ -557,12 +570,21 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
         }
         break;
     }
-    case DeoptReason::DeadCall:
+    case DeoptReason::DeadCall: {
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: DeadCall" << std::endl;
+        #endif
         reason.srcCode()->deadCallReached++;
         // fall through
         [[clang::fallthrough]];
+    }
     case DeoptReason::Calltarget: {
         assert(*pos == Opcode::record_call_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: CallTarget" << std::endl;
+        #endif
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
@@ -572,6 +594,10 @@ void recordDeoptReason(SEXP val, const DeoptReason& reason) {
     }
     case DeoptReason::EnvStubMaterialized: {
         reason.srcCode()->flags.set(Code::NeedsFullEnv);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: EnvStubMaterialized" << std::endl;
+        #endif
         break;
     }
     }
@@ -896,6 +922,53 @@ class SlowcaseCounter {
 };
 #endif
 
+#if LOGG > 0
+class Timer {
+private:
+    std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::_V2::steady_clock::duration> tick, tock;
+    std::chrono::duration<double, std::milli> runtime;
+    size_t fun_id;
+public:
+    void start(const CallContext& call, int hast) {
+		tick = std::chrono::steady_clock::now();
+		std::ofstream & logg = Measuring::getLogStream();
+		SEXP const lhs = CAR(call.ast);
+		static const SEXP double_colons = Rf_install("::");
+		static const SEXP triple_colons = Rf_install(":::");
+		fun_id = reinterpret_cast<size_t>(BODY(call.callee));
+        logg << "=,\"" << fun_id << "\"," << hast << ",";
+        // Function Header
+        if (TYPEOF(lhs) == SYMSXP) {
+			// case 1: function call of the form f(x,y,z)
+			logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
+		} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
+			// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
+			SEXP const fun1 = CAR(lhs);
+			SEXP const pkg = CADR(lhs);
+			SEXP const fun2 = CADDR(lhs);
+			assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
+			logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
+		} else {
+			logg << "\"AN_" << fun_id << "\"";
+        }
+        logg << "\n";
+    }
+
+    void end(const Context & context) {
+		std::ofstream & logg = Measuring::getLogStream();
+        tock = std::chrono::steady_clock::now();
+        runtime = tock - tick;
+		logg << "!," << "\"" << context << "\"," << context.toI() << "," << runtime.count() << "," << fun_id << "\n";
+    }
+private:
+    void* operator new(size_t);
+    void* operator new[](size_t);
+    void operator delete(void*);
+    void operator delete[](void*);
+};
+#endif
+
+
 SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
     assert(call.callee);
 
@@ -959,6 +1032,11 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         assert(DispatchTable::check(body));
 
         auto table = DispatchTable::unpack(body);
+
+        #if LOGG > 0
+        Timer t;
+        t.start(call,table->hast);
+        #endif
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs(),
                             ctx);
@@ -1101,6 +1179,11 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         assert(!fun->flags.contains(Function::Deopt));
         if (popArgs)
             ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+
+        #if LOGG > 0
+        t.end(fun->context());
+        #endif
+
         return result;
     }
     default:
