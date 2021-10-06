@@ -362,7 +362,7 @@ class Instruction : public Value {
     template <typename Result>
     Result ifNonObjectArgs(const GetType& getType, Result then,
                            Result otherwise) const {
-        if (!mergedInputType(getType).maybeObj())
+        if (!getType(arg(0).val()).maybeObj())
             return then;
         return otherwise;
     }
@@ -2345,6 +2345,9 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
+
+    PirType inferType(const GetType& at = [](Value* v) { return v->type; })
+        const override final;
 
     VisibilityFlag visibilityFlag() const override;
     Value* frameStateOrTs() const override final {
