@@ -569,14 +569,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         compileExpr(ctx, args[0]);
 
-        cs << BC::asLogical();
+        cs << BC::aslogical();
         cs.addSrc(args[0]);
         cs << BC::dup()
            << BC::brfalse(nextBranch);
 
         compileExpr(ctx, args[1]);
 
-        cs << BC::asLogical();
+        cs << BC::aslogical();
         cs.addSrc(args[1]);
         cs << BC::lglAnd();
 
@@ -594,14 +594,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         compileExpr(ctx, args[0]);
 
-        cs << BC::asLogical();
+        cs << BC::aslogical();
         cs.addSrc(ast);
         cs << BC::dup()
            << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
-        cs << BC::asLogical();
+        cs << BC::aslogical();
         cs.addSrc(ast);
         cs << BC::lglOr();
 
@@ -1608,6 +1608,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 return true;
             }
 
+            // .Internal(lapply(X, FUN))
             if (fun == symbol::lapply && args.length() == 2) {
 
                 BC::Label loopBranch = cs.mkLabel();
@@ -1840,7 +1841,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         cs << BC::ldfun(fun);
     } else {
         compileExpr(ctx, fun);
-        cs << BC::checkClosure();
+        cs << BC::checkFunction();
     }
 
     if (Compiler::profile)

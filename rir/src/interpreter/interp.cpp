@@ -303,6 +303,8 @@ SEXP materialize(SEXP wrapper) {
         auto parent = lazyEnv->getParent();
         res = Rf_NewEnvironment(R_NilValue, arglist, parent);
         lazyEnv->materialized(res);
+        // Make sure wrapper is not collected by the gc (we may still use it to
+        // access the materialized env)
         Rf_setAttrib(res, symbol::delayedEnv, wrapper);
         lazyEnv->clear();
         // Fixup the contexts chain
@@ -2412,7 +2414,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(check_closure_) {
+        INSTRUCTION(check_function_) {
             SEXP val = ostack_top(ctx);
 
             switch (TYPEOF(val)) {

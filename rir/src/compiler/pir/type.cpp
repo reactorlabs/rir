@@ -27,10 +27,13 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::list);
         break;
     case CLOSXP:
-    // TODO: maybe have different types for those three?
-    case SPECIALSXP:
-    case BUILTINSXP:
         t_.r.set(RType::closure);
+        break;
+    case SPECIALSXP:
+        t_.r.set(RType::special);
+        break;
+    case BUILTINSXP:
+        t_.r.set(RType::builtin);
         break;
     case ENVSXP:
         t_.r.set(RType::env);
@@ -132,7 +135,7 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
         return false;
     } else {
         // Not a type which can represent NaN
-        return true;
+        return false;
     }
 }
 
@@ -238,5 +241,6 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
             type = type & PirType::simpleScalarInt().orPromiseWrapped();
     }
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

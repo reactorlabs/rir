@@ -451,7 +451,7 @@ const Value* Instruction::cFollowCasts() const {
         return cast->arg<0>().val()->followCasts();
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
-    if (auto chk = ChkClosure::Cast(this))
+    if (auto chk = ChkFunction::Cast(this))
         return chk->arg<0>().val()->followCasts();
     if (auto chk = ChkMissing::Cast(this))
         return chk->arg<0>().val()->followCasts();
@@ -468,7 +468,7 @@ const Value* Instruction::cFollowCastsAndForce() const {
     if (auto mkarg = MkArg::Cast(this))
         if (mkarg->isEager())
             return mkarg->eagerArg()->followCastsAndForce();
-    if (auto chk = ChkClosure::Cast(this))
+    if (auto chk = ChkFunction::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkMissing::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
@@ -1034,7 +1034,7 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx) {
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1056,7 +1056,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1082,7 +1082,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(fun, PirType::closure());
+    pushArg(fun, PirType::function());
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
@@ -1109,7 +1109,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
-    pushArg(runtimeClosure, PirType::closure());
+    pushArg(runtimeClosure, PirType::function());
     for (unsigned i = 0; i < args.size(); ++i) {
         assert(!ExpandDots::Cast(args[i]) &&
                "Static Call cannot accept dynamic number of arguments");

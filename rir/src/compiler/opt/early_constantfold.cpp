@@ -81,8 +81,8 @@ bool EarlyConstantfold::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     if (nodots) {
                         anyChange = true;
-                        ip = bb->insert(ip,
-                                        new ChkClosure(call->callArg(1).val()));
+                        ip = bb->insert(
+                            ip, new ChkFunction(call->callArg(1).val()));
                         auto callee = *ip;
                         ip++;
                         std::vector<Value*> args;

@@ -57,6 +57,8 @@ enum class RType : uint8_t {
     raw,
 
     closure,
+    special,
+    builtin,
     prom,
 
     missing,
@@ -243,9 +245,9 @@ struct PirType {
     }
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
-                       RType::closure | RType::prom | RType::code | RType::env |
-                       RType::missing | RType::unbound | RType::ast |
-                       RType::dots | RType::other)
+                       RType::closure | RType::special | RType::builtin |
+                       RType::prom | RType::code | RType::env | RType::missing |
+                       RType::unbound | RType::ast | RType::dots | RType::other)
             .orNAOrNaN()
             .orAttribsOrObj();
     }
@@ -255,6 +257,15 @@ struct PirType {
     }
     static constexpr PirType closure() {
         return PirType(RType::closure).orAttribsOrObj();
+    }
+    static constexpr PirType special() {
+        return PirType(RType::special).orAttribsOrObj();
+    }
+    static constexpr PirType builtin() {
+        return PirType(RType::builtin).orAttribsOrObj();
+    }
+    static constexpr PirType function() {
+        return closure() | RType::special | RType::builtin;
     }
 
     static constexpr PirType env() {
@@ -730,6 +741,12 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::closure:
         out << "cls";
+        break;
+    case RType::special:
+        out << "spec";
+        break;
+    case RType::builtin:
+        out << "blt";
         break;
     case RType::sym:
         out << "sym";

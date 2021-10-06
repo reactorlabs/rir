@@ -146,7 +146,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateCondBr(tt, isProm, isVal);
 
     builder.SetInsertPoint(isProm);
-    auto val = car(arg);
+    auto val = promsxpValue(arg);
     checkIsSexp(arg, "prval");
     auto tv = builder.CreateICmpEQ(val, constant(R_UnboundValue, t::SEXP));
     builder.CreateCondBr(tv, needsEval, isPromVal, branchMostlyFalse);
@@ -414,13 +414,13 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         }
     }
 
-    if (vali && variables_.count(vali))
+    if (vali && variables_.count(vali)) {
         res = getVariable(vali);
-    else if (val == Env::elided())
+    } else if (val == Env::elided()) {
         res = constant(R_NilValue, needed);
-    else if (auto e = Env::Cast(val)) {
+    } else if (auto e = Env::Cast(val)) {
         if (e == Env::notClosed()) {
-            res = tag(paramClosure());
+            res = closxpEnv(paramClosure());
         } else if (e == Env::nil()) {
             res = constant(R_NilValue, needed);
         } else if (Env::isStaticEnv(e)) {
@@ -1069,9 +1069,19 @@ llvm::Value* LowerFunctionLLVM::isArray(llvm::Value* v) {
     return res();
 }
 
+llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
+    v = builder.CreateGEP(v, {c(0), c(4), c(0)});
+    return builder.CreateLoad(v);
+}
+
+llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
+    v = builder.CreateGEP(v, {c(0), c(4), c(1)});
+    return builder.CreateLoad(v);
+}
+
 llvm::Value* LowerFunctionLLVM::tag(llvm::Value* v) {
-    auto pos = builder.CreateGEP(v, {c(0), c(4), c(2)});
-    return builder.CreateLoad(pos);
+    v = builder.CreateGEP(v, {c(0), c(4), c(2)});
+    return builder.CreateLoad(v);
 }
 
 void LowerFunctionLLVM::setCar(llvm::Value* x, llvm::Value* y,
@@ -1133,16 +1143,6 @@ void LowerFunctionLLVM::setTag(llvm::Value* x, llvm::Value* y,
     writeBarrier(x, y, fast, [&]() {
         call(NativeBuiltins::get(NativeBuiltins::Id::setTag), {x, y});
     });
-}
-
-llvm::Value* LowerFunctionLLVM::car(llvm::Value* v) {
-    v = builder.CreateGEP(v, {c(0), c(4), c(0)});
-    return builder.CreateLoad(v);
-}
-
-llvm::Value* LowerFunctionLLVM::cdr(llvm::Value* v) {
-    v = builder.CreateGEP(v, {c(0), c(4), c(1)});
-    return builder.CreateLoad(v);
 }
 
 llvm::Value* LowerFunctionLLVM::attr(llvm::Value* v) {
@@ -1522,7 +1522,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
     builder.CreateCondBr(tt, isProm, isVal, branchMostlyFalse);
 
     builder.SetInsertPoint(isProm);
-    auto val = car(arg);
+    auto val = promsxpValue(arg);
     res.addInput(val);
     builder.CreateBr(ok);
 
@@ -2369,7 +2369,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto res = builder.CreateICmpEQ(ai, bi);
 
-                if (Rep::Of(b) == Rep::SEXP) {
+                if (rep == Rep::SEXP) {
                     if (a->type.maybeLazy()) {
                         res = builder.CreateAnd(
                             res, builder.CreateICmpNE(
@@ -2381,6 +2381,8 @@ void LowerFunctionLLVM::compile() {
                     }
                 }
 
+                // TODO: is it okay to ignore RType::builtin and RType::special
+                // here?
                 if (a->type.maybe(RType::closure) ||
                     b->type.maybe(RType::closure)) {
                     res = createSelect2(
@@ -2986,12 +2988,12 @@ void LowerFunctionLLVM::compile() {
                     case blt("bodyCode"): {
                         assert(irep == Rep::SEXP && orep == irep);
                         llvm::Value* res = nullptr;
-                        if (i->arg(0).val()->type.isA(PirType::closure())) {
-                            res = cdr(a);
+                        if (i->arg(0).val()->type.isA(PirType::function())) {
+                            res = closxpBody(a);
                         } else {
                             res = createSelect2(
                                 builder.CreateICmpEQ(c(CLOSXP), sexptype(a)),
-                                [&]() { return cdr(a); },
+                                [&]() { return closxpBody(a); },
                                 [&]() {
                                     return constant(R_NilValue, t::SEXP);
                                 });
@@ -3000,12 +3002,12 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("environment"):
-                        if (!i->arg(0).val()->type.isA(PirType::closure())) {
+                        if (!i->arg(0).val()->type.isA(PirType::function())) {
                             done = false;
                             break;
                         }
                         assert(irep == Rep::SEXP && orep == irep);
-                        setVal(i, tag(a));
+                        setVal(i, closxpEnv(a));
                         break;
                     default:
                         done = false;
@@ -4497,9 +4499,10 @@ void LowerFunctionLLVM::compile() {
             case Tag::UpdatePromise: {
                 auto val = loadSxp(i->arg(1).val());
                 ensureShared(val);
-                setCar(loadSxp(i->arg(0).val()), val);
+                setPromsxpValue(loadSxp(i->arg(0).val()), val);
                 break;
             }
+
             case Tag::LdVarSuper: {
                 auto ld = LdVarSuper::Cast(i);
 
@@ -4507,7 +4510,7 @@ void LowerFunctionLLVM::compile() {
                 if (auto mk = MkEnv::Cast(i->env()))
                     env = loadSxp(mk->env());
                 else
-                    env = cdr(loadSxp(ld->env()));
+                    env = envsxpEnclos(loadSxp(ld->env()));
 
                 auto res = call(NativeBuiltins::get(NativeBuiltins::Id::ldvar),
                                 {constant(ld->varName, t::SEXP), env});
@@ -4611,7 +4614,7 @@ void LowerFunctionLLVM::compile() {
                             if (e->rho == R_BaseNamespace ||
                                 e->rho == R_BaseEnv) {
                                 auto sym = constant(varName, t::SEXP);
-                                res = cdr(sym);
+                                res = symsxpValue(sym);
                                 res = createSelect2(
                                     builder.CreateICmpNE(
                                         res, constant(R_UnboundValue, t::SEXP)),
@@ -5574,10 +5577,10 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::ChkClosure: {
+            case Tag::ChkFunction: {
                 auto arg = loadSxp(i->arg(0).val());
                 call(NativeBuiltins::get(NativeBuiltins::Id::chkfun),
-                     {constant(Rf_install(ChkClosure::Cast(i)->name().c_str()),
+                     {constant(Rf_install(ChkFunction::Cast(i)->name().c_str()),
                                t::SEXP),
                       arg});
                 setVal(i, arg);

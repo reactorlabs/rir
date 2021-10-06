@@ -278,7 +278,7 @@ static Value* insertLdFunGuard(Compiler& compiler, const TargetInfo& trg,
         // It is therefore safe (ie. conservative with respect to the
         // guard) to avoid forcing the result by casting it to a value.
         auto casted = new CastType(calleeForGuard, CastType::Downcast,
-                                   PirType::any(), PirType::closure());
+                                   PirType::any(), PirType::function());
         pos = bb->insert(pos, casted);
         pos++;
 
@@ -524,7 +524,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (bc.immediate.typeFeedback.numTypes) {
             auto feedback = bc.immediate.typeFeedback;
             if (auto i = Instruction::Cast(at(0))) {
-                // Search for the most specific feedabck for this location
+                // Search for the most specific feedback for this location
                 for (auto fb : outerFeedback) {
                     bool found = false;
                     // TODO: implement with a find method on register map
@@ -1259,8 +1259,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::check_closure_:
-        push(insert(new ChkClosure(pop())));
+    case Opcode::check_function_:
+        push(insert(new ChkFunction(pop())));
         break;
 
 #define V(_, name, Name)                                                       \

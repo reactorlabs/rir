@@ -332,12 +332,19 @@ class LowerFunctionLLVM {
     llvm::Value* vectorLength(llvm::Value* v);
     llvm::Value* isScalar(llvm::Value* v);
     llvm::Value* isSimpleScalar(llvm::Value* v, SEXPTYPE);
-    llvm::Value* tag(llvm::Value* v);
     llvm::Value* car(llvm::Value* v);
     llvm::Value* cdr(llvm::Value* v);
+    llvm::Value* tag(llvm::Value* v);
     void setCar(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
     void setCdr(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
     void setTag(llvm::Value* x, llvm::Value* y, bool writeBarrier = true);
+    llvm::Value* symsxpValue(llvm::Value* v) { return cdr(v); }
+    llvm::Value* envsxpEnclos(llvm::Value* v) { return cdr(v); }
+    llvm::Value* closxpBody(llvm::Value* v) { return cdr(v); }
+    llvm::Value* closxpEnv(llvm::Value* v) { return tag(v); }
+    llvm::Value* promsxpValue(llvm::Value* v) { return car(v); }
+    void setPromsxpValue(llvm::Value* x, llvm::Value* y) { setCar(x, y); }
+
     llvm::Value* isObj(llvm::Value*);
     llvm::Value* fastVeceltOkNative(llvm::Value*);
     llvm::Value* isAltrep(llvm::Value*);

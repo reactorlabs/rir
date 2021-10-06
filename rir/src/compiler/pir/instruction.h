@@ -929,11 +929,13 @@ class FLIE(LdFun, 2, Effects::Any()) {
     bool hintIsInnerFunction = false;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::function(),
+                                         {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::closure(), {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(PirType::function(),
+                                         {{PirType::any()}},
                                          {{Tombstone::closure()}}, env),
           varName(name) {
         assert(TYPEOF(name) == SYMSXP);
@@ -1034,10 +1036,11 @@ class FLI(ChkMissing, 1, Effect::Error) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLI(ChkClosure, 1, Effect::Error) {
+class FLI(ChkFunction, 1, Effect::Error) {
   public:
-    explicit ChkClosure(Value* in)
-        : FixedLenInstruction(PirType::closure(), {{PirType::val()}}, {{in}}) {}
+    explicit ChkFunction(Value* in)
+        : FixedLenInstruction(PirType::function(), {{PirType::val()}}, {{in}}) {
+    }
     size_t gvnBase() const override { return tagHash(); }
 };
 
@@ -1225,7 +1228,7 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
     size_t gvnBase() const override {
-        // Lazyly compiled cls might be still missing
+        // Lazily compiled cls might be still missing
         if (!cls)
             return 0;
         return hash_combine(tagHash(), cls);
@@ -2414,7 +2417,7 @@ class VLIE(MkEnv, Effect::LeakArg) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
-    std::string name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
+    std::string name() const override { return stub ? "(MkEnv)" : "MkEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
 
@@ -2462,7 +2465,7 @@ class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
         : VarLenInstructionWithEnvSlot(NativeType::context, sysparent) {
         call->eachCallArg([&](Value* v) { pushArg(v, PirType::any()); });
         pushArg(ast, PirType::any());
-        pushArg(op, PirType::closure());
+        pushArg(op, PirType::function());
         if (call->isReordered()) {
             argOrderOrig = call->getArgOrderOrig();
         }
@@ -2472,7 +2475,7 @@ class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
 
     Value* op() const {
         auto op = arg(nargs() - 2).val();
-        assert(op->type.isA(PirType::closure()));
+        assert(op->type.isA(PirType::function()));
         return op;
     }
     Value* ast() const { return arg(nargs() - 3).val(); }

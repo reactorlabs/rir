@@ -162,19 +162,20 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bool ok = false;
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(
-                                mkarg->prom()->entry, [&](Instruction* i) {
-                                    return stub.allowedNotMaterializing;
+                                mkarg->prom()->entry, [&](Instruction* j) {
+                                    return EnvStubInfo::of(j->tag)
+                                        .allowedNotMaterializing;
                                 });
-                        }
-                        if (auto mk = MkEnv::Cast(i))
+                        } else if (auto mk = MkEnv::Cast(i)) {
                             ok = mk->stub;
+                        }
                         if (!ok) {
                             if (debug) {
-                                std::cout << "Environment:";
+                                std::cout << "Environment '";
                                 m->print(std::cout);
-                                std::cout << " blocked by ";
+                                std::cout << "' blocked by '";
                                 i->print(std::cout);
-                                std::cout << "\n";
+                                std::cout << "'\n";
                             }
                             bannedEnvs.insert(m);
                             return;
@@ -203,11 +204,11 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         checks[i][cp].insert(mk);
                     } else {
                         if (debug) {
-                            std::cout << "Environment (in context): ";
+                            std::cout << "Environment (in context) '";
                             mk->print(std::cout);
-                            std::cout << " blocked by missing checkpoint at ";
+                            std::cout << "' blocked by missing checkpoint at '";
                             i->print(std::cout);
-                            std::cout << "\n";
+                            std::cout << "'\n";
                         }
                         bannedEnvs.insert(mk);
                     }
@@ -238,12 +239,12 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             checks[i][cp].insert(mk);
                         } else {
                             if (debug) {
-                                std::cout << "Environment: ";
+                                std::cout << "Environment '";
                                 mk->print(std::cout);
                                 std::cout
-                                    << " blocked by missing checkpoint at ";
+                                    << "' blocked by missing checkpoint at '";
                                 i->print(std::cout);
-                                std::cout << "\n";
+                                std::cout << "'\n";
                             }
                             bannedEnvs.insert(mk);
                         }
@@ -280,9 +281,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (auto env = MkEnv::Cast(i)) {
                 if (!env->stub && !bannedEnvs.count(i) && !bb->isDeopt()) {
                     if (debug) {
-                        std::cout << "stubbing ";
+                        std::cout << "stubbing '";
                         env->print(std::cout);
-                        std::cout << "\n";
+                        std::cout << "'\n";
                     }
                     env->stub = true;
                     materializableStubs.insert(env);

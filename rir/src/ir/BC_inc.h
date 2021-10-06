@@ -271,8 +271,6 @@ class BC {
 
     bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
-    bool isPure() { return isPure(bc); }
-
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
@@ -323,7 +321,6 @@ BC_NOARGS(V, _)
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
-    inline static BC push_from_pool(PoolIdx idx);
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
@@ -487,7 +484,7 @@ BC_NOARGS(V, _)
 
     static unsigned inline fixedSize(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return imm * sizeof(Immediate) + 1;
 #include "insns.h"
@@ -498,7 +495,7 @@ BC_NOARGS(V, _)
 
     static char const* name(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return #name;
 #include "insns.h"
@@ -509,7 +506,7 @@ BC_NOARGS(V, _)
 
     static unsigned pushCount(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         return opush;
 #include "insns.h"
@@ -521,22 +518,10 @@ BC_NOARGS(V, _)
 
     static unsigned popCount(Opcode bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
+#define DEF_INSTR(name, imm, opop, opush)                                      \
     case Opcode::name:                                                         \
         assert(opop != -1);                                                    \
         return opop;
-#include "insns.h"
-        default:
-            assert(false);
-            return 0;
-        }
-    }
-
-    static unsigned isPure(Opcode bc) {
-        switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
-    case Opcode::name:                                                         \
-        return pure;
 #include "insns.h"
         default:
             assert(false);
