@@ -319,10 +319,16 @@ void Compiler::optimizeModule() {
                 Visitor::run(v->entry, [&](Instruction* i) {
                     if (CallInstruction::CastCall(i)) {
                         if (i->type.isVoid() || !i->type.isRType()) {
+                            std::cerr
+                                << "Error after pass " + translation->getName()
+                                << "\n";
                             std::cerr << "Error: instruction '";
                             i->print(std::cerr);
                             std::cerr << "' must return R value\n";
-                            v->print(std::cout, false);
+                            v->print(std::cerr, false);
+                            std::cerr
+                                << "Error after pass " + translation->getName()
+                                << "\n";
                             assert(false);
                         }
                     }
