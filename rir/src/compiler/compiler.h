@@ -10,8 +10,8 @@
 #include <stack>
 
 namespace rir {
-struct DispatchTable;
 
+struct DispatchTable;
 namespace pir {
 struct DeoptContext;
 

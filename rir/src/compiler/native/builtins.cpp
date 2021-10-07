@@ -6,6 +6,7 @@
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
+#include "runtime/GenericDispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback.h"
@@ -824,6 +825,8 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
+typedef GenericDispatchTable<DeoptContext, Function, 3> DeoptlessDispatchTable;
+
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                DeoptReason* deoptReason, SEXP deoptTrigger) {
     recordDeoptReason(deoptTrigger, *deoptReason);
@@ -870,22 +873,20 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
             DeoptContext ctx(m->frames[0].pc, le, types, *deoptReason,
                              deoptTrigger);
-            static std::unordered_map<
-                SEXP, std::vector<std::pair<DeoptContext, rir::Function*>>>
-                continuations;
 
-            // TODO: not fully sound because cls could be recycled. Still
-            // clashes very unlikely because of the context.
-            auto cnt = continuations.find(cls);
-            if (cnt != continuations.end()) {
-                for (auto e : cnt->second) {
-                    if (e.first == ctx) {
-                        fun = e.second;
-                    }
-                }
+            DeoptlessDispatchTable* dispatchTable = nullptr;
+            if (c->extraPoolSize > 0) {
+                dispatchTable = DeoptlessDispatchTable::check(
+                    c->getExtraPoolEntry(c->extraPoolSize - 1));
+            }
+            if (!dispatchTable) {
+                dispatchTable = DeoptlessDispatchTable::create();
+                c->addExtraPoolEntry(dispatchTable->container());
             }
 
-            if (!fun) {
+            fun = dispatchTable->dispatch(ctx);
+
+            if (!fun && !dispatchTable->full()) {
                 // compile to pir
                 pir::Module* module = new pir::Module;
 
@@ -904,8 +905,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                         fun = backend.getOrCompile(cnt);
                         R_PreserveObject(fun->container());
-                        continuations[cls].push_back({ctx, fun});
-
+                        dispatchTable->insert(ctx, fun);
                     },
                     [&]() {
                         std::cerr << "Continuation compilation failed\n";
