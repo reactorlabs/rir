@@ -526,7 +526,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // Narrow down type according to what the analysis reports
                 if (i->type.isRType()) {
                     auto inferedType = res.type;
-                    if (!i->type.isA(inferedType)) {
+                    if (!i->type.isA(inferedType) && !inferedType.isVoid()) {
                         i->type = inferedType;
                         changed = true;
                     }
