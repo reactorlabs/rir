@@ -315,6 +315,18 @@ void Compiler::optimizeModule() {
 #else
 #ifdef ENABLE_SLOWASSERT
                 Verify::apply(v, "Error after pass " + translation->getName());
+#else
+                Visitor::run(v->entry, [&](Instruction* i) {
+                    if (CallInstruction::CastCall(i)) {
+                        if (i->type.isVoid() || !i->type.isRType()) {
+                            std::cerr << "Error: instruction '";
+                            i->print(std::cerr);
+                            std::cerr << "' must return R value\n";
+                            v->print(std::cout, false);
+                            assert(false);
+                        }
+                    }
+                });
 #endif
 #endif
             });
