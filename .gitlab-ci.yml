@@ -74,96 +74,19 @@ cpp_check:
     - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq cppcheck
     - /opt/rir/tools/cppcheck
 
-# Run check-all in release mode  (additionally check pir types)
-test_release_1:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+# Test the benchmarks container before deploying
+test_benchmarks:
+  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 1
   stage: Run tests
   needs:
-    - rir_container
-  except:
-    - schedules
+    - benchmark_container
   script:
-    - /opt/rir/container/install-test-deps.sh
-    - cd /opt/rir/build/release
-    - RIR_CHECK_PIR_TYPES=1 bin/tests
-    - RIR_CHECK_PIR_TYPES=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
-    - ../../tools/check-gnur-make-tests-error
-  artifacts:
-    paths:
-    - logs
-    when: on_failure
-    expire_in: 1 week
+    - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
+    - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
+    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
-test_release_2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
-    PIR_MAX_INPUT_SIZE: 4000
-    PIR_WARMUP: 5
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - /opt/rir/container/install-test-deps.sh
-    - cd /opt/rir/build/release
-    - bin/gnur-make-tests check-recommended || $SAVE_LOGS
-    - ../../tools/check-gnur-make-tests-error
-  artifacts:
-    paths:
-    - logs
-    when: on_failure
-    expire_in: 1 week
-
-# Run some tests in the debug mode
-tests_debug:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - /opt/rir/container/build-releaseassert.sh
-    - cd /opt/rir/build/releaseassert
-    - export UNSOUND_OPTS=off
-    - R_ENABLE_JIT=0 ./bin/tests
-    - R_ENABLE_JIT=1 ./bin/tests
-    - R_ENABLE_JIT=2 ./bin/tests
-    - R_ENABLE_JIT=3 ./bin/tests
-    - PIR_ENABLE=off ./bin/tests
-    - PIR_ENABLE=force ./bin/tests
-
-tests_debug2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - /opt/rir/container/install-test-deps.sh
-    - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check-devel || $SAVE_LOGS
-    - ../../tools/check-gnur-make-tests-error
-  artifacts:
-    paths:
-    - logs
-    when: on_failure
-    expire_in: 1 week
 
 # Run some tests in the full verify (release) mode
 tests_fullverify:
@@ -213,51 +136,7 @@ test_features_1:
     when: on_failure
     expire_in: 1 week
 
-test_features_2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 1
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - /opt/rir/container/install-test-deps.sh
-    - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check || $SAVE_LOGS
-  artifacts:
-    paths:
-    - logs
-    when: on_failure
-    expire_in: 1 week
-
-test_features_3:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - /opt/rir/container/install-test-deps.sh
-    - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
-    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
-  artifacts:
-    paths:
-    - logs
-    when: on_failure
-    expire_in: 1 week
-
-
-# Run ubsan and gc torture
-test_gctorture1:
+test_features_1_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -270,40 +149,19 @@ test_gctorture1:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - R_GCTORTURE=5000 ./bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
     when: on_failure
     expire_in: 1 week
 
-test_gctorture2:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-  stage: Run tests
-  needs:
-    - rir_container
-  except:
-    - schedules
-  script:
-    - cd /opt/rir/build/release
-    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
-    - /opt/rir/container/build-releaseassert.sh
-    - cd /opt/rir/build/releaseassert
-    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=60 bin/tests
 
-# Test with inlining big functions
-test_big_inline:
+
+test_features_1_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 5000
-    PIR_INLINER_MAX_SIZE: 4000
-    PIR_INLINER_INLINE_UNLIKELY: 1
-    PIR_INLINER_MAX_INLINEE_SIZE: 400
     PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
@@ -313,48 +171,57 @@ test_big_inline:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
     when: on_failure
     expire_in: 1 week
 
-# Test with asan and ubsan
-test_sanitize:
+
+
+test_features_1_3:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
   except:
     - schedules
   script:
-    - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
-    - mkdir /opt/rir/build/sanitize
-    - cd /opt/rir/build/sanitize
-    - /opt/rir/tools/fetch-llvm.sh
-    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize ../..
-    - make -j6
-    # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
-    # intercept_tls_get_addr=0 helps with leak sanitizer crashes
-    - ASAN_OPTIONS="intercept_tls_get_addr=0" LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/12.0.0/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
-  # sometimes leak sanitizer segfaults
-  retry: 2
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
 
-# Test the benchmarks container before deploying
-test_benchmarks:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+
+
+test_features_1_4:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
   stage: Run tests
   needs:
-    - benchmark_container
+    - rir_container
+  except:
+    - schedules
   script:
-    - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
-    - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
+  artifacts:
+    paths:
+    - logs
+    when: on_failure
+    expire_in: 1 week
+
 
 deploy:
   stage: Deploy
