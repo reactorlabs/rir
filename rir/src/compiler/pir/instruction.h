@@ -1282,11 +1282,8 @@ class FLIE(Force, 3, Effects::Any()) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
 
-    PirType inferType(const GetType& getType) const override final {
-        auto res = type & getType(input()).forced();
-        assert(!res.isVoid());
-        return res;
-    }
+    PirType inferType(const GetType& getType) const override final;
+
     Effects inferEffects(const GetType& getType) const override final {
         auto e = getType(input()).maybeLazy()
                      ? effects

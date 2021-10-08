@@ -87,8 +87,16 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
     Visitor::run(code->entry, [&](Instruction* i) {
         if (!i->type.isRType())
             return;
-        if (types.count(i))
-            i->type = types.at(i);
+        auto t = types.find(i);
+        if (t != types.end()) {
+            // Inferring void can legitimately happen with unreachable
+            // instructions. For example ChkMissing(missingArg) returns the type
+            // missing.notMissing(), i.e. void, since it will always error.
+            // However we do not want this to happen as it is guaranteed to
+            // cause problems downstream, e.g. in code generation.
+            if (!t->second.isVoid())
+                i->type = t->second;
+        }
     });
 
     return false;

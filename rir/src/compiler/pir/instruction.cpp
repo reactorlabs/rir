@@ -1048,6 +1048,10 @@ void Force::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
+PirType Force::inferType(const GetType& getType) const {
+    return type & getType(input()).forced();
+}
+
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
     auto assumptions = inferAvailableAssumptions();
 
