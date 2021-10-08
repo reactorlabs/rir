@@ -2,6 +2,7 @@
 #define COMPILER_INSTRUCTION_H
 
 #include "R/r.h"
+#include "compiler/rir2pir/rir2pir.h"
 #include "env.h"
 #include "instruction_list.h"
 #include "ir/BC_inc.h"
@@ -148,6 +149,14 @@ struct TypeFeedback {
     FeedbackOrigin feedbackOrigin;
     bool used = false;
 };
+struct CallFeedback {
+    FeedbackOrigin feedbackOrigin;
+    size_t taken = 0;
+    SEXP monomorphic = nullptr;
+    SEXPTYPE type = NILSXP;
+    bool stableEnv = false;
+    bool used = false;
+};
 
 class DominanceGraph;
 class MkEnv;
@@ -193,6 +202,23 @@ class Instruction : public Value {
     }
     void typeFeedback(const TypeFeedback& feedback) {
         typeFeedback_.reset(new TypeFeedback(feedback));
+    }
+
+    std::shared_ptr<CallFeedback> callFeedback_;
+    const CallFeedback& callFeedback() const {
+        if (callFeedback_.get())
+            return *callFeedback_;
+        const static CallFeedback none;
+        return none;
+    }
+    CallFeedback& updateCallFeedback() {
+        if (callFeedback_.get())
+            return *callFeedback_;
+        callFeedback_.reset(new CallFeedback());
+        return updateCallFeedback();
+    }
+    void callFeedback(const CallFeedback& feedback) {
+        callFeedback_.reset(new CallFeedback(feedback));
     }
 
     Effects getObservableEffects() const {
@@ -543,7 +569,7 @@ class Instruction : public Value {
         return -1;
     }
 };
-static_assert(sizeof(Instruction) <= 56, "Bloated instructions...");
+static_assert(sizeof(Instruction) <= 72, "Bloated instructions...");
 
 template <Tag ITAG, class Base, Effects::StoreType INITIAL_EFFECTS,
           HasEnvSlot ENV, Controlflow CF, class ArgStore>

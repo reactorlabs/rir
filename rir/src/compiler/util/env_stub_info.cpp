@@ -9,10 +9,10 @@ namespace pir {
 // If we only see these (and call instructions) then we stub an environment,
 // since it can only be accessed reflectively.
 static constexpr auto allowed = {
-    Tag::Force,      Tag::PushContext, Tag::LdVar,         Tag::LdVarSuper,
-    Tag::LdFun,      Tag::StVar,       Tag::StVarSuper,    Tag::Call,
-    Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall,    Tag::LdDots,
-    Tag::Missing,    Tag::IsEnvStub,   Tag::MaterializeEnv};
+    Tag::Force,      Tag::PushContext, Tag::LdVar,          Tag::LdVarSuper,
+    Tag::LdFun,      Tag::StVar,       Tag::StVarSuper,     Tag::Call,
+    Tag::FrameState, Tag::CallBuiltin, Tag::StaticCall,     Tag::LdDots,
+    Tag::Missing,    Tag::IsEnvStub,   Tag::MaterializeEnv, Tag::MkEnv};
 
 // These are only stubbed on the second try, since they seem to be better
 // covered by type speculation pass.

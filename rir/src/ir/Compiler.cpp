@@ -234,9 +234,9 @@ enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_FROM_TOS }
 
 static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res);
 
-static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
-                                      SEXP args, bool voidContext,
-                                      int skipArgs = 0, int eager = 0);
+static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
+                            LoadArgsResult& info, bool voidContext,
+                            int skipArgs = 0, int eager = 0);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody, bool peelLoop = false) {
@@ -1151,7 +1151,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << objBranch;
 
-        compileLoadArgs(ctx, ast, fun, args_, voidContext, 1);
+        {
+            LoadArgsResult dummy;
+            compileLoadArgs(ctx, ast, fun, args_, dummy, voidContext, 1);
+        }
         cs << BC::br(contBranch);
 
         cs << nonObjBranch;
@@ -1766,13 +1769,11 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
     }
 }
 
-static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
-                                      SEXP args, bool voidContext, int skipArgs,
-                                      int eager) {
+static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
+                            LoadArgsResult& info, bool voidContext,
+                            int skipArgs, int eager) {
     // Process arguments:
     // Arguments can be optionally named
-
-    LoadArgsResult res;
 
     SEXP cur_cell = args;
     int i = 0;
@@ -1780,15 +1781,12 @@ static LoadArgsResult compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun,
     {
         if (i >= skipArgs) {
             ArgType t = (i < eager) ? ArgType::RAW_VALUE : ArgType::PROMISE;
-            compileLoadOneArg(ctx, cur_cell, t, res);
+            compileLoadOneArg(ctx, cur_cell, t, info);
         }
         cur_cell = CDR(cur_cell);
         i++;
     }
-
-    return res;
 }
-
 
 // function application
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
@@ -1860,18 +1858,25 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     LoadArgsResult info;
     if (fun == symbol::forceAndCall) {
-        // First arg certainly eager
-        info = compileLoadArgs(ctx, ast, fun, args, voidContext, 0, 2);
+        // forceAndCall is a special with signature `function(n, FUN, ...)`
+        // The first two args are eager
+        compileLoadOneArg(ctx, args, ArgType::RAW_VALUE, info);
+        compileLoadOneArg(ctx, CDR(args), ArgType::RAW_VALUE, info);
+        if (Compiler::profile)
+            cs << BC::recordCall();
+        // Load the rest of the args
+        compileLoadArgs(ctx, ast, fun, args, info, voidContext, 2, 0);
     } else {
-        info = compileLoadArgs(ctx, ast, fun, args, voidContext);
+        compileLoadArgs(ctx, ast, fun, args, info, voidContext);
     }
     compileCall(info);
 
     if (speculateOnBuiltin) {
         cs << BC::br(theEnd) << eager;
 
-        auto infoEager = compileLoadArgs(ctx, ast, fun, args, voidContext, 0,
-                                         RList(args).length());
+        LoadArgsResult infoEager;
+        compileLoadArgs(ctx, ast, fun, args, infoEager, voidContext, 0,
+                        RList(args).length());
 
         compileCall(infoEager);
 

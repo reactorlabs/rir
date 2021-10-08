@@ -74,7 +74,7 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
 
 SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
                                int contextPos) {
-    SLOWASSERT(TYPEOF(parent) == ENVSXP);
+    SLOWASSERT(TYPEOF(parent) == ENVSXP || LazyEnvironment::check(parent));
     SEXP res = LazyEnvironment::BasicNew(parent, n, names)->container();
     if (contextPos > 0) {
         if (auto cptr = getFunctionContext(contextPos - 1)) {

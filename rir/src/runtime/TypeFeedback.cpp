@@ -41,7 +41,8 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
     switch (reason) {
     case DeoptReason::Typecheck:
     case DeoptReason::DeadCall:
-    case DeoptReason::Calltarget:
+    case DeoptReason::CallTarget:
+    case DeoptReason::ForceAndCall:
     case DeoptReason::DeadBranchReached: {
         assert(pc());
         auto o = *pc();

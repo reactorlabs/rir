@@ -61,7 +61,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
         auto assume = new Assume(
             test, speculation.cp,
-            DeoptReason(speculation.origin, DeoptReason::Calltarget));
+            DeoptReason(speculation.origin, DeoptReason::CallTarget));
         ip = bb->insert(ip, assume);
         ++ip;
 

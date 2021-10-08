@@ -184,7 +184,8 @@ struct DeoptReason {
         Unknown,
         Typecheck,
         DeadCall,
-        Calltarget,
+        CallTarget,
+        ForceAndCall,
         EnvStubMaterialized,
         DeadBranchReached,
     };
@@ -210,8 +211,11 @@ struct DeoptReason {
         case DeadCall:
             out << "DeadCall";
             break;
-        case Calltarget:
+        case CallTarget:
             out << "CallTarget";
+            break;
+        case ForceAndCall:
+            out << "ForceAndCall";
             break;
         case EnvStubMaterialized:
             out << "EnvStubMaterialized";
