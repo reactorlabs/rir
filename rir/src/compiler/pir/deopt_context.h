@@ -58,8 +58,8 @@ struct DeoptContext {
 
     DeoptContext()
         : stackSize_(0), envSize_(0), reason_(DeoptReason::unknown()) {}
-    DeoptContext(Opcode* pc, LazyEnvironment* env,
-                 const std::vector<PirType>& stack, const DeoptReason& reason,
+    DeoptContext(Opcode* pc, LazyEnvironment* env, R_bcstack_t* base,
+                 size_t stackSize, const DeoptReason& reason,
                  SEXP deoptTrigger);
 
     // TODO: a bit of a hack since the trigger is not used for equality (but

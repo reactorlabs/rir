@@ -14,8 +14,7 @@
 
 #include "R/Protect.h"
 
-#include "compiler/backend.h"
-#include "compiler/compiler.h"
+#include "compiler/deoptless.h"
 #include "compiler/pir/pir_impl.h"
 
 #include "R/Funtab.h"
@@ -825,8 +824,6 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-typedef GenericDispatchTable<DeoptContext, Function, 3> DeoptlessDispatchTable;
-
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                DeoptReason* deoptReason, SEXP deoptTrigger) {
     recordDeoptReason(deoptTrigger, *deoptReason);
@@ -842,9 +839,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     static bool deoptless =
         getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
-    static int deoptlessCount = 0;
     static constexpr bool deoptlessDebug = false;
-    if (m->numFrames == 1 && deoptless && deoptlessCount < 10) {
+
+    if (m->numFrames == 1 && deoptless) {
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
         if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
@@ -860,62 +857,25 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 Rf_PrintValue(deoptTrigger);
                 std::cout << PirType(deoptTrigger) << "\n";
                 std::cout << "Stack : [\n";
-            }
-
-            std::vector<PirType> types;
-            for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
-                auto v = (base + i)->u.sxpval;
-                if (deoptlessDebug)
+                for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
+                    auto v = (base + i)->u.sxpval;
                     Rf_PrintValue(v);
-                types.push_back(PirType(v));
-            }
-            if (deoptlessDebug)
+                }
                 std::cout << "]\n";
-
-            DeoptContext ctx(m->frames[0].pc, le, types, *deoptReason,
-                             deoptTrigger);
-
-            DeoptlessDispatchTable* dispatchTable = nullptr;
-            if (c->extraPoolSize > 0) {
-                dispatchTable = DeoptlessDispatchTable::check(
-                    c->getExtraPoolEntry(c->extraPoolSize - 1));
-            }
-            if (!dispatchTable) {
-                dispatchTable = DeoptlessDispatchTable::create();
-                c->addExtraPoolEntry(dispatchTable->container());
             }
 
-            fun = dispatchTable->dispatch(ctx);
-
-            if (!fun && !dispatchTable->full()) {
-                // compile to pir
-                pir::Module* module = new pir::Module;
-
-                pir::StreamLogger logger(DebugOptions::DefaultDebugOptions);
-                logger.title("Compiling continuation");
-                pir::Compiler cmp(module, logger);
-
-                pir::Backend backend(module, logger, "continuation");
-
-                cmp.compileContinuation(
-                    closure,
-                    DeoptContext(m->frames[0].pc, le, types, *deoptReason,
-                                 deoptTrigger),
-                    [&](Continuation* cnt) {
-                        cmp.optimizeModule();
-
-                        fun = backend.getOrCompile(cnt);
-                        dispatchTable->insert(ctx, fun);
-                    },
-                    [&]() {
-                        std::cerr << "Continuation compilation failed\n";
-                    });
-            }
+            DeoptContext ctx(m->frames[0].pc, le, base, m->frames[0].stackSize,
+                             *deoptReason, deoptTrigger);
+            fun = DeoptLess::dispatch(closure, c, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
             if (fun) {
                 assert(env == ostack_at(ctx, 0));
+
+                // Adapting calling convention: deoptless wants the env as
+                // individual arguments on the stack.
+                // TODO: speed this up by already passing it that way...
                 ostack_pop(ctx);
                 if (deoptlessDebug)
                     std::cout << "Env : [\n";
@@ -934,9 +894,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                deoptlessCount++;
                 auto res = nc(code, base, le->getParent(), closure);
-                deoptlessCount--;
+
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
                 assert(false);

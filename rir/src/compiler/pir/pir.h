@@ -23,6 +23,8 @@ class MkEnv;
 class MkArg;
 class LogStream;
 class Const;
+
+struct DeoptContext;
 }
 }
 
