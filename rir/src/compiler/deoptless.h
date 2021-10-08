@@ -14,7 +14,7 @@ class DeoptLess {
                               const DeoptContext& ctx);
 };
 
-typedef GenericDispatchTable<DeoptContext, Function, 3> DeoptlessDispatchTable;
+typedef GenericDispatchTable<DeoptContext, Function, 5> DeoptlessDispatchTable;
 
 } // namespace pir
 } // namespace rir
