@@ -1,3 +1,6 @@
+if (Sys.getenv("LSAN_OPTIONS") != "")
+  q()
+
 pkgname <- "grid"
 source(file.path(R.home("share"), "R", "examples-header.R"))
 options(warn = 1)

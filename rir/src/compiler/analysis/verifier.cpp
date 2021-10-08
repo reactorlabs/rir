@@ -215,6 +215,15 @@ class TheVerifier {
             ok = false;
         }
 
+        if (CallInstruction::CastCall(i)) {
+            if (i->type.isVoid() || !i->type.isRType()) {
+                std::cerr << "Error: instruction '";
+                i->print(std::cerr);
+                std::cerr << "' must return R value\n";
+                ok = false;
+            }
+        }
+
         if (auto call = NamedCall::Cast(i)) {
             if (call->inferAvailableAssumptions().includes(
                     rir::Assumption::StaticallyArgmatched)) {
