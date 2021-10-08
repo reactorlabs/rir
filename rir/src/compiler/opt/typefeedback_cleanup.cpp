@@ -65,26 +65,31 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
             }
+            bool needUpdate = false;
             i->eachArg([&](Value* v) {
-                if (auto vi = Instruction::Cast(v)) {
-                    if (affected.count(vi)) {
-                        affected.insert(i);
-                        if (i->hasTypeFeedback()) {
-                            auto inferred = i->inferType([&](Value* v) {
-                                if (auto vi = Instruction::Cast(v)) {
-                                    auto tf = vi->typeFeedback().type;
-                                    if (!tf.isVoid())
-                                        return tf;
-                                }
-                                return v->type;
-                            });
-                            i->updateTypeFeedback().type = inferred;
-                            i->updateTypeFeedback().value = nullptr;
+                if (!needUpdate)
+                    if (auto vi = Instruction::Cast(v)) {
+                        if (affected.count(vi)) {
+                            affected.insert(i);
+                            needUpdate = true;
                         }
-                        changed = true;
                     }
-                }
             });
+            if (needUpdate) {
+                if (i->hasTypeFeedback()) {
+                    auto inferred = i->inferType([&](Value* v) {
+                        if (auto vi = Instruction::Cast(v)) {
+                            auto tf = vi->typeFeedback().type;
+                            if (!tf.isVoid())
+                                return tf;
+                        }
+                        return v->type;
+                    });
+                    i->updateTypeFeedback().type = inferred;
+                    i->updateTypeFeedback().value = nullptr;
+                }
+                changed = true;
+            }
         });
         if (changed)
             anyChange = true;
