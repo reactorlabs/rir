@@ -847,7 +847,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     if (m->numFrames == 1 && deoptless && deoptlessCount < 10) {
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
-        if (le && !le->materialized()) {
+        if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
+            m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
             auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
             rir::Function* fun = nullptr;
             RCNTXT* originalCntxt = findFunctionContextFor(env);
@@ -904,7 +905,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                         cmp.optimizeModule();
 
                         fun = backend.getOrCompile(cnt);
-                        R_PreserveObject(fun->container());
                         dispatchTable->insert(ctx, fun);
                     },
                     [&]() {

@@ -28,14 +28,14 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (auto pc = i->typeFeedback().feedbackOrigin.pc()) {
             auto& ctx = version->deoptContext;
 
-            if (pc == ctx.reason.pc()) {
-                if (ctx.reason.reason == DeoptReason::Typecheck) {
-                    i->updateTypeFeedback().type = PirType(ctx.deoptTrigger);
-                } else if (ctx.reason.reason ==
+            if (pc == ctx.reason().pc()) {
+                if (ctx.reason().reason == DeoptReason::Typecheck) {
+                    i->updateTypeFeedback().type = PirType(ctx.deoptTrigger());
+                } else if (ctx.reason().reason ==
                            DeoptReason::DeadBranchReached) {
-                    if (ctx.deoptTrigger == R_TrueValue)
+                    if (ctx.deoptTrigger() == R_TrueValue)
                         i->updateTypeFeedback().value = True::instance();
-                    else if (ctx.deoptTrigger == R_FalseValue)
+                    else if (ctx.deoptTrigger() == R_FalseValue)
                         i->updateTypeFeedback().value = False::instance();
                 }
                 if (auto f = Force::Cast(i)) {

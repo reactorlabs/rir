@@ -107,15 +107,19 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
 
     std::vector<Value*> args;
     std::vector<SEXP> names;
-    std::vector<bool> miss(cnt->deoptContext.env.size(), false);
-    auto h = cnt->deoptContext.stack.size();
-    for (size_t i = 0; i < cnt->deoptContext.env.size(); ++i) {
+    std::vector<bool> miss(cnt->deoptContext.envSize(), false);
+    auto h = cnt->deoptContext.stackSize();
+    auto e = cnt->deoptContext.envBegin();
+    size_t i = 0;
+    while (e != cnt->deoptContext.envEnd()) {
         auto r = this->operator()(new LdArg(h + i));
-        r->type = std::get<PirType>(cnt->deoptContext.env[i]);
+        r->type = std::get<PirType>(*e);
         args.push_back(r);
-        auto n = std::get<SEXP>(cnt->deoptContext.env[i]);
+        auto n = std::get<SEXP>(*e);
         names.push_back(n);
-        miss[i] = std::get<bool>(cnt->deoptContext.env[i]);
+        miss[i] = std::get<bool>(*e);
+        e++;
+        i++;
     }
     auto mkenv = new MkEnv(closureEnv, names, args.data());
     mkenv->missing = miss;

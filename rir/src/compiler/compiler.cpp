@@ -89,7 +89,7 @@ void Compiler::compileContinuation(SEXP closure, const DeoptContext& ctx,
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
 
-    if (rir2pir.tryCompileContinuation(builder, ctx.pc, ctx.stack)) {
+    if (rir2pir.tryCompileContinuation(builder, ctx.pc, ctx.stack())) {
         log.compilationEarlyPir(version);
         log.flush();
         return success(version);
