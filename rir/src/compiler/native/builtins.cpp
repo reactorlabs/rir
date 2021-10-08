@@ -897,7 +897,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 auto nc = code->nativeCode();
                 deoptlessCount++;
                 auto res = nc(code, base, le->getParent(), closure);
-                deoptlessCount++;
+                deoptlessCount--;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
