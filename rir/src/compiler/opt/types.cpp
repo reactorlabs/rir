@@ -90,12 +90,12 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
         auto t = types.find(i);
         if (t != types.end()) {
             // Inferring void can legitimately happen with unreachable
-            // instructions. For example ChkMissing(missingArg) returns the type
-            // missing.notMissing(), i.e. void, since it will always error.
-            // However we do not want this to happen as it is guaranteed to
-            // cause problems downstream, e.g. in code generation.
-            if (!t->second.isVoid())
-                i->type = t->second;
+            // instructions. For example ChkMissing(missingArg) might infer
+            // void, since it will always error. However we do not want this to
+            // happen as it is guaranteed to cause problems downstream, e.g. in
+            // code generation.
+            assert(!t->second.isVoid() && "Inference must not reutrn void");
+            i->type = t->second;
         }
     });
 

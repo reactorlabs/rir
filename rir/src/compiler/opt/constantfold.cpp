@@ -329,6 +329,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         return false;
                     }
                 };
+                if (ChkMissing::Cast(i)) {
+                    if (i->arg(0).val() == MissingArg::instance())
+                        killUnreachable();
+                }
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
                     if (isStaticallyNA(a)) {
