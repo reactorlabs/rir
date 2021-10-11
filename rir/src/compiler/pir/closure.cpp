@@ -1,5 +1,6 @@
 #include "closure.h"
 #include "closure_version.h"
+#include "continuation.h"
 #include "env.h"
 #include "runtime/DispatchTable.h"
 
@@ -36,6 +37,8 @@ void Closure::invariant() const {
 Closure::~Closure() {
     for (auto c : versions)
         delete c.second;
+    for (auto c : continuations)
+        delete c;
 }
 
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
@@ -61,6 +64,13 @@ ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
     return nullptr;
 }
 
+Continuation* Closure::declareContinuation(const DeoptContext& ctx) {
+    for (auto& c : continuations)
+        assert(!(c->deoptContext == ctx));
+    continuations.push_back(new Continuation(this, ctx));
+    return continuations.back();
+}
+
 ClosureVersion* Closure::declareVersion(const Context& optimizationContext,
                                         bool root, rir::Function* optFunction) {
     assert(!versions.count(optimizationContext));
@@ -76,6 +86,13 @@ void Closure::print(std::ostream& out, bool tty) const {
         v->print(out, tty);
         out << "-------------------------------\n";
     });
+}
+
+void Closure::eachVersion(ClosureVersionIterator it) const {
+    for (auto& v : versions)
+        it(v.second);
+    for (auto& v : continuations)
+        it(v);
 }
 
 } // namespace pir

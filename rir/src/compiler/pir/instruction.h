@@ -188,6 +188,7 @@ class Instruction : public Value {
     }
 
     std::shared_ptr<TypeFeedback> typeFeedback_;
+    bool hasTypeFeedback() const { return typeFeedback_.get(); }
     const TypeFeedback& typeFeedback() const {
         if (typeFeedback_.get())
             return *typeFeedback_;
@@ -387,7 +388,7 @@ class Instruction : public Value {
     template <typename Result>
     Result ifNonObjectArgs(const GetType& getType, Result then,
                            Result otherwise) const {
-        if (!mergedInputType(getType).maybeObj())
+        if (!getType(arg(0).val()).maybeObj())
             return then;
         return otherwise;
     }
@@ -1060,6 +1061,13 @@ class FLI(ChkMissing, 1, Effect::Error) {
               in == MissingArg::instance() ? in->type : in->type.notMissing(),
               {{PirType::any()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        auto t = getType(arg<0>().val()).notMissing();
+        if (t.isVoid())
+            return type;
+        return t;
+    }
 };
 
 class FLI(ChkFunction, 1, Effect::Error) {
@@ -1280,6 +1288,7 @@ class FLIE(Force, 3, Effects::Any()) {
                 effects.reset(Effect::Reflection);
             }
         }
+        assert(!type.isVoid());
         updateTypeAndEffects();
     }
     Value* input() const { return arg(0).val(); }
@@ -1302,9 +1311,8 @@ class FLIE(Force, 3, Effects::Any()) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
 
-    PirType inferType(const GetType& getType) const override final {
-        return type & getType(input()).forced();
-    }
+    PirType inferType(const GetType& getType) const override final;
+
     Effects inferEffects(const GetType& getType) const override final {
         auto e = getType(input()).maybeLazy()
                      ? effects
@@ -2367,6 +2375,9 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
+
+    PirType inferType(const GetType& at = [](Value* v) { return v->type; })
+        const override final;
 
     VisibilityFlag visibilityFlag() const override;
     Value* frameStateOrTs() const override final {

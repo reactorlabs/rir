@@ -2,6 +2,7 @@
 
 #include "compiler/pir/pir_impl.h"
 #include "runtime/Context.h"
+#include "utils/Pool.h"
 
 namespace rir {
 namespace pir {
@@ -94,6 +95,39 @@ Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
     enterBB(cont);
     return cp;
 };
+
+Builder::Builder(Continuation* cnt, Value* closureEnv)
+    : function(cnt), code(cnt), env(nullptr) {
+    createNextBB();
+    assert(!function->entry);
+    function->entry = bb;
+
+    // Create another BB to ensure that the entry BB has no predecessors.
+    createNextBB();
+
+    std::vector<Value*> args;
+    std::vector<SEXP> names;
+    std::vector<bool> miss(cnt->deoptContext.envSize(), false);
+    auto h = cnt->deoptContext.stackSize();
+    auto e = cnt->deoptContext.envBegin();
+    size_t i = 0;
+    while (e != cnt->deoptContext.envEnd()) {
+        auto r = this->operator()(new LdArg(h + i));
+        r->type = std::get<PirType>(*e);
+        args.push_back(r);
+        auto n = std::get<SEXP>(*e);
+        names.push_back(n);
+        miss[i] = std::get<bool>(*e);
+        e++;
+        i++;
+    }
+    auto mkenv = new MkEnv(closureEnv, names, args.data());
+    mkenv->missing = miss;
+    auto rirCode = cnt->owner()->rirFunction()->body();
+    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
+    add(mkenv);
+    this->env = mkenv;
+}
 
 Builder::Builder(ClosureVersion* version, Value* closureEnv)
     : function(version), code(version), env(nullptr) {

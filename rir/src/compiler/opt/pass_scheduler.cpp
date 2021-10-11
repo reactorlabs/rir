@@ -77,6 +77,7 @@ PassScheduler::PassScheduler() {
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
     nextPhase("Speculation", Parameter::PIR_OPT_LEVEL > 1 ? 100 : 0);
+    add<TypefeedbackCleanup>();
     add<ElideEnvSpec>();
     addDefaultOpt();
     add<TypeSpeculation>();

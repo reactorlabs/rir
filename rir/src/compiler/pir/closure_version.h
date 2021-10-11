@@ -16,8 +16,7 @@ namespace pir {
  * ClosureVersion
  *
  */
-class ClosureVersion
-    : public CodeImpl<CodeTag::ClosureVersion, ClosureVersion> {
+class ClosureVersion : public Code {
   public:
     enum class Property {
         IsEager,
@@ -47,10 +46,12 @@ class ClosureVersion
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
-    const Context& optimizationContext_;
+    const Context optimizationContext_;
 
     std::string name_;
     std::string nameSuffix_;
+
+  protected:
     ClosureVersion(Closure* closure, rir::Function* optFunction, bool root,
                    const Context& optimizationContext,
                    const Properties& properties = Properties());
@@ -67,8 +68,11 @@ class ClosureVersion
     Closure* owner() const { return owner_; }
     size_t nargs() const;
     size_t effectiveNArgs() const;
+
     const std::string& name() const { return name_; }
     const std::string& nameSuffix() const { return nameSuffix_; }
+
+    void printName(std::ostream& out) const override { out << name(); }
 
     void print(std::ostream& out, bool tty) const;
     void print(DebugStyle style, std::ostream& out, bool tty,
@@ -96,11 +100,7 @@ class ClosureVersion
 
     rir::Code* rirSrc() const override final;
 
-    friend std::ostream& operator<<(std::ostream& out,
-                                    const ClosureVersion& e) {
-        out << e.name();
-        return out;
-    }
+    virtual Continuation* isContinuation() { return nullptr; }
 
     ~ClosureVersion();
 };

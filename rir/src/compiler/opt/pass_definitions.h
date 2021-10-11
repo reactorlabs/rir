@@ -162,6 +162,8 @@ class PASS(Overflow, true, false);
  */
 class PASS(HoistInstruction, false, false);
 
+class PASS(TypefeedbackCleanup, false, false);
+
 class PhaseMarker : public Pass {
   public:
     explicit PhaseMarker(const std::string& name) : Pass(name) {}

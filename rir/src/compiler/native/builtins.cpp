@@ -6,9 +6,16 @@
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
 #include "ir/Deoptimization.h"
+#include "runtime/GenericDispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
+
+#include "R/Protect.h"
+
+#include "compiler/deoptless.h"
+#include "compiler/pir/pir_impl.h"
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -42,6 +49,8 @@ static SEXP forcePromiseImpl(SEXP prom) {
 }
 
 static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    if (val == R_UnboundValue)
+        return rest;
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     if (val == R_MissingArg)
@@ -51,6 +60,8 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    if (val == R_UnboundValue)
+        return rest;
     SEXP res = CONS_NR(val, rest);
     SET_TAG(res, name);
     SET_MISSING(res, val == R_MissingArg ? 1 : 2);
@@ -802,7 +813,7 @@ static FunctionSignature
                      FunctionSignature::OptimizationLevel::Optimized);
 static Function* deoptSentinel;
 static SEXP deoptSentinelContainer = []() {
-    auto c = Code::New(0);
+    auto c = rir::Code::New(0);
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
     R_PreserveObject(store);
@@ -813,7 +824,7 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                DeoptReason* deoptReason, SEXP deoptTrigger) {
     recordDeoptReason(deoptTrigger, *deoptReason);
 
@@ -823,15 +834,85 @@ void deoptImpl(Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         stackHeight += m->frames[i].stackSize + 1;
     }
 
+    SEXP env =
+        ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
+
+    static bool deoptless =
+        getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
+    static constexpr bool deoptlessDebug = false;
+    static int deoptlessCount = 0;
+
+    if (m->numFrames == 1 && deoptless && deoptlessCount < 10) {
+        assert(m->frames[0].inPromise == false);
+        auto le = LazyEnvironment::check(env);
+        if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
+            m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
+            auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
+            rir::Function* fun = nullptr;
+            RCNTXT* originalCntxt = findFunctionContextFor(env);
+            assert(originalCntxt);
+            auto closure = originalCntxt->callfun;
+
+            if (deoptlessDebug) {
+                std::cout << "Deopt " << *deoptReason << "\n";
+                Rf_PrintValue(deoptTrigger);
+                std::cout << PirType(deoptTrigger) << "\n";
+                std::cout << "Stack : [\n";
+                for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
+                    auto v = (base + i)->u.sxpval;
+                    Rf_PrintValue(v);
+                }
+                std::cout << "]\n";
+            }
+
+            DeoptContext ctx(m->frames[0].pc, le, base, m->frames[0].stackSize,
+                             *deoptReason, deoptTrigger);
+            fun = DeoptLess::dispatch(closure, c, ctx);
+
+            // We have an optimized continuation, let's call it and then
+            // non-local return its result.
+            if (fun) {
+                assert(env == ostack_at(ctx, 0));
+
+                // Adapting calling convention: deoptless wants the env as
+                // individual arguments on the stack.
+                // TODO: speed this up by already passing it that way...
+                ostack_pop(ctx);
+                if (deoptlessDebug)
+                    std::cout << "Env : [\n";
+                for (size_t i = 0; i < le->nargs; ++i) {
+                    if (deoptlessDebug) {
+                        Rf_PrintValue(Pool::get(le->names[i]));
+                        if (le->getArg(i) == R_UnboundValue)
+                            std::cout << "unbound\n";
+                        else
+                            Rf_PrintValue(le->getArg(i));
+                    }
+                    ostack_push(ctx, le->getArg(i));
+                }
+                if (deoptlessDebug)
+                    std::cout << "]\n";
+
+                auto code = fun->body();
+                auto nc = code->nativeCode();
+                deoptlessCount++;
+                auto res = nc(code, base, le->getParent(), closure);
+                deoptlessCount--;
+
+                Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
+                               originalCntxt->cloenv, res);
+                assert(false);
+                return;
+            }
+        }
+    }
+
     c->registerDeopt();
     // Invalidate target caches pointing to deoptimized version
     for (auto idx : NativeBuiltins::targetCaches)
         if (auto f = Function::check(Pool::get(idx)))
             if (f->body() == c)
                 Pool::patch(idx, deoptSentinelContainer);
-
-    SEXP env =
-        ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
                      /* nargs */ -1, src_pool_at(globalContext(), c->src), args,

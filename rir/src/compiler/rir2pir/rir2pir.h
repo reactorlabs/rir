@@ -20,6 +20,9 @@ class Rir2Pir {
             const std::list<PirTypeFeedback*>& outerFeedback);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
+    bool tryCompileContinuation(Builder& insert, Opcode* start,
+                                const std::vector<PirType>& initialStack)
+        __attribute__((warn_unused_result));
 
     Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager)
         __attribute__((warn_unused_result));
@@ -34,10 +37,16 @@ class Rir2Pir {
     // has to be discarded, if compilation fails!
     bool tryCompile(rir::Code* srcCode, Builder& insert)
         __attribute__((warn_unused_result));
+    bool tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
+                    const std::vector<PirType>& initialStack)
+        __attribute__((warn_unused_result));
     bool tryCompilePromise(rir::Code* prom, Builder& insert)
         __attribute__((warn_unused_result));
 
     Value* tryTranslate(rir::Code* srcCode, Builder& insert)
+        __attribute__((warn_unused_result));
+    Value* tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
+                        const std::vector<PirType>& initialStack)
         __attribute__((warn_unused_result));
 
     void finalize(Value*, Builder& insert);

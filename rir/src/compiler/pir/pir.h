@@ -10,6 +10,7 @@ namespace pir {
 struct PirType;
 class Closure;
 class ClosureVersion;
+class Continuation;
 class BB;
 class Promise;
 class Value;
@@ -22,6 +23,8 @@ class MkEnv;
 class MkArg;
 class LogStream;
 class Const;
+
+struct DeoptContext;
 }
 }
 

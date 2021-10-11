@@ -9,7 +9,6 @@
 #define REXPORT extern "C"
 
 extern int R_ENABLE_JIT;
-extern rir::pir::DebugOptions PirDebug;
 
 REXPORT SEXP rirInvocationCount(SEXP what);
 REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,

@@ -40,211 +40,11 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                     return PirType::bottom();
                 };
 
-                PirType inferred = PirType::bottom();
+                PirType inferred = i->inferType(getType);
                 switch (i->tag) {
-                case Tag::CallSafeBuiltin: {
-                    auto c = CallSafeBuiltin::Cast(i);
-                    std::string name =
-                        getBuiltinName(getBuiltinNr(c->builtinSexp));
-
-                    static const std::unordered_set<std::string> bitwise = {
-                        "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
-                        "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
-                    if (bitwise.count(name)) {
-                        inferred = PirType(RType::integer);
-                        if (getType(c->callArg(0).val()).isSimpleScalar() &&
-                            getType(c->callArg(1).val()).isSimpleScalar())
-                            inferred = inferred.simpleScalar();
-                        break;
-                    }
-
-                    if ("length" == name) {
-                        inferred = (PirType() | RType::integer | RType::real)
-                                       .simpleScalar()
-                                       .orNAOrNaN();
-                        break;
-                    }
-
-                    int doSummary = "min" == name || "max" == name ||
-                                    "prod" == name || "sum" == name;
-                    if (name == "abs" || doSummary) {
-                        if (c->nCallArgs()) {
-                            auto m = PirType::bottom();
-                            for (size_t i = 0; i < c->nCallArgs(); ++i)
-                                m = m.mergeWithConversion(
-                                    getType(c->callArg(i).val()));
-                            if (!m.maybeObj()) {
-                                auto lub = PirType::num().orAttribsOrObj();
-                                // Min/max support string comparison
-                                if (name == "min" || name == "max")
-                                    lub = lub | RType::str;
-                                inferred = m & lub;
-
-                                if (inferred.maybe(RType::logical))
-                                    inferred = inferred.orT(RType::integer)
-                                                   .notT(RType::logical);
-
-                                if (doSummary)
-                                    inferred = inferred.simpleScalar();
-                                if ("prod" == name)
-                                    inferred = inferred.orT(RType::real)
-                                                   .notT(RType::integer);
-                                if ("abs" == name) {
-                                    if (inferred.maybe(RType::cplx))
-                                        inferred = inferred.orT(RType::real)
-                                                       .notT(RType::cplx);
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    if ("sqrt" == name) {
-                        if (c->nCallArgs()) {
-                            auto m = PirType::bottom();
-                            for (size_t i = 0; i < c->nCallArgs(); ++i)
-                                m = m.mergeWithConversion(
-                                    getType(c->callArg(i).val()));
-                            if (!m.maybeObj()) {
-                                inferred = m & PirType::num().orAttribsOrObj();
-                                inferred = inferred.orT(RType::real)
-                                               .notT(RType::integer);
-                                break;
-                            }
-                        }
-                    }
-
-                    if ("as.integer" == name) {
-                        if (!getType(c->callArg(0).val()).maybeObj()) {
-                            inferred = PirType(RType::integer);
-                            if (getType(c->callArg(0).val()).isSimpleScalar())
-                                inferred = inferred.simpleScalar();
-                        } else {
-                            inferred = i->inferType(getType);
-                        }
-                        break;
-                    }
-
-                    if ("typeof" == name) {
-                        inferred = PirType(RType::str).simpleScalar();
-                        break;
-                    }
-
-                    static const std::unordered_set<std::string> vecTests = {
-                        "is.na", "is.nan", "is.finite", "is.infinite"};
-                    if (vecTests.count(name)) {
-                        if (!getType(c->callArg(0).val()).maybeObj()) {
-                            inferred = PirType(RType::logical);
-                            if (getType(c->callArg(0).val()).maybeHasAttrs())
-                                inferred =
-                                    inferred.orAttribsOrObj().notObject();
-                            if (!getType(c->callArg(0).val())
-                                     .maybeNotFastVecelt())
-                                inferred = inferred.fastVecelt();
-                            if (getType(c->callArg(0).val()).isSimpleScalar())
-                                inferred = inferred.simpleScalar();
-                        } else {
-                            inferred = i->inferType(getType);
-                        }
-                        break;
-                    }
-
-                    static const std::unordered_set<std::string> tests = {
-                        "is.vector",   "is.null",      "is.integer",
-                        "is.double",   "is.complex",   "is.character",
-                        "is.symbol",   "is.name",      "is.environment",
-                        "is.list",     "is.pairlist",  "is.expression",
-                        "is.raw",      "is.object",    "isS4",
-                        "is.numeric",  "is.matrix",    "is.array",
-                        "is.atomic",   "is.recursive", "is.call",
-                        "is.language", "is.function",  "all",
-                        "any"};
-                    if (tests.count(name)) {
-                        if (!getType(c->callArg(0).val()).maybeObj())
-                            inferred = PirType(RType::logical)
-                                           .simpleScalar()
-                                           .notNAOrNaN();
-                        else
-                            inferred = i->inferType(getType);
-                        break;
-                    }
-
-                    if ("c" == name) {
-                        inferred = i->mergedInputType(getType).collectionType(
-                            c->nCallArgs());
-                        // If at least one arg is non-nil, then the result is
-                        // also not nil
-                        if (inferred.maybe(RType::nil)) {
-                            auto notNil = false;
-                            i->eachArg([&](Value* v) {
-                                if (!v->type.maybe(RType::nil))
-                                    notNil = true;
-                            });
-                            if (notNil)
-                                inferred = inferred.notT(RType::nil);
-                        }
-                        break;
-                    }
-
-                    if ("vector" == name) {
-                        bool handled = false;
-                        if (auto con = Const::Cast(c->arg(0).val())) {
-                            if (TYPEOF(con->c()) == STRSXP &&
-                                XLENGTH(con->c()) == 1) {
-                                handled = true;
-                                SEXPTYPE type =
-                                    str2type(CHAR(STRING_ELT(con->c(), 0)));
-                                switch (type) {
-                                case LGLSXP:
-                                    inferred = RType::logical;
-                                    break;
-                                case INTSXP:
-                                    inferred = RType::integer;
-                                    break;
-                                case REALSXP:
-                                    inferred = RType::real;
-                                    break;
-                                case CPLXSXP:
-                                    inferred = RType::cplx;
-                                    break;
-                                case STRSXP:
-                                    inferred = RType::str;
-                                    break;
-                                case VECSXP:
-                                    inferred = RType::vec;
-                                    break;
-                                case RAWSXP:
-                                    inferred = RType::raw;
-                                    break;
-                                default:
-                                    assert(false);
-                                    handled = false;
-                                    break;
-                                }
-                            }
-                        }
-                        if (handled)
-                            break;
-                    }
-
-                    if ("strsplit" == name) {
-                        inferred = PirType(RType::vec).orAttribsOrObj();
-                        break;
-                    }
-
-                    inferred = i->inferType(getType);
-                    break;
-                }
 #define V(instr) case Tag::instr:
                     VECTOR_RW_INSTRUCTIONS(V);
                     {
-                        inferred = i->inferType(getType);
-
-                        // These return primitive values, unless overwritten by
-                        // objects
-                        if (!i->arg(0).val()->type.maybeObj())
-                            inferred = inferred & PirType::val();
-
                         if (auto e = Extract1_1D::Cast(i)) {
                             if (!inferred.isSimpleScalar() &&
                                 getType(e->vec()).isA(PirType::num()) &&
@@ -265,8 +65,8 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
                         break;
                     }
 
-                default:
-                    inferred = i->inferType(getType);
+                default: {
+                }
                 }
 
                 // inference should never generate less precise type
@@ -287,8 +87,16 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
     Visitor::run(code->entry, [&](Instruction* i) {
         if (!i->type.isRType())
             return;
-        if (types.count(i))
-            i->type = types.at(i);
+        auto t = types.find(i);
+        if (t != types.end()) {
+            // Inferring void can legitimately happen with unreachable
+            // instructions. For example ChkMissing(missingArg) might infer
+            // void, since it will always error. However we do not want this to
+            // happen as it is guaranteed to cause problems downstream, e.g. in
+            // code generation.
+            assert(!t->second.isVoid() && "Inference must not reutrn void");
+            i->type = t->second;
+        }
     });
 
     return false;

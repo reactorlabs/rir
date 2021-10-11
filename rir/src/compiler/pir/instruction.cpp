@@ -52,7 +52,8 @@ extern std::ostream& operator<<(std::ostream& out,
 constexpr Effects Instruction::errorWarnVisible;
 
 static bool printInstructionId() {
-    return PirDebug.flags.contains(DebugFlag::PrintInstructionIds);
+    return DebugOptions::DefaultDebugOptions.flags.contains(
+        DebugFlag::PrintInstructionIds);
 };
 
 std::string Instruction::getRef() const {
@@ -524,6 +525,7 @@ PirType Extract1_1D::inferType(const GetType& getType) const {
             }
         }
     }
+
     return res;
 }
 
@@ -734,6 +736,168 @@ size_t CallSafeBuiltin::gvnBase() const {
     return hash_combine(builtinId, tagHash());
 }
 
+PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
+    PirType inferred = PirType::bottom();
+    std::string name = getBuiltinName(getBuiltinNr(builtinSexp));
+
+    static const std::unordered_set<std::string> bitwise = {
+        "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
+        "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
+    if (bitwise.count(name)) {
+        inferred = PirType(RType::integer);
+        if (getType(callArg(0).val()).isSimpleScalar() &&
+            getType(callArg(1).val()).isSimpleScalar())
+            inferred = inferred.simpleScalar();
+    }
+
+    if ("length" == name) {
+        inferred = (PirType() | RType::integer | RType::real)
+                       .simpleScalar()
+                       .orNAOrNaN();
+    }
+
+    int doSummary =
+        "min" == name || "max" == name || "prod" == name || "sum" == name;
+    if (name == "abs" || doSummary) {
+        if (nCallArgs()) {
+            auto m = PirType::bottom();
+            for (size_t i = 0; i < nCallArgs(); ++i)
+                m = m.mergeWithConversion(getType(callArg(i).val()));
+            if (!m.maybeObj()) {
+                auto lub = PirType::num().orAttribsOrObj();
+                // Min/max support string comparison
+                if (name == "min" || name == "max")
+                    lub = lub | RType::str;
+                inferred = m & lub;
+
+                if (inferred.maybe(RType::logical))
+                    inferred =
+                        inferred.orT(RType::integer).notT(RType::logical);
+
+                if (doSummary)
+                    inferred = inferred.simpleScalar();
+                if ("prod" == name)
+                    inferred = inferred.orT(RType::real).notT(RType::integer);
+                if ("abs" == name) {
+                    if (inferred.maybe(RType::cplx))
+                        inferred = inferred.orT(RType::real).notT(RType::cplx);
+                }
+            }
+        }
+    }
+
+    if ("sqrt" == name) {
+        if (nCallArgs()) {
+            auto m = PirType::bottom();
+            for (size_t i = 0; i < nCallArgs(); ++i)
+                m = m.mergeWithConversion(getType(callArg(i).val()));
+            if (!m.maybeObj()) {
+                inferred = m & PirType::num().orAttribsOrObj();
+                inferred = inferred.orT(RType::real).notT(RType::integer);
+            }
+        }
+    }
+
+    if ("as.integer" == name) {
+        if (!getType(callArg(0).val()).maybeObj()) {
+            inferred = PirType(RType::integer);
+            if (getType(callArg(0).val()).isSimpleScalar())
+                inferred = inferred.simpleScalar();
+        }
+    }
+
+    if ("typeof" == name) {
+        inferred = PirType(RType::str).simpleScalar();
+    }
+
+    static const std::unordered_set<std::string> vecTests = {
+        "is.na", "is.nan", "is.finite", "is.infinite"};
+    if (vecTests.count(name)) {
+        if (!getType(callArg(0).val()).maybeObj()) {
+            inferred = PirType(RType::logical);
+            if (getType(callArg(0).val()).maybeHasAttrs())
+                inferred = inferred.orAttribsOrObj().notObject();
+            if (!getType(callArg(0).val()).maybeNotFastVecelt())
+                inferred = inferred.fastVecelt();
+            if (getType(callArg(0).val()).isSimpleScalar())
+                inferred = inferred.simpleScalar();
+        }
+    }
+
+    static const std::unordered_set<std::string> tests = {
+        "is.vector",   "is.null",      "is.integer",
+        "is.double",   "is.complex",   "is.character",
+        "is.symbol",   "is.name",      "is.environment",
+        "is.list",     "is.pairlist",  "is.expression",
+        "is.raw",      "is.object",    "isS4",
+        "is.numeric",  "is.matrix",    "is.array",
+        "is.atomic",   "is.recursive", "is.call",
+        "is.language", "is.function",  "all",
+        "any"};
+    if (tests.count(name)) {
+        if (!getType(callArg(0).val()).maybeObj())
+            inferred = PirType(RType::logical).simpleScalar().notNAOrNaN();
+    }
+
+    if ("c" == name) {
+        inferred = mergedInputType(getType).collectionType(nCallArgs());
+        // If at least one arg is non-nil, then the result is
+        // also not nil
+        if (inferred.maybe(RType::nil)) {
+            auto notNil = false;
+            eachArg([&](Value* v) {
+                if (!v->type.maybe(RType::nil))
+                    notNil = true;
+            });
+            if (notNil)
+                inferred = inferred.notT(RType::nil);
+        }
+    }
+
+    if ("vector" == name) {
+        if (auto con = Const::Cast(arg(0).val())) {
+            if (TYPEOF(con->c()) == STRSXP && XLENGTH(con->c()) == 1) {
+                SEXPTYPE type = str2type(CHAR(STRING_ELT(con->c(), 0)));
+                switch (type) {
+                case LGLSXP:
+                    inferred = RType::logical;
+                    break;
+                case INTSXP:
+                    inferred = RType::integer;
+                    break;
+                case REALSXP:
+                    inferred = RType::real;
+                    break;
+                case CPLXSXP:
+                    inferred = RType::cplx;
+                    break;
+                case STRSXP:
+                    inferred = RType::str;
+                    break;
+                case VECSXP:
+                    inferred = RType::vec;
+                    break;
+                case RAWSXP:
+                    inferred = RType::raw;
+                    break;
+                default:
+                    assert(false);
+                    break;
+                }
+            }
+        }
+    }
+
+    if ("strsplit" == name) {
+        inferred = PirType(RType::vec).orAttribsOrObj();
+    }
+
+    if (inferred != PirType::bottom())
+        return inferred & type;
+
+    return Instruction::inferType(getType);
+}
+
 CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
                          const std::vector<Value*>& args, unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), env, srcIdx),
@@ -882,6 +1046,10 @@ void Force::printArgs(std::ostream& out, bool tty) const {
         frameState()->printRef(out);
         out << ", ";
     }
+}
+
+PirType Force::inferType(const GetType& getType) const {
+    return type & getType(input()).forced();
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {

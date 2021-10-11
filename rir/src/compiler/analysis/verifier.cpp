@@ -215,7 +215,7 @@ class TheVerifier {
             ok = false;
         }
 
-        if (CallInstruction::CastCall(i)) {
+        if (Force::Cast(i) || CallInstruction::CastCall(i)) {
             if (i->type.isVoid() || !i->type.isRType()) {
                 std::cerr << "Error: instruction '";
                 i->print(std::cerr);

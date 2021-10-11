@@ -76,14 +76,7 @@ class PirJitLLVM {
     // same module to make the names unique)
     static std::string makeName(Code* c) {
         std::stringstream ss;
-        ss << "rsh" << nModules << "_";
-        if (auto cls = ClosureVersion::Cast(c)) {
-            ss << cls->name();
-        } else if (auto p = Promise::Cast(c)) {
-            ss << p->owner->name() << "_" << *p;
-        } else {
-            assert(false);
-        }
+        ss << "rsh" << nModules << "_" << c;
         return ss.str().substr(0, rir::Code::MAX_CODE_HANDLE_LENGTH - 6);
     }
 
