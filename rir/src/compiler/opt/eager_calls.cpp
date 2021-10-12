@@ -281,11 +281,19 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
                                 if (auto f = Force::Cast(i)) {
-                                    if (LdArg::Cast(f)) {
-                                        f->elideEnv();
-                                        f->effects.reset(
-                                            Effect::DependsOnAssume);
-                                        f->effects.reset(Effect::Reflection);
+                                    if (auto a = Argument::Cast(f->input())) {
+                                        if (availableAssumptions.isNonRefl(
+                                                a->pos)) {
+                                            f->elideEnv();
+                                            f->effects.reset(
+                                                Effect::DependsOnAssume);
+                                            f->effects.reset(
+                                                Effect::Reflection);
+                                        }
+                                        if (availableAssumptions.isEager(
+                                                a->pos)) {
+                                            f->effects.reset();
+                                        }
                                     }
                                 }
                             });

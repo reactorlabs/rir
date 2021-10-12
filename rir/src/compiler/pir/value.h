@@ -13,6 +13,7 @@ enum class Tag : uint8_t;
 
 class BB;
 class Code;
+class Instruction;
 
 /*
  * A typed PIR value.
@@ -50,6 +51,15 @@ class Value {
     }
 
     void callArgTypeToContext(Context&, unsigned arg) const;
+
+    void checkReplace(Value* replace) const;
+
+    virtual void replaceUsesIn(
+        Value* val, BB* target,
+        const std::function<void(Instruction*, size_t)>& postAction =
+            [](Instruction*, size_t) {},
+        const std::function<bool(Instruction*)>& replaceOnly =
+            [](Instruction*) { return true; });
 };
 static_assert(sizeof(Value) <= 16, "");
 

@@ -277,11 +277,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 
         // Forcing an argument can only affect local envs by reflection.
         // Hence, only leaked envs can be affected
-        auto ld = LdArg::Cast(arg->cFollowCastsAndForce());
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
-            if (ld) {
-                if (closure->context().isNonRefl(ld->id)) {
+            if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
+                if (closure->context().isNonRefl(a->pos)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;
@@ -291,8 +290,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         if (upd == state.forcedPromise.end()) {
                             if (depth < MAX_DEPTH && !fixedPointReached() &&
                                 force->strict) {
-                                if (ld->id < args.size())
-                                    arg = args[ld->id];
+                                if (a->pos < args.size())
+                                    arg = args[a->pos];
 
                                 // We are certain that we do force something
                                 // here. Let's peek through the argument and see

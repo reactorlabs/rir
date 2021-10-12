@@ -297,24 +297,25 @@ void Instruction::clearFrameState() {
     updateFrameState(Tombstone::framestate());
 }
 
-static void checkReplace(Instruction* origin, Value* replace) {
-    if (replace->type.isRType() != origin->type.isRType() ||
-        (replace->type.maybePromiseWrapped() &&
-         !origin->type.maybePromiseWrapped())) {
-        std::cerr << "Trying to replace a ";
-        origin->type.print(std::cerr);
-        std::cerr << " with a ";
-        replace->type.print(std::cerr);
-        std::cerr << "\n";
-        origin->bb()->owner->printCode(std::cout, true, false);
-        assert(false);
+void Instruction::replaceUsesIn(
+    Value* val, BB* target,
+    const std::function<void(Instruction*, size_t)>& postAction,
+    const std::function<bool(Instruction*)>& replaceOnly) {
+    Value::replaceUsesIn(val, target, postAction, replaceOnly);
+
+    // Propagate typefeedback
+    if (auto rep = Instruction::Cast(val)) {
+        if (typeFeedback_.get())
+            if (!rep->type.isA(typeFeedback().type) &&
+                rep->typeFeedback().type.isVoid())
+                rep->typeFeedback(typeFeedback());
     }
 }
 
 void Instruction::replaceDominatedUses(Instruction* replace,
                                        const DominanceGraph& dom,
                                        const std::initializer_list<Tag>& skip) {
-    checkReplace(this, replace);
+    checkReplace(replace);
 
     auto start = false;
 
@@ -368,41 +369,6 @@ void Instruction::replaceDominatedUses(Instruction* replace,
                 rep->typeFeedback().type.isVoid())
                 rep->typeFeedback(typeFeedback());
         }
-}
-
-void Instruction::replaceUsesIn(
-    Value* replace, BB* start,
-    const std::function<void(Instruction*, size_t)>& postAction,
-    const std::function<bool(Instruction*)>& replaceOnly) {
-    checkReplace(this, replace);
-    Visitor::run(start, [&](BB* bb) {
-        for (auto& i : *bb) {
-            std::vector<size_t> changed;
-            size_t pos = 0;
-            if (!replaceOnly(i))
-                continue;
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == this) {
-                    arg.val() = replace;
-                    changed.push_back(pos);
-                }
-                pos++;
-            });
-            if (!changed.empty()) {
-                for (auto c : changed)
-                    postAction(i, c);
-                i->updateTypeAndEffects();
-            }
-        }
-    });
-
-    // Propagate typefeedback
-    if (auto rep = Instruction::Cast(replace)) {
-        if (typeFeedback_.get())
-            if (!rep->type.isA(typeFeedback().type) &&
-                rep->typeFeedback().type.isVoid())
-                rep->typeFeedback(typeFeedback());
-    }
 }
 
 void Instruction::replaceUsesWith(

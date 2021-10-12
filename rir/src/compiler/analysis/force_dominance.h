@@ -171,6 +171,15 @@ struct ForcedBy {
     AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
+        for (auto sc = inScope.begin(); sc != inScope.end(); ++sc) {
+            if (!other.inScope.count(*sc)) {
+                sc = inScope.erase(sc);
+                res.update();
+                if (sc == inScope.end())
+                    break;
+            }
+        }
+
         rir::SmallSet<MkArg*> gotAmbiguous;
         for (auto& e : forcedBy) {
             if (!e.second)

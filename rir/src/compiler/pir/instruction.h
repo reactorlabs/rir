@@ -318,24 +318,27 @@ class Instruction : public Value {
 
     Instruction* hasSingleUse();
     void eraseAndRemove();
+
+    void replaceUsesIn(
+        Value* val, BB* target,
+        const std::function<void(Instruction*, size_t)>& postAction =
+            [](Instruction*, size_t) {},
+        const std::function<bool(Instruction*)>& replaceOnly =
+            [](Instruction*) { return true; }) override final;
+
     void replaceUsesWith(
         Value* val,
         const std::function<void(Instruction*, size_t)>& postAction =
             [](Instruction*, size_t) {},
         const std::function<bool(Instruction*)>& replaceOnly =
             [](Instruction*) { return true; });
+
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
     void replaceDominatedUses(Instruction* replacement,
                               const DominanceGraph& dom,
                               const std::initializer_list<Tag>& skip = {});
-    void
-    replaceUsesIn(Value* val, BB* target,
-                  const std::function<void(Instruction*, size_t)>& postAction =
-                      [](Instruction*, size_t) {},
-                  const std::function<bool(Instruction*)>& replaceOnly =
-                      [](Instruction*) { return true; });
     void replaceUsesOfValue(Value* old, Value* rpl);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
@@ -547,6 +550,18 @@ class Instruction : public Value {
             COMPILER_INSTRUCTIONS(V)
 #undef V
             return static_cast<Instruction*>(v);
+        default: {
+        }
+        }
+        return nullptr;
+    }
+
+    static const Instruction* Cast(const Value* v) {
+        switch (v->tag) {
+#define V(Name) case Tag::Name:
+            COMPILER_INSTRUCTIONS(V)
+#undef V
+            return static_cast<const Instruction*>(v);
         default: {
         }
         }

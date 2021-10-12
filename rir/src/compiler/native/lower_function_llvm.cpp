@@ -873,12 +873,29 @@ llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
 }
 
 llvm::Value* LowerFunctionLLVM::argument(int i) {
-    auto pos = builder.CreateGEP(paramArgs(), {c(i), c(0)});
-    insn_assert(builder.CreateICmpEQ(builder.CreateLoad(pos), c(0)),
+    if ((int)loadedArgs.size() <= i)
+        loadedArgs.resize(i + 1);
+    if (loadedArgs.at(i))
+        return loadedArgs.at(i);
+
+    auto cur = builder.GetInsertBlock();
+    builder.SetInsertPoint(entryBlock);
+
+#ifdef ENABLE_SLOWASSERT
+    auto tagPos = builder.CreateGEP(paramArgs(), {c(i), c(0)});
+    insn_assert(builder.CreateICmpEQ(builder.CreateLoad(tagPos), c(0)),
                 "Expected boxed arg");
-    pos = builder.CreateGEP(paramArgs(), {c(i), c(2)});
+#endif
+    auto pos = builder.CreateGEP(paramArgs(), {c(i), c(2)});
+#ifdef ENABLE_SLOWASSERT
     insn_assert(builder.CreateIsNotNull(builder.CreateLoad(pos)), "null arg");
-    return builder.CreateLoad(pos);
+#endif
+
+    loadedArgs.at(i) = builder.CreateLoad(pos);
+    entryBlock = builder.GetInsertBlock();
+    builder.SetInsertPoint(cur);
+
+    return argument(i);
 }
 
 AllocaInst* LowerFunctionLLVM::topAlloca(llvm::Type* t, size_t len) {

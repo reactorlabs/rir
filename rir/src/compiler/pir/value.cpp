@@ -1,6 +1,9 @@
 #include "value.h"
+
+#include "compiler/util/visitor.h"
 #include "instruction.h"
 #include "pir_impl.h"
+
 #include <unordered_map>
 
 namespace rir {
@@ -53,6 +56,47 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     arg = arg->cFollowCastsAndForce();
     if (!MkArg::Cast(arg))
         check(arg);
+}
+
+void Value::checkReplace(Value* replace) const {
+    if (replace->type.isRType() != type.isRType() ||
+        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
+        std::cerr << "Trying to replace a ";
+        type.print(std::cerr);
+        std::cerr << " with a ";
+        replace->type.print(std::cerr);
+        std::cerr << "\n";
+        if (const auto i = Instruction::Cast(this))
+            i->bb()->owner->printCode(std::cout, true, false);
+        assert(false);
+    }
+}
+
+void Value::replaceUsesIn(
+    Value* replace, BB* start,
+    const std::function<void(Instruction*, size_t)>& postAction,
+    const std::function<bool(Instruction*)>& replaceOnly) {
+    checkReplace(replace);
+    Visitor::run(start, [&](BB* bb) {
+        for (auto& i : *bb) {
+            std::vector<size_t> changed;
+            size_t pos = 0;
+            if (!replaceOnly(i))
+                continue;
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this) {
+                    arg.val() = replace;
+                    changed.push_back(pos);
+                }
+                pos++;
+            });
+            if (!changed.empty()) {
+                for (auto c : changed)
+                    postAction(i, c);
+                i->updateTypeAndEffects();
+            }
+        }
+    });
 }
 }
 }
