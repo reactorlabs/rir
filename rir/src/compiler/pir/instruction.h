@@ -1045,13 +1045,14 @@ class FLI(Length, 1, Effects::None()) {
 
 class FLI(LdArg, 0, Effects::None()) {
   public:
-    size_t id;
+    size_t pos;
 
-    explicit LdArg(size_t id) : FixedLenInstruction(PirType::any()), id(id) {}
+    explicit LdArg(size_t pos)
+        : FixedLenInstruction(PirType::any()), pos(pos) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
 
-    size_t gvnBase() const override { return hash_combine(tagHash(), id); }
+    size_t gvnBase() const override { return hash_combine(tagHash(), pos); }
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 };
 

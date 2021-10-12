@@ -412,8 +412,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     if (state.forcedAt(arg, f))
                         res.update();
                 }
-                if (!state.ambiguousForceOrder && !state.maybeForced(arg->id)) {
-                    state.argumentForceOrder.push_back(arg->id);
+                if (!state.ambiguousForceOrder &&
+                    !state.maybeForced(arg->pos)) {
+                    state.argumentForceOrder.push_back(arg->pos);
                     res.update();
                 }
             } else {

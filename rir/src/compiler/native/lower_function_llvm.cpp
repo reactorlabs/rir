@@ -70,7 +70,7 @@ class NativeAllocator : public SSAAllocator {
         : SSAAllocator(code, livenessIntervals) {}
 
     bool needsAVariable(Value* v) const {
-        return Instruction::Cast(v) && !v->type.isVoid() &&
+        return Instruction::Cast(v) && !LdArg::Cast(v) && !v->type.isVoid() &&
                !v->type.isVirtualValue() && !v->type.isCompositeValue();
     }
     bool needsASlot(Value* v) const override final {
@@ -414,7 +414,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         }
     }
 
-    if (vali && variables_.count(vali)) {
+    if (auto a = LdArg::Cast(val)) {
+        res = argument(a->pos);
+    } else if (vali && variables_.count(vali)) {
         res = getVariable(vali);
     } else if (val == Env::elided()) {
         res = constant(R_NilValue, needed);
@@ -2353,7 +2355,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::LdArg:
-                setVal(i, argument(LdArg::Cast(i)->id));
+                // handled in load
                 break;
 
             case Tag::LdFunctionEnv:

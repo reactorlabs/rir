@@ -281,7 +281,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
                                 if (auto f = Force::Cast(i)) {
-                                    if (auto a = Argument::Cast(f->input())) {
+                                    if (auto a = LdArg::Cast(f->input())) {
                                         if (availableAssumptions.isNonRefl(
                                                 a->pos)) {
                                             f->elideEnv();
@@ -412,11 +412,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         anyChange = true;
                         Visitor::run(newCls->entry, [&](Instruction* i) {
                             if (auto ld = LdArg::Cast(i)) {
-                                if (eager.count(ld->id)) {
+                                if (eager.count(ld->pos)) {
                                     ld->type = PirType::promiseWrappedVal()
                                                    .notObject()
                                                    .notMissing();
-                               }
+                                }
                             }
                         });
                     });

@@ -306,7 +306,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 analysis.lookup(arg, [&](const AbstractPirValue& res) {
                     res.ifSingleValue([&](Value* val) { arg = val; });
                 });
-                if (auto a = Argument::Cast(arg)) {
+                if (auto a = LdArg::Cast(arg)) {
                     if (force->hasEnv() && cls->context().isNonRefl(a->pos)) {
                         force->elideEnv();
                         force->effects.reset(Effect::Reflection);

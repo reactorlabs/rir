@@ -567,7 +567,7 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
+void LdArg::printArgs(std::ostream& out, bool tty) const { out << pos; }
 
 void StVar::printArgs(std::ostream& out, bool tty) const {
     if (isStArg)
