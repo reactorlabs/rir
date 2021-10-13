@@ -5,6 +5,7 @@
 #define SYMBOLS_SIMPLE_INSTRUCTION_V(V, name, _) V(name, "." #name)
 
 #define SYMBOLS(V)                                                             \
+    SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UnknownDeoptTrigger, ".unknownDeoptTrigger")                             \
     V(SuperAssignBracket, "[<<-")                                              \
     V(SuperAssignDoubleBracket, "[[<<-")                                       \
@@ -76,11 +77,11 @@
     V(c, "c")                                                                  \
     V(standardGeneric, "standardGeneric")                                      \
     V(dispatchGeneric, "dispatchGeneric")                                      \
-    SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UseMethod, "UseMethod")                                                  \
     V(sysframe, "sys.frame")                                                   \
     V(syscall, "sys.call")                                                     \
     V(srcref, "srcref")                                                        \
+    V(expandDotsTrigger, ".expandDotsTrigger.")                                \
     V(ambiguousCallTarget, ".ambiguousCallTarget.")                            \
     V(delayedEnv, ".delayedEnv.")                                              \
     V(eval, "eval")                                                            \

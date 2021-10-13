@@ -1584,7 +1584,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 std::vector<SEXP> names;
                 for (RListIter arg = args.begin(); arg != RList::end(); ++arg) {
                     if (*arg == R_DotsSymbol) {
-                        cs << BC::push(R_DotsSymbol);
+                        cs << BC::push(symbol::expandDotsTrigger);
                         names.push_back(R_DotsSymbol);
                         continue;
                     }
@@ -1702,7 +1702,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
     res.numArgs += 1;
 
     if (CAR(arg) == R_DotsSymbol) {
-        cs << BC::push(R_DotsSymbol);
+        cs << BC::push(symbol::expandDotsTrigger);
         res.names.push_back(R_DotsSymbol);
         res.hasDots = true;
         return;

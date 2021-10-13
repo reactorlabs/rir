@@ -1692,7 +1692,7 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 hasNames = true;
         } else {
             SEXP ellipsis = arg;
-            if (ellipsis == R_DotsSymbol)
+            if (ellipsis == symbol::expandDotsTrigger)
                 ellipsis = Rf_findVar(R_DotsSymbol, env);
 
             if (TYPEOF(ellipsis) == PROMSXP)

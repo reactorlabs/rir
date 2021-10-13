@@ -231,7 +231,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         } else if (c == R_FalseValue ||
                    (IS_SIMPLE_SCALAR(c, LGLSXP) && *LOGICAL(c) == 0)) {
             push(False::instance());
-        } else if (c == R_DotsSymbol) {
+        } else if (c == symbol::expandDotsTrigger) {
             auto d = insert(new LdDots(insert.env));
             push(insert(new ExpandDots(d)));
         } else {
