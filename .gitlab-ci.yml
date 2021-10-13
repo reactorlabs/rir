@@ -250,6 +250,7 @@ test_features_3:
     - PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
     - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - PIR_DEOPTLESS=1 bin/tests
+    - PIR_DEOPTLESS=2 bin/tests
 
   artifacts:
     paths:

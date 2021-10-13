@@ -837,16 +837,49 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
-    static bool deoptless =
-        getenv("PIR_DEOPTLESS") && *getenv("PIR_DEOPTLESS") == '1';
+    static int deoptless =
+        getenv("PIR_DEOPTLESS") && std::atoi("PIR_DEOPTLESS");
     static constexpr bool deoptlessDebug = false;
     static int deoptlessCount = 0;
 
-    if (m->numFrames == 1 && deoptless && deoptlessCount < 10) {
+    if (deoptless && m->numFrames == 1 && deoptlessCount < 10) {
+
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
+
+        std::vector<Immediate> names;
+        if (deoptless > 1) {
+            if (le && le->materialized()) {
+                env = le->materialized();
+                le = nullptr;
+            }
+            if (!le) {
+                auto f = FRAME(env);
+                size_t pos = 0;
+                while (f != R_NilValue) {
+                    if (pos == DeoptContext::MAX_ENV)
+                        break;
+                    names.push_back(Pool::insert(TAG(f)));
+                    f = CDR(f);
+                    pos++;
+                }
+                if (f == R_NilValue) {
+                    le = LazyEnvironment::BasicNew(ENCLOS(env), pos,
+                                                   names.data());
+                    f = FRAME(env);
+                    pos = 0;
+                    while (f != R_NilValue) {
+                        le->missing[pos] = MISSING(f);
+                        le->setArg(pos++, CAR(f), false);
+                        f = CDR(f);
+                    }
+                }
+            }
+        }
+
         if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
+            PROTECT(le->container());
             auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
             rir::Function* fun = nullptr;
             RCNTXT* originalCntxt = findFunctionContextFor(env);
@@ -872,8 +905,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
             if (fun) {
-                assert(env == ostack_at(ctx, 0));
-
                 // Adapting calling convention: deoptless wants the env as
                 // individual arguments on the stack.
                 // TODO: speed this up by already passing it that way...
@@ -904,6 +935,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 assert(false);
                 return;
             }
+
+            UNPROTECT(1);
         }
     }
 
