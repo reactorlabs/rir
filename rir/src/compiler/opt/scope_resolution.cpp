@@ -43,9 +43,9 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
             res.eachSource([&](ValOrig vo) {
                 auto v = vo.val->followCastsAndForce();
                 if (v->type.maybeLazy()) {
-                    if (auto ld = LdArg::Cast(v))
-                        if (cls->context().isNonRefl(ld->id) ||
-                            cls->context().isEager(ld->id))
+                    if (auto a = LdArg::Cast(v))
+                        if (cls->context().isNonRefl(a->pos) ||
+                            cls->context().isEager(a->pos))
                             return;
                     maybe = true;
                 }
@@ -306,15 +306,15 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 analysis.lookup(arg, [&](const AbstractPirValue& res) {
                     res.ifSingleValue([&](Value* val) { arg = val; });
                 });
-                if (auto ld = LdArg::Cast(arg)) {
-                    if (force->hasEnv() && cls->context().isNonRefl(ld->id)) {
+                if (auto a = LdArg::Cast(arg)) {
+                    if (force->hasEnv() && cls->context().isNonRefl(a->pos)) {
                         force->elideEnv();
                         force->effects.reset(Effect::Reflection);
                         changed = true;
                     }
 
                     if (after.noReflection()) {
-                        force->type.fromContext(cls->context(), ld->id,
+                        force->type.fromContext(cls->context(), a->pos,
                                                 cls->nargs(), true);
                     }
                 }

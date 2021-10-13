@@ -65,10 +65,10 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                         removed = true;
                         force->replaceUsesWith(mkArg->eagerArg());
                         next = bb->remove(ip);
-                    } else if (auto ld =
+                    } else if (auto a =
                                    LdArg::Cast(arg->followCastsAndForce())) {
                         if (force->hasEnv() &&
-                            cls->context().isNonRefl(ld->id)) {
+                            cls->context().isNonRefl(a->pos)) {
                             force->elideEnv();
                             force->effects.reset(Effect::Reflection);
                         }

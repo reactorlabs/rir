@@ -171,6 +171,15 @@ struct ForcedBy {
     AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
+        for (auto sc = inScope.begin(); sc != inScope.end(); ++sc) {
+            if (!other.inScope.count(*sc)) {
+                sc = inScope.erase(sc);
+                res.update();
+                if (sc == inScope.end())
+                    break;
+            }
+        }
+
         rir::SmallSet<MkArg*> gotAmbiguous;
         for (auto& e : forcedBy) {
             if (!e.second)
@@ -403,8 +412,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                     if (state.forcedAt(arg, f))
                         res.update();
                 }
-                if (!state.ambiguousForceOrder && !state.maybeForced(arg->id)) {
-                    state.argumentForceOrder.push_back(arg->id);
+                if (!state.ambiguousForceOrder &&
+                    !state.maybeForced(arg->pos)) {
+                    state.argumentForceOrder.push_back(arg->pos);
                     res.update();
                 }
             } else {

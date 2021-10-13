@@ -326,8 +326,8 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
 
                         if (ld) {
-                            Value* a = (ld->id < arguments.size())
-                                           ? arguments[ld->id]
+                            Value* a = (ld->pos < arguments.size())
+                                           ? arguments[ld->pos]
                                            : MissingArg::instance();
                             if (auto mk = MkArg::Cast(a)) {
                                 if (!ld->type.maybePromiseWrapped()) {

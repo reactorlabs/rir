@@ -275,6 +275,8 @@ class LowerFunctionLLVM {
     llvm::Value* paramEnv() { return args[2]; }
     llvm::Value* paramClosure() { return args[3]; }
 
+    std::vector<llvm::Value*> loadedArgs;
+
     static llvm::Constant* c(void* i) {
         return llvm::ConstantInt::get(PirJitLLVM::getContext(),
                                       llvm::APInt(64, (intptr_t)i));

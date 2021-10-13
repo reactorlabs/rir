@@ -120,7 +120,6 @@ static void lower(Module* module, Code* code) {
         DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
 
     Visitor::runPostChange(code->entry, [&](BB* bb) {
-
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
