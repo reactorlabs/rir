@@ -20,7 +20,6 @@
 
 #include <stack>
 
-
 namespace rir {
 
 namespace {
@@ -46,20 +45,20 @@ static bool containsLoop(SEXP exp) {
 
     if (TYPEOF(fun) != SYMSXP) {
         return false;
-            } else if (fun == symbol::Repeat) {
-                return true;
-            } else if (fun == symbol::While) {
-                return true;
-            } else if (fun == symbol::For) {
-                return true;
-            }
+    } else if (fun == symbol::Repeat) {
+        return true;
+    } else if (fun == symbol::While) {
+        return true;
+    } else if (fun == symbol::For) {
+        return true;
+    }
 
-            RList args(args_);
-            bool res = false;
-            for (RListIter e = args.begin(); e != args.end(); ++e) {
-                res = res || containsLoop(*e);
-            }
-            return res;
+    RList args(args_);
+    bool res = false;
+    for (RListIter e = args.begin(); e != args.end(); ++e) {
+        res = res || containsLoop(*e);
+    }
+    return res;
 }
 
 class CompilerContext {
@@ -224,15 +223,21 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext = false);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                  bool voidContext);
 
-// EAGER_PROMISE_FROM_TOS is for the special case when the expression has already
-// been evaluated: wrap the value at TOS into a promise.
-// This is used in particular for the complex assignment: the expression
+// EAGER_PROMISE_FROM_TOS is for the special case when the expression has
+// already been evaluated: wrap the value at TOS into a promise. This is used in
+// particular for the complex assignment: the expression
 //    f(x) <- z
-// returns z, z must be evaluated first, and z must be passed as en eager promise to `f<-`
-// as its last argument.
-enum class ArgType { PROMISE, EAGER_PROMISE, RAW_VALUE, EAGER_PROMISE_FROM_TOS };
+// returns z, z must be evaluated first, and z must be passed as en eager
+// promise to `f<-` as its last argument.
+enum class ArgType {
+    PROMISE,
+    EAGER_PROMISE,
+    RAW_VALUE,
+    EAGER_PROMISE_FROM_TOS
+};
 
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res);
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
+                              LoadArgsResult& res);
 
 static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                             LoadArgsResult& info, bool voidContext,
@@ -293,141 +298,138 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     RList args(argsSexp);
     if (fun != symbol::Colon || args.length() != 2) {
         return false;
-            }
+    }
 
-            // for(i in m:n) {
-            //   ...
-            // }
-            // =>
-            // m' <- m
-            // n' <- n
-            // if (!colonInputEffects(m, n)) {
-            //    <regular for>
-            // } else {
-            //   m' <- colonCastLhs(m')
-            //   n' <- colonCastRhs(m', n')
-            //   step <- if (m' <= n') 1L else -1L
-            //   i' <- m'
-            //   while (i' != n') {
-            //     i <- i'
-            //     i' <- i' + step
-            //     ...
-            //   }
-            // }
+    // for(i in m:n) {
+    //   ...
+    // }
+    // =>
+    // m' <- m
+    // n' <- n
+    // if (!colonInputEffects(m, n)) {
+    //    <regular for>
+    // } else {
+    //   m' <- colonCastLhs(m')
+    //   n' <- colonCastRhs(m', n')
+    //   step <- if (m' <= n') 1L else -1L
+    //   i' <- m'
+    //   while (i' != n') {
+    //     i <- i'
+    //     i' <- i' + step
+    //     ...
+    //   }
+    // }
 
-            SEXP start = args[0];
-            SEXP end = args[1];
-            CodeStream& cs = ctx.cs();
+    SEXP start = args[0];
+    SEXP end = args[1];
+    CodeStream& cs = ctx.cs();
 
-            BC::Label skipRegularForBranch = cs.mkLabel();
-            BC::Label stepElseBranch = cs.mkLabel();
-            BC::Label stepEndBranch = cs.mkLabel();
-            BC::Label endBranch = cs.mkLabel();
+    BC::Label skipRegularForBranch = cs.mkLabel();
+    BC::Label stepElseBranch = cs.mkLabel();
+    BC::Label stepEndBranch = cs.mkLabel();
+    BC::Label endBranch = cs.mkLabel();
 
-            // m' <- m
-            compileExpr(ctx, start);
-            cs << BC::force();
-            // n' <- n
-            compileExpr(ctx, end);
-            cs << BC::force();
+    // m' <- m
+    compileExpr(ctx, start);
+    cs << BC::force();
+    // n' <- n
+    compileExpr(ctx, end);
+    cs << BC::force();
 
-            // if (!colonInputEffects(m, n)) {
-            cs << BC::colonInputEffects();
-            cs.addSrc(seq);
-            bool staticFastcase =
-                TYPEOF(start) != LANGSXP && TYPEOF(start) != SYMSXP &&
-                TYPEOF(end) != LANGSXP && TYPEOF(end) != SYMSXP &&
-                isColonFastcase(start, end);
-            if (staticFastcase) {
-                // We statically know that colonInputEffects is true, so we can
-                // just pop the result and don't need to compile the slowcase
-                // branch
-                cs << BC::pop();
-            } else {
-                cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
-                //   <regular for>
-                // Note that we call the builtin `for` and pass the body as a
-                // promise to lower the bytecode size
+    // if (!colonInputEffects(m, n)) {
+    cs << BC::colonInputEffects();
+    cs.addSrc(seq);
+    bool staticFastcase = TYPEOF(start) != LANGSXP && TYPEOF(start) != SYMSXP &&
+                          TYPEOF(end) != LANGSXP && TYPEOF(end) != SYMSXP &&
+                          isColonFastcase(start, end);
+    if (staticFastcase) {
+        // We statically know that colonInputEffects is true, so we can
+        // just pop the result and don't need to compile the slowcase
+        // branch
+        cs << BC::pop();
+    } else {
+        cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
+        //   <regular for>
+        // Note that we call the builtin `for` and pass the body as a
+        // promise to lower the bytecode size
 
-                // 1) Finish creating the seq, and add its SEXP as a promise
-                // (it's eager but it needs to be a promise to be an arg)
-                cs << BC::colon();
-                cs.addSrc(seq);
-                Code* seqProm = compilePromise(ctx, seq);
-                size_t seqPromIdx = cs.addPromise(seqProm);
+        // 1) Finish creating the seq, and add its SEXP as a promise
+        // (it's eager but it needs to be a promise to be an arg)
+        cs << BC::colon();
+        cs.addSrc(seq);
+        Code* seqProm = compilePromise(ctx, seq);
+        size_t seqPromIdx = cs.addPromise(seqProm);
 
-                // 2) Create a promise with the body
-                Code* bodyProm = compilePromise(ctx, body);
-                size_t bodyPromIdx = cs.addPromise(bodyProm);
+        // 2) Create a promise with the body
+        Code* bodyProm = compilePromise(ctx, body);
+        size_t bodyPromIdx = cs.addPromise(bodyProm);
 
-                // 3) Add the function, arguments, and call
-                Context assumptions;
-                assumptions.setEager(0);
-                assumptions.add(Assumption::CorrectOrderOfArguments);
-                assumptions.add(Assumption::NotTooManyArguments);
+        // 3) Add the function, arguments, and call
+        Context assumptions;
+        assumptions.setEager(0);
+        assumptions.add(Assumption::CorrectOrderOfArguments);
+        assumptions.add(Assumption::NotTooManyArguments);
 
-                cs << BC::ldfun(symbol::For) << BC::swap()
-                   << BC::mkEagerPromise(seqPromIdx)
-                   << BC::mkPromise(bodyPromIdx)
-                   << BC::call(2, fullAst, assumptions);
-                if (voidContext)
-                    cs << BC::pop();
-                else if (Compiler::profile)
-                    cs << BC::recordType();
+        cs << BC::ldfun(symbol::For) << BC::swap()
+           << BC::mkEagerPromise(seqPromIdx) << BC::mkPromise(bodyPromIdx)
+           << BC::call(2, fullAst, assumptions);
+        if (voidContext)
+            cs << BC::pop();
+        else if (Compiler::profile)
+            cs << BC::recordType();
 
-                cs << BC::br(endBranch);
-                cs << skipRegularForBranch;
-            }
-            // } else {
+        cs << BC::br(endBranch);
+        cs << skipRegularForBranch;
+    }
+    // } else {
 
-            // m' <- colonCastLhs(m')
-            cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
-               << BC::ensureNamed() << BC::swap();
+    // m' <- colonCastLhs(m')
+    cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
+       << BC::ensureNamed() << BC::swap();
 
-            // n' <- colonCastRhs(m', n')
-            cs << BC::colonCastRhs() << BC::ensureNamed() << BC::recordType();
+    // n' <- colonCastRhs(m', n')
+    cs << BC::colonCastRhs() << BC::ensureNamed() << BC::recordType();
 
-            // step <- if (m' <= n') 1L else -1L
-            cs << BC::dup2() << BC::le();
+    // step <- if (m' <= n') 1L else -1L
+    cs << BC::dup2() << BC::le();
+    cs.addSrc(R_NilValue);
+    cs << BC::recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
+       << BC::br(stepEndBranch) << stepElseBranch << BC::push(-1)
+       << stepEndBranch;
+
+    // i' <- m' (we just reuse m', but we need to fix the stack as the
+    //           following bytecode expects: lhs :: rhs :: step :: ...)
+    cs << BC::swap() << BC::pick(2);
+
+    // while
+    compileWhile(
+        ctx,
+        [&cs]() {
+            // (i' != n')
+            cs << BC::dup2() << BC::ne();
             cs.addSrc(R_NilValue);
-            cs << BC::recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
-               << BC::br(stepEndBranch) << stepElseBranch << BC::push(-1)
-               << stepEndBranch;
-
-            // i' <- m' (we just reuse m', but we need to fix the stack as the
-            //           following bytecode expects: lhs :: rhs :: step :: ...)
-            cs << BC::swap() << BC::pick(2);
-
-            // while
-            compileWhile(
-                ctx,
-                [&cs]() {
-                    // (i' != n')
-                    cs << BC::dup2() << BC::ne();
-                    cs.addSrc(R_NilValue);
-                },
-                [&ctx, &cs, &sym, &body]() {
-                    // {
-                    // i <- i'
-                    cs << BC::dup();
-                    if (ctx.code.top()->isCached(sym))
-                        cs << BC::stvarCached(
-                            sym, ctx.code.top()->cacheSlotFor(sym));
-                    else
-                        cs << BC::stvar(sym);
-                    // i' <- i' + step
-                    cs << BC::pull(2) << BC::ensureNamed() << BC::add();
-                    cs.addSrc(R_NilValue);
-                    // ...
-                    compileExpr(ctx, body, true);
-                    // }
-                },
-                !containsLoop(body));
-            cs << BC::popn(3);
-            if (!voidContext)
-                cs << BC::push(R_NilValue) << BC::invisible();
-            cs << endBranch;
-            return true;
+        },
+        [&ctx, &cs, &sym, &body]() {
+            // {
+            // i <- i'
+            cs << BC::dup();
+            if (ctx.code.top()->isCached(sym))
+                cs << BC::stvarCached(sym, ctx.code.top()->cacheSlotFor(sym));
+            else
+                cs << BC::stvar(sym);
+            // i' <- i' + step
+            cs << BC::pull(2) << BC::ensureNamed() << BC::add();
+            cs.addSrc(R_NilValue);
+            // ...
+            compileExpr(ctx, body, true);
+            // }
+        },
+        !containsLoop(body));
+    cs << BC::popn(3);
+    if (!voidContext)
+        cs << BC::push(R_NilValue) << BC::invisible();
+    cs << endBranch;
+    return true;
 }
 
 // A very conservative estimation if the ast could contain an assignment, or
@@ -492,13 +494,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (args.length() == 2 &&
-        (fun == symbol::Add || fun == symbol::Sub ||
-         fun == symbol::Mul || fun == symbol::Div || fun == symbol::Idiv ||
-         fun == symbol::Mod || fun == symbol::Pow ||
-         fun == symbol::Lt || fun == symbol::Gt ||
-         fun == symbol::Le || fun == symbol::Ge ||
-         fun == symbol::Eq || fun == symbol::Ne ||
-         fun == symbol::Colon)) {
+        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Mul ||
+         fun == symbol::Div || fun == symbol::Idiv || fun == symbol::Mod ||
+         fun == symbol::Pow || fun == symbol::Lt || fun == symbol::Gt ||
+         fun == symbol::Le || fun == symbol::Ge || fun == symbol::Eq ||
+         fun == symbol::Ne || fun == symbol::Colon)) {
         emitGuardForNamePrimitive(cs, fun);
 
         compileExpr(ctx, args[0]);
@@ -543,8 +543,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     }
 
     if (args.length() == 1 &&
-        (fun == symbol::Add || fun == symbol::Sub ||
-         fun == symbol::Not)) {
+        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Not)) {
         emitGuardForNamePrimitive(cs, fun);
 
         compileExpr(ctx, args[0]);
@@ -571,8 +570,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::aslogical();
         cs.addSrc(args[0]);
-        cs << BC::dup()
-           << BC::brfalse(nextBranch);
+        cs << BC::dup() << BC::brfalse(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -596,8 +594,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         cs << BC::aslogical();
         cs.addSrc(ast);
-        cs << BC::dup()
-           << BC::brtrue(nextBranch);
+        cs << BC::dup() << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
@@ -619,7 +616,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         return true;
     }
 
-    if (fun == symbol::Assign || fun == symbol::Assign2 || fun == symbol::SuperAssign) {
+    if (fun == symbol::Assign || fun == symbol::Assign2 ||
+        fun == symbol::SuperAssign) {
         assert(args.length() == 2);
 
         bool superAssign = fun == symbol::SuperAssign;
@@ -704,7 +702,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
         }
 
-
         // 3) Special case f(a) <- b
 
         // Only allow one level of nesting:
@@ -763,8 +760,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     cs << BC::setShared();
             }
 
-            // Again, subassign bytecodes override objects with named count of 1. If
-            // the target is from the outer scope that would be wrong. For example
+            // Again, subassign bytecodes override objects with named count
+            // of 1. If the target is from the outer scope that would be wrong.
+            // For example
             //
             //     a <- 1
             //     f <- function()
@@ -823,7 +821,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             } else {
                 if (ctx.code.top()->isCached(target))
                     cs << BC::stvarCached(target,
-                                        ctx.code.top()->cacheSlotFor(target));
+                                          ctx.code.top()->cacheSlotFor(target));
                 else
                     cs << BC::stvar(target);
             }
@@ -951,11 +949,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             compileLoadOneArg(ctx, farrow_args, ArgType::RAW_VALUE,
                               load_arg_res);
 
-            //load y1, <...>, yn
+            // load y1, <...>, yn
 
             for (SEXP cur_arg_cell = CDR(farrow_args);
                  cur_arg_cell != new_z_cell; cur_arg_cell = CDR(cur_arg_cell)) {
-                compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE, load_arg_res);
+                compileLoadOneArg(ctx, cur_arg_cell, ArgType::PROMISE,
+                                  load_arg_res);
             }
 
             // now, the value stack looks like this:
@@ -965,13 +964,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
             // where N is the number of arguments _already_ passed to `f<-`
             // (load_arg_res.numArgs)
-            if(voidContext) {
+            if (voidContext) {
                 // move the value of z to TOS
-                cs << BC::pick(load_arg_res.numArgs+1);
-            }
-            else {
+                cs << BC::pick(load_arg_res.numArgs + 1);
+            } else {
                 // keep a copy before `f<-` to return after the assignment
-                cs << BC::pull(load_arg_res.numArgs+1);
+                cs << BC::pull(load_arg_res.numArgs + 1);
             }
 
             // after this instruction:
@@ -1017,7 +1015,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         return true;
     }
-
 
     if (fun == symbol::Block) {
         emitGuardForNamePrimitive(cs, fun);
@@ -1196,8 +1193,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         return true;
     }
 
-    if (fun == symbol::Missing && args.length() == 1 && TYPEOF(args[0]) == SYMSXP &&
-        !DDVAL(args[0])) {
+    if (fun == symbol::Missing && args.length() == 1 &&
+        TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
         emitGuardForNamePrimitive(cs, fun);
         if (!voidContext) {
             cs << BC::missing(args[0]) << BC::visible();
@@ -1213,13 +1210,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         emitGuardForNamePrimitive(cs, fun);
 
-        compileWhile(ctx,
-                     [&ctx, &cs, &cond]() {
-                         compileExpr(ctx, cond);
-                         cs << BC::asbool();
-                     },
-                     [&ctx, &body]() { compileExpr(ctx, body, true); },
-                     !containsLoop(body));
+        compileWhile(
+            ctx,
+            [&ctx, &cs, &cond]() {
+                compileExpr(ctx, cond);
+                cs << BC::asbool();
+            },
+            [&ctx, &body]() { compileExpr(ctx, body, true); },
+            !containsLoop(body));
 
         if (!voidContext)
             cs << BC::push(R_NilValue) << BC::invisible();
@@ -1354,8 +1352,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopNext())
-               << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
             return true;
         }
     }
@@ -1370,8 +1367,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopBreak())
-               << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
             return true;
         }
     }
@@ -1442,15 +1438,15 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         std::vector<BC::Label> groupLabels; // eval/return for each group
         std::vector<SEXP> expressions;      // return value ast for each group
         std::vector<BC::Label> labels;      // eval/return for each arg
-        std::vector<bool> argMissing(argLen-1, true);
+        std::vector<bool> argMissing(argLen - 1, true);
         int dftLabelIdx = -1; // index into `labels` for default return arg
         bool dupDflt = false;
         BC::Label vecArityBr = cs.mkLabel();
         BC::Label vecErrorBr = cs.mkLabel();
         BC::Label vecEContBr = cs.mkLabel();
         BC::Label facWContBr = cs.mkLabel();
-        BC::Label strBr  = cs.mkLabel();
-        BC::Label nilBr  = cs.mkLabel();
+        BC::Label strBr = cs.mkLabel();
+        BC::Label nilBr = cs.mkLabel();
         BC::Label contBr = cs.mkLabel();
 
         // find default and group args
@@ -1527,11 +1523,12 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                        << BC::brtrue(groupLabels[i]);
                 }
             }
-            auto fallbackLabel = (dftLabelIdx == -1) ? nilBr : labels[dftLabelIdx];
+            auto fallbackLabel =
+                (dftLabelIdx == -1) ? nilBr : labels[dftLabelIdx];
             cs << BC::br(fallbackLabel);
         }
 
-        for (size_t i=0, j=0; i < labels.size(); ++i) {
+        for (size_t i = 0, j = 0; i < labels.size(); ++i) {
             cs << labels[i];
             if (argMissing[i]) {
                 ctx.emitError("empty alternative in numeric switch", ast);
@@ -1632,16 +1629,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // loop invariant stack layout: [ans, length(X), i]
 
                 // check end condition
-                cs << loopBranch
-                   << BC::inc()
-                   << BC::dup2()
-                   << BC::lt();
+                cs << loopBranch << BC::inc() << BC::dup2() << BC::lt();
                 cs.addSrc(ast);
 
                 SEXP isym = Rf_install("i");
-                cs << BC::brtrue(nextBranch)
-                   << BC::dup()
-                   << BC::stvar(isym);
+                cs << BC::brtrue(nextBranch) << BC::dup() << BC::stvar(isym);
 
                 // construct ast for FUN(X[[i]], ...)
                 SEXP tmp =
@@ -1655,8 +1647,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 UNPROTECT(2);
 
                 // store result
-                cs << BC::pull(1)
-                   << BC::pick(4)
+                cs << BC::pull(1) << BC::pick(4)
                    << BC::swap() // [length(X), i, fun(X[[i]], ...), ans, i]
                    << BC::subassign2_1();
                 cs.addSrc(ast);
@@ -1665,10 +1656,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                    << BC::br(loopBranch);
 
                 // put ans to the top and remove rest
-                cs << nextBranch
-                   << BC::pop()
-                   << BC::pop()
-                   << BC::visible();
+                cs << nextBranch << BC::pop() << BC::pop() << BC::visible();
 
                 if (voidContext)
                     cs << BC::pop();
@@ -1684,15 +1672,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);                                                        \
         return true;                                                           \
     }
-SIMPLE_INSTRUCTIONS(V, _)
+    SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     return false;
 }
 
-
-static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, LoadArgsResult & res)
-{
+static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
+                              LoadArgsResult& res) {
     // Prepare the argument arg for a function call.
     // The bytecode generated will return the result either as a promise, an
     // evaluated promise, or a raw value.
@@ -1761,7 +1748,8 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type, 
 
     size_t idx = cs.addPromise(prom);
 
-    if (arg_type == ArgType::EAGER_PROMISE || arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
+    if (arg_type == ArgType::EAGER_PROMISE ||
+        arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         res.assumptions.setEager(i);
         cs << BC::mkEagerPromise(idx);
     } else {
@@ -1777,8 +1765,7 @@ static void compileLoadArgs(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
 
     SEXP cur_cell = args;
     int i = 0;
-    while(cur_cell != R_NilValue)
-    {
+    while (cur_cell != R_NilValue) {
         if (i >= skipArgs) {
             ArgType t = (i < eager) ? ArgType::RAW_VALUE : ArgType::PROMISE;
             compileLoadOneArg(ctx, cur_cell, t, info);
@@ -1981,7 +1968,7 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
     return ctx.pop();
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 SEXP Compiler::finalize() {
     FunctionWriter function;
