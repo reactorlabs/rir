@@ -9,13 +9,13 @@ namespace rir {
 
 class Protect {
   public:
-    Protect(const Protect& other) = delete;
-
     Protect() {}
     explicit Protect(SEXP init) {
         Rf_protect(init);
         ++protectedValues_;
     }
+    Protect(const Protect& other) = delete;
+    ~Protect() { clear(); }
 
     SEXP operator()(SEXP value) {
         Rf_protect(value);
@@ -23,7 +23,7 @@ class Protect {
         return value;
     }
 
-    ~Protect() { Rf_unprotect(protectedValues_); }
+    void clear() { Rf_unprotect(protectedValues_); }
 
   private:
     /* Prevents heap allocation. */
@@ -34,6 +34,7 @@ class Protect {
 
     unsigned protectedValues_ = 0;
 };
-}
+
+} // namespace rir
 
 #endif // PROTECT_H

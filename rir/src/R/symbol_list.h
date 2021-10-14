@@ -81,7 +81,6 @@
     V(sysframe, "sys.frame")                                                   \
     V(syscall, "sys.call")                                                     \
     V(srcref, "srcref")                                                        \
-    V(expandDotsTrigger, ".expandDotsTrigger.")                                \
     V(ambiguousCallTarget, ".ambiguousCallTarget.")                            \
     V(delayedEnv, ".delayedEnv.")                                              \
     V(eval, "eval")                                                            \

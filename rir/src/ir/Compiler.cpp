@@ -1575,14 +1575,16 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 for (RListIter arg = args.begin(); arg != RList::end(); ++arg)
                     if (*arg == R_DotsSymbol)
                         hasDots = true;
+
                 if (hasDots)
                     cs << BC::push(internal);
 
                 std::vector<SEXP> names;
                 for (RListIter arg = args.begin(); arg != RList::end(); ++arg) {
+
                     if (*arg == R_DotsSymbol) {
                         cs << BC::push(symbol::expandDotsTrigger);
-                        names.push_back(R_DotsSymbol);
+                        names.push_back(R_NilValue);
                         continue;
                     }
 
@@ -1689,14 +1691,10 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     res.numArgs += 1;
 
     if (CAR(arg) == R_DotsSymbol) {
+        // The name is ignored, eg. foo(x = ...) ~~~ foo(...)
         cs << BC::push(symbol::expandDotsTrigger);
-        res.names.push_back(R_DotsSymbol);
-        res.hasDots = true;
-        return;
-    }
-    if (CAR(arg) == R_MissingArg) {
-        cs << BC::push(R_MissingArg);
         res.names.push_back(R_NilValue);
+        res.hasDots = true;
         return;
     }
 
@@ -1704,6 +1702,11 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     res.names.push_back(TAG(arg));
     if (TAG(arg) != R_NilValue)
         res.hasNames = true;
+
+    if (CAR(arg) == R_MissingArg) {
+        cs << BC::push(R_MissingArg);
+        return;
+    }
 
     if (arg_type == ArgType::RAW_VALUE) {
         compileExpr(ctx, CAR(arg), false);
