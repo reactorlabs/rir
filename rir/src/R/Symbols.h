@@ -11,7 +11,7 @@ namespace symbol {
 SYMBOLS(V)
 #undef V
 
-extern SEXP expandDotsTrigger;
+// extern SEXP expandDotsTrigger;
 
 } // namespace symbol
 } // namespace rir

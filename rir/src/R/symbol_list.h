@@ -90,6 +90,7 @@
     V(forceAndCall, "forceAndCall")                                            \
     V(remove, "remove")                                                        \
     V(rm, "rm")                                                                \
-    V(Recall, "Recall")
+    V(Recall, "Recall")                                                        \
+    V(expandDotsTrigger, "\x02expandDotsTrigger\x03")
 
 #endif // SYMBOLS_LIST_H_

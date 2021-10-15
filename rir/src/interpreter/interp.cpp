@@ -1696,15 +1696,18 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
             bool pir = (name == symbol::expandDotsTrigger);
             SEXP ellipsis = pir ? arg : Rf_findVar(R_DotsSymbol, env);
 
+            if (TYPEOF(ellipsis) == PROMSXP)
+                ellipsis = evaluatePromise(ellipsis, ctx);
+
             if (TYPEOF(ellipsis) == DOTSXP || ellipsis == R_NilValue) {
                 while (ellipsis != R_NilValue) {
                     auto dotArg = CAR(ellipsis);
                     if (TYPEOF(dotArg) == LANGSXP ||
                         (TYPEOF(dotArg) == SYMSXP && dotArg != R_MissingArg)) {
-                        args.push_back(p(Rf_mkPROMISE(dotArg, env)));
-                    } else {
-                        args.push_back(dotArg);
+                        arg = Rf_mkPROMISE(arg, env);
+                        p(arg);
                     }
+                    args.push_back(dotArg);
                     names.push_back(TAG(ellipsis));
                     if (TAG(ellipsis) != R_NilValue)
                         hasNames = true;
@@ -1718,13 +1721,17 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                     args.push_back(R_MissingArg);
                     names.push_back(R_NilValue);
                 }
+            } else if (ellipsis == R_UnboundValue) {
             } else {
-                // Protect stack should be restored after Rf_error but to be
-                // safe...
-                p.clear();
-                args = std::vector<SEXP>();
-                names = std::vector<SEXP>();
-                Rf_error("'...' used in an incorrect context");
+                // TODO: why does this happen in SERIALIZE CHAOS?
+                args.push_back(ellipsis);
+                names.push_back(R_NilValue);
+                // // Protect stack should be restored after Rf_error but to be
+                // // safe...
+                // p.clear();
+                // args = std::vector<SEXP>();
+                // names = std::vector<SEXP>();
+                // Rf_error("'...' used in an incorrect context booooo");
             }
         } else {
             args.push_back(arg);
