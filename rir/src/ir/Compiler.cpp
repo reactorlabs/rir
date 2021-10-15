@@ -1698,7 +1698,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
         return;
     }
 
-    // remember if the argument had a name associated
+    // remember if the argument had a name associated (for missing too)
     res.names.push_back(TAG(arg));
     if (TAG(arg) != R_NilValue)
         res.hasNames = true;

@@ -1726,12 +1726,6 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                 // TODO: why does this happen in SERIALIZE CHAOS?
                 args.push_back(ellipsis);
                 names.push_back(R_NilValue);
-                // // Protect stack should be restored after Rf_error but to be
-                // // safe...
-                // p.clear();
-                // args = std::vector<SEXP>();
-                // names = std::vector<SEXP>();
-                // Rf_error("'...' used in an incorrect context booooo");
             }
         } else {
             args.push_back(arg);
