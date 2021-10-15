@@ -838,48 +838,16 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
     static int deoptless =
-        getenv("PIR_DEOPTLESS") && std::atoi("PIR_DEOPTLESS");
+        getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
     static constexpr bool deoptlessDebug = false;
     static int deoptlessCount = 0;
 
     if (deoptless && m->numFrames == 1 && deoptlessCount < 10) {
-
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
 
-        std::vector<Immediate> names;
-        if (deoptless > 1) {
-            if (le && le->materialized()) {
-                env = le->materialized();
-                le = nullptr;
-            }
-            if (!le) {
-                auto f = FRAME(env);
-                size_t pos = 0;
-                while (f != R_NilValue) {
-                    if (pos == DeoptContext::MAX_ENV)
-                        break;
-                    names.push_back(Pool::insert(TAG(f)));
-                    f = CDR(f);
-                    pos++;
-                }
-                if (f == R_NilValue) {
-                    le = LazyEnvironment::BasicNew(ENCLOS(env), pos,
-                                                   names.data());
-                    f = FRAME(env);
-                    pos = 0;
-                    while (f != R_NilValue) {
-                        le->missing[pos] = MISSING(f);
-                        le->setArg(pos++, CAR(f), false);
-                        f = CDR(f);
-                    }
-                }
-            }
-        }
-
         if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
-            PROTECT(le->container());
             auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
             rir::Function* fun = nullptr;
             RCNTXT* originalCntxt = findFunctionContextFor(env);
@@ -893,7 +861,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 std::cout << "Stack : [\n";
                 for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
                     auto v = (base + i)->u.sxpval;
-                    Rf_PrintValue(v);
+                    if (TYPEOF(v) == PROMSXP && PRVALUE(v) != R_UnboundValue)
+                        Rf_PrintValue(PRVALUE(v));
+                    else
+                        Rf_PrintValue(v);
                 }
                 std::cout << "]\n";
             }
@@ -911,15 +882,21 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 ostack_pop(ctx);
                 if (deoptlessDebug)
                     std::cout << "Env : [\n";
-                for (size_t i = 0; i < le->nargs; ++i) {
+                for (unsigned i = 0; i < le->nargs; ++i) {
+                    auto v = le->getArg(i);
                     if (deoptlessDebug) {
                         Rf_PrintValue(Pool::get(le->names[i]));
                         if (le->getArg(i) == R_UnboundValue)
                             std::cout << "unbound\n";
-                        else
-                            Rf_PrintValue(le->getArg(i));
+                        else {
+                            if (TYPEOF(v) == PROMSXP &&
+                                PRVALUE(v) != R_UnboundValue)
+                                Rf_PrintValue(PRVALUE(v));
+                            else
+                                Rf_PrintValue(v);
+                        }
                     }
-                    ostack_push(ctx, le->getArg(i));
+                    ostack_push(ctx, v);
                 }
                 if (deoptlessDebug)
                     std::cout << "]\n";
@@ -935,8 +912,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 assert(false);
                 return;
             }
-
-            UNPROTECT(1);
         }
     }
 

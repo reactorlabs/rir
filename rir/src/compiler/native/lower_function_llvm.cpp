@@ -5829,8 +5829,8 @@ void LowerFunctionLLVM::compile() {
                 ensureNamedIfNeeded(i);
 
             if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid() &&
-                variables_.count(i)) {
-                if (Rep::Of(i) == Rep::SEXP) {
+                (variables_.count(i) || LdArg::Cast(i))) {
+                if (Rep::Of(i) == Rep::SEXP || LdArg::Cast(i)) {
                     if (i->type != RType::expandedDots &&
                         i->type != NativeType::context && !CastType::Cast(i)) {
                         static std::vector<std::string> leaky;
@@ -5845,7 +5845,7 @@ void LowerFunctionLLVM::compile() {
                             msg = defaultMsg;
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {load(i), c((unsigned long)i->type.serialize()),
+                             {loadSxp(i), c((unsigned long)i->type.serialize()),
                               convertToPointer(msg, t::i8, true)});
                     }
                 }
@@ -5858,7 +5858,6 @@ void LowerFunctionLLVM::compile() {
                 }
 #endif
             }
-
         }
 
         // Copy of phi input values
