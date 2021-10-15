@@ -1687,14 +1687,13 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
     for (size_t i = 0; i < n; ++i) {
         auto arg = ostack_at(ctx, n - i - 1);
         auto name = cp_pool_at(ctx, names_[i]);
-        if (arg == symbol::expandDotsTrigger ||
-            name == symbol::expandDotsTrigger) {
-            // If we come from rir, we have to look up `...`
-            // If we come from pir, `...` is already loaded
-            assert(arg != symbol::expandDotsTrigger ||
-                   name != symbol::expandDotsTrigger);
-            bool pir = (name == symbol::expandDotsTrigger);
-            SEXP ellipsis = pir ? arg : Rf_findVar(R_DotsSymbol, env);
+        if (name == symbol::expandDotsTrigger) {
+            // If we come from rir, we have to look up `...`, marked by the arg
+            // being the symbol expandDotsTrigger If we come from pir, `...` is
+            // already loaded
+            SEXP ellipsis = (arg == symbol::expandDotsTrigger)
+                                ? Rf_findVar(R_DotsSymbol, env)
+                                : arg;
 
             if (TYPEOF(ellipsis) == PROMSXP) {
                 ellipsis = evaluatePromise(ellipsis, ctx);
@@ -1722,10 +1721,6 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                     args.push_back(R_MissingArg);
                     names.push_back(R_NilValue);
                 }
-            } else if (ellipsis == R_UnboundValue) {
-                assert(false);
-            } else if (pir) {
-                assert(false);
             }
         } else {
             args.push_back(arg);

@@ -1583,8 +1583,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 for (RListIter arg = args.begin(); arg != RList::end(); ++arg) {
 
                     if (*arg == R_DotsSymbol) {
+                        // The name is ignored, eg. foo(x = ...) ~~~ foo(...),
+                        // so we can use it to mark that we require dots
+                        // expansion. The actual value pushed means that we at
+                        // runtime should look up the ellipsis, as opposed to it
+                        // being already on the stack (which is what pir does).
                         cs << BC::push(symbol::expandDotsTrigger);
-                        names.push_back(R_NilValue);
+                        names.push_back(symbol::expandDotsTrigger);
                         continue;
                     }
 
@@ -1691,9 +1696,12 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     res.numArgs += 1;
 
     if (CAR(arg) == R_DotsSymbol) {
-        // The name is ignored, eg. foo(x = ...) ~~~ foo(...)
+        // The name is ignored, eg. foo(x = ...) ~~~ foo(...), so we can use it
+        // to mark that we require dots expansion. The actual value pushed means
+        // that we at runtime should look up the ellipsis, as opposed to it
+        // being already on the stack (which is what pir does).
         cs << BC::push(symbol::expandDotsTrigger);
-        res.names.push_back(R_NilValue);
+        res.names.push_back(symbol::expandDotsTrigger);
         res.hasDots = true;
         return;
     }
