@@ -160,6 +160,9 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
     else
         merge(TYPEOF(e));
 
+    if (TYPEOF(e) == PROMSXP)
+        return;
+
     if (!Rf_isObject(e))
         flags_.reset(TypeFlags::maybeObject);
     if (fastVeceltOk(e))
@@ -168,7 +171,6 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
         flags_.reset(TypeFlags::maybeAttrib);
     if (Rf_xlength(e) == 1)
         flags_.reset(TypeFlags::maybeNotScalar);
-
     if (!maybeContainsNAOrNaN(e))
         flags_.reset(TypeFlags::maybeNAOrNaN);
 }
