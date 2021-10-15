@@ -23,6 +23,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         SEXP builtin;
         Checkpoint* cp;
         FeedbackOrigin origin;
+        Speculation() {}
+        Speculation(SEXP builtin, Checkpoint* cp, const FeedbackOrigin& origin)
+            : builtin(builtin), cp(cp), origin(origin) {
+            assert(origin.pc());
+        }
     };
 
     auto replaceLdFunBuiltinWithDeopt = [&](BB* bb, BB::Instrs::iterator ip,
@@ -202,9 +207,13 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                                     bb, ip, call, builtin,
                                                     !inBase);
                                             }
-                                            if (!inBase)
-                                                needsGuard[ldfun] = {builtin,
-                                                                     cp};
+                                            if (!inBase &&
+                                                ldfun->typeFeedback()
+                                                    .feedbackOrigin.pc())
+                                                needsGuard[ldfun] = {
+                                                    builtin, cp,
+                                                    ldfun->typeFeedback()
+                                                        .feedbackOrigin};
                                         }
                                     }
                                 }
