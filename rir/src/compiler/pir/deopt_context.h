@@ -30,6 +30,7 @@ struct DeoptContext {
     const std::vector<PirType> stack() const {
         std::vector<PirType> s;
         s.insert(s.begin(), stack_.begin(), stackEnd());
+        assert(s.size() == stackSize());
         return s;
     }
 

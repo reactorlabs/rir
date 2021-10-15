@@ -862,7 +862,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 std::cout << "Stack : [\n";
                 for (size_t i = 0; i < m->frames[0].stackSize; ++i) {
                     auto v = (base + i)->u.sxpval;
-                    Rf_PrintValue(v);
+                    if (TYPEOF(v) == PROMSXP && PRVALUE(v) != R_UnboundValue)
+                        Rf_PrintValue(PRVALUE(v));
+                    else
+                        Rf_PrintValue(v);
                 }
                 std::cout << "]\n";
             }
@@ -880,15 +883,21 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 ostack_pop(ctx);
                 if (deoptlessDebug)
                     std::cout << "Env : [\n";
-                for (size_t i = 0; i < le->nargs; ++i) {
+                for (unsigned i = 0; i < le->nargs; ++i) {
+                    auto v = le->getArg(i);
                     if (deoptlessDebug) {
                         Rf_PrintValue(Pool::get(le->names[i]));
                         if (le->getArg(i) == R_UnboundValue)
                             std::cout << "unbound\n";
-                        else
-                            Rf_PrintValue(le->getArg(i));
+                        else {
+                            if (TYPEOF(v) == PROMSXP &&
+                                PRVALUE(v) != R_UnboundValue)
+                                Rf_PrintValue(PRVALUE(v));
+                            else
+                                Rf_PrintValue(v);
+                        }
                     }
-                    ostack_push(ctx, le->getArg(i));
+                    ostack_push(ctx, v);
                 }
                 if (deoptlessDebug)
                     std::cout << "]\n";
