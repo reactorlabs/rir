@@ -1696,8 +1696,9 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
             bool pir = (name == symbol::expandDotsTrigger);
             SEXP ellipsis = pir ? arg : Rf_findVar(R_DotsSymbol, env);
 
-            if (TYPEOF(ellipsis) == PROMSXP)
+            if (TYPEOF(ellipsis) == PROMSXP) {
                 ellipsis = evaluatePromise(ellipsis, ctx);
+            }
 
             if (TYPEOF(ellipsis) == DOTSXP || ellipsis == R_NilValue) {
                 while (ellipsis != R_NilValue) {
@@ -1722,10 +1723,9 @@ size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                     names.push_back(R_NilValue);
                 }
             } else if (ellipsis == R_UnboundValue) {
-            } else {
-                // TODO: why does this happen in SERIALIZE CHAOS?
-                args.push_back(ellipsis);
-                names.push_back(R_NilValue);
+                assert(false);
+            } else if (pir) {
+                assert(false);
             }
         } else {
             args.push_back(arg);
