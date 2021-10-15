@@ -848,7 +848,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
         if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
-            PROTECT(le->container());
             auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
             rir::Function* fun = nullptr;
             RCNTXT* originalCntxt = findFunctionContextFor(env);
