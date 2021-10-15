@@ -843,39 +843,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     static int deoptlessCount = 0;
 
     if (deoptless && m->numFrames == 1 && deoptlessCount < 10) {
-
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
-
-        std::vector<Immediate> names;
-        if (deoptless > 1) {
-            if (le && le->materialized()) {
-                env = le->materialized();
-                le = nullptr;
-            }
-            if (!le) {
-                auto f = FRAME(env);
-                size_t pos = 0;
-                while (f != R_NilValue) {
-                    if (pos == DeoptContext::MAX_ENV)
-                        break;
-                    names.push_back(Pool::insert(TAG(f)));
-                    f = CDR(f);
-                    pos++;
-                }
-                if (f == R_NilValue) {
-                    le = LazyEnvironment::BasicNew(ENCLOS(env), pos,
-                                                   names.data());
-                    f = FRAME(env);
-                    pos = 0;
-                    while (f != R_NilValue) {
-                        le->missing[pos] = MISSING(f);
-                        le->setArg(pos++, CAR(f), false);
-                        f = CDR(f);
-                    }
-                }
-            }
-        }
 
         if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
@@ -935,8 +904,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 assert(false);
                 return;
             }
-
-            UNPROTECT(1);
         }
     }
 
