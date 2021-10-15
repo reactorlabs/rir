@@ -217,7 +217,8 @@ bool PirType::isInstance(SEXP val) const {
         if (LazyEnvironment::check(val))
             return PirType(RType::env).isA(*this);
         if (*this == PirType::test()) {
-            return val == R_TrueValue || val == R_FalseValue;
+            return IS_SIMPLE_SCALAR(val, LGLSXP) &&
+                   LOGICAL(val)[0] != NA_LOGICAL;
         }
         return PirType(val).isA(*this);
     } else {
