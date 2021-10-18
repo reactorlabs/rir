@@ -1,6 +1,7 @@
-#include "Printing.h"
-
+#include "R/Printing.h"
 #include "R/Funtab.h"
+#include "R/Symbols.h"
+
 #include <iostream>
 #include <string>
 
@@ -11,6 +12,8 @@ std::string Print::dumpSexp(SEXP src, size_t length) {
         return "R_UnboundValue";
     } else if (src == R_MissingArg) {
         return "R_MissingArg";
+    } else if (src == symbol::expandDotsTrigger) {
+        return "`...`";
     }
 
     static auto deparseBlt = getBuiltinFun("deparse");

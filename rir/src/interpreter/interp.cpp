@@ -1,5 +1,6 @@
 #include "interp.h"
 #include "R/Funtab.h"
+#include "R/Protect.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "cache.h"
@@ -1679,50 +1680,53 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
 size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
                                Immediate* names_, SEXP env, bool explicitDots) {
+    Protect p;
     std::vector<SEXP> args;
     std::vector<SEXP> names;
     bool hasNames = false;
     for (size_t i = 0; i < n; ++i) {
         auto arg = ostack_at(ctx, n - i - 1);
         auto name = cp_pool_at(ctx, names_[i]);
-        if (name != R_DotsSymbol) {
-            args.push_back(arg);
-            names.push_back(name);
-            if (name != R_NilValue)
-                hasNames = true;
-        } else {
-            SEXP ellipsis = arg;
-            if (ellipsis == R_DotsSymbol)
-                ellipsis = Rf_findVar(R_DotsSymbol, env);
+        if (name == symbol::expandDotsTrigger) {
+            // If we come from rir, we have to look up `...`, marked by the arg
+            // being the symbol expandDotsTrigger If we come from pir, `...` is
+            // already loaded
+            SEXP ellipsis = (arg == symbol::expandDotsTrigger)
+                                ? Rf_findVar(R_DotsSymbol, env)
+                                : arg;
 
-            if (TYPEOF(ellipsis) == PROMSXP)
+            if (TYPEOF(ellipsis) == PROMSXP) {
                 ellipsis = evaluatePromise(ellipsis, ctx);
+            }
 
-            if (TYPEOF(ellipsis) == DOTSXP) {
+            if (TYPEOF(ellipsis) == DOTSXP || ellipsis == R_NilValue) {
                 while (ellipsis != R_NilValue) {
-                    auto arg = CAR(ellipsis);
-                    if (TYPEOF(arg) == LANGSXP || TYPEOF(arg) == SYMSXP)
+                    auto dotArg = CAR(ellipsis);
+                    if (TYPEOF(dotArg) == LANGSXP ||
+                        (TYPEOF(dotArg) == SYMSXP && dotArg != R_MissingArg)) {
                         arg = Rf_mkPROMISE(arg, env);
-                    args.push_back(arg);
+                        p(arg);
+                    }
+                    args.push_back(dotArg);
                     names.push_back(TAG(ellipsis));
                     if (TAG(ellipsis) != R_NilValue)
                         hasNames = true;
                     ellipsis = CDR(ellipsis);
                 }
             } else if (ellipsis == R_MissingArg) {
-                // empty ... occurring in the middle of an argument list needs
+                // Empty `...` occurring in the middle of an argument list needs
                 // to be explicit, since pir optimized functions expect it that
                 // way.
                 if (explicitDots) {
                     args.push_back(R_MissingArg);
                     names.push_back(R_NilValue);
                 }
-            } else if (ellipsis == R_NilValue || ellipsis == R_UnboundValue) {
-            } else {
-                // TODO: why does this happen in SERIALIZE CHAOS?
-                args.push_back(ellipsis);
-                names.push_back(R_NilValue);
             }
+        } else {
+            args.push_back(arg);
+            names.push_back(name);
+            if (name != R_NilValue)
+                hasNames = true;
         }
     }
     if (hasNames) {

@@ -34,6 +34,7 @@ class Protect {
 
     unsigned protectedValues_ = 0;
 };
-}
+
+} // namespace rir
 
 #endif // PROTECT_H

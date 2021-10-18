@@ -1835,7 +1835,7 @@ bool LowerFunctionLLVM::compileDotcall(
     calli->eachCallArg([&](Value* v) {
         if (auto exp = ExpandDots::Cast(v)) {
             args.push_back(exp);
-            newNames.push_back(Pool::insert(R_DotsSymbol));
+            newNames.push_back(Pool::insert(symbol::expandDotsTrigger));
             seenDots = true;
         } else {
             assert(!DotsList::Cast(v));
@@ -2312,19 +2312,22 @@ void LowerFunctionLLVM::compile() {
             case Tag::DotsList: {
                 auto mk = DotsList::Cast(i);
                 auto arglist = constant(R_NilValue, t::SEXP);
-                std::stack<llvm::Value*> argsLoaded;
-                mk->eachElement(
-                    [&](SEXP name, Value* v) { argsLoaded.push(loadSxp(v)); });
-                mk->eachElementRev([&](SEXP name, Value* v) {
-                    auto val = argsLoaded.top();
-                    argsLoaded.pop();
-                    incrementNamed(val);
-                    arglist =
-                        call(NativeBuiltins::get(NativeBuiltins::Id::consNr),
-                             {val, arglist});
-                    setTag(arglist, constant(name, t::SEXP), false);
-                });
-                setSexptype(arglist, DOTSXP);
+                if (mk->nargs()) {
+                    std::stack<llvm::Value*> argsLoaded;
+                    mk->eachElement([&](SEXP name, Value* v) {
+                        argsLoaded.push(loadSxp(v));
+                    });
+                    mk->eachElementRev([&](SEXP name, Value* v) {
+                        auto val = argsLoaded.top();
+                        argsLoaded.pop();
+                        incrementNamed(val);
+                        arglist = call(
+                            NativeBuiltins::get(NativeBuiltins::Id::consNr),
+                            {val, arglist});
+                        setTag(arglist, constant(name, t::SEXP), false);
+                    });
+                    setSexptype(arglist, DOTSXP);
+                }
                 setVal(i, arglist);
                 break;
             }

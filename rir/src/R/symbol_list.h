@@ -5,6 +5,7 @@
 #define SYMBOLS_SIMPLE_INSTRUCTION_V(V, name, _) V(name, "." #name)
 
 #define SYMBOLS(V)                                                             \
+    SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UnknownDeoptTrigger, ".unknownDeoptTrigger")                             \
     V(SuperAssignBracket, "[<<-")                                              \
     V(SuperAssignDoubleBracket, "[[<<-")                                       \
@@ -76,7 +77,6 @@
     V(c, "c")                                                                  \
     V(standardGeneric, "standardGeneric")                                      \
     V(dispatchGeneric, "dispatchGeneric")                                      \
-    SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UseMethod, "UseMethod")                                                  \
     V(sysframe, "sys.frame")                                                   \
     V(syscall, "sys.call")                                                     \
@@ -90,6 +90,12 @@
     V(forceAndCall, "forceAndCall")                                            \
     V(remove, "remove")                                                        \
     V(rm, "rm")                                                                \
-    V(Recall, "Recall")
+    V(Recall, "Recall")                                                        \
+    V(expandDotsTrigger, "\x02expandDotsTrigger\x03")
+/*
+ * The expandDotsTrigger symbol uses unprintable characters in hopes the users
+ * won't create it from R (however, they still can, eg. `as.name("\x1a")`).
+ * The other option is to make this a serializable EXTERNALSXP object.
+ */
 
 #endif // SYMBOLS_LIST_H_
