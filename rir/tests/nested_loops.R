@@ -1,4 +1,4 @@
-if (Sys.getenv("PIR_ENABLE") == "off" ||
+if (Sys.getenv("PIR_ENABLE") != "" ||
     Sys.getenv("RIR_SERIALIZE_CHAOS") != "") {
   q()
 }
