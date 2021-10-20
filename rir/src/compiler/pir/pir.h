@@ -24,6 +24,7 @@ class MkArg;
 class LogStream;
 class Const;
 
+struct ContinuationContext;
 struct DeoptContext;
 }
 }

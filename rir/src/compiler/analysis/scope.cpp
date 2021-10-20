@@ -176,12 +176,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
     } else if (auto me = MaterializeEnv::Cast(i)) {
         state.envs.aliases[me] = me->arg(0).val();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
-        // LdFunctionEnv happen inside promises and refer back to the caller
-        // environment, ie. the instruction that created the promise.
-        assert(staticClosureEnv != Env::notClosed());
-        assert(!state.envs.aliases.count(le) ||
-               state.envs.aliases.at(le) == staticClosureEnv);
-        state.envs.aliases[le] = staticClosureEnv;
+        if (staticClosureEnv != Env::notClosed()) {
+            // LdFunctionEnv happen inside promises and refer back to the caller
+            // environment, ie. the instruction that created the promise.
+            assert(!state.envs.aliases.count(le) ||
+                   state.envs.aliases.at(le) == staticClosureEnv);
+            state.envs.aliases[le] = staticClosureEnv;
+        }
     } else if (auto ldfun = LdFun::Cast(i)) {
         // Loadfun has collateral forcing if we touch intermediate envs.
         // But if we statically find the closure to load, then there is no issue

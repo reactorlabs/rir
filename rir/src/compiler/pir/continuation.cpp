@@ -4,10 +4,11 @@
 namespace rir {
 namespace pir {
 
-Continuation::Continuation(Closure* closure, const DeoptContext& deoptContext)
+Continuation::Continuation(Closure* closure,
+                           const ContinuationContext* continuationContext)
     : ClosureVersion(closure, nullptr, true, Compiler::defaultContext,
                      Properties()),
-      deoptContext(deoptContext) {}
+      continuationContext(continuationContext) {}
 
 } // namespace pir
 } // namespace rir

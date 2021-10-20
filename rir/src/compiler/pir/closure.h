@@ -77,7 +77,7 @@ class Closure {
 
     ClosureVersion* declareVersion(const Context&, bool root,
                                    rir::Function* optFunction);
-    Continuation* declareContinuation(const DeoptContext&);
+    Continuation* declareContinuation(const ContinuationContext*);
     void erase(const Context& ctx) { versions.erase(ctx); }
 
     bool existsVersion(const Context& ctx) { return versions.count(ctx); }

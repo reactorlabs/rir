@@ -64,9 +64,9 @@ ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
     return nullptr;
 }
 
-Continuation* Closure::declareContinuation(const DeoptContext& ctx) {
+Continuation* Closure::declareContinuation(const ContinuationContext* ctx) {
     for (auto& c : continuations)
-        assert(!(c->deoptContext == ctx));
+        assert(!(c->continuationContext == ctx));
     continuations.push_back(new Continuation(this, ctx));
     return continuations.back();
 }

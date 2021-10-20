@@ -39,7 +39,7 @@ class Compiler {
                          SEXP formals, SEXP srcRef, const Context& ctx,
                          MaybeCls success, Maybe fail,
                          std::list<PirTypeFeedback*> outerFeedback);
-    void compileContinuation(SEXP closure, const DeoptContext& ctx,
+    void compileContinuation(SEXP closure, const ContinuationContext* ctx,
                              MaybeCnt success, Maybe fail);
 
     void optimizeModule();

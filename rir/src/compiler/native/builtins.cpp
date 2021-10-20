@@ -14,7 +14,7 @@
 
 #include "R/Protect.h"
 
-#include "compiler/deoptless.h"
+#include "compiler/osr.h"
 #include "compiler/pir/pir_impl.h"
 
 #include "R/Funtab.h"
@@ -871,7 +871,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
             DeoptContext ctx(m->frames[0].pc, le, base, m->frames[0].stackSize,
                              *deoptReason, deoptTrigger);
-            fun = DeoptLess::dispatch(closure, c, ctx);
+            fun = OSR::deoptlessDispatch(closure, c, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
@@ -904,7 +904,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessCount++;
-                auto res = nc(code, base, le->getParent(), closure);
+                auto res = nc(code, base, symbol::delayedEnv, closure);
                 deoptlessCount--;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,

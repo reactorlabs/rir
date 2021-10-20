@@ -78,8 +78,7 @@ class DeadStoreAnalysis {
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
             auto markEnv = [&](Value* env) {
-                if (LdFunctionEnv::Cast(env)) {
-                    assert(promEnv);
+                if (promEnv && LdFunctionEnv::Cast(env)) {
                     env = promEnv;
                 }
                 if (auto m = MaterializeEnv::Cast(env))
@@ -101,6 +100,12 @@ class DeadStoreAnalysis {
                     }
                 }
             };
+            if (!promEnv && LdFunctionEnv::Cast(i)) {
+                if (!state.leaked.count(i)) {
+                    state.leaked.insert(i);
+                    effect.update();
+                }
+            }
             if (i->leaksEnv()) {
                 markEnv(i->env());
             }
@@ -231,9 +236,10 @@ class DeadStoreAnalysis {
                     env = e->env();
                     continue;
                 }
+                if (MkEnv::Cast(env) || LdFunctionEnv::Cast(env))
+                    res.insert(env);
                 if (!MkEnv::Cast(env))
                     break;
-                res.insert(env);
                 env = Env::parentEnv(env);
             }
             return res;
@@ -246,8 +252,7 @@ class DeadStoreAnalysis {
         }
 
         Value* resolveEnv(Value* env) const {
-            if (LdFunctionEnv::Cast(env)) {
-                assert(promEnv);
+            if (promEnv && LdFunctionEnv::Cast(env)) {
                 env = promEnv;
             }
             if (auto m = MaterializeEnv::Cast(env)) {

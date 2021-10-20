@@ -73,7 +73,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
                    fail, outerFeedback);
 }
 
-void Compiler::compileContinuation(SEXP closure, const DeoptContext& ctx,
+void Compiler::compileContinuation(SEXP closure, const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
     assert(isValidClosureSEXP(closure));
@@ -89,7 +89,7 @@ void Compiler::compileContinuation(SEXP closure, const DeoptContext& ctx,
     auto& log = logger.begin(version);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
 
-    if (rir2pir.tryCompileContinuation(builder, ctx.pc, ctx.stack())) {
+    if (rir2pir.tryCompileContinuation(builder, ctx->pc, ctx->stack())) {
         log.compilationEarlyPir(version);
         log.flush();
         return success(version);
