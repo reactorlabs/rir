@@ -1890,13 +1890,14 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
     static size_t loopCounter = 0;
     if (callCtxt && callCtxt->stackArgs && ++loopCounter >= osrLimit) {
         loopCounter = 0;
-        auto size = R_BCNodeStackTop - basePtr;
+        long size = R_BCNodeStackTop - basePtr;
+        assert(size >= 0);
         auto l = Rf_length(FRAME(env));
         auto dt = DispatchTable::check(BODY(callCtxt->callee));
         if (dt &&
             !dt->baseline()->flags.includes(Function::Flag::NotOptimizable) &&
-            size <= (int)pir::ContinuationContext::MAX_STACK &&
-            l <= (int)pir::ContinuationContext::MAX_ENV) {
+            size <= (long)pir::ContinuationContext::MAX_STACK &&
+            l <= (long)pir::ContinuationContext::MAX_ENV) {
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
             if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
                 PROTECT(fun->container());

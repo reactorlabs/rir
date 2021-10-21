@@ -237,8 +237,6 @@ test_features_3:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
   stage: Run tests
   needs:
     - rir_container
@@ -247,8 +245,10 @@ test_features_3:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
-    - RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPTLESS=1 bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_OSR=1 bin/tests
     - PIR_DEOPTLESS=1 bin/tests
     - PIR_OSR=1 bin/tests
     - PIR_DEOPTLESS=1 RIR_CHECK_PIR_TYPES=1 bin/tests
@@ -299,7 +299,7 @@ test_gctorture2:
     - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
     - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
-    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=60 bin/tests
+    - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=70 bin/tests
 
 # Test with inlining big functions
 test_big_inline:
