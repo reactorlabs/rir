@@ -166,6 +166,11 @@ class CompilerContext {
         code.top()->loops.emplace(next_, break_);
     }
 
+    void pushFakeLoop() {
+        code.top()->loops.emplace(-1, -1);
+        code.top()->setContextNeeded();
+    }
+
     void popLoop() { code.top()->loops.pop(); }
 
     void push(SEXP ast, SEXP env) {
@@ -361,7 +366,9 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         size_t seqPromIdx = cs.addPromise(seqProm);
 
         // 2) Create a promise with the body
+        ctx.pushFakeLoop();
         Code* bodyProm = compilePromise(ctx, body);
+        ctx.popLoop();
         size_t bodyPromIdx = cs.addPromise(bodyProm);
 
         // 3) Add the function, arguments, and call
