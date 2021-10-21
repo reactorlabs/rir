@@ -1937,6 +1937,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
 
+    R_bcstack_t* basePtr = nullptr;
+
     BindingCache* bindingCache;
     if (cache) {
         bindingCache = cache;
@@ -1952,6 +1954,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Measuring::countEvent("env allocated");
 #endif
         }
+
+        // If this is an inner loop context (ie. cache exists), or a deopt (ie.
+        // initialPC is set), we do not know the actual base pointer. Otherwise
+        // we do...
+        if (!initialPC)
+            basePtr = R_BCNodeStackTop;
     }
 
     // make sure there is enough room on the stack
@@ -1990,8 +1998,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         if (feedback->stateBeforeLastForce < state)
             feedback->stateBeforeLastForce = state;
     };
-
-    auto basePtr = R_BCNodeStackTop;
 
     // main loop
     BEGIN_MACHINE {
@@ -3088,7 +3094,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
-            if (pir::Parameter::ENABLE_OSR && offset < 0) {
+            if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
                 if (auto res = osr(callCtxt, basePtr, env, c, pc))
                     return res;
             }

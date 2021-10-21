@@ -84,7 +84,7 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
             });
             if ((needUpdate && i->hasTypeFeedback()) ||
-                (allInputsHaveFeedback && !i->hasTypeFeedback())) {
+                (false && allInputsHaveFeedback && !i->hasTypeFeedback())) {
                 affected.insert(i);
                 auto inferred = i->inferType([&](Value* v) {
                     if (auto vi = Instruction::Cast(v)) {
