@@ -70,21 +70,17 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
             bool needUpdate = false;
             bool allInputsHaveFeedback = true;
             i->eachArg([&](Value* v) {
-                if (!needUpdate) {
-                    if (auto vi = Instruction::Cast(v)) {
-                        if (!vi->hasTypeFeedback()) {
-                            allInputsHaveFeedback = false;
-                        }
-                        if (affected.count(vi)) {
-                            needUpdate = true;
-                        }
-                    }
+                if (auto vi = Instruction::Cast(v)) {
+                    if (!vi->hasTypeFeedback())
+                        allInputsHaveFeedback = false;
+                    if (affected.count(vi))
+                        needUpdate = true;
                 } else {
                     allInputsHaveFeedback = false;
                 }
             });
             if ((needUpdate && i->hasTypeFeedback()) ||
-                (false && allInputsHaveFeedback && !i->hasTypeFeedback())) {
+                (allInputsHaveFeedback && !i->hasTypeFeedback())) {
                 affected.insert(i);
                 auto inferred = i->inferType([&](Value* v) {
                     if (auto vi = Instruction::Cast(v)) {
@@ -94,9 +90,11 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                     return v->type;
                 });
-                i->updateTypeFeedback().type = inferred;
-                i->updateTypeFeedback().value = nullptr;
-                changed = true;
+                if (needUpdate || !inferred.isVoid()) {
+                    i->updateTypeFeedback().type = inferred;
+                    i->updateTypeFeedback().value = nullptr;
+                    changed = true;
+                }
             }
         });
         if (changed)
