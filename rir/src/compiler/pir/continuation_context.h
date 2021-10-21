@@ -59,8 +59,6 @@ struct ContinuationContext {
     ContinuationContext(Opcode* pc, SEXP env, bool leaked, R_bcstack_t* base,
                         size_t stackSize);
 
-    // TODO: a bit of a hack since the trigger is not used for equality (but
-    // the compiler only uses it as a heuristic to update type feedback)
     bool operator==(const ContinuationContext& other) const {
         if (pc != other.pc || envSize() != other.envSize() ||
             stackSize() != other.stackSize() || leakedEnv_ != other.leakedEnv_)
@@ -125,11 +123,39 @@ struct ContinuationContext {
             return false;
 
         // Linearize to complete order
-        char here[sizeof(*this)];
-        char there[sizeof(*this)];
-        memcpy(here, (void*)this, sizeof(*this));
-        memcpy(there, (void*)&other, sizeof(*this));
-        return strncmp(here, there, sizeof(*this)) < 0;
+        if (pc < other.pc || stackSize_ < other.stackSize_ ||
+            envSize_ < other.envSize_ || leakedEnv_ < other.leakedEnv_)
+            return true;
+        if (pc > other.pc || stackSize_ > other.stackSize_ ||
+            envSize_ > other.envSize_ || leakedEnv_ > other.leakedEnv_)
+            return false;
+
+        {
+            auto here = envBegin();
+            auto there = other.envBegin();
+            while (here != envEnd()) {
+                if (std::get<SEXP>(*here) < std::get<SEXP>(*there) ||
+                    std::get<bool>(*here) < std::get<bool>(*there))
+                    return true;
+                if (std::get<PirType>(*here).hash() <
+                    std::get<PirType>(*there).hash())
+                    return true;
+                here++;
+                there++;
+            }
+        }
+        {
+            auto here = stackBegin();
+            auto there = other.stackBegin();
+            while (here != stackEnd()) {
+                if (here->hash() < there->hash())
+                    return true;
+                here++;
+                there++;
+            }
+        }
+
+        return false;
     }
 
     virtual const DeoptContext* asDeoptContext() const { return nullptr; }
