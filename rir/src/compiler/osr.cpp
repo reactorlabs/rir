@@ -29,6 +29,9 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
             fun = backend.getOrCompile(cnt);
         },
         [&]() { std::cerr << "Continuation compilation failed\n"; });
+
+    delete module;
+
     return fun;
 }
 
