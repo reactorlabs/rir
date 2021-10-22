@@ -25,7 +25,6 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
         closure, &ctx,
         [&](Continuation* cnt) {
             cmp.optimizeModule();
-
             fun = backend.getOrCompile(cnt);
         },
         [&]() { std::cerr << "Continuation compilation failed\n"; });
