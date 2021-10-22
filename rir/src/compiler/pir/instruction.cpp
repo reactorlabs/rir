@@ -101,12 +101,6 @@ void printPaddedIdTypeRef(std::ostream& out, const Instruction* i) {
     }
     std::ostringstream buf;
     buf << i->type;
-    if (!i->typeFeedback().type.isVoid()) {
-        if (i->type == i->typeFeedback().type)
-            buf << "<>";
-        else
-            buf << "<" << i->typeFeedback().type << ">";
-    }
     out << std::left << std::setw(15) << buf.str() << " ";
     buf.str("");
     if (i->type != PirType::voyd()) {
@@ -210,6 +204,17 @@ void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedEffects(out, tty, this);
     printArgs(out, tty);
     printEnv(out, tty);
+
+    if (hasTypeFeedback() && tag != Tag::MkEnv) {
+        out << "   <";
+        if (typeFeedback().value)
+            typeFeedback().value->printRef(out);
+        else if (!typeFeedback().type.isVoid())
+            out << typeFeedback().type;
+        if (!typeFeedback().feedbackOrigin.pc())
+            out << "@?";
+        out << ">";
+    }
 }
 
 void Instruction::printGraph(std::ostream& out, bool tty) const {
