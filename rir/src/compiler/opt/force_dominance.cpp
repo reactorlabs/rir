@@ -323,13 +323,16 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (u.kind == ForcedBy::PromiseInlineable::
                                           SafeToInlineWithUpdate) {
                             if (auto m = MkEnv::Cast(u.escapedAt())) {
-                                m->eachLocalVar([&](SEXP name, Value* a, bool) {
-                                    if (a->followCasts() == mkarg) {
-                                        pos = split->insert(
-                                            pos, new StArg(name, upcast, m));
-                                        pos++;
-                                    }
-                                });
+                                if (!m->bb()->isDeopt())
+                                    m->eachLocalVar(
+                                        [&](SEXP name, Value* a, bool) {
+                                            if (a->followCasts() == mkarg) {
+                                                pos = split->insert(
+                                                    pos,
+                                                    new StArg(name, upcast, m));
+                                                pos++;
+                                            }
+                                        });
                             } else if (PushContext::Cast(u.escapedAt())) {
                                 // Escapes to non-environment, let's update
                                 // existing promise
