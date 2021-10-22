@@ -384,7 +384,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 res->flags.set(rir::Code::NoReflection);
             res->addExtraPoolEntry(code->container());
         }
-        jit.compile(res, c, promMap.at(c), refcount, needsLdVarForUpdate, log);
+        jit.compile(res, cls, c, promMap.at(c), refcount, needsLdVarForUpdate,
+                    log);
         return res;
     };
     auto body = compile(cls);

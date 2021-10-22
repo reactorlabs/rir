@@ -933,6 +933,38 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
+void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
+    switch (*pos) {
+    case Opcode::record_test_: {
+        ObservedTest* feedback = (ObservedTest*)(pos + 1);
+        feedback->record(value);
+        break;
+    }
+    case Opcode::record_type_: {
+        assert(*pos == Opcode::record_type_);
+        ObservedValues* feedback = (ObservedValues*)(pos + 1);
+        feedback->record(value);
+        if (TYPEOF(value) == PROMSXP) {
+            if (PRVALUE(value) == R_UnboundValue &&
+                feedback->stateBeforeLastForce < ObservedValues::promise)
+                feedback->stateBeforeLastForce = ObservedValues::promise;
+            else if (feedback->stateBeforeLastForce <
+                     ObservedValues::evaluatedPromise)
+                feedback->stateBeforeLastForce =
+                    ObservedValues::evaluatedPromise;
+        }
+        break;
+    }
+    case Opcode::record_call_: {
+        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
+        feedback->record(code, value);
+        break;
+    }
+    default:
+        assert(false);
+    }
+}
+
 void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
     asm("int3");
@@ -2263,6 +2295,11 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
+    get_(Id::recordTypefeedback) = {
+        "recordTypefeedback",
+        (void*)&recordTypefeedbackImpl,
+        llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
+        {}};
     get_(Id::deopt) = {
         "deopt",
         (void*)&deoptImpl,
