@@ -109,7 +109,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             [&](TypeTest::Info info) {
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
-                speculateOn->updateTypeFeedback().used = true;
+                assert(i->hasTypeFeedback());
+                i->updateTypeFeedback().used = true;
             },
             []() {});
     });
