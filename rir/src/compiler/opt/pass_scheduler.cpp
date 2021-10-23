@@ -68,6 +68,7 @@ PassScheduler::PassScheduler() {
     };
 
     nextPhase("Initial", Parameter::PIR_OPT_LEVEL > 1 ? 60 : 0);
+    add<TypefeedbackCleanup>();
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
@@ -80,6 +81,7 @@ PassScheduler::PassScheduler() {
     add<TypefeedbackCleanup>();
     add<ElideEnvSpec>();
     addDefaultOpt();
+    add<TypefeedbackCleanup>();
     add<TypeSpeculation>();
 
     if (Parameter::PIR_OPT_LEVEL > 0) {

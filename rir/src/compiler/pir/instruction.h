@@ -147,7 +147,6 @@ struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
-    bool used = false;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;
@@ -178,6 +177,7 @@ class Instruction : public Value {
 
   public:
     bool deleted = false;
+    bool typeFeedbackUsed = false;
     void clearEffects() { effects.reset(); }
     void clearVisibility() { effects.reset(Effect::Visibility); }
     void clearLeaksEnv() { effects.reset(Effect::LeaksEnv); }

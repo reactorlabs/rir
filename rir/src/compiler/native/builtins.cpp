@@ -14,7 +14,7 @@
 
 #include "R/Protect.h"
 
-#include "compiler/deoptless.h"
+#include "compiler/osr.h"
 #include "compiler/pir/pir_impl.h"
 
 #include "R/Funtab.h"
@@ -871,7 +871,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
             DeoptContext ctx(m->frames[0].pc, le, base, m->frames[0].stackSize,
                              *deoptReason, deoptTrigger);
-            fun = DeoptLess::dispatch(closure, c, ctx);
+            fun = OSR::deoptlessDispatch(closure, c, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
@@ -904,7 +904,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessCount++;
-                auto res = nc(code, base, le->getParent(), closure);
+                auto res = nc(code, base, symbol::delayedEnv, closure);
                 deoptlessCount--;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
@@ -931,6 +931,38 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                            m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
+}
+
+void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
+    switch (*pos) {
+    case Opcode::record_test_: {
+        ObservedTest* feedback = (ObservedTest*)(pos + 1);
+        feedback->record(value);
+        break;
+    }
+    case Opcode::record_type_: {
+        assert(*pos == Opcode::record_type_);
+        ObservedValues* feedback = (ObservedValues*)(pos + 1);
+        feedback->record(value);
+        if (TYPEOF(value) == PROMSXP) {
+            if (PRVALUE(value) == R_UnboundValue &&
+                feedback->stateBeforeLastForce < ObservedValues::promise)
+                feedback->stateBeforeLastForce = ObservedValues::promise;
+            else if (feedback->stateBeforeLastForce <
+                     ObservedValues::evaluatedPromise)
+                feedback->stateBeforeLastForce =
+                    ObservedValues::evaluatedPromise;
+        }
+        break;
+    }
+    case Opcode::record_call_: {
+        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
+        feedback->record(code, value);
+        break;
+    }
+    default:
+        assert(false);
+    }
 }
 
 void assertFailImpl(const char* msg) {
@@ -2263,6 +2295,11 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
+    get_(Id::recordTypefeedback) = {
+        "recordTypefeedback",
+        (void*)&recordTypefeedbackImpl,
+        llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
+        {}};
     get_(Id::deopt) = {
         "deopt",
         (void*)&deoptImpl,

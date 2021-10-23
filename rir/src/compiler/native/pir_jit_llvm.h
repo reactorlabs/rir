@@ -47,8 +47,8 @@ class PirJitLLVM {
     PirJitLLVM(PirJitLLVM&&) = delete;
     ~PirJitLLVM();
 
-    void compile(rir::Code* target, Code* code, const PromMap& m,
-                 const NeedsRefcountAdjustment& refcount,
+    void compile(rir::Code* target, ClosureVersion* closure, Code* code,
+                 const PromMap& m, const NeedsRefcountAdjustment& refcount,
                  const std::unordered_set<Instruction*>& needsLdVarForUpdate,
                  ClosureStreamLogger& log);
 

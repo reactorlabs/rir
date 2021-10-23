@@ -28,6 +28,7 @@ struct Rep;
 class LowerFunctionLLVM {
     rir::Code* target;
     std::string name;
+    ClosureVersion* cls;
     Code* code;
     BB::Instrs::iterator currentInstr;
     BB* currentBB = nullptr;
@@ -78,14 +79,15 @@ class LowerFunctionLLVM {
     MkEnv* myPromenv = nullptr;
 
     LowerFunctionLLVM(
-        rir::Code* target, const std::string& name, Code* code,
-        const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
+        rir::Code* target, const std::string& name, ClosureVersion* cls,
+        Code* code, const PromMap& promMap,
+        const NeedsRefcountAdjustment& refcount,
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
         const PirJitLLVM::GetFunction& getFunction, PirJitLLVM::DebugInfo* DI,
         llvm::DIBuilder* DIB)
-        : target(target), code(code), promMap(promMap), refcount(refcount),
-          needsLdVarForUpdate(needsLdVarForUpdate),
+        : target(target), cls(cls), code(code), promMap(promMap),
+          refcount(refcount), needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
           liveness(code, code->nextBBId), numLocals(0), numTemps(0),
           maxTemps(0), branchAlwaysTrue(MDB.createBranchWeights(100000000, 1)),

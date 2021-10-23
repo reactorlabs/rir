@@ -326,8 +326,8 @@ void PirJitLLVM::finalizeAndFixup() {
 }
 
 void PirJitLLVM::compile(
-    rir::Code* target, Code* code, const PromMap& promMap,
-    const NeedsRefcountAdjustment& refcount,
+    rir::Code* target, ClosureVersion* closure, Code* code,
+    const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     ClosureStreamLogger& log) {
 
@@ -369,7 +369,8 @@ void PirJitLLVM::compile(
     std::string mangledName = JIT->mangle(makeName(code));
 
     LowerFunctionLLVM funCompiler(
-        target, mangledName, code, promMap, refcount, needsLdVarForUpdate,
+        target, mangledName, closure, code, promMap, refcount,
+        needsLdVarForUpdate,
         // declare
         [&](Code* c, const std::string& name, llvm::FunctionType* signature) {
             assert(!funs.count(c));

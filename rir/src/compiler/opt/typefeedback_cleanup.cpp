@@ -15,6 +15,8 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
     auto version = cls->isContinuation();
     if (!version)
         return false;
+    auto ctx = version->continuationContext;
+    auto deoptCtx = ctx->asDeoptContext();
 
     bool anyChange = false;
 
@@ -22,73 +24,92 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
     TypeFeedback changedVarType;
 
     std::unordered_set<Instruction*> affected;
-    Visitor::run(version->entry, [&](Instruction* i) {
-        if (!i->hasTypeFeedback())
-            return;
-        if (auto pc = i->typeFeedback().feedbackOrigin.pc()) {
-            auto& ctx = version->deoptContext;
-
-            if (pc == ctx.reason().pc()) {
-                if (ctx.reason().reason == DeoptReason::Typecheck) {
-                    i->updateTypeFeedback().type = PirType(ctx.deoptTrigger());
-                } else if (ctx.reason().reason ==
+    if (deoptCtx)
+        Visitor::run(version->entry, [&](Instruction* i) {
+            if (!i->hasTypeFeedback())
+                return;
+            if (i->typeFeedback().feedbackOrigin.pc() ==
+                deoptCtx->reason().pc()) {
+                if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
+                    i->updateTypeFeedback().type =
+                        PirType(deoptCtx->deoptTrigger());
+                } else if (deoptCtx->reason().reason ==
                            DeoptReason::DeadBranchReached) {
-                    if (ctx.deoptTrigger() == R_TrueValue)
+                    if (deoptCtx->deoptTrigger() == R_TrueValue)
                         i->updateTypeFeedback().value = True::instance();
-                    else if (ctx.deoptTrigger() == R_FalseValue)
+                    else if (deoptCtx->deoptTrigger() == R_FalseValue)
                         i->updateTypeFeedback().value = False::instance();
                 }
-                if (auto f = Force::Cast(i)) {
-                    if (auto ld = LdVar::Cast(f->input())) {
-                        changedVar = ld->varName;
-                        changedVarType = f->typeFeedback();
-                    }
+                if (auto ld = LdVar::Cast(i->followCastsAndForce())) {
+                    changedVar = ld->varName;
+                    changedVarType = i->typeFeedback();
                 }
                 affected.insert(i);
             }
-        }
-    });
+        });
 
+    std::unordered_set<SEXP> otherAffectedVars;
     bool changed = true;
     while (changed) {
         changed = false;
         Visitor::run(version->entry, [&](Instruction* i) {
             if (affected.count(i))
                 return;
-            if (auto f = Force::Cast(i)) {
-                if (auto ld = LdVar::Cast(f->input())) {
-                    if (ld->varName == changedVar) {
-                        affected.insert(i);
-                        i->updateTypeFeedback() = changedVarType;
-                        changed = true;
-                        return;
-                    }
+            bool needUpdate = false;
+            if (auto ld = LdVar::Cast(i->followCastsAndForce())) {
+                if (ld->varName == changedVar) {
+                    affected.insert(i);
+                    i->updateTypeFeedback() = changedVarType;
+                    if (Force::Cast(i))
+                        i->updateTypeFeedback().type =
+                            i->typeFeedback().type.forced();
+                    changed = true;
+                    return;
+                } else if (otherAffectedVars.count(ld->varName)) {
+                    needUpdate = true;
                 }
             }
-            bool needUpdate = false;
+            bool allInputsHaveFeedback = true;
             i->eachArg([&](Value* v) {
-                if (!needUpdate)
-                    if (auto vi = Instruction::Cast(v)) {
-                        if (affected.count(vi)) {
-                            affected.insert(i);
-                            needUpdate = true;
-                        }
-                    }
-            });
-            if (needUpdate) {
-                if (i->hasTypeFeedback()) {
-                    auto inferred = i->inferType([&](Value* v) {
-                        if (auto vi = Instruction::Cast(v)) {
-                            auto tf = vi->typeFeedback().type;
-                            if (!tf.isVoid())
-                                return tf;
-                        }
-                        return v->type;
-                    });
-                    i->updateTypeFeedback().type = inferred;
-                    i->updateTypeFeedback().value = nullptr;
+                if (auto vi = Instruction::Cast(v)) {
+                    if (!vi->hasTypeFeedback() ||
+                        vi->typeFeedback().type.isVoid())
+                        allInputsHaveFeedback = false;
+                    if (affected.count(vi))
+                        needUpdate = true;
+                } else {
+                    allInputsHaveFeedback = false;
                 }
-                changed = true;
+            });
+            if (needUpdate && StVar::Cast(i)) {
+                changed =
+                    otherAffectedVars.insert(StVar::Cast(i)->varName).second ||
+                    changed;
+            }
+            if ((needUpdate && i->hasTypeFeedback()) ||
+                (allInputsHaveFeedback && i->hasTypeFeedback() &&
+                 i->typeFeedback().type.isVoid())) {
+                affected.insert(i);
+                std::unordered_set<Value*> vals;
+                auto inferred = i->inferType([&](Value* v) {
+                    if (auto vi = Instruction::Cast(v)) {
+                        auto tf = vi->typeFeedback().type;
+                        vals.insert(vi->typeFeedback().value);
+                        if (!tf.isVoid())
+                            return tf;
+                    } else {
+                        vals.insert(v);
+                    }
+                    return v->type;
+                });
+                if (needUpdate || !inferred.isVoid()) {
+                    i->updateTypeFeedback().type = inferred;
+                    if (vals.size() == 1)
+                        i->updateTypeFeedback().value = *vals.begin();
+                    else
+                        i->updateTypeFeedback().value = nullptr;
+                    changed = true;
+                }
             }
         });
         if (changed)

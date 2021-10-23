@@ -160,7 +160,7 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         // don't see all stores happening before entering the current function,
         // therefore we cannot practically exclude the existence of a
         // bindinging in those environments).
-        if (Env::isStaticEnv(env))
+        if (LdFunctionEnv::Cast(env) || Env::isStaticEnv(env))
             return AbstractLoad(env, AbstractPirValue::tainted());
 
         auto parent = envIt->second.parentEnv();
@@ -209,7 +209,7 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
         // don't see all stores happening before entering the current function,
         // therefore we cannot practically exclude the existence of a
         // bindinging in those environments).
-        if (Env::isStaticEnv(env))
+        if (LdFunctionEnv::Cast(env) || Env::isStaticEnv(env))
             return AbstractLoad(env, AbstractPirValue::tainted());
 
         auto parent = envIt->second.parentEnv();
@@ -241,7 +241,8 @@ AbstractLoad AbstractREnvironmentHierarchy::superGet(Value* env, SEXP e) const {
 void AbstractREnvironmentHierarchy::addDependency(Value* from, Value* to) {
     if (from == to)
         return;
-    if (to == AbstractREnvironment::UnknownParent || Env::isStaticEnv(to)) {
+    if (to == AbstractREnvironment::UnknownParent || Env::isStaticEnv(to) ||
+        LdFunctionEnv::Cast(to)) {
         leak(from);
         return;
     }

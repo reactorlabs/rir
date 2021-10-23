@@ -107,26 +107,34 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
 
     std::vector<Value*> args;
     std::vector<SEXP> names;
-    std::vector<bool> miss(cnt->deoptContext.envSize(), false);
-    auto h = cnt->deoptContext.stackSize();
-    auto e = cnt->deoptContext.envBegin();
-    size_t i = 0;
-    while (e != cnt->deoptContext.envEnd()) {
-        auto r = this->operator()(new LdArg(h + i));
-        r->type = std::get<PirType>(*e);
-        args.push_back(r);
-        auto n = std::get<SEXP>(*e);
-        names.push_back(n);
-        miss[i] = std::get<bool>(*e);
-        e++;
-        i++;
+    std::vector<bool> miss(cnt->continuationContext->envSize(), false);
+    auto h = cnt->continuationContext->stackSize();
+
+    if (!cnt->continuationContext->leakedEnv()) {
+        auto e = cnt->continuationContext->envBegin();
+        size_t i = 0;
+        while (e != cnt->continuationContext->envEnd()) {
+            auto r = this->operator()(new LdArg(h + i));
+            r->type = std::get<PirType>(*e);
+            args.push_back(r);
+            auto n = std::get<SEXP>(*e);
+            names.push_back(n);
+            miss[i] = std::get<bool>(*e);
+            e++;
+            i++;
+        }
+        auto mkenv = new MkEnv(closureEnv, names, args.data());
+        mkenv->missing = miss;
+
+        auto rirCode = cnt->owner()->rirFunction()->body();
+        mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
+        add(mkenv);
+        this->env = mkenv;
+    } else {
+        auto e = new LdFunctionEnv();
+        add(e);
+        this->env = e;
     }
-    auto mkenv = new MkEnv(closureEnv, names, args.data());
-    mkenv->missing = miss;
-    auto rirCode = cnt->owner()->rirFunction()->body();
-    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
-    add(mkenv);
-    this->env = mkenv;
 }
 
 Builder::Builder(ClosureVersion* version, Value* closureEnv)

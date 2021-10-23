@@ -36,9 +36,17 @@ void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
             f->updateTypeAndEffects();
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
+
+                // When compiling for OSR it can happen that we are not sure
+                // that the inc_ input is really an integer. But it has to be,
+                // since in the rir compiler we only use it that way.
+                if (Inc::Cast(instr)) {
+                    arg.val()->type = arg.val()->type & arg.type();
+                    break;
+                }
                 auto c = cast(arg.val(), arg.type(), env);
                 if (!c) {
-                    bb->print(std::cerr, true);
+                    bb->owner->printCode(std::cerr, false, false);
                     assert(false);
                 }
                 ip = bb->insert(ip, c) + 1;

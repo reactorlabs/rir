@@ -32,6 +32,8 @@ struct Parameter {
     static unsigned PIR_OPT_LEVEL;
 
     static bool ENABLE_PIR2RIR;
+
+    static bool ENABLE_OSR;
 };
 } // namespace pir
 } // namespace rir

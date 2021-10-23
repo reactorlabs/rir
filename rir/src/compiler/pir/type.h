@@ -581,8 +581,7 @@ struct PirType {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::list | RType::code)
-                    .orAttribsOrObj())) {
+        if (isA((num() | RType::str | RType::list).orAttribsOrObj())) {
             return simpleScalar();
         } else if (isA(PirType(RType::vec))) {
             return val().notMissing();

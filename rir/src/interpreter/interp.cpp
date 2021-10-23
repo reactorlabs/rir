@@ -5,7 +5,9 @@
 #include "R/Symbols.h"
 #include "cache.h"
 #include "compiler/compiler.h"
+#include "compiler/osr.h"
 #include "compiler/parameter.h"
+#include "compiler/pir/continuation_context.h"
 #include "ir/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -1879,6 +1881,39 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     return result;
 }
 
+bool pir::Parameter::ENABLE_OSR =
+    getenv("PIR_OSR") && *getenv("PIR_OSR") == '1';
+static size_t osrLimit =
+    getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 10000;
+static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
+                Code* c, Opcode* pc) {
+    static size_t loopCounter = 0;
+    if (callCtxt && callCtxt->stackArgs && ++loopCounter >= osrLimit) {
+        loopCounter = 0;
+        long size = R_BCNodeStackTop - basePtr;
+        assert(size >= 0);
+        auto l = Rf_length(FRAME(env));
+        auto dt = DispatchTable::check(BODY(callCtxt->callee));
+        if (dt &&
+            !dt->baseline()->flags.includes(Function::Flag::NotOptimizable) &&
+            size <= (long)pir::ContinuationContext::MAX_STACK &&
+            l <= (long)pir::ContinuationContext::MAX_ENV) {
+            pir::ContinuationContext ctx(pc, env, true, basePtr, size);
+            if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
+                PROTECT(fun->container());
+                dt->baseline()->flags.set(Function::Flag::MarkOpt);
+                auto code = fun->body();
+                auto nc = code->nativeCode();
+                auto res = nc(code, basePtr, env, callCtxt->callee);
+                ostack_popn(ctx, size);
+                UNPROTECT(1);
+                return res;
+            }
+        }
+    }
+    return nullptr;
+}
+
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
                  BindingCache* cache) {
@@ -1902,6 +1937,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
 
+    R_bcstack_t* basePtr = nullptr;
+
     BindingCache* bindingCache;
     if (cache) {
         bindingCache = cache;
@@ -1917,6 +1954,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             Measuring::countEvent("env allocated");
 #endif
         }
+
+        // If this is an inner loop context (ie. cache exists), or a deopt (ie.
+        // initialPC is set), we do not know the actual base pointer. Otherwise
+        // we do...
+        if (!initialPC)
+            basePtr = R_BCNodeStackTop;
     }
 
     // make sure there is enough room on the stack
@@ -3051,6 +3094,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
+            if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc))
+                    return res;
+            }
             NEXT();
         }
 

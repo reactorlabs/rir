@@ -42,29 +42,25 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 PirType inferred = i->inferType(getType);
                 switch (i->tag) {
-#define V(instr) case Tag::instr:
-                    VECTOR_RW_INSTRUCTIONS(V);
-                    {
-                        if (auto e = Extract1_1D::Cast(i)) {
-                            if (!inferred.isSimpleScalar() &&
-                                getType(e->vec()).isA(PirType::num()) &&
-                                // named arguments produce named result
-                                !getType(e->vec()).maybeHasAttrs() &&
-                                getType(e->idx()).isSimpleScalar()) {
-                                auto range = rangeAnalysis.before(e).range;
-                                if (range.count(e->idx())) {
-                                    if (range.at(e->idx()) > 0) {
-                                        // Negative numbers as indices make the
-                                        // extract return a vector. Only
-                                        // positive are safe.
-                                        inferred = inferred.simpleScalar();
-                                    }
-                                }
+                case Tag::Extract1_1D: {
+                    auto e = Extract1_1D::Cast(i);
+                    if (!inferred.isSimpleScalar() &&
+                        getType(e->vec()).isA(PirType::num()) &&
+                        // named arguments produce named result
+                        !getType(e->vec()).maybeHasAttrs() &&
+                        getType(e->idx()).isSimpleScalar()) {
+                        auto range = rangeAnalysis.before(e).range;
+                        if (range.count(e->idx())) {
+                            if (range.at(e->idx()) > 0) {
+                                // Negative numbers as indices make the
+                                // extract return a vector. Only
+                                // positive are safe.
+                                inferred = inferred.simpleScalar();
                             }
                         }
-                        break;
                     }
-
+                    break;
+                }
                 default: {
                 }
                 }

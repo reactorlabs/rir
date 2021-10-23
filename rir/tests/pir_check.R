@@ -6,6 +6,8 @@ if (!jitOn)
 
 if (Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
   q()
+if (Sys.getenv("PIR_OSR") != "")
+  q()
 
 # Sanity check for loop peeling, and testing that enabling/disabling works
 # These loop peeling tests may be a bit brittle.

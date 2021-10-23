@@ -30,6 +30,9 @@ class TypeTest {
                 return failed();
         }
 
+        if (!feedback.feedbackOrigin.pc())
+            return failed();
+
         assert(feedback.feedbackOrigin.pc());
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?

@@ -169,8 +169,10 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
         flags_.reset(TypeFlags::maybeNotFastVecelt);
     if (ATTRIB(e) == R_NilValue)
         flags_.reset(TypeFlags::maybeAttrib);
-    if (Rf_xlength(e) == 1)
-        flags_.reset(TypeFlags::maybeNotScalar);
+    auto t = TYPEOF(e);
+    if (t != LISTSXP && t != EXTERNALSXP && t != BCODESXP && t != LANGSXP)
+        if (Rf_xlength(e) == 1)
+            flags_.reset(TypeFlags::maybeNotScalar);
     if (!maybeContainsNAOrNaN(e))
         flags_.reset(TypeFlags::maybeNAOrNaN);
 }

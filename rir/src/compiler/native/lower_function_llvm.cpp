@@ -5831,6 +5831,20 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
+            // For OSR try to collect more typefeedback for the part of the code
+            // that was not yet executed
+            if (cls->isContinuation() && cls == code)
+                if (Rep::Of(i) == Rep::SEXP && i->hasTypeFeedback() &&
+                    i->typeFeedback().feedbackOrigin.pc() &&
+                    i->typeFeedback().type.isVoid() &&
+                    !i->typeFeedback().value) {
+                    call(NativeBuiltins::get(
+                             NativeBuiltins::Id::recordTypefeedback),
+                         {c((void*)i->typeFeedback().feedbackOrigin.pc()),
+                          c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
+                          load(i)});
+                }
+
             if (Parameter::RIR_CHECK_PIR_TYPES > 0 && !i->type.isVoid() &&
                 (variables_.count(i) || LdArg::Cast(i))) {
                 if (Rep::Of(i) == Rep::SEXP || LdArg::Cast(i)) {
