@@ -133,7 +133,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                                   ip);
 
                         if (auto argi = Instruction::Cast(given)) {
-                            argi->updateTypeFeedback().used = true;
+                            argi->typeFeedbackUsed = true;
                             auto cast = new CastType(argi, CastType::Downcast,
                                                      PirType::val(), type);
                             cast->effects.set(Effect::DependsOnAssume);
