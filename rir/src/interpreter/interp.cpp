@@ -3094,10 +3094,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
-            if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc))
-                    return res;
-            }
+            // TODO: why does osr-in deserialized code break?
+            if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
+                if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
+                    if (auto res = osr(callCtxt, basePtr, env, c, pc))
+                        return res;
+                }
             NEXT();
         }
 
