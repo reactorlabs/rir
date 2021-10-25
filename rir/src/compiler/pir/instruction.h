@@ -154,7 +154,6 @@ struct CallFeedback {
     SEXP monomorphic = nullptr;
     SEXPTYPE type = NILSXP;
     bool stableEnv = false;
-    bool used = false;
 };
 
 class DominanceGraph;
@@ -189,6 +188,7 @@ class Instruction : public Value {
 
     std::shared_ptr<TypeFeedback> typeFeedback_;
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
+    bool hasCallFeedback() const { return callFeedback_.get(); }
     const TypeFeedback& typeFeedback() const {
         if (typeFeedback_.get())
             return *typeFeedback_;

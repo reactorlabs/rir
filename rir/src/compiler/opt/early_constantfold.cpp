@@ -100,8 +100,8 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         continue;
                     }
 
-                    auto fb = given->callFeedback();
-                    if (fb.used || fb.taken < 2 ||
+                    const auto fb = given->callFeedback();
+                    if (given->typeFeedbackUsed || fb.taken < 2 ||
                         (fb.type != CLOSXP && fb.type != BUILTINSXP &&
                          fb.type != SPECIALSXP)) {
                         ip = next;
@@ -111,7 +111,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                            TYPEOF(fb.monomorphic) == fb.type);
 
                     anyChange = true;
-                    fb.used = true;
+                    given->typeFeedbackUsed = true;
 
                     Value* callee = given;
                     if (fb.monomorphic) {
