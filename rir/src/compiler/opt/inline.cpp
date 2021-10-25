@@ -269,6 +269,11 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
 
+                        if (auto l = LdFunctionEnv::Cast(i)) {
+                            l->replaceUsesWith(staticEnv);
+                            l->effects.reset();
+                        }
+
                         if (auto sp = FrameState::Cast(i)) {
                             if (!callerFrameState) {
                                 failedToInline = true;
