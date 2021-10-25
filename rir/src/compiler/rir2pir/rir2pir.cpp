@@ -22,6 +22,7 @@
 
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -748,10 +749,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto isUseMethod = CAR(ast) == symbol::UseMethod &&
                                    TYPEOF(CADR(ast)) == STRSXP &&
                                    CDDR(ast) == R_NilValue;
+                static std::unordered_set<SEXP> usemethodNoReflectionList({
+                    Rf_install("seq"),
+                    Rf_install("unique"),
+                    Rf_install("as.list"),
+                    Rf_install("rev"),
+                    Rf_install("anyDuplicated"),
+                });
                 if (isUseMethod) {
+                    auto usemethodName =
+                        Rf_install(CHAR(STRING_ELT(CADR(ast), 0)));
+                    bool maybeReflection =
+                        !usemethodNoReflectionList.count(usemethodName);
                     if (auto d = DotsList::Cast(matchedArgs[0])) {
                         if (d->nargs() > 0) {
-                            if (eagerEval(d->arg(0).val(), 0, true)) {
+                            if (eagerEval(d->arg(0).val(), 0,
+                                          maybeReflection)) {
                                 d->arg(0).type() = d->arg(0).val()->type;
                                 // creation of dots list must come after eager
                                 // evaluation of content...
@@ -764,7 +777,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                             }
                         }
                     } else {
-                        if (!eagerEval(matchedArgs[0], -1, true))
+                        if (!eagerEval(matchedArgs[0], -1, maybeReflection))
                             return false;
                     }
                 }
