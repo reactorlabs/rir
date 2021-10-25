@@ -588,15 +588,17 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // LdVarSuper where the parent environment is known and
                 // local, can be replaced by a simple LdVar
                 if (auto lds = LdVarSuper::Cast(i)) {
-                    auto e = Env::parentEnv(lds->env());
-                    if (e) {
-                        auto r = new LdVar(lds->varName, e);
-                        bb->replace(ip, r);
-                        lds->replaceUsesWith(r);
-                        assert(!r->type.maybePromiseWrapped() ||
-                               i->type.maybePromiseWrapped());
-                        replacedValue[lds] = r;
-                        changed = true;
+                    if (!LdFunctionEnv::Cast(lds->env())) {
+                        auto e = Env::parentEnv(lds->env());
+                        if (e) {
+                            auto r = new LdVar(lds->varName, e);
+                            bb->replace(ip, r);
+                            lds->replaceUsesWith(r);
+                            assert(!r->type.maybePromiseWrapped() ||
+                                   i->type.maybePromiseWrapped());
+                            replacedValue[lds] = r;
+                            changed = true;
+                        }
                     }
                     return;
                 }
