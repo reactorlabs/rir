@@ -654,13 +654,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
-        auto eagerEval = [&](Value*& arg, size_t i) {
+        auto eagerEval = [&](Value*& arg, size_t i, bool promiseWrapped) {
             if (auto mk = MkArg::Cast(arg)) {
                 if (mk->isEager()) {
                     arg = mk->eagerArg();
                 } else {
                     auto original = arg;
                     arg = tryCreateArg(mk->prom()->rirSrc(), insert, true);
+                    if (promiseWrapped)
+                        arg = insert(new MkArg(mk->prom(), arg, mk->env()));
                     if (!arg) {
                         log.warn("Failed to compile a promise");
                         return false;
@@ -670,7 +672,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         // Let's have a checkpoint here. This checkpoint needs
                         // to capture the so far evaluated promises.
                         stack.at(nargs - 1 - i) =
-                            insert(new MkArg(mk->prom(), arg, mk->env()));
+                            promiseWrapped
+                                ? arg
+                                : insert(new MkArg(mk->prom(), arg, mk->env()));
                         addCheckpoint(srcCode, pos, stack, insert);
                     }
                 }
@@ -680,7 +684,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (monomorphicBuiltin || staticMonomorphicBuiltin) {
             for (size_t i = 0; i < args.size(); ++i)
-                if (!eagerEval(args[i], i))
+                if (!eagerEval(args[i], i, false))
                     return false;
 
             if (auto calli = Instruction::Cast(callee))
@@ -747,7 +751,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (isUseMethod) {
                     if (auto d = DotsList::Cast(matchedArgs[0])) {
                         if (d->nargs() > 0) {
-                            if (eagerEval(d->arg(0).val(), 0)) {
+                            if (eagerEval(d->arg(0).val(), 0, true)) {
                                 d->arg(0).type() = d->arg(0).val()->type;
                                 // creation of dots list must come after eager
                                 // evaluation of content...
@@ -760,7 +764,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                             }
                         }
                     } else {
-                        if (!eagerEval(matchedArgs[0], -1))
+                        if (!eagerEval(matchedArgs[0], -1, true))
                             return false;
                     }
                 }
