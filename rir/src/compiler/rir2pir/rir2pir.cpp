@@ -555,8 +555,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (ldfun) {
             if (ti.monomorphic) {
                 ldfun->hint(ti.monomorphic, ti.feedbackOrigin);
-                if (!ti.stableEnv)
-                    ldfun->hintIsInnerFunction = true;
+                if (ti.stableEnv)
+                    ldfun->hintHasStableEnv = true;
             } else {
                 ldfun->hint(symbol::ambiguousCallTarget, {});
             }

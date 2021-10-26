@@ -81,8 +81,8 @@ void Compiler::compileContinuation(SEXP closure, const ContinuationContext* ctx,
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
 
-    auto pirClosure =
-        module->getOrDeclareRirClosure("deoptimizationless", closure, fun, {});
+    auto pirClosure = module->getOrDeclareRirClosure(
+        ctx->asDeoptContext() ? "deoptless" : "osr", closure, fun, {});
     auto version = pirClosure->declareContinuation(ctx);
 
     Builder builder(version, pirClosure->closureEnv());

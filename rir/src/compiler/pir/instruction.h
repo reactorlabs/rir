@@ -968,7 +968,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
         hintOrigin_ = hintOrigin;
     }
     SEXP varName;
-    bool hintIsInnerFunction = false;
+    bool hintHasStableEnv = false;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::function(),
