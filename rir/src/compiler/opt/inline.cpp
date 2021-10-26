@@ -262,6 +262,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 bool failedToInline = false;
                 bool hasNonLocalReturn = false;
+                bool hasReturn = false;
                 Visitor::run(copy, [&](BB* bb) {
                     auto ip = bb->begin();
                     while (!failedToInline && ip != bb->end()) {
@@ -274,14 +275,16 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             l->effects.reset();
                         }
 
+                        if (Return::Cast(i))
+                            hasReturn = true;
+                        if (NonLocalReturn::Cast(i))
+                            hasNonLocalReturn = true;
+
                         if (auto sp = FrameState::Cast(i)) {
                             if (!callerFrameState) {
                                 failedToInline = true;
                                 return;
                             }
-
-                            if (NonLocalReturn::Cast(i))
-                                hasNonLocalReturn = true;
 
                             // When inlining a frameState we need to chain it
                             // with the frameStates after the call to the
@@ -374,6 +377,9 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 });
 
+                if (!hasReturn && !hasNonLocalReturn)
+                    failedToInline = true;
+
                 if (failedToInline) {
                     std::vector<BB*> toDel;
                     Visitor::run(copy, [&](BB* bb) { toDel.push_back(bb); });
@@ -428,11 +434,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     auto inlineeRes = BBTransform::forInline(
                         copy, split, inlineeCls->closureEnv(), cpAtCall);
 
-                    bool noNormalReturn = false;
-                    if (inlineeRes == Tombstone::unreachable()) {
-                        inlineeRes = Nil::instance();
-                        noNormalReturn = true;
-                    }
+                    assert(inlineeRes != Tombstone::unreachable());
 
                     if (allowInline == SafeToInline::NeedsContext) {
                         Value* op = nullptr;
@@ -462,13 +464,16 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         popc->type = popc->type & theCall->type;
                         popc->updateTypeAndEffects();
 
-                        if (noNormalReturn || hasNonLocalReturn) {
+                        if (hasNonLocalReturn) {
+                            assert(split->predecessors().empty());
+                            assert(copy->hasSinglePred());
                             // No normal return, this means that pop-context
                             // looks unreachable, even though it is reachable
                             // through non-local returns.
                             auto fake1 = new BB(cls, cls->nextBBId++);
                             // avoids critical edge
                             auto fake2 = new BB(cls, cls->nextBBId++);
+                            assert(prologue->next() == copy);
                             prologue->overrideNext(fake1);
                             fake1->append(new Branch(OpaqueTrue::instance()));
                             fake1->setSuccessors({fake2, split});
