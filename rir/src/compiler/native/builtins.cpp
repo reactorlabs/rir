@@ -1450,7 +1450,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
                     return vec;
                 }
             }
-            if (TYPEOF(vec) == VECSXP) {
+            if (TYPEOF(vec) == VECSXP && val != R_NilValue) {
                 if (XLENGTH(vec) > pos ||
                     (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                     if (XLENGTH(vec) == pos)
