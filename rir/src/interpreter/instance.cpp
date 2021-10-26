@@ -1,5 +1,6 @@
 #include "instance.h"
 #include "api.h"
+#include "compiler/parameter.h"
 
 namespace rir {
 
@@ -49,6 +50,7 @@ InterpreterInstance* context_create() {
     c->closureOptimizer = [](SEXP f, const Context&, SEXP n) { return f; };
 
     if (pir && std::string(pir).compare("off") == 0) {
+        pir::Parameter::ENABLE_OSR = false;
         // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {

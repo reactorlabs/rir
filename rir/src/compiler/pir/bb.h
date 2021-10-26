@@ -260,11 +260,11 @@ class BB {
         next0 = bb;
         next0->prev.insert(this);
     }
-    const BB* next() const {
+    BB* next() {
         assert(next0 && !next1);
         return next0;
     }
-    BB* next() {
+    const BB* next() const {
         assert(next0 && !next1);
         return next0;
     }

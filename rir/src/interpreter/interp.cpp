@@ -1882,9 +1882,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
 }
 
 bool pir::Parameter::ENABLE_OSR =
-    getenv("PIR_OSR") && *getenv("PIR_OSR") == '1';
+    !getenv("PIR_OSR") || *getenv("PIR_OSR") != '0';
 static size_t osrLimit =
-    getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 10000;
+    getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
                 Code* c, Opcode* pc) {
     static size_t loopCounter = 0;
@@ -3094,10 +3094,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
-            if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc))
-                    return res;
-            }
+            // TODO: why does osr-in deserialized code break?
+            if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
+                if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
+                    if (auto res = osr(callCtxt, basePtr, env, c, pc))
+                        return res;
+                }
             NEXT();
         }
 

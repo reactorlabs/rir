@@ -22,6 +22,7 @@
 
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -388,28 +389,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_type_: {
-        if (bc.immediate.typeFeedback.numTypes) {
-            auto feedback = bc.immediate.typeFeedback;
-            if (auto i = Instruction::Cast(at(0))) {
-                // Search for the most specific feedback for this location
-                for (auto fb : outerFeedback) {
-                    bool found = false;
-                    // TODO: implement with a find method on register map
-                    fb->forEachSlot(
-                        [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
-                            found = true;
-                            auto origin = fb->getOriginOfSlot(i);
-                            if (origin == pos && mdEntry.readyForReopt) {
-                                feedback = mdEntry.feedback;
-                            }
-                        });
-                    if (found)
-                        break;
-                }
-                // TODO: deal with multiple locations
-                auto& t = i->updateTypeFeedback();
+        auto feedback = bc.immediate.typeFeedback;
+        if (auto i = Instruction::Cast(at(0))) {
+            // Search for the most specific feedback for this location
+            for (auto fb : outerFeedback) {
+                bool found = false;
+                // TODO: implement with a find method on register map
+                fb->forEachSlot(
+                    [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
+                        found = true;
+                        auto origin = fb->getOriginOfSlot(i);
+                        if (origin == pos && mdEntry.readyForReopt) {
+                            feedback = mdEntry.feedback;
+                        }
+                    });
+                if (found)
+                    break;
+            }
+            // TODO: deal with multiple locations
+            auto& t = i->updateTypeFeedback();
+            t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+            if (feedback.numTypes) {
                 t.type.merge(feedback);
-                t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
@@ -446,41 +447,39 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto& f = i->updateCallFeedback();
             const auto& feedback = bc.immediate.callFeedback;
             f.taken = feedback.taken;
-            if (f.taken > 1) {
-                f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
-                if (feedback.numTargets == 1) {
-                    f.monomorphic = feedback.getTarget(srcCode, 0);
-                    f.type = TYPEOF(f.monomorphic);
-                    f.stableEnv = true;
-                } else if (feedback.numTargets > 1) {
-                    SEXP first = nullptr;
-                    bool stableType = true;
-                    bool stableBody = true;
-                    bool stableEnv = true;
-                    for (size_t i = 0; i < feedback.numTargets; ++i) {
-                        SEXP b = feedback.getTarget(srcCode, i);
-                        if (!first) {
-                            first = b;
+            f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+            if (feedback.numTargets == 1) {
+                f.monomorphic = feedback.getTarget(srcCode, 0);
+                f.type = TYPEOF(f.monomorphic);
+                f.stableEnv = true;
+            } else if (feedback.numTargets > 1) {
+                SEXP first = nullptr;
+                bool stableType = true;
+                bool stableBody = true;
+                bool stableEnv = true;
+                for (size_t i = 0; i < feedback.numTargets; ++i) {
+                    SEXP b = feedback.getTarget(srcCode, i);
+                    if (!first) {
+                        first = b;
+                    } else {
+                        if (TYPEOF(b) != TYPEOF(first))
+                            stableType = stableBody = stableEnv = false;
+                        else if (TYPEOF(b) == CLOSXP) {
+                            if (BODY(first) != BODY(b))
+                                stableBody = false;
+                            if (CLOENV(first) != CLOENV(b))
+                                stableEnv = false;
                         } else {
-                            if (TYPEOF(b) != TYPEOF(first))
-                                stableType = stableBody = stableEnv = false;
-                            else if (TYPEOF(b) == CLOSXP) {
-                                if (BODY(first) != BODY(b))
-                                    stableBody = false;
-                                if (CLOENV(first) != CLOENV(b))
-                                    stableEnv = false;
-                            } else {
-                                stableBody = stableEnv = false;
-                            }
+                            stableBody = stableEnv = false;
                         }
                     }
-                    if (stableType)
-                        f.type = TYPEOF(first);
-                    if (stableBody)
-                        f.monomorphic = first;
-                    if (stableEnv)
-                        f.stableEnv = true;
                 }
+                if (stableType)
+                    f.type = TYPEOF(first);
+                if (stableBody)
+                    f.monomorphic = first;
+                if (stableEnv)
+                    f.stableEnv = true;
             }
         }
         break;
@@ -547,10 +546,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (phi->nargs() == 1)
                 callee = phi->arg(0).val();
         }
-        auto dummyCallFeedback = CallFeedback();
-        auto& ti = Instruction::Cast(callee)
-                       ? Instruction::Cast(callee)->updateCallFeedback()
-                       : dummyCallFeedback;
+        const auto dummyCallFeedback = CallFeedback();
+        const auto ti = Instruction::Cast(callee)
+                            ? Instruction::Cast(callee)->callFeedback()
+                            : dummyCallFeedback;
 
         auto ldfun = LdFun::Cast(callee);
         if (ldfun) {
@@ -562,10 +561,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 ldfun->hint(symbol::ambiguousCallTarget, {});
             }
         }
-
-        // Deopt in promise not possible
-        if (inPromise())
-            ti.monomorphic = nullptr;
 
         bool monomorphicClosure =
             ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
@@ -641,26 +636,34 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (!staticMonomorphicBuiltin &&
             (monomorphicBuiltin || monomorphicClosure ||
              monomorphicInnerFunction || monomorphicSpecial)) {
-            auto cp = callTargetCheckpoints.count(callee)
-                          ? callTargetCheckpoints.at(callee)
-                          : nullptr;
-            if (!cp)
-                cp = addCheckpoint(srcCode, pos, stack, insert);
-            auto bb = cp->nextBB();
-            auto dummyPos = bb->begin();
-            callee = BBTransform::insertCalleeGuard(
-                compiler, ti,
-                DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget), callee,
-                cp, bb, dummyPos);
+            // Can't speculate in promises
+            if (inPromise()) {
+                monomorphicBuiltin = monomorphicClosure =
+                    monomorphicInnerFunction = monomorphicSpecial = false;
+            } else {
+                auto cp = callTargetCheckpoints.count(callee)
+                              ? callTargetCheckpoints.at(callee)
+                              : nullptr;
+                if (!cp)
+                    cp = addCheckpoint(srcCode, pos, stack, insert);
+                auto bb = cp->nextBB();
+                auto dummyPos = bb->begin();
+                callee = BBTransform::insertCalleeGuard(
+                    compiler, ti,
+                    DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
+                    callee, cp, bb, dummyPos);
+            }
         }
 
-        auto eagerEval = [&](Value*& arg, size_t i) {
+        auto eagerEval = [&](Value*& arg, size_t i, bool promiseWrapped) {
             if (auto mk = MkArg::Cast(arg)) {
                 if (mk->isEager()) {
                     arg = mk->eagerArg();
                 } else {
                     auto original = arg;
                     arg = tryCreateArg(mk->prom()->rirSrc(), insert, true);
+                    if (promiseWrapped)
+                        arg = insert(new MkArg(mk->prom(), arg, mk->env()));
                     if (!arg) {
                         log.warn("Failed to compile a promise");
                         return false;
@@ -670,7 +673,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         // Let's have a checkpoint here. This checkpoint needs
                         // to capture the so far evaluated promises.
                         stack.at(nargs - 1 - i) =
-                            insert(new MkArg(mk->prom(), arg, mk->env()));
+                            promiseWrapped
+                                ? arg
+                                : insert(new MkArg(mk->prom(), arg, mk->env()));
                         addCheckpoint(srcCode, pos, stack, insert);
                     }
                 }
@@ -680,9 +685,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (monomorphicBuiltin || staticMonomorphicBuiltin) {
             for (size_t i = 0; i < args.size(); ++i)
-                if (!eagerEval(args[i], i))
+                if (!eagerEval(args[i], i, false))
                     return false;
 
+            if (auto calli = Instruction::Cast(callee))
+                calli->typeFeedbackUsed = true;
             popn(toPop);
             auto bt = insert(BuiltinCallFactory::New(
                 env, staticMonomorphicBuiltin ? staticCallee : ti.monomorphic,
@@ -742,10 +749,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto isUseMethod = CAR(ast) == symbol::UseMethod &&
                                    TYPEOF(CADR(ast)) == STRSXP &&
                                    CDDR(ast) == R_NilValue;
+                static std::unordered_set<SEXP> usemethodNoReflectionList({
+                    Rf_install("seq"),
+                    Rf_install("unique"),
+                    Rf_install("as.list"),
+                    Rf_install("rev"),
+                    Rf_install("anyDuplicated"),
+                });
                 if (isUseMethod) {
+                    auto usemethodName =
+                        Rf_install(CHAR(STRING_ELT(CADR(ast), 0)));
+                    bool maybeReflection =
+                        !usemethodNoReflectionList.count(usemethodName);
                     if (auto d = DotsList::Cast(matchedArgs[0])) {
                         if (d->nargs() > 0) {
-                            if (eagerEval(d->arg(0).val(), 0)) {
+                            if (eagerEval(d->arg(0).val(), 0,
+                                          maybeReflection)) {
                                 d->arg(0).type() = d->arg(0).val()->type;
                                 // creation of dots list must come after eager
                                 // evaluation of content...
@@ -758,7 +777,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                             }
                         }
                     } else {
-                        if (!eagerEval(matchedArgs[0], -1))
+                        if (!eagerEval(matchedArgs[0], -1, maybeReflection))
                             return false;
                     }
                 }
@@ -836,6 +855,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             auto apply = [&](ClosureVersion* f) {
+                if (auto calli = Instruction::Cast(callee))
+                    calli->typeFeedbackUsed = true;
                 popn(toPop);
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
