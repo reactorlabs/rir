@@ -473,7 +473,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             auto fake1 = new BB(cls, cls->nextBBId++);
                             // avoids critical edge
                             auto fake2 = new BB(cls, cls->nextBBId++);
-                            assert(prologue->next() == copy);
+                            assert(((const BB*)prologue)->next() == copy);
                             prologue->overrideNext(fake1);
                             fake1->append(new Branch(OpaqueTrue::instance()));
                             fake1->setSuccessors({fake2, split});
