@@ -281,7 +281,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
 Value* BBTransform::insertCalleeGuard(Compiler& compiler,
                                       const CallFeedback& fb,
                                       const DeoptReason& dr, Value* callee,
-                                      Checkpoint* cp, BB* bb,
+                                      bool stableEnv, Checkpoint* cp, BB* bb,
                                       BB::Instrs::iterator& pos) {
     // We use ldvar instead of ldfun for the guard. The reason is that
     // ldfun can force promises, which is a pain for our optimizer to
@@ -306,7 +306,7 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
 
     assert(fb.monomorphic);
 
-    if (!fb.stableEnv) {
+    if (!stableEnv) {
         static SEXP b = nullptr;
         if (!b) {
             auto idx = blt("bodyCode");
@@ -332,8 +332,8 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
         calleeForGuard = body;
     }
 
-    auto expected = fb.stableEnv ? compiler.module->c(fb.monomorphic)
-                                 : compiler.module->c(BODY(fb.monomorphic));
+    auto expected = stableEnv ? compiler.module->c(fb.monomorphic)
+                              : compiler.module->c(BODY(fb.monomorphic));
 
     auto t = new Identical(calleeForGuard, expected, PirType::any());
     pos = bb->insert(pos, t) + 1;
@@ -341,7 +341,7 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
     auto assumption = new Assume(t, cp, dr);
     pos = bb->insert(pos, assumption) + 1;
 
-    if (fb.stableEnv)
+    if (stableEnv)
         return expected;
 
     // The guard also ensures that this closure is not a promise thus we

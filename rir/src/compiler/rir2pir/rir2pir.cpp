@@ -564,7 +564,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         bool monomorphicClosure =
             ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
-        bool monomorphicInnerFunction = monomorphicClosure && !ti.stableEnv;
+        bool stableEnv = ti.stableEnv;
         bool monomorphicBuiltin = ti.monomorphic &&
                                   TYPEOF(ti.monomorphic) == BUILTINSXP &&
                                   // TODO implement support for call_builtin_
@@ -594,7 +594,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool monomorphicSpecial =
             ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
             supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
-        if (monomorphicClosure && !monomorphicInnerFunction) {
+        if (monomorphicClosure) {
             auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
             // Let's not re-translate already optimized functions if they are
             // huge.
@@ -612,34 +612,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        auto guardedCallee = callee;
         auto ast = bc.immediate.callFixedArgs.ast;
-        auto emitGenericCall = [&]() {
-            popn(toPop);
-            Value* fs = inlining()
-                           ? (Value*)Tombstone::framestate()
-                           : (Value*)insert.registerFrameState(
-                                  srcCode, nextPos, stack, inPromise());
-            Instruction* res;
-            if (namedArguments) {
-                res = insert(new NamedCall(env, callee, args, callArgumentNames,
-                                           fs, bc.immediate.callFixedArgs.ast));
-            } else {
-                res = insert(new Call(env, callee, args, fs,
-                                      bc.immediate.callFixedArgs.ast));
-            }
-            if (monomorphicSpecial)
-                res->effects.set(Effect::DependsOnAssume);
-            push(res);
-        };
-
         // Insert a guard if we want to speculate
         if (!staticMonomorphicBuiltin &&
-            (monomorphicBuiltin || monomorphicClosure ||
-             monomorphicInnerFunction || monomorphicSpecial)) {
+            (monomorphicBuiltin || monomorphicClosure || monomorphicSpecial)) {
             // Can't speculate in promises
             if (inPromise()) {
-                monomorphicBuiltin = monomorphicClosure =
-                    monomorphicInnerFunction = monomorphicSpecial = false;
+                monomorphicBuiltin = monomorphicClosure = monomorphicSpecial =
+                    false;
             } else {
                 auto cp = callTargetCheckpoints.count(callee)
                               ? callTargetCheckpoints.at(callee)
@@ -648,10 +629,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     cp = addCheckpoint(srcCode, pos, stack, insert);
                 auto bb = cp->nextBB();
                 auto dummyPos = bb->begin();
-                callee = BBTransform::insertCalleeGuard(
+                guardedCallee = BBTransform::insertCalleeGuard(
                     compiler, ti,
                     DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                    callee, cp, bb, dummyPos);
+                    callee, stableEnv, cp, bb, dummyPos);
             }
         }
 
@@ -683,6 +664,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             return true;
         };
 
+        auto emitGenericCall = [&]() {
+            popn(toPop);
+            Value* fs = inlining() ? (Value*)Tombstone::framestate()
+                                   : (Value*)insert.registerFrameState(
+                                         srcCode, nextPos, stack, inPromise());
+            Instruction* res;
+            if (namedArguments) {
+                res = insert(new NamedCall(env, guardedCallee, args,
+                                           callArgumentNames, fs,
+                                           bc.immediate.callFixedArgs.ast));
+            } else {
+                res = insert(new Call(env, guardedCallee, args, fs,
+                                      bc.immediate.callFixedArgs.ast));
+            }
+            if (monomorphicSpecial)
+                res->effects.set(Effect::DependsOnAssume);
+            push(res);
+        };
+
         if (monomorphicBuiltin || staticMonomorphicBuiltin) {
             for (size_t i = 0; i < args.size(); ++i)
                 if (!eagerEval(args[i], i, false))
@@ -697,7 +697,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (!staticMonomorphicBuiltin)
                 bt->effects.set(Effect::DependsOnAssume);
             push(bt);
-        } else if (monomorphicClosure || monomorphicInnerFunction) {
+        } else if (monomorphicClosure) {
             // (1) Argument Matching
             //
             size_t missingArgs = 0;
@@ -742,13 +742,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             // Specialcase for calling usemethod, the first argument is eager.
             // This helps determine the object type of the caller.
-            if (monomorphicClosure) {
+            {
                 auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
-                auto ast =
+                auto calleeAst =
                     src_pool_at(globalContext(), dt->baseline()->body()->src);
-                auto isUseMethod = CAR(ast) == symbol::UseMethod &&
-                                   TYPEOF(CADR(ast)) == STRSXP &&
-                                   CDDR(ast) == R_NilValue;
+                auto isUseMethod = CAR(calleeAst) == symbol::UseMethod &&
+                                   TYPEOF(CADR(calleeAst)) == STRSXP &&
+                                   CDDR(calleeAst) == R_NilValue;
                 static std::unordered_set<SEXP> usemethodNoReflectionList({
                     Rf_install("seq"),
                     Rf_install("unique"),
@@ -758,7 +758,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 });
                 if (isUseMethod) {
                     auto usemethodName =
-                        Rf_install(CHAR(STRING_ELT(CADR(ast), 0)));
+                        Rf_install(CHAR(STRING_ELT(CADR(calleeAst), 0)));
                     bool maybeReflection =
                         !usemethodNoReflectionList.count(usemethodName);
                     if (auto d = DotsList::Cast(matchedArgs[0])) {
@@ -864,7 +864,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto cl = insert(new StaticCall(
                     insert.env, f->owner(), given, matchedArgs,
                     std::move(argOrderOrig), fs, ast,
-                    monomorphicInnerFunction ? callee : Tombstone::closure()));
+                    !stableEnv ? guardedCallee : Tombstone::closure()));
                 cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
@@ -878,7 +878,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 delayedCompilation.erase(delayed);
             };
 
-            if (monomorphicInnerFunction) {
+            if (!stableEnv) {
                 compiler.compileFunction(
                     DispatchTable::unpack(BODY(ti.monomorphic)), name,
                     FORMALS(ti.monomorphic),

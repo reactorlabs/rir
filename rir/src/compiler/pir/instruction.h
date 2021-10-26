@@ -1149,6 +1149,7 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
     Value* val() const { return arg(0).val(); }
     using FixedLenInstructionWithEnvSlot::env;
 
+    std::string name() const override { return isStArg ? "StArg" : "StVar"; }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 

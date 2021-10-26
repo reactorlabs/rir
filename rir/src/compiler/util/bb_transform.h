@@ -42,7 +42,7 @@ class BBTransform {
                              DeoptReason::Reason reason);
     static Value* insertCalleeGuard(Compiler& compiler, const CallFeedback& fb,
                                     const DeoptReason& dr, Value* callee,
-                                    Checkpoint* cp, BB* bb,
+                                    bool stableEnv, Checkpoint* cp, BB* bb,
                                     BB::Instrs::iterator& pos);
 
     static void mergeRedundantBBs(Code* closure);
