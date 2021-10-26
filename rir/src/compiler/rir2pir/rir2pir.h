@@ -58,6 +58,7 @@ class Rir2Pir {
     ClosureStreamLogger& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
+    std::unordered_map<SEXP, MkFunCls*> localFuns;
 
     struct DelayedCompilation {
         DispatchTable* dt;

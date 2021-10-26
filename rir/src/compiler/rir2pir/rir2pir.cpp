@@ -278,6 +278,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.seenC = true;
         forceIfPromised(0);
         v = pop();
+        if (auto mk = MkFunCls::Cast(v)) {
+            if (localFuns.count(bc.immediateConst()))
+                localFuns.at(bc.immediateConst()) = nullptr;
+            else
+                localFuns[bc.immediateConst()] = mk;
+        }
         insert(new StVar(bc.immediateConst(), v, env));
         break;
 
@@ -565,6 +571,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool monomorphicClosure =
             ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
         bool stableEnv = ti.stableEnv;
+        if (monomorphicClosure)
+            if (auto dt = DispatchTable::check(BODY(ti.monomorphic)))
+                if (dt->baseline()->flags.includes(
+                        Function::Flag::InnerFunction))
+                    stableEnv = false;
+
         bool monomorphicBuiltin = ti.monomorphic &&
                                   TYPEOF(ti.monomorphic) == BUILTINSXP &&
                                   // TODO implement support for call_builtin_
@@ -629,10 +641,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     cp = addCheckpoint(srcCode, pos, stack, insert);
                 auto bb = cp->nextBB();
                 auto dummyPos = bb->begin();
+
+                Value* expection = nullptr;
+                if (ldfun && localFuns.count(ldfun->varName)) {
+                    auto mk = localFuns.at(ldfun->varName);
+                    if (mk &&
+                        mk->originalBody->container() == BODY(ti.monomorphic)) {
+                        stableEnv = (expection = mk);
+                    }
+                }
                 guardedCallee = BBTransform::insertCalleeGuard(
                     compiler, ti,
                     DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                    callee, stableEnv, cp, bb, dummyPos);
+                    callee, stableEnv, expection, cp, bb, dummyPos);
             }
         }
 
@@ -861,10 +882,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                auto cl = insert(new StaticCall(
-                    insert.env, f->owner(), given, matchedArgs,
-                    std::move(argOrderOrig), fs, ast,
-                    !stableEnv ? guardedCallee : Tombstone::closure()));
+                auto cl = insert(
+                    new StaticCall(insert.env, f->owner(), given, matchedArgs,
+                                   std::move(argOrderOrig), fs, ast,
+                                   f->owner()->closureEnv() == Env::notClosed()
+                                       ? guardedCallee
+                                       : Tombstone::closure()));
                 cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
@@ -1282,6 +1305,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                              const std::vector<PirType>& initialStack) {
     assert(!finalized);
 
+    auto firstBB = insert.getCurrentBB();
+    insert.createNextBB();
     CallTargetCheckpoints callTargetCheckpoints;
     std::vector<ReturnSite> results;
 
@@ -1527,8 +1552,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             }
             inner << (pos - srcCode->code());
 
-            auto mk =
-                insert(new MkFunCls(nullptr, formals, srcRef, dt, insert.env));
+            auto mk = new MkFunCls(nullptr, formals, srcRef, dt, insert.env);
+            firstBB->append(mk);
             cur.stack.push(mk);
 
             delayedCompilation[mk] = {dt,      inner.str(),

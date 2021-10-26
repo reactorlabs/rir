@@ -464,6 +464,10 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);
                         }
+                    } else if (i->arg(0).val() == i->arg(1).val()) {
+                        iterAnyChange = true;
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
                     } else if (isConst(i->arg(0).val(), p) &&
                                isConst(i->arg(0).val(), p) == R_TrueValue &&
                                i->arg(1).val()->type.isA(PirType::test())) {
