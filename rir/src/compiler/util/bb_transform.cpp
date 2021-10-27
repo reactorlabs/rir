@@ -354,7 +354,6 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
             new Force(guardedCallee, Env::elided(), Tombstone::framestate());
         forced->effects.reset();
         forced->effects.set(Effect::DependsOnAssume);
-        forced->type = PirType(fb.monomorphic);
         pos = bb->insert(pos, forced) + 1;
 
         guardedCallee = forced;
