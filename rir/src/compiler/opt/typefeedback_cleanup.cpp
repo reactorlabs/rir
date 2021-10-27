@@ -46,6 +46,14 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 affected.insert(i);
             }
+            // If typefeedback contradicts actual type of deoptless continuation
+            // state then it is clearly stale
+            if (LdArg::Cast(i))
+                if (!i->typeFeedback().type.isVoid() &&
+                    (i->typeFeedback().type & i->type).isVoid()) {
+                    i->typeFeedback_->type = PirType::voyd();
+                    affected.insert(i);
+                }
         });
 
     std::unordered_set<SEXP> otherAffectedVars;
@@ -81,10 +89,17 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
                     allInputsHaveFeedback = false;
                 }
             });
-            if (needUpdate && StVar::Cast(i)) {
-                changed =
-                    otherAffectedVars.insert(StVar::Cast(i)->varName).second ||
-                    changed;
+            // If types of a local variable changed then assume that all loads
+            // and stores from/to this variable are tainted.
+            if (needUpdate) {
+                SEXP varName = nullptr;
+                if (StVar::Cast(i))
+                    varName = StVar::Cast(i)->varName;
+                if (LdVar::Cast(i))
+                    varName = LdVar::Cast(i)->varName;
+                if (varName)
+                    changed =
+                        otherAffectedVars.insert(varName).second || changed;
             }
             if ((needUpdate && i->hasTypeFeedback()) ||
                 (allInputsHaveFeedback && i->hasTypeFeedback() &&
