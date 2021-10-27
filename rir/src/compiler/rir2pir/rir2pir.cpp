@@ -659,7 +659,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 guardedCallee = BBTransform::insertCalleeGuard(
                     compiler, ti,
                     DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                    callee, stableEnv, expection, cp, bb, dummyPos);
+                    callee, stableEnv || expection, expection, cp, bb,
+                    dummyPos);
             }
         }
 
@@ -897,7 +898,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
-                auto innerc = MkFunCls::Cast(callee->followCastsAndForce());
+                auto innerc =
+                    MkFunCls::Cast(guardedCallee->followCastsAndForce());
                 if (!innerc)
                     return;
                 auto delayed = delayedCompilation.find(innerc);
