@@ -647,7 +647,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto mk = localFuns.at(ldfun->varName);
                     if (mk &&
                         mk->originalBody->container() == BODY(ti.monomorphic)) {
-                        stableEnv = (expection = mk);
+                        expection = mk;
+                        // Even though we statically know the env, we must
+                        // compile an Env::unclosed() closure here, since we
+                        // cannot pass the pir env from the host function to the
+                        // inner function -- currently it is not possible to
+                        // refer to values outside the function...
+                        stableEnv = false;
                     }
                 }
                 guardedCallee = BBTransform::insertCalleeGuard(
