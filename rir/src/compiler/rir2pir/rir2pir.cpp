@@ -278,6 +278,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.seenC = true;
         forceIfPromised(0);
         v = pop();
+        if (auto mk = MkFunCls::Cast(v)) {
+            if (localFuns.count(bc.immediateConst()))
+                localFuns.at(bc.immediateConst()) = nullptr;
+            else
+                localFuns[bc.immediateConst()] = mk;
+        }
         insert(new StVar(bc.immediateConst(), v, env));
         break;
 
@@ -555,8 +561,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (ldfun) {
             if (ti.monomorphic) {
                 ldfun->hint(ti.monomorphic, ti.feedbackOrigin);
-                if (!ti.stableEnv)
-                    ldfun->hintIsInnerFunction = true;
+                if (ti.stableEnv)
+                    ldfun->hintHasStableEnv = true;
             } else {
                 ldfun->hint(symbol::ambiguousCallTarget, {});
             }
@@ -564,7 +570,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         bool monomorphicClosure =
             ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
-        bool monomorphicInnerFunction = monomorphicClosure && !ti.stableEnv;
+        bool stableEnv = ti.stableEnv;
+        if (monomorphicClosure)
+            if (auto dt = DispatchTable::check(BODY(ti.monomorphic)))
+                if (dt->baseline()->flags.includes(
+                        Function::Flag::InnerFunction))
+                    stableEnv = false;
+
         bool monomorphicBuiltin = ti.monomorphic &&
                                   TYPEOF(ti.monomorphic) == BUILTINSXP &&
                                   // TODO implement support for call_builtin_
@@ -594,7 +606,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool monomorphicSpecial =
             ti.monomorphic && TYPEOF(ti.monomorphic) == SPECIALSXP &&
             supportedSpecials.count(ti.monomorphic->u.primsxp.offset);
-        if (monomorphicClosure && !monomorphicInnerFunction) {
+        if (monomorphicClosure) {
             auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
             // Let's not re-translate already optimized functions if they are
             // huge.
@@ -612,34 +624,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         }
 
+        auto guardedCallee = callee;
         auto ast = bc.immediate.callFixedArgs.ast;
-        auto emitGenericCall = [&]() {
-            popn(toPop);
-            Value* fs = inlining()
-                           ? (Value*)Tombstone::framestate()
-                           : (Value*)insert.registerFrameState(
-                                  srcCode, nextPos, stack, inPromise());
-            Instruction* res;
-            if (namedArguments) {
-                res = insert(new NamedCall(env, callee, args, callArgumentNames,
-                                           fs, bc.immediate.callFixedArgs.ast));
-            } else {
-                res = insert(new Call(env, callee, args, fs,
-                                      bc.immediate.callFixedArgs.ast));
-            }
-            if (monomorphicSpecial)
-                res->effects.set(Effect::DependsOnAssume);
-            push(res);
-        };
-
         // Insert a guard if we want to speculate
         if (!staticMonomorphicBuiltin &&
-            (monomorphicBuiltin || monomorphicClosure ||
-             monomorphicInnerFunction || monomorphicSpecial)) {
+            (monomorphicBuiltin || monomorphicClosure || monomorphicSpecial)) {
             // Can't speculate in promises
             if (inPromise()) {
-                monomorphicBuiltin = monomorphicClosure =
-                    monomorphicInnerFunction = monomorphicSpecial = false;
+                monomorphicBuiltin = monomorphicClosure = monomorphicSpecial =
+                    false;
             } else {
                 auto cp = callTargetCheckpoints.count(callee)
                               ? callTargetCheckpoints.at(callee)
@@ -648,10 +641,26 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     cp = addCheckpoint(srcCode, pos, stack, insert);
                 auto bb = cp->nextBB();
                 auto dummyPos = bb->begin();
-                callee = BBTransform::insertCalleeGuard(
+
+                Value* expection = nullptr;
+                if (ldfun && localFuns.count(ldfun->varName)) {
+                    auto mk = localFuns.at(ldfun->varName);
+                    if (mk &&
+                        mk->originalBody->container() == BODY(ti.monomorphic)) {
+                        expection = mk;
+                        // Even though we statically know the env, we must
+                        // compile an Env::unclosed() closure here, since we
+                        // cannot pass the pir env from the host function to the
+                        // inner function -- currently it is not possible to
+                        // refer to values outside the function...
+                        stableEnv = false;
+                    }
+                }
+                guardedCallee = BBTransform::insertCalleeGuard(
                     compiler, ti,
                     DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                    callee, cp, bb, dummyPos);
+                    callee, stableEnv || expection, expection, cp, bb,
+                    dummyPos);
             }
         }
 
@@ -683,6 +692,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             return true;
         };
 
+        auto emitGenericCall = [&]() {
+            popn(toPop);
+            Value* fs = inlining() ? (Value*)Tombstone::framestate()
+                                   : (Value*)insert.registerFrameState(
+                                         srcCode, nextPos, stack, inPromise());
+            Instruction* res;
+            if (namedArguments) {
+                res = insert(new NamedCall(env, guardedCallee, args,
+                                           callArgumentNames, fs,
+                                           bc.immediate.callFixedArgs.ast));
+            } else {
+                res = insert(new Call(env, guardedCallee, args, fs,
+                                      bc.immediate.callFixedArgs.ast));
+            }
+            if (monomorphicSpecial)
+                res->effects.set(Effect::DependsOnAssume);
+            push(res);
+        };
+
         if (monomorphicBuiltin || staticMonomorphicBuiltin) {
             for (size_t i = 0; i < args.size(); ++i)
                 if (!eagerEval(args[i], i, false))
@@ -697,7 +725,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (!staticMonomorphicBuiltin)
                 bt->effects.set(Effect::DependsOnAssume);
             push(bt);
-        } else if (monomorphicClosure || monomorphicInnerFunction) {
+        } else if (monomorphicClosure) {
             // (1) Argument Matching
             //
             size_t missingArgs = 0;
@@ -742,13 +770,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
             // Specialcase for calling usemethod, the first argument is eager.
             // This helps determine the object type of the caller.
-            if (monomorphicClosure) {
+            {
                 auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
-                auto ast =
+                auto calleeAst =
                     src_pool_at(globalContext(), dt->baseline()->body()->src);
-                auto isUseMethod = CAR(ast) == symbol::UseMethod &&
-                                   TYPEOF(CADR(ast)) == STRSXP &&
-                                   CDDR(ast) == R_NilValue;
+                auto isUseMethod = CAR(calleeAst) == symbol::UseMethod &&
+                                   TYPEOF(CADR(calleeAst)) == STRSXP &&
+                                   CDDR(calleeAst) == R_NilValue;
                 static std::unordered_set<SEXP> usemethodNoReflectionList({
                     Rf_install("seq"),
                     Rf_install("unique"),
@@ -758,7 +786,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 });
                 if (isUseMethod) {
                     auto usemethodName =
-                        Rf_install(CHAR(STRING_ELT(CADR(ast), 0)));
+                        Rf_install(CHAR(STRING_ELT(CADR(calleeAst), 0)));
                     bool maybeReflection =
                         !usemethodNoReflectionList.count(usemethodName);
                     if (auto d = DotsList::Cast(matchedArgs[0])) {
@@ -861,14 +889,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                auto cl = insert(new StaticCall(
-                    insert.env, f->owner(), given, matchedArgs,
-                    std::move(argOrderOrig), fs, ast,
-                    monomorphicInnerFunction ? callee : Tombstone::closure()));
+                auto cl = insert(
+                    new StaticCall(insert.env, f->owner(), given, matchedArgs,
+                                   std::move(argOrderOrig), fs, ast,
+                                   f->owner()->closureEnv() == Env::notClosed()
+                                       ? guardedCallee
+                                       : Tombstone::closure()));
                 cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
-                auto innerc = MkFunCls::Cast(callee->followCastsAndForce());
+                auto innerc =
+                    MkFunCls::Cast(guardedCallee->followCastsAndForce());
                 if (!innerc)
                     return;
                 auto delayed = delayedCompilation.find(innerc);
@@ -878,7 +909,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 delayedCompilation.erase(delayed);
             };
 
-            if (monomorphicInnerFunction) {
+            if (!stableEnv) {
                 compiler.compileFunction(
                     DispatchTable::unpack(BODY(ti.monomorphic)), name,
                     FORMALS(ti.monomorphic),
@@ -1282,6 +1313,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                              const std::vector<PirType>& initialStack) {
     assert(!finalized);
 
+    auto firstBB = insert.getCurrentBB();
+    insert.createNextBB();
     CallTargetCheckpoints callTargetCheckpoints;
     std::vector<ReturnSite> results;
 
@@ -1527,8 +1560,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             }
             inner << (pos - srcCode->code());
 
-            auto mk =
-                insert(new MkFunCls(nullptr, formals, srcRef, dt, insert.env));
+            auto mk = new MkFunCls(nullptr, formals, srcRef, dt, insert.env);
+            firstBB->append(mk);
             cur.stack.push(mk);
 
             delayedCompilation[mk] = {dt,      inner.str(),

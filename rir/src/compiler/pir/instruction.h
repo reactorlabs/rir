@@ -968,7 +968,7 @@ class FLIE(LdFun, 2, Effects::Any()) {
         hintOrigin_ = hintOrigin;
     }
     SEXP varName;
-    bool hintIsInnerFunction = false;
+    bool hintHasStableEnv = false;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::function(),
@@ -1149,6 +1149,7 @@ class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
     Value* val() const { return arg(0).val(); }
     using FixedLenInstructionWithEnvSlot::env;
 
+    std::string name() const override { return isStArg ? "StArg" : "StVar"; }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 

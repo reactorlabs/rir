@@ -1888,7 +1888,8 @@ static size_t osrLimit =
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
                 Code* c, Opcode* pc) {
     static size_t loopCounter = 0;
-    if (callCtxt && callCtxt->stackArgs && ++loopCounter >= osrLimit) {
+    if (callCtxt && !isDeoptimizing() && callCtxt->stackArgs &&
+        ++loopCounter >= osrLimit) {
         loopCounter = 0;
         long size = R_BCNodeStackTop - basePtr;
         assert(size >= 0);

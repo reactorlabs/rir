@@ -42,6 +42,7 @@ class BBTransform {
                              DeoptReason::Reason reason);
     static Value* insertCalleeGuard(Compiler& compiler, const CallFeedback& fb,
                                     const DeoptReason& dr, Value* callee,
+                                    bool stableEnv, Value* overrideExpect,
                                     Checkpoint* cp, BB* bb,
                                     BB::Instrs::iterator& pos);
 

@@ -1093,7 +1093,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        cs << BC::return_();
+        if (ctx.inLoop() || ctx.isInPromise())
+            cs << BC::return_();
+        else
+            cs << BC::ret();
         return true;
     }
 

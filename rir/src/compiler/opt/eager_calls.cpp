@@ -157,7 +157,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     Effect::DependsOnAssume));
                         }
                     } else if (auto ldfun = LdFun::Cast(call->cls())) {
-                        if (ldfun->hint() && !ldfun->hintIsInnerFunction) {
+                        if (ldfun->hint() && ldfun->hintHasStableEnv) {
                             auto kind = TYPEOF(ldfun->hint());
                             // We also speculate on calls to CLOSXPs, these will
                             // be picked up by MatchArgs opt pass and turned
