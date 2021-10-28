@@ -306,8 +306,8 @@ test_big_inline:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
-    PIR_MAX_INPUT_SIZE: 5000
-    PIR_INLINER_MAX_SIZE: 2000
+    PIR_MAX_INPUT_SIZE: 4000
+    PIR_INLINER_MAX_SIZE: 1000
     PIR_INLINER_INLINE_UNLIKELY: 1
     PIR_INLINER_MAX_INLINEE_SIZE: 400
     PIR_LLVM_OPT_LEVEL: 0
