@@ -5831,10 +5831,11 @@ void LowerFunctionLLVM::compile() {
             if (!Phi::Cast(i))
                 ensureNamedIfNeeded(i);
 
-            // For OSR try to collect more typefeedback for the part of the code
-            // that was not yet executed
+            // For OSR-in try to collect more typefeedback for the part of the
+            // code that was not yet executed.
             if (cls->isContinuation() && cls == code &&
-                Rep::Of(i) == Rep::SEXP) {
+                Rep::Of(i) == Rep::SEXP &&
+                !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback() &&
                     i->typeFeedback().feedbackOrigin.pc() &&
                     i->typeFeedback().type.isVoid() &&

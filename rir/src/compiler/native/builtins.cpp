@@ -841,8 +841,13 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
     static constexpr bool deoptlessDebug = false;
     static int deoptlessCount = 0;
+    const static int deoptlessMaxRecursion =
+        getenv("PIR_DEOPTLESS_RECURSION")
+            ? std::atoi(getenv("PIR_DEOPTLESS_RECURSION"))
+            : 2;
 
-    if (deoptless && m->numFrames == 1 && deoptlessCount < 10) {
+    if (deoptless && m->numFrames == 1 &&
+        deoptlessCount < deoptlessMaxRecursion) {
         assert(m->frames[0].inPromise == false);
         auto le = LazyEnvironment::check(env);
 
