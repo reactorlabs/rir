@@ -838,7 +838,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
     static int deoptless =
-        getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
+        getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 1;
     static constexpr bool deoptlessDebug = false;
     static int deoptlessCount = 0;
     const static int deoptlessMaxRecursion =
