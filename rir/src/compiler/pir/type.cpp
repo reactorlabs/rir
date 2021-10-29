@@ -232,28 +232,34 @@ bool PirType::isInstance(SEXP val) const {
 
 void PirType::fromContext(const Context& assumptions, unsigned arg,
                           unsigned nargs, bool afterForce) {
-    auto& type = *this;
+    PirType type = *this;
     auto i = arg;
     if (!afterForce &&
         assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
         arg < nargs - assumptions.numMissing())
-        type = type.notMissing();
+        type = type & type.notMissing();
 
     if (assumptions.isEager(i))
-        type = type.notLazy();
+        type = type & type.notLazy();
 
     if (afterForce)
-        type = type.forced();
+        type = type & type.forced();
 
     if (assumptions.isEager(i) || afterForce) {
-        type = type.notLazy();
+        type = type & type.notLazy();
         if (assumptions.isNotObj(i))
-            type = type.notMissing().notObject();
+            type = type & type.notMissing().notObject();
         if (assumptions.isSimpleReal(i))
             type = type & PirType::simpleScalarReal().orPromiseWrapped();
         if (assumptions.isSimpleInt(i))
             type = type & PirType::simpleScalarInt().orPromiseWrapped();
     }
+    // well, if the intersection of context info and current type is void, we
+    // probably made a wrong speculation. it's most probably a bug somewhere,
+    // but I don't want to make it an assert, since it can happen depending on
+    // the pass order...
+    if (!type.isVoid())
+        *this = type;
 }
 
 } // namespace pir

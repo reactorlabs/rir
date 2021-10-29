@@ -336,9 +336,11 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
-    void replaceDominatedUses(Instruction* replacement,
-                              const DominanceGraph& dom,
-                              const std::initializer_list<Tag>& skip = {});
+    void replaceDominatedUses(
+        Instruction* replacement, const DominanceGraph& dom,
+        const std::initializer_list<Tag>& skip = {},
+        const std::function<void(Instruction*)>& postAction = [](Instruction*) {
+        });
     void replaceUsesOfValue(Value* old, Value* rpl);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);

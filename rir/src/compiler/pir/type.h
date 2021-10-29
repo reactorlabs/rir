@@ -833,7 +833,7 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     } else {
         if (!t.maybeNotFastVecelt()) {
             assert(!t.maybeObj());
-            out << "¹";
+            out << "_";
         } else if (!t.maybeObj()) {
             out << "+";
         }

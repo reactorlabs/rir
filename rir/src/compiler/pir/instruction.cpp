@@ -317,9 +317,10 @@ void Instruction::replaceUsesIn(
     }
 }
 
-void Instruction::replaceDominatedUses(Instruction* replace,
-                                       const DominanceGraph& dom,
-                                       const std::initializer_list<Tag>& skip) {
+void Instruction::replaceDominatedUses(
+    Instruction* replace, const DominanceGraph& dom,
+    const std::initializer_list<Tag>& skip,
+    const std::function<void(Instruction*)>& postAction) {
     checkReplace(replace);
 
     auto start = false;
@@ -346,8 +347,10 @@ void Instruction::replaceDominatedUses(Instruction* replace,
                         changed = true;
                     }
                 });
-                if (changed)
+                if (changed) {
                     i->updateTypeAndEffects();
+                    postAction(i);
+                }
             }
 
             // If we reach the original instruction we have to stop replacing.
