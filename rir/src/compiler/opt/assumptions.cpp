@@ -211,10 +211,12 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
     std::unordered_map<Instruction*,
                        std::tuple<Instruction*, Checkpoint*, Assume*>>
         hoistAssume;
+    std::unordered_map<Force*, std::tuple<IsType*, Checkpoint*, Assume*>>
+        hoistCheck;
 
     bool anyChange = false;
     Visitor::runPostChange(code->entry, [&checkpoint, &assumptions, &dom,
-                                         &replaced, &hoistAssume,
+                                         &replaced, &hoistAssume, &hoistCheck,
                                          &anyChange](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -293,6 +295,18 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                 next = bb->remove(ip);
                             }
                         }
+                    } else if (auto tt = IsType::Cast(assume->condition())) {
+                        if (auto f = Force::Cast(tt->arg(0).val())) {
+                            if (f->hasEnv() && !tt->typeTest.maybeLazy() &&
+                                (f->observed == Force::ArgumentKind::value ||
+                                 f->observed ==
+                                     Force::ArgumentKind::evaluatedPromise)) {
+                                if (auto cp = checkpoint.at(f)) {
+                                    hoistCheck[f] = {tt, cp, assume};
+                                    anyChange = true;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -349,15 +363,51 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
-            auto h = hoistAssume.find(*ip);
-            if (h != hoistAssume.end()) {
-                auto g = h->second;
-                ip++;
-                auto assume = new Assume(std::get<Instruction*>(g),
-                                         std::get<Checkpoint*>(g),
-                                         std::get<Assume*>(g)->reason);
-                ip = bb->insert(ip, assume);
-                anyChange = true;
+            {
+                auto h = hoistAssume.find(*ip);
+                if (h != hoistAssume.end()) {
+                    auto g = h->second;
+                    ip++;
+                    auto assume = new Assume(std::get<Instruction*>(g),
+                                             std::get<Checkpoint*>(g),
+                                             std::get<Assume*>(g)->reason);
+                    ip = bb->insert(ip, assume);
+                    anyChange = true;
+                }
+            }
+            if (auto f = Force::Cast(*ip)) {
+                auto h = hoistCheck.find(f);
+                if (h != hoistCheck.end()) {
+                    // Convert:
+                    //   y = Force(x)     <feedback: eager>
+                    //   t = IsType(y, eager)
+                    //       Assume(t)
+                    // To:
+                    //   t = IsType(x, eager)
+                    //       Assume(t)
+                    //   y = CastType(x, eager)
+                    //       Force(y)   <-  Force becomes silent...
+                    auto tt = std::get<IsType*>(h->second);
+                    auto cp = std::get<Checkpoint*>(h->second);
+                    auto a = std::get<Assume*>(h->second);
+                    assert(tt->arg(0).val() == f);
+                    auto inp = f->arg(0).val();
+                    auto expected = (f->observed != Force::ArgumentKind::value)
+                                        ? tt->typeTest.orPromiseWrapped()
+                                        : tt->typeTest;
+                    auto newTT = new IsType(expected, tt->arg<0>().val());
+                    newTT->arg(0).val() = inp;
+                    ip = bb->insert(ip, newTT) + 1;
+                    ip = bb->insert(ip, new Assume(newTT, cp, a->reason)) + 1;
+                    auto casted = new CastType(inp, CastType::Downcast,
+                                               PirType::any(), newTT->typeTest);
+                    casted->effects.set(Effect::DependsOnAssume);
+                    f->arg(0).val() = casted;
+                    f->elideEnv();
+                    f->effects.reset();
+                    f->updateTypeAndEffects();
+                    ip = bb->insert(ip, casted) + 1;
+                }
             }
             ip++;
         }
