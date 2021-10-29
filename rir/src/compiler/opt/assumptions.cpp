@@ -304,6 +304,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     } else if (auto tt = IsType::Cast(assume->condition())) {
                         if (auto f = Force::Cast(tt->arg(0).val())) {
                             if (f->hasEnv() && !tt->typeTest.maybeLazy() &&
+                                tt->typeTest.isA(f->typeFeedback().type) &&
                                 (f->observed == Force::ArgumentKind::value ||
                                  f->observed ==
                                      Force::ArgumentKind::evaluatedPromise)) {
@@ -398,9 +399,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto a = std::get<Assume*>(h->second);
                     assert(tt->arg(0).val() == f);
                     auto inp = f->arg(0).val();
-                    auto expected = (f->observed != Force::ArgumentKind::value)
-                                        ? tt->typeTest.orPromiseWrapped()
-                                        : tt->typeTest;
+                    auto expected = tt->typeTest;
+                    if (f->observed != Force::ArgumentKind::value)
+                        expected = expected.orPromiseWrapped();
+                    assert(!expected.maybeLazy());
                     auto newTT = new IsType(expected, tt->arg<0>().val());
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
@@ -410,8 +412,12 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     casted->effects.set(Effect::DependsOnAssume);
                     f->arg(0).val() = casted;
                     f->elideEnv();
+                    f->clearFrameState();
                     f->effects.reset();
                     f->updateTypeAndEffects();
+                    tt->replaceUsesWith(True::instance());
+                    if (!expected.maybePromiseWrapped())
+                        f->replaceUsesWith(casted);
                     ip = bb->insert(ip, casted) + 1;
                 }
             }
