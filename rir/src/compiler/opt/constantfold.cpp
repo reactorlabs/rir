@@ -549,7 +549,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             isdead = true;
                         }
                     } else if (auto n = Not::Cast(assume->condition())) {
-                        if (n->type.isA(PirType::test())) {
+                        if (n->arg<0>().val()->type.isA(PirType::test())) {
                             assume->arg<0>().val() = n->arg<0>().val();
                             assume->assumeTrue = !assume->assumeTrue;
                             iterAnyChange = true;

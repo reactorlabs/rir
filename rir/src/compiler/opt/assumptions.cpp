@@ -415,7 +415,6 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     f->clearFrameState();
                     f->effects.reset();
                     f->updateTypeAndEffects();
-                    tt->replaceUsesWith(True::instance());
                     if (!expected.maybePromiseWrapped())
                         f->replaceUsesWith(casted);
                     ip = bb->insert(ip, casted) + 1;
