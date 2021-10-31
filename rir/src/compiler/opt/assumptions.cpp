@@ -286,13 +286,15 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto guard = Instruction::Cast(assume->condition());
                     auto cp = assume->checkpoint();
                     if (guard && guard->bb() != cp->bb()) {
-                        if (auto cp0 = checkpoint.at(assume)) {
+                        if (auto cp0 = checkpoint.at(guard)) {
                             while (replaced.count(cp0))
                                 cp0 = replaced.at(cp0);
                             if (assume->checkpoint() != cp0) {
                                 anyChange = true;
                                 hoistAssume[guard] = {guard, cp0, assume};
-                                next = bb->remove(ip);
+                                // assume cannot be removed, first we have to
+                                // show that the new assume is reaching the old
+                                // one, ie. run this pass again...
                             }
                         }
                     } else if (auto tt = IsType::Cast(assume->condition())) {
