@@ -895,6 +895,9 @@ bool testTypeRules() {
     assert(!realScalar.maybeHasAttrs());
     assert(real.mergeWithConversion(realScalar).maybeHasAttrs());
     assert(!PirType::val().isA(PirType::function()));
+    assert(!PirType::simpleScalarInt()
+                .extractType(PirType(RType::real).noAttribsOrObject())
+                .isVoid());
     return true;
 }
 

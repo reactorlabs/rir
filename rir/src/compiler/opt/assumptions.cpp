@@ -245,13 +245,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                             // one, since the cast was not yet updated.
                             tt->updateTypeAndEffects();
                             if (!in->type.isA(tt->type)) {
-                                in->replaceDominatedUses(
-                                    tt, dom, {}, [](Instruction* i) {
-                                        // Can happen in unreachable code when
-                                        // we have conflicting speculations...
-                                        if (i->type.isVoid())
-                                            i->type = PirType::any();
-                                    });
+                                in->replaceDominatedUses(tt, dom);
                             }
                         }
                     }
@@ -414,9 +408,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     f->elideEnv();
                     f->clearFrameState();
                     f->effects.reset();
+                    f->type = newTT->typeTest.forced().notMissing();
                     f->updateTypeAndEffects();
-                    if (!expected.maybePromiseWrapped())
-                        f->replaceUsesWith(casted);
+                    assert(!f->type.isVoid());
                     ip = bb->insert(ip, casted) + 1;
                 }
             }
