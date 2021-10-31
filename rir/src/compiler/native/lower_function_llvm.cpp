@@ -1502,7 +1502,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     }
     assert(v->getType() == t::Double);
     return builder.CreateSelect(
-        builder.CreateFCmpOEQ(v, c(0.0)), constant(R_FalseValue, t::SEXP),
+        builder.CreateFCmpUEQ(v, c(0.0)), constant(R_FalseValue, t::SEXP),
         builder.CreateSelect(builder.CreateFCmpUNE(v, v),
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
@@ -2820,7 +2820,7 @@ void LowerFunctionLLVM::compile() {
                                           builder.CreateFCmpUNE(a, a),
                                           constant(R_LogicalNAValue, orep),
                                           builder.CreateSelect(
-                                              builder.CreateFCmpOEQ(a, c(0.0)),
+                                              builder.CreateFCmpUEQ(a, c(0.0)),
                                               constant(R_FalseValue, orep),
                                               constant(R_TrueValue, orep))));
 
