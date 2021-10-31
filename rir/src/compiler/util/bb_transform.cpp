@@ -218,13 +218,12 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
     if (triggerAnyway) {
         test = condition ? (Value*)False::instance() : (Value*)True::instance();
     }
-    Value* expected =
-        condition ? (Value*)True::instance() : (Value*)False::instance();
 
-    auto t = new Identical(test, expected, PirType::any());
-    position = srcBlock->insert(position, t) + 1;
-    srcBlock->replace(position, new Branch(t));
-    srcBlock->overrideSuccessors({split, deoptBlock});
+    srcBlock->replace(position, new Branch(test));
+    if (condition)
+        srcBlock->overrideSuccessors({split, deoptBlock});
+    else
+        srcBlock->overrideSuccessors({deoptBlock, split});
 
     // If visibility was tainted between the last checkpoint and the bailout,
     // we try (best-effort) to recover the correct setting, by scanning for the
