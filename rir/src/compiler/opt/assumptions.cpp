@@ -286,7 +286,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto guard = Instruction::Cast(assume->condition());
                     auto cp = assume->checkpoint();
                     if (guard && guard->bb() != cp->bb()) {
-                        if (auto cp0 = checkpoint.at(guard)) {
+                        if (auto cp0 = checkpoint.at(assume)) {
                             while (replaced.count(cp0))
                                 cp0 = replaced.at(cp0);
                             if (assume->checkpoint() != cp0) {
@@ -303,6 +303,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                  f->observed ==
                                      Force::ArgumentKind::evaluatedPromise)) {
                                 if (auto cp = checkpoint.at(f)) {
+                                    while (replaced.count(cp))
+                                        cp = replaced.at(cp);
                                     hoistCheck[f] = {tt, cp, assume};
                                     anyChange = true;
                                 }
@@ -369,8 +371,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                 if (h != hoistAssume.end()) {
                     auto g = h->second;
                     ip++;
-                    auto assume = new Assume(std::get<Instruction*>(g),
-                                             std::get<Checkpoint*>(g),
+                    auto cp = std::get<Checkpoint*>(h->second);
+                    while (replaced.count(cp))
+                        cp = replaced.at(cp);
+                    auto assume = new Assume(std::get<Instruction*>(g), cp,
                                              std::get<Assume*>(g)->reason);
                     ip = bb->insert(ip, assume);
                     anyChange = true;
@@ -390,6 +394,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     //       Force(y)   <-  Force becomes silent...
                     auto tt = std::get<IsType*>(h->second);
                     auto cp = std::get<Checkpoint*>(h->second);
+                    while (replaced.count(cp))
+                        cp = replaced.at(cp);
                     auto a = std::get<Assume*>(h->second);
                     assert(tt->arg(0).val() == f);
                     auto inp = f->arg(0).val();
