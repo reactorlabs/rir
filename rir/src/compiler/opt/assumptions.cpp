@@ -402,8 +402,11 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     assert(tt->arg(0).val() == f);
                     auto inp = f->arg(0).val();
                     auto expected = tt->typeTest;
-                    if (f->observed != Force::ArgumentKind::value)
+                    if (f->observed != Force::ArgumentKind::value) {
                         expected = expected.orPromiseWrapped();
+                        if (!tt->typeTest.maybeMissing())
+                            expected = expected.notWrappedMissing();
+                    }
                     assert(!expected.maybeLazy());
                     auto newTT = new IsType(expected, tt->arg<0>().val());
                     newTT->arg(0).val() = inp;
@@ -416,7 +419,6 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     f->elideEnv();
                     f->clearFrameState();
                     f->effects.reset();
-                    f->type = newTT->typeTest.forced().notMissing();
                     f->updateTypeAndEffects();
                     assert(!f->type.isVoid());
                     ip = bb->insert(ip, casted) + 1;

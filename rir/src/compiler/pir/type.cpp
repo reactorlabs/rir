@@ -210,6 +210,9 @@ bool PirType::isInstance(SEXP val) const {
             assert(!Rf_isObject(val));
             if (maybePromiseWrapped() && !maybeLazy()) {
                 auto v = PRVALUE(val);
+                if (flags_.contains(TypeFlags::notWrappedMissing) &&
+                    v == R_MissingArg)
+                    return false;
                 return v != R_UnboundValue && forced().isInstance(v);
             }
             return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
