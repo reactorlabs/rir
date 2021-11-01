@@ -4192,28 +4192,59 @@ void LowerFunctionLLVM::compile() {
                             return depromise(a, arg->type);
                         return a;
                     };
-                    if (t->typeTest.notPromiseWrapped() ==
-                        PirType::simpleScalarInt()) {
-                        setVal(i,
-                               builder.CreateZExt(
-                                   isSimpleScalar(depromiseIfNeeded(), INTSXP),
-                                   t::Int));
+                    if (t->typeTest.notPromiseWrapped()
+                            .orNAOrNaN()
+                            .orWrappedMissing() == PirType::simpleScalarInt()) {
+                        a = depromiseIfNeeded();
+                        auto res = isSimpleScalar(a, INTSXP);
+                        if (!t->typeTest.maybeNAOrNaN())
+                            res = createSelect2(
+                                res,
+                                [&]() {
+                                    return builder.CreateICmpNE(unboxInt(a),
+                                                                c(NA_INTEGER));
+                                },
+                                [&]() { return builder.getFalse(); });
+                        setVal(i, builder.CreateZExt(res, t::Int));
                         break;
-                    } else if (t->typeTest.notPromiseWrapped() ==
+                    } else if (t->typeTest.notPromiseWrapped()
+                                   .orNAOrNaN()
+                                   .orWrappedMissing() ==
                                PirType::simpleScalarLogical()) {
-                        setVal(i,
-                               builder.CreateZExt(
-                                   isSimpleScalar(depromiseIfNeeded(), LGLSXP),
-                                   t::Int));
+                        a = depromiseIfNeeded();
+                        auto res = isSimpleScalar(a, LGLSXP);
+                        if (!t->typeTest.maybeNAOrNaN()) {
+                            res = createSelect2(
+                                res,
+                                [&]() {
+                                    return builder.CreateICmpNE(unboxLgl(a),
+                                                                c(NA_LOGICAL));
+                                },
+                                [&]() { return builder.getFalse(); });
+                        }
+                        setVal(i, builder.CreateZExt(res, t::Int));
                         break;
-                    } else if (t->typeTest.notPromiseWrapped() ==
+                    } else if (t->typeTest.notPromiseWrapped()
+                                   .orNAOrNaN()
+                                   .orWrappedMissing() ==
                                PirType::simpleScalarReal()) {
-                        setVal(i,
-                               builder.CreateZExt(
-                                   isSimpleScalar(depromiseIfNeeded(), REALSXP),
-                                   t::Int));
+                        a = depromiseIfNeeded();
+                        auto res = isSimpleScalar(a, REALSXP);
+                        if (!t->typeTest.maybeNAOrNaN())
+                            res = createSelect2(
+                                res,
+                                [&]() {
+                                    auto va = unboxReal(a);
+                                    return builder.CreateFCmpUEQ(va, va);
+                                },
+                                [&]() { return builder.getFalse(); });
+                        setVal(i, builder.CreateZExt(res, t::Int));
                         break;
                     }
+
+                    // NA checks can only be done on scalars!
+                    assert(arg->type.maybeNAOrNaN() <=
+                           t->typeTest.maybeNAOrNaN());
 
                     // Here we depromise the value. In case the promise is lazy,
                     // a will be R_UnboundValue, which is handled in the tests
