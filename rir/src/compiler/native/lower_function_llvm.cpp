@@ -4185,30 +4185,36 @@ void LowerFunctionLLVM::compile() {
                 if (Rep::Of(arg) == Rep::SEXP) {
                     auto a = loadSxp(arg);
 
+                    // Some specialcases for the simple scalars which we want to
+                    // be extra fast.
+                    auto depromiseIfNeeded = [&]() {
+                        if (t->typeTest.maybePromiseWrapped())
+                            return depromise(a, arg->type);
+                        return a;
+                    };
                     if (t->typeTest.notPromiseWrapped() ==
                         PirType::simpleScalarInt()) {
-                        setVal(i, builder.CreateZExt(
-                                      isSimpleScalar(depromise(a, arg->type),
-                                                     INTSXP),
-                                      t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), INTSXP),
+                                   t::Int));
                         break;
                     } else if (t->typeTest.notPromiseWrapped() ==
                                PirType::simpleScalarLogical()) {
-                        setVal(i, builder.CreateZExt(
-                                      isSimpleScalar(depromise(a, arg->type),
-                                                     LGLSXP),
-                                      t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), LGLSXP),
+                                   t::Int));
                         break;
                     } else if (t->typeTest.notPromiseWrapped() ==
                                PirType::simpleScalarReal()) {
-                        setVal(i, builder.CreateZExt(
-                                      isSimpleScalar(depromise(a, arg->type),
-                                                     REALSXP),
-                                      t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), REALSXP),
+                                   t::Int));
                         break;
                     }
 
-                    auto phi = phiBuilder(t::i1);
                     // Here we depromise the value. In case the promise is lazy,
                     // a will be R_UnboundValue, which is handled in the tests
                     // below. In case the type-test guards against wrapped
@@ -4216,6 +4222,7 @@ void LowerFunctionLLVM::compile() {
                     // missing. However this check must distinguish the promise
                     // case from the naked value case, because missingness of a
                     // type can change with forcing.
+                    auto phi = phiBuilder(t::i1);
                     if (t->typeTest.maybePromiseWrapped())
                         a = depromise(
                             a, arg->type,
@@ -4239,7 +4246,6 @@ void LowerFunctionLLVM::compile() {
                                 }
                             });
                     auto res = phi.initialized() ? phi() : builder.getTrue();
-
 
                     llvm::Value* res1;
                     if (t->typeTest.noAttribsOrObject().isA(
