@@ -3432,6 +3432,18 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(set_vec_elt_) {
+            SEXP idx = ostack_at(ctx, 0);
+            SEXP vec = ostack_at(ctx, 1);
+            SEXP val = ostack_at(ctx, 2);
+            if (MAYBE_REFERENCED(val))
+                val = Rf_lazy_duplicate(val);
+            SET_VECTOR_ELT(vec, INTEGER(idx)[0] - 1, val);
+            ostack_popn(ctx, 3);
+            ostack_push(ctx, vec);
+            NEXT();
+        }
+
         INSTRUCTION(subassign2_1_) {
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);

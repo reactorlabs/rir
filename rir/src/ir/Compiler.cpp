@@ -1666,7 +1666,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // store result
                 cs << BC::pull(1) << BC::pick(4)
                    << BC::swap() // [length(X), i, fun(X[[i]], ...), ans, i]
-                   << BC::subassign2_1();
+                   << BC::set_vec_elt();
                 cs.addSrc(ast);
 
                 cs << BC::put(2) // [ans, length(X), i]

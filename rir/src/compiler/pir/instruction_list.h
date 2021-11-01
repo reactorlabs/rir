@@ -30,6 +30,7 @@
     V(Extract1_2D)                                                             \
     V(Extract1_3D)                                                             \
     V(Subassign1_1D)                                                           \
+    V(SetVecElt)                                                               \
     V(Subassign2_1D)                                                           \
     V(Subassign1_2D)                                                           \
     V(Subassign2_2D)                                                           \

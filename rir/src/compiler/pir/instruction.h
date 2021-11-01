@@ -1509,6 +1509,18 @@ class FLIE(Subassign1_1D, 4, Effects::Any()) {
     }
 };
 
+class FLI(SetVecElt, 3, Effect::Error) {
+  public:
+    SetVecElt(Value* val, Value* vec, Value* idx, unsigned srcIdx)
+        : FixedLenInstruction(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{val, vec, idx}}, srcIdx) {}
+    Value* val() const { return arg(0).val(); }
+    Value* vec() const { return arg(1).val(); }
+    Value* idx() const { return arg(2).val(); }
+};
+
 class FLIE(Subassign2_1D, 4, Effects::Any()) {
   public:
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,

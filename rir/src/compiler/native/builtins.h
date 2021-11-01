@@ -124,6 +124,7 @@ struct NativeBuiltins {
         extract22rr,
         nativeCallTrampoline,
         subassign11,
+        setVecElt,
         subassign21,
         subassign21ii,
         subassign21rr,

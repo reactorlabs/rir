@@ -1412,6 +1412,13 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
     return res;
 }
 
+SEXP setVecEltImpl(SEXP vec, SEXP idx, SEXP val, Immediate srcIdx) {
+    if (MAYBE_REFERENCED(val))
+        val = Rf_lazy_duplicate(val);
+    SET_VECTOR_ELT(vec, INTEGER(idx)[0] - 1, val);
+    return vec;
+}
+
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
@@ -2365,6 +2372,10 @@ void NativeBuiltins::initializeBuiltins() {
         "subassign1_1D", (void*)subassign11Impl,
         llvm::FunctionType::get(
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false)};
+    get_(Id::setVecElt) = {
+        "setVecElt", (void*)setVecEltImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int},
+                                false)};
     get_(Id::subassign21) = {
         "subassign2_1D", (void*)subassign21Impl,
         llvm::FunctionType::get(
