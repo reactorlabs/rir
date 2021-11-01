@@ -336,9 +336,11 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
 
-    void replaceDominatedUses(Instruction* replacement,
-                              const DominanceGraph& dom,
-                              const std::initializer_list<Tag>& skip = {});
+    void replaceDominatedUses(
+        Instruction* replacement, const DominanceGraph& dom,
+        const std::initializer_list<Tag>& skip = {},
+        const std::function<void(Instruction*)>& postAction = [](Instruction*) {
+        });
     void replaceUsesOfValue(Value* old, Value* rpl);
 
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
@@ -358,7 +360,12 @@ class Instruction : public Value {
     }
 
     void updateTypeAndEffects() {
+        auto isRType = type.isRType();
+        assert(!type.isVoid() || !isRType);
         type = inferType();
+        // Can happen in unreachable code when we have conflicting speculations
+        if (isRType && type.isVoid())
+            type = PirType::val();
         effects = inferEffects();
     }
 

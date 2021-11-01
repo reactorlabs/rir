@@ -166,6 +166,7 @@ class LowerFunctionLLVM {
             assert(v->getType() == type);
             inputs.push_back({v, b});
         }
+        bool initialized() const { return inputs.size() > 0; }
 
         llvm::Value* operator()(size_t numInputs = 0);
 
@@ -400,7 +401,11 @@ class LowerFunctionLLVM {
     llvm::Value* boxLgl(llvm::Value* v);
     llvm::Value* boxTst(llvm::Value* v);
     void insn_assert(llvm::Value* v, const char* msg, llvm::Value* p = nullptr);
-    llvm::Value* depromise(llvm::Value* arg, const PirType& t);
+    llvm::Value* depromise(
+        llvm::Value* arg, const PirType& t,
+        const std::function<void(llvm::Value*)>& extraPromiseCase =
+            [](llvm::Value*) {},
+        const std::function<void()>& = []() {});
     llvm::Value* depromise(Value* v);
 
     llvm::Value* force(Instruction* i, llvm::Value* arg);

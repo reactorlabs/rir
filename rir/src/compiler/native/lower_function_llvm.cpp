@@ -1502,7 +1502,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     }
     assert(v->getType() == t::Double);
     return builder.CreateSelect(
-        builder.CreateFCmpOEQ(v, c(0.0)), constant(R_FalseValue, t::SEXP),
+        builder.CreateFCmpUEQ(v, c(0.0)), constant(R_FalseValue, t::SEXP),
         builder.CreateSelect(builder.CreateFCmpUNE(v, v),
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
@@ -1521,7 +1521,10 @@ void LowerFunctionLLVM::protectTemp(llvm::Value* val) {
         maxTemps = numTemps;
 }
 
-llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
+llvm::Value* LowerFunctionLLVM::depromise(
+    llvm::Value* arg, const PirType& t,
+    const std::function<void(llvm::Value*)>& extraPromiseCase,
+    const std::function<void()>& nonPromiseCase) {
 
     if (!t.maybePromiseWrapped()) {
 #ifdef ENABLE_SLOWASSERT
@@ -1542,6 +1545,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
 
     builder.SetInsertPoint(isProm);
     auto val = promsxpValue(arg);
+    extraPromiseCase(val);
     res.addInput(val);
     builder.CreateBr(ok);
 
@@ -1550,6 +1554,7 @@ llvm::Value* LowerFunctionLLVM::depromise(llvm::Value* arg, const PirType& t) {
     insn_assert(builder.CreateICmpNE(sexptype(arg), c(PROMSXP)),
                 "Depromise returned promise");
 #endif
+    nonPromiseCase();
     res.addInput(arg);
     builder.CreateBr(ok);
 
@@ -2820,7 +2825,7 @@ void LowerFunctionLLVM::compile() {
                                           builder.CreateFCmpUNE(a, a),
                                           constant(R_LogicalNAValue, orep),
                                           builder.CreateSelect(
-                                              builder.CreateFCmpOEQ(a, c(0.0)),
+                                              builder.CreateFCmpUEQ(a, c(0.0)),
                                               constant(R_FalseValue, orep),
                                               constant(R_TrueValue, orep))));
 
@@ -4179,57 +4184,105 @@ void LowerFunctionLLVM::compile() {
                 auto arg = i->arg(0).val();
                 if (Rep::Of(arg) == Rep::SEXP) {
                     auto a = loadSxp(arg);
-                    if (t->typeTest.maybePromiseWrapped())
-                        a = depromise(a, arg->type);
 
+                    // Some specialcases for the simple scalars which we want to
+                    // be extra fast.
+                    auto depromiseIfNeeded = [&]() {
+                        if (t->typeTest.maybePromiseWrapped())
+                            return depromise(a, arg->type);
+                        return a;
+                    };
                     if (t->typeTest.notPromiseWrapped() ==
                         PirType::simpleScalarInt()) {
-                        setVal(i, builder.CreateZExt(isSimpleScalar(a, INTSXP),
-                                                     t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), INTSXP),
+                                   t::Int));
                         break;
                     } else if (t->typeTest.notPromiseWrapped() ==
                                PirType::simpleScalarLogical()) {
-                        setVal(i, builder.CreateZExt(isSimpleScalar(a, LGLSXP),
-                                                     t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), LGLSXP),
+                                   t::Int));
                         break;
                     } else if (t->typeTest.notPromiseWrapped() ==
                                PirType::simpleScalarReal()) {
-                        setVal(i, builder.CreateZExt(isSimpleScalar(a, REALSXP),
-                                                     t::Int));
+                        setVal(i,
+                               builder.CreateZExt(
+                                   isSimpleScalar(depromiseIfNeeded(), REALSXP),
+                                   t::Int));
                         break;
                     }
 
-                    llvm::Value* res = nullptr;
+                    // Here we depromise the value. In case the promise is lazy,
+                    // a will be R_UnboundValue, which is handled in the tests
+                    // below. In case the type-test guards against wrapped
+                    // missing values, we must test the promise content against
+                    // missing. However this check must distinguish the promise
+                    // case from the naked value case, because missingness of a
+                    // type can change with forcing.
+                    auto phi = phiBuilder(t::i1);
+                    if (t->typeTest.maybePromiseWrapped())
+                        a = depromise(
+                            a, arg->type,
+                            [&](llvm::Value* promisedVal) {
+                                if (!t->typeTest.forced().maybeMissing() &&
+                                    arg->type.forced().maybeMissing()) {
+                                    phi.addInput(builder.CreateICmpNE(
+                                        promisedVal,
+                                        constant(R_MissingArg, t::SEXP)));
+                                } else {
+                                    phi.addInput(builder.getTrue());
+                                }
+                            },
+                            [&]() {
+                                if (!t->typeTest.maybeMissing() &&
+                                    arg->type.maybeMissing()) {
+                                    phi.addInput(builder.CreateICmpNE(
+                                        a, constant(R_MissingArg, t::SEXP)));
+                                } else {
+                                    phi.addInput(builder.getTrue());
+                                }
+                            });
+                    auto res = phi.initialized() ? phi() : builder.getTrue();
+
+                    llvm::Value* res1;
                     if (t->typeTest.noAttribsOrObject().isA(
                             PirType(RType::logical).orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(LGLSXP));
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::integer)
                                        .orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(INTSXP));
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::real).orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(REALSXP));
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::closure)
                                        .orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(CLOSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(CLOSXP));
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::builtin)
                                        .orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(BUILTINSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(BUILTINSXP));
                     } else if (t->typeTest.noAttribsOrObject().isA(
                                    PirType(RType::special)
                                        .orPromiseWrapped())) {
-                        res = builder.CreateICmpEQ(sexptype(a), c(SPECIALSXP));
+                        res1 = builder.CreateICmpEQ(sexptype(a), c(SPECIALSXP));
                     } else {
                         assert(arg->type.notMissing()
                                    .notPromiseWrapped()
                                    .noAttribsOrObject()
                                    .isA(t->typeTest));
-                        res = builder.CreateICmpNE(
+                        res1 = builder.CreateICmpNE(
                             a, constant(R_UnboundValue, t::SEXP));
                     }
+                    if (res == builder.getTrue())
+                        res = res1;
+                    else
+                        res = builder.CreateAnd(res, res1);
+
                     if (t->typeTest.isScalar() && !arg->type.isScalar()) {
                         assert(a->getType() == t::SEXP);
                         res = builder.CreateAnd(res, isScalar(a));

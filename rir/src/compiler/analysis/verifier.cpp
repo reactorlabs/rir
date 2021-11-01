@@ -215,7 +215,9 @@ class TheVerifier {
             ok = false;
         }
 
-        if (Force::Cast(i) || CallInstruction::CastCall(i)) {
+        static std::unordered_set<Tag> mustProduceValue(
+            {Tag::Force, Tag::Extract1_1D});
+        if (CallInstruction::CastCall(i) || mustProduceValue.count(i->tag)) {
             if (i->type.isVoid() || !i->type.isRType()) {
                 std::cerr << "Error: instruction '";
                 i->print(std::cerr);
