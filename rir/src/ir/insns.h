@@ -453,7 +453,7 @@ DEF_INSTR(ret_, 0, 1, 0)
  * heavy in size.
  */
 DEF_INSTR(record_call_, 4, 1, 1)
-DEF_INSTR(record_type_, 1, 1, 1)
+DEF_INSTR(record_type_, 2, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
 
 DEF_INSTR(int3_, 0, 0, 0)

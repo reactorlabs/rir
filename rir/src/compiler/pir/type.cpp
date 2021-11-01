@@ -196,7 +196,8 @@ void PirType::merge(const ObservedValues& other) {
         flags_.set(TypeFlags::maybeNotFastVecelt);
     assert(other.attribs || (!other.notFastVecelt && !other.object));
 
-    flags_.set(TypeFlags::maybeNAOrNaN);
+    if (other.maybeNA || other.notScalar)
+        flags_.set(TypeFlags::maybeNAOrNaN);
     for (size_t i = 0; i < other.numTypes; ++i)
         merge(other.seen[i]);
 

@@ -79,13 +79,14 @@ struct ObservedValues {
         promise,
     };
 
-    static constexpr unsigned MaxTypes = 3;
-    uint8_t numTypes : 2;
-    uint8_t stateBeforeLastForce : 2;
-    uint8_t notScalar : 1;
-    uint8_t attribs : 1;
-    uint8_t object : 1;
-    uint8_t notFastVecelt : 1;
+    static constexpr unsigned MaxTypes = 6;
+    uint16_t numTypes : 3;
+    uint16_t stateBeforeLastForce : 2;
+    uint16_t notScalar : 1;
+    uint16_t attribs : 1;
+    uint16_t object : 1;
+    uint16_t notFastVecelt : 1;
+    uint16_t maybeNA : 1;
 
     std::array<uint8_t, MaxTypes> seen;
 
@@ -104,7 +105,8 @@ struct ObservedValues {
                     out << ", ";
             }
             out << " (" << (object ? "o" : "") << (attribs ? "a" : "")
-                << (notFastVecelt ? "v" : "") << (!notScalar ? "s" : "") << ")";
+                << (notFastVecelt ? "v" : "") << (!notScalar ? "s" : "")
+                << (!maybeNA ? "n" : "") << ")";
             if (stateBeforeLastForce !=
                 ObservedValues::StateBeforeLastForce::unknown) {
                 out << " | "
@@ -137,6 +139,9 @@ struct ObservedValues {
         object = object || isObject(e);
         attribs = attribs || object || ATTRIB(e) != R_NilValue;
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
+        maybeNA = maybeNA || notScalar || attribs || object ||
+                  !((TYPEOF(e) == INTSXP && *INTEGER(e) != NA_INTEGER) ||
+                    (TYPEOF(e) == LGLSXP && *LOGICAL(e) != NA_LOGICAL));
 
         uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes) {
@@ -150,7 +155,7 @@ struct ObservedValues {
         }
     }
 };
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+static_assert(sizeof(ObservedValues) == 2 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 enum class Opcode : uint8_t;
