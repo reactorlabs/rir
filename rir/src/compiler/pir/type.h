@@ -439,6 +439,11 @@ struct PirType {
         return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
     }
 
+    PirType constexpr orWrappedMissing() const {
+        assert(isRType());
+        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::notWrappedMissing));
+    }
+
     PirType constexpr notWrappedMissing() const {
         assert(isRType());
         return PirType(t_.r, flags_ | TypeFlags::notWrappedMissing);
