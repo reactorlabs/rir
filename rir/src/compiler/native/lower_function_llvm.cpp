@@ -3141,11 +3141,17 @@ void LowerFunctionLLVM::compile() {
                             llvm::Value* res;
                             auto isvec = isVector(aval);
                             auto v = b->arg(0).val();
-                            if (!v->type.maybeNotFastVecelt() ||
-                                !v->type.maybeHasAttrs()) {
+                            if (!v->type.maybeHasAttrs()) {
+                                // If there are no attributes, we just check the
+                                // sexptype
                                 res = builder.CreateSelect(
                                     isvec, constant(R_TrueValue, orep),
                                     constant(R_FalseValue, orep));
+                            } else if (!v->type.maybeNotFastVecelt()) {
+                                // If there is (only) the `dim` attribute, we
+                                // know the result is false since do_isvector
+                                // only allows `names`
+                                res = constant(R_FalseValue, orep);
                             } else {
                                 res = createSelect2(
                                     isvec,
