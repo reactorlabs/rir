@@ -98,6 +98,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::colon_:
     case Opcode::colon_input_effects_:
     case Opcode::subassign1_1_:
+    case Opcode::set_vec_elt_:
     case Opcode::subassign2_1_:
     case Opcode::subassign1_2_:
     case Opcode::subassign2_2_:
