@@ -37,7 +37,7 @@ static SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr,
-                        unsigned long initialStackSize = 0);
+                        size_t initialStackSize = 0, bool useStackSize = false);
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -1656,7 +1656,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
             return r;
         }
         return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
-                           f.stackSize);
+                           f.stackSize, true);
     };
 
     SEXP res = trampoline();
@@ -1918,7 +1918,8 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
-                 BindingCache* cache, unsigned long initialStackSize) {
+                 BindingCache* cache, size_t initialStackSize,
+                 bool useInitialStackSize) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     checkUserInterrupt();
@@ -1939,7 +1940,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
 
-    assert(initialPC || initialStackSize == 0);
+    assert((!initialPC && !useInitialStackSize && initialStackSize == 0) ||
+           (initialPC && (useInitialStackSize || initialStackSize == 0))
+
+    );
     R_bcstack_t* basePtr = nullptr;
 
     BindingCache* bindingCache;
@@ -1958,7 +1962,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #endif
         }
 
-        basePtr = R_BCNodeStackTop - initialStackSize;
+        if (!initialPC)
+            basePtr = R_BCNodeStackTop;
+        else if (initialPC && useInitialStackSize)
+            basePtr = R_BCNodeStackTop - initialStackSize;
     }
 
     // make sure there is enough room on the stack
