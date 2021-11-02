@@ -5335,7 +5335,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::setVecElt),
-                         {vec, idx, val, c(setVecElt->srcIdx)});
+                         {vec, idx, val});
                 setVal(i, res);
                 break;
             }

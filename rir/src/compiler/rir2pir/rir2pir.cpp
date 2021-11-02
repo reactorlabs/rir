@@ -1028,7 +1028,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
-        push(insert(new SetVecElt(val, vec, idx, srcIdx)));
+        push(insert(new SetVecElt(val, vec, idx)));
         break;
     }
 

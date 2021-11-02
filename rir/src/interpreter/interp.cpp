@@ -3436,6 +3436,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
+            assert(IS_SIMPLE_SCALAR(idx, INTSXP));
             if (MAYBE_REFERENCED(val))
                 val = Rf_lazy_duplicate(val);
             SET_VECTOR_ELT(vec, INTEGER(idx)[0] - 1, val);
