@@ -36,7 +36,8 @@ namespace rir {
 static SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                         const CallContext* callContext,
                         Opcode* initialPc = nullptr,
-                        BindingCache* cache = nullptr);
+                        BindingCache* cache = nullptr,
+                        unsigned long initialStackSize = 0);
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -1654,7 +1655,8 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
             UNPROTECT(1);
             return r;
         }
-        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr);
+        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc, nullptr,
+                           f.stackSize);
     };
 
     SEXP res = trampoline();
@@ -1888,8 +1890,7 @@ static size_t osrLimit =
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
                 Code* c, Opcode* pc) {
     static size_t loopCounter = 0;
-    if (callCtxt && !isDeoptimizing() && callCtxt->stackArgs &&
-        ++loopCounter >= osrLimit) {
+    if (callCtxt && callCtxt->stackArgs && ++loopCounter >= osrLimit) {
         loopCounter = 0;
         long size = R_BCNodeStackTop - basePtr;
         assert(size >= 0);
@@ -1917,7 +1918,7 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 
 SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
-                 BindingCache* cache) {
+                 BindingCache* cache, unsigned long initialStackSize) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     checkUserInterrupt();
@@ -1938,6 +1939,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
     assert(c->info.magic == CODE_MAGIC);
 
+    assert(initialPC || initialStackSize == 0);
     R_bcstack_t* basePtr = nullptr;
 
     BindingCache* bindingCache;
@@ -1956,11 +1958,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #endif
         }
 
-        // If this is an inner loop context (ie. cache exists), or a deopt (ie.
-        // initialPC is set), we do not know the actual base pointer. Otherwise
-        // we do...
-        if (!initialPC)
-            basePtr = R_BCNodeStackTop;
+        basePtr = R_BCNodeStackTop - initialStackSize;
     }
 
     // make sure there is enough room on the stack
