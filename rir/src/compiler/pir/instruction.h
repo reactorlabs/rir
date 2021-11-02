@@ -1514,11 +1514,18 @@ class FLI(SetVecElt, 3, Effect::Error) {
     SetVecElt(Value* val, Value* vec, Value* idx, unsigned srcIdx)
         : FixedLenInstruction(
               PirType::val(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{PirType::val(), PirType::val(), PirType::simpleScalarInt()}},
               {{val, vec, idx}}, srcIdx) {}
     Value* val() const { return arg(0).val(); }
     Value* vec() const { return arg(1).val(); }
     Value* idx() const { return arg(2).val(); }
+
+    PirType inferType(const GetType& getType) const override final {
+        auto restricted =
+            type &
+            (getType(vec()).mergeWithConversion(getType(val())).orNotScalar());
+        return restricted;
+    }
 };
 
 class FLIE(Subassign2_1D, 4, Effects::Any()) {
