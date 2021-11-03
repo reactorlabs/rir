@@ -89,6 +89,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/.bin_create")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/tests"           "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/tests \"$@\"")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/R"               "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/R \"$@\"")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rscript"         "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/Rscript \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rgnu"            "#!/bin/sh\n${CMAKE_SOURCE_DIR}/external/custom-r/bin/R \"$@\"")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make"       "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make \"$@\"")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make-tests" "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make-tests \"$@\"")
 

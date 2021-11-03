@@ -93,6 +93,7 @@ class BufferedLogStream : public LogStream {
   public:
     explicit BufferedLogStream(std::ostream& actualOut = std::cout)
         : LogStream(sstream), actualOut(actualOut) {}
+    ~BufferedLogStream() override;
 
     void flush() override {
         LogStream::flush();

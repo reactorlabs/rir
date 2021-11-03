@@ -43,6 +43,9 @@ FileLogStream::~FileLogStream() {
     fstream.flush();
     fstream.close();
 }
+
+BufferedLogStream::~BufferedLogStream() { flush(); }
+
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 bool SimpleLogStream::tty() { return ConsoleColor::isTTY(out); }
 

@@ -227,7 +227,7 @@ class StaticReferenceCount
 
         switch (i->tag) {
 
-        // A phi gets tainted if any of it's inputs are
+        // A phi gets tainted if any of its inputs are
         case Tag::Phi: {
             auto p = Phi::Cast(i);
             auto phiTaint = state.isTainted(p);
