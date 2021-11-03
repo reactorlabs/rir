@@ -5358,6 +5358,19 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::SetVecElt: {
+                auto setVecElt = SetVecElt::Cast(i);
+                auto vec = loadSxp(setVecElt->vec());
+                auto val = loadSxp(setVecElt->val());
+                auto idx = loadSxp(setVecElt->idx());
+
+                auto res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::setVecElt),
+                         {vec, idx, val});
+                setVal(i, res);
+                break;
+            }
+
             case Tag::Subassign2_1D: {
                 auto subAssign = Subassign2_1D::Cast(i);
 

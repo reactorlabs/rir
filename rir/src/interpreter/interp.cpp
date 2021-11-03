@@ -3432,6 +3432,19 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
+        INSTRUCTION(set_vec_elt_) {
+            SEXP idx = ostack_at(ctx, 0);
+            SEXP vec = ostack_at(ctx, 1);
+            SEXP val = ostack_at(ctx, 2);
+            assert(IS_SIMPLE_SCALAR(idx, INTSXP));
+            if (MAYBE_REFERENCED(val))
+                val = Rf_lazy_duplicate(val);
+            SET_VECTOR_ELT(vec, INTEGER(idx)[0] - 1, val);
+            ostack_popn(ctx, 3);
+            ostack_push(ctx, vec);
+            NEXT();
+        }
+
         INSTRUCTION(subassign2_1_) {
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);
@@ -3447,14 +3460,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 // 1. index is numerical and scalar
                 // 2. vector is real and shape of value fits into real
                 //      or vector is int and shape of value is int
-                //      or vector is generic
+                //      or vector is generic and value is not NULL
                 // 3. value fits into one cell of the vector
                 if ((idxT == INTSXP || idxT == REALSXP) &&
                     (XLENGTH(idx) == 1) && // 1
                     ((vectorT == REALSXP &&
                       (valT == REALSXP || valT == INTSXP)) || // 2
-                     (vectorT == INTSXP && (valT == INTSXP)) ||
-                     (vectorT == VECSXP)) &&
+                     (vectorT == INTSXP && valT == INTSXP) ||
+                     (vectorT == VECSXP && val != R_NilValue)) &&
                     (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
 
                     int idx_ = -1;

@@ -1022,6 +1022,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::set_vec_elt_: {
+        forceIfPromised(1);
+        addCheckpoint(srcCode, pos, stack, insert);
+        Value* idx = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(insert(new SetVecElt(val, vec, idx)));
+        break;
+    }
+
     case Opcode::subassign2_1_: {
         forceIfPromised(1);
         addCheckpoint(srcCode, pos, stack, insert);

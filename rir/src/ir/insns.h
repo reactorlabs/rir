@@ -352,6 +352,11 @@ DEF_INSTR(extract2_1_, 0, 2, 1)
 DEF_INSTR(extract2_2_, 0, 3, 1)
 
 /**
+ * set_vec_elt_:: do SET_VECTOR_ELT(x, i, v)
+ */
+DEF_INSTR(set_vec_elt_, 0, 3, 1)
+
+/**
  * subassign2_1 :: a[[b]] <- c
  *
  * this instruction creates the rhs part of a <- `[[<-(a,b,c)` and still needs
