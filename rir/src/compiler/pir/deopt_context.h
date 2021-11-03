@@ -19,9 +19,9 @@ struct DeoptContext : public ContinuationContext {
     const DeoptReason& reason() const { return reason_; }
     SEXP deoptTrigger() const { return deoptTrigger_; }
 
-    DeoptContext(Opcode* pc, LazyEnvironment* env, R_bcstack_t* base,
-                 size_t stackSize, const DeoptReason& reason,
-                 SEXP deoptTrigger);
+    DeoptContext(Opcode* pc, size_t envSize, SEXP actualEnv,
+                 LazyEnvironment* env, R_bcstack_t* base, size_t stackSize,
+                 const DeoptReason& reason, SEXP deoptTrigger);
 
     const DeoptContext* asDeoptContext() const override final { return this; }
 };

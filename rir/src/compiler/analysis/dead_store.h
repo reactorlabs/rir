@@ -407,6 +407,17 @@ class DeadStoreAnalysis {
         return !observed.isObserved(st);
     };
 
+    bool escapedEnv(Deopt* d) const {
+        auto fs = d->frameState();
+        auto state = leak.before(d);
+        while (fs) {
+            if (state.leaked.count(fs->env()))
+                return true;
+            fs = fs->next();
+        }
+        return false;
+    }
+
     bool onlyObservedByDeopt(StVar* st) const {
         return observed.isObservedOnlyByDeopt(st);
     };
