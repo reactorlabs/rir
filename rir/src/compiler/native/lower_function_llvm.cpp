@@ -3141,8 +3141,7 @@ void LowerFunctionLLVM::compile() {
                             llvm::Value* res;
                             auto isvec = isVector(aval);
                             auto v = b->arg(0).val();
-                            if (!v->type.maybeNotFastVecelt() ||
-                                !v->type.maybeHasAttrs()) {
+                            if (!v->type.maybeHasAttrs()) {
                                 res = builder.CreateSelect(
                                     isvec, constant(R_TrueValue, orep),
                                     constant(R_FalseValue, orep));
