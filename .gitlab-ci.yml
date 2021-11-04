@@ -1,32 +1,12 @@
 stages:
-  - Build container
   - Benchmark
 
 cache:
   paths:
   - apt-cache/
 
-rir_container:
-  stage: Build container
-  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
-  variables:
-    DOCKER_HOST: tcp://docker:2375/
-    DOCKER_TLS_CERTDIR: ""
-  services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
-      alias: docker
-  before_script:
-    - docker info
-  script:
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
-    - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
-    - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
-  tags:
-    - dockerInDocker
-  retry: 1
-
 benchmark_llvm:
-  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  image: registry.gitlab.com/rirvm/rir_mirror:master
   stage: Benchmark
   tags:
     - benchmarks
@@ -35,7 +15,9 @@ benchmark_llvm:
     - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pip sudo
     - git clone --depth 1 https://github.com/smarr/ReBench.git /opt/ReBench && cd /opt/ReBench && pip3 install .
     - git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 5977a8ab19d193eb4be262cdcd3ba375e5d436fd
-    - rebench /opt/rir/experiment/rebench.conf e:paper -df $CI_PROJECT_DIR/benchmarks.data -R
+    - cd $CI_PROJECT_DIR
+    - cp -r experiment /opt/
+    - rebench experiment/rebench.conf e:paper -df $CI_PROJECT_DIR/benchmarks.data -R
   artifacts:
     paths:
     - benchmarks.data
