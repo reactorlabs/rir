@@ -17,7 +17,7 @@ benchmark_llvm:
     - git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 5977a8ab19d193eb4be262cdcd3ba375e5d436fd
     - cd $CI_PROJECT_DIR
     - cp -r experiment /opt/
-    - rebench experiment/rebench.conf e:paper -df $CI_PROJECT_DIR/benchmarks.data -R
+    - rebench experiment/rebench.conf
   artifacts:
     paths:
     - benchmarks.data

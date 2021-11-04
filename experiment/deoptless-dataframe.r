@@ -56,7 +56,6 @@ rows  = 10000000L
 
 generateData(cols, rows)
 
-totalTime = system.time(
 {
     #warm up
     print("WARMUP")
@@ -67,8 +66,9 @@ totalTime = system.time(
     f(2, myData)
     f(2, myData)
     f(2, myData)
+}
 
-
+execute <- function(ignore) {
     # run
     print("RUN")
     f(	1	,myData)
@@ -188,6 +188,3 @@ totalTime = system.time(
 
 
 }
-)
-print("TOTAL TIME:")
-print(totalTime)
