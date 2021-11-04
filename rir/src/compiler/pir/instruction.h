@@ -922,7 +922,7 @@ class VLIE(FrameState,
         : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
           code(code), stackSize(stack.size()), inPromise(inPromise) {
         for (auto& v : stack)
-            pushArg(v);
+            pushArg(v, PirType::any());
     }
 
     void updateNext(FrameState* s) {
