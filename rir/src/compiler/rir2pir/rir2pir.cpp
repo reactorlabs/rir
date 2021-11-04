@@ -421,6 +421,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
                 }
+            } else if (t.type.isVoid() && srcCode->deoptCount < 2) {
+                t.type = PirType::val().notObject().fastVecelt();
             }
         }
         break;
