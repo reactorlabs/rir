@@ -3529,6 +3529,7 @@ void LowerFunctionLLVM::compile() {
                     return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                 {paramCode(), paramClosure(),
                                  convertToPointer(m, t::i8, true), paramArgs(),
+                                 c(deopt->escapedEnv, 1),
                                  load(deopt->deoptReason()),
                                  loadSxp(deopt->deoptTrigger())});
                 });

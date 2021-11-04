@@ -27,6 +27,10 @@ bool DeadStoreRemoval::apply(Compiler&, ClosureVersion* cls, Code* code,
                 }
                 ip = next;
             }
+            if (bb->isDeopt()) {
+                auto d = Deopt::Cast(bb->last());
+                d->escapedEnv = analysis.escapedEnv(d);
+            }
         });
 
         VisitorNoDeoptBranch::runBackward(code->entry, [&](BB* bb) {

@@ -23,7 +23,9 @@ ContinuationContext::ContinuationContext(Opcode* pc, SEXP env, bool leaked,
         size_t i = 0;
         while (f != R_NilValue) {
             auto n = TAG(f);
+            assert(i < (size_t)l);
             env_.at(i) = {n, PirType(CAR(f)), MISSING(f)};
+            f = CDR(f);
             i++;
         }
     }

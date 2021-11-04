@@ -2702,6 +2702,8 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
 class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
+    bool escapedEnv = true;
+
     explicit Deopt(FrameState* frameState);
 
     Value* frameStateOrTs() const override final { return arg<0>().val(); }

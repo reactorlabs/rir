@@ -825,7 +825,7 @@ static SEXP deoptSentinelContainer = []() {
 }();
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
-               DeoptReason* deoptReason, SEXP deoptTrigger) {
+               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     recordDeoptReason(deoptTrigger, *deoptReason);
 
     assert(m->numFrames >= 1);
@@ -846,12 +846,14 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             ? std::atoi(getenv("PIR_DEOPTLESS_RECURSION"))
             : 2;
 
+    auto le = LazyEnvironment::check(env);
     if (deoptless && m->numFrames == 1 &&
-        deoptlessCount < deoptlessMaxRecursion) {
+        deoptlessCount < deoptlessMaxRecursion &&
+        ((le && !le->materialized()) || (!le && !leakedEnv))) {
         assert(m->frames[0].inPromise == false);
-        auto le = LazyEnvironment::check(env);
 
-        if (le && !le->materialized() && le->nargs <= DeoptContext::MAX_ENV &&
+        size_t envSize = le ? le->nargs : Rf_length(FRAME(env));
+        if (envSize <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
             auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
             rir::Function* fun = nullptr;
@@ -874,8 +876,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 std::cout << "]\n";
             }
 
-            DeoptContext ctx(m->frames[0].pc, le, base, m->frames[0].stackSize,
-                             *deoptReason, deoptTrigger);
+            DeoptContext ctx(m->frames[0].pc, envSize, le ? nullptr : env, le,
+                             base, m->frames[0].stackSize, *deoptReason,
+                             deoptTrigger);
             fun = OSR::deoptlessDispatch(closure, c, ctx);
 
             // We have an optimized continuation, let's call it and then
@@ -887,10 +890,14 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 ostack_pop(ctx);
                 if (deoptlessDebug)
                     std::cout << "Env : [\n";
-                for (unsigned i = 0; i < le->nargs; ++i) {
-                    auto v = le->getArg(i);
+
+                SEXP f = nullptr;
+                if (!le)
+                    f = FRAME(env);
+                for (unsigned i = 0; i < envSize; ++i) {
+                    auto v = f ? CAR(f) : le->getArg(i);
                     if (deoptlessDebug) {
-                        Rf_PrintValue(Pool::get(le->names[i]));
+                        Rf_PrintValue(f ? TAG(f) : Pool::get(le->names[i]));
                         if (le->getArg(i) == R_UnboundValue)
                             std::cout << "unbound\n";
                         else {
@@ -902,6 +909,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                         }
                     }
                     ostack_push(ctx, v);
+                    if (f)
+                        f = CDR(f);
                 }
                 if (deoptlessDebug)
                     std::cout << "]\n";
@@ -2313,14 +2322,14 @@ void NativeBuiltins::initializeBuiltins() {
         (void*)&recordTypefeedbackImpl,
         llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
         {}};
-    get_(Id::deopt) = {
-        "deopt",
-        (void*)&deoptImpl,
-        llvm::FunctionType::get(t::t_void,
-                                {t::voidPtr, t::SEXP, t::voidPtr,
-                                 t::stackCellPtr, t::DeoptReasonPtr, t::SEXP},
-                                false),
-        {llvm::Attribute::NoReturn}};
+    get_(Id::deopt) = {"deopt",
+                       (void*)&deoptImpl,
+                       llvm::FunctionType::get(t::t_void,
+                                               {t::voidPtr, t::SEXP, t::voidPtr,
+                                                t::stackCellPtr, t::i1,
+                                                t::DeoptReasonPtr, t::SEXP},
+                                               false),
+                       {llvm::Attribute::NoReturn}};
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,
                             t::void_voidPtr,
