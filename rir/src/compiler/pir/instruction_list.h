@@ -63,7 +63,6 @@
     V(NonLocalReturn)                                                          \
     V(MkArg)                                                                   \
     V(UpdatePromise)                                                           \
-    V(MkFunCls)                                                                \
     V(MkCls)                                                                   \
     V(ChkMissing)                                                              \
     V(ChkFunction)                                                             \

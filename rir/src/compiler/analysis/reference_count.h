@@ -275,7 +275,6 @@ class StaticReferenceCount
         case Tag::LOr:
         case Tag::LAnd:
         case Tag::MkCls:
-        case Tag::MkFunCls:
         case Tag::Eq:
         case Tag::Neq:
         case Tag::Lt:

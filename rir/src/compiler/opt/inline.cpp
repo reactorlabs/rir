@@ -51,11 +51,10 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 bool hasDotslistArg = false;
                 const FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
-                    auto mkcls =
-                        MkFunCls::Cast(call->cls()->followCastsAndForce());
-                    if (!mkcls)
+                    auto mk = MkCls::Cast(call->cls()->followCastsAndForce());
+                    if (!mk)
                         continue;
-                    inlineeCls = mkcls->tryGetCls();
+                    inlineeCls = mk->tryGetCls();
                     if (!inlineeCls)
                         continue;
                     if (dontInline(inlineeCls))
@@ -71,7 +70,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     // TODO do some argument matching
                     if (hasDotArgs)
                         continue;
-                    staticEnv = mkcls->lexicalEnv();
+                    staticEnv = mk->lexicalEnv();
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
@@ -86,9 +85,6 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
                         inlinee != cls) {
                         if (Query::noParentEnv(inlinee)) {
-                        } else if (auto mk =
-                                       MkFunCls::Cast(call->runtimeClosure())) {
-                            staticEnv = mk->lexicalEnv();
                         } else if (auto mk =
                                        MkCls::Cast(call->runtimeClosure())) {
                             staticEnv = mk->lexicalEnv();

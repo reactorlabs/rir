@@ -247,13 +247,11 @@ class BC {
     }
 
     bool hasPromargs() const {
-        return bc == Opcode::mk_promise_ || bc == Opcode::mk_eager_promise_ ||
-               bc == Opcode::push_code_;
+        return bc == Opcode::mk_promise_ || bc == Opcode::mk_eager_promise_;
     }
 
     void addMyPromArgsTo(std::vector<FunIdx>& proms) {
         switch (bc) {
-        case Opcode::push_code_:
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
             proms.push_back(immediate.arg_idx);
@@ -321,7 +319,6 @@ BC_NOARGS(V, _)
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
-    inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
@@ -569,7 +566,6 @@ BC_NOARGS(V, _)
             break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
-        case Opcode::push_code_:
             memcpy(&immediate.fun, pc, sizeof(FunIdx));
             break;
         case Opcode::br_:

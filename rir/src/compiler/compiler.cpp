@@ -278,7 +278,7 @@ static void findUnreachable(Module* m, StreamLogger& log) {
                                 found(call->tryDispatch(cls));
                         } else {
                             i->eachArg([&](Value* v) {
-                                if (auto mk = MkFunCls::Cast(i)) {
+                                if (auto mk = MkCls::Cast(i)) {
                                     if (mk->tryGetCls())
                                         mk->tryGetCls()->eachVersion(found);
                                 }

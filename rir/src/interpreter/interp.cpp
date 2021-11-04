@@ -2519,13 +2519,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(push_code_) {
-            Immediate n = readImmediate();
-            advanceImmediate();
-            ostack_push(ctx, c->getPromise(n)->container());
-            NEXT();
-        }
-
         INSTRUCTION(dup_) {
             ostack_push(ctx, ostack_top(ctx));
             NEXT();

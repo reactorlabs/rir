@@ -11,7 +11,7 @@ namespace rir {
 namespace pir {
 
 struct RirStack;
-class MkFunCls;
+class MkCls;
 
 class Rir2Pir {
   public:
@@ -58,7 +58,7 @@ class Rir2Pir {
     ClosureStreamLogger& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
-    std::unordered_map<SEXP, MkFunCls*> localFuns;
+    std::unordered_map<SEXP, MkCls*> localFuns;
 
     struct DelayedCompilation {
         DispatchTable* dt;
@@ -68,7 +68,7 @@ class Rir2Pir {
         bool seen;
         Context context;
     };
-    std::unordered_map<MkFunCls*, DelayedCompilation> delayedCompilation;
+    std::unordered_map<MkCls*, DelayedCompilation> delayedCompilation;
 
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
