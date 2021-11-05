@@ -840,15 +840,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     static int deoptless =
         getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
     static constexpr bool deoptlessDebug = false;
-    static int deoptlessCount = 0;
-    const static int deoptlessMaxRecursion =
-        getenv("PIR_DEOPTLESS_RECURSION")
-            ? std::atoi(getenv("PIR_DEOPTLESS_RECURSION"))
-            : 2;
+    static rir::Code* deoptlessRecursion = nullptr;
 
     auto le = LazyEnvironment::check(env);
-    if (deoptless && m->numFrames == 1 &&
-        deoptlessCount < deoptlessMaxRecursion &&
+    if (deoptless && m->numFrames == 1 && c != deoptlessRecursion &&
         ((le && !le->materialized()) || (!le && !leakedEnv))) {
         assert(m->frames[0].inPromise == false);
 
@@ -917,9 +912,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                deoptlessCount++;
+                deoptlessRecursion = c;
                 auto res = nc(code, base, symbol::delayedEnv, closure);
-                deoptlessCount--;
+                deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
