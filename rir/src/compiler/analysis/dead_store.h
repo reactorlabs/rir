@@ -17,6 +17,7 @@ class DeadStoreAnalysis {
         std::unordered_set<MkArg*> visited;
         Envs leaked;
         Envs leakedByDeopt;
+        std::unordered_map<Instruction*, Instruction*> storeIntoLeaked;
         AbstractResult mergeExit(const EnvSet& other) { return merge(other); }
         AbstractResult merge(const EnvSet& other) {
             AbstractResult res;
@@ -39,19 +40,33 @@ class DeadStoreAnalysis {
                     res.update();
                 }
             }
+            for (const auto& s : other.storeIntoLeaked) {
+                if (!storeIntoLeaked.count(s.first)) {
+                    storeIntoLeaked.insert(s);
+                    res.update();
+                }
+            }
             return res;
         }
         void print(std::ostream& out, bool tty) const {
             out << "==============\nLeaked:\n";
             for (auto environment : leaked) {
                 out << "\t";
-                environment->printRef(std::cout);
+                environment->printRef(out);
                 out << "\n";
             }
-            std::cout << "Leaked only by deopt branches:\n";
+            out << "Leaked only by deopt branches:\n";
             for (auto environment : leakedByDeopt) {
                 out << "\t";
-                environment->printRef(std::cout);
+                environment->printRef(out);
+                out << "\n";
+            }
+            out << "Store into leaked:\n";
+            for (const auto& s : storeIntoLeaked) {
+                out << "\t";
+                s.first->printRef(out);
+                out << " -> ";
+                s.second->printRef(out);
                 out << "\n";
             }
             out << "==============\n";
@@ -110,11 +125,24 @@ class DeadStoreAnalysis {
                 markEnv(i->env());
             }
             if (i->leaksArg()) {
+                auto store = StVar::Cast(i) || StVarSuper::Cast(i);
                 i->eachArg([&](Value* v) {
-                    if (auto mk = MkArg::Cast(v)) {
-                        markEnv(mk->env());
-                    } else if (auto mk = MkFunCls::Cast(v)) {
-                        markEnv(mk->env());
+                    // For stores we know where they leak their argument, so
+                    // we'll only mark the promise / closure env if the store's
+                    // env gets leaked
+                    if (store) {
+                        if (!state.storeIntoLeaked.count(i) &&
+                            (MkArg::Cast(v) || MkFunCls::Cast(v))) {
+                            state.storeIntoLeaked.insert(
+                                {i, Instruction::Cast(v)});
+                            effect.update();
+                        }
+                    } else {
+                        if (auto mk = MkArg::Cast(v)) {
+                            markEnv(mk->env());
+                        } else if (auto mk = MkFunCls::Cast(v)) {
+                            markEnv(mk->env());
+                        }
                     }
                 });
             }
@@ -123,6 +151,16 @@ class DeadStoreAnalysis {
                     markEnv(fs->env());
                     fs = fs->next();
                 } while (fs);
+            }
+            if (i->exits() || i->readsEnv() ||
+                i->effects.contains(Effect::ExecuteCode)) {
+                for (const auto& s : state.storeIntoLeaked) {
+                    assert(StVar::Cast(s.first) || StVarSuper::Cast(s.first));
+                    assert(MkArg::Cast(s.second) || MkFunCls::Cast(s.second));
+                    if (state.leaked.count(s.first->env()) ||
+                        state.leakedByDeopt.count(s.first->env()))
+                        markEnv(s.second->env());
+                }
             }
             return effect;
         }

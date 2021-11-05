@@ -81,7 +81,7 @@ pir.tests <- function() {
     invisible(.Call("pirTests"))
 }
 
-# returns TRUE f, when PIR compiled, satisfies the the given checks (e.g.
+# returns TRUE if, when PIR compiled, satisfies the the given checks (e.g.
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
 # warmup=<FUN> will call <FUN> repeatedly to get better assumptions.
 pir.check <- function(f, ..., warmup=NULL) {
