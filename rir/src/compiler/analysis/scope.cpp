@@ -410,7 +410,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             bool anyDots = false;
             calli->eachCallArg(
                 [&](Value* v) { anyDots = anyDots || ExpandDots::Cast(v); });
-            if (auto mk = MkFunCls::Cast(target))
+            if (auto mk = MkCls::Cast(target))
                 if (!anyDots)
                     if (mk->tryGetCls()) {
                         if (auto trg = call->tryDispatch(mk->tryGetCls()))
@@ -478,8 +478,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             if (auto mk = MkArg::Cast(a)) {
                 leak = mk->env();
             } else if (auto mk = MkCls::Cast(a)) {
-                leak = mk->lexicalEnv();
-            } else if (auto mk = MkFunCls::Cast(a)) {
                 leak = mk->lexicalEnv();
             } else if (!Env::isAnyEnv(i) && Env::isAnyEnv(a)) {
                 leak = a;

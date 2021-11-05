@@ -1000,12 +1000,12 @@ bool Deopt::hasDeoptReason() const {
     return deoptReason() != DeoptReasonWrapper::unknown();
 }
 
-MkFunCls::MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
-                   DispatchTable* originalBody, Value* lexicalEnv)
+MkCls::MkCls(Closure* cls, SEXP formals, SEXP srcRef,
+             DispatchTable* originalBody, Value* lexicalEnv)
     : FixedLenInstructionWithEnvSlot(PirType::closure(), lexicalEnv), cls(cls),
       originalBody(originalBody), formals(formals), srcRef(srcRef) {}
 
-void MkFunCls::printArgs(std::ostream& out, bool tty) const {
+void MkCls::printArgs(std::ostream& out, bool tty) const {
     if (cls)
         out << *cls;
     Instruction::printArgs(out, tty);
@@ -1091,7 +1091,7 @@ Context CallInstruction::inferAvailableAssumptions() const {
         }
     } else {
         if (auto clsArg = tryGetClsArg()) {
-            if (auto mk = MkFunCls::Cast(clsArg)) {
+            if (auto mk = MkCls::Cast(clsArg)) {
                 localFun = mk->originalBody->baseline();
                 formals = mk->formals;
             } else if (auto ld = Const::Cast(clsArg)) {

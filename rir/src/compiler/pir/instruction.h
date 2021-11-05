@@ -1248,26 +1248,7 @@ class FLI(UpdatePromise, 2,
     MkArg* mkarg() const { return MkArg::Cast(arg(0).val()); }
 };
 
-class FLIE(MkCls, 4, Effects::None()) {
-  public:
-    MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
-        : FixedLenInstructionWithEnvSlot(
-              PirType::closure(),
-              {{PirType::list(), RType::code, PirType::any()}},
-              {{fml, code, src}}, lexicalEnv) {}
-
-    Value* code() const { return arg(1).val(); }
-    Value* lexicalEnv() const { return env(); }
-
-    int minReferenceCount() const override { return MAX_REFCOUNT; }
-
-    size_t gvnBase() const override { return tagHash(); }
-
-  private:
-    using FixedLenInstructionWithEnvSlot::env;
-};
-
-class FLIE(MkFunCls, 1, Effects::None()) {
+class FLIE(MkCls, 1, Effects::None()) {
   private:
     Closure* cls;
 
@@ -1277,8 +1258,8 @@ class FLIE(MkFunCls, 1, Effects::None()) {
     DispatchTable* originalBody;
     SEXP formals;
     SEXP srcRef;
-    MkFunCls(Closure* cls, SEXP formals, SEXP srcRef,
-             DispatchTable* originalBody, Value* lexicalEnv);
+    MkCls(Closure* cls, SEXP formals, SEXP srcRef, DispatchTable* originalBody,
+          Value* lexicalEnv);
     void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
@@ -2192,7 +2173,7 @@ class VLIE(Call, Effects::Any()), public CallInstruction {
         return cls()->followCastsAndForce();
     }
     Closure* tryGetCls() const override final {
-        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
+        if (auto mk = MkCls::Cast(cls()->followCastsAndForce()))
             return mk->tryGetCls();
         return nullptr;
     }
@@ -2241,7 +2222,7 @@ class VLIE(NamedCall, Effects::Any()), public CallInstruction {
         return cls()->followCastsAndForce();
     }
     Closure* tryGetCls() const override final {
-        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
+        if (auto mk = MkCls::Cast(cls()->followCastsAndForce()))
             return mk->tryGetCls();
         return nullptr;
     }

@@ -28,6 +28,8 @@ inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
 #undef isObject
 inline bool isObject(SEXP s) { return OBJECT(s) != 0; }
 
+#undef isVector
+
 #undef PI
 
 #undef PREXPR

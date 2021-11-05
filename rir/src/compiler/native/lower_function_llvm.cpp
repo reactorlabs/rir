@@ -4150,8 +4150,8 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::MkFunCls: {
-                auto mkFunction = MkFunCls::Cast(i);
+            case Tag::MkCls: {
+                auto mkFunction = MkCls::Cast(i);
                 auto srcRef = constant(mkFunction->srcRef, t::SEXP);
                 auto formals = constant(mkFunction->formals, t::SEXP);
                 auto body =
@@ -4162,18 +4162,6 @@ void LowerFunctionLLVM::compile() {
                     i,
                     call(NativeBuiltins::get(NativeBuiltins::Id::createClosure),
                          {body, formals, loadSxp(mkFunction->env()), srcRef}));
-                break;
-            }
-
-            case Tag::MkCls: {
-                auto mk = MkCls::Cast(i);
-                auto formals = loadSxp(mk->arg(0).val());
-                auto body = loadSxp(mk->arg(1).val());
-                auto srcRef = loadSxp(mk->arg(2).val());
-                auto env = loadSxp(mk->arg(3).val());
-                setVal(i, call(NativeBuiltins::get(
-                                   NativeBuiltins::Id::createClosure),
-                               {body, formals, env, srcRef}));
                 break;
             }
 

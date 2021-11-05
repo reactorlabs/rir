@@ -85,7 +85,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (TYPEOF(cnst->c()) == CLOSXP)
                                 formals = FORMALS(cnst->c());
                         }
-                        if (auto mk = MkFunCls::Cast(calli->tryGetClsArg())) {
+                        if (auto mk = MkCls::Cast(calli->tryGetClsArg())) {
                             formals = mk->formals;
                         }
                     }
@@ -211,8 +211,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     [&](ClosureVersion* fun) { target = fun; },
                                     []() {}, {});
                         }
-                    } else if (auto mk =
-                                   MkFunCls::Cast(calli->tryGetClsArg())) {
+                    } else if (auto mk = MkCls::Cast(calli->tryGetClsArg())) {
                         if (auto cls = mk->tryGetCls())
                             target = cls->findCompatibleVersion(asmpt);
                         auto dt = mk->originalBody;
@@ -221,8 +220,8 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (dt->baseline()->body()->codeSize <
                                 Parameter::RECOMPILE_THRESHOLD)
                                 cmp.compileFunction(
-                                    dt, "unknown--fromMkFunCls", formals,
-                                    srcRef, asmpt,
+                                    dt, "unknown--fromMkCls", formals, srcRef,
+                                    asmpt,
                                     [&](ClosureVersion* fun) {
                                         mk->setCls(fun->owner());
                                         target = fun;

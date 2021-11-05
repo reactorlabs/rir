@@ -2065,7 +2065,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 SEXP sym = cp_pool_at(ctx, id);
                 Rf_error("argument \"%s\" is missing, with no default",
@@ -2107,7 +2107,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 SEXP sym = cp_pool_at(ctx, id);
                 Rf_error("argument \"%s\" is missing, with no default",
@@ -2140,7 +2140,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             recordForceBehavior(res);
 
             if (res == R_UnboundValue) {
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
@@ -2164,7 +2164,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
@@ -2195,7 +2195,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 SEXP sym = cp_pool_at(ctx, id);
                 Rf_error("argument \"%s\" is missing, with no default",
@@ -2221,7 +2221,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = Rf_findVar(sym, ENCLOS(env));
 
             if (res == R_UnboundValue) {
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
@@ -2245,7 +2245,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = Rf_ddfindVar(sym, env);
 
             if (res == R_UnboundValue) {
-                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+                Rf_error("object '%s' not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
                          CHAR(PRINTNAME(sym)));
@@ -2516,13 +2516,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             res = readConst(ctx, readImmediate());
             advanceImmediate();
             ostack_push(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(push_code_) {
-            Immediate n = readImmediate();
-            advanceImmediate();
-            ostack_push(ctx, c->getPromise(n)->container());
             NEXT();
         }
 

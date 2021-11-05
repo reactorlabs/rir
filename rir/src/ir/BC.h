@@ -124,11 +124,6 @@ BC BC::guardNamePrimitive(SEXP sym) {
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), NO_DEOPT_INFO};
     return BC(Opcode::guard_fun_, i);
 }
-BC BC::push_code(FunIdx prom) {
-    ImmediateArguments i;
-    i.fun = prom;
-    return BC(Opcode::push_code_, i);
-}
 BC BC::mkEagerPromise(FunIdx prom) {
     ImmediateArguments i;
     i.fun = prom;

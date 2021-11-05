@@ -278,7 +278,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.seenC = true;
         forceIfPromised(0);
         v = pop();
-        if (auto mk = MkFunCls::Cast(v)) {
+        if (auto mk = MkCls::Cast(v)) {
             if (localFuns.count(bc.immediateConst()))
                 localFuns.at(bc.immediateConst()) = nullptr;
             else
@@ -352,14 +352,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(at(1));
         push(at(1));
         break;
-
-    case Opcode::close_: {
-        Value* srcref = pop();
-        Value* body = pop();
-        Value* formals = pop();
-        push(insert(new MkCls(formals, body, srcref, env)));
-        break;
-    }
 
     case Opcode::nop_:
         break;
@@ -898,8 +890,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
-                auto innerc =
-                    MkFunCls::Cast(guardedCallee->followCastsAndForce());
+                auto innerc = MkCls::Cast(guardedCallee->followCastsAndForce());
                 if (!innerc)
                     return;
                 auto delayed = delayedCompilation.find(innerc);
@@ -1249,9 +1240,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::clear_binding_cache_:
         break;
 
-    // Currently unused opcodes:
-    case Opcode::push_code_:
-
     // Invalid opcodes:
     case Opcode::invalid_:
     case Opcode::num_of:
@@ -1260,6 +1248,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::brtrue_:
     case Opcode::brfalse_:
     case Opcode::br_:
+    case Opcode::close_:
     case Opcode::ret_:
     case Opcode::return_:
         assert(false);
@@ -1570,7 +1559,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             }
             inner << (pos - srcCode->code());
 
-            auto mk = new MkFunCls(nullptr, formals, srcRef, dt, insert.env);
+            auto mk = new MkCls(nullptr, formals, srcRef, dt, insert.env);
             firstBB->append(mk);
             cur.stack.push(mk);
 
@@ -1697,7 +1686,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         }
         if (!callee)
             return;
-        auto innerFCallee = MkFunCls::Cast(callee);
+        auto innerFCallee = MkCls::Cast(callee);
         auto f = delayedCompilation.find(innerFCallee);
         if (f == delayedCompilation.end())
             return;

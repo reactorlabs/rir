@@ -137,12 +137,6 @@ DEF_INSTR(force_, 0, 1, 1)
 DEF_INSTR(push_, 1, 0, 1)
 
 /**
- * push_code_:: take immediate code object index, and push code object onto obj
- * stack
- */
-DEF_INSTR(push_code_, 1, 0, 1)
-
-/**
  * dup_:: pop value from object stack, push it twice
  */
 DEF_INSTR(dup_, 0, 1, 2)

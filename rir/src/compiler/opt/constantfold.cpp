@@ -832,14 +832,11 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("bodyCode") && nargs == 1) {
                         auto in = i->arg(0).val()->followCastsAndForce();
-                        if (auto mk = MkFunCls::Cast(in)) {
+                        if (auto mk = MkCls::Cast(in)) {
                             iterAnyChange = true;
                             i->replaceUsesWith(
                                 cmp.module->c(mk->originalBody->container()));
                             next = bb->remove(ip);
-                        } else if (auto mk = MkCls::Cast(in)) {
-                            iterAnyChange = true;
-                            i->replaceUsesWith(mk->code());
                         } else if (auto mk = MkArg::Cast(in)) {
                             // This can happen after inlining, since we use
                             // "bodyCode" in guards without forcing the promise.
@@ -864,10 +861,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("environment") && nargs == 1) {
                         auto in = i->arg(0).val()->followCastsAndForce();
-                        if (auto mk = MkFunCls::Cast(in)) {
-                            iterAnyChange = true;
-                            i->replaceUsesWith(mk->lexicalEnv());
-                        } else if (auto mk = MkCls::Cast(in)) {
+                        if (auto mk = MkCls::Cast(in)) {
                             iterAnyChange = true;
                             i->replaceUsesWith(mk->lexicalEnv());
                         }
