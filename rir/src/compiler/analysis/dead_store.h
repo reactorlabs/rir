@@ -109,6 +109,15 @@ class DeadStoreAnalysis {
             if (i->leaksEnv()) {
                 markEnv(i->env());
             }
+            if (i->leaksArg()) {
+                i->eachArg([&](Value* v) {
+                    if (auto mk = MkArg::Cast(v)) {
+                        markEnv(mk->env());
+                    } else if (auto mk = MkFunCls::Cast(v)) {
+                        markEnv(mk->env());
+                    }
+                });
+            }
             if (auto fs = i->frameState()) {
                 do {
                     markEnv(fs->env());
