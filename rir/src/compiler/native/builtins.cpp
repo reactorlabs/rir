@@ -826,8 +826,6 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    recordDeoptReason(deoptTrigger, *deoptReason);
-
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -928,7 +926,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             }
         }
     }
-
+    recordDeoptReason(deoptTrigger, *deoptReason);
     c->registerDeopt();
     // Invalidate target caches pointing to deoptimized version
     for (auto idx : NativeBuiltins::targetCaches)
