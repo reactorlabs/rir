@@ -259,11 +259,7 @@ class Instruction : public Value {
 
     bool mayObserveContext(MkEnv* c = nullptr) const;
 
-    // TODO: Add verify, then replace with effects.includes(Effect::LeaksArg)
-    bool leaksArg(Value* val) const {
-        return leaksEnv() || effects.includes(Effect::LeaksArg);
-    }
-
+    bool leaksArg() const { return effects.includes(Effect::LeaksArg); }
     bool readsEnv() const {
         return hasEnv() && effects.includes(Effect::ReadsEnv);
     }
@@ -1191,9 +1187,10 @@ class NonLocalReturn
                                          {{ret}}, env) {}
 };
 
-class Return
-    : public FixedLenInstruction<Tag::Return, Return, 1, Effects::NoneI(),
-                                 HasEnvSlot::No, Controlflow::Exit> {
+class Return : public FixedLenInstruction<Tag::Return, Return, 1,
+                                          static_cast<Effects::StoreType>(
+                                              Effects(Effect::LeaksArg)),
+                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
     explicit Return(Value* ret)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
