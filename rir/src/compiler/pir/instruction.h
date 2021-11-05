@@ -100,7 +100,7 @@ enum class Effect : uint8_t {
     // Instruction might use reflection
     Reflection,
     // Instruction might leak some of it's arguments
-    LeakArg,
+    LeaksArg,
 
     ChangesContexts,
     ReadsEnv,
@@ -227,7 +227,7 @@ class Instruction : public Value {
         // Those are effects, and we are required to have them in the correct
         // order. But they are not "doing" anything on their own. If e.g.
         // instructions with those effects are unused, we can remove them.
-        e.reset(Effect::LeakArg);
+        e.reset(Effect::LeaksArg);
         e.reset(Effect::ReadsEnv);
         e.reset(Effect::LeaksEnv);
         e.reset(Effect::DependsOnAssume);
@@ -259,9 +259,9 @@ class Instruction : public Value {
 
     bool mayObserveContext(MkEnv* c = nullptr) const;
 
-    // TODO: Add verify, then replace with effects.includes(Effect::LeakArg)
+    // TODO: Add verify, then replace with effects.includes(Effect::LeaksArg)
     bool leaksArg(Value* val) const {
-        return leaksEnv() || effects.includes(Effect::LeakArg);
+        return leaksEnv() || effects.includes(Effect::LeaksArg);
     }
 
     bool readsEnv() const {
@@ -902,7 +902,7 @@ struct RirStack {
  *  eventually needed for deoptimization purposes
  */
 class VLIE(FrameState,
-           Effects(Effect::LeaksEnv) | Effect::ReadsEnv | Effect::LeakArg) {
+           Effects(Effect::LeaksEnv) | Effect::ReadsEnv | Effect::LeaksArg) {
   public:
     bool inlined = false;
     Opcode* pc;
@@ -1102,7 +1102,8 @@ class FLI(ChkFunction, 1, Effect::Error) {
 };
 
 class FLIE(StVarSuper, 2,
-           Effects() | Effect::ReadsEnv | Effect::WritesEnv | Effect::LeakArg) {
+           Effects() | Effect::ReadsEnv | Effect::WritesEnv |
+               Effect::LeaksArg) {
   public:
     StVarSuper(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
@@ -1137,7 +1138,7 @@ class FLIE(LdVarSuper, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
     int minReferenceCount() const override { return 1; }
 };
 
-class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeakArg) {
+class FLIE(StVar, 2, Effects(Effect::WritesEnv) | Effect::LeaksArg) {
   public:
     bool isStArg = false;
 
@@ -1240,7 +1241,7 @@ class FLIE(MkArg, 2, Effects::None()) {
 };
 
 class FLI(UpdatePromise, 2,
-          Effects(Effect::MutatesArgument) | Effect::LeakArg) {
+          Effects(Effect::MutatesArgument) | Effect::LeaksArg) {
   public:
     UpdatePromise(MkArg* prom, Value* v)
         : FixedLenInstruction(PirType::voyd(), {{RType::prom, PirType::val()}},
@@ -2436,7 +2437,7 @@ class BuiltinCallFactory {
                             const std::vector<Value*>& args, unsigned srcIdx);
 };
 
-class VLIE(MkEnv, Effect::LeakArg) {
+class VLIE(MkEnv, Effect::LeaksArg) {
   public:
     std::vector<SEXP> varName;
     std::vector<bool> missing;
@@ -2536,7 +2537,7 @@ class FLIE(IsEnvStub, 1, Effect::ReadsEnv) {
         : FixedLenInstructionWithEnvSlot(PirType::test(), e) {}
 };
 
-class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeakArg |
+class VLIE(PushContext, Effects(Effect::ChangesContexts) | Effect::LeaksArg |
                             Effect::LeaksEnv) {
     ArglistOrder::CallArglistOrder argOrderOrig;
 
@@ -2591,7 +2592,7 @@ class FLI(ExpandDots, 1, Effects::None()) {
                               {{dots}}) {}
 };
 
-class VLI(DotsList, Effect::LeakArg) {
+class VLI(DotsList, Effect::LeaksArg) {
   public:
     std::vector<SEXP> names;
     DotsList() : VarLenInstruction(RType::dots) {}

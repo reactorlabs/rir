@@ -374,7 +374,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     if (SafeBuiltinsList::nonObject(builtinId))
                                         return true;
                                 }
-                                if (i->effects.includes(Effect::LeakArg) ||
+                                if (i->effects.includes(Effect::LeaksArg) ||
                                     i->effects.includes(Effect::Reflection)) {
                                     return false;
                                 }
