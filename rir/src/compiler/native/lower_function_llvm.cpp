@@ -1782,7 +1782,10 @@ void LowerFunctionLLVM::compileUnop(
     }
 
     builder.SetInsertPoint(done);
-    setVal(i, res());
+    auto theRes = res();
+    if (Rep::Of(i) == Rep::SEXP)
+        theRes = box(theRes, arg->type);
+    setVal(i, theRes);
 };
 
 void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
