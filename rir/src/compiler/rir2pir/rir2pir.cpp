@@ -157,6 +157,9 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
                                    Builder& insert) const {
     if (inlining())
         return nullptr;
+    for (auto i : stack)
+        if (ExpandDots::Cast(i))
+            return nullptr;
     return insert.emitCheckpoint(srcCode, pos, stack, inPromise());
 }
 
@@ -328,7 +331,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         auto ld = insert(new LdFun(bc.immediateConst(), env));
         // Add early checkpoint for efficient speculative inlining. The goal is
         // to be able do move the ldfun into the deoptbranch later.
-        callTargetCheckpoints[ld] = addCheckpoint(srcCode, pos, stack, insert);
+        if (auto cp = addCheckpoint(srcCode, pos, stack, insert))
+            callTargetCheckpoints[ld] = cp;
         push(ld);
         break;
     }
@@ -641,28 +645,31 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                               : nullptr;
                 if (!cp)
                     cp = addCheckpoint(srcCode, pos, stack, insert);
-                auto bb = cp->nextBB();
-                auto dummyPos = bb->begin();
+                if (cp) {
+                    auto bb = cp->nextBB();
+                    auto dummyPos = bb->begin();
 
-                Value* expection = nullptr;
-                if (ldfun && localFuns.count(ldfun->varName)) {
-                    auto mk = localFuns.at(ldfun->varName);
-                    if (mk &&
-                        mk->originalBody->container() == BODY(ti.monomorphic)) {
-                        expection = mk;
-                        // Even though we statically know the env, we must
-                        // compile an Env::unclosed() closure here, since we
-                        // cannot pass the pir env from the host function to the
-                        // inner function -- currently it is not possible to
-                        // refer to values outside the function...
-                        stableEnv = false;
+                    Value* expection = nullptr;
+                    if (ldfun && localFuns.count(ldfun->varName)) {
+                        auto mk = localFuns.at(ldfun->varName);
+                        if (mk && mk->originalBody->container() ==
+                                      BODY(ti.monomorphic)) {
+                            expection = mk;
+                            // Even though we statically know the env, we must
+                            // compile an Env::unclosed() closure here, since we
+                            // cannot pass the pir env from the host function to
+                            // the inner function -- currently it is not
+                            // possible to refer to values outside the
+                            // function...
+                            stableEnv = false;
+                        }
                     }
+                    guardedCallee = BBTransform::insertCalleeGuard(
+                        compiler, ti,
+                        DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
+                        callee, stableEnv || expection, expection, cp, bb,
+                        dummyPos);
                 }
-                guardedCallee = BBTransform::insertCalleeGuard(
-                    compiler, ti,
-                    DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                    callee, stableEnv || expection, expection, cp, bb,
-                    dummyPos);
             }
         }
 
