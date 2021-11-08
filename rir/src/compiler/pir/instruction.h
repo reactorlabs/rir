@@ -922,7 +922,7 @@ class VLIE(FrameState,
         : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
           code(code), stackSize(stack.size()), inPromise(inPromise) {
         for (auto& v : stack)
-            pushArg(v);
+            pushArg(v, PirType::any());
     }
 
     void updateNext(FrameState* s) {
@@ -2106,6 +2106,9 @@ class LogicalUnop : public Unop<BASE, TAG> {
       public:                                                                  \
         Kind(Value* val, Value* env, unsigned srcIdx)                          \
             : ArithmeticUnop<Kind, Tag::Kind>(val, env, srcIdx) {}             \
+        PirType inferType(const GetType& getType) const override {             \
+            return inferredTypeForArithmeticInstruction(getType);              \
+        }                                                                      \
     }
 #define LOGICAL_UNOP(Kind)                                                     \
     class Kind : public LogicalUnop<Kind, Tag::Kind> {                         \
