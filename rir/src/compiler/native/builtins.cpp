@@ -840,10 +840,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     static int deoptless =
         getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
     static constexpr bool deoptlessDebug = false;
-    static rir::Code* deoptlessRecursion = nullptr;
+    static SEXP deoptlessRecursion = nullptr;
 
     auto le = LazyEnvironment::check(env);
-    if (deoptless && m->numFrames == 1 && c != deoptlessRecursion &&
+    if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
         ((le && !le->materialized()) || (!le && !leakedEnv))) {
         assert(m->frames[0].inPromise == false);
 
@@ -912,7 +912,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                deoptlessRecursion = c;
+                deoptlessRecursion = cls;
                 auto res = nc(code, base, symbol::delayedEnv, closure);
                 deoptlessRecursion = nullptr;
 
