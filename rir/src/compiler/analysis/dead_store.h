@@ -17,7 +17,7 @@ class DeadStoreAnalysis {
         std::unordered_set<MkArg*> visited;
         Envs leaked;
         Envs leakedByDeopt;
-        std::unordered_map<Instruction*, Instruction*> storeIntoLeaked;
+        std::unordered_map<Instruction*, Value*> storeIntoLeaked;
         AbstractResult mergeExit(const EnvSet& other) { return merge(other); }
         AbstractResult merge(const EnvSet& other) {
             AbstractResult res;
@@ -92,12 +92,35 @@ class DeadStoreAnalysis {
       protected:
         AbstractResult apply(EnvSet& state, Instruction* i) const override {
             AbstractResult effect;
+
+            // These need special leak tracking - they have no effects by
+            // themselves but leak their env when used
+            static std::unordered_set<Tag> leakOnUse = {
+                // Leaks env when forced
+                Tag::MkArg,
+                // Leaks env when called
+                Tag::MkFunCls,
+            };
+            // With these we know where they leak their args, so we can only
+            // mark the `leakOnUse` env if the target env itself leaks. Eg:
+            //    e0 = MkEnv()
+            //    e1 = MkEnv()
+            //    %2 = MkCls(..., e1)
+            //    %3 = StVar(%2, e0)
+            //         Return 42  // e1 not leaked
+            static std::unordered_set<Tag> delayedLeak = {
+                Tag::StVar,
+                Tag::StVarSuper,
+                Tag::MkEnv,
+            };
+
             auto markEnv = [&](Value* env) {
                 if (promEnv && LdFunctionEnv::Cast(env)) {
                     env = promEnv;
                 }
-                if (auto m = MaterializeEnv::Cast(env))
+                if (auto m = MaterializeEnv::Cast(env)) {
                     env = m->env();
+                }
                 if (i->bb()->isDeopt()) {
                     if (!state.leakedByDeopt.count(env)) {
                         state.leakedByDeopt.insert(env);
@@ -115,53 +138,67 @@ class DeadStoreAnalysis {
                     }
                 }
             };
+
             if (!promEnv && LdFunctionEnv::Cast(i)) {
                 if (!state.leaked.count(i)) {
                     state.leaked.insert(i);
                     effect.update();
                 }
             }
+
             if (i->leaksEnv()) {
                 markEnv(i->env());
             }
+
             if (i->leaksArg()) {
-                auto store = StVar::Cast(i) || StVarSuper::Cast(i);
-                i->eachArg([&](Value* v) {
-                    // For stores we know where they leak their argument, so
-                    // we'll only mark the promise / closure env if the store's
-                    // env gets leaked
-                    if (store) {
-                        if (!state.storeIntoLeaked.count(i) &&
-                            (MkArg::Cast(v) || MkFunCls::Cast(v))) {
-                            state.storeIntoLeaked.insert(
-                                {i, Instruction::Cast(v)});
-                            effect.update();
+                if (delayedLeak.count(i->tag)) {
+                    i->eachArg([&](Value* v) {
+                        if (auto a = Instruction::Cast(v)) {
+                            if (!state.storeIntoLeaked.count(i) &&
+                                leakOnUse.count(a->tag)) {
+                                Value* env = nullptr;
+                                if (auto st = StVar::Cast(i)) {
+                                    env = st->env();
+                                } else if (auto st = StVarSuper::Cast(i)) {
+                                    if (auto mk = MkEnv::Cast(st->env()))
+                                        env = MkEnv::Cast(mk->lexicalEnv());
+                                } else if (auto mkenv = MkEnv::Cast(i)) {
+                                    env = mkenv;
+                                }
+                                if (env) {
+                                    state.storeIntoLeaked.insert({i, env});
+                                    effect.update();
+                                } else {
+                                    markEnv(a->env());
+                                }
+                            }
                         }
-                    } else {
-                        if (auto mk = MkArg::Cast(v)) {
-                            markEnv(mk->env());
-                        } else if (auto mk = MkFunCls::Cast(v)) {
-                            markEnv(mk->env());
+                    });
+                } else {
+                    i->eachArg([&](Value* v) {
+                        if (leakOnUse.count(v->tag)) {
+                            markEnv(Instruction::Cast(v)->env());
                         }
-                    }
-                });
+                    });
+                }
             }
+
             if (auto fs = i->frameState()) {
                 do {
                     markEnv(fs->env());
                     fs = fs->next();
                 } while (fs);
             }
+
             if (i->exits() || i->readsEnv() ||
                 i->effects.contains(Effect::ExecuteCode)) {
                 for (const auto& s : state.storeIntoLeaked) {
-                    assert(StVar::Cast(s.first) || StVarSuper::Cast(s.first));
-                    assert(MkArg::Cast(s.second) || MkFunCls::Cast(s.second));
                     if (state.leaked.count(s.first->env()) ||
                         state.leakedByDeopt.count(s.first->env()))
-                        markEnv(s.second->env());
+                        markEnv(s.second);
                 }
             }
+
             return effect;
         }
     };
