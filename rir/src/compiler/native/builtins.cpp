@@ -834,16 +834,18 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         stackHeight += m->frames[i].stackSize + 1;
     }
 
+    static std::set<SEXP> alreadyDeptless;
+
     SEXP env =
         ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
     static int deoptless =
-        getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
+        getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 1;
     static constexpr bool deoptlessDebug = false;
-    static SEXP deoptlessRecursion = nullptr;
+    // static SEXP deoptlessRecursion = nullptr;
 
     auto le = LazyEnvironment::check(env);
-    if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
+    if (deoptless && m->numFrames == 1 && !alreadyDeptless.count(cls) &&
         ((le && !le->materialized()) || (!le && !leakedEnv))) {
         assert(m->frames[0].inPromise == false);
 
@@ -912,9 +914,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                deoptlessRecursion = cls;
+                alreadyDeptless.insert(cls);
                 auto res = nc(code, base, symbol::delayedEnv, closure);
-                deoptlessRecursion = nullptr;
+                // deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
