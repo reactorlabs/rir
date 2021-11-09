@@ -136,7 +136,7 @@ void Instruction::printEffects(std::ostream& out, bool tty) const {
             CASE(Error, "e")
             CASE(Force, "f")
             CASE(Reflection, "r")
-            CASE(LeakArg, "l")
+            CASE(LeaksArg, "l")
             CASE(ChangesContexts, "C")
             CASE(ReadsEnv, "R")
             CASE(WritesEnv, "W")

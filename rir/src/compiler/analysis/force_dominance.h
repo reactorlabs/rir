@@ -466,7 +466,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
         // 3. Figure out where promises escape to
         std::function<void(Instruction*)> traceEscapes = [&](Instruction* i) {
-            if (!i->effects.includes(Effect::LeakArg) && !MkEnv::Cast(i))
+            if (!i->leaksArg() && !MkEnv::Cast(i))
                 return;
             i->eachArg([&](Value* v) {
                 if (auto m = MkArg::Cast(v->followCasts()))

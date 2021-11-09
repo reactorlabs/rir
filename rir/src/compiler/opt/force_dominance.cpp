@@ -353,7 +353,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     }
                 }
             } else if (auto cast = CastType::Cast(*ip)) {
-                // Only replace upcasts, or we loose information
+                // Only replace upcasts, or we lose information
                 if (cast->kind == CastType::Upcast) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
                         if (mk->isEager()) {
@@ -367,15 +367,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     builtinId = b->builtinId;
                                 if (auto b = CallSafeBuiltin::Cast(i))
                                     builtinId = b->builtinId;
-                                if (builtinId) {
+                                if (builtinId != -1) {
                                     if (eager->type.maybeObj())
                                         if (SafeBuiltinsList::always(builtinId))
                                             return true;
                                     if (SafeBuiltinsList::nonObject(builtinId))
                                         return true;
                                 }
-                                if (i->effects.includes(Effect::LeakArg) ||
-                                    i->effects.includes(Effect::Reflection)) {
+                                if (i->leaksArg() || i->mayUseReflection()) {
                                     return false;
                                 }
                                 // Depromised and promised missing do not behave
