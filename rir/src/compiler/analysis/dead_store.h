@@ -99,7 +99,7 @@ class DeadStoreAnalysis {
                 // Leaks env when forced
                 Tag::MkArg,
                 // Leaks env when called
-                Tag::MkFunCls,
+                Tag::MkCls,
             };
             // With these we know where they leak their args, so we can only
             // mark the `leakOnUse` env if the target env itself leaks. Eg:
