@@ -44,7 +44,8 @@ struct DeoptContext : public ContinuationContext {
     bool smaller(const DeoptContext& other) const {
         if (pc() != other.pc() || envSize() != other.envSize() ||
             stackSize() != other.stackSize() ||
-            leakedEnv_ != other.leakedEnv_ || !(reason_ == other.reason_))
+            leakedEnv_ != other.leakedEnv_ ||
+            reason_.reason != other.reason_.reason)
             return false;
 
         if (reason_.reason == DeoptReason::Typecheck)
@@ -96,10 +97,6 @@ struct DeoptContext : public ContinuationContext {
             envSize_ > other.envSize_ || leakedEnv_ > other.leakedEnv_)
             return false;
 
-        if (reason_.pc() < other.reason_.pc())
-            return true;
-        if (reason_.pc() > other.reason_.pc())
-            return false;
         if (reason_.reason == DeoptReason::Typecheck) {
             auto a = typeCheckTrigger().hash();
             auto b = other.typeCheckTrigger().hash();
