@@ -85,12 +85,12 @@ struct GenericDispatchTable
         setEntry(i, value->container());
     }
 
-    Value* dispatch(const Key& a) const {
+    std::pair<const Key&, Value*> dispatch(const Key& a) const {
         for (size_t i = 0; i < size(); ++i) {
             if (a.smaller(key(i)))
-                return Value::unpack(getEntry(i));
+                return {key(i), Value::unpack(getEntry(i))};
         }
-        return nullptr;
+        return {a, nullptr};
     }
 
     bool full() const { return size() == capacity(); }

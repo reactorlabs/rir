@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
+bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 LogStream& log, size_t) const {
 
     auto version = cls->isContinuation();
@@ -31,14 +31,17 @@ bool TypefeedbackCleanup::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (i->typeFeedback().feedbackOrigin.pc() ==
                 deoptCtx->reason().pc()) {
                 if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
-                    i->updateTypeFeedback().type =
-                        PirType(deoptCtx->deoptTrigger());
+                    i->updateTypeFeedback().type = deoptCtx->typeCheckTrigger();
                 } else if (deoptCtx->reason().reason ==
                            DeoptReason::DeadBranchReached) {
-                    if (deoptCtx->deoptTrigger() == R_TrueValue)
+                    if (deoptCtx->deadBranchTrigger() == R_TrueValue)
                         i->updateTypeFeedback().value = True::instance();
-                    else if (deoptCtx->deoptTrigger() == R_FalseValue)
+                    else if (deoptCtx->deadBranchTrigger() == R_FalseValue)
                         i->updateTypeFeedback().value = False::instance();
+                } else if (deoptCtx->reason().reason ==
+                               DeoptReason::CallTarget ||
+                           deoptCtx->reason().reason == DeoptReason::DeadCall) {
+                    // TODO
                 }
                 if (auto ld = LdVar::Cast(i->followCastsAndForce())) {
                     changedVar = ld->varName;

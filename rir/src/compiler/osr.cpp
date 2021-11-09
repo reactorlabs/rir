@@ -46,7 +46,13 @@ Function* OSR::deoptlessDispatch(SEXP closure, rir::Code* c,
         c->addExtraPoolEntry(dispatchTable->container());
     }
 
-    Function* fun = dispatchTable->dispatch(ctx);
+    auto res = dispatchTable->dispatch(ctx);
+
+    auto fun = res.second;
+    // If the context differs recompile in the hope we get a better version
+    if (fun && !(res.first == ctx) &&
+        dispatchTable->size() < (dispatchTable->capacity() / 2))
+        fun = nullptr;
 
     if (!fun && !dispatchTable->full()) {
         assert(ctx.asDeoptContext());
