@@ -12,16 +12,18 @@ namespace pir {
 struct DeoptContext;
 
 struct ContinuationContext {
-    Opcode* pc = nullptr;
-
     static constexpr size_t MAX_ENV = 10;
     static constexpr size_t MAX_STACK = 10;
 
-  private:
+  protected:
+    Opcode* pc_ = nullptr;
+
     unsigned short stackSize_;
     std::array<PirType, MAX_STACK> stack_;
 
   public:
+    Opcode* pc() const { return pc_; }
+
     size_t stackSize() const { return stackSize_; }
     std::array<PirType, MAX_STACK>::const_iterator stackBegin() const {
         return stack_.begin();
@@ -60,7 +62,7 @@ struct ContinuationContext {
                         size_t stackSize);
 
     bool operator==(const ContinuationContext& other) const {
-        if (pc != other.pc || envSize() != other.envSize() ||
+        if (pc() != other.pc() || envSize() != other.envSize() ||
             stackSize() != other.stackSize() || leakedEnv_ != other.leakedEnv_)
             return false;
         auto e1 = envBegin();
@@ -80,82 +82,6 @@ struct ContinuationContext {
             s2++;
         }
         return true;
-    }
-
-    // a smaller b  ==>  b can be called when a is the current context
-    bool smaller(const ContinuationContext& other) const {
-        if (pc != other.pc || envSize() != other.envSize() ||
-            stackSize() != other.stackSize() || leakedEnv_ != other.leakedEnv_)
-            return false;
-
-        {
-            auto here = envBegin();
-            auto there = other.envBegin();
-            while (here != envEnd()) {
-                if (std::get<SEXP>(*here) != std::get<SEXP>(*there) ||
-                    std::get<bool>(*here) != std::get<bool>(*there))
-                    return false;
-                if (!std::get<PirType>(*here).isA(std::get<PirType>(*there)))
-                    return false;
-                here++;
-                there++;
-            }
-        }
-        {
-            auto here = stackBegin();
-            auto there = other.stackBegin();
-            while (here != stackEnd()) {
-                if (!here->isA(*there))
-                    return false;
-                here++;
-                there++;
-            }
-        }
-        return true;
-    }
-
-    bool operator<(const ContinuationContext& other) const {
-        if (*this == other)
-            return false;
-        if (smaller(other))
-            return true;
-        if (other.smaller(*this))
-            return false;
-
-        // Linearize to complete order
-        if (pc < other.pc || stackSize_ < other.stackSize_ ||
-            envSize_ < other.envSize_ || leakedEnv_ < other.leakedEnv_)
-            return true;
-        if (pc > other.pc || stackSize_ > other.stackSize_ ||
-            envSize_ > other.envSize_ || leakedEnv_ > other.leakedEnv_)
-            return false;
-
-        {
-            auto here = envBegin();
-            auto there = other.envBegin();
-            while (here != envEnd()) {
-                if (std::get<SEXP>(*here) < std::get<SEXP>(*there) ||
-                    std::get<bool>(*here) < std::get<bool>(*there))
-                    return true;
-                if (std::get<PirType>(*here).hash() <
-                    std::get<PirType>(*there).hash())
-                    return true;
-                here++;
-                there++;
-            }
-        }
-        {
-            auto here = stackBegin();
-            auto there = other.stackBegin();
-            while (here != stackEnd()) {
-                if (here->hash() < there->hash())
-                    return true;
-                here++;
-                there++;
-            }
-        }
-
-        return false;
     }
 
     virtual const DeoptContext* asDeoptContext() const { return nullptr; }

@@ -16,8 +16,7 @@ class OSR {
                                        const DeoptContext& ctx);
 };
 
-typedef GenericDispatchTable<ContinuationContext, Function, 5>
-    DeoptlessDispatchTable;
+typedef GenericDispatchTable<DeoptContext, Function, 5> DeoptlessDispatchTable;
 
 } // namespace pir
 } // namespace rir
