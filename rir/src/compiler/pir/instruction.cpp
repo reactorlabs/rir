@@ -994,6 +994,8 @@ void Deopt::printArgs(std::ostream& out, bool tty) const {
         InstructionImplementation::printArgs(out, tty);
     else
         arg(0).val()->printRef(out);
+    if (escapedEnv)
+        out << "   !";
 }
 
 bool Deopt::hasDeoptReason() const {
