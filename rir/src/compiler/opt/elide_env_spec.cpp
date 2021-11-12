@@ -163,8 +163,9 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         if (auto mkarg = MkArg::Cast(i)) {
                             ok = Visitor::check(
                                 mkarg->prom()->entry, [&](Instruction* j) {
-                                    return EnvStubInfo::of(j->tag)
-                                        .allowedNotMaterializing;
+                                    return !j->hasEnv() ||
+                                           EnvStubInfo::of(j->tag)
+                                               .allowedNotMaterializing;
                                 });
                         } else if (auto mk = MkEnv::Cast(i)) {
                             ok = mk->stub;
