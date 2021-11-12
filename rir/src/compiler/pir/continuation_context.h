@@ -12,8 +12,8 @@ namespace pir {
 struct DeoptContext;
 
 struct ContinuationContext {
-    static constexpr size_t MAX_ENV = 10;
-    static constexpr size_t MAX_STACK = 10;
+    static constexpr size_t MAX_ENV = 32;
+    static constexpr size_t MAX_STACK = 16;
 
   protected:
     Opcode* pc_ = nullptr;
