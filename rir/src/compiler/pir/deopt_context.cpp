@@ -22,10 +22,13 @@ DeoptContext::DeoptContext(Opcode* pc, size_t envSize, SEXP actualEnv,
         if (deoptTrigger == R_TrueValue || deoptTrigger == R_FalseValue)
             deadBranchTrigger_ = deoptTrigger;
         break;
+    case DeoptReason::CallTarget:
+        callTargetTrigger_ = deoptTrigger;
+        R_PreserveObject(callTargetTrigger_);
+        break;
     case DeoptReason::DeadCall:
     case DeoptReason::ForceAndCall:
     case DeoptReason::Unknown:
-    case DeoptReason::CallTarget:
     case DeoptReason::EnvStubMaterialized:
         break;
     }
