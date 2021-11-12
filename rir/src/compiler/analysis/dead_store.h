@@ -133,8 +133,21 @@ class DeadStoreAnalysis {
                             return;
                     }
                     if (!state.leaked.count(env)) {
-                        state.leaked.insert(env);
-                        effect.update();
+                        auto leak = true;
+                        if (auto f = Force::Cast(i))
+                            leak = f->effects.contains(Effect::Reflection);
+                        if (auto call = CallInstruction::CastCall(i)) {
+                            if (auto cls = call->tryGetCls()) {
+                                if (auto t = call->tryDispatch(cls)) {
+                                    leak = !t->properties.includes(
+                                        ClosureVersion::Property::NoReflection);
+                                }
+                            }
+                        }
+                        if (leak) {
+                            state.leaked.insert(env);
+                            effect.update();
+                        }
                     }
                 }
             };
