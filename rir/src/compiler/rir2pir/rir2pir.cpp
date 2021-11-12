@@ -492,8 +492,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                         deoptedCallTargets.insert(b);
                                 }
                                 if (feedback.numTargets == 2) {
-                                    if (first != deoptCallTarget)
-                                        first = deoptCallTarget;
+                                    first = deoptCallTarget;
                                     stableBody = stableEnv = stableType = true;
                                     deoptedCallReplacement = deoptCallTarget;
                                 }
