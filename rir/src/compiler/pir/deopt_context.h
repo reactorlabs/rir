@@ -15,6 +15,7 @@ struct DeoptContext : public ContinuationContext {
     DeoptReason reason_;
     PirType typeCheckTrigger_;
     SEXP deadBranchTrigger_ = nullptr;
+    SEXP callTargetTrigger_ = nullptr;
 
   public:
     const DeoptReason& reason() const { return reason_; }
@@ -25,6 +26,10 @@ struct DeoptContext : public ContinuationContext {
     SEXP deadBranchTrigger() const {
         assert(reason_.reason == DeoptReason::DeadBranchReached);
         return deadBranchTrigger_;
+    }
+    SEXP callTargetTrigger() const {
+        assert(reason_.reason == DeoptReason::CallTarget);
+        return callTargetTrigger_;
     }
 
     DeoptContext();
@@ -53,6 +58,9 @@ struct DeoptContext : public ContinuationContext {
                 return false;
         if (reason_.reason == DeoptReason::DeadBranchReached)
             if (!deadBranchTrigger() && other.deadBranchTrigger())
+                return false;
+        if (reason_.reason == DeoptReason::CallTarget)
+            if (callTargetTrigger() != other.callTargetTrigger())
                 return false;
 
         {
@@ -108,6 +116,14 @@ struct DeoptContext : public ContinuationContext {
         if (reason_.reason == DeoptReason::DeadBranchReached) {
             auto a = deadBranchTrigger();
             auto b = other.deadBranchTrigger();
+            if (a < b)
+                return true;
+            if (b < a)
+                return false;
+        }
+        if (reason_.reason == DeoptReason::CallTarget) {
+            auto a = callTargetTrigger();
+            auto b = other.callTargetTrigger();
             if (a < b)
                 return true;
             if (b < a)

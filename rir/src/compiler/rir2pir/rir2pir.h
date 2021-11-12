@@ -60,6 +60,9 @@ class Rir2Pir {
     std::list<PirTypeFeedback*> outerFeedback;
     std::unordered_map<SEXP, MkCls*> localFuns;
 
+    std::unordered_set<SEXP> deoptedCallTargets;
+    SEXP deoptedCallReplacement = nullptr;
+
     struct DelayedCompilation {
         DispatchTable* dt;
         std::string name;
