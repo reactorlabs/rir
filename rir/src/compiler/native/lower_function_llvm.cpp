@@ -4233,6 +4233,14 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
 
+                    if (!(arg->type.maybeNAOrNaN() <=
+                          t->typeTest.maybeNAOrNaN())) {
+                        arg->type.print(std::cout);
+                        std::cout << " ";
+                        t->typeTest.print(std::cout);
+                        std::cout << "\n";
+                    }
+
                     // NA checks can only be done on scalars!
                     assert(arg->type.maybeNAOrNaN() <=
                            t->typeTest.maybeNAOrNaN());

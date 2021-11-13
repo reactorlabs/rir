@@ -20,6 +20,11 @@ class TypeTest {
                        const std::function<void()>& failed) {
         auto expected = i->type & feedback.type;
 
+        // NA checks are only possible on scalars
+        if (i->type.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
+            !expected.isSimpleScalar())
+            expected = expected.orNAOrNaN();
+
         if (i->type.isA(expected) && i->type.isA(required))
             return;
 
