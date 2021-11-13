@@ -7,7 +7,7 @@ namespace pir {
 
 ContinuationContext::ContinuationContext(Opcode* pc, SEXP env, bool leaked,
                                          R_bcstack_t* base, size_t stackSize)
-    : pc_(pc), stackSize_(stackSize) {
+    : pc_(pc), stackSize_(stackSize), leakedEnv_(leaked) {
     assert(stackSize <= MAX_STACK);
     for (size_t i = 0; i < stackSize; ++i) {
         auto v = (base + i)->u.sxpval;

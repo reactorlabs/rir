@@ -844,7 +844,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     auto le = LazyEnvironment::check(env);
     if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
-        ((le && !le->materialized()) || (!le && !leakedEnv))) {
+        ((le && !le->materialized()) || !le)) {
         assert(m->frames[0].inPromise == false);
 
         size_t envSize = le ? le->nargs : Rf_length(FRAME(env));
@@ -872,8 +872,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             }
 
             DeoptContext ctx(m->frames[0].pc, envSize, le ? nullptr : env, le,
-                             base, m->frames[0].stackSize, *deoptReason,
-                             deoptTrigger);
+                             leakedEnv && !le, base, m->frames[0].stackSize,
+                             *deoptReason, deoptTrigger);
             fun = OSR::deoptlessDispatch(closure, c, ctx);
 
             // We have an optimized continuation, let's call it and then
@@ -883,37 +883,41 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 // individual arguments on the stack.
                 // TODO: speed this up by already passing it that way...
                 ostack_pop(ctx);
-                if (deoptlessDebug)
-                    std::cout << "Env : [\n";
+                if (!leakedEnv || le) {
+                    assert(!le || !le->materialized());
+                    if (deoptlessDebug)
+                        std::cout << "Env : [\n";
 
-                SEXP f = nullptr;
-                if (!le)
-                    f = FRAME(env);
-                for (unsigned i = 0; i < envSize; ++i) {
-                    auto v = f ? CAR(f) : le->getArg(i);
-                    if (deoptlessDebug) {
-                        Rf_PrintValue(f ? TAG(f) : Pool::get(le->names[i]));
-                        if (le->getArg(i) == R_UnboundValue)
-                            std::cout << "unbound\n";
-                        else {
-                            if (TYPEOF(v) == PROMSXP &&
-                                PRVALUE(v) != R_UnboundValue)
-                                Rf_PrintValue(PRVALUE(v));
-                            else
-                                Rf_PrintValue(v);
+                    SEXP f = nullptr;
+                    if (!le)
+                        f = FRAME(env);
+                    for (unsigned i = 0; i < envSize; ++i) {
+                        auto v = f ? CAR(f) : le->getArg(i);
+                        if (deoptlessDebug) {
+                            Rf_PrintValue(f ? TAG(f) : Pool::get(le->names[i]));
+                            if (le->getArg(i) == R_UnboundValue)
+                                std::cout << "unbound\n";
+                            else {
+                                if (TYPEOF(v) == PROMSXP &&
+                                    PRVALUE(v) != R_UnboundValue)
+                                    Rf_PrintValue(PRVALUE(v));
+                                else
+                                    Rf_PrintValue(v);
+                            }
                         }
+                        ostack_push(ctx, v);
+                        if (f)
+                            f = CDR(f);
                     }
-                    ostack_push(ctx, v);
-                    if (f)
-                        f = CDR(f);
+                    if (deoptlessDebug)
+                        std::cout << "]\n";
+                    env = symbol::delayedEnv;
                 }
-                if (deoptlessDebug)
-                    std::cout << "]\n";
 
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessRecursion = cls;
-                auto res = nc(code, base, symbol::delayedEnv, closure);
+                auto res = nc(code, base, env, closure);
                 deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
