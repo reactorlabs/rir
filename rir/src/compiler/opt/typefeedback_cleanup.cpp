@@ -104,7 +104,7 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     changed =
                         otherAffectedVars.insert(varName).second || changed;
             }
-            if ((needUpdate && i->hasTypeFeedback()) ||
+            if ((needUpdate && (i->hasTypeFeedback() || Phi::Cast(i))) ||
                 (allInputsHaveFeedback && i->hasTypeFeedback() &&
                  i->typeFeedback().type.isVoid())) {
                 affected.insert(i);

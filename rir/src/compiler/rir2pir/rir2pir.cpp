@@ -386,6 +386,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     i->updateTypeFeedback().value = nullptr;
                 }
             }
+        } else if (feedback.seen == ObservedTest::None) {
+            // To communicate to the backend that feedback is missing that
+            // should still be collected.
+            if (auto i = Instruction::Cast(at(0)))
+                i->updateTypeFeedback();
         }
         break;
     }

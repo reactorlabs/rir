@@ -5929,21 +5929,18 @@ void LowerFunctionLLVM::compile() {
 
             // For OSR-in try to collect more typefeedback for the part of the
             // code that was not yet executed.
-            if (cls->isContinuation() && cls == code &&
-                Rep::Of(i) == Rep::SEXP &&
+            if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
+                variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback() &&
-                    i->typeFeedback().feedbackOrigin.pc() &&
-                    i->typeFeedback().type.isVoid() &&
-                    !i->typeFeedback().value) {
-                    assert(i->typeFeedback().feedbackOrigin.pc());
+                    i->typeFeedback().feedbackOrigin.pc()) {
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),
                          {c((void*)i->typeFeedback().feedbackOrigin.pc()),
                           c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
                           load(i)});
                 }
-                if (i->hasCallFeedback() && i->callFeedback().taken < 2) {
+                if (i->hasCallFeedback()) {
                     assert(i->callFeedback().feedbackOrigin.pc());
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),

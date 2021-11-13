@@ -965,6 +965,9 @@ void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
                      ObservedValues::evaluatedPromise)
                 feedback->stateBeforeLastForce =
                     ObservedValues::evaluatedPromise;
+        } else {
+            if (feedback->stateBeforeLastForce < ObservedValues::value)
+                feedback->stateBeforeLastForce = ObservedValues::value;
         }
         break;
     }
