@@ -408,7 +408,8 @@ class TheVerifier {
             } while (fs);
         }
 
-        if (i->hasEnv() && !EnvStubInfo::of(i->tag).allowed) {
+        if (i->hasEnv() &&
+            (!EnvStubInfo::of(i->tag).allowed && !MkArg::Cast(i))) {
             auto env = MkEnv::Cast(i->env());
             if (env && env->stub) {
                 std::cerr << "Error at instruction '";
