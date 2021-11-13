@@ -1782,7 +1782,10 @@ class FLI(IsType, 1, Effects::None()) {
     const PirType typeTest;
     IsType(PirType type, Value* v)
         : FixedLenInstruction(PirType::test(), {{PirType::any()}}, {{v}}),
-          typeTest(type) {}
+          typeTest(type) {
+        if (v->type.maybeNAOrNaN() && !type.maybeNAOrNaN())
+            assert(type.isSimpleScalar());
+    }
 
     void printArgs(std::ostream& out, bool tty) const override;
 
