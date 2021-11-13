@@ -5922,6 +5922,7 @@ void LowerFunctionLLVM::compile() {
             // For OSR-in try to collect more typefeedback for the part of the
             // code that was not yet executed.
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
+                variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback() &&
                     i->typeFeedback().feedbackOrigin.pc()) {
