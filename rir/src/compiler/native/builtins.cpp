@@ -223,9 +223,9 @@ void setTagImpl(SEXP x, SEXP y) {
 }
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
-    assert(x->sxpinfo.mark && "Use fastpath setEntry");
-    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
-           "use fast path setEntry");
+    // assert(x->sxpinfo.mark && "Use fastpath setEntry");
+    // assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
+    //        "use fast path setEntry");
     EXTERNALSXP_SET_ENTRY(x, i, y);
 }
 
