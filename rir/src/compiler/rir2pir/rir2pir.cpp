@@ -448,6 +448,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // TODO: Deopts in promises are not supported by the promise
             // inliner. So currently it does not pay off to put any deopts in
             // there.
+            //
             auto& f = i->updateCallFeedback();
             const auto& feedback = bc.immediate.callFeedback;
             f.taken = feedback.taken;
@@ -478,6 +479,28 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         }
                     }
                 }
+
+                if (auto c = cls->isContinuation()) {
+                    if (auto d = c->continuationContext->asDeoptContext()) {
+                        if (d->reason().reason == DeoptReason::CallTarget) {
+                            if (d->reason().pc() == pos) {
+                                auto deoptCallTarget = d->callTargetTrigger();
+                                for (size_t i = 0; i < feedback.numTargets;
+                                     ++i) {
+                                    SEXP b = feedback.getTarget(srcCode, i);
+                                    if (b != deoptCallTarget)
+                                        deoptedCallTargets.insert(b);
+                                }
+                                if (feedback.numTargets == 2) {
+                                    first = deoptCallTarget;
+                                    stableBody = stableEnv = stableType = true;
+                                    deoptedCallReplacement = deoptCallTarget;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (stableType)
                     f.type = TYPEOF(first);
                 if (stableBody)
@@ -551,9 +574,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 callee = phi->arg(0).val();
         }
         const auto dummyCallFeedback = CallFeedback();
-        const auto ti = Instruction::Cast(callee)
-                            ? Instruction::Cast(callee)->callFeedback()
-                            : dummyCallFeedback;
+        auto ti = Instruction::Cast(callee)
+                      ? Instruction::Cast(callee)->callFeedback()
+                      : dummyCallFeedback;
+        if (ti.monomorphic && deoptedCallTargets.count(ti.monomorphic)) {
+            if (deoptedCallReplacement)
+                ti.monomorphic = deoptedCallReplacement;
+            else
+                ti.monomorphic = nullptr;
+        }
 
         auto ldfun = LdFun::Cast(callee);
         if (ldfun) {
