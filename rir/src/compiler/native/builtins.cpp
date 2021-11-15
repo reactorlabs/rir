@@ -23,6 +23,8 @@
 
 #include "llvm/IR/Attributes.h"
 
+#include <random>
+
 namespace rir {
 namespace pir {
 
@@ -2159,6 +2161,17 @@ bool clsEqImpl(SEXP lhs, SEXP rhs) {
            BODY_EXPR(lhs) == BODY_EXPR(rhs);
 }
 
+bool deoptChaosTriggerImpl(bool deoptTrue) {
+    assert(Parameter::DEOPT_CHAOS);
+    static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
+    static std::bernoulli_distribution coin(
+        Parameter::DEOPT_CHAOS ? 1.0 / Parameter::DEOPT_CHAOS : 0);
+    auto res = coin(gen);
+    if (deoptTrue)
+        return res;
+    return !res;
+}
+
 void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
     assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
     pir::PirType typ(type);
@@ -2520,6 +2533,11 @@ void NativeBuiltins::initializeBuiltins() {
                                   (void*)&Rf_shallow_duplicate,
                                   t::sexp_sexp,
                                   {llvm::Attribute::NoAlias}};
+    get_(Id::deoptChaosTrigger) = {
+        "deoptChaosTrigger",
+        (void*)&deoptChaosTriggerImpl,
+        llvm::FunctionType::get(t::i1, {t::i1}, false),
+        {}};
 #ifdef __APPLE__
     get_(Id::sigsetjmp) = {
         "sigsetjmp", (void*)&sigsetjmp,

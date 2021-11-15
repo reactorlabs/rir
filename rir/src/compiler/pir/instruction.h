@@ -1169,6 +1169,8 @@ class Branch
     : public FixedLenInstruction<Tag::Branch, Branch, 1, Effects::NoneI(),
                                  HasEnvSlot::No, Controlflow::Branch> {
   public:
+    bool deoptTrigger = false;
+
     explicit Branch(Value* test)
         : FixedLenInstruction(PirType::voyd(), {{PirType::test()}}, {{test}}) {}
     void printArgs(std::ostream& out, bool tty) const override;

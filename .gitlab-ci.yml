@@ -200,7 +200,7 @@ test_features_1:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=500 ./bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=50000 ./bin/gnur-make-tests check || $SAVE_LOGS
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=2 FAST_TESTS=1 ./bin/tests
@@ -245,7 +245,7 @@ test_features_3:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPT_CHAOS=1000 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPT_CHAOS=10000 bin/gnur-make-tests check || $SAVE_LOGS
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPTLESS=1 bin/tests
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_OSR=0 bin/tests
@@ -296,7 +296,7 @@ test_gctorture2:
   script:
     - cd /opt/rir/build/release
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100 ./bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100000 ./bin/tests
     - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=80 bin/tests
@@ -359,7 +359,7 @@ test_benchmarks:
     - benchmark_container
   script:
     - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
-    - PIR_DEOPT_CHAOS=200 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
+    - PIR_DEOPT_CHAOS=100000 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:

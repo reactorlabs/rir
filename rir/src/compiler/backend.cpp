@@ -107,13 +107,6 @@ static void approximateNeedsLdVarForUpdate(
     });
 }
 
-static bool coinFlip() {
-    static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
-    static std::bernoulli_distribution coin(
-        Parameter::DEOPT_CHAOS ? 1.0 / Parameter::DEOPT_CHAOS : 0);
-    return coin(gen);
-};
-
 static void lower(Module* module, Code* code) {
     DeadInstructions representAsReal(
         code, 1, Effects::Any(),
@@ -216,8 +209,8 @@ static void lower(Module* module, Code* code) {
                     }
                     BBTransform::lowerExpect(
                         module, code, bb, it, expect, expectation,
-                        expect->checkpoint()->bb()->falseBranch(), debugMessage,
-                        Parameter::DEOPT_CHAOS && coinFlip());
+                        expect->checkpoint()->bb()->falseBranch(),
+                        debugMessage);
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
                     // than trusting the modified iterator.
