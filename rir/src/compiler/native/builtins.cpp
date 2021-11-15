@@ -1331,7 +1331,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     fun->registerInvocation();
     if (fail || RecompileHeuristic(dt, fun, 6)) {
-        if (fail || RecompileCondition(dt, fun, Context(available))) {
+        inferCurrentContext(call, fun->nargs(), ctx);
+        if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             fun->unregisterInvocation();
 
             auto res = doCall(call, globalContext(), true);
