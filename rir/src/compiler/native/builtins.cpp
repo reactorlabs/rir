@@ -846,7 +846,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     auto le = LazyEnvironment::check(env);
     if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
-        ((le && !le->materialized()) || !le)) {
+        ((le && !le->materialized()) || (!le && !leakedEnv))) {
         assert(m->frames[0].inPromise == false);
 
         size_t envSize = le ? le->nargs : Rf_length(FRAME(env));
