@@ -65,7 +65,7 @@ test_benchmarks:
     GIT_STRATEGY: none
     PIR_DEOPT_CHAOS: 100000
     PIR_DEOPT_CHAOS_NO_RETRIGGER: 1
-    PIR_DEOPTLESS: 0
+    PIR_DEOPTLESS: 1
   stage: Run tests
   needs:
     - benchmark_container
@@ -124,7 +124,7 @@ benchmark_llvm:
   variables:
     PIR_DEOPT_CHAOS: 100000
     PIR_DEOPT_CHAOS_NO_RETRIGGER: 1
-    PIR_DEOPTLESS: 0
+    PIR_DEOPTLESS: 1
     GIT_STRATEGY: none
   tags:
     - benchmarks
