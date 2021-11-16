@@ -62,7 +62,7 @@ benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   needs:
-    - test_benchmarks
+    - benchmark_container
   variables:
     PIR_DEOPT_CHAOS: 200000
     PIR_DEOPT_CHAOS_NO_RETRIGGER: 1
