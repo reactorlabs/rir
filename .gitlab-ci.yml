@@ -62,7 +62,7 @@ benchmark_llvm:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: Benchmark
   needs:
-    - test_benchmarks
+    - benchmark_container
   variables:
     PIR_DEOPT_CHAOS: 200000
     PIR_DEOPT_CHAOS_NO_RETRIGGER: 1
@@ -71,6 +71,7 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
+    - "sed -i 's/command: nbody\/nbody_naive$/command: nbody\/nbody/' /opt/rbenchmarking/rebench.conf"
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
