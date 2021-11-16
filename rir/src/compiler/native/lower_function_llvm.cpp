@@ -3479,16 +3479,31 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Branch: {
+                auto br = Branch::Cast(i);
                 auto cond = load(i->arg(0).val(), Rep::i32);
                 cond = builder.CreateICmpNE(cond, c(0));
 
                 auto t = bb->trueBranch();
                 auto f = bb->falseBranch();
                 MDNode* weight = nullptr;
-                if (t->isDeopt() || (t->isJmp() && t->next()->isDeopt()))
+                if (t->isDeopt() || (t->isJmp() && t->next()->isDeopt())) {
+                    if (br->deoptTrigger && Parameter::DEOPT_CHAOS)
+                        cond = builder.CreateOr(
+                            cond,
+                            call(NativeBuiltins::get(
+                                     NativeBuiltins::Id::deoptChaosTrigger),
+                                 {builder.getTrue()}));
                     weight = branchAlwaysFalse;
-                else if (f->isDeopt() || (f->isJmp() && f->next()->isDeopt()))
+                } else if (f->isDeopt() ||
+                           (f->isJmp() && f->next()->isDeopt())) {
+                    if (br->deoptTrigger && Parameter::DEOPT_CHAOS)
+                        cond = builder.CreateAnd(
+                            cond,
+                            call(NativeBuiltins::get(
+                                     NativeBuiltins::Id::deoptChaosTrigger),
+                                 {builder.getFalse()}));
                     weight = branchAlwaysTrue;
+                }
                 builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
                                      getBlock(bb->falseBranch()), weight);
                 break;

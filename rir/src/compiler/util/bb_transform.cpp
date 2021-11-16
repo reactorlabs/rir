@@ -175,8 +175,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
 BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
                              BB::Instrs::iterator position, Assume* assume,
                              bool condition, BB* deoptBlock_,
-                             const std::string& debugMessage,
-                             bool triggerAnyway) {
+                             const std::string& debugMessage) {
 
     auto split =
         BBTransform::split(code->nextBBId++, srcBlock, position + 1, code);
@@ -215,11 +214,10 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
     Phi::Cast(d->deoptTrigger())->addInput(deoptBlock, deoptTrigger);
 
     Value* test = assume->condition();
-    if (triggerAnyway) {
-        test = condition ? (Value*)False::instance() : (Value*)True::instance();
-    }
 
-    srcBlock->replace(position, new Branch(test));
+    auto br = new Branch(test);
+    br->deoptTrigger = true;
+    srcBlock->replace(position, br);
     if (condition)
         srcBlock->overrideSuccessors({split, deoptBlock});
     else
