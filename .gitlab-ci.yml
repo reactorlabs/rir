@@ -71,6 +71,7 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
+    - "sed -i 's+command: volcano$+command: convolution+' /opt/rbenchmarking/rebench.conf"
     - "sed -i 's+command: nbody/nbody_naive$+command: nbody/nbody+' /opt/rbenchmarking/rebench.conf"
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
