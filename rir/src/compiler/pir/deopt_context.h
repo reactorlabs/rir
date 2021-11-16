@@ -106,6 +106,11 @@ struct DeoptContext : public ContinuationContext {
             envSize_ > other.envSize_ || leakedEnv_ > other.leakedEnv_)
             return false;
 
+        if (reason_.reason < other.reason_.reason)
+            return true;
+        if (reason_.reason > other.reason_.reason)
+            return false;
+
         if (reason_.reason == DeoptReason::Typecheck) {
             auto a = typeCheckTrigger().hash();
             auto b = other.typeCheckTrigger().hash();
