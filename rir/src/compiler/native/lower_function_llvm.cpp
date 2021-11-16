@@ -3486,8 +3486,15 @@ void LowerFunctionLLVM::compile() {
                 auto t = bb->trueBranch();
                 auto f = bb->falseBranch();
                 MDNode* weight = nullptr;
+                bool retrigger =
+                    cls->owner()->rirFunction()->deoptCount() > 0 ||
+                    cls->isContinuation();
+                bool chaos =
+                    br->deoptTrigger && Parameter::DEOPT_CHAOS &&
+                    (!retrigger || !Parameter::DEOPT_CHAOS_NO_RETRIGGER);
+
                 if (t->isDeopt() || (t->isJmp() && t->next()->isDeopt())) {
-                    if (br->deoptTrigger && Parameter::DEOPT_CHAOS)
+                    if (chaos)
                         cond = builder.CreateOr(
                             cond,
                             call(NativeBuiltins::get(
@@ -3496,7 +3503,7 @@ void LowerFunctionLLVM::compile() {
                     weight = branchAlwaysFalse;
                 } else if (f->isDeopt() ||
                            (f->isJmp() && f->next()->isDeopt())) {
-                    if (br->deoptTrigger && Parameter::DEOPT_CHAOS)
+                    if (chaos)
                         cond = builder.CreateAnd(
                             cond,
                             call(NativeBuiltins::get(
@@ -6093,6 +6100,15 @@ void LowerFunctionLLVM::compile() {
     }
     }
 }
+
+size_t Parameter::DEOPT_CHAOS =
+    getenv("PIR_DEOPT_CHAOS") ? atoi(getenv("PIR_DEOPT_CHAOS")) : 0;
+bool Parameter::DEOPT_CHAOS_NO_RETRIGGER =
+    getenv("PIR_DEOPT_CHAOS_NO_RETRIGGER")
+        ? atoi(getenv("PIR_DEOPT_CHAOS_NO_RETRIGGER"))
+        : 0;
+int Parameter::DEOPT_CHAOS_SEED =
+    getenv("PIR_DEOPT_CHAOS_SEED") ? atoi(getenv("PIR_DEOPT_CHAOS_SEED")) : 42;
 
 } // namespace pir
 } // namespace rir

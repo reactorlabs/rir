@@ -421,10 +421,6 @@ rir::Function* Backend::getOrCompile(ClosureVersion* cls) {
 
 bool Parameter::DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
                                0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
-int Parameter::DEOPT_CHAOS =
-    getenv("PIR_DEOPT_CHAOS") ? atoi(getenv("PIR_DEOPT_CHAOS")) : 0;
-int Parameter::DEOPT_CHAOS_SEED =
-    getenv("PIR_DEOPT_CHAOS_SEED") ? atoi(getenv("PIR_DEOPT_CHAOS_SEED")) : 42;
 
 } // namespace pir
 } // namespace rir
