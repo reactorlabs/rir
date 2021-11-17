@@ -841,12 +841,18 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     static int deoptless =
         getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
+    static bool deoptlessNoLeakedEnvs =
+        getenv("PIR_DEOPTLESS_NO_LEAKED_ENVS")
+            ? atoi(getenv("PIR_DEOPTLESS_NO_LEAKED_ENVS"))
+            : 0;
+
     static constexpr bool deoptlessDebug = false;
     static SEXP deoptlessRecursion = nullptr;
 
     auto le = LazyEnvironment::check(env);
     if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
-        ((le && !le->materialized()) || !le)) {
+        ((le && !le->materialized()) ||
+         (!le && (!leakedEnv || !deoptlessNoLeakedEnvs)))) {
         assert(m->frames[0].inPromise == false);
 
         size_t envSize = le ? le->nargs : Rf_length(FRAME(env));

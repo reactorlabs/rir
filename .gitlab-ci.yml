@@ -200,6 +200,7 @@ test_features_1:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
+    - PIR_DEOPT_CHAOS=100000 PIR_DEOPT_CHAOS_NO_RETRIGGER=1 ./bin/tests || $SAVE_LOGS
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=50000 ./bin/gnur-make-tests check || $SAVE_LOGS
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 ./bin/tests
     - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 FAST_TESTS=1 ./bin/tests
