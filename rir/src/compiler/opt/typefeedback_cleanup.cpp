@@ -91,13 +91,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     (std::get<PirType>(*v) &
                                      i->typeFeedback().type)
                                         .isVoid()) {
-                                    Rf_PrintValue(ld->varName);
-                                    i->updateTypeFeedback().type.print(
-                                        std::cout);
                                     i->updateTypeFeedback().type =
                                         std::get<PirType>(*v);
-                                    i->updateTypeFeedback().type.print(
-                                        std::cout);
                                     affected.insert(i);
                                 }
                 }
