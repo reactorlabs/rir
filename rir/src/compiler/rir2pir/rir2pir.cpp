@@ -499,6 +499,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                 if (feedback.numTargets == 2) {
                                     first = deoptCallTarget;
                                     stableBody = stableEnv = stableType = true;
+                                    if (TYPEOF(deoptCallTarget) == CLOSXP &&
+                                        !isValidClosureSEXP(deoptCallTarget))
+                                        rir::Compiler::compileClosure(
+                                            deoptCallTarget);
                                     deoptedCallReplacement = deoptCallTarget;
                                 }
                             }
@@ -574,9 +578,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         auto callee = at(nargs);
 
-        if (auto phi = Phi::Cast(callee)) {
+        while (auto phi = Phi::Cast(callee)) {
             if (phi->nargs() == 1)
                 callee = phi->arg(0).val();
+            else
+                break;
         }
         const auto dummyCallFeedback = CallFeedback();
         auto ti = Instruction::Cast(callee)
