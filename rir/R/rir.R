@@ -193,6 +193,10 @@ rir.disableLoopPeeling <- function() {
     .Call("rirDisableLoopPeeling")
 }
 
+rir.resetMeasuring <- function(outputOld = FALSE) {
+    invisible(.Call("rirResetMeasuring", outputOld))
+}
+
 rir.printBuiltinIds <- function() {
     invisible(.Call("rirPrintBuiltinIds"))
 }

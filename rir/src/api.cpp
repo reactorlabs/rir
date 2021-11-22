@@ -15,6 +15,7 @@
 #include "interpreter/interp_incl.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
+#include "utils/measuring.h"
 
 #include <cassert>
 #include <cstdio>
@@ -513,6 +514,18 @@ REXPORT SEXP rirEnableLoopPeeling() {
 
 REXPORT SEXP rirDisableLoopPeeling() {
     Compiler::loopPeelingEnabled = false;
+    return R_NilValue;
+}
+
+REXPORT SEXP rirResetMeasuring(SEXP outputOld) {
+    if (TYPEOF(outputOld) != LGLSXP) {
+        Rf_warning("non-boolean flag");
+        return R_NilValue;
+    }
+    if (LENGTH(outputOld) == 0) {
+        return R_NilValue;
+    }
+    Measuring::reset(LOGICAL(outputOld)[0]);
     return R_NilValue;
 }
 
