@@ -1123,8 +1123,12 @@ fallbackToLegacyCall:
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
+        for (SEXP a = arglist; a != R_NilValue; a = CDR(a))
+            INCREMENT_NAMED(CAR(a));
         res =
             f(call.ast, call.callee, arglist, materializeCallerEnv(call, ctx));
+        for (SEXP a = arglist; a != R_NilValue; a = CDR(a))
+            DECREMENT_NAMED(CAR(a));
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
     } else {

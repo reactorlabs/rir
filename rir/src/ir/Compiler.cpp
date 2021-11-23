@@ -924,7 +924,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             //   names(x) <- x
             // leads to calling do_namesgets with x with named = 1 as both
             // the target and the value
-            // MARK_ASSIGNMENT_CALL(farrow_ast);
+            MARK_ASSIGNMENT_CALL(farrow_ast);
 
             // We need to append "value = z" to the list of args for f<-
             // Let's create the corresponding cell (directly linked in AST so
