@@ -126,11 +126,11 @@ struct MeasuringImpl {
     static std::string format(double secs) {
         std::stringstream ss;
         if (secs < 60)
-            ss << secs << "s";
+            ss << secs << " secs";
         else if (secs < 60 * 60)
-            ss << secs / 60 << "m";
+            ss << secs / 60 << " min";
         else
-            ss << secs / 60 / 60 << "h";
+            ss << secs / 60 / 60 << " hrs";
         return ss.str();
     }
 
@@ -191,6 +191,12 @@ void Measuring::setEventThreshold(size_t n) {
 void Measuring::countEvent(const std::string& name, size_t n) {
     m->shouldOutput = true;
     m->events[name] += n;
+}
+
+void Measuring::reset(bool outputOld) {
+    if (m)
+        m->shouldOutput = outputOld;
+    m.reset(new MeasuringImpl());
 }
 
 } // namespace rir

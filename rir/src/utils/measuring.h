@@ -12,6 +12,7 @@ class Measuring {
     static void addTime(const std::string& name, double time);
     static void setEventThreshold(size_t n);
     static void countEvent(const std::string& name, size_t n = 1);
+    static void reset(bool outputOld = false);
 };
 
 } // namespace rir
