@@ -332,6 +332,30 @@ static bool doesNotAccessEnv(SEXP b) {
     return pir::SafeBuiltinsList::nonObject(b->u.primsxp.offset);
 }
 
+SEXP tryFastBuiltinSetter(CallContext& call, InterpreterInstance* ctx,
+                          size_t nargs, SEXP (&args)[MAXARGS]) {
+    switch (call.callee->u.primsxp.offset) {
+    case blt("names<-"): {
+        SEXP arglist;
+        CCODE f = getBuiltin(call.callee);
+        SEXP res = nullptr;
+        auto env = doesNotAccessEnv(call.callee)
+                       ? R_BaseEnv
+                       : materializeCallerEnv(call, ctx);
+        if (NAMED(args[1]))
+            ENSURE_NAMEDMAX(args[1]);
+        FAKE_ARGS2(arglist, args[0], args[1]);
+        res = f(call.ast, call.callee, arglist, env);
+        CHECK_FAKE_ARGS2();
+        return res;
+    }
+    default: {
+    }
+    }
+
+    return nullptr;
+}
+
 SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
                          size_t nargs, SEXP (&args)[MAXARGS]) {
     assert(nargs <= 5);
@@ -1038,6 +1062,16 @@ SEXP tryFastBuiltinCall1(const CallContext& call, InterpreterInstance* ctx,
     return nullptr;
 }
 
+bool supportsFastBuiltinSetter(SEXP b, size_t nargs) {
+    switch (b->u.primsxp.offset) {
+    case blt("names<-"):
+        return nargs == 2;
+    default: {
+    }
+    }
+    return false;
+}
+
 bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     switch (b->u.primsxp.offset) {
     case blt("nargs"):
@@ -1089,12 +1123,15 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
 }
 
 SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(!call.hasNames());
 
     SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 
     if (nargs > MAXARGS)
+        return nullptr;
+
+    bool fastSetter = supportsFastBuiltinSetter(call.callee, nargs);
+    if (call.hasNames() && !fastSetter)
         return nullptr;
 
     bool hasAttrib = false;
@@ -1109,8 +1146,12 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
         args[i] = arg;
     }
 
-    auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args);
-    if (res)
+    if (fastSetter) {
+        if (auto res = tryFastBuiltinSetter(call, ctx, nargs, args))
+            return res;
+    }
+
+    if (auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args))
         return res;
 
     if (hasAttrib)

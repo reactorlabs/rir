@@ -645,23 +645,27 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                     // Cant rewrite this statically...
                     return false;
                 }
-            } break;
-            case SYMSXP:
+                break;
+            }
+            case SYMSXP: {
                 l = nullptr;
                 break;
-            case STRSXP:
+            }
+            case STRSXP: {
                 l = nullptr;
                 break;
-            default:
+            }
+            default: {
                 // Probably broken assignment
                 return false;
+            }
             }
         }
 
         if (!superAssign)
             MARK_ASSIGNMENT_CALL(ast);
 
-        // 2) Specialcalse normal assignment (ie. "i <- expr")
+        // 2) Specialcase normal assignment (ie. "i <- expr")
         if (TYPEOF(lhs) == SYMSXP) {
             emitGuardForNamePrimitive(cs, fun);
             compileExpr(ctx, rhs);
@@ -688,24 +692,29 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         while (!target) {
             switch (TYPEOF(l)) {
             case LANGSXP: {
-                auto fun = l->u.listsxp.carval;
-                auto args = l->u.listsxp.cdrval;
+                auto fun = CAR(l);
+                auto args = CDR(l);
                 assert(TYPEOF(fun) == SYMSXP);
                 lhsParts.push_back(l);
                 l = CAR(args);
-            } break;
+                break;
+            }
             case SYMSXP: {
-                lhsParts.push_back(l);
                 target = l;
-            } break;
+                lhsParts.push_back(target);
+                break;
+            }
             case STRSXP: {
                 assert(Rf_length(l) == 1);
                 target = Rf_install(CHAR(STRING_ELT(l, 0)));
                 lhsParts.push_back(target);
-            } break;
-            default:
-                errorcall(ast, "invalid (do_set) left-hand side to assignment");
                 break;
+            }
+            default: {
+                Rf_errorcall(ast,
+                             "invalid (do_set) left-hand side to assignment");
+                break;
+            }
             }
         }
 

@@ -215,8 +215,8 @@ SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc,
         prstack.promise = e;
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
-        val = evalRirCode(Code::unpack(PRCODE(e)), ctx, e->u.promsxp.env,
-                          nullptr, pc, nullptr);
+        val = evalRirCode(Code::unpack(PRCODE(e)), ctx, PRENV(e), nullptr, pc,
+                          nullptr);
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
@@ -329,8 +329,7 @@ SEXP materialize(SEXP wrapper) {
     return res;
 }
 
-SEXP materializeCallerEnv(CallContext& callCtx,
-                                 InterpreterInstance* ctx) {
+SEXP materializeCallerEnv(CallContext& callCtx, InterpreterInstance* ctx) {
     if (auto le = LazyEnvironment::check(callCtx.callerEnv)) {
         if (le->materialized())
             callCtx.callerEnv = le->materialized();
@@ -904,9 +903,9 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
+
     case SPECIALSXP: {
-        SEXP res = tryFastSpecialCall(call, ctx);
-        if (res) {
+        if (SEXP res = tryFastSpecialCall(call, ctx)) {
             if (popArgs)
                 ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
             return res;
@@ -929,26 +928,49 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
         return result;
     }
+
     case BUILTINSXP: {
-        if (!call.hasNames()) {
-            SEXP res = tryFastBuiltinCall(call, ctx);
-            if (res) {
-                int flag = getFlag(call.callee);
-                if (flag < 2)
-                    R_Visible = static_cast<Rboolean>(flag != 1);
-                if (popArgs)
-                    ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-                return res;
-            }
+        if (SEXP res = tryFastBuiltinCall(call, ctx)) {
+            int flag = getFlag(call.callee);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            if (popArgs)
+                ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+            return res;
+        }
 #ifdef DEBUG_SLOWCASES
             SlowcaseCounter::count("builtin", call, ctx);
 #endif
-        }
-        goto fallbackToLegacyCall;
+
+            SEXP arglist = createPromargsFromStackValues(call, ctx);
+            PROTECT(arglist);
+
+            CCODE f = getBuiltin(call.callee);
+            int flag = getFlag(call.callee);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            SEXP res = f(call.ast, call.callee, arglist,
+                         materializeCallerEnv(call, ctx));
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            UNPROTECT(1);
+            if (popArgs)
+                ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+            return res;
     }
+
     case CLOSXP: {
-        if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
-            goto fallbackToLegacyCall;
+        if (TYPEOF(BODY(call.callee)) != EXTERNALSXP) {
+            SEXP arglist = createPromargsFromStackValues(call, ctx);
+            PROTECT(arglist);
+            SEXP res =
+                Rf_applyClosure(call.ast, call.callee, arglist,
+                                materializeCallerEnv(call, ctx), R_NilValue);
+            UNPROTECT(1);
+            if (popArgs)
+                ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+            return res;
+        }
 
         R_CheckStack();
         SEXP body = BODY(call.callee);
@@ -1108,40 +1130,11 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         return result;
     }
     default:
-        Rf_error("Invalid Callee");
+        Rf_error("attempt to apply non-function");
     };
 
-fallbackToLegacyCall:
-    SEXP arglist = createPromargsFromStackValues(call, ctx);
-    PROTECT(arglist);
-
-    SEXP res;
-    if (TYPEOF(call.callee) == BUILTINSXP) {
-        // get the ccode
-        CCODE f = getBuiltin(call.callee);
-        int flag = getFlag(call.callee);
-        if (flag < 2)
-            R_Visible = static_cast<Rboolean>(flag != 1);
-        // call it
-        for (SEXP a = arglist; a != R_NilValue; a = CDR(a))
-            INCREMENT_NAMED(CAR(a));
-        res =
-            f(call.ast, call.callee, arglist, materializeCallerEnv(call, ctx));
-        for (SEXP a = arglist; a != R_NilValue; a = CDR(a))
-            DECREMENT_NAMED(CAR(a));
-        if (flag < 2)
-            R_Visible = static_cast<Rboolean>(flag != 1);
-    } else {
-
-        assert(TYPEOF(call.callee) == CLOSXP &&
-               TYPEOF(BODY(call.callee)) != EXTERNALSXP);
-        res = Rf_applyClosure(call.ast, call.callee, arglist,
-                              materializeCallerEnv(call, ctx), R_NilValue);
-    }
-    UNPROTECT(1);
-    if (popArgs)
-        ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-    return res;
+    // not reached
+    assert(false);
 }
 
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
@@ -2187,7 +2180,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-
         INSTRUCTION(ldvar_cached_) {
             Immediate id = readImmediate();
             advanceImmediate();
@@ -2913,12 +2905,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
             // TODO
-            // 1. currently aslogical_ is used for &&, || only, and this checking
-            //    is to mimic the behavior of builtin &&, ||. Technically asLogical
-            //    is less strict than this.
-            // 2. the error message also doesn't suggest which argument is wrong, or
-            //    which boolean operation it was. To achieve the exact behavior, one
-            //    could potentially compile this check in `ir/Compiler.cpp`
+            // 1. currently aslogical_ is used for &&, || only, and this
+            // checking
+            //    is to mimic the behavior of builtin &&, ||. Technically
+            //    asLogical is less strict than this.
+            // 2. the error message also doesn't suggest which argument is
+            // wrong, or
+            //    which boolean operation it was. To achieve the exact behavior,
+            //    one could potentially compile this check in `ir/Compiler.cpp`
             if (!Rf_isNumber(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
                 Rf_errorcall(call, "argument has the wrong type for && or ||");
