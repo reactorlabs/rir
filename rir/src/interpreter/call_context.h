@@ -99,7 +99,7 @@ struct CallContext {
 
     void depromiseArgs() const {
 
-        // Both stackAergs and listargs should point to the same promises
+        // Both stackArgs and listArgs should point to the same promises
         // So forcing twice shouldn't execute the promise twice
 
         // depromise on stack

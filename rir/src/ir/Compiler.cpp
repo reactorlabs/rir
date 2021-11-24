@@ -928,11 +928,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             while (CDR(last_farrow_cell) != R_NilValue) {
                 last_farrow_cell = CDR(last_farrow_cell);
             }
-            // TODO: this can cause cyclic objects sometimes, eg.
-            //   x <- c("a", "b")
-            //   names(x) <- x
-            // leads to calling do_namesgets with x with named = 1 as both
-            // the target and the value
             MARK_ASSIGNMENT_CALL(farrow_ast);
 
             // We need to append "value = z" to the list of args for f<-
