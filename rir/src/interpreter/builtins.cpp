@@ -332,46 +332,6 @@ static bool doesNotAccessEnv(SEXP b) {
     return pir::SafeBuiltinsList::nonObject(b->u.primsxp.offset);
 }
 
-SEXP tryFastBuiltinSetter(CallContext& call, InterpreterInstance* ctx) {
-    switch (call.callee->u.primsxp.offset) {
-    // case blt("dimnames<-"):
-    case blt("names<-"): {
-        if (call.suppliedArgs != 2 || call.stackArg(0) == R_DotsSymbol ||
-            call.stackArg(1) == R_DotsSymbol ||
-            call.stackArg(0) == R_MissingArg ||
-            call.stackArg(1) == R_MissingArg)
-            return nullptr;
-        bool createArglist = !call.arglist;
-        CCODE f = getBuiltin(call.callee);
-        auto env = doesNotAccessEnv(call.callee)
-                       ? R_BaseEnv
-                       : materializeCallerEnv(call, ctx);
-        call.depromiseArgs();
-        if (createArglist) {
-            call.arglist = CONS_NR(call.stackArg(0),
-                                   CONS_NR(call.stackArg(1), R_NilValue));
-            // tags??
-            PROTECT(call.arglist);
-        }
-
-        // Make sure the RHS NAMED value is 0 or NAMEDMAX for when the RHS value
-        // is part of the LHS object. See FIXUP_RHS_NAMED in eval.c
-        if (NAMED(CADR(call.arglist)))
-            ENSURE_NAMEDMAX(CADR(call.arglist));
-
-        SEXP res = f(call.ast, call.callee, call.arglist, env);
-        if (createArglist) {
-            call.arglist = nullptr;
-            UNPROTECT(1);
-        }
-        return res;
-    }
-    default: {
-    }
-    }
-    return nullptr;
-}
-
 SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
                          size_t nargs, SEXP (&args)[MAXARGS]) {
     assert(nargs <= 5);
@@ -1129,10 +1089,6 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
 }
 
 SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
-
-    if (auto res = tryFastBuiltinSetter(call, ctx))
-        return res;
-
     SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 

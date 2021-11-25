@@ -939,24 +939,63 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             return res;
         }
 #ifdef DEBUG_SLOWCASES
-            SlowcaseCounter::count("builtin", call, ctx);
+        SlowcaseCounter::count("builtin", call, ctx);
 #endif
 
-            SEXP arglist = createPromargsFromStackValues(call, ctx);
-            PROTECT(arglist);
+        SEXP arglist = createPromargsFromStackValues(call, ctx);
+        PROTECT(arglist);
 
-            CCODE f = getBuiltin(call.callee);
-            int flag = getFlag(call.callee);
-            if (flag < 2)
-                R_Visible = static_cast<Rboolean>(flag != 1);
-            SEXP res = f(call.ast, call.callee, arglist,
-                         materializeCallerEnv(call, ctx));
-            if (flag < 2)
-                R_Visible = static_cast<Rboolean>(flag != 1);
-            UNPROTECT(1);
-            if (popArgs)
-                ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
-            return res;
+        // Make sure the RHS NAMED value is 0 or NAMEDMAX for when the RHS value
+        // is part of the LHS object. See FIXUP_RHS_NAMED in eval.c
+        switch (call.callee->u.primsxp.offset) {
+        case blt("length<-"):
+        case blt("oldClass<-"):
+        case blt("class<-"):
+        case blt("names<-"):
+        case blt("dimnames<-"):
+        case blt("dim<-"):
+        case blt("attributes<-"):
+        case blt("levels<-"):
+        case blt("comment<-"):
+        case blt("storage.mode<-"):
+        case blt("environment<-"):
+        case blt("parent.env<-"): {
+            if (call.passedArgs == 2) {
+                if (NAMED(CADR(arglist)))
+                    ENSURE_NAMEDMAX(CADR(arglist));
+            }
+            break;
+        }
+        case blt("attr<-"): {
+            if (call.passedArgs == 3) {
+                if (NAMED(CADDR(arglist)))
+                    ENSURE_NAMEDMAX(CADDR(arglist));
+            }
+            break;
+        }
+        case blt("substr<-"): {
+            if (call.passedArgs == 4) {
+                if (NAMED(CADDDR(arglist)))
+                    ENSURE_NAMEDMAX(CADDDR(arglist));
+            }
+            break;
+        }
+        default: {
+        }
+        }
+
+        CCODE f = getBuiltin(call.callee);
+        int flag = getFlag(call.callee);
+        if (flag < 2)
+            R_Visible = static_cast<Rboolean>(flag != 1);
+        SEXP res =
+            f(call.ast, call.callee, arglist, materializeCallerEnv(call, ctx));
+        if (flag < 2)
+            R_Visible = static_cast<Rboolean>(flag != 1);
+        UNPROTECT(1);
+        if (popArgs)
+            ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+        return res;
     }
 
     case CLOSXP: {
