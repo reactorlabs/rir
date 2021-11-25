@@ -11,6 +11,17 @@ namespace pir {
 
 struct NeedsRefcountAdjustment {
     enum Kind { EnsureNamed, SetShared };
+    friend std::ostream& operator<<(std::ostream& out, Kind k) {
+        switch (k) {
+        case EnsureNamed:
+            out << "EnsureNamed";
+            break;
+        case SetShared:
+            out << "SetShared";
+            break;
+        }
+        return out;
+    }
 
     // Not needed since we do not use the state in the analysis
     bool changed() { return false; }
@@ -200,8 +211,7 @@ class StaticReferenceCount
                     if (i == j || j->minReferenceCount() > 1)
                         return;
                     if (auto taint = state.isTainted(j)) {
-                        NeedsRefcountAdjustment::Kind k =
-                            NeedsRefcountAdjustment::EnsureNamed;
+                        auto k = NeedsRefcountAdjustment::EnsureNamed;
                         if (taint->kind == AbstractValueTaint::Taint::Override)
                             k = NeedsRefcountAdjustment::SetShared;
                         else
@@ -260,7 +270,7 @@ class StaticReferenceCount
             break;
         }
 
-        // Instructions which never reuse SEXPS can be ignored
+        // Instructions which never reuse SEXPs can be ignored
         case Tag::PirCopy:
         case Tag::Return:
         case Tag::Colon:
@@ -361,7 +371,8 @@ class StaticReferenceCount
         return res;
     }
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

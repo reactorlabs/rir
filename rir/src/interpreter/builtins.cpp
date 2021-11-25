@@ -1089,12 +1089,10 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
 }
 
 SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
-    SLOWASSERT(!call.hasNames());
-
     SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 
-    if (nargs > MAXARGS)
+    if (nargs > MAXARGS || call.hasNames())
         return nullptr;
 
     bool hasAttrib = false;
@@ -1109,8 +1107,7 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
         args[i] = arg;
     }
 
-    auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args);
-    if (res)
+    if (auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args))
         return res;
 
     if (hasAttrib)
