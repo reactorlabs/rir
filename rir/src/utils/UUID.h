@@ -2,6 +2,8 @@
 
 #include <R/r.h>
 
+#include <string>
+
 namespace rir {
 
 class UUID {

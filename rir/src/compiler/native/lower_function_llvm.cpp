@@ -105,7 +105,7 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  llvm::Type* ty,
                                                  bool constant) {
     assert(what);
-    char name[17];
+    char name[21];
     sprintf(name, "ept_%lx", (uintptr_t)what);
     return getModule().getOrInsertGlobal(name, ty, [&]() {
         return new llvm::GlobalVariable(
@@ -119,7 +119,7 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
 llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
     assert(what);
-    char name[17];
+    char name[21];
     sprintf(name, "efn_%lx", (uintptr_t)what);
     return getModule().getOrInsertFunction(name, ty);
 }
