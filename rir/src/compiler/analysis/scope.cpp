@@ -130,6 +130,12 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
     };
 
+    auto fs = i->frameState();
+    while (fs) {
+        state.envs.leak(fs->env());
+        fs = fs->next();
+    }
+
     if (auto ret = Return::Cast(i)) {
         // We keep track of the result of function returns.
         auto res = ret->arg<0>().val();
@@ -140,7 +146,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             },
             [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
-    } else if (auto d = Deopt::Cast(i)) {
+    } else if (Deopt::Cast(i)) {
         // Deoptimization is currently only supported in inlined promises.
         // Therefore we can ignore Deopt points in promises for the sake of this
         // analysis, since a deoptimization through such a point will also
@@ -151,11 +157,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             // who knows what the deopt target will return...
             state.returnValue.taint();
             state.mayUseReflection = true;
-            auto fs = d->frameState();
-            while (fs) {
-                state.envs.leak(fs->env());
-                fs = fs->next();
-            }
             effect.taint();
         }
         handled = true;
