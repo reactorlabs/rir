@@ -130,10 +130,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         }
     };
 
-    auto fs = i->frameState();
-    while (fs) {
-        state.envs.leak(fs->env());
-        fs = fs->next();
+    if (i->effects.includes(Effect::TriggerDeopt)) {
+        auto fs = i->frameState();
+        while (fs) {
+            if (!MkEnv::Cast(fs->env()) || !MkEnv::Cast(fs->env())->stub)
+                state.envs.leak(fs->env());
+            fs = fs->next();
+        }
     }
 
     if (auto ret = Return::Cast(i)) {
