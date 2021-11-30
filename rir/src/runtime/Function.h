@@ -121,6 +121,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const FunctionSignature& signature() const { return signature_; }
     const Context& context() const { return context_; }
 
+    bool disabled() const {
+        return body()->isDeoptimized || flags.contains(Flag::Deopt);
+    }
+
   private:
     unsigned numArgs_;
 

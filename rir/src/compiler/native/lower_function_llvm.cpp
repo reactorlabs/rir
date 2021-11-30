@@ -2129,7 +2129,8 @@ void LowerFunctionLLVM::compile() {
 
             if (varName) {
                 auto e = MkEnv::Cast(i->env());
-                if (e && !e->stub) {
+                if ((e && !e->stub) ||
+                    (LdFunctionEnv::Cast(i->env()) && cls->isContinuation())) {
                     bindings.insert(std::pair<Value*, SEXP>(i->env(), varName));
                 }
             }
@@ -2140,6 +2141,13 @@ void LowerFunctionLLVM::compile() {
         }
         bindingsCacheBase = topAlloca(t::SEXP, idx);
     }
+
+    for (auto b : bindingsCache)
+        if (LdFunctionEnv::Cast(b.first))
+            for (auto b : b.second)
+                builder.CreateStore(
+                    llvm::ConstantPointerNull::get(t::SEXP),
+                    builder.CreateGEP(bindingsCacheBase, c(b.second)));
 
     std::unordered_map<Instruction*, Instruction*> phis;
     {

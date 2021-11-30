@@ -87,8 +87,11 @@ struct GenericDispatchTable
 
     std::pair<const Key&, Value*> dispatch(const Key& a) const {
         for (size_t i = 0; i < size(); ++i) {
-            if (a.smaller(key(i)))
-                return {key(i), Value::unpack(getEntry(i))};
+            if (a.smaller(key(i))) {
+                auto v = Value::unpack(getEntry(i));
+                if (!v->disabled())
+                    return {key(i), Value::unpack(getEntry(i))};
+            }
         }
         return {a, nullptr};
     }

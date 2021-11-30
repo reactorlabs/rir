@@ -14,10 +14,10 @@ ContinuationContext::ContinuationContext(Opcode* pc, SEXP env, bool leaked,
         stack_.at(i) = PirType(v);
     }
 
-    if (!leaked && env) {
+    leakedEnv_ = leaked;
+    if (env) {
         auto l = Rf_length(FRAME(env));
         assert(l <= (int)MAX_ENV);
-        leakedEnv_ = false;
         envSize_ = l;
         auto f = FRAME(env);
         size_t i = 0;
