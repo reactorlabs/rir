@@ -5,6 +5,8 @@
 
 #include "compiler/pir/pir.h"
 
+#include <iostream>
+
 namespace rir {
 namespace pir {
 

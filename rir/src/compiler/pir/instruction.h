@@ -1913,10 +1913,7 @@ class Binop
     Value* rhs() const { return arg(1).val(); }
 
     VisibilityFlag visibilityFlag() const override final {
-        if (!lhs()->type.maybeObj() && !rhs()->type.maybeObj())
-            return VisibilityFlag::On;
-        else
-            return VisibilityFlag::Unknown;
+        return VisibilityFlag::Unknown;
     }
 
     size_t gvnBase() const override {
@@ -2052,10 +2049,7 @@ class Unop
     Value* val() const { return arg(0).val(); }
 
     VisibilityFlag visibilityFlag() const override final {
-        if (!mergedInputType().maybeObj())
-            return VisibilityFlag::On;
-        else
-            return VisibilityFlag::Unknown;
+        return VisibilityFlag::Unknown;
     }
 
     size_t gvnBase() const override {
