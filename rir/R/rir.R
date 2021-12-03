@@ -312,3 +312,5 @@ rir.restoreBuiltins <- function() {
     for (n in rir.switchedDefaultsCache$keys())
         rir.restoreImplementation(n)
 }
+
+rir.switchBuiltins()
