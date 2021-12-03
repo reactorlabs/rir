@@ -1,4 +1,4 @@
-# the following functions are intended for the API
+# The following functions are intended for the API
 
 rir.markFunction <- function(what, which,
                              Reopt=NA,
@@ -217,4 +217,98 @@ rir.annotateDepromised <- function(closure) {
     rir.compile(copy)
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
+}
+
+# Reimplement some builtins in R
+
+cache_memory <- function() {
+  cache <- NULL
+  .reset <- function() cache <<- new.env(TRUE, emptyenv())
+  .set <- function(key, value) assign(key, value, envir = cache)
+  .get <- function(key) get(key, envir = cache, inherits = FALSE)
+  .has_key <- function(key) exists(key, envir = cache, inherits = FALSE)
+  .drop_key <- function(key) rm(list = key, envir = cache, inherits = FALSE)
+  .reset()
+  list(
+    reset = .reset,
+    set = .set,
+    get = .get,
+    has_key = .has_key,
+    drop_key = .drop_key,
+    keys = function() ls(cache)
+  )
+}
+
+rir.switchedDefaultsCache <- cache_memory()
+
+rir.switchImplementation <- function(name, fun) {
+    if (!is.character(name) || length(name) != 1)
+        stop("rir.switchImplementation: need name as string")
+
+    o <- get(name, envir = globalenv())
+
+    if (rir.switchedDefaultsCache$has_key(name)) {
+        warning(
+            paste0("rir.switchImplementation: '",
+                   name,
+                   "' already saved, not overwriting..."))
+    } else {
+        rir.switchedDefaultsCache$set(name, o)
+    }
+
+    e <- environment(o)
+    unlockBinding(name, e)
+    fun <- match.fun(fun)
+    environment(fun) <- e
+    assign(name, fun, envir = e)
+    lockBinding(name, e)
+    invisible(NULL)
+}
+
+rir.restoreImplementation <- function(name) {
+    if (!is.character(name) || length(name) != 1)
+        stop("rir.restoreImplementation: need name as string")
+
+    if (!rir.switchedDefaultsCache$has_key(name)) {
+        warning(
+            paste("rir.restoreImplementation: '",
+                  name,
+                  "' not saved, doing nothing...",
+                  sep = ""))
+    } else {
+        o <- rir.switchedDefaultsCache$get(name)
+        rir.switchedDefaultsCache$drop_key(name)
+
+        e <- environment(o)
+        unlockBinding(name, e)
+        assign(name, o, envir = e)
+        lockBinding(name, e)
+    }
+    invisible(NULL)
+}
+
+rir.switchBuiltins <- function() {
+
+    rir.switchImplementation("lapply", function (X, FUN, ...) {
+        FUN <- match.fun(FUN)
+        if (!is.vector(X) || is.object(X))
+            X <- as.list(X)
+
+        n <- length(X);
+        ans <- vector(mode = "list", length = n)
+        if (!is.null(names(X)))
+            names(ans) <- names(X)
+
+        for (i in 1:n) {
+            ans[[i]] <- forceAndCall(1, FUN, X[[i]], ...)
+        }
+
+        ans
+    })
+
+}
+
+rir.restoreBuiltins <- function() {
+    for (n in rir.switchedDefaultsCache$keys())
+        rir.restoreImplementation(n)
 }
