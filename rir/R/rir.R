@@ -287,17 +287,26 @@ rir.restoreImplementation <- function(name) {
     invisible(NULL)
 }
 
-rir.switchBuiltins <- function(x) {
+rir.switchBuiltins <- function() {
 
-if (x) {
+if (TRUE) {
     rir.switchImplementation("lapply", function (X, FUN, ...) {
 ## cat(">>>>>>>>>> BEGIN\n")
 ## print(match.call())
         FUN <- match.fun(FUN)
+        ## ff <- match.fun(FUN)
+        ## FUN <- function(...) {
+        ##     print(match.call())
+        ##     ff(...)
+        ## }
         if (!is.vector(X) || is.object(X))
             X <- as.list(X)
 
-        n <- length(X);
+        o <- attributes(X)
+        attributes(X) <- NULL
+        n <- length(X)
+        attributes(X) <- o
+
         ans <- vector(mode = "list", length = n)
         if (!is.null(names(X)))
             names(ans) <- names(X)
@@ -307,6 +316,8 @@ if (x) {
             # handle missing - can't evaluate if assigned to a variable
             # handle null - subassigning mustn't shrink the result
             # normal case is okay
+            ## if (identical(tmp <- FUN(X[[i]], ...),
+            ##               quote(expr = ))) {
             if (identical(tmp <- forceAndCall(1L, FUN, X[[i]], ...),
                           quote(expr = ))) {
                 ans[[i]] <- quote(expr = )
@@ -340,4 +351,4 @@ rir.restoreBuiltins <- function() {
         rir.restoreImplementation(n)
 }
 
-rir.switchBuiltins(T)
+rir.switchBuiltins()

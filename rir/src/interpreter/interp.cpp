@@ -901,7 +901,7 @@ class SlowcaseCounter {
 
 SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
     assert(call.callee);
-
+// if (call.ast) Rf_PrintValue(call.ast);
     switch (TYPEOF(call.callee)) {
 
     case SPECIALSXP: {
