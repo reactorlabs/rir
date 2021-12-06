@@ -287,9 +287,12 @@ rir.restoreImplementation <- function(name) {
     invisible(NULL)
 }
 
-rir.switchBuiltins <- function() {
+rir.switchBuiltins <- function(x) {
 
+if (x) {
     rir.switchImplementation("lapply", function (X, FUN, ...) {
+## cat(">>>>>>>>>> BEGIN\n")
+## print(match.call())
         FUN <- match.fun(FUN)
         if (!is.vector(X) || is.object(X))
             X <- as.list(X)
@@ -299,13 +302,37 @@ rir.switchBuiltins <- function() {
         if (!is.null(names(X)))
             names(ans) <- names(X)
 
-        for (i in 1:n) {
-            ans[[i]] <- forceAndCall(1, FUN, X[[i]], ...)
+        i <- 1L
+        while (i <= n) {
+            # handle missing - can't evaluate if assigned to a variable
+            # handle null - subassigning mustn't shrink the result
+            # normal case is okay
+            if (identical(tmp <- forceAndCall(1L, FUN, X[[i]], ...),
+                          quote(expr = ))) {
+                ans[[i]] <- quote(expr = )
+            } else if (is.null(tmp)) {
+                ans[i] <- list(NULL)
+            } else {
+                ans[[i]] <- tmp
+            }
+            i <- i + 1L
         }
-
+## cat(">>>>>>>>>> RESULT 2\n")
+## print(ans)
+## cat("<<<<<<<<<< END\n")
         ans
     })
-
+} else {
+    rir.switchImplementation("lapply", function (X, FUN, ...) {
+## cat(">>>>>>>>>> BEGIN\n")
+## print(match.call())
+        ans <- rir.switchedDefaultsCache$get("lapply")(X, FUN, ...)
+## cat(">>>>>>>>>> RESULT 2\n")
+## print(ans)
+## cat("<<<<<<<<<< END\n")
+        ans
+   })
+}
 }
 
 rir.restoreBuiltins <- function() {
@@ -313,4 +340,4 @@ rir.restoreBuiltins <- function() {
         rir.restoreImplementation(n)
 }
 
-rir.switchBuiltins()
+rir.switchBuiltins(T)
