@@ -1485,6 +1485,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 groupLabels.push_back(label);
                 groups.push_back({}); // start new group
             }
+            if (*arg == R_DotsSymbol)
+                return false;
         }
 
         /******************* INSTRUCTIONS START HERE *********************/
