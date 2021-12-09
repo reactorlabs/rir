@@ -57,17 +57,35 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
-                               unsigned factor = 1) {
+inline bool RecompileHeuristic(DispatchTable* table, Function* fun) {
     auto& flags = fun->flags;
-    return (!flags.contains(Function::NotOptimizable) &&
-            (flags.contains(Function::MarkOpt) ||
-             (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-              ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-                fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-               (pir::Parameter::RIR_WARMUP == 0) ||
-               (fun->invocationCount() %
-                (factor * (pir::Parameter::RIR_WARMUP))) == 0))));
+    if (flags.contains(Function::MarkOpt))
+        return true;
+    if (flags.contains(Function::NotOptimizable) ||
+        fun->deoptCount() >= pir::Parameter::DEOPT_ABANDON)
+        return false;
+
+    auto wu = pir::Parameter::PIR_WARMUP;
+    auto wt = pir::Parameter::PIR_OPT_TIME;
+    if (fun->signature().optimization !=
+        FunctionSignature::OptimizationLevel::Baseline) {
+        wu = pir::Parameter::PIR_REOPT;
+        wt = pir::Parameter::PIR_REOPT_TIME;
+    }
+
+    if (wu == 0)
+        return true;
+
+    if (fun->invocationCount() % wu == 0) {
+        return true;
+    }
+
+    if (fun->invocationCount() > 3 && fun->invocationTime() > wt) {
+        fun->clearInvocationTime();
+        return true;
+    }
+
+    return false;
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,

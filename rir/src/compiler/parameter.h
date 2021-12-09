@@ -12,7 +12,11 @@ struct Parameter {
     static bool DEOPT_CHAOS_NO_RETRIGGER;
     static int DEOPT_CHAOS_SEED;
     static size_t MAX_INPUT_SIZE;
-    static unsigned RIR_WARMUP;
+
+    static unsigned PIR_WARMUP;
+    static unsigned PIR_REOPT;
+    static unsigned PIR_OPT_TIME;
+    static unsigned PIR_REOPT_TIME;
     static unsigned DEOPT_ABANDON;
 
     static size_t PROMISE_INLINER_MAX_SIZE;

@@ -71,7 +71,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void unregisterInvocation() { body()->unregisterInvocation(); }
     void registerInvocation() { body()->registerInvocation(); }
+    void registerEndInvocation() { body()->registerEndInvocation(); }
     size_t invocationCount() { return body()->funInvocationCount; }
+    unsigned long invocationTime() { return body()->execTime; }
+    void clearInvocationTime() { body()->execTime = 0; }
     void registerDeopt() { body()->registerDeopt(); }
     size_t deoptCount() { return body()->deoptCount; }
 

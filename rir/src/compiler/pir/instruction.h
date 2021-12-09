@@ -357,7 +357,6 @@ class Instruction : public Value {
 
     void updateTypeAndEffects() {
         auto isRType = type.isRType();
-        assert(!type.isVoid() || !isRType);
         type = inferType();
         // Can happen in unreachable code when we have conflicting speculations
         if (isRType && type.isVoid())

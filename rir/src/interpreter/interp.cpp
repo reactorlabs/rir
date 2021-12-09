@@ -863,10 +863,16 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
     }
 }
 
-unsigned pir::Parameter::RIR_WARMUP =
-    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
+unsigned pir::Parameter::PIR_WARMUP =
+    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
+unsigned pir::Parameter::PIR_REOPT =
+    getenv("PIR_REOPT") ? atoi(getenv("PIR_REOPT")) : 1000;
+unsigned pir::Parameter::PIR_OPT_TIME =
+    getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 5e6;
+unsigned pir::Parameter::PIR_REOPT_TIME =
+    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 1e8;
 unsigned pir::Parameter::DEOPT_ABANDON =
-    getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 10;
+    getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 
 static unsigned serializeCounter = 0;
 
@@ -1041,7 +1047,20 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             fun->clearDisabledAssumptions(given);
             if (RecompileCondition(table, fun, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
+                    if (fun->body()->codeSize < 50 &&
+                        fun->invocationTime() > 0 &&
+                        fun->invocationTime() <
+                            pir::Parameter::PIR_OPT_TIME / 10 &&
+                        call.stackArgs && call.caller) {
+
+                        auto t = call.caller->currentInvocationTime();
+                        if (t > pir::Parameter::PIR_OPT_TIME * 2)
+                            call.triggerOsr = true;
+                    }
+
                     DoRecompile(fun, call.ast, call.callee, given, ctx);
+                    // Don't register invocation to avoid counting the time
+                    // for lazy compilation.
                     fun = dispatch(call, table);
                 }
             }
@@ -1166,6 +1185,7 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         assert(!fun->flags.contains(Function::Deopt));
         if (popArgs)
             ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+        fun->registerEndInvocation();
         return result;
     }
     default:
@@ -1923,10 +1943,8 @@ static size_t osrLimit =
     getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
                 Code* c, Opcode* pc) {
-    static size_t loopCounter = 0;
-    if (callCtxt && !isDeoptimizing() && callCtxt->stackArgs &&
-        ++loopCounter >= osrLimit) {
-        loopCounter = 0;
+    if (basePtr && callCtxt && !isDeoptimizing() && callCtxt->stackArgs &&
+        !pir::Parameter::RIR_SERIALIZE_CHAOS && pir::Parameter::ENABLE_OSR) {
         long size = R_BCNodeStackTop - basePtr;
         assert(size >= 0);
         auto l = Rf_length(FRAME(env));
@@ -2387,6 +2405,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+
+            if (call.triggerOsr) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                    return res;
+                }
+            }
+
             NEXT();
         }
 
@@ -2414,6 +2439,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+
+            if (call.triggerOsr) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                    return res;
+                }
+            }
             NEXT();
         }
 
@@ -2454,6 +2485,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             ostack_push(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
+
+            if (call.triggerOsr) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                    return res;
+                }
+            }
             NEXT();
         }
 
@@ -3126,11 +3163,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             // TODO: why does osr-in deserialized code break?
-            if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
-                if (basePtr && pir::Parameter::ENABLE_OSR && offset < 0) {
+            if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
+                static size_t loopCounter = 0;
+                if (offset < 0 && ++loopCounter >= osrLimit) {
+                    loopCounter = 0;
                     if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
                 }
+            }
             NEXT();
         }
 
@@ -3941,13 +3981,16 @@ SEXP rirEval(SEXP what, SEXP env) {
         // the baseline version!
         Function* fun = table->baseline();
         fun->registerInvocation();
-
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        auto res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        fun->registerEndInvocation();
+        return res;
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        auto res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        fun->registerEndInvocation();
+        return res;
     }
 
     assert(false && "Expected a code object or a dispatch table");

@@ -365,8 +365,9 @@ REXPORT SEXP rirInvocationCount(SEXP what) {
     assert(dt);
 
     SEXP res = Rf_allocVector(INTSXP, dt->size());
-    for (size_t i = 0; i < dt->size(); ++i)
+    for (size_t i = 0; i < dt->size(); ++i) {
         INTEGER(res)[i] = dt->get(i)->invocationCount();
+    }
 
     return res;
 }

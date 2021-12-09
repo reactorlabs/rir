@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdint>
 #include <ostream>
+#include <time.h>
 
 namespace rir {
 
@@ -108,13 +109,41 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void unregisterInvocation() {
+        invoked = 0;
         if (funInvocationCount > 0)
             funInvocationCount--;
     }
 
     void registerInvocation() {
+        if (invoked != 0)
+            execTime += 1e4;
+
+        struct timespec begin;
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
+        invoked = begin.tv_nsec + begin.tv_sec * 1e9;
+
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
+    }
+
+    unsigned long currentInvocationTime() const {
+        if (invoked == 0)
+            return 0;
+
+        struct timespec begin;
+        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
+        unsigned long now = begin.tv_nsec + begin.tv_sec * 1e9;
+        return now - invoked;
+    }
+
+    void registerEndInvocation() {
+        if (invoked != 0) {
+            struct timespec begin;
+            clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
+            unsigned long now = begin.tv_nsec + begin.tv_sec * 1e9;
+            execTime += now - invoked;
+            invoked = 0;
+        }
     }
 
     void registerDeopt() {
@@ -125,6 +154,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     // number of invocations. only incremented if this code object is the body
     // of a function
+    unsigned long invoked = 0;
+    unsigned long execTime = 0;
     unsigned funInvocationCount;
     unsigned deoptCount;
     unsigned deadCallReached = 0;
