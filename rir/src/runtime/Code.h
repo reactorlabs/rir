@@ -11,6 +11,8 @@
 #include <ostream>
 #include <time.h>
 
+#include <asm/msr.h>
+
 namespace rir {
 
 typedef SEXP FunctionSEXP;
@@ -114,13 +116,17 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             funInvocationCount--;
     }
 
-    void registerInvocation() {
+    static inline unsigned long rdtsc() {
+        unsigned low, high;
+        asm volatile("rdtsc" : "=a"(low), "=d"(high));
+        return ((low) | ((uint64_t)(high) << 32));
+    }
+
+    inline void registerInvocation() {
         if (invoked != 0)
             execTime += 1e4;
 
-        struct timespec begin;
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
-        invoked = begin.tv_nsec + begin.tv_sec * 1e9;
+        invoked = rdtsc();
 
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
@@ -130,18 +136,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         if (invoked == 0)
             return 0;
 
-        struct timespec begin;
-        clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
-        unsigned long now = begin.tv_nsec + begin.tv_sec * 1e9;
-        return now - invoked;
+        return rdtsc() - invoked;
     }
 
-    void registerEndInvocation() {
+    inline void registerEndInvocation() {
         if (invoked != 0) {
-            struct timespec begin;
-            clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &begin);
-            unsigned long now = begin.tv_nsec + begin.tv_sec * 1e9;
-            execTime += now - invoked;
+            execTime += rdtsc() - invoked;
             invoked = 0;
         }
     }
