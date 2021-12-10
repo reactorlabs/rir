@@ -219,136 +219,134 @@ rir.annotateDepromised <- function(closure) {
     copy
 }
 
-# Reimplement some builtins in R
+########################################################
+###########  Reimplement some builtins in R  ###########
+########################################################
 
-cache_memory <- function() {
-  cache <- NULL
-  .reset <- function() cache <<- new.env(TRUE, emptyenv())
-  .set <- function(key, value) assign(key, value, envir = cache)
-  .get <- function(key) get(key, envir = cache, inherits = FALSE)
-  .has_key <- function(key) exists(key, envir = cache, inherits = FALSE)
-  .drop_key <- function(key) rm(list = key, envir = cache, inherits = FALSE)
-  .reset()
-  list(
-    reset = .reset,
-    set = .set,
-    get = .get,
-    has_key = .has_key,
-    drop_key = .drop_key,
-    keys = function() ls(cache)
-  )
-}
+# the toplevel of this file lives in the base environment (we do sys.source).. do we want that?
+# (only in tests we explicitly source it to the test's global env)
 
-rir.switchedDefaultsCache <- cache_memory()
+rir.builtins <- new.env()
 
-rir.switchImplementation <- function(name, fun) {
-    if (!is.character(name) || length(name) != 1)
-        stop("rir.switchImplementation: need name as string")
+local({
 
-    o <- get(name, envir = globalenv())
+    # builtins_env <- attach(what = NULL, pos = length(search()), name = "rir:builtins")
+    builtins_env <- new.env(parent = baseenv())
+    attr(builtins_env, "name") <- "rir:builtins"
 
-    if (rir.switchedDefaultsCache$has_key(name)) {
-        warning(
-            paste0("rir.switchImplementation: '",
-                   name,
-                   "' already saved, not overwriting..."))
-    } else {
-        rir.switchedDefaultsCache$set(name, o)
+    new_cache <- function() {
+        cache <- NULL
+        .reset <- function() cache <<- new.env(TRUE, emptyenv())
+        .set <- function(key, value) assign(key, value, envir = cache)
+        .get <- function(key) get(key, envir = cache, inherits = FALSE)
+        .has_key <- function(key) exists(key, envir = cache, inherits = FALSE)
+        .drop_key <- function(key) rm(list = key, envir = cache, inherits = FALSE)
+        .reset()
+        list(
+            reset = .reset,
+            set = .set,
+            get = .get,
+            has_key = .has_key,
+            drop_key = .drop_key,
+            keys = function() ls(cache)
+        )
     }
 
-    e <- environment(o)
-    unlockBinding(name, e)
-    fun <- match.fun(fun)
-    environment(fun) <- e
-    assign(name, fun, envir = e)
-    lockBinding(name, e)
-    invisible(NULL)
-}
+    cache <- new_cache()
 
-rir.restoreImplementation <- function(name) {
-    if (!is.character(name) || length(name) != 1)
-        stop("rir.restoreImplementation: need name as string")
+    add_implementation <- function(name, fun) {
+        stopifnot(is.character(name), length(name) == 1, is.function(fun))
 
-    if (!rir.switchedDefaultsCache$has_key(name)) {
-        warning(
-            paste("rir.restoreImplementation: '",
-                  name,
-                  "' not saved, doing nothing...",
-                  sep = ""))
-    } else {
-        o <- rir.switchedDefaultsCache$get(name)
-        rir.switchedDefaultsCache$drop_key(name)
+        fun <- match.fun(fun)
+        environment(fun) <- builtins_env
+        assign(name, fun, envir = builtins_env)
+    }
+
+    switch_implementation <- function(name, fun) {
+        stopifnot(is.character(name), length(name) == 1, is.function(fun))
+
+        o <- get(name, envir = parent.env(globalenv()))
+
+        if (cache$has_key(name)) {
+            warning(paste(name, "already switched"))
+        } else {
+            cache$set(name, o)
+        }
+
+        fun <- match.fun(fun)
+        environment(fun) <- builtins_env
 
         e <- environment(o)
         unlockBinding(name, e)
-        assign(name, o, envir = e)
+        assign(name, fun, envir = e)
         lockBinding(name, e)
     }
-    invisible(NULL)
-}
 
-rir.switchBuiltins <- function() {
+    restore_implementation <- function(name) {
+        stopifnot(is.character(name), length(name) == 1)
 
-if (TRUE) {
-    rir.switchImplementation("lapply", function (X, FUN, ...) {
-## cat(">>>>>>>>>> BEGIN\n")
-## print(match.call())
-        FUN <- match.fun(FUN)
-        ## ff <- match.fun(FUN)
-        ## FUN <- function(...) {
-        ##     print(match.call())
-        ##     ff(...)
-        ## }
-        if (!is.vector(X) || is.object(X))
-            X <- as.list(X)
+        if (cache$has_key(name)) {
+            o <- cache$get(name)
+            cache$drop_key(name)
 
-        o <- attributes(X)
-        attributes(X) <- NULL
-        n <- length(X)
-        attributes(X) <- o
-
-        ans <- vector(mode = "list", length = n)
-        if (!is.null(names(X)))
-            names(ans) <- names(X)
-
-        i <- 1L
-        while (i <= n) {
-            # handle missing - can't evaluate if assigned to a variable
-            # handle null - subassigning mustn't shrink the result
-            # normal case is okay
-            ## if (identical(tmp <- FUN(X[[i]], ...),
-            ##               quote(expr = ))) {
-            if (identical(tmp <- forceAndCall(1L, FUN, X[[i]], ...),
-                          quote(expr = ))) {
-                ans[[i]] <- quote(expr = )
-            } else if (is.null(tmp)) {
-                ans[i] <- list(NULL)
-            } else {
-                ans[[i]] <- tmp
-            }
-            i <- i + 1L
+            e <- environment(o)
+            unlockBinding(name, e)
+            assign(name, o, envir = e)
+            lockBinding(name, e)
+        } else {
+            warning(paste(name, "not stored"))
         }
-## cat(">>>>>>>>>> RESULT 2\n")
-## print(ans)
-## cat("<<<<<<<<<< END\n")
-        ans
-    })
-} else {
-    rir.switchImplementation("lapply", function (X, FUN, ...) {
-## cat(">>>>>>>>>> BEGIN\n")
-## print(match.call())
-        ans <- rir.switchedDefaultsCache$get("lapply")(X, FUN, ...)
-## cat(">>>>>>>>>> RESULT 2\n")
-## print(ans)
-## cat("<<<<<<<<<< END\n")
-        ans
-   })
-}
-}
+    }
 
-rir.restoreBuiltins <- function() {
-    for (n in rir.switchedDefaultsCache$keys())
-        rir.restoreImplementation(n)
-}
+    switch_builtins <- function() {
 
-rir.switchBuiltins()
+        add_implementation("rir_length", function(x) {
+            .Call("rirLength", x)
+        })
+
+        switch_implementation("lapply", function (X, FUN, ...) {
+            FUN <- match.fun(FUN)
+            if (!is.vector(X) || is.object(X))
+                X <- as.list(X)
+
+            # need to prevent length from dispatching
+            ## o <- attributes(X)
+            ## attributes(X) <- NULL
+            ## n <- length(X)
+            ## attributes(X) <- o
+
+            n <- rir_length(X)
+
+            ans <- vector(mode = "list", length = n)
+            if (!is.null(names(X)))
+                names(ans) <- names(X)
+
+            i <- 1L
+            while (i <= n) {
+                # handle missing - can't evaluate if assigned to a variable
+                # handle null - subassigning mustn't shrink the result
+                # normal case is okay
+                # do we need forceAndCall? maybe forcing by hand and just calling?
+                if (identical(tmp <- forceAndCall(1L, FUN, X[[i]], ...),
+                            quote(expr = ))) {
+                    ans[[i]] <- quote(expr = )
+                } else if (is.null(tmp)) {
+                    ans[i] <- list(NULL)
+                } else {
+                    ans[[i]] <- tmp
+                }
+                i <- i + 1L
+            }
+            ans
+        })
+
+    }
+
+    restore_builtins <- function() {
+        for (n in cache$keys())
+            restore_implementation(n)
+    }
+
+}, envir = rir.builtins)
+
+rir.builtins$switch_builtins()

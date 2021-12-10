@@ -48,6 +48,7 @@
     V(Ellipsis, "...")                                                         \
     V(Colon, ":")                                                              \
     V(Internal, ".Internal")                                                   \
+    V(Call, ".Call")                                                           \
     V(tmp, "*tmp*")                                                            \
     V(vtmp, "*vtmp*")                                                          \
     V(value, "value")                                                          \

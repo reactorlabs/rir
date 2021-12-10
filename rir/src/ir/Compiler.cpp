@@ -1691,6 +1691,28 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         }
     }
 
+    if (fun == symbol::Call) {
+        auto fun = CAR(args_);
+        auto sargs = CDR(args_);
+        RList args(sargs);
+
+        if (TYPEOF(fun) == STRSXP && LENGTH(fun) == 1) {
+
+            // .Call("rirLength", x)
+            if (std::string("rirLength") == CHAR(STRING_ELT(fun, 0)) &&
+                args.length() == 1) {
+
+                compileExpr(ctx, args[0]); // [x]
+                cs << BC::length_();
+
+                if (voidContext)
+                    cs << BC::pop();
+
+                return true;
+            }
+        }
+    }
+
 #define V(NESTED, name, Name)                                                  \
     if (fun == symbol::name) {                                                 \
         cs << BC::push(R_NilValue) << BC::name();                              \

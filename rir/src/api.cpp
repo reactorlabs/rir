@@ -595,6 +595,8 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
+REXPORT SEXP rirLength(SEXP x) { return Rf_ScalarInteger(Rf_length(x)); }
+
 bool startup() {
     initializeRuntime();
     return true;
