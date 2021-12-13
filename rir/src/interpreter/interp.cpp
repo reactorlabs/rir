@@ -866,9 +866,9 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
 unsigned pir::Parameter::PIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
 unsigned pir::Parameter::PIR_REOPT =
-    getenv("PIR_REOPT") ? atoi(getenv("PIR_REOPT")) : 1000;
+    getenv("PIR_REOPT") ? atoi(getenv("PIR_REOPT")) : 800;
 unsigned pir::Parameter::PIR_OPT_TIME =
-    getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 5e6;
+    getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 1e7;
 unsigned pir::Parameter::PIR_REOPT_TIME =
     getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 1e8;
 unsigned pir::Parameter::DEOPT_ABANDON =

@@ -80,7 +80,7 @@ inline bool RecompileHeuristic(DispatchTable* table, Function* fun) {
         return true;
     }
 
-    if (fun->invocationCount() > 3 && fun->invocationTime() > wt) {
+    if (fun->invocationCount() >= 2 && fun->invocationTime() > wt) {
         fun->clearInvocationTime();
         return true;
     }
