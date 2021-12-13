@@ -5220,8 +5220,6 @@ void LowerFunctionLLVM::compile() {
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
                     llvm::Value* vector = load(subAssign->vec());
-                    if (Rep::Of(subAssign->vec()) == Rep::SEXP)
-                        vector = cloneIfShared(vector);
 
                     auto ncol = builder.CreateZExt(
                         call(NativeBuiltins::get(
@@ -5244,8 +5242,32 @@ void LowerFunctionLLVM::compile() {
                             builder.CreateMul(nrow, index2, "", true, true);
                         index =
                             builder.CreateAdd(index, index1, "", true, true);
-                        assignVector(vector, index, val, vecType);
-                        res.addInput(convert(vector, i->type));
+
+                        auto cont = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+                        auto update = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto unchanged = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto cur = accessVector(vector, index, vecType);
+                        auto same = Rep::Of(subAssign->val()) == Rep::f64
+                                        ? builder.CreateFCmpUEQ(val, cur)
+                                        : builder.CreateICmpEQ(val, cur);
+                        auto res2 = phiBuilder(Rep::Of(i).toLlvm());
+                        builder.CreateCondBr(same, unchanged, update);
+
+                        builder.SetInsertPoint(unchanged);
+                        res2.addInput(convert(vector, i->type));
+                        builder.CreateBr(cont);
+
+                        builder.SetInsertPoint(update);
+                        auto cv = cloneIfShared(vector);
+                        assignVector(cv, index, val, vecType);
+                        res2.addInput(convert(cv, i->type));
+                        builder.CreateBr(cont);
+
+                        builder.SetInsertPoint(cont);
+                        res.addInput(res2());
                     } else {
                         res.addInput(convert(val, i->type));
                     }
@@ -5446,7 +5468,6 @@ void LowerFunctionLLVM::compile() {
                         builder.CreateCondBr(isAltrep(vector), fallback, hit1,
                                              branchMostlyFalse);
                         builder.SetInsertPoint(hit1);
-                        vector = cloneIfShared(vector);
                     }
 
                     llvm::Value* index = computeAndCheckIndex(subAssign->idx(),
@@ -5454,9 +5475,32 @@ void LowerFunctionLLVM::compile() {
 
                     auto val = load(subAssign->val());
                     if (Rep::Of(i) == Rep::SEXP) {
-                        assignVector(vector, index, val,
-                                     subAssign->vec()->type);
-                        res.addInput(convert(vector, i->type));
+
+                        auto cont = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                       "", fun);
+                        auto update = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto unchanged = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto cur = accessVector(vector, index, vecType);
+                        auto same = Rep::Of(subAssign->val()) == Rep::f64
+                                        ? builder.CreateFCmpUEQ(val, cur)
+                                        : builder.CreateICmpEQ(val, cur);
+                        auto res2 = phiBuilder(Rep::Of(i).toLlvm());
+                        builder.CreateCondBr(same, unchanged, update);
+
+                        builder.SetInsertPoint(unchanged);
+                        res2.addInput(convert(vector, i->type));
+                        builder.CreateBr(cont);
+
+                        builder.SetInsertPoint(update);
+                        auto cv = cloneIfShared(vector);
+                        assignVector(cv, index, val, vecType);
+                        res2.addInput(convert(cv, i->type));
+                        builder.CreateBr(cont);
+
+                        builder.SetInsertPoint(cont);
+                        res.addInput(res2());
                     } else {
                         res.addInput(convert(val, i->type));
                     }
