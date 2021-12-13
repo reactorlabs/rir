@@ -32,9 +32,10 @@ struct CallContext {
           suppliedvars(suppliedvars), ast(ast), callee(callee),
           givenContext(givenContext) {
         assert(callerEnv);
-        assert(callee &&
-               (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
-                TYPEOF(callee) == BUILTINSXP));
+        // This can happen, it triggers an error later...
+        // assert(callee &&
+        //        (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
+        //         TYPEOF(callee) == BUILTINSXP));
         SLOWASSERT(callerEnv == symbol::delayedEnv ||
                    TYPEOF(callerEnv) == ENVSXP || callerEnv == R_NilValue ||
                    LazyEnvironment::check(callerEnv));
