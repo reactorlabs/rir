@@ -1387,7 +1387,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             R_ReturnedValue = R_NilValue; /* remove restart token */
             code->registerInvocation();
             result = code->nativeCode()(code, args, env, callee);
-            code->registerEndInvocation();
+            fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }

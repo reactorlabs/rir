@@ -111,39 +111,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void unregisterInvocation() {
-        invoked = 0;
         if (funInvocationCount > 0)
             funInvocationCount--;
     }
 
-    static inline unsigned long rdtsc() {
-        unsigned low, high;
-        asm volatile("rdtsc" : "=a"(low), "=d"(high));
-        return ((low) | ((uint64_t)(high) << 32));
-    }
-
     inline void registerInvocation() {
-        if (invoked != 0)
-            execTime += 1e4;
-
-        invoked = rdtsc();
-
         if (funInvocationCount < UINT_MAX)
             funInvocationCount++;
-    }
-
-    unsigned long currentInvocationTime() const {
-        if (invoked == 0)
-            return 0;
-
-        return rdtsc() - invoked;
-    }
-
-    inline void registerEndInvocation() {
-        if (invoked != 0) {
-            execTime += rdtsc() - invoked;
-            invoked = 0;
-        }
     }
 
     void registerDeopt() {
@@ -154,8 +128,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     // number of invocations. only incremented if this code object is the body
     // of a function
-    unsigned long invoked = 0;
-    unsigned long execTime = 0;
     unsigned funInvocationCount;
     unsigned deoptCount;
     unsigned deadCallReached = 0;

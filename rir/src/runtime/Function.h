@@ -69,12 +69,34 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    void unregisterInvocation() { body()->unregisterInvocation(); }
-    void registerInvocation() { body()->registerInvocation(); }
-    void registerEndInvocation() { body()->registerEndInvocation(); }
+    static inline unsigned long rdtsc() {
+        unsigned low, high;
+        asm volatile("rdtsc" : "=a"(low), "=d"(high));
+        return ((low) | ((uint64_t)(high) << 32));
+    }
+
+    void unregisterInvocation() {
+        invoked = 0;
+        body()->unregisterInvocation();
+    }
+    void registerInvocation() {
+        if (invoked != 0) {
+            execTime += 5e5;
+        }
+
+        invoked = rdtsc();
+
+        body()->registerInvocation();
+    }
+    void registerEndInvocation() {
+        if (invoked != 0) {
+            execTime += rdtsc() - invoked;
+            invoked = 0;
+        }
+    }
     size_t invocationCount() { return body()->funInvocationCount; }
-    unsigned long invocationTime() { return body()->execTime; }
-    void clearInvocationTime() { body()->execTime = 0; }
+    unsigned long invocationTime() { return execTime; }
+    void clearInvocationTime() { execTime = 0; }
     void registerDeopt() { body()->registerDeopt(); }
     size_t deoptCount() { return body()->deoptCount; }
 
@@ -130,6 +152,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
   private:
     unsigned numArgs_;
+
+    unsigned long invoked = 0;
+    unsigned long execTime = 0;
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
