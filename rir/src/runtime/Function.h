@@ -80,10 +80,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         body()->unregisterInvocation();
     }
     void registerInvocation() {
-        if (invoked != 0) {
-            execTime += 5e5;
-        }
-
+        if (invoked != 0)
+            execTime += 5e5 + rdtsc() - invoked;
         invoked = rdtsc();
 
         body()->registerInvocation();

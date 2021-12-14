@@ -870,7 +870,7 @@ unsigned pir::Parameter::PIR_REOPT =
 unsigned pir::Parameter::PIR_OPT_TIME =
     getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 3e6;
 unsigned pir::Parameter::PIR_REOPT_TIME =
-    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 1e8;
+    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 1e7;
 unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 
