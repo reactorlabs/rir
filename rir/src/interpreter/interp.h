@@ -58,7 +58,7 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 }
 
 inline bool RecompileHeuristic(DispatchTable* table, Function* fun) {
-    auto& flags = fun->flags;
+    auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt))
         return true;
     if (flags.contains(Function::NotOptimizable) ||

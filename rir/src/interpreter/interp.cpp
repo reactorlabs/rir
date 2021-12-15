@@ -870,7 +870,7 @@ unsigned pir::Parameter::PIR_REOPT =
 unsigned pir::Parameter::PIR_OPT_TIME =
     getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 3e6;
 unsigned pir::Parameter::PIR_REOPT_TIME =
-    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 1e7;
+    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
 unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 
@@ -1053,12 +1053,13 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
                             pir::Parameter::PIR_OPT_TIME / 10 &&
                         call.stackArgs && call.caller) {
                             call.triggerOsr = true;
-                    }
+                    } else {
 
-                    DoRecompile(fun, call.ast, call.callee, given, ctx);
-                    // Don't register invocation to avoid counting the time
-                    // for lazy compilation.
-                    fun = dispatch(call, table);
+                        DoRecompile(fun, call.ast, call.callee, given, ctx);
+                        // Don't register invocation to avoid counting the time
+                        // for lazy compilation.
+                        fun = dispatch(call, table);
+                    }
                 }
             }
         }

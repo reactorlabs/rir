@@ -80,8 +80,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         body()->unregisterInvocation();
     }
     void registerInvocation() {
+        // constant increment for recursive functions
         if (invoked != 0)
-            execTime += 5e5 + rdtsc() - invoked;
+            execTime += 5e5;
         invoked = rdtsc();
 
         body()->registerInvocation();

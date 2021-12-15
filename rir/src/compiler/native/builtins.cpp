@@ -1338,11 +1338,12 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     auto dt = DispatchTable::unpack(BODY(callee));
 
     fun->registerInvocation();
-    if (fail || RecompileHeuristic(dt, fun)) {
+    static int recheck = 0;
+    if (fail || (++recheck == 20 && RecompileHeuristic(dt, fun))) {
+        recheck = 0;
         inferCurrentContext(call, fun->nargs(), ctx);
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             fun->unregisterInvocation();
-
             auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
