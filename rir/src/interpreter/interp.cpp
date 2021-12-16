@@ -759,18 +759,11 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                                 v = le->getArg(sym);
                             } else {
                                 auto env = PRENV(prom);
-                                while (env != R_NilValue) {
                                     R_varloc_t loc =
                                         R_findVarLocInFrame(env, sym);
-                                    if (R_VARLOC_IS_NULL(loc)) {
-                                        env = ENCLOS(env);
-                                        continue;
-                                    }
-                                    if (IS_ACTIVE_BINDING(loc.cell))
-                                        break;
-                                    v = CAR(loc.cell);
-                                    break;
-                                }
+                                    if (!R_VARLOC_IS_NULL(loc) &&
+                                        !IS_ACTIVE_BINDING(loc.cell))
+                                        v = CAR(loc.cell);
                             }
                         }
                     }
