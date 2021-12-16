@@ -3434,6 +3434,7 @@ void LowerFunctionLLVM::compile() {
                                     loadSxp(calli->env()),
                                     c(args.size()),
                                     c(asmpt.toI()),
+                                    c((nativeTarget->context() - asmpt).toI()),
                                 });
                         });
                         setVal(i, res);

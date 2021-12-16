@@ -761,7 +761,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                                 auto env = PRENV(prom);
                                 while (env != R_NilValue) {
                                     R_varloc_t loc =
-                                        R_findVarLocInFrame(PRENV(prom), sym);
+                                        R_findVarLocInFrame(env, sym);
                                     if (R_VARLOC_IS_NULL(loc)) {
                                         env = ENCLOS(env);
                                         continue;
