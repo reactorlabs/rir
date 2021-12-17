@@ -85,6 +85,7 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                          next->effects.contains(Effect::Reflection))
                     break;
 
+                anyChange = true;
                 bb->swapWithNext(it);
                 it++;
             }

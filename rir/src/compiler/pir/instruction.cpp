@@ -433,6 +433,30 @@ const Value* Instruction::cFollowCasts() const {
     return this;
 }
 
+const Value* Instruction::cFollowDownCastsAndForce() const {
+    if (auto cast = PirCopy::Cast(this))
+        return cast->arg<0>().val()->followCasts();
+    if (auto cast = CastType::Cast(this)) {
+        if (cast->kind == CastType::Downcast) {
+            return cast->arg<0>().val()->followCastsAndForce();
+        } else {
+            if (auto mkarg = MkArg::Cast(cast->arg<0>().val()))
+                if (mkarg->isEager())
+                    return mkarg->eagerArg()->followCastsAndForce();
+        }
+    }
+    if (auto force = Force::Cast(this))
+        return force->input()->followCastsAndForce();
+    if (auto mkarg = MkArg::Cast(this))
+        if (mkarg->isEager())
+            return mkarg->eagerArg()->followCastsAndForce();
+    if (auto chk = ChkFunction::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    if (auto chk = ChkMissing::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    return this;
+}
+
 const Value* Instruction::cFollowCastsAndForce() const {
     if (auto cast = PirCopy::Cast(this))
         return cast->arg<0>().val()->followCasts();
