@@ -1350,11 +1350,15 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                                 LazyEnvironment::check(prom->u.promsxp.env)) {
                             a = le->getArg(sym);
                         } else {
-                            R_varloc_t loc =
-                                R_findVarLocInFrame(PRENV(prom), sym);
-                            if (!R_VARLOC_IS_NULL(loc) &&
-                                !IS_ACTIVE_BINDING(loc.cell))
-                                a = CAR(loc.cell);
+                            if (env == R_BaseEnv) {
+                                a = SYMVALUE(sym);
+                            } else {
+                                R_varloc_t loc =
+                                    R_findVarLocInFrame(PRENV(prom), sym);
+                                if (!R_VARLOC_IS_NULL(loc) &&
+                                    !IS_ACTIVE_BINDING(loc.cell))
+                                    a = CAR(loc.cell);
+                            }
                         }
                     }
                 }

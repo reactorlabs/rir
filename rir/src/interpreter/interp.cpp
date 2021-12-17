@@ -759,7 +759,15 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                                 v = le->getArg(sym);
                             } else {
                                 auto env = PRENV(prom);
-                                while (env != R_NilValue) {
+                                while (env != R_EmptyEnv) {
+                                    if (env == R_BaseEnv) {
+                                        if (SYMVALUE(sym) == R_UnboundValue) {
+                                            env = ENCLOS(env);
+                                            continue;
+                                        }
+                                        v = SYMVALUE(sym);
+                                        break;
+                                    }
                                     R_varloc_t loc =
                                         R_findVarLocInFrame(env, sym);
                                     if (R_VARLOC_IS_NULL(loc)) {
