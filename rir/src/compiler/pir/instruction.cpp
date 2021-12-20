@@ -438,22 +438,22 @@ const Value* Instruction::cFollowDownCastsAndForce() const {
         return cast->arg<0>().val()->followCasts();
     if (auto cast = CastType::Cast(this)) {
         if (cast->kind == CastType::Downcast) {
-            return cast->arg<0>().val()->followCastsAndForce();
+            return cast->arg<0>().val()->followDownCastsAndForce();
         } else {
             if (auto mkarg = MkArg::Cast(cast->arg<0>().val()))
                 if (mkarg->isEager())
-                    return mkarg->eagerArg()->followCastsAndForce();
+                    return mkarg->eagerArg()->followDownCastsAndForce();
         }
     }
     if (auto force = Force::Cast(this))
-        return force->input()->followCastsAndForce();
+        return force->input()->followDownCastsAndForce();
     if (auto mkarg = MkArg::Cast(this))
         if (mkarg->isEager())
-            return mkarg->eagerArg()->followCastsAndForce();
+            return mkarg->eagerArg()->followDownCastsAndForce();
     if (auto chk = ChkFunction::Cast(this))
-        return chk->arg<0>().val()->followCastsAndForce();
+        return chk->arg<0>().val()->followDownCastsAndForce();
     if (auto chk = ChkMissing::Cast(this))
-        return chk->arg<0>().val()->followCastsAndForce();
+        return chk->arg<0>().val()->followDownCastsAndForce();
     return this;
 }
 
