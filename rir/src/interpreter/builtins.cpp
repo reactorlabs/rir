@@ -225,10 +225,13 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
             for (int i = 0; i < n; i++) {
                 auto p = innerCall.stackArg(i);
-                if (TYPEOF(p) == PROMSXP)
-                    evaluatePromise(p);
-                else if (p == R_MissingArg)
+                if (TYPEOF(p) == PROMSXP) {
+                    auto v = evaluatePromise(p);
+                    if (TYPEOF(fun) == BUILTINSXP)
+                        innerCall.setStackArg(v, i);
+                } else if (p == R_MissingArg) {
                     Rf_errorcall(innerCall.ast, ("argument %d is empty"), i);
+                }
             }
         } else if (TYPEOF(fun) != SPECIALSXP) {
             Rf_error("attempt to apply non-function");
