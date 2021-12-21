@@ -5992,6 +5992,7 @@ void LowerFunctionLLVM::compile() {
                         if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
                             i->printRecursive(str, 4);
+                            str << cls->context() << "\n";
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
                         } else {
