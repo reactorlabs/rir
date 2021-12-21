@@ -13,6 +13,5 @@ PKG="$SCRIPTPATH/../rir/"
 
 export EXTRA_LOAD_SO="`ls $RIR_BUILD/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
-export R_JIT_STRATEGY=1
 
 $R_HOME/bin/`basename "$0"` "$@"

@@ -211,7 +211,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         weight *= 0.4;
                 }
                 if (inlineeCls->rirFunction()->invocationCount() >
-                    2 * cls->owner()->rirFunction()->invocationCount())
+                    4 * cls->owner()->rirFunction()->invocationCount())
                     weight *= 0.8;
                 if (hasDotslistArg)
                     weight *= 0.4;
