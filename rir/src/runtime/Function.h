@@ -99,6 +99,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void registerDeopt() { body()->registerDeopt(); }
     size_t deoptCount() { return body()->deoptCount; }
 
+    bool isOptimized() const {
+        return signature_.optimization !=
+               FunctionSignature::OptimizationLevel::Baseline;
+    }
+
     unsigned size; /// Size, in bytes, of the function and its data
 
 #define RIR_FUNCTION_FLAGS(V)                                                  \

@@ -692,6 +692,33 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     return newrho;
 }
 
+SEXP getTrivialPromValue(SEXP sym, SEXP env) {
+    while (env != R_EmptyEnv) {
+        if (auto le = LazyEnvironment::check(env)) {
+            auto v = le->getArg(sym);
+            if (v != R_UnboundValue)
+                return v;
+            env = le->getParent();
+            continue;
+        }
+        if (env == R_BaseEnv) {
+            auto v = SYMVALUE(sym);
+            if (v != R_UnboundValue)
+                return v;
+        } else {
+            R_varloc_t loc = R_findVarLocInFrame(env, sym);
+            if (!R_VARLOC_IS_NULL(loc)) {
+                if (IS_ACTIVE_BINDING(loc.cell))
+                    return R_UnboundValue;
+                else
+                    return CAR(loc.cell);
+            }
+        }
+        env = ENCLOS(env);
+    }
+    return R_UnboundValue;
+}
+
 void inferCurrentContext(CallContext& call, size_t formalNargs,
                          InterpreterInstance* ctx) {
     Context& given = call.givenContext;
@@ -753,34 +780,8 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                     // expression (i.e. just a name lookup) and if that lookup
                     // can be easily resolved.
                     if (v == R_UnboundValue) {
-                        if (auto sym = getSymbolIfTrivialPromise(prom)) {
-                            if (auto le = LazyEnvironment::check(
-                                    prom->u.promsxp.env)) {
-                                v = le->getArg(sym);
-                            } else {
-                                auto env = PRENV(prom);
-                                while (env != R_EmptyEnv) {
-                                    if (env == R_BaseEnv) {
-                                        if (SYMVALUE(sym) == R_UnboundValue) {
-                                            env = ENCLOS(env);
-                                            continue;
-                                        }
-                                        v = SYMVALUE(sym);
-                                        break;
-                                    }
-                                    R_varloc_t loc =
-                                        R_findVarLocInFrame(env, sym);
-                                    if (R_VARLOC_IS_NULL(loc)) {
-                                        env = ENCLOS(env);
-                                        continue;
-                                    }
-                                    if (IS_ACTIVE_BINDING(loc.cell))
-                                        break;
-                                    v = CAR(loc.cell);
-                                    break;
-                                }
-                            }
-                        }
+                        if (auto sym = getSymbolIfTrivialPromise(prom))
+                            v = getTrivialPromValue(sym, PRENV(prom));
                     }
 
                     if (reflectionPossible) {
@@ -871,15 +872,13 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
     }
 }
 
-unsigned pir::Parameter::PIR_WARMUP =
+const unsigned pir::Parameter::PIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
-unsigned pir::Parameter::PIR_REOPT =
-    getenv("PIR_REOPT") ? atoi(getenv("PIR_REOPT")) : 800;
-unsigned pir::Parameter::PIR_OPT_TIME =
+const unsigned pir::Parameter::PIR_OPT_TIME =
     getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 3e6;
-unsigned pir::Parameter::PIR_REOPT_TIME =
+const unsigned pir::Parameter::PIR_REOPT_TIME =
     getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
-unsigned pir::Parameter::DEOPT_ABANDON =
+const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 
 static unsigned serializeCounter = 0;
@@ -1044,7 +1043,7 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         Function* fun = dispatch(call, table);
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
+        if (!isDeoptimizing() && RecompileHeuristic(fun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of

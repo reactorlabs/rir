@@ -1345,22 +1345,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                 if (TYPEOF(a) == PROMSXP)
                     a = PRVALUE(a);
                 if (a == R_UnboundValue) {
-                    if (auto sym = getSymbolIfTrivialPromise(prom)) {
-                        if (auto le =
-                                LazyEnvironment::check(prom->u.promsxp.env)) {
-                            a = le->getArg(sym);
-                        } else {
-                            if (env == R_BaseEnv) {
-                                a = SYMVALUE(sym);
-                            } else {
-                                R_varloc_t loc =
-                                    R_findVarLocInFrame(PRENV(prom), sym);
-                                if (!R_VARLOC_IS_NULL(loc) &&
-                                    !IS_ACTIVE_BINDING(loc.cell))
-                                    a = CAR(loc.cell);
-                            }
-                        }
-                    }
+                    if (auto sym = getSymbolIfTrivialPromise(prom))
+                        a = getTrivialPromValue(sym, PRENV(prom));
                 }
                 checkArgs[i] = a;
                 return a;
@@ -1370,6 +1356,14 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             while (flag <= TypeAssumption::LAST) {
                 if (missingAsmpt.getTypeFlags().includes(flag))
                     switch (flag) {
+#define FOR_ALL_ARGS(v)                                                        \
+    v(0);                                                                      \
+    v(1);                                                                      \
+    v(2);                                                                      \
+    v(3);                                                                      \
+    v(4);                                                                      \
+    v(5);
+
 #define CHECK_EAGER(__i__)                                                     \
     case TypeAssumption::Arg##__i__##IsNonRefl_:                               \
     case TypeAssumption::Arg##__i__##IsEager_: {                               \
@@ -1378,12 +1372,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = true;                                                       \
         break;                                                                 \
     }
-                        CHECK_EAGER(0)
-                        CHECK_EAGER(1)
-                        CHECK_EAGER(2)
-                        CHECK_EAGER(3)
-                        CHECK_EAGER(4)
-                        CHECK_EAGER(5)
+                        FOR_ALL_ARGS(CHECK_EAGER)
 #undef CHECK_EAGER
 #define CHECK_NON_OBJ(__i__)                                                   \
     case TypeAssumption::Arg##__i__##IsNotObj_: {                              \
@@ -1392,12 +1381,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = true;                                                       \
         break;                                                                 \
     }
-                        CHECK_NON_OBJ(0)
-                        CHECK_NON_OBJ(1)
-                        CHECK_NON_OBJ(2)
-                        CHECK_NON_OBJ(3)
-                        CHECK_NON_OBJ(4)
-                        CHECK_NON_OBJ(5)
+                        FOR_ALL_ARGS(CHECK_NON_OBJ)
 #undef CHECK_NON_OBJ
 #define CHECK_INT(__i__)                                                       \
     case TypeAssumption::Arg##__i__##IsSimpleInt_: {                           \
@@ -1407,12 +1391,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = true;                                                       \
         break;                                                                 \
     }
-                        CHECK_INT(0)
-                        CHECK_INT(1)
-                        CHECK_INT(2)
-                        CHECK_INT(3)
-                        CHECK_INT(4)
-                        CHECK_INT(5)
+                        FOR_ALL_ARGS(CHECK_INT)
 #undef CHECK_INT
 #define CHECK_REAL(__i__)                                                      \
     case TypeAssumption::Arg##__i__##IsSimpleReal_: {                          \
@@ -1422,13 +1401,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = true;                                                       \
         break;                                                                 \
     }
-                        CHECK_REAL(0)
-                        CHECK_REAL(1)
-                        CHECK_REAL(2)
-                        CHECK_REAL(3)
-                        CHECK_REAL(4)
-                        CHECK_REAL(5)
+                        FOR_ALL_ARGS(CHECK_REAL)
 #undef CHECK_REAL
+#undef FOR_ALL_ARGS
                     }
                 flag = (TypeAssumption)((unsigned)flag + 1);
             }
@@ -1449,7 +1424,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     fun->registerInvocation();
     static int recheck = 0;
-    if (fail || (++recheck == 20 && RecompileHeuristic(dt, fun))) {
+    if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
         recheck = 0;
         inferCurrentContext(call, fun->nargs(), ctx);
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
