@@ -820,7 +820,11 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
         // Without isEager, these are the results of executing a trivial
         // expression, given no reflective change happens.
         if (arg != R_UnboundValue && arg != R_MissingArg) {
-            if (!isObject(arg))
+            // some objects are converted in-place to objects (plus we don't
+            // have optimizations for these not being objs), so we don't want to
+            // count these
+            if (!isObject(arg) && TYPEOF(arg) != CLOSXP &&
+                TYPEOF(arg) != ENVSXP)
                 given.setNotObj(i);
             if (IS_SIMPLE_SCALAR(arg, REALSXP))
                 given.setSimpleReal(i);
