@@ -1317,7 +1317,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                                      SEXP callee, Immediate target,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available,
-                                     unsigned long missingAsmpt_) {
+                                     Immediate missingAsmpt_) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
@@ -1328,10 +1328,12 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                      ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
-    auto missingAsmpt = Context(missingAsmpt_);
-    auto fail = !missingAsmpt.empty();
+    auto missingAsmpt =
+        (Context*)(DATAPTR(cp_pool_at(globalContext(), missingAsmpt_)));
+    auto fail = !missingAsmpt->empty();
     if (fail) {
-        if (missingAsmpt.numMissing() == 0 && missingAsmpt.getFlags().empty()) {
+        if (missingAsmpt->numMissing() == 0 &&
+            missingAsmpt->getFlags().empty()) {
             fail = false;
 
             // Check only missing assumptions
@@ -1354,7 +1356,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
             auto flag = TypeAssumption::FIRST;
             while (flag <= TypeAssumption::LAST) {
-                if (missingAsmpt.getTypeFlags().includes(flag))
+                if (missingAsmpt->getTypeFlags().includes(flag))
                     switch (flag) {
 #define FOR_ALL_ARGS(v)                                                        \
     v(0);                                                                      \
@@ -1409,7 +1411,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             }
 
             if (!fail)
-                call.givenContext = call.givenContext | missingAsmpt;
+                call.givenContext = call.givenContext | *missingAsmpt;
         }
 
         if (fail) {
@@ -1432,6 +1434,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
+            *missingAsmpt = fun->context() - Context(available);
             return res;
         }
     }
@@ -2488,7 +2491,7 @@ void NativeBuiltins::initializeBuiltins() {
         "nativeCallTrampoline", (void*)&nativeCallTrampolineImpl,
         llvm::FunctionType::get(t::SEXP,
                                 {t::i64, t::voidPtr, t::SEXP, t::Int, t::Int,
-                                 t::SEXP, t::i64, t::i64, t::i64},
+                                 t::SEXP, t::i64, t::i64, t::Int},
                                 false)};
     get_(Id::subassign11) = {
         "subassign1_1D", (void*)subassign11Impl,
