@@ -1434,7 +1434,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
-            *missingAsmpt = fun->context() - Context(available);
+            *missingAsmpt = trg->context() - Context(available);
             return res;
         }
     }
