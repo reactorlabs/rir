@@ -74,17 +74,20 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         asm volatile("rdtsc" : "=a"(low), "=d"(high));
         return ((low) | ((uint64_t)(high) << 32));
     }
+    static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
 
     void unregisterInvocation() {
         invoked = 0;
         body()->unregisterInvocation();
     }
     void registerInvocation() {
-        // constant increment for recursive functions
-        if (invoked != 0)
-            execTime += 5e5;
-        else
-            invoked = rdtsc();
+        if (execTime < MAX_TIME_MEASURE) {
+            // constant increment for recursive functions
+            if (invoked != 0)
+                execTime += 5e5;
+            else
+                invoked = rdtsc();
+        }
 
         body()->registerInvocation();
     }

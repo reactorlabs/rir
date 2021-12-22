@@ -1437,7 +1437,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     R_CheckStack();
+#ifdef ENABLE_SLOWASSERT
     auto t = R_BCNodeStackTop;
+#endif
 
     auto missing = fun->nargs() - nargs;
     for (size_t i = 0; i < missing; ++i)
@@ -1490,7 +1492,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     UNPROTECT(2);
     ostack_popn(globalContext(), missing);
 
-    assert(t == R_BCNodeStackTop);
+    SLOWASSERT(t == R_BCNodeStackTop);
     fun->registerEndInvocation();
     return result;
 }
