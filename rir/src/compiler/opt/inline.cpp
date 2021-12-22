@@ -210,9 +210,6 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (profitable.count(inlineeCls->name()))
                         weight *= 0.4;
                 }
-                if (inlineeCls->rirFunction()->invocationCount() >
-                    4 * cls->owner()->rirFunction()->invocationCount())
-                    weight *= 0.8;
                 if (hasDotslistArg)
                     weight *= 0.4;
                 if (!(*it)->typeFeedback().type.isVoid() &&
