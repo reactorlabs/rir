@@ -68,6 +68,7 @@ struct CallContext {
     const SEXP callee;
     Context givenContext;
     SEXP arglist = nullptr;
+    bool triggerOsr = false;
 
     bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
     bool hasNames() const { return names; }
