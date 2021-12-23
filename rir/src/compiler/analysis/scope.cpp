@@ -186,6 +186,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             assert(!state.envs.aliases.count(le) ||
                    state.envs.aliases.at(le) == staticClosureEnv);
             state.envs.aliases[le] = staticClosureEnv;
+        } else {
+            state.envs.at(i).leak();
+            effect.taint();
         }
     } else if (auto ldfun = LdFun::Cast(i)) {
         // Loadfun has collateral forcing if we touch intermediate envs.
