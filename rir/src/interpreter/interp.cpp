@@ -693,29 +693,27 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
 }
 
 SEXP getTrivialPromValue(SEXP sym, SEXP env) {
-    while (env != R_EmptyEnv) {
         if (auto le = LazyEnvironment::check(env)) {
             auto v = le->getArg(sym);
             if (v != R_UnboundValue)
                 return v;
             env = le->getParent();
-            continue;
-        }
-        if (env == R_BaseEnv) {
-            auto v = SYMVALUE(sym);
-            if (v != R_UnboundValue)
-                return v;
         } else {
-            R_varloc_t loc = R_findVarLocInFrame(env, sym);
-            if (!R_VARLOC_IS_NULL(loc)) {
-                if (IS_ACTIVE_BINDING(loc.cell))
-                    return R_UnboundValue;
-                else
-                    return CAR(loc.cell);
+            if (env == R_BaseEnv) {
+                auto v = SYMVALUE(sym);
+                if (v != R_UnboundValue)
+                    return v;
+            } else {
+                R_varloc_t loc = R_findVarLocInFrame(env, sym);
+                if (!R_VARLOC_IS_NULL(loc)) {
+                    if (IS_ACTIVE_BINDING(loc.cell))
+                        return R_UnboundValue;
+                    else
+                        return CAR(loc.cell);
+                }
             }
         }
         env = ENCLOS(env);
-    }
     return R_UnboundValue;
 }
 
