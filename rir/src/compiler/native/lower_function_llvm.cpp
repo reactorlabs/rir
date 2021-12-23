@@ -3420,6 +3420,11 @@ void LowerFunctionLLVM::compile() {
                         auto idx = Pool::makeSpace();
                         NativeBuiltins::targetCaches.push_back(idx);
                         Pool::patch(idx, nativeTarget->container());
+                        auto missAsmptStore =
+                            Rf_allocVector(RAWSXP, sizeof(Context));
+                        auto missAsmptIdx = Pool::insert(missAsmptStore);
+                        new (DATAPTR(missAsmptStore))
+                            Context(nativeTarget->context() - asmpt);
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
                             return call(
@@ -3434,6 +3439,7 @@ void LowerFunctionLLVM::compile() {
                                     loadSxp(calli->env()),
                                     c(args.size()),
                                     c(asmpt.toI()),
+                                    c(missAsmptIdx),
                                 });
                         });
                         setVal(i, res);
@@ -5991,6 +5997,7 @@ void LowerFunctionLLVM::compile() {
                         if (Parameter::RIR_CHECK_PIR_TYPES > 1) {
                             std::stringstream str;
                             i->printRecursive(str, 4);
+                            str << cls->context() << "\n";
                             leaky.push_back(str.str());
                             msg = leaky.back().c_str();
                         } else {

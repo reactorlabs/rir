@@ -280,6 +280,15 @@ struct Context {
 
     void setSpecializationLevel(int level);
 
+    Context operator-(const Context& other) const {
+        return Context(flags & ~other.flags, typeFlags & ~other.typeFlags,
+                       missing - other.missing);
+    }
+
+    Flags getFlags() const { return flags; }
+
+    TypeFlags getTypeFlags() const { return typeFlags; }
+
   private:
     Flags flags;
     TypeFlags typeFlags;
