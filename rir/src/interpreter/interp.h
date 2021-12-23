@@ -112,6 +112,7 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
 
 void inferCurrentContext(CallContext& call, size_t formalNargs,
                          InterpreterInstance* ctx);
+SEXP getTrivialPromValue(SEXP sym, SEXP env);
 
 SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs = false);
 size_t expandDotDotDotCallArgs(InterpreterInstance* ctx, size_t n,
