@@ -2414,12 +2414,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+
             NEXT();
         }
 
         INSTRUCTION(call_dots_) {
 #ifdef ENABLE_SLOWASSERT
             int ttt = R_PPStackTop;
+            auto lll = ostack_length(ctx);
 #endif
 
             // Stack contains [callee, arg1, ..., argn]
@@ -2435,6 +2437,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP callee = ostack_at(ctx, n);
             Immediate* names = names_;
             int pushed = 0;
+#ifdef ENABLE_SLOWASSERT
+            auto oldn = n;
+#endif
             if (needsExpandedDots(callee)) {
                 n = expandDotDotDotCallArgs(
                     ctx, n, names_, env,
@@ -2449,10 +2454,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             CallContext call(ArglistOrder::NOT_REORDERED, c, callee, n, ast,
                              ostack_cell_at(ctx, (long)n - 1), names, env,
                              R_NilValue, given, ctx);
+
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1 + pushed);
             ostack_push(ctx, res);
 
+            SLOWASSERT(lll - oldn == (unsigned)ostack_length(ctx));
             SLOWASSERT(ttt == R_PPStackTop);
             NEXT();
         }

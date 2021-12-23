@@ -221,6 +221,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
                               nargs, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
                               call.callerEnv, R_NilValue, innerCtxt, ctx);
+        assert(call.passedArgs == innerCall.passedArgs + 2);
 
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == CLOSXP) {
             for (int i = 0; i < n; i++) {
@@ -234,6 +235,10 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
             Rf_error("attempt to apply non-function");
         }
         auto res = doCall(innerCall, ctx);
+
+        // In case the args were padded with missing we need to communicate this
+        // back to avoid leaving them on the stack.
+        call.passedArgs = innerCall.passedArgs + 2;
         UNPROTECT(1);
         R_Visible = (Rboolean) true;
         return res;
