@@ -79,9 +79,13 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
 
                 if (PushContext::Cast(next))
                     envInstr->context++;
-                if (PopContext::Cast(next))
+                else if (PopContext::Cast(next))
                     envInstr->context--;
+                else if (envInstr->context > 0 &&
+                         next->effects.contains(Effect::Reflection))
+                    break;
 
+                anyChange = true;
                 bb->swapWithNext(it);
                 it++;
             }

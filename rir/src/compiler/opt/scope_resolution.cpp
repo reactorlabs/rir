@@ -41,7 +41,7 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
                 return true;
             bool maybe = false;
             res.eachSource([&](ValOrig vo) {
-                auto v = vo.val->followCastsAndForce();
+                auto v = vo.val->followDownCastsAndForce();
                 if (v->type.maybeLazy()) {
                     if (auto a = LdArg::Cast(v))
                         if (cls->context().isNonRefl(a->pos) ||

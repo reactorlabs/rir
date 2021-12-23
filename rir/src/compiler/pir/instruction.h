@@ -294,6 +294,7 @@ class Instruction : public Value {
 
     const Value* cFollowCasts() const override final;
     const Value* cFollowCastsAndForce() const override final;
+    const Value* cFollowDownCastsAndForce() const override final;
     virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;

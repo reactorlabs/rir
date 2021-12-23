@@ -53,22 +53,22 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 void Function::disassemble(std::ostream& out) {
-    std::cout << "[sigature] ";
+    out << "[sigature] ";
     signature().print(std::cout);
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
-    std::cout << "\n";
-    std::cout << "[flags]    ";
+    out << "\n";
+    out << "[flags]    ";
 #define V(F)                                                                   \
     if (flags.includes(F))                                                     \
         std::cout << #F << " ";
     RIR_FUNCTION_FLAGS(V)
 #undef V
-    std::cout << "\n";
-    std::cout << "[stats]    ";
-    std::cout << "invoked: " << invocationCount()
-              << ", deopt: " << deoptCount();
-    std::cout << "\n";
+    out << "\n";
+    out << "[stats]    ";
+    out << "invoked: " << invocationCount()
+        << ", deopt: " << deoptCount();
+    out << "\n";
     body()->disassemble(out);
 }
 

@@ -1342,7 +1342,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         inferCurrentContext(call, fun->nargs(), ctx);
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             fun->unregisterInvocation();
-
             auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
@@ -1351,7 +1350,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     R_CheckStack();
+#ifdef ENABLE_SLOWASSERT
     auto t = R_BCNodeStackTop;
+#endif
 
     auto missing = fun->nargs() - nargs;
     for (size_t i = 0; i < missing; ++i)
@@ -1403,7 +1404,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     UNPROTECT(2);
     ostack_popn(globalContext(), missing);
 
-    assert(t == R_BCNodeStackTop);
+    SLOWASSERT(t == R_BCNodeStackTop);
     return result;
 }
 
