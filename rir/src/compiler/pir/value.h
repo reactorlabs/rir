@@ -31,6 +31,7 @@ class Value {
     void printRef() const { printRef(std::cerr); }
     virtual const Value* cFollowCasts() const { return this; }
     virtual const Value* cFollowCastsAndForce() const { return this; }
+    virtual const Value* cFollowDownCastsAndForce() const { return this; }
     Value* followCasts() {
         return const_cast<Value*>(
             const_cast<const Value*>(this)->cFollowCasts());
@@ -38,6 +39,10 @@ class Value {
     Value* followCastsAndForce() {
         return const_cast<Value*>(
             const_cast<const Value*>(this)->cFollowCastsAndForce());
+    }
+    Value* followDownCastsAndForce() {
+        return const_cast<Value*>(
+            const_cast<const Value*>(this)->cFollowDownCastsAndForce());
     }
     virtual bool validIn(Code* code) const { return true; }
     virtual SEXP asRValue() const {
