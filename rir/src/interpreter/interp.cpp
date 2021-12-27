@@ -1047,10 +1047,9 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
                         fun->body()->codeSize < 20) {
                         call.triggerOsr = true;
-                    } else {
-                        DoRecompile(fun, call.ast, call.callee, given, ctx);
-                        fun = dispatch(call, table);
                     }
+                    DoRecompile(fun, call.ast, call.callee, given, ctx);
+                    fun = dispatch(call, table);
                 }
             }
         }
