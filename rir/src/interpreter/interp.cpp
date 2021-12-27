@@ -692,6 +692,29 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
     return newrho;
 }
 
+SEXP getTrivialPromValue(SEXP sym, SEXP env) {
+    if (auto le = LazyEnvironment::check(env)) {
+        auto v = le->getArg(sym);
+        if (v != R_UnboundValue)
+            return v;
+    } else {
+        if (env == R_BaseEnv) {
+            auto v = SYMVALUE(sym);
+            if (v != R_UnboundValue)
+                return v;
+        } else {
+            R_varloc_t loc = R_findVarLocInFrame(env, sym);
+            if (!R_VARLOC_IS_NULL(loc)) {
+                if (IS_ACTIVE_BINDING(loc.cell))
+                    return R_UnboundValue;
+                else
+                    return CAR(loc.cell);
+            }
+        }
+    }
+    return R_UnboundValue;
+}
+
 void inferCurrentContext(CallContext& call, size_t formalNargs,
                          InterpreterInstance* ctx) {
     Context& given = call.givenContext;
@@ -753,26 +776,8 @@ void inferCurrentContext(CallContext& call, size_t formalNargs,
                     // expression (i.e. just a name lookup) and if that lookup
                     // can be easily resolved.
                     if (v == R_UnboundValue) {
-                        if (auto sym = getSymbolIfTrivialPromise(prom)) {
-                            if (auto le = LazyEnvironment::check(
-                                    prom->u.promsxp.env)) {
-                                v = le->getArg(sym);
-                            } else {
-                                auto env = PRENV(prom);
-                                while (env != R_NilValue) {
-                                    R_varloc_t loc =
-                                        R_findVarLocInFrame(PRENV(prom), sym);
-                                    if (R_VARLOC_IS_NULL(loc)) {
-                                        env = ENCLOS(env);
-                                        continue;
-                                    }
-                                    if (IS_ACTIVE_BINDING(loc.cell))
-                                        break;
-                                    v = CAR(loc.cell);
-                                    break;
-                                }
-                            }
-                        }
+                        if (auto sym = getSymbolIfTrivialPromise(prom))
+                            v = getTrivialPromValue(sym, PRENV(prom));
                     }
 
                     if (reflectionPossible) {
