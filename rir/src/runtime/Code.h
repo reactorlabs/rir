@@ -98,7 +98,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return lazyCompile();
     }
 
-    bool isCompiled() {
+    bool isCompiled() const {
         return *lazyCodeHandle_ != '\0' && nativeCode_ != nullptr;
     }
 

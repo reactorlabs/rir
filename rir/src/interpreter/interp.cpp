@@ -1041,9 +1041,11 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             fun->clearDisabledAssumptions(given);
             if (RecompileCondition(table, fun, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
-                    if (fun->body()->codeSize < 20 &&
-                        (!call.caller || fun->invocationCount() >
-                                             call.caller->funInvocationCount)) {
+                    if (call.caller && call.caller->funInvocationCount > 0 &&
+                        !call.caller->isCompiled() &&
+                        !call.caller->isDeoptimized &&
+                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
+                        fun->body()->codeSize < 20) {
                         call.triggerOsr = true;
                     } else {
                         DoRecompile(fun, call.ast, call.callee, given, ctx);
