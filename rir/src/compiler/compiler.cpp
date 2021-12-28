@@ -98,8 +98,6 @@ void Compiler::compileContinuation(SEXP closure, const ContinuationContext* ctx,
     log.failed("rir2pir aborted");
     log.flush();
     logger.close(version);
-    //    closure->erase(ctx);
-    delete version;
     return fail();
 }
 
