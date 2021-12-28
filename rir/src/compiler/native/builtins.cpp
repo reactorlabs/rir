@@ -1316,7 +1316,8 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
 static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                                      SEXP callee, Immediate target,
                                      Immediate astP, SEXP env, size_t nargs,
-                                     unsigned long available) {
+                                     unsigned long available,
+                                     Immediate missingAsmpt_) {
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
@@ -1327,10 +1328,97 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                      ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
-    auto fail = !call.givenContext.smaller(fun->context());
+    auto missingAsmpt =
+        (Context*)(DATAPTR(cp_pool_at(globalContext(), missingAsmpt_)));
+    auto fail = !missingAsmpt->empty();
     if (fail) {
-        inferCurrentContext(call, fun->nargs(), ctx);
-        fail = !call.givenContext.smaller(fun->context());
+        if (missingAsmpt->numMissing() == 0 &&
+            missingAsmpt->getFlags().empty()) {
+            fail = false;
+
+            // Check only missing assumptions
+            std::array<SEXP, Context::NUM_TYPED_ARGS> checkArgs;
+            checkArgs.fill(nullptr);
+            auto loadArg = [&](size_t i) {
+                if (checkArgs[i])
+                    return checkArgs[i];
+                auto a = call.stackArg(i);
+                auto prom = a;
+                if (TYPEOF(a) == PROMSXP)
+                    a = PRVALUE(a);
+                if (a == R_UnboundValue) {
+                    if (auto sym = getSymbolIfTrivialPromise(prom))
+                        a = getTrivialPromValue(sym, PRENV(prom));
+                }
+                checkArgs[i] = a;
+                return a;
+            };
+
+            auto flag = TypeAssumption::FIRST;
+            while (flag <= TypeAssumption::LAST) {
+                if (missingAsmpt->getTypeFlags().includes(flag))
+                    switch (flag) {
+#define FOR_ALL_ARGS(v)                                                        \
+    v(0);                                                                      \
+    v(1);                                                                      \
+    v(2);                                                                      \
+    v(3);                                                                      \
+    v(4);                                                                      \
+    v(5);
+
+#define CHECK_EAGER(__i__)                                                     \
+    case TypeAssumption::Arg##__i__##IsNonRefl_:                               \
+    case TypeAssumption::Arg##__i__##IsEager_: {                               \
+        auto a = call.stackArg(__i__);                                         \
+        if (TYPEOF(a) == PROMSXP && PRVALUE(a) == R_MissingArg)                \
+            fail = true;                                                       \
+        break;                                                                 \
+    }
+                        FOR_ALL_ARGS(CHECK_EAGER)
+#undef CHECK_EAGER
+#define CHECK_NON_OBJ(__i__)                                                   \
+    case TypeAssumption::Arg##__i__##IsNotObj_: {                              \
+        auto a = loadArg(__i__);                                               \
+        if (a == R_UnboundValue || a == R_MissingArg || isObject(a) ||         \
+            TYPEOF(a) == CLOSXP || TYPEOF(a) == ENVSXP)                        \
+            fail = true;                                                       \
+        break;                                                                 \
+    }
+                        FOR_ALL_ARGS(CHECK_NON_OBJ)
+#undef CHECK_NON_OBJ
+#define CHECK_INT(__i__)                                                       \
+    case TypeAssumption::Arg##__i__##IsSimpleInt_: {                           \
+        auto a = loadArg(__i__);                                               \
+        if (a == R_UnboundValue || a == R_MissingArg ||                        \
+            !IS_SIMPLE_SCALAR(a, INTSXP))                                      \
+            fail = true;                                                       \
+        break;                                                                 \
+    }
+                        FOR_ALL_ARGS(CHECK_INT)
+#undef CHECK_INT
+#define CHECK_REAL(__i__)                                                      \
+    case TypeAssumption::Arg##__i__##IsSimpleReal_: {                          \
+        auto a = loadArg(__i__);                                               \
+        if (a == R_UnboundValue || a == R_MissingArg ||                        \
+            !IS_SIMPLE_SCALAR(a, REALSXP))                                     \
+            fail = true;                                                       \
+        break;                                                                 \
+    }
+                        FOR_ALL_ARGS(CHECK_REAL)
+#undef CHECK_REAL
+#undef FOR_ALL_ARGS
+                    }
+                flag = (TypeAssumption)((unsigned)flag + 1);
+            }
+
+            if (!fail)
+                call.givenContext = call.givenContext | *missingAsmpt;
+        }
+
+        if (fail) {
+            inferCurrentContext(call, fun->nargs(), ctx);
+            fail = !call.givenContext.smaller(fun->context());
+        }
     }
     if (!fun->body()->nativeCode() || fun->body()->isDeoptimized)
         fail = true;
@@ -1345,6 +1433,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             auto res = doCall(call, globalContext(), true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
+            *missingAsmpt = trg->context() - Context(available);
             return res;
         }
     }
@@ -2399,7 +2488,7 @@ void NativeBuiltins::initializeBuiltins() {
         "nativeCallTrampoline", (void*)&nativeCallTrampolineImpl,
         llvm::FunctionType::get(t::SEXP,
                                 {t::i64, t::voidPtr, t::SEXP, t::Int, t::Int,
-                                 t::SEXP, t::i64, t::i64},
+                                 t::SEXP, t::i64, t::i64, t::Int},
                                 false)};
     get_(Id::subassign11) = {
         "subassign1_1D", (void*)subassign11Impl,
