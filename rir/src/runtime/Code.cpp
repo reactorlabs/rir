@@ -22,13 +22,15 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      nativeCode_(nullptr), funInvocationCount(0), deoptCount(0), src(srcIdx),
-      trivialExpr(nullptr), stackLength(0), localsCount(localsCnt),
-      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
-      extraPoolSize(0) {
+      nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr), stackLength(0),
+      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
+      srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
+    assert(!fun || rir::Function::check(fun));
+    if (fun)
+        setEntry(3, fun);
 }
 
 Code* Code::New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
@@ -51,6 +53,14 @@ Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
 Code::~Code() {
     // TODO: Not sure if this is actually called
     // Otherwise the pointer will leak a few bytes
+}
+
+void Code::function(Function* fun) { setEntry(3, fun->container()); }
+
+rir::Function* Code::function() const {
+    auto f = getEntry(3);
+    assert(f);
+    return rir::Function::unpack(f);
 }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
@@ -98,8 +108,6 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     PROTECT(store);
     Code* code = new (DATAPTR(store)) Code;
     code->nativeCode_ = nullptr; // not serialized for now
-    code->funInvocationCount = InInteger(inp);
-    code->deoptCount = InInteger(inp);
     code->src = InInteger(inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
@@ -135,8 +143,6 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
     // Header
-    OutInteger(out, funInvocationCount);
-    OutInteger(out, deoptCount);
     OutInteger(out, src);
     OutInteger(out, trivialExpr != nullptr);
     if (trivialExpr)

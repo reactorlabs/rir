@@ -235,6 +235,8 @@ struct DeoptReason {
         return DeoptReason(FeedbackOrigin(0, 0), Unknown);
     }
 
+    void record(SEXP val) const;
+
     DeoptReason() = delete;
 
   private:

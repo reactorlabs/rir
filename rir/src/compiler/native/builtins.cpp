@@ -828,7 +828,7 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    recordDeoptReason(deoptTrigger, *deoptReason);
+    deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
@@ -936,7 +936,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         }
     }
 
-    c->registerDeopt();
+    c->function()->registerDeopt();
     // Invalidate target caches pointing to deoptimized version
     for (auto idx : NativeBuiltins::targetCaches)
         if (auto f = Function::check(Pool::get(idx)))
@@ -1420,7 +1420,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             fail = !call.givenContext.smaller(fun->context());
         }
     }
-    if (!fun->body()->nativeCode() || fun->body()->isDeoptimized)
+    if (!fun->body()->nativeCode() || fun->disabled())
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));
@@ -1475,7 +1475,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
-            code->registerInvocation();
+            fun->registerInvocation();
             result = code->nativeCode()(code, args, env, callee);
         } else {
             result = R_ReturnedValue;

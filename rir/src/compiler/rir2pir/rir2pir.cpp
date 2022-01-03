@@ -422,7 +422,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
                 }
-            } else if (t.type.isVoid() && srcCode->deoptCount == 0) {
+            } else if (t.type.isVoid() &&
+                       (!insert.function->optFunction->isOptimized() ||
+                        insert.function->optFunction->deoptCount() == 0)) {
                 t.type = PirType::val().notObject().fastVecelt();
             }
         }
@@ -437,7 +439,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed. Might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            srcCode->funInvocationCount > 1 && srcCode->deadCallReached < 3) {
+            insert.function->optFunction->invocationCount() > 1 &&
+            srcCode->function()->deadCallReached() < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
 
@@ -963,11 +966,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             emitGenericCall();
         }
 
-        if (ti.taken != (size_t)-1 && srcCode->funInvocationCount) {
+        if (ti.taken != (size_t)-1 &&
+            insert.function->optFunction->invocationCount()) {
             if (auto c = CallInstruction::CastCall(top())) {
                 // invocation count is already incremented before calling jit
-                c->taken = (double)ti.taken /
-                           (double)(srcCode->funInvocationCount - 1);
+                c->taken =
+                    (double)ti.taken /
+                    (double)(insert.function->optFunction->invocationCount() -
+                             1);
             }
         }
         break;

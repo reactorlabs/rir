@@ -4,9 +4,9 @@
 namespace rir {
 namespace pir {
 
-Continuation::Continuation(Closure* closure,
+Continuation::Continuation(Closure* closure, rir::Function* fun,
                            const ContinuationContext* continuationContext)
-    : ClosureVersion(closure, nullptr, true, Compiler::defaultContext,
+    : ClosureVersion(closure, fun, true, Compiler::defaultContext,
                      Properties()),
       continuationContext(continuationContext) {}
 

@@ -389,6 +389,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
     log.finalPIR(cls);
     function.finalize(body, signature, cls->context());
+    for (auto& c : done)
+        c.second->function(function.function());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
     return function.function();

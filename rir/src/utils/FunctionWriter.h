@@ -19,6 +19,7 @@ class FunctionWriter {
   private:
     Function* function_;
     std::vector<SEXP> defaultArgs;
+    std::vector<rir::Code*> codes;
     Preserve preserve;
 
   public:
@@ -54,6 +55,8 @@ class FunctionWriter {
         preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);
+        for (auto& c : codes)
+            c->function(fun);
 
         function_ = fun;
     }
@@ -184,6 +187,7 @@ class FunctionWriter {
         }
 
         assert(numberOfSources == sources.size());
+        codes.push_back(code);
 
         return code;
     }

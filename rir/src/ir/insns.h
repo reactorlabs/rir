@@ -456,6 +456,5 @@ DEF_INSTR(record_type_, 1, 1, 1)
 DEF_INSTR(record_test_, 1, 1, 1)
 
 DEF_INSTR(int3_, 0, 0, 0)
-DEF_INSTR(printInvocation_, 0, 0, 0)
 
 #undef DEF_INSTR

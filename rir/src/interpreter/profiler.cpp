@@ -98,7 +98,7 @@ void RuntimeProfiler::sample(int signal) {
     // at least one slot justifies re-opt.
     if (goodValues >= (slotCount / 2) && needReopt) {
         // set global re-opt flag
-        code->flags.set(Code::Reoptimise);
+        code->function()->flags.set(Function::Reoptimize);
         compilations++;
     }
 }
