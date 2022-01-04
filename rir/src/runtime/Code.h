@@ -9,6 +9,9 @@
 #include <cassert>
 #include <cstdint>
 #include <ostream>
+#include <time.h>
+
+#include <asm/msr.h>
 
 namespace rir {
 

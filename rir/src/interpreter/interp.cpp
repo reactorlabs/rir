@@ -818,10 +818,14 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
     }
 }
 
-unsigned pir::Parameter::RIR_WARMUP =
-    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
-unsigned pir::Parameter::DEOPT_ABANDON =
-    getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 10;
+const unsigned pir::Parameter::PIR_WARMUP =
+    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
+const unsigned pir::Parameter::PIR_OPT_TIME =
+    getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 3e6;
+const unsigned pir::Parameter::PIR_REOPT_TIME =
+    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
+const unsigned pir::Parameter::DEOPT_ABANDON =
+    getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 
 static unsigned serializeCounter = 0;
 
@@ -985,7 +989,7 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         Function* fun = dispatch(call, table);
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(table, fun)) {
+        if (!isDeoptimizing() && RecompileHeuristic(fun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of
@@ -1128,6 +1132,7 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
+        fun->registerEndInvocation();
         return result;
     }
     default:
@@ -3924,13 +3929,16 @@ SEXP rirEval(SEXP what, SEXP env) {
         // the baseline version!
         Function* fun = table->baseline();
         fun->registerInvocation();
-
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        auto res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        fun->registerEndInvocation();
+        return res;
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
-        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        auto res = evalRirCodeExtCaller(fun->body(), globalContext(), env);
+        fun->registerEndInvocation();
+        return res;
     }
 
     assert(false && "Expected a code object or a dispatch table");

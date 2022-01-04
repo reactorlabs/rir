@@ -57,23 +57,36 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(DispatchTable* table, Function* fun,
-                               unsigned factor = 1) {
-    auto& flags = fun->flags;
-    return (!flags.contains(Function::NotOptimizable) &&
-            (flags.contains(Function::MarkOpt) ||
-             (fun->deoptCount() < pir::Parameter::DEOPT_ABANDON &&
-              ((fun != table->baseline() && fun->invocationCount() >= 2 &&
-                fun->invocationCount() <= pir::Parameter::RIR_WARMUP) ||
-               (pir::Parameter::RIR_WARMUP == 0) ||
-               (fun->invocationCount() %
-                (factor * (pir::Parameter::RIR_WARMUP))) == 0))));
+inline bool RecompileHeuristic(Function* fun) {
+    auto flags = fun->flags;
+    if (flags.contains(Function::MarkOpt))
+        return true;
+    if (flags.contains(Function::NotOptimizable))
+        return false;
+
+    auto abandon = fun->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+    auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
+                                 : pir::Parameter::PIR_OPT_TIME;
+    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
+        fun->clearInvocationTime();
+        return !abandon;
+    }
+
+    if (fun->isOptimized())
+        return false;
+    auto wu = pir::Parameter::PIR_WARMUP;
+    if (wu == 0)
+        return !abandon;
+
+    if (fun->invocationCount() == wu)
+        return !abandon;
+
+    return false;
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) ||
-            fun == table->baseline() ||
+    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
             (context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
             fun->flags.contains(Function::Reoptimize));
