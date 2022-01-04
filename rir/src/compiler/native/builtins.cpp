@@ -1370,7 +1370,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     case TypeAssumption::Arg##__i__##IsNonRefl_:                               \
     case TypeAssumption::Arg##__i__##IsEager_: {                               \
         auto a = call.stackArg(__i__);                                         \
-        if (TYPEOF(a) == PROMSXP && PRVALUE(a) == R_MissingArg)                \
+        if (TYPEOF(a) == PROMSXP && PRVALUE(a) == R_UnboundValue)              \
             fail = true;                                                       \
         break;                                                                 \
     }
