@@ -120,6 +120,14 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->extraPoolSize = InInteger(inp);
     SEXP extraPool = ReadItem(refTable, inp);
     PROTECT(extraPool);
+    auto hasArgReorder = InInteger(inp);
+    SEXP argReorder = nullptr;
+    if (hasArgReorder) {
+        argReorder = ReadItem(refTable, inp);
+        PROTECT(argReorder);
+    }
+    SEXP rirFunction = ReadItem(refTable, inp);
+    PROTECT(rirFunction);
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
@@ -135,7 +143,12 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
-    UNPROTECT(2);
+    code->setEntry(3, rirFunction);
+    if (hasArgReorder) {
+        code->setEntry(2, argReorder);
+        UNPROTECT(1);
+    }
+    UNPROTECT(3);
 
     return code;
 }
@@ -154,6 +167,10 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
     WriteItem(getEntry(0), refTable, out);
+    OutInteger(out, getEntry(2) != nullptr);
+    if (getEntry(2))
+        WriteItem(getEntry(2), refTable, out);
+    WriteItem(getEntry(3), refTable, out);
 
     // Bytecode
     BC::serialize(refTable, out, code(), codeSize, this);
