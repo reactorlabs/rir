@@ -65,10 +65,11 @@ class ScopeAnalysisState {
         if (forcedPromise.size() != other.forcedPromise.size()) {
             for (auto u = other.forcedPromise.begin();
                  u != other.forcedPromise.end(); u++) {
-                if (!forcedPromise.count(u->first))
+                if (!forcedPromise.count(u->first)) {
                     forcedPromise[u->first] = AbstractPirValue::tainted();
+                    res.lostPrecision();
+                }
             }
-            res.lostPrecision();
         }
 
         return res.max(envs.merge(other.envs));

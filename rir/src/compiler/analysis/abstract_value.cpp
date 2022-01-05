@@ -59,7 +59,8 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         return AbstractResult::None;
     if (type == PirType::bottom()) {
         *this = other;
-        return AbstractResult::Updated;
+        return other.type == PirType::bottom() ? AbstractResult::None
+                                               : AbstractResult::Updated;
     }
     if (other.unknown) {
         taint();
@@ -69,12 +70,12 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
     bool changed = false;
     for (const auto& e : other.vals) {
         if (!vals.includes(e)) {
+            if (vals.size() >= MAX_VALS) {
+                taint();
+                return AbstractResult::LostPrecision;
+            }
             vals.insert(e);
             changed = true;
-            if (vals.size() > MAX_VALS) {
-                taint();
-                break;
-            }
         }
     }
     auto old = type;
