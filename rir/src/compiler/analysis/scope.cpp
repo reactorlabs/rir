@@ -20,6 +20,11 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
     if (!instr)
         return notFound();
 
+    // Inter procedural args handling
+    if (auto ld = LdArg::Cast(instr))
+        if (ld->pos < args.size())
+            return lookup(args[ld->pos], action, notFound);
+
     // If the this is an call instruction or force we might have some result
     // value from the inter-procedural analysis.
     // Since the "returnValues" and the "cache" are indexed by SSA variables,
@@ -280,13 +285,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 lookupAt(state, arg0, doLookup);
             else
                 lookup(arg->followCastsAndForce(), doLookup);
-
-            if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
-                if (a->pos < args.size()) {
-                    arg = args[a->pos];
-                    lookup(arg->followCastsAndForce(), doLookup);
-                }
-            }
         }
 
         // Forcing an argument can only affect local envs by reflection.
