@@ -247,11 +247,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 updateReturnValue(AbstractPirValue(arg, i, depth));
             handled = true;
         }
-        if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
-            if (a->pos < args.size())
-                arg = args[a->pos];
-        }
-
         if (!handled) {
             auto doLookup = [&](const AbstractPirValue& analysisRes) {
                 if (!analysisRes.type.maybeLazy()) {
@@ -285,6 +280,13 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 lookupAt(state, arg0, doLookup);
             else
                 lookup(arg->followCastsAndForce(), doLookup);
+
+            if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
+                if (a->pos < args.size()) {
+                    arg = args[a->pos];
+                    lookup(arg->followCastsAndForce(), doLookup);
+                }
+            }
         }
 
         // Forcing an argument can only affect local envs by reflection.
@@ -391,20 +393,32 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 args.push_back(MissingArg::instance());
 
             ScopeAnalysis* nextFun;
+            bool myEnvWasLeaked = state.envs.at(i->env()).leaked();
             if (!subAnalysis.count(i)) {
-                nextFun = subAnalysis
-                              .emplace(i, std::make_unique<ScopeAnalysis>(
-                                              version, args, lexicalEnv, state,
-                                              globalState, depth + 1, log))
-                              .first->second.get();
+                auto subState = state;
+                if (calli->nCallArgs() > 0)
+                    subState.envs.at(i->env()).leak();
+                nextFun =
+                    subAnalysis
+                        .emplace(i, std::make_unique<ScopeAnalysis>(
+                                        version, args, lexicalEnv, subState,
+                                        globalState, depth + 1, log))
+                        .first->second.get();
             } else {
                 nextFun = subAnalysis.at(i).get();
-                nextFun->setInitialState(
-                    [&](ScopeAnalysisState& init) { init = state; });
+                nextFun->setInitialState([&](ScopeAnalysisState& init) {
+                    init = state;
+                    if (calli->nCallArgs() > 0)
+                        init.envs.at(i->env()).leak();
+                });
             }
 
             (*nextFun)();
-            state.mergeCall(code, nextFun->result());
+            auto& result = const_cast<ScopeAnalysisState&>(nextFun->result());
+            auto& myenv = result.envs.at(i->env());
+            if (!myEnvWasLeaked && !myenv.tainted)
+                myenv.unleak();
+            state.mergeCall(code, result);
             updateReturnValue(nextFun->result().returnValue);
             effect.keepSnapshot = true;
             handled = true;

@@ -217,6 +217,7 @@ struct AbstractREnvironment {
     }
 
     void leak() { leaked_ = true; }
+    void unleak() { leaked_ = false; }
     bool leaked() const { return leaked_; }
 
     AbstractResult merge(const AbstractREnvironment& other) {
