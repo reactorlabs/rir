@@ -305,19 +305,22 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         // if we find a promise. If so, we will analyze
                         // it.
 
-                        ScopeAnalysis* prom;
+                        ScopeAnalysis* prom = nullptr;
                         if (!subAnalysis.count(i)) {
-                            prom = subAnalysis
-                                       .emplace(
-                                           i, std::make_unique<ScopeAnalysis>(
-                                                  closure, mkarg->prom(),
-                                                  mkarg->env(), state,
-                                                  globalState, depth + 1, log))
-                                       .first->second.get();
-                            prom->setInitialState(
-                                [&](ScopeAnalysisState& init) {
-                                    init.mayUseReflection = false;
-                                });
+                            if (subAnalysis.size() < MAX_SUB_ANALYSIS) {
+                                prom =
+                                    subAnalysis
+                                        .emplace(
+                                            i, std::make_unique<ScopeAnalysis>(
+                                                   closure, mkarg->prom(),
+                                                   mkarg->env(), state,
+                                                   globalState, depth + 1, log))
+                                        .first->second.get();
+                                prom->setInitialState(
+                                    [&](ScopeAnalysisState& init) {
+                                        init.mayUseReflection = false;
+                                    });
+                            }
                         } else {
                             prom = subAnalysis.at(i).get();
                             prom->setInitialState(
@@ -326,17 +329,19 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                                     init.mayUseReflection = false;
                                 });
                         }
-                        (*prom)();
+                        if (prom) {
+                            (*prom)();
 
-                        auto res = prom->result();
+                            auto res = prom->result();
 
-                        state.mergeCall(code, res);
-                        updateReturnValue(res.returnValue);
-                        effect.max(
-                            state.forcedPromise[mkarg].merge(res.returnValue));
-                        handled = true;
-                        effect.update();
-                        effect.keepSnapshot = true;
+                            state.mergeCall(code, res);
+                            updateReturnValue(res.returnValue);
+                            effect.max(state.forcedPromise[mkarg].merge(
+                                res.returnValue));
+                            handled = true;
+                            effect.update();
+                            effect.keepSnapshot = true;
+                        }
                     }
                 } else if (!upd->second.isUnknown()) {
                     updateReturnValue(upd->second);
@@ -398,6 +403,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             ScopeAnalysis* nextFun;
             bool myEnvWasLeaked = state.envs.at(i->env()).leaked();
             if (!subAnalysis.count(i)) {
+                if (subAnalysis.size() >= MAX_SUB_ANALYSIS)
+                    return;
                 auto subState = state;
                 if (calli->nCallArgs() > 0)
                     subState.envs.at(i->env()).leak();
