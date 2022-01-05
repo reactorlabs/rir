@@ -247,6 +247,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 updateReturnValue(AbstractPirValue(arg, i, depth));
             handled = true;
         }
+        if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
+            if (a->pos < args.size())
+                arg = args[a->pos];
+        }
 
         if (!handled) {
             auto doLookup = [&](const AbstractPirValue& analysisRes) {
@@ -287,66 +291,65 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         // Hence, only leaked envs can be affected
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
-            if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
+            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
+                auto upd = state.forcedPromise.find(mkarg);
+                if (upd == state.forcedPromise.end()) {
+                    if (depth < MAX_DEPTH && !fixedPointReached() &&
+                        force->strict) {
+
+                        // We are certain that we do force something
+                        // here. Let's peek through the argument and see
+                        // if we find a promise. If so, we will analyze
+                        // it.
+
+                        ScopeAnalysis* prom;
+                        if (!subAnalysis.count(i)) {
+                            prom = subAnalysis
+                                       .emplace(
+                                           i, std::make_unique<ScopeAnalysis>(
+                                                  closure, mkarg->prom(),
+                                                  mkarg->env(), state,
+                                                  globalState, depth + 1, log))
+                                       .first->second.get();
+                            prom->setInitialState(
+                                [&](ScopeAnalysisState& init) {
+                                    init.mayUseReflection = false;
+                                });
+                        } else {
+                            prom = subAnalysis.at(i).get();
+                            prom->setInitialState(
+                                [&](ScopeAnalysisState& init) {
+                                    init = state;
+                                    init.mayUseReflection = false;
+                                });
+                        }
+                        (*prom)();
+
+                        auto res = prom->result();
+
+                        state.mergeCall(code, res);
+                        updateReturnValue(res.returnValue);
+                        effect.max(
+                            state.forcedPromise[mkarg].merge(res.returnValue));
+                        handled = true;
+                        effect.update();
+                        effect.keepSnapshot = true;
+                    }
+                } else if (!upd->second.isUnknown()) {
+                    updateReturnValue(upd->second);
+                    handled = true;
+                }
+                if (!handled) {
+                    state.envs.at(mkarg->env()).taint();
+                    effect.max(state.envs.taintLeaked());
+                    updateReturnValue(AbstractPirValue::tainted());
+                    handled = true;
+                }
+            } else if (auto a = LdArg::Cast(arg->followCastsAndForce())) {
                 if (closure->context().isNonRefl(a->pos)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;
-                } else {
-                    if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                        auto upd = state.forcedPromise.find(mkarg);
-                        if (upd == state.forcedPromise.end()) {
-                            if (depth < MAX_DEPTH && !fixedPointReached() &&
-                                force->strict) {
-                                if (a->pos < args.size())
-                                    arg = args[a->pos];
-
-                                // We are certain that we do force something
-                                // here. Let's peek through the argument and see
-                                // if we find a promise. If so, we will analyze
-                                // it.
-
-                                ScopeAnalysis* prom;
-                                if (!subAnalysis.count(i)) {
-                                    prom =
-                                        subAnalysis
-                                            .emplace(
-                                                i,
-                                                std::make_unique<ScopeAnalysis>(
-                                                    closure, mkarg->prom(),
-                                                    mkarg->env(), state,
-                                                    globalState, depth + 1,
-                                                    log))
-                                            .first->second.get();
-                                    prom->setInitialState(
-                                        [&](ScopeAnalysisState& init) {
-                                            init.mayUseReflection = false;
-                                        });
-                                } else {
-                                    prom = subAnalysis.at(i).get();
-                                    prom->setInitialState(
-                                        [&](ScopeAnalysisState& init) {
-                                            init = state;
-                                            init.mayUseReflection = false;
-                                        });
-                                }
-                                (*prom)();
-
-                                auto res = prom->result();
-
-                                state.mergeCall(code, res);
-                                updateReturnValue(res.returnValue);
-                                effect.max(state.forcedPromise[mkarg].merge(
-                                    res.returnValue));
-                                handled = true;
-                                effect.update();
-                                effect.keepSnapshot = true;
-                            }
-                        } else if (!upd->second.isUnknown()) {
-                            updateReturnValue(upd->second);
-                            handled = true;
-                        }
-                    }
                 }
             } else if (env && env->stub) {
                 // Forcing using a stub should deopt if local vars are modified.
