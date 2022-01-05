@@ -295,7 +295,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 auto upd = state.forcedPromise.find(mkarg);
                 if (upd == state.forcedPromise.end()) {
                     if (depth < MAX_DEPTH && !fixedPointReached() &&
-                        force->strict) {
+                        force->strict &&
+                        mkarg->prom()->numInstrs() < MAX_PROM_SIZE) {
 
                         // We are certain that we do force something
                         // here. Let's peek through the argument and see
