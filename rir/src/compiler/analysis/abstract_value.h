@@ -330,6 +330,13 @@ class AbstractREnvironmentHierarchy {
 
     SmallMap<Value*, Value*> aliases;
 
+    bool allTainted() const {
+        for (auto e : envs)
+            if (!e.second.tainted)
+                return false;
+        return true;
+    }
+
     AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
         return merge(other);
     }

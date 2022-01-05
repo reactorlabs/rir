@@ -297,7 +297,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 auto upd = state.forcedPromise.find(mkarg);
                 if (upd == state.forcedPromise.end()) {
                     if (depth < MAX_DEPTH && !fixedPointReached() &&
-                        force->strict &&
+                        force->strict && !state.envs.allTainted() &&
                         mkarg->prom()->numInstrs() < MAX_PROM_SIZE) {
 
                         // We are certain that we do force something
@@ -385,6 +385,9 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 return;
 
             if (version->numNonDeoptInstrs() > MAX_SIZE)
+                return;
+
+            if (state.envs.allTainted())
                 return;
 
             std::vector<Value*> args;
