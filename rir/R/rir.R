@@ -230,9 +230,15 @@ rir.builtins <- new.env()
 
 local({
 
-    # builtins_env <- attach(what = NULL, pos = length(search()), name = "rir:builtins")
-    builtins_env <- new.env(parent = baseenv())
-    attr(builtins_env, "name") <- "rir:builtins"
+    base_namespace <- getNamespace("base")
+    base_env <- baseenv()
+    rir_builtins_imports <- new.env(parent = base_namespace)
+    attr(rir_builtins_imports, "name") <- "imports:rir_builtins"
+    rir_builtins_namespace <- new.env(parent = rir_builtins_imports)
+    attr(rir_builtins_namespace, "name") <- "namespace:rir_builtins"
+    rir_builtins_env <- attach(what = NULL,
+                               pos = length(search()),
+                               name = "package:rir_builtins")
 
     new_cache <- function() {
         cache <- NULL
@@ -251,21 +257,24 @@ local({
             keys = function() ls(cache)
         )
     }
-
     cache <- new_cache()
 
     add_implementation <- function(name, fun) {
         stopifnot(is.character(name), length(name) == 1, is.function(fun))
 
         fun <- match.fun(fun)
-        environment(fun) <- builtins_env
-        assign(name, fun, envir = builtins_env)
+        environment(fun) <- rir_builtins_namespace
+        assign(name, fun, envir = rir_builtins_namespace)
+        assign(name, fun, envir = rir_builtins_env)
     }
 
     switch_implementation <- function(name, fun) {
         stopifnot(is.character(name), length(name) == 1, is.function(fun))
+        stopifnot(name %in% ls(base_namespace))
 
-        o <- get(name, envir = parent.env(globalenv()))
+        o <- get(name, envir = globalenv())
+        stopifnot(identical(environment(o), base_namespace))
+        stopifnot(identical(o, get(name, envir = base_namespace, inherits = FALSE)))
 
         if (cache$has_key(name)) {
             warning(paste(name, "already switched"))
@@ -274,12 +283,15 @@ local({
         }
 
         fun <- match.fun(fun)
-        environment(fun) <- builtins_env
+        environment(fun) <- rir_builtins_namespace
 
-        e <- environment(o)
-        unlockBinding(name, e)
-        assign(name, fun, envir = e)
-        lockBinding(name, e)
+        assign(name, fun, envir = rir_builtins_namespace)
+        unlockBinding(name, base_namespace)
+        assign(name, fun, envir = base_namespace)
+        lockBinding(name, base_namespace)
+        unlockBinding(name, base_env)
+        assign(name, fun, envir = base_env)
+        lockBinding(name, base_env)
     }
 
     restore_implementation <- function(name) {
@@ -289,10 +301,12 @@ local({
             o <- cache$get(name)
             cache$drop_key(name)
 
-            e <- environment(o)
-            unlockBinding(name, e)
-            assign(name, o, envir = e)
-            lockBinding(name, e)
+            unlockBinding(name, base_namespace)
+            assign(name, o, envir = base_namespace)
+            lockBinding(name, base_namespace)
+            unlockBinding(name, base_env)
+            assign(name, o, envir = base_env)
+            lockBinding(name, base_env)
         } else {
             warning(paste(name, "not stored"))
         }
@@ -305,17 +319,12 @@ local({
         })
 
         switch_implementation("lapply", function (X, FUN, ...) {
+
             FUN <- match.fun(FUN)
             if (!is.vector(X) || is.object(X))
                 X <- as.list(X)
 
-            # need to prevent length from dispatching
-            ## o <- attributes(X)
-            ## attributes(X) <- NULL
-            ## n <- length(X)
-            ## attributes(X) <- o
-
-            n <- rir_length(X)
+            n <- rir_length(X) # doesn't dispatch
 
             ans <- vector(mode = "list", length = n)
             if (!is.null(names(X)))
@@ -326,7 +335,11 @@ local({
                 # handle missing - can't evaluate if assigned to a variable
                 # handle null - subassigning mustn't shrink the result
                 # normal case is okay
-                # do we need forceAndCall? maybe forcing by hand and just calling?
+
+                # this but xi can be missing...
+                # xi <- X[[i]]
+                # if (identical(tmp <- FUN(xi, ...),
+                #               quote(expr = ))) {
                 if (identical(tmp <- forceAndCall(1L, FUN, X[[i]], ...),
                             quote(expr = ))) {
                     ans[[i]] <- quote(expr = )
