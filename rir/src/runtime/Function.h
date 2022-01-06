@@ -62,6 +62,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void serialize(SEXP refTable, R_outpstream_t out) const;
     void disassemble(std::ostream&);
 
+    bool isOptimized() const {
+        return signature_.optimization !=
+               FunctionSignature::OptimizationLevel::Baseline;
+    }
+
     Code* defaultArg(size_t i) const {
         assert(i < numArgs_);
         if (!defaultArg_[i])
@@ -69,11 +74,18 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    void unregisterInvocation() { body()->unregisterInvocation(); }
-    void registerInvocation() { body()->registerInvocation(); }
-    size_t invocationCount() { return body()->funInvocationCount; }
-    void registerDeopt() { body()->registerDeopt(); }
-    size_t deoptCount() { return body()->deoptCount; }
+    void unregisterInvocation() {
+        if (invocationCount_ > 0)
+            invocationCount_--;
+    }
+    void registerInvocation() {
+        if (invocationCount_ < UINT_MAX)
+            invocationCount_++;
+    }
+    size_t invocationCount() { return invocationCount_; }
+
+    size_t deoptCount() { return deoptCount_; }
+    void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     unsigned size; /// Size, in bytes, of the function and its data
 
@@ -88,6 +100,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     V(InnerFunction)                                                           \
     V(DisableAllSpecialization)                                                \
     V(DisableArgumentTypeSpecialization)                                       \
+    V(NeedsFullEnv)                                                            \
+    V(Reoptimize)                                                              \
     V(DisableNumArgumentsSpezialization)
 
     enum Flag {
@@ -121,12 +135,37 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const FunctionSignature& signature() const { return signature_; }
     const Context& context() const { return context_; }
 
-    bool disabled() const {
-        return body()->isDeoptimized || flags.contains(Flag::Deopt);
+    bool disabled() const { return flags.contains(Flag::Deopt); }
+
+    void registerDeopt() {
+        // Deopt counts are kept on the optimized versions
+        assert(isOptimized());
+        flags.set(Flag::Deopt);
+        if (deoptCount_ < UINT_MAX)
+            deoptCount_++;
+    }
+
+    void registerDeoptReason(DeoptReason::Reason r) {
+        // Deopt reasons are counted in the baseline
+        assert(!isOptimized());
+        if (r == DeoptReason::DeadCall)
+            deadCallReached_++;
+        if (r == DeoptReason::EnvStubMaterialized)
+            flags.set(NeedsFullEnv);
+    }
+
+    size_t deadCallReached() const {
+        assert(!isOptimized());
+        return deadCallReached_;
     }
 
   private:
     unsigned numArgs_;
+
+    unsigned invocationCount_ = 0;
+
+    unsigned deoptCount_ = 0;
+    unsigned deadCallReached_ = 0;
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;

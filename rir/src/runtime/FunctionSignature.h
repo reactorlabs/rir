@@ -28,6 +28,8 @@ struct FunctionSignature {
         FunctionSignature sig(envc, opt);
         sig.numArguments = numArgs;
         sig.dotsPosition = InInteger(inp);
+        sig.hasDotsFormals = InInteger(inp);
+        sig.hasDefaultArgs = InInteger(inp);
         return sig;
     }
 
@@ -36,6 +38,8 @@ struct FunctionSignature {
         OutInteger(out, (int)optimization);
         OutInteger(out, numArguments);
         OutInteger(out, dotsPosition);
+        OutInteger(out, hasDotsFormals);
+        OutInteger(out, hasDefaultArgs);
     }
 
     void pushFormal(SEXP arg, SEXP name) {

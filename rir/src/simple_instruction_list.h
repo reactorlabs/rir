@@ -13,8 +13,6 @@
 // - Add an INSTRUCTION(<name lower case>_) { ... } to interp.cpp:
 //   this defines how to interpret the instruction
 
-#define SIMPLE_INSTRUCTIONS(V, NESTED)                                         \
-V(NESTED, int3, Int3)                                                          \
-V(NESTED, printInvocation, PrintInvocation)                                    \
+#define SIMPLE_INSTRUCTIONS(V, NESTED) V(NESTED, int3, Int3)
 
 #endif

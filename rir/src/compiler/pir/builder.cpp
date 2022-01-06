@@ -170,10 +170,10 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     }
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
-    auto rirCode = version->owner()->rirFunction()->body();
-    if (rirCode->flags.contains(rir::Code::NeedsFullEnv))
+    auto rirFun = version->owner()->rirFunction();
+    if (rirFun->flags.contains(rir::Function::NeedsFullEnv))
         mkenv->neverStub = true;
-    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
+    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirFun->body());
     add(mkenv);
     this->env = mkenv;
 }

@@ -65,10 +65,11 @@ class ScopeAnalysisState {
         if (forcedPromise.size() != other.forcedPromise.size()) {
             for (auto u = other.forcedPromise.begin();
                  u != other.forcedPromise.end(); u++) {
-                if (!forcedPromise.count(u->first))
+                if (!forcedPromise.count(u->first)) {
                     forcedPromise[u->first] = AbstractPirValue::tainted();
+                    res.lostPrecision();
+                }
             }
-            res.lostPrecision();
         }
 
         return res.max(envs.merge(other.envs));
@@ -109,8 +110,10 @@ class ScopeAnalysis
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
-    static constexpr size_t MAX_SIZE = 140;
+    static constexpr size_t MAX_SIZE = 120;
+    static constexpr size_t MAX_PROM_SIZE = 14;
     static constexpr size_t MAX_RESULTS = 800;
+    static constexpr size_t MAX_SUB_ANALYSIS = 10;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     bool inPromise = false;

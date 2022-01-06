@@ -55,7 +55,7 @@ struct DispatchTable
                       << "\n";
 #endif
             auto e = get(i);
-            if (a.smaller(e->context()) && !e->body()->isDeoptimized)
+            if (a.smaller(e->context()) && !e->disabled())
                 return e;
         }
         return baseline();
@@ -75,7 +75,7 @@ struct DispatchTable
     bool contains(const Context& assumptions) const {
         for (size_t i = 0; i < size(); ++i)
             if (get(i)->context() == assumptions)
-                return !get(i)->body()->isDeoptimized;
+                return !get(i)->disabled();
         return false;
     }
 
@@ -108,7 +108,7 @@ struct DispatchTable
                 if (i != 0) {
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
-                    fun->body()->deoptCount += old->body()->deoptCount;
+                    fun->addDeoptCount(old->deoptCount());
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }

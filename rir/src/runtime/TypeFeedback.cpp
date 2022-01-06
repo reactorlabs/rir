@@ -1,6 +1,9 @@
 #include "TypeFeedback.h"
+
+#include "R/Symbols.h"
 #include "R/r.h"
 #include "runtime/Code.h"
+#include "runtime/Function.h"
 
 #include <cassert>
 
@@ -53,6 +56,52 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
     case DeoptReason::Unknown:
     case DeoptReason::EnvStubMaterialized:
         break;
+    }
+}
+
+void DeoptReason::record(SEXP val) const {
+    srcCode()->function()->registerDeoptReason(reason);
+
+    switch (reason) {
+    case DeoptReason::Unknown:
+        break;
+    case DeoptReason::DeadBranchReached: {
+        assert(*pc() == Opcode::record_test_);
+        ObservedTest* feedback = (ObservedTest*)(pc() + 1);
+        feedback->seen = ObservedTest::Both;
+        break;
+    }
+    case DeoptReason::Typecheck: {
+        assert(*pc() == Opcode::record_type_);
+        if (val == symbol::UnknownDeoptTrigger)
+            break;
+        ObservedValues* feedback = (ObservedValues*)(pc() + 1);
+        feedback->record(val);
+        if (TYPEOF(val) == PROMSXP) {
+            if (PRVALUE(val) == R_UnboundValue &&
+                feedback->stateBeforeLastForce < ObservedValues::promise)
+                feedback->stateBeforeLastForce = ObservedValues::promise;
+            else if (feedback->stateBeforeLastForce <
+                     ObservedValues::evaluatedPromise)
+                feedback->stateBeforeLastForce =
+                    ObservedValues::evaluatedPromise;
+        }
+        break;
+    }
+    case DeoptReason::DeadCall:
+    case DeoptReason::ForceAndCall:
+    case DeoptReason::CallTarget: {
+        assert(*pc() == Opcode::record_call_);
+        if (val == symbol::UnknownDeoptTrigger)
+            break;
+        ObservedCallees* feedback = (ObservedCallees*)(pc() + 1);
+        feedback->record(srcCode(), val);
+        assert(feedback->taken > 0);
+        break;
+    }
+    case DeoptReason::EnvStubMaterialized: {
+        break;
+    }
     }
 }
 

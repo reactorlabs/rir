@@ -10,7 +10,7 @@ namespace pir {
 class Continuation : public ClosureVersion {
   public:
     const ContinuationContext* continuationContext;
-    Continuation(Closure* closure,
+    Continuation(Closure* closure, rir::Function* fun,
                  const ContinuationContext* continuationContext);
     Continuation* isContinuation() override final { return this; }
 };

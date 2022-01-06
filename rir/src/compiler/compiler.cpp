@@ -73,7 +73,8 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
                    fail, outerFeedback);
 }
 
-void Compiler::compileContinuation(SEXP closure, const ContinuationContext* ctx,
+void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
+                                   const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
     assert(isValidClosureSEXP(closure));
@@ -83,7 +84,7 @@ void Compiler::compileContinuation(SEXP closure, const ContinuationContext* ctx,
 
     auto pirClosure = module->getOrDeclareRirClosure(
         ctx->asDeoptContext() ? "deoptless" : "osr", closure, fun, {});
-    auto version = pirClosure->declareContinuation(ctx);
+    auto version = pirClosure->declareContinuation(ctx, curFun);
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.begin(version);
@@ -239,7 +240,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
-static void findUnreachable(Module* m, StreamLogger& log) {
+static void findUnreachable(Module* m, StreamLogger& log,
+                            const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
@@ -267,7 +269,22 @@ static void findUnreachable(Module* m, StreamLogger& log) {
                 if (reachableVersions.count(v->context())) {
                     auto check = [&](Instruction* i) {
                         if (auto call = StaticCall::Cast(i)) {
-                            assert(call->tryDispatch());
+                            if (!call->tryDispatch()) {
+                                std::stringstream msg;
+                                msg << "After pass " << where
+                                    << " found a broken static call. Available "
+                                       "versions:\n";
+                                call->cls()->eachVersion(
+                                    [&](ClosureVersion* v) {
+                                        msg << v->context() << "\n";
+                                    });
+                                msg << "Available Assumptions:\n"
+                                    << call->inferAvailableAssumptions()
+                                    << "\n";
+                                msg << "In:\n";
+                                i->printRecursive(msg, 2);
+                                log.warn(msg.str());
+                            }
                             found(call->tryDispatch());
                             found(call->tryOptimisticDispatch());
                             found(call->hint);
@@ -316,7 +333,7 @@ void Compiler::optimizeModule() {
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
                 Measuring::startTimer("compiler.cpp: module cleanup");
-            findUnreachable(module, logger);
+            findUnreachable(module, logger, translation->getName());
             if (MEASURE_COMPILER_PERF)
                 Measuring::countTimer("compiler.cpp: module cleanup");
         }

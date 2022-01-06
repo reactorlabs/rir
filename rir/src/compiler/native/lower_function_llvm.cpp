@@ -3500,9 +3500,9 @@ void LowerFunctionLLVM::compile() {
                 auto t = bb->trueBranch();
                 auto f = bb->falseBranch();
                 MDNode* weight = nullptr;
-                bool retrigger =
-                    cls->owner()->rirFunction()->deoptCount() > 0 ||
-                    cls->isContinuation();
+                bool retrigger = (cls->optFunction->isOptimized() &&
+                                  cls->optFunction->deoptCount() > 0) ||
+                                 cls->isContinuation();
                 bool chaos =
                     br->deoptTrigger && Parameter::DEOPT_CHAOS &&
                     (!retrigger || !Parameter::DEOPT_CHAOS_NO_RETRIGGER);
@@ -5934,7 +5934,6 @@ void LowerFunctionLLVM::compile() {
                 break;
 
             case Tag::Int3:
-            case Tag::PrintInvocation:
                 assert(false);
                 break;
 

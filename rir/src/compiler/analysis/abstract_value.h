@@ -217,6 +217,7 @@ struct AbstractREnvironment {
     }
 
     void leak() { leaked_ = true; }
+    void unleak() { leaked_ = false; }
     bool leaked() const { return leaked_; }
 
     AbstractResult merge(const AbstractREnvironment& other) {
@@ -328,6 +329,13 @@ class AbstractREnvironmentHierarchy {
     AbstractREnvironmentHierarchy() {}
 
     SmallMap<Value*, Value*> aliases;
+
+    bool allTainted() const {
+        for (auto e : envs)
+            if (!e.second.tainted)
+                return false;
+        return true;
+    }
 
     AbstractResult mergeExit(const AbstractREnvironmentHierarchy& other) {
         return merge(other);

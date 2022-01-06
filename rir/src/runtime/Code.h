@@ -48,7 +48,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
     // extra pool, pir type feedback, arg reordering info
-    static constexpr size_t NumLocals = 3;
+    static constexpr size_t NumLocals = 4;
 
     Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned codeSize,
          unsigned sourceSize, size_t localsCnt, size_t bindingsCacheSize);
@@ -62,6 +62,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
      * 0 : the extra pool for attaching additional GC'd object to the code
      * 1 : pir type feedback
      * 2 : call argument reordering metadata
+     * 3 : rir function
      */
     SEXP locals_[NumLocals];
 
@@ -107,36 +108,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
     }
 
-    void unregisterInvocation() {
-        if (funInvocationCount > 0)
-            funInvocationCount--;
-    }
-
-    void registerInvocation() {
-        if (funInvocationCount < UINT_MAX)
-            funInvocationCount++;
-    }
-
-    void registerDeopt() {
-        isDeoptimized = true;
-        if (deoptCount < UINT_MAX)
-            deoptCount++;
-    }
-
-    // number of invocations. only incremented if this code object is the body
-    // of a function
-    unsigned funInvocationCount;
-    unsigned deoptCount;
-    unsigned deadCallReached = 0;
-    bool isDeoptimized = false;
-
     enum Flag {
-        NeedsFullEnv,
         NoReflection,
-        Reoptimise,
 
-        FIRST = NeedsFullEnv,
-        LAST = Reoptimise
+        FIRST = NoReflection,
+        LAST = NoReflection
     };
 
     EnumSet<Flag> flags;
@@ -211,6 +187,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
             return nullptr;
         return ArglistOrder::unpack(data);
     }
+
+    rir::Function* function() const;
+    void function(rir::Function*);
+
     void arglistOrder(ArglistOrder* data) { setEntry(2, data->container()); }
     SEXP arglistOrderContainer() const { return getEntry(2); }
 

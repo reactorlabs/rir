@@ -530,56 +530,6 @@ void checkUserInterrupt() {
     }
 }
 
-void recordDeoptReason(SEXP val, const DeoptReason& reason) {
-    auto pos = reason.pc();
-
-    switch (reason.reason) {
-    case DeoptReason::Unknown:
-        break;
-    case DeoptReason::DeadBranchReached: {
-        assert(*pos == Opcode::record_test_);
-        ObservedTest* feedback = (ObservedTest*)(pos + 1);
-        feedback->seen = ObservedTest::Both;
-        break;
-    }
-    case DeoptReason::Typecheck: {
-        assert(*pos == Opcode::record_type_);
-        if (val == symbol::UnknownDeoptTrigger)
-            break;
-        ObservedValues* feedback = (ObservedValues*)(pos + 1);
-        feedback->record(val);
-        if (TYPEOF(val) == PROMSXP) {
-            if (PRVALUE(val) == R_UnboundValue &&
-                feedback->stateBeforeLastForce < ObservedValues::promise)
-                feedback->stateBeforeLastForce = ObservedValues::promise;
-            else if (feedback->stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
-                feedback->stateBeforeLastForce =
-                    ObservedValues::evaluatedPromise;
-        }
-        break;
-    }
-    case DeoptReason::DeadCall:
-        reason.srcCode()->deadCallReached++;
-        // fall through
-        [[clang::fallthrough]];
-    case DeoptReason::ForceAndCall:
-    case DeoptReason::CallTarget: {
-        assert(*pos == Opcode::record_call_);
-        if (val == symbol::UnknownDeoptTrigger)
-            break;
-        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
-        feedback->record(reason.srcCode(), val);
-        assert(feedback->taken > 0);
-        break;
-    }
-    case DeoptReason::EnvStubMaterialized: {
-        reason.srcCode()->flags.set(Code::NeedsFullEnv);
-        break;
-    }
-    }
-}
-
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
@@ -1046,9 +996,10 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             fun->clearDisabledAssumptions(given);
             if (RecompileCondition(table, fun, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
-                    if (call.caller && call.caller->funInvocationCount > 0 &&
+                    if (call.caller &&
+                        call.caller->function()->invocationCount() > 0 &&
                         !call.caller->isCompiled() &&
-                        !call.caller->isDeoptimized &&
+                        !call.caller->function()->disabled() &&
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
                         fun->body()->codeSize < 20) {
                         call.triggerOsr = true;
@@ -1175,7 +1126,6 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             UNPROTECT(1);
         }
         assert(result);
-        assert(!fun->flags.contains(Function::Deopt));
         if (popArgs)
             ostack_popn(ctx, call.passedArgs - call.suppliedArgs);
         return result;
@@ -1601,7 +1551,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(ctx, stackHeight);
     auto code = f.code;
-    code->registerInvocation();
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -3901,11 +3850,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         INSTRUCTION(int3_) {
             asm("int3");
-            NEXT();
-        }
-
-        INSTRUCTION(printInvocation_) {
-            printf("Invocation count: %u\n", c->funInvocationCount);
             NEXT();
         }
 

@@ -76,7 +76,7 @@ inline bool RecompileCondition(DispatchTable* table, Function* fun,
             fun == table->baseline() ||
             (context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
-            fun->body()->flags.contains(Code::Reoptimise));
+            fun->flags.contains(Function::Reoptimize));
 }
 
 inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given,
@@ -122,7 +122,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext);
-void recordDeoptReason(SEXP val, const DeoptReason& reason);
 void jit(SEXP cls, SEXP name, InterpreterInstance* ctx);
 
 SEXP seq_int(int n1, int n2);

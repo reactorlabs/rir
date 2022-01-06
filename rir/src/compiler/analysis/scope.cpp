@@ -20,6 +20,11 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
     if (!instr)
         return notFound();
 
+    // Inter procedural args handling
+    if (auto ld = LdArg::Cast(instr))
+        if (ld->pos < args.size())
+            return lookup(args[ld->pos], action, notFound);
+
     // If the this is an call instruction or force we might have some result
     // value from the inter-procedural analysis.
     // Since the "returnValues" and the "cache" are indexed by SSA variables,
@@ -247,7 +252,6 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 updateReturnValue(AbstractPirValue(arg, i, depth));
             handled = true;
         }
-
         if (!handled) {
             auto doLookup = [&](const AbstractPirValue& analysisRes) {
                 if (!analysisRes.type.maybeLazy()) {
@@ -287,66 +291,71 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
         // Hence, only leaked envs can be affected
         auto env = MkEnv::Cast(force->env());
         if (!handled) {
-            if (auto a = LdArg::Cast(arg->cFollowCastsAndForce())) {
+            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
+                auto upd = state.forcedPromise.find(mkarg);
+                if (upd == state.forcedPromise.end()) {
+                    if (depth < MAX_DEPTH && !fixedPointReached() &&
+                        force->strict && !state.envs.allTainted() &&
+                        mkarg->prom()->numInstrs() < MAX_PROM_SIZE) {
+
+                        // We are certain that we do force something
+                        // here. Let's peek through the argument and see
+                        // if we find a promise. If so, we will analyze
+                        // it.
+
+                        ScopeAnalysis* prom = nullptr;
+                        if (!subAnalysis.count(i)) {
+                            if (subAnalysis.size() < MAX_SUB_ANALYSIS) {
+                                prom =
+                                    subAnalysis
+                                        .emplace(
+                                            i, std::make_unique<ScopeAnalysis>(
+                                                   closure, mkarg->prom(),
+                                                   mkarg->env(), state,
+                                                   globalState, depth + 1, log))
+                                        .first->second.get();
+                                prom->setInitialState(
+                                    [&](ScopeAnalysisState& init) {
+                                        init.mayUseReflection = false;
+                                    });
+                            }
+                        } else {
+                            prom = subAnalysis.at(i).get();
+                            prom->setInitialState(
+                                [&](ScopeAnalysisState& init) {
+                                    init = state;
+                                    init.mayUseReflection = false;
+                                });
+                        }
+                        if (prom) {
+                            (*prom)();
+
+                            auto res = prom->result();
+
+                            state.mergeCall(code, res);
+                            updateReturnValue(res.returnValue);
+                            effect.max(state.forcedPromise[mkarg].merge(
+                                res.returnValue));
+                            handled = true;
+                            effect.update();
+                            effect.keepSnapshot = true;
+                        }
+                    }
+                } else if (!upd->second.isUnknown()) {
+                    updateReturnValue(upd->second);
+                    handled = true;
+                }
+                if (!handled) {
+                    state.envs.at(mkarg->env()).taint();
+                    effect.max(state.envs.taintLeaked());
+                    updateReturnValue(AbstractPirValue::tainted());
+                    handled = true;
+                }
+            } else if (auto a = LdArg::Cast(arg->followCastsAndForce())) {
                 if (closure->context().isNonRefl(a->pos)) {
                     effect.max(state.envs.taintLeaked());
                     updateReturnValue(AbstractPirValue::tainted());
                     handled = true;
-                } else {
-                    if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                        auto upd = state.forcedPromise.find(mkarg);
-                        if (upd == state.forcedPromise.end()) {
-                            if (depth < MAX_DEPTH && !fixedPointReached() &&
-                                force->strict) {
-                                if (a->pos < args.size())
-                                    arg = args[a->pos];
-
-                                // We are certain that we do force something
-                                // here. Let's peek through the argument and see
-                                // if we find a promise. If so, we will analyze
-                                // it.
-
-                                ScopeAnalysis* prom;
-                                if (!subAnalysis.count(i)) {
-                                    prom =
-                                        subAnalysis
-                                            .emplace(
-                                                i,
-                                                std::make_unique<ScopeAnalysis>(
-                                                    closure, mkarg->prom(),
-                                                    mkarg->env(), state,
-                                                    globalState, depth + 1,
-                                                    log))
-                                            .first->second.get();
-                                    prom->setInitialState(
-                                        [&](ScopeAnalysisState& init) {
-                                            init.mayUseReflection = false;
-                                        });
-                                } else {
-                                    prom = subAnalysis.at(i).get();
-                                    prom->setInitialState(
-                                        [&](ScopeAnalysisState& init) {
-                                            init = state;
-                                            init.mayUseReflection = false;
-                                        });
-                                }
-                                (*prom)();
-
-                                auto res = prom->result();
-
-                                state.mergeCall(code, res);
-                                updateReturnValue(res.returnValue);
-                                effect.max(state.forcedPromise[mkarg].merge(
-                                    res.returnValue));
-                                handled = true;
-                                effect.update();
-                                effect.keepSnapshot = true;
-                            }
-                        } else if (!upd->second.isUnknown()) {
-                            updateReturnValue(upd->second);
-                            handled = true;
-                        }
-                    }
                 }
             } else if (env && env->stub) {
                 // Forcing using a stub should deopt if local vars are modified.
@@ -381,26 +390,64 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             if (version->numNonDeoptInstrs() > MAX_SIZE)
                 return;
 
+            if (state.envs.allTainted())
+                return;
+
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
             while (args.size() < version->effectiveNArgs())
                 args.push_back(MissingArg::instance());
 
             ScopeAnalysis* nextFun;
+            bool myEnvWasLeaked = state.envs.at(i->env()).leaked();
+            // Caller env can only change if any of the promises potentially
+            // changes it.
+            bool possibleEnvChange = calli->nCallArgs() > 0;
+            if (possibleEnvChange) {
+                possibleEnvChange = false;
+                for (auto a : args) {
+                    if (auto mk = MkArg::Cast(a)) {
+                        if (!mk->isEager() &&
+                            !Visitor::check(mk->prom()->entry,
+                                            [&](Instruction* i) {
+                                                return !i->changesEnv();
+                                            })) {
+                            possibleEnvChange = true;
+                            break;
+                        }
+                    } else if (a->type.maybeLazy()) {
+                        possibleEnvChange = true;
+                        break;
+                    }
+                }
+            }
             if (!subAnalysis.count(i)) {
-                nextFun = subAnalysis
-                              .emplace(i, std::make_unique<ScopeAnalysis>(
-                                              version, args, lexicalEnv, state,
-                                              globalState, depth + 1, log))
-                              .first->second.get();
+                if (subAnalysis.size() >= MAX_SUB_ANALYSIS)
+                    return;
+                auto subState = state;
+                if (possibleEnvChange)
+                    subState.envs.at(i->env()).leak();
+                nextFun =
+                    subAnalysis
+                        .emplace(i, std::make_unique<ScopeAnalysis>(
+                                        version, args, lexicalEnv, subState,
+                                        globalState, depth + 1, log))
+                        .first->second.get();
             } else {
                 nextFun = subAnalysis.at(i).get();
-                nextFun->setInitialState(
-                    [&](ScopeAnalysisState& init) { init = state; });
+                nextFun->setInitialState([&](ScopeAnalysisState& init) {
+                    init = state;
+                    if (possibleEnvChange)
+                        init.envs.at(i->env()).leak();
+                });
             }
 
             (*nextFun)();
-            state.mergeCall(code, nextFun->result());
+            auto& result = const_cast<ScopeAnalysisState&>(nextFun->result());
+            auto& myenv = result.envs.at(i->env());
+            if (!myEnvWasLeaked && !myenv.tainted)
+                myenv.unleak();
+            state.mergeCall(code, result);
             updateReturnValue(nextFun->result().returnValue);
             effect.keepSnapshot = true;
             handled = true;
