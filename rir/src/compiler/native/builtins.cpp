@@ -999,7 +999,7 @@ void printValueImpl(SEXP v) { Rf_PrintValue(v); }
 static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
     if (i == NA_INTEGER)
         return nullptr;
-    if (subset2 || fastVeceltOk(vec)) {
+    if (fastVeceltOk(vec)) {
         switch (TYPEOF(vec)) {
         case REALSXP:
             if (XLENGTH(vec) <= i)
