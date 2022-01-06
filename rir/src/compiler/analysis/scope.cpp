@@ -400,11 +400,32 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
 
             ScopeAnalysis* nextFun;
             bool myEnvWasLeaked = state.envs.at(i->env()).leaked();
+            // Caller env can only change if any of the promises potentially
+            // changes it.
+            bool possibleEnvChange = calli->nCallArgs() > 0;
+            if (possibleEnvChange) {
+                possibleEnvChange = false;
+                for (auto a : args) {
+                    if (auto mk = MkArg::Cast(a)) {
+                        if (!mk->isEager() &&
+                            !Visitor::check(mk->prom()->entry,
+                                            [&](Instruction* i) {
+                                                return !i->changesEnv();
+                                            })) {
+                            possibleEnvChange = true;
+                            break;
+                        }
+                    } else if (a->type.maybeLazy()) {
+                        possibleEnvChange = true;
+                        break;
+                    }
+                }
+            }
             if (!subAnalysis.count(i)) {
                 if (subAnalysis.size() >= MAX_SUB_ANALYSIS)
                     return;
                 auto subState = state;
-                if (calli->nCallArgs() > 0)
+                if (possibleEnvChange)
                     subState.envs.at(i->env()).leak();
                 nextFun =
                     subAnalysis
@@ -416,7 +437,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                 nextFun = subAnalysis.at(i).get();
                 nextFun->setInitialState([&](ScopeAnalysisState& init) {
                     init = state;
-                    if (calli->nCallArgs() > 0)
+                    if (possibleEnvChange)
                         init.envs.at(i->env()).leak();
                 });
             }
