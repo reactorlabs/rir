@@ -78,7 +78,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         if (invocationCount_ > 0)
             invocationCount_--;
     }
-    void registerInvocation() { invocationCount_++; }
+    void registerInvocation() {
+        if (invocationCount_ < UINT_MAX)
+            invocationCount_++;
+    }
     size_t invocationCount() { return invocationCount_; }
 
     size_t deoptCount() { return deoptCount_; }
