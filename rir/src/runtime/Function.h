@@ -74,18 +74,44 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    void unregisterInvocation() {
-        if (invocationCount_ > 0)
-            invocationCount_--;
-    }
-    void registerInvocation() {
-        if (invocationCount_ < UINT_MAX)
-            invocationCount_++;
-    }
     size_t invocationCount() { return invocationCount_; }
 
     size_t deoptCount() { return deoptCount_; }
     void addDeoptCount(size_t n) { deoptCount_ += n; }
+
+    static inline unsigned long rdtsc() {
+        unsigned low, high;
+        asm volatile("rdtsc" : "=a"(low), "=d"(high));
+        return ((low) | ((uint64_t)(high) << 32));
+    }
+    static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
+
+    void unregisterInvocation() {
+        invoked = 0;
+        if (invocationCount_ > 0)
+            invocationCount_--;
+    }
+
+    void registerInvocation() {
+        if (execTime < MAX_TIME_MEASURE) {
+            // constant increment for recursive functions
+            if (invoked != 0)
+                execTime += 5e5;
+            else
+                invoked = rdtsc();
+        }
+
+        if (invocationCount_ < UINT_MAX)
+            invocationCount_++;
+    }
+    void registerEndInvocation() {
+        if (invoked != 0) {
+            execTime += rdtsc() - invoked;
+            invoked = 0;
+        }
+    }
+    unsigned long invocationTime() { return execTime; }
+    void clearInvocationTime() { execTime = 0; }
 
     unsigned size; /// Size, in bytes, of the function and its data
 
@@ -166,6 +192,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned deoptCount_ = 0;
     unsigned deadCallReached_ = 0;
+
+    unsigned long invoked = 0;
+    unsigned long execTime;
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;

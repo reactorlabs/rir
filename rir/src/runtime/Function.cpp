@@ -67,7 +67,8 @@ void Function::disassemble(std::ostream& out) {
     out << "\n";
     out << "[stats]    ";
     out << "invoked: " << invocationCount()
-        << ", deopt: " << deoptCount();
+        << ", time: " << ((double)invocationTime() / 1e6)
+        << "ms, deopt: " << deoptCount();
     out << "\n";
     body()->disassemble(out);
 }

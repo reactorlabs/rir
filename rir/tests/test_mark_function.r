@@ -31,18 +31,17 @@ f4 <- function(b) {
 }
 
 x=1L
-for (i in 1:10)
+for (i in 1:1000)
   f1()
-for (i in 1:10)
+for (i in 1:1000)
   f2()
-for (i in 1:100)
+for (i in 1:1000)
   f3(x)
-for (i in 1:100)
+for (i in 1:1000)
   f4(x)
 
-rir.disassemble(add_noinline1)
-stopifnot(sum(rir.functionInvocations(add_noinline1)) == 10)
-stopifnot(sum(rir.functionInvocations(add_nospecial)) > 10)
-stopifnot(sum(rir.functionInvocations(add_forceinline)) <= 3)
+stopifnot(sum(rir.functionInvocations(add_noinline1)) == 1000)
+stopifnot(sum(rir.functionInvocations(add_nospecial)) > 100)
+stopifnot(sum(rir.functionInvocations(add_forceinline)) <= 800)
 stopifnot(length(rir.functionInvocations(add_nospecial)) == 2)
 stopifnot(length(rir.functionInvocations(add_noinline2)) >= 4)
