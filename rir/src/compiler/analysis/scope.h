@@ -139,7 +139,7 @@ class ScopeAnalysis
     using StaticAnalysis::PositioningStyle;
 
     // Default
-    ScopeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+    ScopeAnalysis(ClosureVersion* cls, Code* code, AbstractLog& log)
         : StaticAnalysis("Scope", cls, code, log), depth(0),
           globalStateStore(new ScopeAnalysisResults) {
         globalState = globalStateStore;
@@ -158,7 +158,7 @@ class ScopeAnalysis
                   Value* staticClosureEnv,
                   const ScopeAnalysisState& initialState,
                   ScopeAnalysisResults* globalState, size_t depth,
-                  LogStream& log)
+                  AbstractLog& log)
         : StaticAnalysis("Scope", cls, cls, initialState, globalState, log),
           depth(depth), staticClosureEnv(staticClosureEnv) {
         assert(args.size() == cls->effectiveNArgs());
@@ -168,7 +168,7 @@ class ScopeAnalysis
     ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                   const ScopeAnalysisState& initialState,
                   ScopeAnalysisResults* globalState, size_t depth,
-                  LogStream& log);
+                  AbstractLog& log);
 
     typedef std::function<void(const AbstractLoad&)> LoadMaybe;
     typedef std::function<void(const AbstractPirValue&)> ValueMaybe;

@@ -152,7 +152,7 @@ static bool isStaticallyNA(Value* i) {
 }
 
 bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                         LogStream& log, size_t iteration) const {
+                         PassLog& log, size_t iteration) const {
     EarlyConstantfold cf;
     bool anyChange = cf.apply(cmp, cls, code, log, iteration);
 

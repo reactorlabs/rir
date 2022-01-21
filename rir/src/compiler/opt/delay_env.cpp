@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, PassLog&,
                      size_t) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](BB* bb) {

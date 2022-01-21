@@ -2,13 +2,13 @@
 #define PIR_PASS_H
 
 #include "../pir/module.h"
-#include "compiler/log/stream_logger.h"
 #include <string>
 
 namespace rir {
 namespace pir {
 
 class Compiler;
+class PassLog;
 
 class Pass {
   public:
@@ -17,9 +17,9 @@ class Pass {
     virtual bool runOnPromises() const { return false; }
     virtual bool isSlow() const { return false; }
 
-    bool apply(Compiler& cmp, ClosureVersion* function, LogStream& log,
+    bool apply(Compiler& cmp, ClosureVersion* function, PassLog& log,
                size_t iteration) const;
-    virtual bool apply(Compiler& cmp, ClosureVersion*, Code*, LogStream&,
+    virtual bool apply(Compiler& cmp, ClosureVersion*, Code*, PassLog&,
                        size_t iteration) const = 0;
 
     std::string getName() const { return this->name; }

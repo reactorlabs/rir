@@ -49,18 +49,18 @@ void PirJitLLVM::DebugInfo::addCode(Code* c) {
     Visitor::run(c->entry, [&](BB* bb) {
         assert(!BBLoc.count(bb));
         BBLoc[bb] = line++;
-        bb->printPrologue(log->out, false);
+        bb->printPrologue(log->out(), false);
 
         for (auto i : *bb) {
             assert(!instLoc.count(i));
             instLoc[i] = line++;
             *log << "  ";
-            i->print(log->out, false);
+            i->print(log->out(), false);
             *log << "\n";
         }
 
         line++;
-        bb->printEpilogue(log->out, false, /* always print newline */ true);
+        bb->printEpilogue(log->out(), false, /* always print newline */ true);
     });
     line++;
     *log << "\n";
@@ -329,7 +329,7 @@ void PirJitLLVM::compile(
     rir::Code* target, ClosureVersion* closure, Code* code,
     const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
-    ClosureStreamLogger& log) {
+    ClosureLog& log) {
 
     if (!M.get()) {
         M = std::make_unique<llvm::Module>("", *TSC.getContext());

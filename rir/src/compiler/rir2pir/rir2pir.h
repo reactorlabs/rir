@@ -15,7 +15,7 @@ class MkCls;
 
 class Rir2Pir {
   public:
-    Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+    Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
             const std::string& name,
             const std::list<PirTypeFeedback*>& outerFeedback);
 
@@ -55,7 +55,7 @@ class Rir2Pir {
 
     Compiler& compiler;
     ClosureVersion* cls;
-    ClosureStreamLogger& log;
+    ClosureLog& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
     std::unordered_map<SEXP, MkCls*> localFuns;
@@ -85,7 +85,7 @@ class Rir2Pir {
 
 class PromiseRir2Pir : public Rir2Pir {
   public:
-    PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+    PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                    const std::string& name,
                    const std::list<PirTypeFeedback*>& outerFeedback,
                    bool inlining)

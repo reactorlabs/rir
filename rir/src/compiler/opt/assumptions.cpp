@@ -151,7 +151,7 @@ struct AAssumption {
 
 struct AvailableAssumptions
     : public StaticAnalysis<IntersectionSet<AAssumption>> {
-    AvailableAssumptions(ClosureVersion* cls, Code* code, LogStream& log)
+    AvailableAssumptions(ClosureVersion* cls, Code* code, AbstractLog& log)
         : StaticAnalysis("AvailableAssumptions", cls, code, log) {}
     AbstractResult apply(IntersectionSet<AAssumption>& state,
                          Instruction* i) const override {
@@ -186,7 +186,7 @@ struct AvailableAssumptions
 };
 
 bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
-                                LogStream& log, size_t) const {
+                                PassLog& log, size_t) const {
     {
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isBranch()) {

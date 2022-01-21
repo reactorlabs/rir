@@ -10,7 +10,7 @@ namespace rir {
 namespace pir {
 
 bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                                LogStream& log, size_t) const {
+                                PassLog& log, size_t) const {
 
     auto version = cls->isContinuation();
     if (!version)

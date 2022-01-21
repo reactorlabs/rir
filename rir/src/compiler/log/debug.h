@@ -27,8 +27,8 @@ namespace pir {
     V(ShowWarnings)                                                            \
     V(DryRun)                                                                  \
     V(PrintPassesIntoFolders)                                                  \
-    V(PrintIntoFiles)                                                          \
-    V(PrintIntoStdout)                                                         \
+    V(PrintUnbuffered)                                                         \
+    V(PrintToStdout)                                                           \
     V(PrintInstructionIds)                                                     \
     V(OmitDeoptBranches)                                                       \
     V(OnlyChanges)                                                             \
@@ -83,6 +83,11 @@ struct DebugOptions {
         : flags(flags), passFilter(filter), functionFilter(functionFilter),
           style(style) {}
     DebugOptions() {}
+
+    bool multipleFiles() const {
+        return includes(DebugFlag::PrintPassesIntoFolders) ||
+               style != DebugStyle::Standard;
+    }
 
     static DebugOptions DefaultDebugOptions;
 };

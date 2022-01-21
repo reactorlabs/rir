@@ -29,10 +29,16 @@ int clearOrCreateDirectory(const char* path) {
 
 // From
 // https://stackoverflow.com/questions/18792489/how-to-create-a-temporary-directory-in-c
-std::string createTmpDirectory() {
-    char pattern[] = "/tmp/rsh.XXXXXX";
-    auto dir = mkdtemp(pattern);
+std::string createTmpDirectory(const std::string& pattern) {
+    char* p = new char[pattern.size() + 1];
+    size_t i = 0;
+    for (auto c : pattern)
+        p[i++] = c;
+    p[i] = 0;
+    auto dir = mkdtemp(p);
     if (dir == NULL)
         perror("mkdtemp failed: ");
-    return dir;
+    std::string res = dir;
+    delete[] p;
+    return res;
 }

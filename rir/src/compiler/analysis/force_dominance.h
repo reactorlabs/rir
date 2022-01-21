@@ -393,7 +393,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     using StaticAnalysis::PositioningStyle;
     const CFG cfg;
     explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
-                                    LogStream& log)
+                                    AbstractLog& log)
         : StaticAnalysis("ForceDominance", cls, code, log), cfg(code) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {

@@ -118,7 +118,7 @@ struct RangeAnalysisState {
 class RangeAnalysis : public StaticAnalysis<RangeAnalysisState, DummyState,
                                             true, AnalysisDebugLevel::None> {
   public:
-    RangeAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+    RangeAnalysis(ClosureVersion* cls, Code* code, AbstractLog& log)
         : StaticAnalysis("Range", cls, code, log) {}
 
     std::pair<bool, Range> getRange(RangeAnalysisState& state, Value* v) const {

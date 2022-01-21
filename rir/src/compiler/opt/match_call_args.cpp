@@ -15,7 +15,7 @@ namespace pir {
 
 // Try to match callsite arguments to formals
 bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                          LogStream& log, size_t) const {
+                          PassLog& log, size_t) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();

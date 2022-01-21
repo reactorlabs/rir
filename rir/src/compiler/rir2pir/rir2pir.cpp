@@ -142,7 +142,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureStreamLogger& log,
+Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                  const std::string& name,
                  const std::list<PirTypeFeedback*>& outerFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
@@ -1706,29 +1706,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         res = phi;
     }
 
-    // The return is only added for the early opt passes to update the result
-    // value. Now we need to remove it again, because we don't know if it is
-    // needed (e.g. when we compile an inline promise it is not).
-    if (insert.getCurrentBB())
-        insert(new Return(res));
-
-    static EarlyConstantfold ecf;
-    static ScopeResolution sr;
-    if (!inPromise()) {
-        // EarlyConstantfold is used to expand specials such as forceAndCall
-        // which can be expressed in PIR.
-        ecf.apply(compiler, cls, insert.code, log.out(), 0);
-        // This early pass of scope resolution helps to find local call targets
-        // and thus leads to better assumptions in the delayed compilation
-        // below.
-        sr.apply(compiler, cls, insert.code, log.out(), 0);
-    }
-
-    if (auto last = insert.getCurrentBB()) {
-        res = Return::Cast(last->last())->arg(0).val();
-        last->remove(last->end() - 1);
-    }
-
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;
@@ -1826,7 +1803,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         insert(new Return(ret));
     }
 
-    InsertCast c(insert.code, insert.env);
+    InsertCast c(insert.code, insert.env, log);
     c();
 
     finalized = true;

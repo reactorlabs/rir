@@ -12,7 +12,7 @@
 namespace rir {
 namespace pir {
 
-bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, PassLog&,
                      size_t) const {
     bool anyChange = false;
     std::unordered_set<Value*> envNeeded;

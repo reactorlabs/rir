@@ -56,7 +56,7 @@ static long isStaticForceAndCall(Call* call) {
 }
 
 bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                              LogStream& log, size_t) const {
+                              PassLog& log, size_t) const {
     bool anyChange = false;
     AvailableCheckpoints checkpoint(cls, code, log);
     DominanceGraph dom(code);

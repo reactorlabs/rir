@@ -9,7 +9,7 @@
 #include "R/r.h"
 #include "abstract_result.h"
 #include "compiler/analysis/cfg.h"
-#include "compiler/log/stream_logger.h"
+#include "compiler/log/sinks.h"
 
 #include <stack>
 #include <unordered_map>
@@ -121,23 +121,25 @@ class StaticAnalysis {
     GlobalAbstractState* globalState = nullptr;
 
     bool done = false;
-    LogStream& log;
+    AbstractLog& logger;
 
     ClosureVersion* closure;
     Code* code;
     std::vector<BB*> entrypoints;
 
+    LogStream& log() const { return logger.out(); }
+
   public:
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
-                   LogStream& log)
-        : name(name), log(log), closure(cls), code(code) {
+                   AbstractLog& log)
+        : name(name), logger(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
         seedEntries();
     }
     StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    const AbstractState& initialState,
-                   GlobalAbstractState* globalState, LogStream& log)
-        : name(name), globalState(globalState), log(log), closure(cls),
+                   GlobalAbstractState* globalState, AbstractLog& log)
+        : name(name), globalState(globalState), logger(log), closure(cls),
           code(code) {
         snapshots.resize(code->nextBBId);
         seedEntries();
@@ -182,20 +184,20 @@ class StaticAnalysis {
 
     void logHeader() const {
         if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
-            log << "=========== Starting " << name << " Analysis on "
-                << closure->name() << " ";
+            log() << "=========== Starting " << name << " Analysis on "
+                  << closure->name() << " ";
             if (code == closure)
-                log << "body";
+                log() << "body";
             else
-                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
-            log << "\n";
+                log() << "Prom(" << static_cast<Promise*>(code)->id << ")";
+            log() << "\n";
         }
     }
 
     void logInitialState(const AbstractState& state, const BB* bb) const {
         if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
-            log << "======= Entering BB" << bb->id << ", initial state\n";
-            log(state);
+            log() << "======= Entering BB" << bb->id << ", initial state\n";
+            log()(state);
         }
     }
 
@@ -203,13 +205,13 @@ class StaticAnalysis {
                    const Instruction* i) {
         if (DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
             res >= AbstractResult::None) {
-            log << "===== After applying instruction ";
-            log(i);
+            log() << "===== After applying instruction ";
+            log()(i);
             if (res == AbstractResult::Tainted) {
-                log << " (State got tainted)";
+                log() << " (State got tainted)";
             }
-            log << " we have\n";
-            log(post);
+            log() << " we have\n";
+            log()(post);
         }
     }
 
@@ -218,25 +220,25 @@ class StaticAnalysis {
         assert(DEBUG_LEVEL == AnalysisDebugLevel::Taint);
         if (res >= AbstractResult::Tainted) {
             if (res == AbstractResult::Tainted) {
-                log << "===== Before applying instruction ";
-                log(i);
-                log << " we have\n";
-                log(pre);
+                log() << "===== Before applying instruction ";
+                log()(i);
+                log() << " we have\n";
+                log()(pre);
             }
-            log << "===== After applying instruction ";
-            log(i);
+            log() << "===== After applying instruction ";
+            log()(i);
             if (res == AbstractResult::Tainted) {
-                log << " (State got tainted)";
+                log() << " (State got tainted)";
             }
-            log << " we have\n";
-            log(post);
+            log() << " we have\n";
+            log()(post);
         }
     }
 
     void logExit(const AbstractState& state) {
         if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-            log << "===== Exit state is\n";
-            log(state);
+            log() << "===== Exit state is\n";
+            log()(state);
         }
     }
 
@@ -534,24 +536,24 @@ class StaticAnalysis {
                 if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
                     (mres == AbstractResult::Tainted &&
                      DEBUG_LEVEL == AnalysisDebugLevel::Taint)) {
-                    log << "===== Merging BB" << in->id << " into BB" << id
-                        << (mres == AbstractResult::Tainted ? " tainted" : "")
-                        << (mres == AbstractResult::LostPrecision
-                                ? " lost precision"
-                                : "")
-                        << ", updated state:\n";
-                    log << "===- In state is:\n";
-                    log(state);
-                    log << "===- Old state is:\n";
-                    log(old);
-                    log << "===- Merged state is:\n";
-                    log(thisState.entry);
+                    log() << "===== Merging BB" << in->id << " into BB" << id
+                          << (mres == AbstractResult::Tainted ? " tainted" : "")
+                          << (mres == AbstractResult::LostPrecision
+                                  ? " lost precision"
+                                  : "")
+                          << ", updated state:\n";
+                    log() << "===- In state is:\n";
+                    log()(state);
+                    log() << "===- Old state is:\n";
+                    log()(old);
+                    log() << "===- Merged state is:\n";
+                    log()(thisState.entry);
                 }
                 done = false;
                 changed[id] = true;
             } else if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge) {
-                log << "===== Merging into trueBranch BB" << id
-                    << " reached fixpoint\n";
+                log() << "===== Merging into trueBranch BB" << id
+                      << " reached fixpoint\n";
             }
         }
     }

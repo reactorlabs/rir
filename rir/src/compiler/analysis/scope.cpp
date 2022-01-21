@@ -10,7 +10,7 @@ namespace pir {
 ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                              const ScopeAnalysisState& initialState,
                              ScopeAnalysisResults* globalState, size_t depth,
-                             LogStream& log)
+                             AbstractLog& log)
     : StaticAnalysis("Scope", cls, prom, initialState, globalState, log),
       depth(depth), staticClosureEnv(promEnv), inPromise(true) {}
 
@@ -309,10 +309,11 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                                 prom =
                                     subAnalysis
                                         .emplace(
-                                            i, std::make_unique<ScopeAnalysis>(
-                                                   closure, mkarg->prom(),
-                                                   mkarg->env(), state,
-                                                   globalState, depth + 1, log))
+                                            i,
+                                            std::make_unique<ScopeAnalysis>(
+                                                closure, mkarg->prom(),
+                                                mkarg->env(), state,
+                                                globalState, depth + 1, logger))
                                         .first->second.get();
                                 prom->setInitialState(
                                     [&](ScopeAnalysisState& init) {
@@ -431,7 +432,7 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                     subAnalysis
                         .emplace(i, std::make_unique<ScopeAnalysis>(
                                         version, args, lexicalEnv, subState,
-                                        globalState, depth + 1, log))
+                                        globalState, depth + 1, logger))
                         .first->second.get();
             } else {
                 nextFun = subAnalysis.at(i).get();

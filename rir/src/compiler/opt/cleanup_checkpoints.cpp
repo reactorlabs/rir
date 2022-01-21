@@ -7,7 +7,7 @@ namespace rir {
 namespace pir {
 
 bool CleanupCheckpoints::apply(Compiler&, ClosureVersion* cls, Code* code,
-                               LogStream&, size_t) const {
+                               PassLog&, size_t) const {
     bool anyChange = false;
     std::unordered_set<Checkpoint*> used;
     Visitor::run(code->entry, [&](Instruction* i) {

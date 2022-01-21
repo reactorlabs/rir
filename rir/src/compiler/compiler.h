@@ -2,7 +2,7 @@
 #define RIR_2_PIR_COMPILER_H
 
 #include "R/Preserve.h"
-#include "log/stream_logger.h"
+#include "compiler/log/log.h"
 #include "pir/pir.h"
 #include "utils/FormalArgs.h"
 
@@ -25,8 +25,7 @@ class Compiler {
                     Assumption::NotTooManyArguments,
                 0);
 
-    Compiler(Module* module, StreamLogger& logger)
-        : module(module), logger(logger){};
+    Compiler(Module* module, Log& logger) : module(module), logger(logger){};
 
     typedef std::function<void()> Maybe;
     typedef std::function<void(ClosureVersion*)> MaybeCls;
@@ -52,7 +51,9 @@ class Compiler {
     Module* module;
 
   private:
-    StreamLogger& logger;
+    Log& logger;
+
+    void translationDone(ClosureVersion*, ClosureLog&);
 
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const Context& ctx, bool root, MaybeCls success,

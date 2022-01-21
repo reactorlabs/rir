@@ -6,7 +6,7 @@
 namespace rir {
 namespace pir {
 
-class LogStream;
+class PassLog;
 class Closure;
 
 #define PASS(name, __runOnPromises__, __slow__)                                \
@@ -16,7 +16,7 @@ class Closure;
       public:                                                                  \
         name() : Pass(#name){};                                                \
         bool apply(Compiler& cmp, ClosureVersion* function, Code* code,        \
-                   LogStream& log, size_t iteration) const final override;     \
+                   PassLog& log, size_t iteration) const final override;       \
         bool runOnPromises() const final override {                            \
             return __runOnPromises__;                                          \
         }                                                                      \
@@ -167,7 +167,7 @@ class PASS(TypefeedbackCleanup, true, false);
 class PhaseMarker : public Pass {
   public:
     explicit PhaseMarker(const std::string& name) : Pass(name) {}
-    bool apply(Compiler&, ClosureVersion*, Code*, LogStream&,
+    bool apply(Compiler&, ClosureVersion*, Code*, PassLog&,
                size_t) const final override {
         return false;
     }

@@ -15,7 +15,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
     // compile to pir
     pir::Module* module = new pir::Module;
 
-    pir::StreamLogger logger(DebugOptions::DefaultDebugOptions);
+    pir::Log logger(DebugOptions::DefaultDebugOptions);
     logger.title("Compiling continuation");
     pir::Compiler cmp(module, logger);
 
