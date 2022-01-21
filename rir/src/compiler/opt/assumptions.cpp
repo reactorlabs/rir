@@ -186,7 +186,7 @@ struct AvailableAssumptions
 };
 
 bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
-                                PassLog& log, size_t) const {
+                                AbstractLog& log, size_t) const {
     {
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isBranch()) {

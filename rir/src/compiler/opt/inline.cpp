@@ -20,8 +20,8 @@
 namespace rir {
 namespace pir {
 
-bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code, PassLog& log,
-                   size_t) const {
+bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
+                   AbstractLog& log, size_t) const {
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 

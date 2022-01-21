@@ -14,8 +14,8 @@ namespace rir {
 namespace pir {
 
 // Search for ExpandDots(Dotlist(...)) pairs and statically expand them
-bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code, PassLog&,
-                       size_t) const {
+bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
+                       AbstractLog&, size_t) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](BB* bb) {
         auto ip = bb->begin();

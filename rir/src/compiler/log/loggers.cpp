@@ -129,12 +129,6 @@ void AbstractLog::footer() {
     highlightOff();
 }
 
-void PassLog::section(const std::string& title) {
-    // If we have a file per pass, then we don't need a section title
-    if (!options.multipleFiles())
-        AbstractLog::section(title);
-}
-
 void AbstractLog::section(const std::string& title) {
     std::string c = out().comment();
     highlightOn();
@@ -176,7 +170,7 @@ void PassLog::pirOptimizationsHeader(const Pass* pass) {
         preparePrint();
         std::stringstream ss;
         ss << pass->getName() << ": == " << number;
-        section(ss.str());
+        parent.section(ss.str());
     }
 }
 

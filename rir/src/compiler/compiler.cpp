@@ -36,7 +36,7 @@ void Compiler::translationDone(ClosureVersion* cls, ClosureLog& log) {
     // which can be expressed in PIR.
     {
         auto passLog = log.forPass(1, "earlyCF");
-        ecf.apply(*this, cls, cls, passLog, 0);
+        ecf.apply(*this, cls, cls, log, 0);
         passLog.pirOptimizations(&ecf);
     }
     // This early pass of scope resolution helps to find local call targets
@@ -44,7 +44,7 @@ void Compiler::translationDone(ClosureVersion* cls, ClosureLog& log) {
     // below.
     {
         auto passLog = log.forPass(2, "earlySR");
-        sr.apply(*this, cls, cls, passLog, 0);
+        sr.apply(*this, cls, cls, log, 0);
         passLog.pirOptimizations(&sr);
     }
 }
@@ -360,22 +360,22 @@ void Compiler::optimizeModule() {
         }
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
-                auto log =
-                    logger.get(v).forPass(passnr, translation->getName());
-                log.pirOptimizationsHeader(translation);
+                auto& clog = logger.get(v);
+                auto pirLog = clog.forPass(passnr, translation->getName());
+                pirLog.pirOptimizationsHeader(translation);
 
                 if (MEASURE_COMPILER_PERF)
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (translation->apply(*this, v, log, iteration))
+                if (translation->apply(*this, v, clog, iteration))
                     changed = true;
                 if (MEASURE_COMPILER_PERF)
                     Measuring::countTimer("compiler.cpp: " +
                                           translation->getName());
 
-                log.pirOptimizations(translation);
-                log.flush();
+                pirLog.pirOptimizations(translation);
+                pirLog.flush();
 
 #ifdef FULLVERIFIER
                 Verify::apply(v, "Error after pass " + translation->getName(),

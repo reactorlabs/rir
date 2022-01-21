@@ -13,7 +13,7 @@ namespace rir {
 namespace pir {
 
 bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                             PassLog& log, size_t) const {
+                             AbstractLog& log, size_t) const {
     bool anyChange = false;
     DominanceGraph dom(code);
     ContextStack cs(cls, code, log);

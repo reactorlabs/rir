@@ -15,7 +15,7 @@ namespace rir {
 namespace pir {
 
 bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
-                          PassLog& log, size_t) const {
+                          AbstractLog& log, size_t) const {
 
     RangeAnalysis rangeAnalysis(cls, code, log);
 

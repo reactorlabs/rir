@@ -44,7 +44,7 @@ class AbstractLog {
     virtual void preparePrint() = 0;
     virtual void flush();
 
-    virtual void section(const std::string&);
+    void section(const std::string&);
     void failed(const std::string& msg);
     void warn(const std::string& msg);
 };
@@ -68,8 +68,6 @@ class PassLog : public AbstractLog {
     void finalPIR();
 
     void preparePrint() override;
-
-    void section(const std::string&) override;
 
   protected:
     PassLog(size_t number, ClosureLog& parent, std::shared_ptr<LogStream> out);

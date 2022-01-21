@@ -50,7 +50,7 @@ struct ALoad {
 };
 
 struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
-    AvailableLoads(ClosureVersion* cls, Code* code, PassLog& log)
+    AvailableLoads(ClosureVersion* cls, Code* code, AbstractLog& log)
         : StaticAnalysis("AvailableLoads", cls, code, log) {}
     AbstractResult apply(IntersectionSet<ALoad>& state,
                          Instruction* i) const override {
@@ -92,7 +92,7 @@ struct AvailableLoads : public StaticAnalysis<IntersectionSet<ALoad>> {
 };
 
 bool LoadElision::apply(Compiler&, ClosureVersion* cls, Code* code,
-                        PassLog& log, size_t) const {
+                        AbstractLog& log, size_t) const {
     AvailableLoads loads(cls, code, log);
     bool anyChange = false;
 

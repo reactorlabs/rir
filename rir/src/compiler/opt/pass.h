@@ -8,7 +8,7 @@ namespace rir {
 namespace pir {
 
 class Compiler;
-class PassLog;
+class AbstractLog;
 
 class Pass {
   public:
@@ -17,9 +17,9 @@ class Pass {
     virtual bool runOnPromises() const { return false; }
     virtual bool isSlow() const { return false; }
 
-    bool apply(Compiler& cmp, ClosureVersion* function, PassLog& log,
+    bool apply(Compiler& cmp, ClosureVersion* function, AbstractLog& log,
                size_t iteration) const;
-    virtual bool apply(Compiler& cmp, ClosureVersion*, Code*, PassLog&,
+    virtual bool apply(Compiler& cmp, ClosureVersion*, Code*, AbstractLog&,
                        size_t iteration) const = 0;
 
     std::string getName() const { return this->name; }

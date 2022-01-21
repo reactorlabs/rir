@@ -5,7 +5,7 @@
 namespace rir {
 namespace pir {
 
-bool Pass::apply(Compiler& cmp, ClosureVersion* function, PassLog& log,
+bool Pass::apply(Compiler& cmp, ClosureVersion* function, AbstractLog& log,
                  size_t iteration) const {
     bool res = apply(cmp, function, function, log, iteration);
     if (runOnPromises()) {

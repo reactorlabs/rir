@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code, PassLog&,
+bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                      size_t) const {
     UsesTree uses(code);
 

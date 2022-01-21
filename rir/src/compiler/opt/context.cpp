@@ -13,7 +13,7 @@ namespace rir {
 namespace pir {
 
 bool OptimizeContexts::apply(Compiler&, ClosureVersion* cls, Code* code,
-                             PassLog& log, size_t) const {
+                             AbstractLog& log, size_t) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](BB* bb) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
