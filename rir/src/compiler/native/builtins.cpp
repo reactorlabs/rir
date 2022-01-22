@@ -954,6 +954,30 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
+void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,
+               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    DeoptMetadata* m = (DeoptMetadata *)DATAPTR(metaDataStore);
+
+    SEXP map = Pool::get(HAST_VTAB_MAP);
+    for (size_t i = 0; i < m->numFrames; i++) {
+        if (m->frames[i].code == 0) {
+            size_t hast = m->frames[i].hast;
+            DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
+            rir::Code * code = vtable->baseline()->body();
+            code = code->getSrcAtOffset(m->frames[i].index);
+            m->frames[i].code = code;
+            m->frames[i].pc = code->code() + m->frames[i].offset;
+
+            // std::cout << "DEOPTMETADATA patc: {";
+            //                 std::cout << "PC: " << (uintptr_t)m->frames[i].pc << ", ";
+            //                 std::cout << "CODE: " << (uintptr_t)code->code() << ", ";
+            //                 std::cout << "SRC: " << (uintptr_t)code;
+            //                 std::cout << " }" << std::endl;
+        }
+    }
+    deoptImpl(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);
+}
+
 void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
     switch (*pos) {
     case Opcode::record_test_: {
@@ -2446,6 +2470,16 @@ void NativeBuiltins::initializeBuiltins() {
                                                 t::DeoptReasonPtr, t::SEXP},
                                                false),
                        {llvm::Attribute::NoReturn}};
+    #if TRY_PATCH_DEOPTMETADATA == 1
+    get_(Id::deoptPool) = {"deoptPool",
+                       (void*)&deoptPoolImpl,
+                       llvm::FunctionType::get(t::t_void,
+                                               {t::voidPtr, t::SEXP, t::SEXP,
+                                                t::stackCellPtr, t::i1,
+                                                t::DeoptReasonPtr, t::SEXP},
+                                               false),
+                       {llvm::Attribute::NoReturn}};
+    #endif
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,
                             t::void_voidPtr,

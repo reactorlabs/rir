@@ -36,6 +36,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "loweringPatches.h"
+#include "api.h"
+#include "utils/UMap.h"
+
 namespace rir {
 namespace pir {
 
@@ -92,8 +96,18 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                             llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
+    #if PATCH_GLOBAL_CONSTANT_NAMES == 1
+
+    static int num = 0;
+    std::stringstream name;
+    name << "copool_" << num++;
+    return new llvm::GlobalVariable(getModule(), ty, true,
+                                    llvm::GlobalValue::PrivateLinkage, init, name.str());
+
+    #else
     return new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init);
+    #endif
 }
 
 llvm::FunctionCallee
@@ -116,6 +130,55 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
     });
 }
 
+// serializer
+llvm::Value* LowerFunctionLLVM::convertToExternalSymbol(std::string name, llvm::Type* ty = t::SEXPREC) {
+    return getModule().getOrInsertGlobal(name, ty, [&]() {
+        return new llvm::GlobalVariable(
+            getModule(), ty, false,
+            llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
+            nullptr, name, nullptr,
+            llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+    });
+}
+
+llvm::Value* LowerFunctionLLVM::namedGlobalConst(std::string name, llvm::Constant* init,
+                                            llvm::Type* ty) {
+    if (!ty)
+        ty = init->getType();
+
+    return new llvm::GlobalVariable(getModule(), ty, true,
+                                    llvm::GlobalValue::PrivateLinkage, init, name);
+}
+
+llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
+                                            llvm::Type* ty) {
+    if (!ty)
+        ty = init->getType();
+
+    #if PATCH_GLOBAL_CONSTANT_NAMES == 1
+
+    static int num = 0;
+    std::stringstream name;
+    name << "srpool_" << num++;
+    return new llvm::GlobalVariable(getModule(), ty, true,
+                                    llvm::GlobalValue::PrivateLinkage, init, name.str());
+
+    #else
+    return new llvm::GlobalVariable(getModule(), ty, true,
+                                    llvm::GlobalValue::PrivateLinkage, init);
+    #endif
+}
+
+llvm::FunctionCallee
+LowerFunctionLLVM::convertToFunctionSymbol(SEXP what, llvm::FunctionType* ty) {
+    assert(what);
+    std::stringstream ss;
+    ss << "cod_";
+    ss << getBuiltinNr(what);
+
+    return getModule().getOrInsertFunction(ss.str(), ty);
+}
+
 llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
     assert(what);
@@ -125,7 +188,11 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
+    #if PATCH_SET_VISIBLE == 1
+    builder.CreateStore(c(i), convertToExternalSymbol("spe_Visible", t::Int));
+    #else
     builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
+    #endif
 }
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
@@ -185,8 +252,17 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     builder.SetInsertPoint(nok);
     if (p)
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
+
+
+    #if PATCH_MSG == 1
+    auto msgGlobalVar =
+        builder.CreateGlobalString(msg);
+    call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+         {builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
+    #else
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
          {convertToPointer((void*)msg, t::i8, true)});
+    #endif
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
@@ -250,23 +326,129 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         }
     }
 
+    #if PATCH_100_102 == 1
+    if (co == R_GlobalEnv) {
+        return convertToExternalSymbol("dcs_100");
+    }
+    if (co == R_BaseEnv) {
+        return convertToExternalSymbol("dcs_101");
+    }
+    if (co == R_BaseNamespace) {
+        return convertToExternalSymbol("dcs_102");
+    }
+    #else
     static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
                                                R_BaseNamespace};
-    if (TYPEOF(co) == SYMSXP || eternal.count(co))
+    if (eternal.count(co))
         return convertToPointer(co);
+    #endif
 
+    #if PATCH_103_109 == 1
+    if (co == R_TrueValue) {
+        return convertToExternalSymbol("dcs_103");
+    }
+    if (co == R_NilValue) {
+        return convertToExternalSymbol("dcs_104");
+    }
+    if (co == R_FalseValue) {
+        return convertToExternalSymbol("dcs_105");
+    }
+    if (co == R_UnboundValue) {
+        return convertToExternalSymbol("dcs_106");
+    }
+    if (co == R_MissingArg) {
+        return convertToExternalSymbol("dcs_107");
+    }
+    if (co == R_LogicalNAValue) {
+        return convertToExternalSymbol("dcs_108");
+    }
+    if (co == R_EmptyEnv) {
+        return convertToExternalSymbol("dcs_109");
+    }
+    #else
     static std::unordered_set<SEXP> eternalConst = {
         R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
         R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
-    if (TYPEOF(co) == BUILTINSXP || TYPEOF(co) == SPECIALSXP ||
-        eternalConst.count(co))
+    if (eternalConst.count(co))
         return convertToPointer(co, true);
+    #endif
 
+    #if PATCH_110_111 == 1
+    if (co == R_RestartToken) {
+        return convertToExternalSymbol("dcs_110");
+    }
+
+    if (co == R_DimSymbol) {
+        return convertToExternalSymbol("dcs_111");
+    }
+    #endif
+
+    #if PATCH_SYMSXP == 1
+    if (TYPEOF(co) == SYMSXP) {
+        std::stringstream ss;
+        ss << "sym_";
+        ss << CHAR(PRINTNAME(co));
+        return convertToExternalSymbol(ss.str());
+    }
+    #else
+    if (TYPEOF(co) == SYMSXP)
+        return convertToPointer(co);
+    #endif
+
+    #if PATCH_BUILTINSXP == 1
+    if (TYPEOF(co) == BUILTINSXP) {
+        std::stringstream ss;
+        ss << "gcb_";
+        ss << getBuiltinNr(co);
+        return convertToExternalSymbol(ss.str());
+    }
+    #else
+    if (TYPEOF(co) == BUILTINSXP) {
+        return convertToPointer(co, true);
+    }
+    #endif
+
+    if (TYPEOF(co) == SPECIALSXP) {
+        #if PATCH_SPECIALSXP == 1
+        auto sym = Rf_install(R_FunTab[co->u.primsxp.offset].name);
+        auto spe1 = Rf_findFun(sym,R_GlobalEnv);
+
+        if (spe1 == co) {
+            std::stringstream ss;
+            ss << "spe1_";
+            ss << co->u.primsxp.offset;
+            return convertToExternalSymbol(ss.str());
+        }
+        else {
+            std::cout << "  (E) PATCH_SPECIALSXP: non-function type, offset: " << co->u.primsxp.offset << ", kind: " << R_FunTab[co->u.primsxp.offset].gram.kind << std::endl;
+            if (serializerError == nullptr) {
+                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+            } else {
+                *serializerError = true;
+            }
+        }
+        #else
+        return convertToPointer(co, true);
+        #endif
+    }
+
+    #if PATCH_CP_ENTRIES == 1
+    auto cpIndex = Pool::insert(co);
+    auto iVal = globalConst(c(cpIndex), t::i32);
+    auto iLoad = builder.CreateLoad(iVal);
+
+    llvm::Value* pos = builder.CreateLoad(constantpool);
+    pos = builder.CreateBitCast(dataPtr(pos, false),
+                                PointerType::get(t::SEXP, 0));
+    pos = builder.CreateGEP(pos, iLoad);
+    #else
     auto i = Pool::insert(co);
     llvm::Value* pos = builder.CreateLoad(constantpool);
     pos = builder.CreateBitCast(dataPtr(pos, false),
                                 PointerType::get(t::SEXP, 0));
     pos = builder.CreateGEP(pos, c(i));
+    #endif
+
     return builder.CreateLoad(pos);
 }
 
@@ -328,6 +510,18 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                                              llvm::Value* env) {
     if (supportsFastBuiltinCall(builtin, args.size())) {
         return withCallFrame(args, [&]() -> llvm::Value* {
+            #if PATCH_CP_ENTRIES == 1
+            auto iVal = globalConst(c(srcIdx), t::i32);
+            auto iLoad = builder.CreateLoad(iVal);
+            return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
+                        {
+                            paramCode(),
+                            iLoad,
+                            constant(builtin, t::SEXP),
+                            env,
+                            c(args.size()),
+                        });
+            #else
             return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
                             paramCode(),
@@ -336,10 +530,15 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                             env,
                             c(args.size()),
                         });
+            #endif
         });
     }
 
+    #if PATCH_BUILTINCALL == 1
+    auto f = convertToFunctionSymbol(builtin, t::builtinFunction);
+    #else
     auto f = convertToFunction((void*)builtinFun, t::builtinFunction);
+    #endif
 
     std::stack<llvm::Value*> loadedArgs;
     auto n = numTemps;
@@ -433,12 +632,82 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     } else if (val->asRValue()) {
         res = constant(val->asRValue(), needed);
     } else if (val == OpaqueTrue::instance()) {
+        #if PATCH_OPAQUE_TRUE == 1
+        // Something that is always true, but llvm does not know about
+        res = builder.CreateLoad(convertToExternalSymbol("spe_opaqueTrue", t::Int));
+        #else
         static int one = 1;
         // Something that is always true, but llvm does not know about
         res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
+        #endif
     } else if (auto ld = Const::Cast(val)) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
+        #if TRY_PATCH_DEOPTREASON == 1
+        Constant * srcAddr;
+        auto data = getHastAndIndex(((DeoptReasonWrapper*)val)->reason.srcCode()->src);
+        size_t hast = data.hast;
+
+        // If the hast is blacklisted, patch will not work
+        SEXP blMap = Pool::get(4);
+        if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+            std::cout << "  (E) TRY_PATCH_DEOPTREASON failed" << std::endl;
+            if (hast == 0) {
+                std::cout << "  (E) hast == 0" << std::endl;
+            } else {
+                std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+            }
+            if (serializerError == nullptr) {
+                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+            } else {
+                *serializerError = true;
+            }
+            auto dr = (DeoptReasonWrapper*)val;
+            auto srcAddr = (Constant*)builder.CreateIntToPtr(
+                llvm::ConstantInt::get(
+                    PirJitLLVM::getContext(),
+                    llvm::APInt(64,
+                                reinterpret_cast<uint64_t>(dr->reason.srcCode()),
+                                false)),
+                t::voidPtr);
+            auto drs = llvm::ConstantStruct::get(
+                t::DeoptReason, {c(dr->reason.reason, 32),
+                                c(dr->reason.origin.offset(), 32), srcAddr});
+            res = globalConst(drs);
+        } else {
+            std::stringstream ss;
+
+            if (reqMap) {
+                ss << "code_" << hast << "_" << data.index;
+                reqMap->insert(hast);
+            } else {
+                ss << "codn_" << hast << "_" << data.index;
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+                    std::cout << "  (E) [DeoptReason patch] reqMap not available (ERROR)" << std::endl;
+                }
+            }
+
+            auto dr = (DeoptReasonWrapper*)val;
+            srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
+
+            // --------------------- DEBUGGING ---------------------
+            SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+            if (debugMap == R_NilValue) {
+                UMap::createMapInCp(PATCH_DEBUG_MAP);
+                debugMap = Pool::get(PATCH_DEBUG_MAP);
+            }
+            UMap::insert(debugMap, Rf_install(ss.str().c_str()), Rf_install(std::to_string((uintptr_t) dr->reason.srcCode()).c_str()));
+            // -----------------------------------------------------
+
+
+            auto realOffset = dr->reason.origin.pc() - dr->reason.origin.srcCode()->code();
+            auto drs = llvm::ConstantStruct::get(
+                t::DeoptReason, {c(dr->reason.reason, 32),
+                                c(realOffset, 32), srcAddr});
+            res = globalConst(drs);
+        }
+        #else
         auto dr = (DeoptReasonWrapper*)val;
         auto srcAddr = (Constant*)builder.CreateIntToPtr(
             llvm::ConstantInt::get(
@@ -447,10 +716,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                             reinterpret_cast<uint64_t>(dr->reason.srcCode()),
                             false)),
             t::voidPtr);
+
         auto drs = llvm::ConstantStruct::get(
             t::DeoptReason, {c(dr->reason.reason, 32),
-                             c(dr->reason.origin.offset(), 32), srcAddr});
+                            c(dr->reason.origin.offset(), 32), srcAddr});
         res = globalConst(drs);
+        #endif
     } else {
         val->printRef(std::cerr);
         if (auto i = Instruction::Cast(val))
@@ -692,8 +963,14 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     // Handle incoming longjumps
     {
         builder.SetInsertPoint(didLongjmp);
+        #if PATCH_RETURNED_VALUE == 1
+        auto speSym = convertToExternalSymbol("spe_returnedValue", t::i64);
+        llvm::Value* returned = builder.CreateLoad(
+            builder.CreateIntToPtr(speSym, t::SEXP_ptr));
+        #else
         llvm::Value* returned = builder.CreateLoad(
             builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
+        #endif
         auto restart =
             builder.CreateICmpEQ(returned, constant(R_RestartToken, t::SEXP));
 
@@ -1586,8 +1863,15 @@ void LowerFunctionLLVM::compileRelop(
         llvm::Value* res;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
+            #if PATCH_SRCIDX_ENTRY == 1
+            auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+            auto iLoad = builder.CreateLoad(iVal);
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                       {a, b, e, iLoad, c((int)kind)});
+            #else
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                        {a, b, e, c(i->srcIdx), c((int)kind)});
+            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((int)kind)});
@@ -1653,8 +1937,15 @@ void LowerFunctionLLVM::compileBinop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
+            #if PATCH_SRCIDX_ENTRY == 1
+            auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+            auto iLoad = builder.CreateLoad(iVal);
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                       {a, b, e, iLoad, c((int)kind)});
+            #else
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                        {a, b, e, c(i->srcIdx), c((int)kind)});
+            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((int)kind)});
@@ -1730,8 +2021,15 @@ void LowerFunctionLLVM::compileUnop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
+            #if PATCH_SRCIDX_ENTRY == 1
+            auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+            auto iLoad = builder.CreateLoad(iVal);
+            res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
+                       {a, e, iLoad, c((int)kind)});
+            #else
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
                        {a, e, c(i->srcIdx), c((int)kind)});
+            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
                        {a, c((int)kind)});
@@ -1862,6 +2160,28 @@ bool LowerFunctionLLVM::compileDotcall(
     if (calli->isReordered())
         callId = pushArgReordering(calli->getArgOrderOrig());
 
+    #if PATCH_CP_ENTRIES == 1
+    auto iVal = globalConst(c(i->srcIdx), t::i32);
+    auto iLoad = builder.CreateLoad(iVal);
+    setVal(i, withCallFrame(
+                args,
+                [&]() -> llvm::Value* {
+                    return call(
+                        NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                        {
+                            c(callId),
+                            paramCode(),
+                            iLoad,
+                            callee(),
+                            i->hasEnv() ? loadSxp(i->env())
+                                        : constant(R_BaseEnv, t::SEXP),
+                            c(calli->nCallArgs()),
+                            builder.CreateBitCast(namesStore, t::IntPtr),
+                            c(asmpt.toI()),
+                        });
+                },
+                /* dotCall pops arguments : */ false));
+    #else
     setVal(i, withCallFrame(
                   args,
                   [&]() -> llvm::Value* {
@@ -1880,6 +2200,7 @@ bool LowerFunctionLLVM::compileDotcall(
                           });
                   },
                   /* dotCall pops arguments : */ false));
+    #endif
     return true;
 }
 
@@ -2105,7 +2426,11 @@ void LowerFunctionLLVM::compile() {
         }
     }
 
+    #if PATCH_NODE_STACK_TOP == 1
+    nodestackPtrAddr = convertToExternalSymbol("spe_BCNodeStackTop", t::stackCellPtr);
+    #else
     nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
+    #endif
     basepointer = nodestackPtr();
 
     size_t additionalStackSlots = 0;
@@ -2174,7 +2499,14 @@ void LowerFunctionLLVM::compile() {
             }
         };
 
+        #if PATCH_CONSTANT_POOL_PTR == 1
+        auto speSym = namedGlobalConst("named_constantPool", c(globalContext()), t::i64);
+        auto iLoad = builder.CreateLoad(speSym);
+        constantpool = builder.CreateIntToPtr(iLoad, t::SEXP_ptr);
+        #else
         constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
+        #endif
+
         constantpool = builder.CreateGEP(constantpool, c(1));
 
         Visitor::run(code->entry, [&](BB* bb) {
@@ -3329,13 +3661,25 @@ void LowerFunctionLLVM::compile() {
                 if (b->isReordered())
                     callId = pushArgReordering(b->getArgOrderOrig());
 
+                #if PATCH_CP_ENTRIES == 1
+                auto iVal = globalConst(c(b->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::get(NativeBuiltins::Id::call),
-                               {c(callId), paramCode(), c(b->srcIdx),
-                                loadSxp(b->cls()), loadSxp(b->env()),
-                                c(b->nCallArgs()), c(asmpt.toI())});
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::call),
+                            {c(callId), paramCode(), iLoad,
+                            loadSxp(b->cls()), loadSxp(b->env()),
+                            c(b->nCallArgs()), c(asmpt.toI())});
+                }));
+                #else
+                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::call),
+                            {c(callId), paramCode(), c(b->srcIdx),
+                            loadSxp(b->cls()), loadSxp(b->env()),
+                            c(b->nCallArgs()), c(asmpt.toI())});
                        }));
+                #endif
                 break;
             }
 
@@ -3359,6 +3703,25 @@ void LowerFunctionLLVM::compile() {
                 if (b->isReordered())
                     callId = pushArgReordering(b->getArgOrderOrig());
 
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalConst(c(b->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                setVal(
+                    i, withCallFrame(args, [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::namedCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                iLoad,
+                                loadSxp(b->cls()),
+                                loadSxp(b->env()),
+                                c(b->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    }));
+                #else
                 setVal(
                     i, withCallFrame(args, [&]() -> llvm::Value* {
                         return call(
@@ -3374,6 +3737,7 @@ void LowerFunctionLLVM::compile() {
                                 c(asmpt.toI()),
                             });
                     }));
+                #endif
                 break;
             }
 
@@ -3391,6 +3755,20 @@ void LowerFunctionLLVM::compile() {
                     callId = pushArgReordering(calli->getArgOrderOrig());
 
                 if (!target->owner()->hasOriginClosure()) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalConst(c(calli->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    setVal(
+                        i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(), iLoad,
+                                 loadSxp(calli->runtimeClosure()),
+                                 loadSxp(calli->env()), c(calli->nCallArgs()),
+                                 c(asmpt.toI())});
+                        }));
+
+                    #else
                     setVal(
                         i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -3400,6 +3778,7 @@ void LowerFunctionLLVM::compile() {
                                  loadSxp(calli->env()), c(calli->nCallArgs()),
                                  c(asmpt.toI())});
                         }));
+                    #endif
                     break;
                 }
 
@@ -3415,6 +3794,113 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
+                        #if TRY_PATCH_OPT_DISPATCH == 1
+                        size_t hast = getHastAndIndex(dt->baseline()->body()->src).hast;
+                        // If the hast is blacklisted, patch will not work
+                        SEXP blMap = Pool::get(BL_MAP);
+                        if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                            std::cout << "  (E) TRY_PATCH_OPT_DISPATCH failed" << std::endl;
+                            if (hast == 0) {
+                                std::cout << "  (E) hast == 0" << std::endl;
+                            } else {
+                                std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                            }
+
+                            if (serializerError == nullptr) {
+                                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                            } else {
+                                *serializerError = true;
+                            }
+                            assert(
+                            asmpt.includes(Assumption::StaticallyArgmatched));
+                            auto idx = Pool::makeSpace();
+                            NativeBuiltins::targetCaches.push_back(idx);
+                            Pool::patch(idx, nativeTarget->container());
+                            auto missAsmptStore =
+                                Rf_allocVector(RAWSXP, sizeof(Context));
+                            auto missAsmptIdx = Pool::insert(missAsmptStore);
+                            new (DATAPTR(missAsmptStore))
+                                Context(nativeTarget->context() - asmpt);
+                            assert(asmpt.smaller(nativeTarget->context()));
+                            auto res = withCallFrame(args, [&]() {
+                                return call(
+                                    NativeBuiltins::get(
+                                        NativeBuiltins::Id::nativeCallTrampoline),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        constant(callee, t::SEXP),
+                                        c(idx),
+                                        c(calli->srcIdx),
+                                        loadSxp(calli->env()),
+                                        c(args.size()),
+                                        c(asmpt.toI()),
+                                        c(missAsmptIdx),
+                                    });
+                            });
+                            setVal(i, res);
+                        } else {
+                            assert(
+                                asmpt.includes(Assumption::StaticallyArgmatched));
+                            // auto idx = Pool::makeSpace();
+                            // NativeBuiltins::targetCaches.push_back(idx);
+                            // Pool::patch(idx, nativeTarget->container());
+
+                            static int track = 0;
+                            std::stringstream ss1;
+                            std::stringstream ss2;
+
+                            if (reqMap) {
+                                ss1 << "clso_" << track++ << "_" << hast;
+                                ss2 << "optd_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
+                                reqMap->insert(hast);
+                            } else {
+                                ss1 << "clsn_" << track++ << "_" << hast;
+                                ss2 << "optn_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
+                                if (serializerError != nullptr) {
+                                    *serializerError = true;
+                                    std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
+                                }
+                            }
+
+                            // --------------------- DEBUGGING ---------------------
+                            SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                            if (debugMap == R_NilValue) {
+                                UMap::createMapInCp(PATCH_DEBUG_MAP);
+                                debugMap = Pool::get(PATCH_DEBUG_MAP);
+                            }
+
+                            SEXP key = Rf_install(ss1.str().c_str());
+                            SEXP val = Rf_install(std::to_string((uintptr_t) callee).c_str());
+                            UMap::insert(debugMap, key, val);
+                            // ------------------------------------------ -----------
+
+                            auto missAsmptStore =
+                                Rf_allocVector(RAWSXP, sizeof(Context));
+                            auto missAsmptIdx = Pool::insert(missAsmptStore);
+                            new (DATAPTR(missAsmptStore))
+                                Context(nativeTarget->context() - asmpt);
+
+                            assert(asmpt.smaller(nativeTarget->context()));
+                            auto res = withCallFrame(args, [&]() {
+                                return call(
+                                    NativeBuiltins::get(
+                                        NativeBuiltins::Id::nativeCallTrampoline),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        convertToExternalSymbol(ss1.str()), // constant(callee, t::SEXP),
+                                        builder.CreateLoad(convertToExternalSymbol(ss2.str(), t::Int)), // c(idx),
+                                        builder.CreateLoad(globalConst(c(calli->srcIdx), t::i32)), // c(calli->srcIdx)
+                                        loadSxp(calli->env()),
+                                        c(args.size()),
+                                        c(asmpt.toI()),
+                                        builder.CreateLoad(globalConst(c(missAsmptIdx), t::i32)), // c(missAsmptIdx),
+                                    });
+                            });
+                            setVal(i, res);
+                        }
+                        #else
                         assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
                         auto idx = Pool::makeSpace();
@@ -3443,10 +3929,98 @@ void LowerFunctionLLVM::compile() {
                                 });
                         });
                         setVal(i, res);
+                        #endif
                         break;
+
                     }
                 }
 
+                #if TRY_PATCH_STATIC_CALL3 == 1
+
+                SEXP body = BODY(calli->cls()->rirClosure());
+
+                auto vtable = DispatchTable::unpack(body);
+                size_t hast = getHastAndIndex(vtable->baseline()->body()->src).hast;
+
+                // If the hast is blacklisted, patch will not work
+                SEXP blMap = Pool::get(BL_MAP);
+                if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                    std::cout << "  (E) TRY_PATCH_STATIC_CALL3 failed" << std::endl;
+                    if (hast == 0) {
+                        std::cout << "  (E) hast == 0" << std::endl;
+                    } else {
+                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                    }
+
+                    if (serializerError == nullptr) {
+                        std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                    } else {
+                        *serializerError = true;
+                    }
+
+                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {
+                                    c(callId),
+                                    paramCode(),
+                                    c(calli->srcIdx),
+                                    builder.CreateIntToPtr(
+                                        c(calli->cls()->rirClosure()), t::SEXP),
+                                    loadSxp(calli->env()),
+                                    c(calli->nCallArgs()),
+                                    c(asmpt.toI()),
+                                });
+                        }));
+                } else {
+                    auto iValAST = globalConst(c(calli->srcIdx), t::i32);
+                    auto iLoadAST = builder.CreateLoad(iValAST);
+
+                    static int track = 0;
+
+                    std::stringstream ss;
+
+                    if (reqMap) {
+                        ss << "clso_" << track++ << "_" << hast;
+                        reqMap->insert(hast);
+                    } else {
+                        ss << "clsn_" << track++ << "_" << hast;
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
+                        }
+                    }
+
+                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    if (debugMap == R_NilValue) {
+                        UMap::createMapInCp(PATCH_DEBUG_MAP);
+                        debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    }
+
+                    SEXP key = Rf_install(ss.str().c_str());
+                    SEXP val = Rf_install(std::to_string((uintptr_t) calli->cls()->rirClosure()).c_str());
+
+                    UMap::insert(debugMap, key, val);
+
+                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {
+                                    c(callId),
+                                    paramCode(),
+                                    iLoadAST,
+                                    convertToExternalSymbol(ss.str()),
+                                    loadSxp(calli->env()),
+                                    c(calli->nCallArgs()),
+                                    c(asmpt.toI()),
+                                });
+                        }));
+
+                }
+
+                #else
                 assert(asmpt.includes(Assumption::StaticallyArgmatched));
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
@@ -3462,6 +4036,7 @@ void LowerFunctionLLVM::compile() {
                                    c(asmpt.toI()),
                                });
                        }));
+                #endif
                 break;
             }
 
@@ -3534,6 +4109,136 @@ void LowerFunctionLLVM::compile() {
                 // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
                 auto deopt = Deopt::Cast(i);
+
+                #if TRY_PATCH_DEOPTMETADATA == 1
+                bool patchPossible = true;
+                SEXP blMap = Pool::get(BL_MAP);
+
+                std::vector<FrameState*> frames;
+
+                auto fs = deopt->frameState();
+                while (fs) {
+                    frames.push_back(fs);
+                    fs = fs->next();
+                }
+
+                for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                    auto fs = *f;
+                    auto srcData = getHastAndIndex(fs->code->src);
+                    size_t hast = srcData.hast;
+
+                    if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                        patchPossible = false;
+                        break;
+                    }
+                }
+
+                if (patchPossible) {
+                    std::vector<Value*> args;
+                    {
+                        std::vector<FrameState*> frames;
+
+                        auto fs = deopt->frameState();
+                        while (fs) {
+                            frames.push_back(fs);
+                            fs = fs->next();
+                        }
+
+                        size_t nframes = frames.size();
+                        SEXP store =
+                            Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
+                                                    nframes * sizeof(FrameInfo));
+                        m = new (DATAPTR(store)) DeoptMetadata;
+                        m->numFrames = nframes;
+
+                        int frameNr = nframes - 1;
+
+                        for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                            auto fs = *f;
+                            for (size_t pos = 0; pos < fs->stackSize; pos++)
+                                args.push_back(fs->arg(pos).val());
+                            args.push_back(fs->env());
+
+                            uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code->code();
+
+                            auto srcData = getHastAndIndex(fs->code->src);
+                            size_t hast = srcData.hast;
+                            int index = srcData.index;
+
+                            if (reqMap) {
+                                reqMap->insert(hast);
+                            } else {
+                                if (serializerError != nullptr) {
+                                    *serializerError = true;
+                                    std::cout << "  (E) [DeoptMetadata patch] reqMap not available (ERROR)" << std::endl;
+                                }
+                            }
+
+                            m->frames[frameNr--] = {offset, hast, index, fs->stackSize,
+                                                    fs->inPromise};
+
+                        }
+                        withCallFrame(args, [&]() {
+                            return call(NativeBuiltins::get(NativeBuiltins::Id::deoptPool),
+                                        {paramCode(), paramClosure(),
+                                        constant(store, Rep::SEXP), paramArgs(),
+                                        c(deopt->escapedEnv, 1),
+                                        load(deopt->deoptReason()),
+                                        loadSxp(deopt->deoptTrigger())});
+                                        });
+                    }
+                    builder.CreateUnreachable();
+                    break;
+                } else {
+                    std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
+                    if (serializerError == nullptr) {
+                        std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                    } else {
+                        *serializerError = true;
+                    }
+                    std::vector<Value*> args;
+                    {
+                        std::vector<FrameState*> frames;
+
+                        auto fs = deopt->frameState();
+                        while (fs) {
+                            frames.push_back(fs);
+                            fs = fs->next();
+                        }
+
+                        size_t nframes = frames.size();
+                        SEXP store =
+                            Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
+                                                    nframes * sizeof(FrameInfo));
+                        m = new (DATAPTR(store)) DeoptMetadata;
+                        m->numFrames = nframes;
+
+                        int frameNr = nframes - 1;
+                        for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                            auto fs = *f;
+                            for (size_t pos = 0; pos < fs->stackSize; pos++)
+                                args.push_back(fs->arg(pos).val());
+                            args.push_back(fs->env());
+                            m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
+                                                    fs->inPromise};
+                        }
+
+                        target->addExtraPoolEntry(store);
+                    }
+
+                    withCallFrame(args, [&]() {
+                        return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
+                                    {paramCode(), paramClosure(),
+                                    convertToPointer(m, t::i8, true), paramArgs(),
+                                    c(deopt->escapedEnv, 1),
+                                    load(deopt->deoptReason()),
+                                    loadSxp(deopt->deoptTrigger())});
+                    });
+                    builder.CreateUnreachable();
+                    break;
+                }
+
+                #else
                 std::vector<Value*> args;
                 {
                     std::vector<FrameState*> frames;
@@ -3574,6 +4279,7 @@ void LowerFunctionLLVM::compile() {
                 });
                 builder.CreateUnreachable();
                 break;
+                #endif
             }
 
             case Tag::MkEnv: {
@@ -3771,9 +4477,17 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* res = nullptr;
                     if (i->hasEnv()) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+                        auto iLoad = builder.CreateLoad(iVal);
+                        res = call(
+                            NativeBuiltins::get(NativeBuiltins::Id::notEnv),
+                            {argumentNative, loadSxp(i->env()), iLoad});
+                        #else
                         res = call(
                             NativeBuiltins::get(NativeBuiltins::Id::notEnv),
                             {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
+                        #endif
                     } else {
                         res =
                             call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
@@ -4119,10 +4833,19 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                             {loadSxp(a), loadSxp(b), e, iLoad,
+                              c((int)BinopKind::COLON)});
+                    #else
                     res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                              {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
                               c((int)BinopKind::COLON)});
+                    #endif
                 } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
                                {load(a), load(b)});
@@ -4854,9 +5577,17 @@ void LowerFunctionLLVM::compile() {
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
                 auto idx = loadSxp(extract->idx());
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                auto res0 =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
+                         {vector, idx, env, iLoad});
+                #else
                 auto res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
                          {vector, idx, env, c(extract->srcIdx)});
+                #endif
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -4941,11 +5672,19 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
                 auto idx1 = loadSxp(extract->idx1());
                 auto idx2 = loadSxp(extract->idx2());
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                auto res0 =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                         {vector, idx1, idx2, loadSxp(extract->env()),
+                          iLoad});
+                #else
                 auto res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
                          {vector, idx1, idx2, loadSxp(extract->env()),
                           c(extract->srcIdx)});
-
+                #endif
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
                     builder.CreateBr(done);
@@ -5010,16 +5749,33 @@ void LowerFunctionLLVM::compile() {
                             NativeBuiltins::get(NativeBuiltins::Id::extract21r);
                     }
                     auto vector = loadSxp(extract->vec());
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 = call(getter,
+                                {vector, load(extract->idx()),
+                                 loadSxp(extract->env()), iLoad});
+                    #else
                     res0 = call(getter,
                                 {vector, load(extract->idx()),
                                  loadSxp(extract->env()), c(extract->srcIdx)});
+                    #endif
                 } else {
                     auto vector = loadSxp(extract->vec());
                     auto idx = loadSxp(extract->idx());
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
+                             {vector, idx, loadSxp(extract->env()),
+                              iLoad});
+                    #else
                     res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
                              {vector, idx, loadSxp(extract->env()),
                               c(extract->srcIdx)});
+                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5045,9 +5801,17 @@ void LowerFunctionLLVM::compile() {
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
 
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                auto res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
+                         {vector, idx1, idx2, idx3, env, iLoad});
+                #else
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
                          {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                #endif
                 setVal(i, res);
 
                 break;
@@ -5126,19 +5890,37 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     auto vector = loadSxp(extract->vec());
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 = call(getter,
+                                {vector, load(extract->idx1()),
+                                 load(extract->idx2()), loadSxp(extract->env()),
+                                 iLoad});
+                    #else
                     res0 = call(getter,
                                 {vector, load(extract->idx1()),
                                  load(extract->idx2()), loadSxp(extract->env()),
                                  c(extract->srcIdx)});
+                    #endif
                 } else {
 
                     auto vector = loadSxp(extract->vec());
                     auto idx1 = loadSxp(extract->idx1());
                     auto idx2 = loadSxp(extract->idx2());
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(extract->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
+                             {vector, idx1, idx2, loadSxp(extract->env()),
+                              iLoad});
+                    #else
                     res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
                              {vector, idx1, idx2, loadSxp(extract->env()),
                               c(extract->srcIdx)});
+                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5161,10 +5943,19 @@ void LowerFunctionLLVM::compile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                auto res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
+                         {vector, idx1, idx2, idx3, val,
+                          loadSxp(subAssign->env()), iLoad});
+                #else
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
                          {vector, idx1, idx2, idx3, val,
                           loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                #endif
                 setVal(i, res);
                 break;
             }
@@ -5178,10 +5969,19 @@ void LowerFunctionLLVM::compile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                auto res =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
+                         {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                          iLoad});
+                #else
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
                          {vector, idx1, idx2, val, loadSxp(subAssign->env()),
                           c(subAssign->srcIdx)});
+                #endif
                 setVal(i, res);
                 break;
             }
@@ -5282,18 +6082,37 @@ void LowerFunctionLLVM::compile() {
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22rrr);
                     }
-
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    assign = call(
+                        setter,
+                        {loadSxp(subAssign->vec()), load(subAssign->idx1()),
+                         load(subAssign->idx2()), load(subAssign->val()),
+                         loadSxp(subAssign->env()), iLoad});
+                    #else
                     assign = call(
                         setter,
                         {loadSxp(subAssign->vec()), load(subAssign->idx1()),
                          load(subAssign->idx2()), load(subAssign->val()),
                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                    #endif
                 } else {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    assign = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::subassign22),
+                        {loadSxp(subAssign->vec()), idx1, idx2,
+                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                         iLoad});
+                    #else
                     assign = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign22),
                         {loadSxp(subAssign->vec()), idx1, idx2,
                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                          c(subAssign->srcIdx)});
+                    #endif
                 }
 
                 res.addInput(assign);
@@ -5377,11 +6196,21 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(fallback);
                 }
 
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                auto iLoad = builder.CreateLoad(iVal);
+                llvm::Value* res0 =
+                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
+                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                          iLoad});
+                #else
                 llvm::Value* res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
                          {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                           loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                           c(subAssign->srcIdx)});
+                #endif
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -5489,18 +6318,37 @@ void LowerFunctionLLVM::compile() {
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21rr);
                     }
-
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 =
+                        call(setter,
+                             {loadSxp(subAssign->vec()), load(subAssign->idx()),
+                              load(subAssign->val()), loadSxp(subAssign->env()),
+                              iLoad});
+                    #else
                     res0 =
                         call(setter,
                              {loadSxp(subAssign->vec()), load(subAssign->idx()),
                               load(subAssign->val()), loadSxp(subAssign->env()),
                               c(subAssign->srcIdx)});
+                    #endif
                 } else {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(subAssign->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    res0 = call(
+                        NativeBuiltins::get(NativeBuiltins::Id::subassign21),
+                        {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                         iLoad});
+                    #else
                     res0 = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign21),
                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                          c(subAssign->srcIdx)});
+                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5757,9 +6605,17 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
                 if (Rep::Of(a) == Rep::SEXP || Rep::Of(b) == Rep::SEXP) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto iVal = globalSrcConst(c(i->srcIdx), t::i32);
+                    auto iLoad = builder.CreateLoad(iVal);
+                    setVal(i, call(NativeBuiltins::get(
+                                       NativeBuiltins::Id::colonInputEffects),
+                                   {loadSxp(a), loadSxp(b), iLoad}));
+                    #else
                     setVal(i, call(NativeBuiltins::get(
                                        NativeBuiltins::Id::colonInputEffects),
                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                    #endif
                     break;
                 }
 
@@ -6002,9 +6858,17 @@ void LowerFunctionLLVM::compile() {
                         } else {
                             msg = defaultMsg;
                         }
+                        #if PATCH_MSG == 1
+                        auto msgGlobalVar =
+                            builder.CreateGlobalString(msg);
+                        call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
+                             {loadSxp(i), c((unsigned long)i->type.serialize()),
+                              builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
+                        #else
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
                              {loadSxp(i), c((unsigned long)i->type.serialize()),
                               convertToPointer(msg, t::i8, true)});
+                        #endif
                     }
                 }
 #ifdef ENABLE_SLOWASSERT

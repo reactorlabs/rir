@@ -119,6 +119,14 @@ class LowerFunctionLLVM {
         return convertToPointer(what, t::SEXPREC, constant);
     }
 
+    // serializer
+    llvm::Value* convertToExternalSymbol(std::string name, llvm::Type* ty);
+    llvm::Value* namedGlobalConst(std::string name, llvm::Constant* init, llvm::Type* ty);
+    llvm::Value* globalSrcConst(llvm::Constant* init, llvm::Type* ty = nullptr);
+    llvm::FunctionCallee convertToFunctionSymbol(SEXP what, llvm::FunctionType* ty);
+    std::set<size_t>* reqMap = nullptr;
+    bool* serializerError = nullptr;
+
     struct Variable {
         bool deadMove(const Variable& other) const;
 

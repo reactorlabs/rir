@@ -28,4 +28,14 @@ REXPORT SEXP rirDeserialize(SEXP file);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+// serializer
+struct hastAndIndex {
+    size_t hast;
+    int index;
+};
+void hash_ast(SEXP ast, size_t & hast);
+void printAST(int space, SEXP ast);
+void printAST(int space, int val);
+hastAndIndex getHastAndIndex(unsigned src);
+
 #endif // API_H_

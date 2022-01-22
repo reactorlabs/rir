@@ -13,6 +13,8 @@
 
 #include <asm/msr.h>
 
+#include "runtimePatches.h"
+
 namespace rir {
 
 typedef SEXP FunctionSEXP;
@@ -212,6 +214,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
+    // serializer
+    void populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index);
+    Code * getSrcAtOffset(int & index);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

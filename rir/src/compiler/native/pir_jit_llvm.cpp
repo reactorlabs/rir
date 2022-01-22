@@ -20,6 +20,12 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include <memory>
 
+#include "loweringPatches.h"
+#include "runtimePatches.h"
+#include "R/Funtab.h"
+#include "utils/UMap.h"
+#include "runtime/DispatchTable.h"
+
 namespace rir {
 namespace pir {
 
@@ -457,6 +463,9 @@ void PirJitLLVM::compile(
 llvm::LLVMContext& PirJitLLVM::getContext() { return *TSC.getContext(); }
 
 void PirJitLLVM::initializeLLVM() {
+    #if ENABLE_SPE_PATCHES == 1
+    static int opaqueTrue = 1;
+    #endif
     if (initialized)
         return;
 
@@ -566,6 +575,43 @@ void PirJitLLVM::initializeLLVM() {
                 auto ept = n.substr(0, 4) == "ept_";
                 auto efn = n.substr(0, 4) == "efn_";
 
+                #if ENABLE_SPE_PATCHES == 1
+                auto spe = n.substr(0, 4) == "spe_"; // Special symbols
+                #endif
+
+                #if ENABLE_DCS_PATCHES == 1
+                auto dcs = n.substr(0, 4) == "dcs_"; // Constant SEXPs from runtime
+                #endif
+
+                #if ENABLE_SYM_PATCHES == 1
+                auto sym = n.substr(0, 4) == "sym_"; // Symbols
+                #endif
+
+                #if ENABLE_GCB_PATCHES == 1
+                auto gcb = n.substr(0, 4) == "gcb_"; // BUILTINSXP
+                #endif
+
+                #if ENABLE_SPE1_PATCHES == 1
+                auto spe1 = n.substr(0, 5) == "spe1_"; // SPECIALSXP
+                #endif
+
+                #if ENABLE_BUILTINCALL_PATCHES == 1
+                auto gcode = n.substr(0, 4) == "cod_"; // callable pointer to builtin
+                #endif
+
+                #if ENABLE_SCALL_PATCHES == 1
+                auto clso = n.substr(0, 5) == "clso_"; // closure objs for staticCalls
+                auto clsn = n.substr(0, 5) == "clsn_"; // should be ideally ignored, but we can skip patching in the deserializer
+
+                auto optd = n.substr(0, 5) == "optd_"; // cp pool index containing pointer to a suitable function that can dispatch to the context
+                auto optn = n.substr(0, 5) == "optn_"; // should be ideally ignored, but we can skip patching in the deserializer
+                #endif
+
+                #if ENABLE_DEOPT_PATCHES == 1
+                auto code = n.substr(0, 5) == "code_"; // code objs for DeoptReason
+                auto codn = n.substr(0, 5) == "codn_"; // should be ideally ignored, but we can skip patching in the deserializer
+                #endif
+
                 if (ept || efn) {
                     auto addrStr = n.substr(4);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
@@ -575,7 +621,236 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported |
                             (efn ? JITSymbolFlags::Callable
                                  : JITSymbolFlags::None));
-                } else {
+                }
+                #if ENABLE_SPE_PATCHES == 1
+                else if (spe) {
+                    auto constantName = n.substr(4);
+                    uintptr_t addr = 0;
+
+                    if (constantName.compare("BCNodeStackTop") == 0) {
+                        addr = reinterpret_cast<uintptr_t>(&R_BCNodeStackTop);
+                    } else if (constantName.compare("Visible") == 0) {
+                        addr = reinterpret_cast<uintptr_t>(&R_Visible);
+                    } else if (constantName.compare("returnedValue") == 0) {
+                        addr = reinterpret_cast<uintptr_t>(&R_ReturnedValue);
+                    } else if (constantName.compare("opaqueTrue") == 0) {
+                        addr = reinterpret_cast<uintptr_t>(&opaqueTrue);
+                    }
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(addr),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
+                #endif
+                #if ENABLE_DCS_PATCHES == 1
+                else if (dcs) {
+                    auto id = std::stoi(n.substr(4));
+                    SEXP ptr = R_NilValue;
+                    switch (id) {
+                        case 100:
+                            ptr = R_GlobalEnv;
+                            break;
+                        case 101:
+                            ptr = R_BaseEnv;
+                            break;
+                        case 102:
+                            ptr = R_BaseNamespace;
+                            break;
+                        case 103:
+                            ptr = R_TrueValue;
+                            break;
+                        case 104:
+                            ptr = R_NilValue;
+                            break;
+                        case 105:
+                            ptr = R_FalseValue;
+                            break;
+                        case 106:
+                            ptr = R_UnboundValue;
+                            break;
+                        case 107:
+                            ptr = R_MissingArg;
+                            break;
+                        case 108:
+                            ptr = R_LogicalNAValue;
+                            break;
+                        case 109:
+                            ptr = R_EmptyEnv;
+                            break;
+                        case 110:
+                            ptr = R_RestartToken;
+                            break;
+                        case 111:
+                            ptr = R_DimSymbol;
+                            break;
+                    }
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(ptr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
+                #endif
+                #if ENABLE_SYM_PATCHES == 1
+                else if (sym) {
+                    auto constantName = n.substr(4);
+                    SEXP con = Rf_install(constantName.c_str());
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(con)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
+                #endif
+                #if ENABLE_GCB_PATCHES == 1
+                else if (gcb) {
+                    auto id = std::stoi(n.substr(4));
+                    SEXP ptr;
+                    assert(R_FunTab[id].eval % 10 == 1 && "Only use for BUILTINSXP");
+                    if (R_FunTab[id].eval % 100 / 10 == 0)
+                        ptr = Rf_install(R_FunTab[id].name)->u.symsxp.value;
+                    else
+                        ptr = Rf_install(R_FunTab[id].name)->u.symsxp.internal;
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(ptr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
+                #endif
+                #if ENABLE_SPE1_PATCHES == 1
+                else if (spe1) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+
+                    auto index = std::stoi(n.substr(firstDel + 1, secondDel - firstDel - 1));
+                    auto sym = Rf_install(R_FunTab[index].name);
+                    auto spe1 = Rf_findFun(sym,R_GlobalEnv);
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(spe1)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
+                #endif
+                #if ENABLE_BUILTINCALL_PATCHES == 1
+                else if (gcode) {
+                    auto id = std::stoi(n.substr(4));
+                    SEXP ptr;
+                    assert(R_FunTab[id].eval % 10 == 1 && "Only use for BUILTINSXP");
+                    if (R_FunTab[id].eval % 100 / 10 == 0)
+                        ptr = Rf_install(R_FunTab[id].name)->u.symsxp.value;
+                    else
+                        ptr = Rf_install(R_FunTab[id].name)->u.symsxp.internal;
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(getBuiltin(ptr))),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                }
+                #endif
+                #if ENABLE_SCALL_PATCHES == 1
+                else if (clso || clsn) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+
+                    auto hast = n.substr(secondDel + 1);
+                    SEXP map = Pool::get(HAST_CLOS_MAP);
+                    auto addr = UMap::get(map, Rf_install(hast.c_str()));
+
+                    #if PRINT_PATCH_ERRORS == 1
+                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
+                    SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
+
+                    if (oldVal != newVal) {
+                        std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
+                        std::cerr << "CLSO patch failed" << std::endl;
+                    }
+                    #endif
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                } else if (optd || optn) {
+
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+                    auto thirdDel = n.find('_', secondDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    unsigned long con = std::stoul(n.substr(secondDel + 1, thirdDel - secondDel - 1));
+                    size_t numArgs = std::stoull((n.substr(thirdDel + 1)));
+
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    DispatchTable * dt = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    SEXP nativeTargetContainer;
+                    rir::Function* nativeTarget = nullptr;
+                    for (size_t i = 0; i < dt->size(); i++) {
+                        auto entry = dt->get(i);
+                        if (entry->context().toI() == con &&
+                            entry->signature().numArguments >= numArgs) {
+                            nativeTarget = entry;
+                            nativeTargetContainer = entry->container();
+                        }
+                    }
+
+                    if (nativeTarget == nullptr) {
+                        nativeTargetContainer = dt->dispatch(Context(con))->container();
+                    }
+
+
+                    auto at = Pool::insert(nativeTargetContainer);
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
+                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
+                    *tmp = at;
+                    Pool::insert(store);
+                    UNPROTECT(1);
+
+
+                    NativeBuiltins::targetCaches.push_back(at);
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(tmp)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                }
+                #endif
+                #if ENABLE_DEOPT_PATCHES == 1
+                else if (code || codn) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    int index = std::stoi(n.substr(secondDel + 1));
+
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    auto addr = vtable->baseline()->body();
+                    addr = addr->getSrcAtOffset(index);
+
+                    #if PRINT_PATCH_ERRORS == 1
+                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
+                    SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
+
+                    if (oldVal != newVal) {
+                        std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
+                        std::cerr << "CODE patch failed" << std::endl;
+                    }
+                    #endif
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                }
+                #endif
+                else {
                     std::cout << "unknown symbol " << n << "\n";
                 }
             }

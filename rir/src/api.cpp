@@ -23,6 +23,8 @@
 #include <memory>
 #include <string>
 
+#include "runtimePatches.h"
+
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
@@ -65,6 +67,276 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     }
 
     return R_NilValue;
+}
+
+// serializer
+void printSpace(int & lim) {
+    int i = 0;
+    for(i = 0; i < lim; i++ ) {
+        std::cout << " ";
+    }
+}
+
+void printHeader(int & space, const char * title) {
+    std::cout << " » " << title << "}" << std::endl;
+    space++;
+}
+
+void printType(int & space, const char * attr, SEXP ptr) {
+    printSpace(space);
+    std::cout << "└■ " << attr << " {" << TYPEOF(ptr);
+}
+
+void printType(int & space, const char * attr, int val) {
+    printSpace(space);
+    std::cout << "└■ " << attr << " {" << val;
+}
+
+void printSPECIALSXP(int space, SEXP specialsxp) {
+    printHeader(space, "SPECIALSXP");
+}
+
+void printLangSXP(int space, SEXP langsxp) {
+    printHeader(space, "LANGSXP");
+
+    auto tag = TAG(langsxp);
+    auto car = CAR(langsxp);
+    auto cdr = CDR(langsxp);
+
+    printType(space, "TAG", tag);
+    printAST(space, tag);
+
+    printType(space, "CAR", car);
+    printAST(space, car);
+
+    printType(space, "CDR", cdr);
+    printAST(space, cdr);
+}
+
+void printSYMSXP(int space, SEXP symsxp) {
+    printHeader(space, "SYMSXP");
+
+    auto pname = PRINTNAME(symsxp);
+    auto value = SYMVALUE(symsxp);
+    auto internal = INTERNAL(symsxp);
+
+    printType(space, "PNAME", pname);
+    printAST(space, pname);
+
+    printType(space, "VALUE", value);
+    if (symsxp != value) {
+        printAST(space, value);
+        // std::cout << "}" << std::endl;
+    } else {
+        std::cout << "}" << std::endl;
+    }
+
+    // std::cout << "}" << std::endl;
+
+    printType(space, "INTERNAL", internal);
+    printAST(space, internal);
+}
+
+void printCHARSXP(int space, SEXP charSXP) {
+    printHeader(space, "CHARSXP");
+
+    printSpace(space);
+    std::cout << CHAR(charSXP) << std::endl;
+}
+
+void printSTRSXP(int space, SEXP strSXP) {
+    printHeader(space, "STRSXP");
+
+    printSpace(space);
+    std::cout << CHAR(STRING_ELT(strSXP, 0)) << std::endl;
+}
+
+void printREALSXP(int space, SEXP realSXP) {
+    printHeader(space, "REALSXP");
+
+    printSpace(space);
+    std::cout << *REAL(realSXP) << std::endl;
+}
+
+void printLISTSXP(int space, SEXP listsxp) {
+    printHeader(space, "LISTSXP");
+
+    auto tag = TAG(listsxp);
+    auto car = CAR(listsxp);
+    auto cdr = CDR(listsxp);
+
+    printType(space, "TAG", tag);
+    printAST(space, tag);
+
+    printType(space, "CAR", car);
+    printAST(space, car);
+
+    printType(space, "CDR", cdr);
+    printAST(space, cdr);
+
+}
+
+void printCLOSXP(int space, SEXP closxp) {
+    printHeader(space, "CLOSXP");
+
+    auto formals = FORMALS(closxp);
+    auto body = BODY(closxp);
+    auto cloenv = CLOENV(closxp);
+
+    printType(space, "FORMALS", formals);
+    printAST(space, formals);
+
+    printType(space, "BODY", body);
+    printAST(space, body);
+
+    printType(space, "CLOENV", cloenv);
+    printAST(space, cloenv);
+
+}
+
+void printExternalCodeEntry(int space, SEXP externalsxp) {
+    printHeader(space, "EXTERNALSXP");
+    if (Code::check(externalsxp)) {
+        Code * code = Code::unpack(externalsxp);
+        code->print(std::cout);
+    }
+}
+
+void printBCODESXP(int space, SEXP bcodeSXP) {
+    printHeader(space, "BCODESXP");
+    printType(space, "VECTOR_ELT(CDR(BCODESXP),0)", bcodeSXP);
+    printAST(space, VECTOR_ELT(CDR(bcodeSXP),0));
+}
+
+void printPROMSXP(int space, SEXP promSXP) {
+    printHeader(space, "PROMSXP");
+
+    auto seen = PRSEEN(promSXP);
+    auto code = PRCODE(promSXP);
+    auto env = PRENV(promSXP);
+    auto value = PRVALUE(promSXP);
+
+    printType(space, "SEEN", seen);
+    printAST(space, seen);
+
+    printType(space, "CODE", code);
+    printAST(space, code);
+
+    printType(space, "ENV", env);
+    printAST(space, env);
+
+    printType(space, "VALUE", value);
+    printAST(space, value);
+}
+
+void printENVSXP(int space, SEXP envSXP) {
+    printHeader(space, "ENVSXP");
+
+    auto frame = FRAME(envSXP);
+    auto encls = FRAME(envSXP);
+    auto hashtab = FRAME(envSXP);
+
+
+    printType(space, "FRAME", frame);
+    printAST(space, frame);
+
+    printType(space, "ENCLS", encls);
+    printAST(space, encls);
+
+    printType(space, "HASHTAB", hashtab);
+    printAST(space, hashtab);
+
+
+}
+
+void printRAWSXP(int space, SEXP rawSXP) {
+    printHeader(space, "ENVSXP");
+
+    Rbyte * rawData = RAW(rawSXP);
+
+    printSpace(space);
+    std::cout << *rawData << std::endl;
+
+}
+
+void printAST(int space, int val) {
+    std::cout << val << "}" << std::endl;
+}
+
+std::vector<SEXP> currentStack;
+long unsigned int maxStackSize = 10;
+
+void printAST(int space, SEXP ast) {
+    if (currentStack.size() >= maxStackSize) {
+        std::cout << "}(LIMIT " << maxStackSize << ")" << std::endl;
+        return;
+    }
+    if (std::find(currentStack.begin(), currentStack.end(), ast) != currentStack.end()) {
+        std::cout << "REC...}" << std::endl;
+        return;
+    }
+    currentStack.push_back(ast);
+    switch(TYPEOF(ast)) {
+        case CLOSXP: printCLOSXP(++space, ast); break;
+        case LANGSXP: printLangSXP(++space, ast); break;
+        case SYMSXP: printSYMSXP(++space, ast); break;
+        case LISTSXP: printLISTSXP(++space, ast); break;
+        case CHARSXP: printCHARSXP(++space, ast); break;
+        case STRSXP: printSTRSXP(++space, ast); break;
+        case REALSXP: printREALSXP(++space, ast); break;
+        case BCODESXP: printBCODESXP(++space, ast); break;
+        case PROMSXP: printPROMSXP(++space, ast); break;
+        case ENVSXP: printENVSXP(++space, ast); break;
+        case RAWSXP: printRAWSXP(++space, ast); break;
+        case SPECIALSXP: printSPECIALSXP(++space, ast); break;
+        case EXTERNALSXP: printExternalCodeEntry(++space, ast); break;
+        default: std::cout << "}" << std::endl; break;
+    }
+    currentStack.pop_back();
+}
+
+hastAndIndex getHastAndIndex(unsigned src) {
+    SEXP srcToHastMap = Pool::get(SRC_HAST_MAP);
+    SEXP srcSym = Rf_install(std::to_string(src).c_str());
+    if (srcToHastMap != R_NilValue && UMap::symbolExistsInMap(srcSym, srcToHastMap)) {
+        SEXP r = UMap::get(srcToHastMap, srcSym);
+        SEXP hastS = VECTOR_ELT(r, 0);
+        size_t hast = std::stoull(CHAR(PRINTNAME(hastS)));
+        SEXP indexS = VECTOR_ELT(r, 1);
+        int index = std::stoi(CHAR(PRINTNAME(indexS)));
+        hastAndIndex res = { hast, index };
+        return res;
+    } else {
+        hastAndIndex res = { 0, 0 };
+        return res;
+    }
+}
+
+static int charToInt(const char* p) {
+    int result = 0;
+    for (size_t i = 0; i < strlen(p); ++i) {
+        result += p[i];
+    }
+    return result;
+}
+
+void hash_ast(SEXP ast, size_t & hast) {
+    if (TYPEOF(ast) == SYMSXP) {
+        const char * pname = CHAR(PRINTNAME(ast));
+        hast = hast * 31;
+        hast += charToInt(pname);
+    }
+    if (TYPEOF(ast) == STRSXP) {
+        const char * pname = CHAR(STRING_ELT(ast, 0));
+        hast = hast * 31;
+        hast += charToInt(pname);
+    }
+    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        hast *= 31;
+        hash_ast(CAR(ast), ++hast);
+        hast *= 31;
+        hash_ast(CDR(ast), ++hast);
+    }
 }
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
@@ -597,6 +869,13 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 
 bool startup() {
     initializeRuntime();
+    #if RESERVE_SPACES_AT_STARTUP == 1
+    Pool::makeSpace(); // (1) For src to hast map
+    Pool::makeSpace(); // (2) Hast to vtable map
+    Pool::makeSpace(); // (3) Hast to closObj
+    Pool::makeSpace(); // (4) Hast blacklist, discard serialized code for these functions
+    Pool::makeSpace(); // (5) Comparing old and new values for the static call patch
+    #endif
     return true;
 }
 

@@ -12,6 +12,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include "utils/UMap.h"
+
 namespace rir {
 
 // cppcheck-suppress uninitMemberVar; symbol=data
@@ -181,6 +183,105 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
         WriteItem(src_pool_at(globalContext(), srclist()[i].srcIdx), refTable,
                   out);
     }
+}
+
+Code * Code::getSrcAtOffset(int & index) {
+    Opcode* pc = code();
+    if (index == 0) {
+        return this;
+    }
+
+    index--;
+
+    std::vector<BC::FunIdx> promises;
+    while (pc < endCode()) {
+        BC bc = BC::decode(pc, this);
+        bc.addMyPromArgsTo(promises);
+
+        pc = BC::next(pc);
+    }
+
+    Code * res;
+
+    for (auto i : promises) {
+        auto c = getPromise(i);
+        res = c->getSrcAtOffset(index);
+        if (res != nullptr) return res;
+    }
+    return nullptr;
+}
+
+void Code::populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index) {
+    Opcode* pc = code();
+    size_t label = 0;
+    std::map<Opcode*, size_t> targets;
+    targets[pc] = label++;
+    while (pc < endCode()) {
+        if (BC::decodeShallow(pc).isJmp()) {
+            auto t = BC::jmpTarget(pc);
+            if (!targets.count(t))
+                targets[t] = label++;
+        }
+        pc = BC::next(pc);
+    }
+
+    // sort labels ascending
+    label = 0;
+    for (auto& t : targets)
+        t.second = label++;
+
+    pc = code();
+    std::vector<BC::FunIdx> promises;
+
+    Protect p;
+    if (mainSrc) {
+        #if PRINT_SRC_HAST_MAP_UPDATES == 1
+        std::cout << "hast(" << parentHast << ", " << src << "): [ ";
+        #endif
+        SEXP srcSym = Rf_install(std::to_string(src).c_str());
+
+        SEXP hastSym = Rf_install(std::to_string(parentHast).c_str());
+        SEXP indexSym = Rf_install(std::to_string(index).c_str());
+        SEXP resVec;
+        p(resVec = Rf_allocVector(VECSXP, 2));
+        SET_VECTOR_ELT(resVec, 0, hastSym);
+        SET_VECTOR_ELT(resVec, 1, indexSym);
+        UMap::insert(map, srcSym, resVec);
+    } else {
+        index++;
+        #if PRINT_SRC_HAST_MAP_UPDATES == 1
+        std::cout << "(" << index << ", " << src << ") ";
+        #endif
+        SEXP srcSym = Rf_install(std::to_string(src).c_str());
+
+        SEXP hastSym = Rf_install(std::to_string(parentHast).c_str());
+        SEXP indexSym = Rf_install(std::to_string(index).c_str());
+        SEXP resVec;
+        p(resVec = Rf_allocVector(VECSXP, 2));
+        SET_VECTOR_ELT(resVec, 0, hastSym);
+        SET_VECTOR_ELT(resVec, 1, indexSym);
+        UMap::insert(map, srcSym, resVec);
+    }
+
+    while (pc < endCode()) {
+        BC bc = BC::decode(pc, this);
+        bc.addMyPromArgsTo(promises);
+
+        pc = BC::next(pc);
+    }
+
+
+    for (auto i : promises) {
+        auto c = getPromise(i);
+        c->populateSrcData(parentHast, map, false, index);
+    }
+
+    #if PRINT_SRC_HAST_MAP_UPDATES == 1
+    if (mainSrc) {
+        std::cout << "]" << std::endl;
+    }
+    #endif
+
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {

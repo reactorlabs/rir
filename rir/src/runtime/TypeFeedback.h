@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <iostream>
 
+#include "loweringPatches.h"
+
 namespace rir {
 
 struct Code;
@@ -169,6 +171,7 @@ struct FeedbackOrigin {
             return nullptr;
         return (Opcode*)((uintptr_t)srcCode() + offset_);
     }
+
     uint32_t offset() const { return offset_; }
     Code* srcCode() const { return srcCode_; }
     void srcCode(Code* src) { srcCode_ = src; }
