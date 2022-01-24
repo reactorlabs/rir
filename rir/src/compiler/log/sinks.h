@@ -86,7 +86,8 @@ class FileLogStream : public LogStream {
 
 class DotFileLogStream : public FileLogStream {
   public:
-    DotFileLogStream(const std::string& fileName) : FileLogStream(fileName) {}
+    explicit DotFileLogStream(const std::string& fileName)
+        : FileLogStream(fileName) {}
 
     ~DotFileLogStream() override;
 

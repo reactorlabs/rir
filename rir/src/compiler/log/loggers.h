@@ -79,7 +79,6 @@ class ClosureLog : public AbstractLog {
     /* Keeps everything related to one ClosureVersion in one logging unit. */
   private:
     bool printedAnything = false;
-    const size_t logId;
 
   public:
     PassLog forPass(size_t number, const std::string& kind);
@@ -117,11 +116,9 @@ class ClosureLog : public AbstractLog {
         printedAnything = false;
     }
 
-    ClosureLog(const DebugOptions& options, const size_t logId,
-               const ClosureVersion* version, std::shared_ptr<LogStream> out,
-               const std::string& basePath)
-        : AbstractLog(options, version, out), logId(logId), basePath(basePath) {
-    }
+    ClosureLog(const DebugOptions& options, const ClosureVersion* version,
+               std::shared_ptr<LogStream> out, const std::string& basePath)
+        : AbstractLog(options, version, out), basePath(basePath) {}
 
   protected:
     const std::string basePath;

@@ -84,7 +84,7 @@ ClosureLog& Log::open(ClosureVersion* cls) {
         clearOrCreateDirectory(basePath.c_str());
 
     // Add stream logger wrapper
-    streams.emplace(cls, ClosureLog(options, logId, cls,
+    streams.emplace(cls, ClosureLog(options, cls,
                                     std::shared_ptr<LogStream>(logStream),
                                     basePath));
     ClosureLog& logger = streams.at(cls);
