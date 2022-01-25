@@ -194,7 +194,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     unsigned deadCallReached_ = 0;
 
     unsigned long invoked = 0;
-    unsigned long execTime;
+    unsigned long execTime = 0;
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
