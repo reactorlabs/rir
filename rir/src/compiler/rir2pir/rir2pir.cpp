@@ -1706,7 +1706,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         res = phi;
     }
 
-    if (cls == insert.code) {
+    if (!inPromise()) {
+        assert(cls == insert.code);
+
         // The return is only added for the early opt passes to update the
         // result value. Now we need to remove it again, because we don't know
         // if it is needed (e.g. when we compile an inline promise it is not).
