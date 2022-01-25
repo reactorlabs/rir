@@ -1,6 +1,7 @@
 #ifndef RIR_INTERPRETER_CACHE_H
 #define RIR_INTERPRETER_CACHE_H
 
+#include "R/Symbols.h"
 #include "R/r.h"
 #include "instance.h"
 #include <type_traits>
