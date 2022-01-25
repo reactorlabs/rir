@@ -1706,6 +1706,39 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         res = phi;
     }
 
+    if (cls == insert.code) {
+        // The return is only added for the early opt passes to update the
+        // result value. Now we need to remove it again, because we don't know
+        // if it is needed (e.g. when we compile an inline promise it is not).
+        if (insert.getCurrentBB())
+            insert(new Return(res));
+
+        log.forPass(0, "rir2pir").compilationEarlyPir();
+
+        static EarlyConstantfold ecf;
+        static ScopeResolution sr;
+        // EarlyConstantfold is used to expand specials such as forceAndCall
+        // which can be expressed in PIR.
+        {
+            auto passLog = log.forPass(1, "earlyCF");
+            ecf.apply(compiler, cls, cls, log, 0);
+            passLog.pirOptimizations(&ecf);
+        }
+        // This early pass of scope resolution helps to find local call targets
+        // and thus leads to better assumptions in the delayed compilation
+        // below.
+        {
+            auto passLog = log.forPass(2, "earlySR");
+            sr.apply(compiler, cls, cls, log, 0);
+            passLog.pirOptimizations(&sr);
+        }
+
+        if (auto last = insert.getCurrentBB()) {
+            res = Return::Cast(last->last())->arg(0).val();
+            last->remove(last->end() - 1);
+        }
+    }
+
     Visitor::run(insert.code->entry, [&](Instruction* i) {
         Value* callee = nullptr;
         Context asmpt;

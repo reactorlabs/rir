@@ -53,8 +53,6 @@ class Compiler {
   private:
     Log& logger;
 
-    void translationDone(ClosureVersion*, ClosureLog&);
-
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const Context& ctx, bool root, MaybeCls success,
                         Maybe fail, std::list<PirTypeFeedback*> outerFeedback);

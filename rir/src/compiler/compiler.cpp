@@ -27,28 +27,6 @@ namespace pir {
 constexpr Context::Flags Compiler::minimalContext;
 constexpr Context Compiler::defaultContext;
 
-void Compiler::translationDone(ClosureVersion* cls, ClosureLog& log) {
-    log.forPass(0, "rir2pir").compilationEarlyPir();
-
-    static EarlyConstantfold ecf;
-    static ScopeResolution sr;
-    // EarlyConstantfold is used to expand specials such as forceAndCall
-    // which can be expressed in PIR.
-    {
-        auto passLog = log.forPass(1, "earlyCF");
-        ecf.apply(*this, cls, cls, log, 0);
-        passLog.pirOptimizations(&ecf);
-    }
-    // This early pass of scope resolution helps to find local call targets
-    // and thus leads to better assumptions in the delayed compilation
-    // below.
-    {
-        auto passLog = log.forPass(2, "earlySR");
-        sr.apply(*this, cls, cls, log, 0);
-        passLog.pirOptimizations(&sr);
-    }
-}
-
 void Compiler::compileClosure(SEXP closure, const std::string& name,
                               const Context& assumptions_, bool root,
                               MaybeCls success, Maybe fail,
@@ -113,7 +91,6 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
-        translationDone(version, log);
         log.flush();
         return success(version);
     }
@@ -247,7 +224,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         Verify::apply(version, "Error after initial translation");
 #endif
 #endif
-        translationDone(version, log);
         log.flush();
         return success(version);
     }
