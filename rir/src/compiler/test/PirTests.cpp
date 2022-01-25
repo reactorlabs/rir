@@ -1,5 +1,4 @@
 #include "PirTests.h"
-#include "../../ir/Compiler.h"
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
@@ -8,6 +7,7 @@
 #include "R/RList.h"
 #include "R_ext/Parse.h"
 #include "api.h"
+#include "bc/Compiler.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"

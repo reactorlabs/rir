@@ -2,7 +2,7 @@
 #define RIR_INTERPRETER_INCL_C_H
 
 #include "R/r.h"
-#include "ir/BC_inc.h"
+#include "bc/BC_inc.h"
 #include "runtime/ArglistOrder.h"
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;

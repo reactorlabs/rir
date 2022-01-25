@@ -8,14 +8,14 @@
 #include "utils/FunctionWriter.h"
 #include "utils/Pool.h"
 
-#include <unordered_map>
-#include <iostream>
-#include <functional>
 #include <cassert>
+#include <functional>
+#include <iostream>
+#include <unordered_map>
 
 typedef struct RCNTXT RCNTXT;
-extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
-extern "C" SEXP R_sysfunction(int n, RCNTXT *cptr);
+extern "C" SEXP R_syscall(int n, RCNTXT* cptr);
+extern "C" SEXP R_sysfunction(int n, RCNTXT* cptr);
 
 namespace rir {
 
@@ -123,6 +123,6 @@ class Compiler {
     }
 };
 
-}
+} // namespace rir
 
 #endif

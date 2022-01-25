@@ -1,11 +1,11 @@
 #ifndef RIR_FUNCTION_HANDLE_H
 #define RIR_FUNCTION_HANDLE_H
 
+#include "bc/BC_inc.h"
 #include "interpreter/instance.h"
-#include "ir/BC_inc.h"
 
 #include "R/Preserve.h"
-#include "ir/CodeVerifier.h"
+#include "bc/CodeVerifier.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ir/BC_inc.h"
+#include "bc/BC_inc.h"
 #include "runtime/TypeFeedback.h"
 #include "tag.h"
 #include "value.h"

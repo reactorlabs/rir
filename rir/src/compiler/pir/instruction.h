@@ -2,13 +2,13 @@
 #define COMPILER_INSTRUCTION_H
 
 #include "R/r.h"
+#include "bc/BC_inc.h"
 #include "compiler/rir2pir/rir2pir.h"
 #include "env.h"
 #include "instruction_list.h"
-#include "ir/BC_inc.h"
-#include "ir/Deoptimization.h"
 #include "pir.h"
 #include "runtime/ArglistOrder.h"
+#include "runtime/Deoptimization.h"
 #include "runtime/TypeFeedback.h"
 #include "singleton_values.h"
 #include "tag.h"

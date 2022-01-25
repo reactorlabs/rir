@@ -2,7 +2,7 @@
 #define interpreter_context_h
 
 #include "R/r.h"
-#include "ir/BC_inc.h"
+#include "bc/BC_inc.h"
 #include "runtime/Context.h"
 
 #include "interp_incl.h"

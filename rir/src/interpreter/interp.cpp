@@ -8,7 +8,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
-#include "ir/Deoptimization.h"
+#include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback_inl.h"
@@ -1932,7 +1932,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
 #define DEF_INSTR(name, ...) (__extension__ && op_##name),
-#include "ir/insns.h"
+#include "bc/insns.h"
 #undef DEF_INSTR
     };
 #endif

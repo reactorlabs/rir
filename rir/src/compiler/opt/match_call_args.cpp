@@ -1,4 +1,5 @@
 #include "R/Symbols.h"
+#include "bc/Compiler.h"
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
@@ -6,7 +7,6 @@
 #include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
 #include "interpreter/interp_incl.h"
-#include "ir/Compiler.h"
 #include "pass_definitions.h"
 #include "runtime/DispatchTable.h"
 

@@ -7,8 +7,8 @@
 #include <cassert>
 #include <cstddef>
 
-#include "ir/BC_inc.h"
 #include "R/r.h"
+#include "bc/BC_inc.h"
 
 #include <unordered_map>
 

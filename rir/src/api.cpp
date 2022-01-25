@@ -5,6 +5,8 @@
 #include "api.h"
 #include "R/Funtab.h"
 #include "R/Serialize.h"
+#include "bc/BC.h"
+#include "bc/Compiler.h"
 #include "compiler/backend.h"
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
@@ -13,8 +15,6 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
-#include "ir/BC.h"
-#include "ir/Compiler.h"
 #include "utils/measuring.h"
 
 #include <cassert>

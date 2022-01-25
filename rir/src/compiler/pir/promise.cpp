@@ -1,10 +1,10 @@
 #include "promise.h"
+#include "bc/BC.h"
 #include "closure_version.h"
 #include "compiler/pir/bb.h"
 #include "compiler/pir/instruction.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
-#include "ir/BC.h"
 
 namespace rir {
 namespace pir {
