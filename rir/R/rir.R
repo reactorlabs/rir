@@ -121,8 +121,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintCSSA = FALSE,
                            PrintLLVM = FALSE,
                            PrintAllocator = FALSE,
-                           PrintFinalPir = FALSE,
-                           PrintFinalRir = FALSE) {
+                           PrintFinalPir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pirDebugFlags",
@@ -144,7 +143,6 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
           PrintLLVM,
           PrintAllocator,
           PrintFinalPir,
-          PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)
 }

@@ -11,34 +11,27 @@ completely disables the PIR optimizer. As follows are the different Options avai
 
 ### Debug flags
 
-#### Controlling compilation
-
-    PIR_ENABLE=
-        on                default, automatically optimize after a number of invocations
-        off               disable pir
-        force             optimize every function after compiling to rir
-        force_dryrun      as above, but throw away the result
-
-    PIR_WARMUP=
-        number:            after how many invocations a function is (re-) optimized
-
 #### Debug output options
+
+It is possible to dump the intermediate representation of the compiler. By default all the
+code is outputted into a directory called compiler-log-[date]. Each function that is compiled
+generates a log file and (depending on the configuration) a subdirectory. To produce a
+graphical representation of the code choose the GraphViz debug style.
 
     PIR_DEBUG=                     (only most important flags listed)
         help                       list all available flags
-        PrintPassesIntoFolders     print each pass into `log/<closure>-pir-function/<pass#>.log` (or `.out` if GraphViz)
-        PrintIntoFiles             print into `log/<closure>-pir-function.log` (or `.out` if GraphViz)
-        PrintIntoStdout            print without buffering (useful for crashes during compilation)
-        PrintInstructionIds        have instructions print out their memory addresses, to track them across compilation passes
-        OmitDeoptBranches          don't print deopt branches in closures
-        OnlyChanges                only print optimization passes/phases which actually change bytecode
         LLVMDebugInfo              turn on generating debug info for jitted code
-        PrintEarlyRir              print after initial rir2pir translation
-        PrintOptimizationPasses    print after every pass
-        PrintOptimizationPhases    print before/after every phase of the compiler
-        PrintPirAfterOpt           print the fully optimized pir
-        PrintFinalPir              print pir after lowering and CSSA conversion
-        PrintFinalRir              print rir produced by pir backend
+        PrintEarlyRir              dump input RIR code
+        PrintPirAfterOpt           dump fully optimized PIR code
+        PrintFinalPir              dump PIR after lowering and CSSA conversion, right before LLVM conversion
+        PrintOptimizationPasses    dump PIR after every pass
+        OnlyChanges                for the above, only print if passes change anything
+        PrintOptimizationPhases    dump PIR after every phase of the compiler
+        OmitDeoptBranches          don't print PIR deopt branches
+        PrintInstructionIds        keep a stable PIR instruction id across passes
+        PrintPassesIntoFolders     dump PIR into separate files for each pass (always on for GraphViz)
+        PrintToStdout              dump logs to stdout instead of files
+        PrintUnbuffered            if dumping to stdout, print unbuffered (useful for crashes during compilation)
 
     PIR_DEBUG_PASS_FILTER=
         regex      only show passes matching regex (might need .*)
@@ -52,6 +45,9 @@ completely disables the PIR optimizer. As follows are the different Options avai
         GraphViz   print pir in GraphViz, displaying all instructions within BBs
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
 
+The following flags can be useful for profiling and finding out which passes take how much time to
+complete.
+
     PIR_MEASURING_LOGFILE=
         filename   write the output to filename instead of std::cerr
 
@@ -61,12 +57,23 @@ completely disables the PIR optimizer. As follows are the different Options avai
     PIR_MEASURE_COMPILER_BACKEND=
         1          print overall time spend in different phases in the backend
 
+#### Controlling compilation
+
+    PIR_ENABLE=
+        on                default, automatically optimize after a number of invocations
+        off               disable pir
+        force             optimize every function after compiling to rir
+        force_dryrun      as above, but throw away the result
+
+    PIR_WARMUP=
+        number:            after how many invocations a function is (re-) optimized
+
+#### Extended debug flags
+
     RIR_CHECK_PIR_TYPES=
         0        Disable
         1        Assert that each PIR instruction conforms to its return type during runtime
         2        Also print out failing instructions (leaks memory and might cause slowdown)
-
-#### Extended debug flags
 
     PIR_DEOPT_CHAOS=
         1          randomly trigger some percent of deopts
@@ -75,6 +82,8 @@ completely disables the PIR optimizer. As follows are the different Options avai
         1          show failing assumption when a deopt happens
 
 #### Optimization heuristics
+
+For more flags see compiler/parameter.h.
 
     PIR_INLINER_INITIAL_FUEL=
         n          how many inlinings per inline pass
@@ -113,9 +122,9 @@ completely disables the PIR optimizer. As follows are the different Options avai
 * `^` : May be lazy (and wrapped in a promise)
 * `~` : May be wrapped in a promise (but evaluated)
 * `?` : May be missing
-* `⁺` : Not an object but may have attributes
-* `ⁿ` : Can only have dimension attributes (not an object)
-* `⁻` : No attributes at all
+* `+` : Not an object but may have attributes
+* `_` : Can only have dimension attributes (not an object)
+* `-` : No attributes at all
 
 #### Effects
 

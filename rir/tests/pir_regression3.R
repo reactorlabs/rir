@@ -15,7 +15,7 @@ f <- rir.compile(function() {
               identical(f1 == f1, c(TRUE,TRUE,NA)))
 })
 
-# pir.setDebugFlags(pir.debugFlags(PrintFinalPir=TRUE, ShowWarnings=TRUE, PrintEarlyPir=TRUE, PrintOriginal=TRUE, PrintFinalRir=TRUE))
+# pir.setDebugFlags(pir.debugFlags(PrintFinalPir=TRUE, ShowWarnings=TRUE, PrintEarlyPir=TRUE, PrintOriginal=TRUE))
 
 f()
 print(".")

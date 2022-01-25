@@ -20,8 +20,7 @@ namespace pir {
     V(PrintCSSA)                                                               \
     V(PrintLLVM)                                                               \
     V(PrintAllocator)                                                          \
-    V(PrintFinalPir)                                                           \
-    V(PrintFinalRir)
+    V(PrintFinalPir)
 
 #define LIST_OF_PIR_DEBUGGING_FLAGS(V)                                         \
     V(ShowWarnings)                                                            \
@@ -45,8 +44,8 @@ enum class DebugFlag {
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
-    FIRST = ShowWarnings,
-    LAST = PrintFinalRir
+        FIRST = ShowWarnings,
+    LAST = PrintFinalPir
 };
 
 enum class DebugStyle {
