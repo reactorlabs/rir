@@ -301,12 +301,12 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
     pir::Module* m = new pir::Module;
-    pir::StreamLogger logger(debug);
+    pir::Log logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
     pir::Backend backend(m, logger, name);
     auto compile = [&](pir::ClosureVersion* c) {
-        logger.flush();
+        logger.flushAll();
         cmp.optimizeModule();
 
         if (dryRun)

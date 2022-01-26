@@ -7,7 +7,7 @@ namespace rir {
 namespace pir {
 
 bool CleanupFramestate::apply(Compiler&, ClosureVersion* function, Code* code,
-                              LogStream&, size_t) const {
+                              AbstractLog&, size_t) const {
     bool anyChange = false;
     Visitor::run(code->entry, [&](Instruction* i) {
         if (!Deopt::Cast(i) && i->frameState()) {

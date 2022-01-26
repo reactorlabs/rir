@@ -16,7 +16,7 @@ namespace rir {
 namespace pir {
 
 bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                       LogStream& log, size_t) const {
+                       AbstractLog& log, size_t) const {
     AvailableCheckpoints checkpoint(cls, code, log);
 
     struct Speculation {

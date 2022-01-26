@@ -32,8 +32,8 @@ namespace pir {
 
 static void approximateRefcount(ClosureVersion* cls, Code* code,
                                 NeedsRefcountAdjustment& refcount,
-                                ClosureStreamLogger& log) {
-    StaticReferenceCount refcountAnalysis(cls, code, log.out());
+                                ClosureLog& log) {
+    StaticReferenceCount refcountAnalysis(cls, code, log);
     refcountAnalysis();
     refcount = refcountAnalysis.getGlobalState();
 }
@@ -296,8 +296,7 @@ static void toCSSA(Module* m, Code* code) {
 bool MEASURE_COMPILER_BACKEND_PERF =
     getenv("PIR_MEASURE_COMPILER_BACKEND") ? true : false;
 
-rir::Function* Backend::doCompile(ClosureVersion* cls,
-                                  ClosureStreamLogger& log) {
+rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     // TODO: keep track of source ast indices in the source pool
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
@@ -387,7 +386,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         Measuring::countTimer("backend.cpp: pir2llvm");
     }
 
-    log.finalPIR(cls);
+    log.finalPIR();
     function.finalize(body, signature, cls->context());
     for (auto& c : done)
         c.second->function(function.function());

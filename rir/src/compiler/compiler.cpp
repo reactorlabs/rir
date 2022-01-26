@@ -87,11 +87,10 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     auto version = pirClosure->declareContinuation(ctx, curFun);
 
     Builder builder(version, pirClosure->closureEnv());
-    auto& log = logger.begin(version);
+    auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
-        log.compilationEarlyPir(version);
         log.flush();
         return success(version);
     }
@@ -140,7 +139,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
-    auto& log = logger.begin(version);
+    auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback);
 
     auto& context = version->context();
@@ -218,7 +217,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     }
 
     if (rir2pir.tryCompile(builder)) {
-        log.compilationEarlyPir(version);
 #ifdef FULLVERIFIER
         Verify::apply(version, "Error after initial translation", true);
 #else
@@ -240,8 +238,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
-static void findUnreachable(Module* m, StreamLogger& log,
-                            const std::string& where) {
+static void findUnreachable(Module* m, Log& log, const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
@@ -325,8 +322,8 @@ static void findUnreachable(Module* m, StreamLogger& log,
 };
 
 void Compiler::optimizeModule() {
-    logger.flush();
-    size_t passnr = 0;
+    logger.flushAll();
+    size_t passnr = 10;
     PassScheduler::instance().run([&](const Pass* translation,
                                       size_t iteration) {
         bool changed = false;
@@ -339,21 +336,22 @@ void Compiler::optimizeModule() {
         }
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
-                auto log = logger.get(v).forPass(passnr);
-                log.pirOptimizationsHeader(translation);
+                auto& clog = logger.get(v);
+                auto pirLog = clog.forPass(passnr, translation->getName());
+                pirLog.pirOptimizationsHeader(translation);
 
                 if (MEASURE_COMPILER_PERF)
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (translation->apply(*this, v, log.out(), iteration))
+                if (translation->apply(*this, v, clog, iteration))
                     changed = true;
                 if (MEASURE_COMPILER_PERF)
                     Measuring::countTimer("compiler.cpp: " +
                                           translation->getName());
 
-                log.pirOptimizations(translation);
-                log.flush();
+                pirLog.pirOptimizations(translation);
+                pirLog.flush();
 
 #ifdef FULLVERIFIER
                 Verify::apply(v, "Error after pass " + translation->getName(),
@@ -373,7 +371,7 @@ void Compiler::optimizeModule() {
 
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
-            logger.get(v).pirOptimizationsFinished(v);
+            logger.get(v).pirOptimizationsFinished();
 #ifdef ENABLE_SLOWASSERT
             Verify::apply(v, "Error after optimizations", true);
 #else
@@ -387,7 +385,7 @@ void Compiler::optimizeModule() {
     if (MEASURE_COMPILER_PERF)
         Measuring::countTimer("compiler.cpp: verification");
 
-    logger.flush();
+    logger.flushAll();
 }
 
 size_t Parameter::MAX_INPUT_SIZE =

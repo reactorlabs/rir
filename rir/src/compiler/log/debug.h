@@ -20,15 +20,14 @@ namespace pir {
     V(PrintCSSA)                                                               \
     V(PrintLLVM)                                                               \
     V(PrintAllocator)                                                          \
-    V(PrintFinalPir)                                                           \
-    V(PrintFinalRir)
+    V(PrintFinalPir)
 
 #define LIST_OF_PIR_DEBUGGING_FLAGS(V)                                         \
     V(ShowWarnings)                                                            \
     V(DryRun)                                                                  \
     V(PrintPassesIntoFolders)                                                  \
-    V(PrintIntoFiles)                                                          \
-    V(PrintIntoStdout)                                                         \
+    V(PrintUnbuffered)                                                         \
+    V(PrintToStdout)                                                           \
     V(PrintInstructionIds)                                                     \
     V(OmitDeoptBranches)                                                       \
     V(OnlyChanges)                                                             \
@@ -45,8 +44,8 @@ enum class DebugFlag {
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
-    FIRST = ShowWarnings,
-    LAST = PrintFinalRir
+        FIRST = ShowWarnings,
+    LAST = PrintFinalPir
 };
 
 enum class DebugStyle {
@@ -83,6 +82,11 @@ struct DebugOptions {
         : flags(flags), passFilter(filter), functionFilter(functionFilter),
           style(style) {}
     DebugOptions() {}
+
+    bool multipleFiles() const {
+        return includes(DebugFlag::PrintPassesIntoFolders) ||
+               style != DebugStyle::Standard;
+    }
 
     static DebugOptions DefaultDebugOptions;
 };

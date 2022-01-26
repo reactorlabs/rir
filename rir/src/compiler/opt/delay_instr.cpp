@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
+bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                        size_t) const {
     bool anyChange = false;
 

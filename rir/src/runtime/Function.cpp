@@ -54,14 +54,14 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
 
 void Function::disassemble(std::ostream& out) {
     out << "[sigature] ";
-    signature().print(std::cout);
+    signature().print(out);
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
     out << "\n";
     out << "[flags]    ";
 #define V(F)                                                                   \
     if (flags.includes(F))                                                     \
-        std::cout << #F << " ";
+        out << #F << " ";
     RIR_FUNCTION_FLAGS(V)
 #undef V
     out << "\n";

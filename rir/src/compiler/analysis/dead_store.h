@@ -78,12 +78,12 @@ class DeadStoreAnalysis {
 
       public:
         EnvLeakAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
-                        LogStream& log)
+                        AbstractLog& log)
             : EnvLeakAnalysis(cls, code, EnvSet(), promEnv, log) {}
 
         EnvLeakAnalysis(ClosureVersion* cls, Code* code,
                         const EnvSet& initialState, Value* promEnv,
-                        LogStream& log)
+                        AbstractLog& log)
             : StaticAnalysis("envLeak", cls, code, initialState, NULL, log),
               promEnv(promEnv) {}
 
@@ -320,7 +320,7 @@ class DeadStoreAnalysis {
 
       public:
         ObservedStoreAnalysis(ClosureVersion* cls, Code* code, Value* promEnv,
-                              const EnvLeakAnalysis& leaked, LogStream& log)
+                              const EnvLeakAnalysis& leaked, AbstractLog& log)
             : StaticAnalysis("observedEnv", cls, code, log), promEnv(promEnv),
               leaked(leaked) {}
 
@@ -496,7 +496,7 @@ class DeadStoreAnalysis {
     ObservedStoreAnalysis observed;
 
   public:
-    DeadStoreAnalysis(ClosureVersion* cls, Code* code, LogStream& log)
+    DeadStoreAnalysis(ClosureVersion* cls, Code* code, AbstractLog& log)
         : leak(cls, code, nullptr, log),
           observed(cls, code, nullptr, leak, log) {}
 

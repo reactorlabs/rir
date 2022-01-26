@@ -17,12 +17,15 @@ namespace pir {
 class InsertCast {
     Code* code;
     Value* env;
+    AbstractLog& log;
+
     void apply(BB* b, AvailableCheckpoints& cp);
 
   public:
     static pir::Instruction* cast(pir::Value* v, PirType t, Value* env);
 
-    InsertCast(Code* s, Value* e) : code(s), env(e) {}
+    InsertCast(Code* s, Value* e, AbstractLog& log)
+        : code(s), env(e), log(log) {}
     void operator()();
 };
 } // namespace pir

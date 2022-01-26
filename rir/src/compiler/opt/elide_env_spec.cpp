@@ -17,7 +17,7 @@ namespace rir {
 namespace pir {
 
 bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
-                         LogStream& log, size_t iteration) const {
+                         AbstractLog& log, size_t iteration) const {
 
     constexpr bool debug = false;
     AvailableCheckpoints checkpoint(cls, code, log);

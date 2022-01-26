@@ -107,8 +107,8 @@ pir.check <- function(f, ..., warmup=NULL) {
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
                            PrintPassesIntoFolders = FALSE,
-                           PrintIntoFiles = FALSE,
-                           PrintIntoStdout = FALSE,
+                           PrintToStdout = FALSE,
+                           PrintUnbuffered = FALSE,
                            PrintInstructionIds = FALSE,
                            OmitDeoptBranches = FALSE,
                            OnlyChanges = FALSE,
@@ -121,16 +121,15 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintCSSA = FALSE,
                            PrintLLVM = FALSE,
                            PrintAllocator = FALSE,
-                           PrintFinalPir = FALSE,
-                           PrintFinalRir = FALSE) {
+                           PrintFinalPir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pirDebugFlags",
           ShowWarnings,
           DryRun,
           PrintPassesIntoFolders,
-          PrintIntoFiles,
-          PrintIntoStdout,
+          PrintToStdout,
+          PrintUnbuffered,
           PrintInstructionIds,
           OmitDeoptBranches,
           OnlyChanges,
@@ -144,7 +143,6 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
           PrintLLVM,
           PrintAllocator,
           PrintFinalPir,
-          PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)
 }

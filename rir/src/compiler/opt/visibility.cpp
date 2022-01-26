@@ -13,7 +13,7 @@ namespace rir {
 namespace pir {
 
 bool OptimizeVisibility::apply(Compiler&, ClosureVersion* cls, Code* code,
-                               LogStream& log, size_t) const {
+                               AbstractLog& log, size_t) const {
     VisibilityAnalysis visible(cls, code, log);
 
     bool anyChange = false;

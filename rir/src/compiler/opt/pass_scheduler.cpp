@@ -2,6 +2,8 @@
 #include "compiler/parameter.h"
 #include "pass_definitions.h"
 
+#include <regex>
+
 namespace rir {
 namespace pir {
 

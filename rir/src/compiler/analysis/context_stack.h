@@ -36,7 +36,7 @@ struct ContextStackState {
 
 class ContextStack : public StaticAnalysis<ContextStackState> {
   public:
-    ContextStack(ClosureVersion* cls, Code* code, LogStream& log)
+    ContextStack(ClosureVersion* cls, Code* code, AbstractLog& log)
         : StaticAnalysis("ContextStack", cls, code, log) {}
 
     AbstractResult apply(ContextStackState& state,

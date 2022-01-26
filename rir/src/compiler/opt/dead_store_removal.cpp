@@ -5,7 +5,7 @@ namespace rir {
 namespace pir {
 
 bool DeadStoreRemoval::apply(Compiler&, ClosureVersion* cls, Code* code,
-                             LogStream& log, size_t) const {
+                             AbstractLog& log, size_t) const {
     bool noStores = Visitor::check(
         code->entry, [&](Instruction* i) { return !StVar::Cast(i); });
     if (noStores)
