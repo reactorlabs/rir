@@ -438,6 +438,7 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP)
             arg = evaluatePromise(arg, ctx);
+        SLOWASSERT(arg != symbol::delayedEnv);
 
         // This is to ensure we pass named arguments to GNU-R builtins because
         // who knows what assumptions does GNU-R do??? We SHOULD test this.

@@ -1319,9 +1319,7 @@ class FLIE(Force, 3, Effects::Any()) {
     PirType inferType(const GetType& getType) const override final;
 
     Effects inferEffects(const GetType& getType) const override final {
-        auto e = getType(input()).maybeLazy()
-                     ? effects
-                     : Effects(Effect::DependsOnAssume);
+        auto e = getType(input()).maybeLazy() ? effects : Effects();
         if (auto mk = MkArg::Cast(input()->followCastsAndForce())) {
             if (mk->noReflection)
                 e.reset(Effect::Reflection);

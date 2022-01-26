@@ -82,7 +82,10 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, LogStream&,
                 else if (PopContext::Cast(next))
                     envInstr->context--;
                 else if (envInstr->context > 0 &&
-                         next->effects.contains(Effect::Reflection))
+                         (next->effects.contains(Effect::Reflection) ||
+                          // TODO: the no-reflection assumption is too weak for
+                          // inlined environments.
+                          (Force::Cast(next) && next->hasObservableEffects())))
                     break;
 
                 anyChange = true;
