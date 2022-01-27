@@ -138,6 +138,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned extraPoolSize; /// Number of elements in the per code constant pool
 
+    std::string mName = ""; /// name of the function in JIT
+
+    std::vector<ArglistOrder::CallArglistOrder> argOrderingVec; /// callArglist order, raw
+
     uint8_t data[]; /// the instructions
 
     /*

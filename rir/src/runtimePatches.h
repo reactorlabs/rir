@@ -8,6 +8,24 @@
 #define PATCH_DEBUG_MAP 5 // (5) Patched Symbol to expected address, for debugging deopt and static call patches
 
 /*************************************/
+// Serializer specific
+//
+#define PRINT_SERIALIZER_PROGRESS 1
+#define ADD_EXTRA_DEBUGGING_DATA 0
+#define BACKEND_PRINT_INITIAL_LLVM 0
+#define PRINT_DONE_MAP 0
+#define BACKEND_PRINT_NAME_UPDATES 0
+#define BACKEND_PRINT_FINAL_LLVM 0
+#define PRINT_PROM_MAP 0
+#define PRINT_MODULE_BEFORE_POOL_PATCHES 0
+#define PRINT_CP_ENTRIES 0
+#define PRINT_SRC_ENTRIES 0
+#define PRINT_PROM_ENTRIES 0
+#define PRINT_MODULE_AFTER_POOL_PATCHES 0
+//
+/*************************************/
+
+/*************************************/
 // Runtime tables for the patches
 //
 #define RESERVE_SPACES_AT_STARTUP 1

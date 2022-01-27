@@ -25,6 +25,9 @@
 #include "R/Funtab.h"
 #include "utils/UMap.h"
 #include "runtime/DispatchTable.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "utils/serializerData.h"
 
 namespace rir {
 namespace pir {
@@ -328,7 +331,359 @@ void PirJitLLVM::finalizeAndFixup() {
     auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
     ExitOnErr(JIT->addIRModule(std::move(TSM)));
     for (auto& fix : jitFixup)
-        fix.second.first->lazyCodeHandle(fix.second.second.str());
+        // fix.second.first->lazyCodeHandle(fix.second.second.str());
+        fix.second.first->lazyCodeHandle(fix.second.second);
+}
+
+auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : ".";
+
+void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIndices, SEXP cData, std::vector<std::string> & relevantNames) {
+
+    std::vector<int64_t> cpEntries;
+    std::vector<int64_t> spEntries;
+
+    std::unordered_map<int64_t, int64_t> cpAlreadySeen;
+    std::unordered_map<int64_t, int64_t> spAlreadySeen;
+
+    size_t srcPoolOffset = 0;
+
+    #if PRINT_SERIALIZER_PROGRESS == 1
+    std::cout << "  (>) Module Serialization Started" << std::endl;
+    #endif
+
+    // Releasing the module as soon as globals are patched and the bc is serialized
+    {
+        // We clone the module because we dont want to update constant pool references in the original module
+        std::unique_ptr<llvm::Module> module = llvm::CloneModule(*M.get());
+
+        #if PRINT_MODULE_BEFORE_POOL_PATCHES == 1
+        llvm::raw_os_ostream dbg_stream(std::cout);
+        dbg_stream << *m;
+        dbg_stream << "\n";
+        #endif
+
+        std::vector<llvm::Function *> junkFunctionList;
+
+        // Remove junk functions, codn and clsn patches should not be needed on the deserializer ideally
+        for (auto & fun: module->getFunctionList()) {
+            if (fun.getName().str().substr(0,3) == "rsh") {
+                junkFunctionList.push_back(&fun);
+            }
+            if (fun.getName().str().substr(0,2) == "f_") {
+                if (std::find(relevantNames.begin(), relevantNames.end(), fun.getName().str()) == relevantNames.end()) {
+                    junkFunctionList.push_back(&fun);
+                }
+            }
+        }
+
+        for (auto & fun : junkFunctionList) {
+            fun->eraseFromParent();
+        }
+
+        // llvm::PassBuilder passBuilder;
+        // llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
+        // llvm::FunctionAnalysisManager functionAnalysisManager(false);
+        // llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
+        // llvm::ModuleAnalysisManager moduleAnalysisManager(false);
+
+        // passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+        // passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+        // passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+        // passBuilder.registerLoopAnalyses(loopAnalysisManager);
+        // // This is the important line:
+        // passBuilder.crossRegisterProxies(
+        //     loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+
+        // llvm::ModulePassManager modulePassManager =
+        //     passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O1);
+        // modulePassManager.run(*, moduleAnalysisManager);
+
+        if (junkFunctionList.size() > 0) {
+            #if PRINT_SERIALIZER_PROGRESS == 1
+            std::cout << "    (*) junk functions cleared" << std::endl;
+            #endif
+        }
+
+        // for (auto & global : module->getGlobalList()) {
+        //     auto pre = global.getName().str().substr(0,6) == "copool";
+        //     auto srp = global.getName().str().substr(0,6) == "srpool";
+        //     if (pre || srp) {
+        //         global.users
+        //     }
+        // }
+
+        // Patch all CP and SRC pool entries
+        int patchValue = 0;
+        // Iterating over all globals
+        for (auto & global : module->getGlobalList()) {
+            auto pre = global.getName().str().substr(0,6) == "copool";
+            auto srp = global.getName().str().substr(0,6) == "srpool";
+            // All src pool references have a srpool prefix
+            if (srp) {
+                auto con = global.getInitializer();
+                if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
+                    // Simple constant ints
+                    auto val = v->getSExtValue();
+                    // contains replacement value, relative to serialized pool
+                    llvm::Constant* replacementValue;
+
+                    if (spAlreadySeen.find(val) == spAlreadySeen.end()) {
+                        // If not seen, we add it to the serialization pool
+                        spEntries.push_back(val);
+                        // update seen map
+                        spAlreadySeen[val] = srcPoolOffset;
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, srcPoolOffset++));
+                    } else {
+                        // If already seen, just use the previously patched value
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, spAlreadySeen[val]));
+                    }
+
+                    global.setInitializer(replacementValue);
+                }
+            }
+            // All constant pool references have a copool prefix
+            if (pre) {
+                llvm::raw_os_ostream ost(std::cout);
+                auto con = global.getInitializer();
+                if (auto * v = llvm::dyn_cast<llvm::ConstantDataArray>(con)) {
+                    // Constant data array
+                    std::vector<llvm::Constant*> patchedIndices;
+
+                    auto arrSize = v->getNumElements();
+
+                    for (unsigned int i = 0; i < arrSize; i++) {
+
+                        // cp Index that we are referring to
+                        auto val = v->getElementAsAPInt(i).getSExtValue();
+
+                        // contains replacement value, relative to serialized pool
+                        llvm::Constant* replacementValue;
+
+                        if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
+                            // If not seen, we add it to the serialization pool
+                            cpEntries.push_back(val);
+                            // update seen map
+                            cpAlreadySeen[val] = patchValue;
+                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
+                        } else {
+                            // If already seen, just use the previously patched value
+                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
+                        }
+                        patchedIndices.push_back(replacementValue);
+
+                    }
+
+                    auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
+                    auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
+
+                    global.setInitializer(newInit);
+                } else if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
+                    // Simple constant ints
+                    auto val = v->getSExtValue();
+
+                    // contains replacement value, relative to serialized pool
+                    llvm::Constant* replacementValue;
+
+                    if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
+                        // If not seen, we add it to the serialization pool
+                        cpEntries.push_back(val);
+                        // update seen map
+                        cpAlreadySeen[val] = patchValue;
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
+                    } else {
+                        // If already seen, just use the previously patched value
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
+                    }
+
+                    global.setInitializer(replacementValue);
+                } else if (auto * v = llvm::dyn_cast<llvm::ConstantAggregateZero>(con)) {
+                    // Constant data array
+                    std::vector<llvm::Constant*> patchedIndices;
+
+                    auto arrSize = v->getNumElements();
+
+                    for (unsigned int i = 0; i < arrSize; i++) {
+
+                        // cp Index that we are referring to
+                        auto val = 0;
+
+                        // contains replacement value, relative to serialized pool
+                        llvm::Constant* replacementValue;
+
+                        if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
+                            // If not seen, we add it to the serialization pool
+                            cpEntries.push_back(val);
+                            // update seen map
+                            cpAlreadySeen[val] = patchValue;
+                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
+                        } else {
+                            // If already seen, just use the previously patched value
+                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
+                        }
+                        patchedIndices.push_back(replacementValue);
+
+                    }
+
+                    auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
+                    auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
+
+                    global.setInitializer(newInit);
+                }
+            }
+        }
+
+        // SERIALIZE THE LLVM MODULE
+        std::ofstream bitcodeFile;
+
+        std::stringstream bcPath;
+        bcPath << prefix << "/" << "temp.bc";
+
+        bitcodeFile.open(bcPath.str().c_str());
+        llvm::raw_os_ostream ooo(bitcodeFile);
+        WriteBitcodeToFile(*module,ooo);
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "    (*) Module bitcode serialized: " << bcPath.str() << std::endl;
+        #endif
+
+        #if PRINT_MODULE_AFTER_POOL_PATCHES == 1
+        llvm::raw_os_ostream debugOp(std::cout);
+        debugOp << *module;
+        #endif
+        module.reset();
+    }
+
+    // Creating a vector containing all pool references
+    SEXP serializationObjects;
+    PROTECT(serializationObjects = Rf_allocVector(VECSXP,
+        cpEntries.size() + spEntries.size() + srcIndices.size()));
+
+    contextData conData(cData);
+
+    conData.addCPoolEntriesSize(cpEntries.size());
+    conData.addSrcPoolEntriesSize(spEntries.size());
+    conData.addPromiseSrcPoolEntriesSize(srcIndices.size());
+
+    #if PRINT_SERIALIZER_PROGRESS == 1
+    std::cout << "    (*) Pool data stored" << std::endl;
+    #endif
+
+    int i = 0;
+
+    // Restore the original bodies of the closures
+    std::unordered_map<SEXP, SEXP> restoreMap;
+
+    #if PRINT_CP_ENTRIES == 1
+    std::cout << "    (*) Constant Pool Entries: [ ";
+    #endif
+
+    for (auto & ele : cpEntries) {
+        SEXP obj = Pool::get(ele);
+        // Dont serialize external code, we serialize the original AST
+        if (TYPEOF(obj) == CLOSXP && DispatchTable::check(BODY(obj))) {
+            auto rshFun = DispatchTable::unpack(BODY(obj));
+            restoreMap[obj] = BODY(obj);
+            auto origBody = src_pool_at(globalContext(), rshFun->baseline()->body()->src);
+            SET_BODY(obj, origBody);
+        }
+        #if PRINT_CP_ENTRIES == 1
+        std::cout << i << "{ TYPE: " << TYPEOF(obj) << "} ";
+        #endif
+        SET_VECTOR_ELT(serializationObjects, i++, obj);
+    }
+
+    #if PRINT_CP_ENTRIES == 1
+    std::cout << " ]" << std::endl;
+    #endif
+
+    // RESTORE THE ORIGINAL BODIES
+    for (auto & ele : restoreMap) {
+        SET_BODY(ele.first, ele.second);
+    }
+
+    #if PRINT_SRC_ENTRIES == 1
+    int j = 0;
+    std::cout << "    (*) Source Pool Entries: [ ";
+    #endif
+
+    for (auto & ele : spEntries) {
+        SEXP obj = src_pool_at(globalContext(), ele);
+        #if PRINT_SRC_ENTRIES == 1
+        std::cout << "{" <<  j << " at "<< i << ", TYPE: " << TYPEOF(obj) << "}" << " ";
+        j++;
+        #endif
+        SET_VECTOR_ELT(serializationObjects, i++, obj);
+    }
+
+    #if PRINT_SRC_ENTRIES == 1
+    std::cout << " ]" << std::endl;
+    #endif
+
+
+    #if PRINT_PROM_ENTRIES == 1
+    std::cout << "    (*) Promise Src Entries: [ ";
+    #endif
+
+    for (auto & ele : srcIndices) {
+        SEXP obj = src_pool_at(globalContext(), ele);
+        #if PRINT_PROM_ENTRIES == 1
+        std::cout << "{ " << ele  << " at " << i << "} ";
+        #endif
+        SET_VECTOR_ELT(serializationObjects, i++, obj);
+    }
+
+    #if PRINT_PROM_ENTRIES == 1
+    std::cout << " ]" << std::endl;
+    #endif
+
+    // SERIALIZE THE CONSTANT POOL
+    #if PRINT_SERIALIZER_PROGRESS == 1
+    std::cout << "    (*) Starting Constant Pool Serialization" << std::endl;
+    #endif
+    R_outpstream_st outputStream;
+    std::stringstream bcPath;
+    bcPath << prefix << "/" << "temp.pool";
+    FILE *fptr;
+    fptr = fopen(bcPath.str().c_str(),"w");
+    R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
+    R_Serialize(serializationObjects, &outputStream);
+    fclose(fptr);
+
+    #if PRINT_SERIALIZER_PROGRESS == 1
+    std::cout << "    (*) Module pool serialized: " << bcPath.str() << std::endl;
+    #endif
+
+    #if PRINT_SERIALIZER_PROGRESS == 1
+    std::cout << "  (/) Module Serialized Successfully" << std::endl;
+    #endif
+
+    UNPROTECT(1);
+}
+
+void PirJitLLVM::updateFunctionNameInModule(std::string oldName, std::string newName) {
+    if (M) {
+        llvm::Function * f = M->getFunction(llvm::StringRef(oldName));
+        f->setName(newName);
+    } else {
+        Rf_error("unable to update names in the module");
+    }
+}
+
+void PirJitLLVM::patchFixupHandle(std::string newName, Code * code) {
+    jitFixup[code].second = newName;
+}
+
+void PirJitLLVM::printModule() {
+    llvm::raw_os_ostream ro(std::cout);
+    ro << *M;
+}
+
+void PirJitLLVM::enableDebugStatements() {
+    debugStatements = true;
+}
+
+void PirJitLLVM::disableDebugStatements() {
+    debugStatements = false;
 }
 
 void PirJitLLVM::compile(
@@ -373,6 +728,8 @@ void PirJitLLVM::compile(
     }
 
     std::string mangledName = JIT->mangle(makeName(code));
+
+    target->mName = mangledName;
 
     LowerFunctionLLVM funCompiler(
         target, mangledName, closure, code, promMap, refcount,
@@ -424,6 +781,10 @@ void PirJitLLVM::compile(
         DI->LexicalBlocks.push_back(SP);
     }
 
+    funCompiler.debugStatements = debugStatements;
+    funCompiler.serializerError = serializerError;
+    funCompiler.reqMap = reqMapForCompilation;
+
     funCompiler.compile();
 
     assert(jitFixup.count(code) == 0);
@@ -442,9 +803,12 @@ void PirJitLLVM::compile(
 
     if (funCompiler.pirTypeFeedback)
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
-    if (funCompiler.hasArgReordering())
+    if (funCompiler.hasArgReordering()) {
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
-    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
+        target->argOrderingVec = funCompiler.getArgReordering();
+    }
+    // jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
+    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName().str()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
         bool debug = true;
@@ -610,6 +974,9 @@ void PirJitLLVM::initializeLLVM() {
                 #if ENABLE_DEOPT_PATCHES == 1
                 auto code = n.substr(0, 5) == "code_"; // code objs for DeoptReason
                 auto codn = n.substr(0, 5) == "codn_"; // should be ideally ignored, but we can skip patching in the deserializer
+
+                auto deop = n.substr(0, 5) == "deop_"; // code objs for DeoptReason
+                auto deon = n.substr(0, 5) == "deon_"; // should be ideally ignored, but we can skip patching in the deserializer
                 #endif
 
                 if (ept || efn) {
@@ -848,6 +1215,49 @@ void PirJitLLVM::initializeLLVM() {
                             reinterpret_cast<uintptr_t>(addr)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
+                }
+                else if (deop || deon) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+                    auto thirdDel = n.find('_', secondDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    auto index = std::stoi(n.substr(secondDel + 1, thirdDel - secondDel - 1));
+                    int realOffset = std::stoi(n.substr(thirdDel + 1));
+
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    auto addr = vtable->baseline()->body();
+                    addr = addr->getSrcAtOffset(index);
+
+                    auto pc = (uintptr_t)addr->code() + (uintptr_t)realOffset;
+
+                    auto res = (uintptr_t)pc - (uintptr_t)addr;
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(uintptr_t)));
+                    uintptr_t * tmp = (uintptr_t *) DATAPTR(store);
+                    *tmp = res;
+                    Pool::insert(store);
+                    UNPROTECT(1);
+
+                    std::cout << "resolved offset: " << res << std::endl;
+
+                    // #if PRINT_PATCH_ERRORS == 1
+                    // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    // SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
+                    // SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
+
+                    // if (oldVal != newVal) {
+                    //     std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
+                    //     std::cerr << "CODE patch failed" << std::endl;
+                    // }
+                    // #endif
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(tmp)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
                 #endif
                 else {

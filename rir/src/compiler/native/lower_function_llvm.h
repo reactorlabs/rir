@@ -126,6 +126,7 @@ class LowerFunctionLLVM {
     llvm::FunctionCallee convertToFunctionSymbol(SEXP what, llvm::FunctionType* ty);
     std::set<size_t>* reqMap = nullptr;
     bool* serializerError = nullptr;
+    bool debugStatements = false;
 
     struct Variable {
         bool deadMove(const Variable& other) const;

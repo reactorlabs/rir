@@ -103,10 +103,9 @@
 /*************************************/
 // Deopt patches
 //
-#define ENABLE_DEOPT_PATCHES 0
+#define ENABLE_DEOPT_PATCHES 1
 //
-  #define PATCH_DEOPTREASON_PC 1
-  #define TRY_PATCH_DEOPTREASON 0
+  #define TRY_PATCH_DEOPTREASON 1
   #define TRY_PATCH_DEOPTMETADATA 1
 /*************************************/
 

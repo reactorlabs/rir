@@ -27,6 +27,8 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "utils/serializerData.h"
+
 namespace rir {
 namespace pir {
 
@@ -296,6 +298,48 @@ static void toCSSA(Module* m, Code* code) {
 bool MEASURE_COMPILER_BACKEND_PERF =
     getenv("PIR_MEASURE_COMPILER_BACKEND") ? true : false;
 
+static Code* findFunCodeObj(std::unordered_map<Code*,std::unordered_map<Code*, std::pair<unsigned, MkArg*>>> & promMap) {
+    // Identify root node
+    // The code object that does not exist in any promise set is the root node
+    Code * mainFunCodeObj = NULL;
+
+    for (auto & element : promMap) {
+        rir::pir::Code *curr_codeObj = element.first;
+        bool trigger = false;
+
+        // check if the current code object is a part of some other code's promises array
+        for (auto & e : promMap) {
+            if (e.second.count(curr_codeObj) > 0) {
+                trigger = true;
+                break;
+            }
+
+        }
+
+        if (trigger == false) {
+            if (mainFunCodeObj != NULL) {
+                std::cout << "More than one root node is not possible, previous node: " << mainFunCodeObj  << std::endl;
+                Rf_error("More than one root node is not possible");
+            }
+            mainFunCodeObj = curr_codeObj;
+        }
+
+    }
+
+    if (!mainFunCodeObj) {
+        for (auto & element : promMap) {
+            std::cout << element.first << " : [ ";
+            for (auto & prom : element.second) {
+                std::cout << prom.first << " ";
+            }
+            std::cout << "]" << std::endl;
+        }
+        Rf_error("No root node found!");
+    }
+
+    return mainFunCodeObj;
+}
+
 rir::Function* Backend::doCompile(ClosureVersion* cls,
                                   ClosureStreamLogger& log) {
     // TODO: keep track of source ast indices in the source pool
@@ -355,6 +399,15 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         Measuring::startTimer("backend.cpp: pir2llvm");
     }
 
+    std::set<size_t> rMap;
+    if (cData != nullptr) {
+        #if ADD_EXTRA_DEBUGGING_DATA == 1
+        jit.enableDebugStatements();
+        #endif
+        jit.serializerError = serializerError;
+        jit.reqMapForCompilation = &rMap;
+    }
+
     std::unordered_map<Code*, rir::Code*> done;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
         if (done.count(c))
@@ -382,6 +435,288 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         return res;
     };
     auto body = compile(cls);
+
+    if (cData != nullptr) {
+        #if ADD_EXTRA_DEBUGGING_DATA == 1
+        jit.disableDebugStatements();
+        #endif
+
+        #if BACKEND_PRINT_INITIAL_LLVM == 1
+        std::cout << "BACKEND_INITIAL_LLVM" << std::endl;
+        jit.printModule();
+        #endif
+
+        Code * mainFunCodeObj = findFunCodeObj(promMap);
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) Found mainFunCodeObj: " << mainFunCodeObj << std::endl;
+        #endif
+
+        size_t hast = getHastAndIndex(done[mainFunCodeObj]->src).hast;
+
+        if (hast == 0) {
+            *serializerError = true;
+            std::cout << "  (E) Hast unavailable, cannot populate cData" << std::endl;
+        }
+
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, 99999);
+        std::string startingUID;
+        while (true) {
+            std::stringstream ss;
+            ss << "f_";
+            ss << dis(gen) << "_"; // random 5 digit number
+            ss << std::hex << std::uppercase << hast; // random 5 digit number
+            ss << "_";
+            ss << std::hex << std::uppercase << cls->context().toI();
+            auto e = jit.JIT->lookup(ss.str() + "_0");
+            if (e.takeError()) {
+                startingUID = ss.str();
+                break;
+            }
+        }
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) StartingUID: " << startingUID << std::endl;
+        #endif
+
+        #if PRINT_DONE_MAP == 1
+        std::cout << "  (*) DONE MAP" << std::endl;
+        for (auto & ele : done) {
+            std::cout << "    " << ele.first << " -> " << ele.second << std::endl;
+        }
+        #endif
+
+        #if PRINT_PROM_MAP == 1
+        std::cout << "  (*) PROMISE MAP" << std::endl;
+        std::cout << "      ROOT: " << mainFunCodeObj << std::endl;
+        for (auto & ele : promMap) {
+            std::cout << "      " << ele.first << " - [ ";
+            for (auto & p : ele.second) {
+                std::cout << p.first << " ";
+            }
+            std::cout << "]" << std::endl;
+        }
+        #endif
+
+        std::vector<unsigned> srcIndices;
+        std::vector<rir::Code*> argDataCodes;
+
+        int uid = 0;
+        std::unordered_map<Code *, std::string> processedName;
+
+        std::stringstream childrenData;
+        std::stringstream srcData;
+        std::stringstream argData;
+
+        int sid = 0;
+        int argId = 0;
+
+        auto getProcessedName = [&](Code * c) {
+            if (processedName.find(c) == processedName.end()) {
+                std::stringstream nn;
+                nn << startingUID << "_" << uid++;
+                std::string name = nn.str();
+                // Update the name in module to the new one
+                jit.updateFunctionNameInModule(done[c]->mName, name);
+                // Update the name for the handle
+                jit.patchFixupHandle(name, c);
+                processedName[c] = name;
+
+                srcData << name << "," << sid++ << ",";
+                srcIndices.push_back(c->rirSrc()->src);
+
+                argData << name << ",";
+
+                if (done[c]->arglistOrder() != nullptr) {
+                    argData << argId++ << ",";
+                    argDataCodes.push_back(done[c]);
+                } else {
+                    argData << "|" << ",";
+                }
+
+                #if BACKEND_PRINT_NAME_UPDATES == 1
+                std::cout << "  (*) Updating name: " << done[c]->mName << " -> " << name << std::endl;
+                #endif
+
+                return name;
+            } else {
+                return processedName[c];
+            }
+        };
+
+        std::function<void(Code* c)>
+            updateModuleNames = [&](Code* c) {
+
+            std::string name = getProcessedName(c);
+
+            // Traverse over all the promises for the current code object
+            auto & promisesForThisObj = promMap[c];
+            // If there are promises, then work on this
+            if (promisesForThisObj.size() > 0) {
+                childrenData << name << ",";
+                for (size_t i = 0; i < promisesForThisObj.size(); i++) {
+                    // get i'th promise
+                    auto curr = done[c]->getExtraPoolEntry(i);
+                    for (auto & promise : promisesForThisObj) {
+                        if (curr == done[promise.first]->container()) {
+                            childrenData << getProcessedName(promise.first) << ",";
+                            break;
+                        }
+                    }
+
+
+                }
+                childrenData << "|,";
+
+            }
+
+        };
+
+        for (auto & ele : promMap) {
+            updateModuleNames(ele.first);
+        }
+        childrenData << "|";
+
+        std::vector<std::string> relevantNames;
+
+        // List of relevant names in the module, to prevent duplicate symbols in the deserializer routine
+        for (auto & ele : processedName) {
+            relevantNames.push_back(ele.second);
+        }
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) Revelant names: [ ";
+        for (auto & ele : relevantNames) {
+            std::cout << ele << " ";
+        }
+        std::cout << "]" << std::endl;
+        #endif
+
+
+
+        jit.serializeModule(done[mainFunCodeObj], srcIndices, cData, relevantNames);
+
+        std::string mainName = getProcessedName(mainFunCodeObj);
+
+        contextData conData(cData);
+
+        conData.addEnvCreation((int)signature.envCreation);   // 1
+        conData.addOptimization((int)signature.optimization); // 2
+        conData.addNumArguments(signature.numArguments);      // 3
+        conData.addDotsPosition(signature.dotsPosition);      // 4
+        conData.addMainName(mainName);                        // 5
+
+    //     // 6(cPoolEntriesSize), 7(srcPoolEntriesSize), 8(promiseSrcPoolEntriesSize)
+        conData.addChildrenData(childrenData.str());          // 9
+        conData.addSrcData(srcData.str().substr(0,srcData.str().size() - 1)); // 10
+        conData.addArgData(argData.str().substr(0,argData.str().size() - 1)); // 11
+
+        std::vector<std::vector<std::vector<size_t>>> argOrderingData;
+        for (auto & codeObj : argDataCodes) {
+            std::vector<std::vector<size_t>> outerData;
+
+            for (auto & outer : codeObj->argOrderingVec) {
+                std::vector<size_t> innerData;
+
+                for (auto & inner : outer) {
+                    innerData.push_back(inner);
+                }
+                outerData.push_back(innerData);
+            }
+            argOrderingData.push_back(outerData);
+        }
+
+
+        SEXP aOrderingData;
+        PROTECT(aOrderingData = Rf_allocVector(VECSXP, argOrderingData.size()));
+
+        int in_i = 0;
+
+        for (auto & i : argOrderingData) {
+
+            SEXP innerData;
+            PROTECT(innerData = Rf_allocVector(VECSXP, i.size()));
+            int in_j = 0;
+            for (auto & j : i) {
+
+                SEXP innermostData;
+                PROTECT(innermostData = Rf_allocVector(VECSXP, j.size()));
+                int in_k = 0;
+
+                for (auto & ele : j) {
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
+                    size_t * tmp = (size_t *) DATAPTR(store);
+                    *tmp = ele;
+                    SET_VECTOR_ELT(innermostData, in_k++, store);
+                    UNPROTECT(1);
+                }
+
+                SET_VECTOR_ELT(innerData, in_j++, innermostData);
+                UNPROTECT(1);
+            }
+
+            SET_VECTOR_ELT(aOrderingData, in_i++, innerData);
+            UNPROTECT(1);
+        }
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) original argOrderingData: <";
+        for (auto & i : argOrderingData) {
+            std::cout << "<";
+            for (auto & j : i) {
+                std::cout << "< ";
+
+                for (auto & ele : j) {
+                    std::cout << ele << " ";
+                }
+                std::cout << ">";
+            }
+            std::cout << ">";
+        }
+        std::cout << ">" << std::endl;
+        #endif
+
+        conData.addArgOrderingData(aOrderingData);
+        UNPROTECT(1);
+
+        SEXP rData;
+        PROTECT(rData = Rf_allocVector(VECSXP, rMap.size()));
+
+        int i = 0;
+        for (auto & ele : rMap) {
+            SEXP store;
+            PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
+            size_t * tmp = (size_t *) DATAPTR(store);
+            *tmp = ele;
+            SET_VECTOR_ELT(rData, i++, store);
+            UNPROTECT(1);
+        }
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) Original reqMapForCompilation: < ";
+        for (auto & ele : rMap) {
+            std::cout << ele << " ";
+        }
+        std::cout << ">" << std::endl;
+        #endif
+
+        conData.addReqMapForCompilation(rData);
+
+        UNPROTECT(1);
+
+        #if PRINT_SERIALIZER_PROGRESS == 1
+        std::cout << "  (*) metadata added" << std::endl;
+        #endif
+
+        #if BACKEND_PRINT_FINAL_LLVM == 1
+        std::cout << "BACKEND_INITIAL_LLVM" << std::endl;
+        jit.printModule();
+        #endif
+    }
 
     if (MEASURE_COMPILER_BACKEND_PERF) {
         Measuring::countTimer("backend.cpp: pir2llvm");

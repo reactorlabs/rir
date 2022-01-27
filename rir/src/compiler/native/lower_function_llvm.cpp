@@ -644,13 +644,13 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
         #if TRY_PATCH_DEOPTREASON == 1
-        Constant * srcAddr;
         auto data = getHastAndIndex(((DeoptReasonWrapper*)val)->reason.srcCode()->src);
         size_t hast = data.hast;
 
         // If the hast is blacklisted, patch will not work
-        SEXP blMap = Pool::get(4);
+        SEXP blMap = Pool::get(BL_MAP);
         if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+            std::cout << "  (*) not patching deopt reason" << std::endl;
             std::cout << "  (E) TRY_PATCH_DEOPTREASON failed" << std::endl;
             if (hast == 0) {
                 std::cout << "  (E) hast == 0" << std::endl;
@@ -670,26 +670,36 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                                 reinterpret_cast<uint64_t>(dr->reason.srcCode()),
                                 false)),
                 t::voidPtr);
+
+            // std::cout << "DeoptReason[]: { srcCode_: " << (uintptr_t)dr->reason.origin.srcCode()
+            //     << ", offset: " << (uintptr_t)(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code())
+            //     << ", pc: " << (uintptr_t)dr->reason.origin.pc() << "}" << std::endl;
+
+
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                                c(dr->reason.origin.offset(), 32), srcAddr});
+                                c(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code(), 32), srcAddr});
             res = globalConst(drs);
         } else {
+            std::cout << "  (*) patching deopt reason" << std::endl;
             std::stringstream ss;
+
+            auto dr = (DeoptReasonWrapper*)val;
 
             if (reqMap) {
                 ss << "code_" << hast << "_" << data.index;
+                // tt << "deop_" << hast << "_" << data.index << "_" << realOffset;
                 reqMap->insert(hast);
             } else {
                 ss << "codn_" << hast << "_" << data.index;
+                // tt << "deon_" << hast << "_" << data.index << "_" << realOffset;
                 if (serializerError != nullptr) {
                     *serializerError = true;
                     std::cout << "  (E) [DeoptReason patch] reqMap not available (ERROR)" << std::endl;
                 }
             }
 
-            auto dr = (DeoptReasonWrapper*)val;
-            srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
+            auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
 
             // --------------------- DEBUGGING ---------------------
             SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
@@ -700,11 +710,13 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
             UMap::insert(debugMap, Rf_install(ss.str().c_str()), Rf_install(std::to_string((uintptr_t) dr->reason.srcCode()).c_str()));
             // -----------------------------------------------------
 
+            // std::cout << "DeoptReason[]: { srcCode_: " << (uintptr_t)dr->reason.origin.srcCode()
+            //     << ", offset: " << (uintptr_t)(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code())
+            //     << ", pc: " << (uintptr_t)dr->reason.origin.pc() << "}" << std::endl;
 
-            auto realOffset = dr->reason.origin.pc() - dr->reason.origin.srcCode()->code();
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                                c(realOffset, 32), srcAddr});
+                                c(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code(), 32), srcAddr});
             res = globalConst(drs);
         }
         #else
@@ -4106,6 +4118,7 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Deopt: {
+                std::cout << "Tag::Deopt Start" << std::endl;
                 // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
                 auto deopt = Deopt::Cast(i);
@@ -4188,6 +4201,7 @@ void LowerFunctionLLVM::compile() {
                                         });
                     }
                     builder.CreateUnreachable();
+                    std::cout << "Tag::Deopt End" << std::endl;
                     break;
                 } else {
                     std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
@@ -4235,6 +4249,7 @@ void LowerFunctionLLVM::compile() {
                                     loadSxp(deopt->deoptTrigger())});
                     });
                     builder.CreateUnreachable();
+                    std::cout << "Tag::Deopt End" << std::endl;
                     break;
                 }
 

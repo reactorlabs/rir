@@ -23,6 +23,9 @@ class Backend {
 
     rir::Function* getOrCompile(ClosureVersion* cls);
 
+    SEXP cData = nullptr;
+    bool* serializerError = nullptr;
+
   private:
     struct LastDestructor {
         LastDestructor();
