@@ -4,7 +4,7 @@
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"
 #include "interp_incl.h"
-#include "ir/Deoptimization.h"
+#include "runtime/Deoptimization.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"

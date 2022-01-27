@@ -5,8 +5,8 @@
 #include <map>
 #include <vector>
 
-#include "runtime/Code.h"
 #include "BC.h"
+#include "runtime/Code.h"
 
 #include "CodeVerifier.h"
 #include "utils/FunctionWriter.h"

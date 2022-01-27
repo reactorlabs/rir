@@ -1,9 +1,9 @@
 #ifndef LAZY_ENVIRONMENT_H
 #define LAZY_ENVIRONMENT_H
 
+#include "bc/BC_inc.h"
 #include "interpreter/instance.h"
 #include "interpreter/interp_incl.h"
-#include "ir/BC_inc.h"
 #include "runtime/RirRuntimeObject.h"
 
 #include <cassert>

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "bc/BC_inc.h"
 #include "common.h"
-#include "ir/BC_inc.h"
 #include "runtime/LazyEnvironment.h"
 
 #include <vector>

@@ -4,7 +4,7 @@
 #include "../pir/bb.h"
 #include "../pir/pir.h"
 #include "../pir/tag.h"
-#include "ir/BC_inc.h"
+#include "bc/BC_inc.h"
 
 #include <deque>
 #include <functional>

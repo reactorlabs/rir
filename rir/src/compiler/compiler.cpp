@@ -13,8 +13,8 @@
 #include "compiler/parameter.h"
 #include "compiler/util/visitor.h"
 
-#include "ir/BC.h"
-#include "ir/Compiler.h"
+#include "bc/BC.h"
+#include "bc/Compiler.h"
 
 #include <chrono>
 #include <unordered_map>

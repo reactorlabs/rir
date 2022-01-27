@@ -7,7 +7,7 @@
 
 #include "compiler/parameter.h"
 #include "interp_incl.h"
-#include "ir/Deoptimization.h"
+#include "runtime/Deoptimization.h"
 
 #include "R/BuiltinIds.h"
 

@@ -256,7 +256,8 @@ class BC {
         case Opcode::mk_eager_promise_:
             proms.push_back(immediate.arg_idx);
             break;
-        default: {}
+        default: {
+        }
         }
     }
 
@@ -289,7 +290,8 @@ class BC {
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (4 + nargs) * sizeof(Immediate);
         }
-        default: {}
+        default: {
+        }
         }
         return fixedSize(bc);
     }
@@ -308,7 +310,7 @@ class BC {
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
 #define V(NESTED, name, name_) inline static BC name();
-BC_NOARGS(V, _)
+    BC_NOARGS(V, _)
 #undef V
     inline static BC recordCall();
     inline static BC recordBinop();
@@ -433,7 +435,8 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
-        default: {}
+        default: {
+        }
         }
     }
 
@@ -462,7 +465,8 @@ BC_NOARGS(V, _)
                     immediate.callFeedback.getTarget(code, i));
             break;
         }
-        default: {}
+        default: {
+        }
         }
     }
 
@@ -593,7 +597,7 @@ BC_NOARGS(V, _)
                    sizeof(ObservedValues));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
-BC_NOARGS(V, _)
+            BC_NOARGS(V, _)
 #undef V
             break;
         case Opcode::invalid_:

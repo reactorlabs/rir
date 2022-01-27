@@ -4,7 +4,7 @@
 #include "ArglistOrder.h"
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
-#include "ir/BC_inc.h"
+#include "bc/BC_inc.h"
 
 #include <cassert>
 #include <cstdint>

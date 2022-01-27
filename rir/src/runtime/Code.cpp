@@ -2,8 +2,8 @@
 #include "Function.h"
 #include "R/Printing.h"
 #include "R/Serialize.h"
+#include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
-#include "ir/BC.h"
 #include "utils/Pool.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>

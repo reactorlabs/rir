@@ -1,10 +1,10 @@
 #include "PirCheck.h"
-#include "../../ir/Compiler.h"
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
 #include "api.h"
+#include "bc/Compiler.h"
 #include "compiler/compiler.h"
 #include "compiler/parameter.h"
 #include <string>

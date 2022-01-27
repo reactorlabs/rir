@@ -1,7 +1,7 @@
 #include "Pool.h"
-#include "R/r.h"
 #include "R/Protect.h"
-#include "ir/BC.h"
+#include "R/r.h"
+#include "bc/BC.h"
 
 namespace rir {
 
