@@ -199,7 +199,10 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             cmp.compileClosure(
                                 usemethodTarget, "unknown--fromOverride", asmpt,
                                 false,
-                                [&](ClosureVersion* fun) { target = fun; },
+                                [&](ClosureVersion* fun) {
+                                    cmp.optimizeClosureVersion(fun);
+                                    target = fun;
+                                },
                                 []() {}, {});
                     } else if (auto cnst = Const::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
@@ -208,7 +211,10 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 cmp.compileClosure(
                                     cnst->c(), "unknown--fromConstant", asmpt,
                                     false,
-                                    [&](ClosureVersion* fun) { target = fun; },
+                                    [&](ClosureVersion* fun) {
+                                        cmp.optimizeClosureVersion(fun);
+                                        target = fun;
+                                    },
                                     []() {}, {});
                         }
                     } else if (auto mk = MkCls::Cast(calli->tryGetClsArg())) {
@@ -224,6 +230,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     asmpt,
                                     [&](ClosureVersion* fun) {
                                         mk->setCls(fun->owner());
+                                        cmp.optimizeClosureVersion(fun);
                                         target = fun;
                                     },
                                     []() {}, {});

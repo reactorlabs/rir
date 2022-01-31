@@ -321,6 +321,19 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
         e.first->erase(e.second);
 };
 
+void Compiler::optimizeClosureVersion(ClosureVersion* v) {
+    size_t passnr = 20;
+    PassScheduler::quickNonSpec().run(
+        [&](const Pass* translation, size_t iteration) {
+            auto& clog = logger.get(v);
+            auto pirLog = clog.forPass(passnr++, translation->getName());
+            bool changed = translation->apply(*this, v, clog, iteration);
+            pirLog.pirOptimizations(translation);
+            pirLog.flush();
+            return changed;
+        });
+}
+
 void Compiler::optimizeModule() {
     logger.flushAll();
     size_t passnr = 10;

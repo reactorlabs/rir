@@ -25,10 +25,8 @@ class PassScheduler {
         Phases phases;
     };
 
-    const static PassScheduler& instance() {
-        static PassScheduler i;
-        return i;
-    }
+    const static PassScheduler& instance();
+    const static PassScheduler& quickNonSpec();
 
     void run(const std::function<bool(const Pass*, size_t)>& apply) const {
         for (auto& phase : schedule_.phases) {
@@ -55,7 +53,7 @@ class PassScheduler {
     }
 
   private:
-    PassScheduler();
+    explicit PassScheduler(unsigned optLevel, bool isFinal);
 
     Schedule schedule_;
     Schedule::Phases::iterator currentPhase;

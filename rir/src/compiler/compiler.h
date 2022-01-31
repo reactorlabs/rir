@@ -43,6 +43,7 @@ class Compiler {
                              Maybe fail);
 
     void optimizeModule();
+    void optimizeClosureVersion(ClosureVersion*);
 
     bool seenC = false;
 
