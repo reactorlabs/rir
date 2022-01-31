@@ -1989,12 +1989,18 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 
         ObservedValues::StateBeforeLastForce state =
             ObservedValues::StateBeforeLastForce::unknown;
-        if (TYPEOF(s) != PROMSXP)
+        if (TYPEOF(s) != PROMSXP) {
             state = ObservedValues::StateBeforeLastForce::value;
-        else if (PRVALUE(s) != R_UnboundValue)
+        } else if (PRVALUE(s) != R_UnboundValue) {
             state = ObservedValues::StateBeforeLastForce::evaluatedPromise;
-        else
-            state = ObservedValues::StateBeforeLastForce::promise;
+        } else {
+            // This is a lazy loading stub, it replaces the promise with the
+            // actual value. From now on it will be a value...
+            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
+                state = ObservedValues::StateBeforeLastForce::value;
+            else
+                state = ObservedValues::StateBeforeLastForce::promise;
+        }
 
         ObservedValues* feedback = (ObservedValues*)(pc + 1);
         if (feedback->stateBeforeLastForce < state)

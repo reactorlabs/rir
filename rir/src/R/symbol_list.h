@@ -85,6 +85,7 @@
     V(delayedEnv, ".delayedEnv.")                                              \
     V(eval, "eval")                                                            \
     V(lazyLoadDBexec, "lazyLoadDBexec")                                        \
+    V(lazyLoadDBfetch, "lazyLoadDBfetch")                                      \
     V(all, "all")                                                              \
     V(FUN, "FUN")                                                              \
     V(forceAndCall, "forceAndCall")                                            \
