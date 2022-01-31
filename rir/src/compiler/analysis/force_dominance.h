@@ -497,7 +497,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         }
 
         // 4. Side analysis: check if force order gets tainted
-        if (i->effects.includes(Effect::Force) && !state.ambiguousForceOrder &&
+        if (!forceHandled && i->effects.includes(Effect::Force) &&
+            !state.ambiguousForceOrder &&
             state.argumentForceOrder.size() < closure->effectiveNArgs()) {
             // After the first effect we give up on recording force order,
             // since we can't use it to turn the arguments into eager ones
