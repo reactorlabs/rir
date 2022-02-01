@@ -55,6 +55,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         auto funEnv = Env::Cast(ldfun->env());
         if (ldfun->varName != symbol::c ||
             (funEnv && funEnv->rho == R_GlobalEnv)) {
+            ldfun->effects.reset();
             given = new LdVar(ldfun->varName, ldfun->env());
             ip = bb->insert(ip, given);
             ++ip;
@@ -238,6 +239,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (r != needsGuard.end()) {
                     ip = replaceLdFunBuiltinWithDeopt(bb, ip, r->second, ldfun);
                     needsGuard.erase(r);
+                    anyChange = true;
                     continue;
                 }
             }
