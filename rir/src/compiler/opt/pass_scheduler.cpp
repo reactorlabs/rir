@@ -24,7 +24,7 @@ void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
 }
 
 unsigned Parameter::PIR_OPT_LEVEL =
-    getenv("PIR_OPT_LEVEL") ? atoi(getenv("PIR_OPT_LEVEL")) : 3;
+    getenv("PIR_OPT_LEVEL") ? atoi(getenv("PIR_OPT_LEVEL")) : 2;
 
 const PassScheduler& PassScheduler::instance() {
     static PassScheduler i(Parameter::PIR_OPT_LEVEL, true);
@@ -85,64 +85,61 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
 
+    // ==== Phase 2) Speculate away environments
+    //
+    // This pass is scheduled second, since we want to first try to do this
+    // statically in Phase 1
+    nextPhase("Speculation", optLevel > 1 ? 100 : 0);
+    add<TypefeedbackCleanup>();
+    add<ElideEnvSpec>();
+    addDefaultOpt();
+    add<TypefeedbackCleanup>();
+    add<TypeSpeculation>();
+
     if (optLevel > 0) {
-        // ==== Phase 2) Speculate away environments
-        //
-        // This pass is scheduled second, since we want to first try to do this
-        // statically in Phase 1
-        nextPhase("Speculation", optLevel > 1 ? 100 : 0);
-        add<TypefeedbackCleanup>();
-        add<ElideEnvSpec>();
-        addDefaultOpt();
-        add<TypefeedbackCleanup>();
-        add<TypeSpeculation>();
+        nextPhase("Speculation post");
+        addDefaultPostPhaseOpt();
 
-            nextPhase("Speculation post");
-            addDefaultPostPhaseOpt();
-    }
-
-    if (optLevel > 1) {
         // ==== Phase 3) Remove checkpoints we did not use
         //
         // This pass removes unused checkpoints.
         // We schedule this pass here, since it might unblock optimizations.
         // Since for example even unused checkpoints keep variables live.
         //
-        // After this phase it is no longer possible to add assumptions at
-        // any point
+        // After this phase it is no longer possible to add assumptions at any
+        // point
         nextPhase("Remove CP");
         add<CleanupCheckpoints>();
         addDefaultPostPhaseOpt();
 
-        nextPhase("Intermediate 2", optLevel > 2 ? 60 : 0);
+        nextPhase("Intermediate 2", optLevel > 1 ? 60 : 0);
         addDefaultOpt();
         nextPhase("Intermediate 2 post");
         addDefaultPostPhaseOpt();
 
         // ==== Phase 3.1) Remove Framestates we did not use
         //
-        // Framestates can be used by call instructions. This pass removes
-        // this dependency and the framestates will subsequently be cleaned.
+        // Framestates can be used by call instructions. This pass removes this
+        // dependency and the framestates will subsequently be cleaned.
         //
         // After this pass it is no longer possible to inline callees with
         // deopts
-        nextPhase("Cleanup FS");
-        add<CleanupFramestate>();
-        add<CleanupCheckpoints>();
+        if (isFinal) {
+            nextPhase("Cleanup FS");
+            add<CleanupFramestate>();
+            add<CleanupCheckpoints>();
+        }
 
-        nextPhase("Final", optLevel > 2 ? 120 : 0);
-    }
-
-    // ==== Phase 4) Final round of default opts
-    addDefaultOpt();
-
-    if (optLevel > 0) {
-        add<ElideEnvSpec>();
+        nextPhase("Final", optLevel > 1 ? 120 : 0);
     }
 
     if (isFinal) {
-        nextPhase("Final post");
+        // ==== Phase 4) Final round of default opts
+        addDefaultOpt();
+        add<ElideEnvSpec>();
         add<CleanupCheckpoints>();
+
+        nextPhase("Final post");
         addDefaultPostPhaseOpt();
         add<Constantfold>(); // Backend relies on the dead assume removal here
         add<Cleanup>();
