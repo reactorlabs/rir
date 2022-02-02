@@ -8,6 +8,7 @@
 
 #include <list>
 #include <stack>
+#include <unordered_set>
 
 namespace rir {
 
@@ -59,6 +60,8 @@ class Compiler {
                         Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
 
     Preserve preserve_;
+
+    std::unordered_set<ClosureVersion*> currentlyOptimizing;
 };
 
 } // namespace pir
