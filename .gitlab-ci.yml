@@ -80,7 +80,7 @@ test_release_1:
   variables:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 1
+    PIR_OPT_LEVEL: 2
   stage: Run tests
   needs:
     - rir_container
@@ -103,7 +103,7 @@ test_release_2:
   variables:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
+    PIR_OPT_LEVEL: 1
     PIR_MAX_INPUT_SIZE: 4000
     PIR_WARMUP: 5
   stage: Run tests
@@ -148,7 +148,7 @@ tests_debug2:
   variables:
     GIT_STRATEGY: none
     PIR_LLVM_OPT_LEVEL: 0
-    PIR_OPT_LEVEL: 0
+    PIR_OPT_LEVEL: 1
   stage: Run tests
   needs:
     - rir_container
@@ -246,10 +246,11 @@ test_features_3:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPT_CHAOS=10000 bin/gnur-make-tests check || $SAVE_LOGS
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_DEOPTLESS=1 bin/tests
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 PIR_OSR=0 bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_DEOPT_CHAOS=10000 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_DEOPTLESS=1 bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_OSR=0 bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 bin/tests
     - PIR_DEOPTLESS=1 bin/tests
     - PIR_OSR=0 bin/tests
     - PIR_DEOPTLESS=1 RIR_CHECK_PIR_TYPES=1 bin/tests

@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -320,6 +321,37 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     for (auto e : toErase)
         e.first->erase(e.second);
 };
+
+void Compiler::optimizeClosureVersion(ClosureVersion* v) {
+    bool alreadyOptimizing = !currentlyOptimizing.empty();
+
+    currentlyOptimizing.insert(v);
+    if (alreadyOptimizing) {
+        return;
+    }
+
+    auto apply = [&](ClosureVersion* v) {
+        size_t passnr = 20;
+        PassScheduler::quick().run(
+            [&](const Pass* translation, size_t iteration) {
+                auto& clog = logger.get(v);
+                auto pirLog = clog.forPass(passnr++, translation->getName());
+                bool changed = translation->apply(*this, v, clog, iteration);
+                pirLog.pirOptimizations(translation);
+                pirLog.flush();
+                return changed;
+            });
+    };
+
+    std::unordered_set<ClosureVersion*> done;
+    while (done.size() < currentlyOptimizing.size()) {
+        for (auto v : currentlyOptimizing)
+            if (!done.count(v)) {
+                done.insert(v);
+                apply(v);
+            }
+    }
+}
 
 void Compiler::optimizeModule() {
     logger.flushAll();
