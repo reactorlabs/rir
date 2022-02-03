@@ -2243,7 +2243,7 @@ void LowerFunctionLLVM::compile() {
     std::unordered_map<BB*, int> blockInPushContext;
     blockInPushContext[code->entry] = 0;
 
-    LoweringVisitor::run(code->entry, [&](BB* bb) {
+    DepthFirstVisitor<>::run(code->entry, [&](BB* bb) {
         currentBB = bb;
 
         builder.SetInsertPoint(getBlock(bb));
@@ -3096,7 +3096,8 @@ void LowerFunctionLLVM::compile() {
                                                             t::i64)}));
                                         fastcase = true;
                                         break;
-                                    default: {}
+                                    default: {
+                                    }
                                     }
                                 }
                             }

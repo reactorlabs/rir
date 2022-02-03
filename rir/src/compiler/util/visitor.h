@@ -101,7 +101,7 @@ reverse_wrapper<T> reverse(T&& iterable) {
 
 }; // namespace VisitorHelpers
 
-enum class Order { Depth, Breadth, Random, Lowering };
+enum class Order { Depth, Breadth, Random };
 
 template <Order ORDER, class Marker, bool VISIT_DEOPT_BRANCH = true>
 class VisitorImplementation {
@@ -246,7 +246,7 @@ class VisitorImplementation {
                 return cur->successors();
             }
         };
-        const Scheduler scheduler;
+        constexpr Scheduler scheduler;
         return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
@@ -257,7 +257,7 @@ class VisitorImplementation {
                 return cur->predecessors();
             }
         };
-        const Scheduler scheduler;
+        constexpr Scheduler scheduler;
         return genericRun<PROCESS_NEW_NODES>(bb, stop, scheduler, action);
     }
 
@@ -269,7 +269,6 @@ class VisitorImplementation {
 
         BB* cur = bb;
         std::deque<BB*> todo;
-        std::deque<BB*> delayed;
         Marker done(bb->owner->nextBBId);
         BB* next = nullptr;
         done.set(cur);
@@ -280,25 +279,10 @@ class VisitorImplementation {
             auto schedule = [&](BB* bb) {
                 if (!bb || done.check(bb) || cur == stop)
                     return;
-                if (ORDER == Order::Lowering) {
-                    bool deoptBranch =
-                        !bb->isEmpty() && Deopt::Cast(bb->last());
-                    bool returnBranch =
-                        !bb->isEmpty() && (NonLocalReturn::Cast(bb->last()) ||
-                                           Return::Cast(bb->last()));
-                    if (deoptBranch) {
-                        delayed.push_back(bb);
-                    } else if (returnBranch) {
-                        delayed.push_front(bb);
-                    } else {
-                        enqueue(todo, bb, random);
-                    }
+                if (!next && todo.empty()) {
+                    next = bb;
                 } else {
-                    if (!next && todo.empty()) {
-                        next = bb;
-                    } else {
-                        enqueue(todo, bb, random);
-                    }
+                    enqueue(todo, bb, random);
                 }
                 done.set(bb);
             };
@@ -319,9 +303,6 @@ class VisitorImplementation {
                 if (!todo.empty()) {
                     next = todo.front();
                     todo.pop_front();
-                } else if (!delayed.empty()) {
-                    next = delayed.front();
-                    delayed.pop_front();
                 }
             }
 
@@ -357,10 +338,6 @@ class BreadthFirstVisitor
 
 template <class Marker = VisitorHelpers::IDMarker>
 class DepthFirstVisitor : public VisitorImplementation<Order::Depth, Marker> {};
-
-class LoweringVisitor
-    : public VisitorImplementation<Order::Lowering, VisitorHelpers::IDMarker> {
-};
 
 template <class Marker = VisitorHelpers::IDMarker>
 class DominatorTreeVisitor {
