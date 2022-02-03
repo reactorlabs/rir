@@ -51,22 +51,29 @@ struct PredicateWrapper<BBActionPredicate> {
  *
  */
 struct IDMarker {
+  private:
     std::vector<bool> done;
-    IDMarker() : done(128, false){};
+
+  public:
+    IDMarker(size_t sz) : done(sz, false){};
 
     void set(BB* bb) {
-        while (bb->id >= done.size())
-            done.resize(done.size() * 2);
-        done[bb->id] = true;
+        if (bb->id >= done.size()) {
+            done.resize(bb->owner->nextBBId * 1.1);
+        }
+
+        assert(bb->id < done.size());
+        done.at(bb->id) = true;
     }
 
-    bool check(BB* bb) { return bb->id < done.size() && done[bb->id]; }
+    bool check(BB* bb) const { return bb->id < done.size() && done.at(bb->id); }
 };
 
 struct PointerMarker {
+    PointerMarker(size_t sz) {}
     std::unordered_set<BB*> done;
     void set(BB* bb) { done.insert(bb); }
-    bool check(BB* bb) { return done.find(bb) != done.end(); }
+    bool check(BB* bb) const { return done.find(bb) != done.end(); }
 };
 
 /*
@@ -263,7 +270,7 @@ class VisitorImplementation {
         BB* cur = bb;
         std::deque<BB*> todo;
         std::deque<BB*> delayed;
-        Marker done;
+        Marker done(bb->owner->nextBBId);
         BB* next = nullptr;
         done.set(cur);
         Random random;
