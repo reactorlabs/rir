@@ -34,6 +34,12 @@ stopifnot(pir.check(
     }
   }, TwoAdd, warmup=function(f) f(2)))
 
+
+if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 1) {
+  warning("skipping rest of test since opt level < 1")
+  q()
+}
+
 # Copied / cross-validated from pir_tests
 
 # This checks that loop-invariant hoisting is working, but it's a bit brittle,
@@ -82,7 +88,7 @@ stopifnot(!pir.check(function(...) {
 stopifnot(pir.check(function() 42L, Returns42L))
 
 
-if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 1) {
+if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 2) {
   warning("skipping rest of test since opt level < 2")
   q()
 }
@@ -217,8 +223,8 @@ stopifnot(pir.check(function(a) {
   q
 }, NoLoad))
 
-if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 2) {
-  warning("skipping rest of test since opt level < 2")
+if (Sys.getenv("PIR_OPT_LEVEL") != "" && as.integer(Sys.getenv("PIR_OPT_LEVEL")) < 3) {
+  warning("skipping rest of test since opt level < 3")
   q()
 }
 

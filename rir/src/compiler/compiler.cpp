@@ -332,7 +332,7 @@ void Compiler::optimizeClosureVersion(ClosureVersion* v) {
 
     auto apply = [&](ClosureVersion* v) {
         size_t passnr = 20;
-        PassScheduler::quickNonSpec().run(
+        PassScheduler::quick().run(
             [&](const Pass* translation, size_t iteration) {
                 auto& clog = logger.get(v);
                 auto pirLog = clog.forPass(passnr++, translation->getName());

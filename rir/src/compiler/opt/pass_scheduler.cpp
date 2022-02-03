@@ -24,14 +24,14 @@ void PassScheduler::add(std::unique_ptr<const Pass>&& t) {
 }
 
 unsigned Parameter::PIR_OPT_LEVEL =
-    getenv("PIR_OPT_LEVEL") ? atoi(getenv("PIR_OPT_LEVEL")) : 2;
+    getenv("PIR_OPT_LEVEL") ? atoi(getenv("PIR_OPT_LEVEL")) : 3;
 
 const PassScheduler& PassScheduler::instance() {
     static PassScheduler i(Parameter::PIR_OPT_LEVEL, true);
     return i;
 }
 
-const PassScheduler& PassScheduler::quickNonSpec() {
+const PassScheduler& PassScheduler::quick() {
     static PassScheduler i(0, false);
     return i;
 }
@@ -79,24 +79,26 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
         add<LoopInvariant>();
     };
 
-    nextPhase("Initial", optLevel > 1 ? 60 : 0);
+    nextPhase("Initial", optLevel > 2 ? 60 : 0);
     add<TypefeedbackCleanup>();
     addDefaultOpt();
     nextPhase("Initial post");
     addDefaultPostPhaseOpt();
 
-    // ==== Phase 2) Speculate away environments
-    //
-    // This pass is scheduled second, since we want to first try to do this
-    // statically in Phase 1
-    nextPhase("Speculation", optLevel > 1 ? 100 : 0);
-    add<TypefeedbackCleanup>();
-    add<ElideEnvSpec>();
-    addDefaultOpt();
-    add<TypefeedbackCleanup>();
-    add<TypeSpeculation>();
-
     if (optLevel > 0) {
+        // ==== Phase 2) Speculate away environments
+        //
+        // This pass is scheduled second, since we want to first try to do this
+        // statically in Phase 1
+        nextPhase("Speculation", optLevel > 2 ? 100 : 0);
+        add<TypefeedbackCleanup>();
+        add<ElideEnvSpec>();
+        addDefaultOpt();
+        add<TypefeedbackCleanup>();
+        add<TypeSpeculation>();
+    }
+
+    if (optLevel > 1) {
         nextPhase("Speculation post");
         addDefaultPostPhaseOpt();
 
@@ -112,7 +114,7 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
         add<CleanupCheckpoints>();
         addDefaultPostPhaseOpt();
 
-        nextPhase("Intermediate 2", optLevel > 1 ? 60 : 0);
+        nextPhase("Intermediate 2", optLevel > 2 ? 60 : 0);
         addDefaultOpt();
         nextPhase("Intermediate 2 post");
         addDefaultPostPhaseOpt();
@@ -130,7 +132,7 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
             add<CleanupCheckpoints>();
         }
 
-        nextPhase("Final", optLevel > 1 ? 120 : 0);
+        nextPhase("Final", optLevel > 2 ? 120 : 0);
     }
 
     if (isFinal) {

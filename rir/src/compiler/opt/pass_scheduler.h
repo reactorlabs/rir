@@ -26,7 +26,7 @@ class PassScheduler {
     };
 
     const static PassScheduler& instance();
-    const static PassScheduler& quickNonSpec();
+    const static PassScheduler& quick();
 
     void run(const std::function<bool(const Pass*, size_t)>& apply) const {
         for (auto& phase : schedule_.phases) {
