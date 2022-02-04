@@ -66,6 +66,9 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
 };
 
 std::ostream& operator<<(std::ostream& out, const Context& a) {
+    if (a.empty()) {
+        return out << "<empty Context>";
+    }
     for (auto i = a.flags.begin(); i != a.flags.end(); ++i) {
         out << *i;
         if (i + 1 != a.flags.end())
