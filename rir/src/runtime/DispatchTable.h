@@ -153,7 +153,7 @@ struct DispatchTable
             std::cout << "* " << Function::unpack(e)->context() << "\n";
         }
         std::cout << "\n";
-        for (size_t i = 0; i < size() - 1; ++i) {
+        for (size_t i = 1; i < size() - 1; ++i) {
             assert(get(i)->context() < get(i + 1)->context());
             assert(get(i)->context() != get(i + 1)->context());
             assert(!(get(i + 1)->context() < get(i)->context()));
