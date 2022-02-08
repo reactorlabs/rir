@@ -55,7 +55,7 @@ struct IDMarker {
     std::vector<bool> done;
 
   public:
-    IDMarker(size_t sz) : done(sz, false){};
+    explicit IDMarker(size_t sz) : done(sz, false){};
 
     void set(BB* bb) {
         if (bb->id >= done.size()) {
@@ -70,7 +70,7 @@ struct IDMarker {
 };
 
 struct PointerMarker {
-    PointerMarker(size_t sz) {}
+    explicit PointerMarker(size_t sz) {}
     std::unordered_set<BB*> done;
     void set(BB* bb) { done.insert(bb); }
     bool check(BB* bb) const { return done.find(bb) != done.end(); }
