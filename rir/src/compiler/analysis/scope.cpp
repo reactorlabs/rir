@@ -7,13 +7,6 @@
 namespace rir {
 namespace pir {
 
-ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
-                             const ScopeAnalysisState& initialState,
-                             ScopeAnalysisResults* globalState, size_t depth,
-                             AbstractLog& log)
-    : StaticAnalysis("Scope", cls, prom, initialState, globalState, log),
-      depth(depth), staticClosureEnv(promEnv), inPromise(true) {}
-
 void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
                            const Maybe& notFound) const {
     auto instr = Instruction::Cast(v);
@@ -155,13 +148,8 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
     } else if (Deopt::Cast(i)) {
-        // Deoptimization is currently only supported in inlined promises.
-        // Therefore we can ignore Deopt points in promises for the sake of this
-        // analysis, since a deoptimization through such a point will also
-        // deoptimize the forcee function. This is a quite useful optimization,
-        // I hope once we support deoptimization in promises proper, we will be
-        // remember to remove this check!
-        if (!inPromise) {
+        // Deoptimization can only happen if the code has an Assume
+        if (canDeopt) {
             // who knows what the deopt target will return...
             state.returnValue.taint();
             state.mayUseReflection = true;
