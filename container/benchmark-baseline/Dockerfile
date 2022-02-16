@@ -15,5 +15,5 @@ RUN apt-get update && \
     ./gu install R && \
     git clone --depth 1 https://github.com/smarr/ReBench.git /opt/ReBench && cd /opt/ReBench && pip3 install . && \
     mv /usr/local/bin/rebench-denoise /usr/local/bin/rebench-denoise.bkp && cp /usr/bin/false /usr/local/bin/rebench-denoise && \
-    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 5c6e186b286db88e89f54bedf308aa9a78ec73df && \
+    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 86f307648c85cabf7f172865b43c3a83ec09ade0 && \
     apt-get clean && rm -rf /var/cache/apt/lists
