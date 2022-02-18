@@ -56,10 +56,11 @@ REPOS.each do |project, repos|
         # temporary bypass for a gitlab timestamp bug
         # https://gitlab.com/gitlab-org/gitlab/-/issues/352999
         timestamp = info['created_at']
-        if temstamp.nil?
+        if timestamp.nil?
+          puts "warning: timestamp missing for #{tag['name']}"
           age = 0
         else
-          t = DateTime.parse(info["created_at"])
+          t = DateTime.parse(timestamp)
           age = DateTime.now - t
         end
 
