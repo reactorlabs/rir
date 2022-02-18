@@ -53,8 +53,15 @@ REPOS.each do |project, repos|
         puts "keeping #{tag['name']} (whitelisted)"
       else
         info = fetch(project, repo, "tags/#{tag['name']}")
-        t = DateTime.parse(info["created_at"])
-        age = DateTime.now - t
+        # temporary bypass for a gitlab timestamp bug
+        # https://gitlab.com/gitlab-org/gitlab/-/issues/352999
+        timestamp = info['created_at']
+        if temstamp.nil?
+          age = 0
+        else
+          t = DateTime.parse(info["created_at"])
+          age = DateTime.now - t
+        end
 
         if age > MAX_AGE_DAYS
           puts "delete #{tag['name']} which is #{age.to_f}d old"
