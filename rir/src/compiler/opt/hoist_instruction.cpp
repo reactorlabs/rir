@@ -271,6 +271,7 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 anyChange = true;
                                 f1->replaceUsesWith(f);
                                 f2->replaceUsesWith(f);
+                                it1 = bb1->remove(it1);
                                 it2 = bb2->remove(it2);
                             }
                         }
