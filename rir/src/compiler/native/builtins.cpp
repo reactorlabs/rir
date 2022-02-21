@@ -1577,6 +1577,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
                     (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                     if (XLENGTH(vec) == pos)
                         SETLENGTH(vec, pos + 1);
+                    INCREMENT_NAMED(val);
                     SET_VECTOR_ELT(vec, pos, val);
                     UNPROTECT(prot);
                     return vec;
