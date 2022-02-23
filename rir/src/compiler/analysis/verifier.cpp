@@ -419,6 +419,26 @@ class TheVerifier {
             }
         }
 
+        if (slow) {
+            if (auto p = Phi::Cast(i)) {
+                p->eachArg([&](BB* input, Value* v) {
+                    if (auto iv = Instruction::Cast(v)) {
+                        if (iv->bb() != input &&
+                            !dom(input->owner)
+                                 .strictlyDominates(iv->bb(), input)) {
+                            std::cerr << "Error at phi '";
+                            i->print(std::cerr);
+                            std::cerr << "': input '";
+                            iv->printRef(std::cerr);
+                            std::cerr << "' is not available in input "
+                                      << input->id << "\n";
+                            ok = false;
+                        }
+                    }
+                });
+            }
+        }
+
         i->eachArg([&](const InstrArg& a) -> void {
             auto v = a.val();
             auto t = a.type();
