@@ -3,7 +3,7 @@ ARG GRAAL_VERSION=22.0.0.2
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake python3-pip sudo && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake python3-pip sudo time && \
     git clone --recursive https://github.com/reactorlabs/rir /opt/rir && cd /opt/rir && \
     DONT_SWITCH_TO_NAMED=1 GNUR_BRANCH=R-4-1-branch tools/build-gnur.sh && \
     rm -rf .git && \
@@ -15,5 +15,5 @@ RUN apt-get update && \
     ./gu install R && \
     git clone --depth 1 https://github.com/smarr/ReBench.git /opt/ReBench && cd /opt/ReBench && pip3 install . && \
     mv /usr/local/bin/rebench-denoise /usr/local/bin/rebench-denoise.bkp && cp /usr/bin/false /usr/local/bin/rebench-denoise && \
-    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout ad88e0c0fef7e15aada7f65f7d53d8165f9c1a16 && \
+    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 540ff94276927fc0fcaa08aaa3a51abbb119ddfc && \
     apt-get clean && rm -rf /var/cache/apt/lists
