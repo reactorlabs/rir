@@ -417,9 +417,11 @@ benchmark_llvm:
     - benchmarks
   script:
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - cp /tmp/memory.data $CI_PROJECT_DIR/
   artifacts:
     paths:
     - benchmarks.data
+    - memory.data
     expire_in: 24 month
   retry: 1
 
@@ -435,9 +437,11 @@ benchmark_gnur:
     - benchmarks
   script:
     - $REBENCH_RUN_BL "e:GNU-R $REBENCH_OPTIONS"
+    - cp /tmp/memory.data $CI_PROJECT_DIR/
   artifacts:
     paths:
     - benchmarks.data
+    - memory.data
     expire_in: 6 month
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
@@ -451,7 +455,9 @@ benchmark_fastr:
     - benchmarks
   script:
     - $REBENCH_RUN_BL "e:FASTR $REBENCH_OPTIONS"
+    - cp /tmp/memory.data $CI_PROJECT_DIR/
   artifacts:
     paths:
     - benchmarks.data
+    - memory.data
     expire_in: 6 month
