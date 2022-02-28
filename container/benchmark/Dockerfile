@@ -4,4 +4,4 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pip sudo && \
     apt-get clean && rm -rf /var/cache/apt/lists && \
     git clone --depth 1 https://github.com/smarr/ReBench.git /opt/ReBench && cd /opt/ReBench && pip3 install . && \
-    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout 623400e295e39b704231687b0328e8889d16df50
+    git clone --depth 10 https://github.com/reactorlabs/rbenchmarking /opt/rbenchmarking && cd /opt/rbenchmarking && git checkout ad88e0c0fef7e15aada7f65f7d53d8165f9c1a16
