@@ -335,7 +335,7 @@ void PirJitLLVM::finalizeAndFixup() {
         fix.second.first->lazyCodeHandle(fix.second.second);
 }
 
-auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : ".";
+auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
 
 void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIndices, SEXP cData, std::vector<std::string> & relevantNames) {
 
@@ -584,6 +584,14 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
             auto rshFun = DispatchTable::unpack(BODY(obj));
             restoreMap[obj] = BODY(obj);
             auto origBody = src_pool_at(globalContext(), rshFun->baseline()->body()->src);
+            auto srcData = getHastAndIndex(rshFun->baseline()->body()->src);
+            size_t hast = srcData.hast;
+            // int index = srcData.index;
+            SEXP blMap = Pool::get(BL_MAP);
+            if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                *serializerError = true;
+                std::cout << "  (E) serialization time error: hast == 0 or blacklisted" << std::endl;
+            }
             SET_BODY(obj, origBody);
         }
         #if PRINT_CP_ENTRIES == 1

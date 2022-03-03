@@ -524,6 +524,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 jit.patchFixupHandle(name, c);
                 processedName[c] = name;
 
+                auto data = getHastAndIndex(c->rirSrc()->src);
+                if (data.hast == 0) {
+                    *serializerError = true;
+                    std::cout << "  (E) Src hast is 0 for " << name << std::endl;
+                }
+                // srcData << name << "|" << data.hast << "|" << data.index << ",";
                 srcData << name << "," << sid++ << ",";
                 srcIndices.push_back(c->rirSrc()->src);
 
@@ -728,6 +734,10 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         c.second->function(function.function());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
+    if (cls->owner()->rirFunction()->flags.contains(Function::InnerFunction)) {
+        *serializerError = true;
+        std::cout << "  (E) inner function" << std::endl;
+    }
     return function.function();
 }
 

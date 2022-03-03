@@ -168,6 +168,18 @@ rir.body <- function(f) {
     .Call("rirBody", f);
 }
 
+f.serializerCleanup <- function() {
+    invisible(.Call("serializerCleanup"))
+}
+
+f.startSerializer <- function() {
+    invisible(.Call("startSerializer"))
+}
+
+f.stopSerializer <- function() {
+    invisible(.Call("stopSerializer"))
+}
+
 # breakpoint during evaluation
 # insert a call to `.int3()` in R code and get a breakpoint when it is evaluated
 # note: the actual body of this function is replaced by an "int3_" bytecode

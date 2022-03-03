@@ -163,6 +163,7 @@ struct NativeBuiltins {
         checkType,
         shallowDuplicate,
         deoptChaosTrigger,
+        llDebugMsg,
         sigsetjmp,
         // Warning: keep LAST in sync!
 

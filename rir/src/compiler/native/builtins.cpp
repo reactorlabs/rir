@@ -2227,6 +2227,42 @@ SEXP makeVectorImpl(int mode, size_t len) {
     return s;
 }
 
+void llDebugMsgImpl(void * ptr, int tag, int location) {
+    #if DEBUG_NATIVE_LOCATIONS == 1
+    if (tag == 1) {
+        SEXP obj = (SEXP) ptr;
+        std::cout << "(" << location << ") TYPEOF OBJ: " << TYPEOF(obj) << std::endl;
+        // printAST(0, obj);
+        // Print::dumpSexp(obj);
+        return;
+    }
+    std::cout << "At location: " << location << " (" << (char *) ptr << ")"  << std::endl;
+    #endif
+
+    // switch (tag) {
+    // case 0:
+    //     std::cout << " ( SEXP: " << (SEXP)ptr << " )" << std::endl;
+    //     break;
+    // case 1:
+    //     std::cout << " ( R_bcstack_t: " << (R_bcstack_t *)ptr << " )" << std::endl;
+    //     if (((R_bcstack_t *)ptr)->tag == 0) {
+    //         SEXP val = ((R_bcstack_t *)ptr)->u.sxpval;
+    //         std::cout << "SEXP VALUE: " << val << " )" << std::endl;
+    //     } else {
+    //         std::cout << "UNBOXED SCALAR VALUE )" << std::endl;
+    //         std::cout << "    ival: " << ((R_bcstack_t *)ptr)->u.dval << std::endl;
+    //         std::cout << "    dval: " << ((R_bcstack_t *)ptr)->u.ival << std::endl;
+    //     }
+    //     break;
+    // case 2:
+    //     std::cout << "CASE 2: " << (intptr_t)ptr << std::endl;
+    //     break;
+    // default:
+    //     break;
+    // }
+
+}
+
 double prodrImpl(SEXP v) {
     double res = 1;
     auto len = XLENGTH(v);
@@ -2673,6 +2709,9 @@ void NativeBuiltins::initializeBuiltins() {
         (void*)&deoptChaosTriggerImpl,
         llvm::FunctionType::get(t::i1, {t::i1}, false),
         {}};
+    get_(Id::llDebugMsg) = {
+        "llDebugMsg", (void*)&llDebugMsgImpl,
+        llvm::FunctionType::get(t::t_void, {t::i64ptr, t::Int, t::Int}, false)};
 #ifdef __APPLE__
     get_(Id::sigsetjmp) = {
         "sigsetjmp", (void*)&sigsetjmp,

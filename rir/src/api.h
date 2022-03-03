@@ -27,6 +27,7 @@ REXPORT SEXP rirDeserialize(SEXP file);
 
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
+REXPORT SEXP serializerCleanup();
 
 // serializer
 struct hastAndIndex {
@@ -37,5 +38,7 @@ void hash_ast(SEXP ast, size_t & hast);
 void printAST(int space, SEXP ast);
 void printAST(int space, int val);
 hastAndIndex getHastAndIndex(unsigned src);
+REXPORT SEXP startSerializer();
+REXPORT SEXP stopSerializer();
 
 #endif // API_H_

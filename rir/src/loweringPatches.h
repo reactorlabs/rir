@@ -118,4 +118,13 @@
   #define TRY_PATCH_OPT_DISPATCH 1
 /*************************************/
 
+/*************************************/
+// Debugging
+//
+#define DEBUG_LOCATIONS 0
+#define ADD_EXTRA_DEBUGGING_DATA 0
+#define DEBUG_NATIVE_LOCATIONS 0
+//
+/*************************************/
+
 #endif
