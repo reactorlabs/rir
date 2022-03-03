@@ -5,7 +5,7 @@ ENV LANG en_US.UTF-8
 RUN echo $CI_COMMIT_SHA > /opt/rir_version && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake tcl-dev tk-dev locales && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git gcc gfortran g++ libreadline-dev libx11-dev libxt-dev zlib1g-dev libbz2-dev liblzma-dev libpcre3-dev libcurl4-openssl-dev libcairo2-dev make libreadline8 libncurses-dev xz-utils cmake tcl-dev tk-dev locales rsync && \
     locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && \
     cd /opt/rir && \
     tools/build-gnur.sh && \

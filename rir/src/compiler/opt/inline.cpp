@@ -217,7 +217,10 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     weight *= 0.9;
 
                 // No recursive inlining
-                if (inlinee->owner() == cls->owner()) {
+                if (inlinee->owner() == cls->owner() ||
+                    (callerFrameState &&
+                     callerFrameState->code ==
+                         inlinee->owner()->rirFunction()->body())) {
                     continue;
                 } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                     if (!inlineeCls->rirFunction()->flags.contains(
