@@ -1924,8 +1924,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
-        return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
+        // std::cout << "executing native code: " << c->getNativecodeHandle() << std::endl;
+        SEXP res = native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
                       callCtxt ? callCtxt->callee : nullptr);
+        // std::cout << "native code end" << std::endl;
+        return res;
     }
 
 #ifdef THREADED_CODE

@@ -25,6 +25,7 @@
 
 #include <random>
 
+
 namespace rir {
 namespace pir {
 
@@ -828,6 +829,7 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    std::cout << "deoptImpl" << std::endl;
     deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
@@ -952,6 +954,30 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                            m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
+}
+
+void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,
+               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    DeoptMetadata* m = (DeoptMetadata *)DATAPTR(metaDataStore);
+
+    SEXP map = Pool::get(HAST_VTAB_MAP);
+    for (size_t i = 0; i < m->numFrames; i++) {
+        if (m->frames[i].code == 0) {
+            size_t hast = m->frames[i].hast;
+            DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
+            rir::Code * code = vtable->baseline()->body();
+            code = code->getSrcAtOffset(m->frames[i].index);
+            m->frames[i].code = code;
+            m->frames[i].pc = code->code() + m->frames[i].offset;
+
+            // std::cout << "DEOPTMETADATA patc: {";
+            //                 std::cout << "PC: " << (uintptr_t)m->frames[i].pc << ", ";
+            //                 std::cout << "CODE: " << (uintptr_t)code->code() << ", ";
+            //                 std::cout << "SRC: " << (uintptr_t)code;
+            //                 std::cout << " }" << std::endl;
+        }
+    }
+    deoptImpl(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);
 }
 
 void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
@@ -2203,6 +2229,42 @@ SEXP makeVectorImpl(int mode, size_t len) {
     return s;
 }
 
+void llDebugMsgImpl(void * ptr, int tag, int location) {
+    #if DEBUG_NATIVE_LOCATIONS == 1
+    if (tag == 1) {
+        SEXP obj = (SEXP) ptr;
+        std::cout << "(" << location << ") TYPEOF OBJ: " << TYPEOF(obj) << " [" << obj <<  "]" << std::endl;
+        // printAST(0, obj);
+        // Print::dumpSexp(obj);
+        return;
+    }
+    std::cout << "At location: " << location << " (" << (char *) ptr << ")"  << std::endl;
+    #endif
+
+    // switch (tag) {
+    // case 0:
+    //     std::cout << " ( SEXP: " << (SEXP)ptr << " )" << std::endl;
+    //     break;
+    // case 1:
+    //     std::cout << " ( R_bcstack_t: " << (R_bcstack_t *)ptr << " )" << std::endl;
+    //     if (((R_bcstack_t *)ptr)->tag == 0) {
+    //         SEXP val = ((R_bcstack_t *)ptr)->u.sxpval;
+    //         std::cout << "SEXP VALUE: " << val << " )" << std::endl;
+    //     } else {
+    //         std::cout << "UNBOXED SCALAR VALUE )" << std::endl;
+    //         std::cout << "    ival: " << ((R_bcstack_t *)ptr)->u.dval << std::endl;
+    //         std::cout << "    dval: " << ((R_bcstack_t *)ptr)->u.ival << std::endl;
+    //     }
+    //     break;
+    // case 2:
+    //     std::cout << "CASE 2: " << (intptr_t)ptr << std::endl;
+    //     break;
+    // default:
+    //     break;
+    // }
+
+}
+
 double prodrImpl(SEXP v) {
     double res = 1;
     auto len = XLENGTH(v);
@@ -2256,10 +2318,229 @@ void nonLocalReturnImpl(SEXP res, SEXP env) {
 
 // Not tagged NoReturn to avoid hot/cold splitting to assume it is cold
 
+// bool clsEqImpl(SEXP lhs, SEXP rhs) {
+//     SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);
+//     return CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+//            BODY_EXPR(lhs) == BODY_EXPR(rhs);
+// }
+
 bool clsEqImpl(SEXP lhs, SEXP rhs) {
-    SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);
-    return CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
-           BODY_EXPR(lhs) == BODY_EXPR(rhs);
+    SLOWASSERT((TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP) || (TYPEOF(lhs) == LANGSXP && TYPEOF(rhs) == LANGSXP));
+    if (TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP) {
+        if (CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) && BODY_EXPR(lhs) == BODY_EXPR(rhs)) {
+            return true;
+        }
+
+        size_t lhsCloHast = 0;
+        hash_ast(CLOENV(lhs), lhsCloHast);
+        size_t rhsCloHast = 0;
+        hash_ast(CLOENV(rhs), rhsCloHast);
+
+        size_t lhsFormalsHast = 0;
+        hash_ast(FORMALS(lhs), lhsFormalsHast);
+        size_t rhsFormalsHast = 0;
+        hash_ast(FORMALS(rhs), rhsFormalsHast);
+
+        // size_t lhsBodyHast = 0;
+        // if (TYPEOF(BODY(lhs)) == EXTERNALSXP) {
+        //     auto dt = DispatchTable::unpack(BODY(lhs));
+        //     auto src = dt->baseline()->body()->src;
+        //     auto realBody = src_pool_at(globalContext(), src);
+        //     hash_ast(realBody, lhsBodyHast);
+        // }
+        // else if (TYPEOF(BODY(lhs)) == BCODESXP) {
+        //     auto realBody = VECTOR_ELT(CDR(BODY(lhs)), 0);
+        //     hash_ast(realBody, lhsBodyHast);
+        // } else {
+        //     hash_ast(BODY(lhs), lhsBodyHast);
+        // }
+
+        // size_t rhsBodyHast = 0;
+        // if (TYPEOF(BODY(rhs)) == EXTERNALSXP) {
+        //     auto dt = DispatchTable::unpack(BODY(rhs));
+        //     auto src = dt->baseline()->body()->src;
+        //     auto realBody = src_pool_at(globalContext(), src);
+        //     hash_ast(realBody, rhsBodyHast);
+        // }
+        // else if (TYPEOF(BODY(rhs)) == BCODESXP) {
+        //     auto realBody = VECTOR_ELT(CDR(BODY(rhs)), 0);
+        //     hash_ast(realBody, rhsBodyHast);
+        // } else {
+        //     hash_ast(BODY(rhs), rhsBodyHast);
+        // }
+
+        bool cloEnvSame = lhsCloHast == rhsCloHast;
+        bool cloForSame = lhsFormalsHast == rhsFormalsHast;
+        // bool cloBodSame = lhsBodyHast == rhsBodyHast;
+
+        // #if DEBUG_NATIVE_LOCATIONS == 1
+        // std::cout << "clsEqImpl: " << (CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
+        //        BODY_EXPR(lhs) == BODY_EXPR(rhs)) << std::endl;
+        // std::cout << "(HAST CHECK) Environment: " << cloEnvSame << std::endl;
+        // std::cout << "(HAST CHECK) Formals: " << cloForSame << std::endl;
+        // std::cout << "(HAST CHECK) Body: " << cloBodSame << std::endl;
+        // printAST(0,lhs);
+        // #endif
+
+        // bool cloEnvSame = lhsEnvHast == rhsEnvHast;
+        // bool cloForSame = lhsFormalsHast == rhsFormalsHast;
+
+        if (cloEnvSame && cloForSame) {
+            size_t lhsBodyHast = 0;
+            if (TYPEOF(BODY(lhs)) == EXTERNALSXP) {
+                auto dt = DispatchTable::unpack(BODY(lhs));
+                auto src = dt->baseline()->body()->src;
+                auto realBody = src_pool_at(globalContext(), src);
+                hash_ast(realBody, lhsBodyHast);
+            }
+            else if (TYPEOF(BODY(lhs)) == BCODESXP) {
+                auto realBody = VECTOR_ELT(CDR(BODY(lhs)), 0);
+                hash_ast(realBody, lhsBodyHast);
+            } else {
+                hash_ast(BODY(lhs), lhsBodyHast);
+            }
+
+            size_t rhsBodyHast = 0;
+            if (TYPEOF(BODY(lhs)) == EXTERNALSXP) {
+                auto dt = DispatchTable::unpack(BODY(lhs));
+                auto src = dt->baseline()->body()->src;
+                auto realBody = src_pool_at(globalContext(), src);
+                hash_ast(realBody, rhsBodyHast);
+            }
+            else if (TYPEOF(BODY(lhs)) == BCODESXP) {
+                auto realBody = VECTOR_ELT(CDR(BODY(lhs)), 0);
+                hash_ast(realBody, rhsBodyHast);
+            } else {
+                hash_ast(BODY(lhs), rhsBodyHast);
+            }
+
+            if (lhsBodyHast == rhsBodyHast) {
+                SEXP map = Pool::get(6);
+                if (map == R_NilValue) {
+                    UMap::createMapInCp(6);
+                    map = Pool::get(6);
+                }
+
+                SEXP symLhs = Rf_install(std::to_string((uintptr_t)lhs).c_str());
+                SEXP symRhs = Rf_install(std::to_string((uintptr_t)rhs).c_str());
+
+                if (UMap::symbolExistsInMap(symLhs, map)) {
+                    UMap::remove(map, symLhs);
+                    SET_CLOENV(lhs, CLOENV(rhs));
+                    SET_FORMALS(lhs, FORMALS(rhs));
+                    SET_BODY(lhs, BODY(rhs));
+                    return true;
+                }
+
+                if (UMap::symbolExistsInMap(symRhs, map)) {
+                    UMap::remove(map, symRhs);
+                    SET_CLOENV(rhs, CLOENV(lhs));
+                    SET_FORMALS(rhs, FORMALS(lhs));
+                    SET_BODY(rhs, BODY(lhs));
+                    return true;
+                }
+                return false;
+            }
+        }
+
+    }
+    // else if (TYPEOF(lhs) == LANGSXP && TYPEOF(rhs) == LANGSXP) {
+    //     size_t lhsLangHast = 0;
+    //     hash_ast(lhs, lhsLangHast);
+    //     size_t rhsLangHast = 0;
+    //     hash_ast(rhs, rhsLangHast);
+    //     if (lhsLangHast == rhsLangHast) {
+    //         SEXP map = Pool::get(6);
+    //         if (map == R_NilValue) {
+    //             UMap::createMapInCp(6);
+    //             map = Pool::get(6);
+    //         }
+
+    //         SEXP symLhs = Rf_install(std::to_string((uintptr_t)lhs).c_str());
+    //         SEXP symRhs = Rf_install(std::to_string((uintptr_t)rhs).c_str());
+
+    //         if (UMap::symbolExistsInMap(symLhs, map)) {
+    //             SEXP runtimeSym = UMap::get(map, symLhs);
+    //             Pool::patch(std::stoi(CHAR(PRINTNAME(runtimeSym))), rhs);
+    //             UMap::remove(map, symLhs);
+    //             return true;
+    //         }
+
+    //         if (UMap::symbolExistsInMap(symRhs, map)) {
+    //             SEXP runtimeSym = UMap::get(map, symRhs);
+    //             Pool::patch(std::stoi(CHAR(PRINTNAME(runtimeSym))), lhs);
+    //             UMap::remove(map, symRhs);
+    //             return true;
+    //         }
+
+    //         return false;
+    //     }
+    // }
+    else if (TYPEOF(lhs) == EXTERNALSXP && TYPEOF(rhs) == LANGSXP) {
+        if (DispatchTable::check(lhs)) {
+            size_t h1 = 0;
+            size_t h2 = 0;
+            auto dt = DispatchTable::unpack(lhs);
+            auto src = dt->baseline()->body()->src;
+            auto realBody = src_pool_at(globalContext(), src);
+
+            hash_ast(realBody, h1);
+            hash_ast(rhs, h2);
+
+            if (h1 == h2) {
+                SEXP map = Pool::get(6);
+                if (map == R_NilValue) {
+                    UMap::createMapInCp(6);
+                    map = Pool::get(6);
+                }
+
+                SEXP sym1 = Rf_install(std::to_string((uintptr_t)rhs).c_str());
+
+                if (UMap::symbolExistsInMap(sym1, map)) {
+                    std::cout << "m: " << lhs << ", " << rhs << std::endl;
+                    // dt->baseline()->disassemble(std::cout);
+                    // printAST(0, rhs);
+                    // printAST(0, realBody);
+                    SEXP runtimeSym = UMap::get(map, sym1);
+                    Pool::patch(std::stoi(CHAR(PRINTNAME(runtimeSym))), lhs);
+                    UMap::remove(map, sym1);
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+    // else if (TYPEOF(rhs) == EXTERNALSXP && TYPEOF(lhs) == LANGSXP) {
+    //     if (DispatchTable::check(rhs)) {
+    //         size_t h1 = 0;
+    //         size_t h2 = 0;
+    //         auto dt = DispatchTable::unpack(rhs);
+    //         auto src = dt->baseline()->body()->src;
+    //         auto realBody = src_pool_at(globalContext(), src);
+    //         hash_ast(realBody, h1);
+    //         hash_ast(lhs, h2);
+    //         if (h1 == h2) {
+    //             SEXP map = Pool::get(6);
+    //             if (map == R_NilValue) {
+    //                 UMap::createMapInCp(6);
+    //                 map = Pool::get(6);
+    //             }
+
+    //             SEXP sym1 = Rf_install(std::to_string((uintptr_t)lhs).c_str());
+
+    //             if (UMap::symbolExistsInMap(sym1, map)) {
+    //                 SEXP runtimeSym = UMap::get(map, sym1);
+    //                 Pool::patch(std::stoi(CHAR(PRINTNAME(runtimeSym))), rhs);
+    //                 UMap::remove(map, sym1);
+    //                 return true;
+    //             }
+    //             return false;
+    //         }
+    //     }
+    // }
+
+
+    return false;
 }
 
 bool deoptChaosTriggerImpl(bool deoptTrue) {
@@ -2446,6 +2727,16 @@ void NativeBuiltins::initializeBuiltins() {
                                                 t::DeoptReasonPtr, t::SEXP},
                                                false),
                        {llvm::Attribute::NoReturn}};
+    #if TRY_PATCH_DEOPTMETADATA == 1
+    get_(Id::deoptPool) = {"deoptPool",
+                       (void*)&deoptPoolImpl,
+                       llvm::FunctionType::get(t::t_void,
+                                               {t::voidPtr, t::SEXP, t::SEXP,
+                                                t::stackCellPtr, t::i1,
+                                                t::DeoptReasonPtr, t::SEXP},
+                                               false),
+                       {llvm::Attribute::NoReturn}};
+    #endif
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,
                             t::void_voidPtr,
@@ -2639,6 +2930,11 @@ void NativeBuiltins::initializeBuiltins() {
         (void*)&deoptChaosTriggerImpl,
         llvm::FunctionType::get(t::i1, {t::i1}, false),
         {}};
+
+    get_(Id::llDebugMsg) = {
+        "llDebugMsg", (void*)&llDebugMsgImpl,
+        llvm::FunctionType::get(t::t_void, {t::i64ptr, t::Int, t::Int}, false)};
+
 #ifdef __APPLE__
     get_(Id::sigsetjmp) = {
         "sigsetjmp", (void*)&sigsetjmp,

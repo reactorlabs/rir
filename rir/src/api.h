@@ -28,4 +28,13 @@ REXPORT SEXP rirDeserialize(SEXP file);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+// deserializer
+REXPORT SEXP loadBitcodes();
+REXPORT SEXP loadBitcode(SEXP metaData);
+REXPORT SEXP compileStats();
+void hash_ast(SEXP ast, size_t & hast);
+void printAST(int space, SEXP ast);
+void printAST(int space, int val);
+
+
 #endif // API_H_

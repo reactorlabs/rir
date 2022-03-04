@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "loweringPatches.h"
+#include "utils/UMap.h"
+
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
@@ -111,6 +114,9 @@ struct NativeBuiltins {
         length,
         recordTypefeedback,
         deopt,
+        #if TRY_PATCH_DEOPTMETADATA == 1
+        deoptPool,
+        #endif
         assertFail,
         printValue,
         extract11,
@@ -157,6 +163,7 @@ struct NativeBuiltins {
         checkType,
         shallowDuplicate,
         deoptChaosTrigger,
+        llDebugMsg,
         sigsetjmp,
         // Warning: keep LAST in sync!
 

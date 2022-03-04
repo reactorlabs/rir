@@ -4,6 +4,9 @@
 #include <R/r.h>
 #include <iostream>
 
+#include "loweringPatches.h"
+
+
 namespace rir {
 #pragma pack(push)
 #pragma pack(1)
@@ -12,6 +15,24 @@ enum class Opcode : uint8_t;
 struct Code;
 
 struct FrameInfo {
+    #if TRY_PATCH_DEOPTMETADATA == 1
+    Opcode* pc;
+    uintptr_t offset;
+    Code* code;
+    size_t hast;
+    int index;
+    size_t stackSize;
+    bool inPromise;
+
+    FrameInfo() {}
+    FrameInfo(uintptr_t offset, size_t hast, int index, size_t stackSize, bool promise)
+        : offset(offset), hast(hast), index(index), stackSize(stackSize), inPromise(promise) {
+            code = 0;
+            pc = 0;
+        }
+    FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
+        : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
+    #else
     Opcode* pc;
     Code* code;
     size_t stackSize;
@@ -20,6 +41,7 @@ struct FrameInfo {
     FrameInfo() {}
     FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
         : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
+    #endif
 };
 
 struct DeoptMetadata {

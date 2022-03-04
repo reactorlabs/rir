@@ -23,11 +23,22 @@
 #include <memory>
 #include <string>
 
+// deserializer
+#include "utils/UMap.h"
+#include "utils/serializerData.h"
+#include "dirent.h"
+#include "runtimePatches.h"
+#include <chrono>
+using namespace std::chrono;
+
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
+
+
+static size_t totalCompileTime = 0;
 
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
@@ -84,6 +95,410 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         SEXP result = Compiler::compileExpression(what);
         return result;
     }
+}
+
+static int charToInt(const char* p) {
+    int result = 0;
+    for (size_t i = 0; i < strlen(p); ++i) {
+        result += p[i];
+    }
+    return result;
+}
+
+void printSpace(int & lim) {
+    int i = 0;
+    for(i = 0; i < lim; i++ ) {
+        std::cout << " ";
+    }
+}
+
+void printHeader(int & space, const char * title) {
+    std::cout << " » " << title << "}" << std::endl;
+    space++;
+}
+
+void printType(int & space, const char * attr, SEXP ptr) {
+    printSpace(space);
+    std::cout << "└■ " << attr << " {" << "(" << ptr << ") TYPE-" << TYPEOF(ptr);
+}
+
+void printType(int & space, const char * attr, int val) {
+    printSpace(space);
+    std::cout << "└■ " << attr << " {" << val;
+}
+
+void printLangSXP(int space, SEXP langsxp) {
+    printHeader(space, "LANGSXP");
+
+    auto tag = TAG(langsxp);
+    auto car = CAR(langsxp);
+    auto cdr = CDR(langsxp);
+
+    printType(space, "TAG", tag);
+    printAST(space, tag);
+
+    printType(space, "CAR", car);
+    printAST(space, car);
+
+    printType(space, "CDR", cdr);
+    printAST(space, cdr);
+}
+
+void printSYMSXP(int space, SEXP symsxp) {
+    printHeader(space, "SYMSXP");
+
+    auto pname = PRINTNAME(symsxp);
+    auto value = SYMVALUE(symsxp);
+    auto internal = INTERNAL(symsxp);
+
+    printType(space, "PNAME", pname);
+    printAST(space, pname);
+
+    printType(space, "VALUE", value);
+    if (symsxp != value) {
+        printAST(space, value);
+    } else {
+        std::cout << "}" << std::endl;
+    }
+
+    // std::cout << "}" << std::endl;
+
+    printType(space, "INTERNAL", internal);
+    printAST(space, internal);
+}
+
+void printCHARSXP(int space, SEXP charSXP) {
+    printHeader(space, "CHARSXP");
+
+    printSpace(space);
+    std::cout << CHAR(charSXP) << std::endl;
+}
+
+void printSTRSXP(int space, SEXP strSXP) {
+    printHeader(space, "STRSXP");
+
+    printSpace(space);
+    std::cout << CHAR(STRING_ELT(strSXP, 0)) << std::endl;
+}
+
+void printREALSXP(int space, SEXP realSXP) {
+    printHeader(space, "REALSXP");
+
+    printSpace(space);
+    std::cout << *REAL(realSXP) << std::endl;
+}
+
+void printLISTSXP(int space, SEXP listsxp) {
+    printHeader(space, "LISTSXP");
+
+    auto tag = TAG(listsxp);
+    auto car = CAR(listsxp);
+    auto cdr = CDR(listsxp);
+
+    printType(space, "TAG", tag);
+    printAST(space, tag);
+
+    printType(space, "CAR", car);
+    printAST(space, car);
+
+    printType(space, "CDR", cdr);
+    printAST(space, cdr);
+
+}
+
+void printVECSXP(int space, SEXP vecsxp) {
+    printHeader(space, "VECSXP");
+
+    for (int i = 0; i < Rf_length(vecsxp); i++) {
+        SEXP ele = VECTOR_ELT(vecsxp, i);
+        printType(space, "VEC ITEM", ele);
+        printAST(space, ele);
+    }
+}
+
+void printCLOSXP(int space, SEXP closxp) {
+    printHeader(space, "CLOSXP");
+
+    auto formals = FORMALS(closxp);
+    auto body = BODY(closxp);
+    auto cloenv = CLOENV(closxp);
+
+    printType(space, "FORMALS", formals);
+    printAST(space, formals);
+
+    printType(space, "BODY", body);
+    printAST(space, body);
+
+    printType(space, "CLOENV", cloenv);
+    printAST(space, cloenv);
+
+}
+
+void printExternalCodeEntry(int space, SEXP externalsxp) {
+    printHeader(space, "EXTERNALSXP");
+    if (Code::check(externalsxp)) {
+        Code * code = Code::unpack(externalsxp);
+        code->print(std::cout);
+    } else if (DispatchTable::check(externalsxp)) {
+        auto vtable = DispatchTable::unpack(externalsxp);
+        vtable->baseline()->body()->print(std::cout);
+    }
+}
+
+void printBCODESXP(int space, SEXP bcodeSXP) {
+    printHeader(space, "BCODESXP");
+    printType(space, "VECTOR_ELT(CDR(BCODESXP),0)", bcodeSXP);
+    printAST(space, VECTOR_ELT(CDR(bcodeSXP),0));
+}
+
+void printPROMSXP(int space, SEXP promSXP) {
+    printHeader(space, "PROMSXP");
+
+    auto seen = PRSEEN(promSXP);
+    auto code = PRCODE(promSXP);
+    auto env = PRENV(promSXP);
+    auto value = PRVALUE(promSXP);
+
+    printType(space, "SEEN", seen);
+    printAST(space, seen);
+
+    printType(space, "CODE", code);
+    printAST(space, code);
+
+    printType(space, "ENV", env);
+    printAST(space, env);
+
+    if (promSXP != value) {
+        printType(space, "VALUE", value);
+        printAST(space, value);
+    }
+}
+
+
+void printENVSXP(int space, SEXP envSXP) {
+    printHeader(space, "ENVSXP");
+    auto frame = FRAME(envSXP);
+    auto encls = FRAME(envSXP);
+    auto hashtab = FRAME(envSXP);
+
+    printType(space, "FRAME", frame);
+    printAST(space, frame);
+
+    printType(space, "ENCLS", encls);
+    printAST(space, encls);
+
+    printType(space, "HASHTAB", hashtab);
+    printAST(space, hashtab);
+
+
+}
+
+void printRAWSXP(int space, SEXP rawSXP) {
+    printHeader(space, "ENVSXP");
+
+    Rbyte * rawData = RAW(rawSXP);
+
+    printSpace(space);
+    std::cout << *rawData << std::endl;
+
+}
+
+void printAST(int space, int val) {
+    std::cout << val << "}" << std::endl;
+}
+
+std::vector<SEXP> currentStack;
+long unsigned int maxStackSize = 25;
+
+void printAST(int space, SEXP ast) {
+    if (currentStack.size() >= maxStackSize) {
+        std::cout << "}(LIMIT " << maxStackSize << ")" << std::endl;
+        return;
+    }
+    if (std::find(currentStack.begin(), currentStack.end(), ast) != currentStack.end()) {
+        std::cout << "REC...}" << std::endl;
+        return;
+    }
+    currentStack.push_back(ast);
+    switch(TYPEOF(ast)) {
+        case CLOSXP: printCLOSXP(++space, ast); break;
+        case LANGSXP: printLangSXP(++space, ast); break;
+        case SYMSXP: printSYMSXP(++space, ast); break;
+        case LISTSXP: printLISTSXP(++space, ast); break;
+        case CHARSXP: printCHARSXP(++space, ast); break;
+        case STRSXP: printSTRSXP(++space, ast); break;
+        case REALSXP: printREALSXP(++space, ast); break;
+        case BCODESXP: printBCODESXP(++space, ast); break;
+        case PROMSXP: printPROMSXP(++space, ast); break;
+        case ENVSXP: printENVSXP(++space, ast); break;
+        case RAWSXP: printRAWSXP(++space, ast); break;
+        case VECSXP: printVECSXP(++space, ast); break;
+        case EXTERNALSXP: printExternalCodeEntry(++space, ast); break;
+        default: std::cout << "}" << std::endl; break;
+    }
+    currentStack.pop_back();
+}
+
+void hash_ast(SEXP ast, size_t & hast) {
+    if (TYPEOF(ast) == SYMSXP) {
+        const char * pname = CHAR(PRINTNAME(ast));
+        hast = hast * 31;
+        hast += charToInt(pname);
+    }
+    if (TYPEOF(ast) == STRSXP) {
+        const char * pname = CHAR(STRING_ELT(ast, 0));
+        hast = hast * 31;
+        hast += charToInt(pname);
+    }
+    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        hast *= 31;
+        hash_ast(CAR(ast), ++hast);
+        hast *= 31;
+        hash_ast(CDR(ast), ++hast);
+    }
+}
+
+SEXP deserializeFromFile(std::string metaDataPath) {
+    std::string prefix = "";
+
+    auto lastSlash = metaDataPath.find_last_of("/");
+
+    if (lastSlash != metaDataPath.npos) {
+        prefix = metaDataPath.substr(0, lastSlash + 1);
+    }
+
+    // Load the serialized pool from the .pool file
+    FILE *reader;
+    reader = fopen(metaDataPath.c_str(),"r");
+
+    // Initialize the deserializing stream
+    R_inpstream_st inputStream;
+    R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
+
+    serializerData sData(R_Unserialize(&inputStream));
+
+    size_t hast = sData.getHastData();
+    std::string functionName = sData.getNameData();
+
+    #if PRINT_DESERIALIZER_PROGRESS == 1
+    std::cout << "(>) Deserializer Start" << std::endl;
+    std::cout << "Deserializing: " << hast << "(" << functionName << ")" << std::endl;
+    #endif
+
+
+    SEXP contextMap = sData.getContextMap();
+    SEXP keys = VECTOR_ELT(contextMap, 0);
+    for (int i = 0; i < Rf_length(keys); i++) {
+        SEXP keySym = VECTOR_ELT(keys, i);
+        SEXP ele = UMap::get(contextMap, keySym);
+        contextData c(ele);
+        #if PRINT_DESERIALIZER_PROGRESS == 1
+        std::cout << "============ ============ ============" << std::endl;
+        c.print();
+        #endif
+
+        unsigned long con = c.getContext();
+
+        // MAIN PREFIX
+        std::stringstream mainPrefix;
+        mainPrefix << prefix << hast << "_" << con;
+
+        // PATH TO BITCODE FILE
+        std::stringstream bitcodePath;
+        bitcodePath << mainPrefix.str() << ".bc";
+
+        // PATH TO BITCODE POOL
+        std::stringstream poolPath;
+        poolPath << mainPrefix.str() << ".pool";
+
+        size_t ePoolEntriesSize = 0;
+        std::vector<std::vector<std::vector<size_t>>> argOrderingData = c.getArgOrderingData();
+
+        int envCreation = c.getEnvCreation();
+        int optimization = c.getOptimization();
+        unsigned numArguments = c.getNumArguments();
+        size_t dotsPosition = c.getDotsPosition();
+        std::string mainName = c.getMainName();
+        std::string childrenData = c.getChildrenData();
+        std::string srcData = c.getSrcData();
+        std::string argData = c.getArgData();
+        size_t cPoolEntriesSize = c.getCPoolEntriesSize();
+        size_t srcPoolEntriesSize = c.getSrcPoolEntriesSize();
+        size_t promiseSrcPoolEntriesSize = c.getPromiseSrcPoolEntriesSize();
+
+        std::vector<size_t> reqMapForCompilation = c.getReqMapForCompilation();
+
+        // INSERT THE FUNCTION INTO THE JIT
+        pir::Module* m = new pir::Module;
+        pir::StreamLogger logger(pir::DebugOptions::DefaultDebugOptions);
+        logger.title("Deserializing " + functionName);
+        pir::Compiler cmp(m, logger);
+        pir::Backend backend(m, logger, functionName);
+
+        backend.deserialize(
+            argOrderingData,
+            hast, Context(con),
+            envCreation, optimization, numArguments, dotsPosition,
+            bitcodePath.str(), poolPath.str(), mainName, childrenData, srcData, argData,
+            cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize, promiseSrcPoolEntriesSize); // passing the context and fileName (remove context later)
+
+        SEXP map = Pool::get(HAST_DEPENDENCY_MAP);
+        DeserialDataMap::addDependencies(map, hast, con, reqMapForCompilation);
+    }
+    return R_FalseValue;
+}
+
+REXPORT SEXP loadBitcode(SEXP metaData) {
+    const char * metaDataPath = CHAR(VECTOR_ELT(metaData, 0));
+    return deserializeFromFile(metaDataPath);
+}
+
+auto prefix = getenv("BC_FOLDER") ? getenv("BC_FOLDER") : ".";
+
+REXPORT SEXP loadBitcodes() {
+    Protect prot;
+    DIR *dir;
+    struct dirent *ent;
+
+    UMap::createMapInCp(HAST_DEPENDENCY_MAP);
+    UMap::createMapInCp(2);
+    UMap::createMapInCp(3);
+    UMap::createMapInCp(4);
+
+    std::stringstream ss;
+    ss << "./bitcodes/" << prefix << "/";
+
+    #if PRINT_DESERIALIZER_PROGRESS == 1
+    std::cout << "loadBitcodes: " << ss.str() << std::endl;
+    #endif
+
+    if ((dir = opendir (ss.str().c_str())) != NULL) {
+        while ((ent = readdir (dir)) != NULL) {
+            std::string fName = ent->d_name;
+            if (fName.find(".meta") != std::string::npos) {
+                deserializeFromFile(ss.str() + fName);
+            }
+        }
+
+        closedir (dir);
+        #if PRINT_DEPENDENCY_MAP == 1
+        DeserialDataMap::printDependencies();
+        #endif
+        #if PRINT_UNLOCK_MAP == 1
+        DeserialDataMap::printUnlockMap();
+        #endif
+    } else {
+        /* could not open directory */
+        perror ("");
+        return R_FalseValue;
+    }
+    return R_TrueValue;
+}
+
+REXPORT SEXP compileStats() {
+    std::cout << "totalCompileTime: " << totalCompileTime << "ms" << std::endl;
+    R_Visible = (Rboolean) false;
+    return R_NilValue;
 }
 
 REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
@@ -289,6 +704,9 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
+    static unsigned int stack = 0;
+    stack++;
+    auto start = high_resolution_clock::now();
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -302,7 +720,14 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::StreamLogger logger(debug);
-    logger.title("Compiling " + name);
+    std::stringstream ss;
+    ss << "Compiling " << name << " - " << TYPEOF(what) << ", " << what;
+    logger.title(ss.str());
+
+    // auto vtable = DispatchTable::unpack(BODY(what));
+    // std::cout << "PEXT" << std::endl;
+    // vtable->baseline()->body()->print(std::cout);
+
     pir::Compiler cmp(m, logger);
     pir::Backend backend(m, logger, name);
     auto compile = [&](pir::ClosureVersion* c) {
@@ -354,6 +779,13 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     delete m;
     UNPROTECT(1);
+    stack--;
+    if (stack == 0) {
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<milliseconds>(stop - start);
+        // std::cout << "compileTime: " << duration.count() << std::endl;
+        totalCompileTime += duration.count();
+    }
     return what;
 }
 
@@ -597,6 +1029,14 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 
 bool startup() {
     initializeRuntime();
+    #if RESERVE_SPACES_AT_STARTUP == 1
+    Pool::makeSpace(); // (1) For src to hast map
+    Pool::makeSpace(); // (2) Hast to vtable map
+    Pool::makeSpace(); // (3) Hast to closObj
+    Pool::makeSpace(); // (4) Hast blacklist, discard serialized code for these functions
+    Pool::makeSpace(); // (5) Comparing old and new values for the static call patch
+    Pool::makeSpace(); // (6) Comparison patches
+    #endif
     return true;
 }
 
