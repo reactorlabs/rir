@@ -456,7 +456,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         if (hast == 0) {
             *serializerError = true;
+            #if PRINT_SERIALIZER_ERRORS == 1
             std::cout << "  (E) Hast unavailable, cannot populate cData" << std::endl;
+            #endif
         }
 
         std::random_device rd;
@@ -608,10 +610,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         contextData conData(cData);
 
-        conData.addEnvCreation((int)signature.envCreation);   // 1
-        conData.addOptimization((int)signature.optimization); // 2
-        conData.addNumArguments(signature.numArguments);      // 3
-        conData.addDotsPosition(signature.dotsPosition);      // 4
+        std::cout << "[ORIG Signature]: " << (int)signature.envCreation << ", " << (int)signature.optimization << ", " <<  signature.numArguments << ", " << signature.hasDotsFormals << ", " << signature.hasDefaultArgs << ", " << signature.dotsPosition << std::endl;
+        conData.addFunctionSignature(signature);                 // 1
+
         conData.addMainName(mainName);                        // 5
 
     //     // 6(cPoolEntriesSize), 7(srcPoolEntriesSize), 8(promiseSrcPoolEntriesSize)
@@ -714,6 +715,10 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         UNPROTECT(1);
 
+        if (getenv("PIR_SERIALIZE_NO_REQ") && rMap.size() > 0) {
+            *serializerError = true;
+            std::cout << "  (F) PIR_SERIALIZE_NO_REQ" << std::endl;
+        }
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (*) metadata added" << std::endl;
         #endif
@@ -722,6 +727,10 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::cout << "BACKEND_INITIAL_LLVM" << std::endl;
         jit.printModule();
         #endif
+        if (getenv("PIR_SERIALIZE_NO_INNER") && cls->owner()->rirFunction()->flags.contains(Function::InnerFunction)) {
+            *serializerError = true;
+            std::cout << "  (F) inner function" << std::endl;
+        }
     }
 
     if (MEASURE_COMPILER_BACKEND_PERF) {
@@ -734,10 +743,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         c.second->function(function.function());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
-    if (cls->owner()->rirFunction()->flags.contains(Function::InnerFunction)) {
-        *serializerError = true;
-        std::cout << "  (E) inner function" << std::endl;
-    }
     return function.function();
 }
 
