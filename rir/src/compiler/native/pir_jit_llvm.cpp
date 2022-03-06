@@ -384,10 +384,8 @@ void PirJitLLVM::deserializeAndAddModule(
         #endif
 
         if (TYPEOF(ele) == LANGSXP || TYPEOF(ele) == CLOSXP) {
-            std::cout << std::endl;
             // std::cout << "LANGSXP IN CP: " << std::endl;
             // printAST(0, ele);
-            std::cout << std::endl;
             SEXP map = Pool::get(6);
             if (map == R_NilValue) {
                 UMap::createMapInCp(6);
@@ -550,6 +548,7 @@ void PirJitLLVM::deserializeAndAddModule(
             // llvm::outs() << "replacement: " << *replacementValue << "\n";
 
             global.setInitializer(replacementValue);
+            global.setExternallyInitialized(false);
         }
 
         if (pre) {
@@ -603,6 +602,7 @@ void PirJitLLVM::deserializeAndAddModule(
                     std::cout << global.getName().str() << " -> Unknown Type " << std::endl;
                 }
             }
+            global.setExternallyInitialized(false);
         }
 
         // All src pool references have a srpool prefix
@@ -617,6 +617,7 @@ void PirJitLLVM::deserializeAndAddModule(
 
                 // std::cout << "src pool patch: " << sPoolPatch[val] << std::endl;
             }
+            global.setExternallyInitialized(false);
         }
     }
 
