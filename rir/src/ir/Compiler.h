@@ -171,10 +171,11 @@ class Compiler {
         size_t hast = getHast(vtable);
         if (readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << hast << " (Adding table and populating src Map)" << std::endl;
+            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
             #endif
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);
+            insertClosObj(vtable->container(), hast);
         }
         return vtable->container();
     }

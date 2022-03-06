@@ -380,23 +380,23 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
             fun->eraseFromParent();
         }
 
-        // llvm::PassBuilder passBuilder;
-        // llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
-        // llvm::FunctionAnalysisManager functionAnalysisManager(false);
-        // llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
-        // llvm::ModuleAnalysisManager moduleAnalysisManager(false);
+        llvm::PassBuilder passBuilder;
+        llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
+        llvm::FunctionAnalysisManager functionAnalysisManager(false);
+        llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
+        llvm::ModuleAnalysisManager moduleAnalysisManager(false);
 
-        // passBuilder.registerModuleAnalyses(moduleAnalysisManager);
-        // passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
-        // passBuilder.registerFunctionAnalyses(functionAnalysisManager);
-        // passBuilder.registerLoopAnalyses(loopAnalysisManager);
-        // // This is the important line:
-        // passBuilder.crossRegisterProxies(
-        //     loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+        passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+        passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+        passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+        passBuilder.registerLoopAnalyses(loopAnalysisManager);
+        // This is the important line:
+        passBuilder.crossRegisterProxies(
+            loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
 
-        // llvm::ModulePassManager modulePassManager =
-        //     passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O1);
-        // modulePassManager.run(*, moduleAnalysisManager);
+        llvm::ModulePassManager modulePassManager =
+            passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
+        modulePassManager.run(*, moduleAnalysisManager);
 
         if (junkFunctionList.size() > 0) {
             #if PRINT_SERIALIZER_PROGRESS == 1
@@ -580,22 +580,20 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
     for (auto & ele : cpEntries) {
         SEXP obj = Pool::get(ele);
         // Dont serialize external code, we serialize the original AST
-        if (TYPEOF(obj) == CLOSXP && DispatchTable::check(BODY(obj))) {
-            auto rshFun = DispatchTable::unpack(BODY(obj));
-            restoreMap[obj] = BODY(obj);
-            auto origBody = src_pool_at(globalContext(), rshFun->baseline()->body()->src);
-            auto srcData = getHastAndIndex(rshFun->baseline()->body()->src);
-            size_t hast = srcData.hast;
-            // int index = srcData.index;
-            SEXP blMap = Pool::get(BL_MAP);
-            if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-                *serializerError = true;
-                std::cout << "  (E) serialization time error: hast == 0 or blacklisted" << std::endl;
-            }
-            SET_BODY(obj, origBody);
+        if (TYPEOF(obj) == CLOSXP) {
+            *serializerError = true;
+            #if PRINT_POOL_SERIALIZATION_ERRORS == 1
+            std::cout << "  (E) Trying to serialize CLOSXP with EXTERNALSXP body" << std::endl;
+            #endif
+        }
+        if (TYPEOF(obj) == 26) {
+            *serializerError = true;
+            #if PRINT_POOL_SERIALIZATION_ERRORS == 1
+            std::cout << "  (E) Trying to serialize a EXTERNALSXP" << std::endl;
+            #endif
         }
         #if PRINT_CP_ENTRIES == 1
-        std::cout << i << "{ TYPE: " << TYPEOF(obj) << "} ";
+        std::cout << i << "{ TYPE: " << TYPEOF(obj) << ", " << obj << "} ";
         #endif
         SET_VECTOR_ELT(serializationObjects, i++, obj);
     }
@@ -987,6 +985,8 @@ void PirJitLLVM::initializeLLVM() {
                 auto deon = n.substr(0, 5) == "deon_"; // should be ideally ignored, but we can skip patching in the deserializer
                 #endif
 
+                auto cppp = n.substr(0, 5) == "cppp_";
+
                 if (ept || efn) {
                     auto addrStr = n.substr(4);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
@@ -1268,6 +1268,21 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
                 #endif
+                else if (cppp) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    // auto index = std::stoi(n.substr(secondDel + 1));
+
+                    SEXP map = Pool::get(HAST_CLOS_MAP);
+                    auto addr = UMap::get(map, Rf_install(hast.c_str()));
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }
                 else {
                     std::cout << "unknown symbol " << n << "\n";
                 }

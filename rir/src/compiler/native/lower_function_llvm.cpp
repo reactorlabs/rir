@@ -105,8 +105,10 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
     static int num = 0;
     std::stringstream name;
     name << "copool_" << num++;
-    return new llvm::GlobalVariable(getModule(), ty, true,
+    auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
+    res->setExternallyInitialized(true);
+    return res;
 
     #else
     return new llvm::GlobalVariable(getModule(), ty, true,
@@ -150,8 +152,10 @@ llvm::Value* LowerFunctionLLVM::namedGlobalConst(std::string name, llvm::Constan
     if (!ty)
         ty = init->getType();
 
-    return new llvm::GlobalVariable(getModule(), ty, true,
+    auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name);
+    res->setExternallyInitialized(true);
+    return res;
 }
 
 llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
@@ -164,8 +168,10 @@ llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
     static int num = 0;
     std::stringstream name;
     name << "srpool_" << num++;
-    return new llvm::GlobalVariable(getModule(), ty, true,
+    auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
+    res->setExternallyInitialized(true);
+    return res;
 
     #else
     return new llvm::GlobalVariable(getModule(), ty, true,
@@ -450,6 +456,82 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
     }
 
     #if PATCH_CP_ENTRIES == 1
+    // handle common cases for comparisons
+    if (TYPEOF(co) == EXTERNALSXP || TYPEOF(co) == CLOSXP) {
+        SEXP curr;
+        if (TYPEOF(co) == EXTERNALSXP) {
+            curr = co;
+        } else if (TYPEOF(BODY(co)) == EXTERNALSXP) {
+            curr = BODY(co);
+        } else {
+            #if PRINT_UNHANDLED_ERRORS == 1
+            std::cout << "  (E) no EXTERNALSXP for CLOSXP" << std::endl;
+            #endif
+            if (serializerError == nullptr) {
+                #if PRINT_SERIALIZER_ERRORS == 1
+                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                #endif
+            } else {
+                *serializerError = true;
+            }
+            curr = R_NilValue;
+        }
+
+        if (DispatchTable::check(curr)) {
+            auto vtable = DispatchTable::unpack(curr);
+            auto data = getHastAndIndex(vtable->baseline()->body()->src);
+            auto hast = data.hast;
+            auto index = data.index;
+
+            // If the hast is blacklisted, patch will not work
+            SEXP blMap = Pool::get(BL_MAP);
+            if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                #if PRINT_SERIALIZER_ERRORS == 1
+                if (hast == 0) {
+                    std::cout << "  (E) hast == 0" << std::endl;
+                } else {
+                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                }
+                #endif
+
+                if (serializerError == nullptr) {
+                    #if PRINT_SERIALIZER_ERRORS == 1
+                    std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                    #endif
+                } else {
+                    *serializerError = true;
+                }
+            } else {
+                // patch case
+                std::stringstream ss;
+                if (reqMap) {
+                    ss << "cppp_" << hast << "_" << index;
+                    reqMap->insert(hast);
+                } else {
+                    ss << "cppp_" << hast << "_" << index;
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        #if PRINT_SERIALIZER_ERRORS == 1
+                        std::cout << "  (E) [CPPP patch] reqMap not available (ERROR)" << std::endl;
+                        #endif
+                    }
+                }
+
+                return convertToExternalSymbol(ss.str());
+            }
+        } else {
+            #if PRINT_UNHANDLED_ERRORS == 1
+            std::cout << "  (E) EXTERNALSXP not in BC" << std::endl;
+            #endif
+            if (serializerError == nullptr) {
+                #if PRINT_SERIALIZER_ERRORS == 1
+                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                #endif
+            } else {
+                *serializerError = true;
+            }
+        }
+    }
     auto cpIndex = Pool::insert(co);
     auto iVal = globalConst(c(cpIndex), t::i32);
     auto iLoad = builder.CreateLoad(iVal);
@@ -2881,22 +2963,11 @@ void LowerFunctionLLVM::compile() {
                     res = createSelect2(
                         res, [&]() { return builder.getTrue(); },
                         [&]() {
-                            // auto cls = builder.CreateAnd(
-                            //     builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
-                            //     builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
                             auto cls = builder.CreateAnd(
                                 builder.CreateICmpEQ(sexptype(ai), c(CLOSXP)),
                                 builder.CreateICmpEQ(sexptype(bi), c(CLOSXP)));
-                            auto lang = builder.CreateAnd(
-                                    builder.CreateICmpEQ(sexptype(ai), c(LANGSXP)),
-                                    builder.CreateICmpEQ(sexptype(bi), c(LANGSXP)));
-                            auto ext = builder.CreateAnd(
-                                    builder.CreateICmpEQ(sexptype(ai), c(EXTERNALSXP)),
-                                    builder.CreateICmpEQ(sexptype(bi), c(LANGSXP)));
-                            auto cond = builder.CreateOr(cls, lang);
-                            cond = builder.CreateOr(cond, ext);
                             return createSelect2(
-                                cond,
+                                cls,
                                 [&]() {
                                     #if DEBUG_LOCATIONS == 1
                                     if (debugStatements) {

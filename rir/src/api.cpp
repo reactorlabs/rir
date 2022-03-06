@@ -583,9 +583,13 @@ static bool fileExists(std::string fName) {
 static void serializeClosure(unsigned src, std::string name, bool & serializerError, contextData & cData) {
     size_t hast = getHastAndIndex(src).hast;
     if (hast == 0) {
+        #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (E) unavailable hast, cannot serialize" << std::endl;
+        #endif
     } else if (serializerError) {
+        #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (E) Serializer Error Occured" << std::endl;
+        #endif
     } else {
         std::stringstream fN;
         fN << prefix << "/" << "m_" << hast << ".meta";
@@ -615,7 +619,13 @@ static void serializeClosure(unsigned src, std::string name, bool & serializerEr
             R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
 
             SEXP result;
+            #if PRINT_SERIALIZER_PROGRESS == 1
+            std::cout << "    (*) Deserializing meta" << std::endl;
+            #endif
             p(result= R_Unserialize(&inputStream));
+            #if PRINT_SERIALIZER_PROGRESS == 1
+            std::cout << "    (*) Deserialized meta successfully" << std::endl;
+            #endif
 
             sData.updateContainer(result);
 
@@ -652,6 +662,8 @@ static void serializeClosure(unsigned src, std::string name, bool & serializerEr
         std::rename(poolOldName.str().c_str(), poolFName.str().c_str());
     }
 }
+
+static int serializerSuccess = 0, serializerFailed = 0;
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
@@ -716,13 +728,36 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 serializeClosure(c->rirSrc()->src, c->name(), serializerError, cData);
 
 
-                #if PRINT_SERIALIZER_PROGRESS == 1
                 if (!serializerError) {
+                    serializerSuccess++;
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "(/) Serializer Success" << std::endl;
+                    #endif
+                    // Adding the type feedback for the RIR BC
+                    // auto codeStart = DispatchTable::unpack(body)->baseline()->body()->code();
+                    // auto codeEnd = DispatchTable::unpack(body)->baseline()->body()->endCode();
+                    // auto pc = codeStart;
+                    // while (pc < codeEnd) {
+                    //     BC bc = BC::decode(pc, DispatchTable::unpack(body)->baseline()->body());
+                    //     switch(bc.bc) {
+                    //         case Opcode::record_type_: {
+                    //             std::cout << "sizeof: " << sizeof(bc) << std::endl;
+                    //             bc.print(std::cout);
+                    //             break;
+                    //         }
+                    //         default: {
+
+                    //         }
+
+                    //     }
+                    //     pc = BC::next(pc);
+                    // }
                 } else {
+                    serializerFailed++;
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "(/) Serializer Error" << std::endl;
+                    #endif
                 }
-                #endif
                 backend.cData = nullptr;
             } else {
                 auto fun = backend.getOrCompile(c);
@@ -756,7 +791,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         // Eagerly compile the main function
         done->body()->nativeCode();
     };
-
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
@@ -782,19 +816,19 @@ static bool dependencyBlacklisted(SEXP map) {
 
         SEXP rMap = c.getReqMapAsVector();
 
-        std::cout << "   " << CHAR(PRINTNAME(keySym)) << " : [ ";
+        // std::cout << "   " << CHAR(PRINTNAME(keySym)) << " : [ ";
 
         for (int j = 0; j < Rf_length(rMap); j++) {
             SEXP dataContainer = VECTOR_ELT(rMap, j);
             size_t* res = (size_t *) DATAPTR(dataContainer);
-            std::cout << *res << " ";
+            // std::cout << *res << " ";
             SEXP depSym = Rf_install(std::to_string(*res).c_str());
             if (UMap::symbolExistsInMap(depSym, blMap)) {
                 // if even one dependency is blacklisted, we cannot use it
                 return true;
             }
         }
-        std::cout << "]" << std::endl;
+        // std::cout << "]" << std::endl;
     }
 
     return false;
@@ -822,6 +856,8 @@ REXPORT SEXP serializerCleanup() {
     DIR *dir;
     struct dirent *ent;
 
+    int blacklisted = 0, failed = 0;
+
     if ((dir = opendir (savePath.str().c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
             std::string fName = ent->d_name;
@@ -829,7 +865,6 @@ REXPORT SEXP serializerCleanup() {
                 std::stringstream metaPath;
                 metaPath << prefix << "/" << fName;
 
-                std::cout << "analysing: " << metaPath.str() << std::endl;
                 // Load the serialized pool from the .pool file
                 FILE *reader;
                 reader = fopen(metaPath.str().c_str(),"r");
@@ -845,15 +880,13 @@ REXPORT SEXP serializerCleanup() {
                 // check if the currentHast is blacklisted
                 serializerData sData(result);
                 size_t hast = sData.getHastData();
-                std::cout << "currHast: " << hast << std::endl;
 
                 if (UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap)) {
-                    std::cout << "BLACKLIST FILE: " << metaPath.str() << " (hast has collisions)" << std::endl;
                     const int removeRes = remove(metaPath.str().c_str());
                     if( removeRes == 0 ){
-                        std::cout << "successfully removed the file" << std::endl;
+                        blacklisted++;
                     } else {
-                        std::cout << "failed to remove the file" << std::endl;
+                        failed++;
                     }
                     UNPROTECT(1);
                     continue;
@@ -862,12 +895,11 @@ REXPORT SEXP serializerCleanup() {
                 SEXP contextMap = sData.getContextMap();
 
                 if (dependencyBlacklisted(contextMap)) {
-                    std::cout << "BLACKLIST FILE: " << metaPath.str() << " (dependency blacklisted)" << std::endl;
                     const int removeRes = remove(metaPath.str().c_str());
                     if( removeRes == 0 ){
-                        std::cout << "successfully removed the file" << std::endl;
+                        blacklisted++;
                     } else {
-                        std::cout << "failed to remove the file" << std::endl;
+                        failed++;
                     }
                 }
                 UNPROTECT(1);
@@ -875,6 +907,9 @@ REXPORT SEXP serializerCleanup() {
         }
 
         closedir (dir);
+
+        std::cout << "Serializer: " << "(" << serializerSuccess << "," << serializerFailed << ") " << (int)(((double)serializerSuccess/(serializerSuccess+serializerFailed))*100) << "% success" << std::endl;
+        std::cout << "Serializer cleanup: " << blacklisted << " blacklisted, " << failed << " failed" << std::endl;
     } else {
         /* could not open directory */
         perror ("");
