@@ -28,6 +28,7 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "utils/serializerData.h"
+#include "llvm/Passes/PassBuilder.h"
 
 namespace rir {
 namespace pir {
@@ -396,7 +397,7 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
 
         llvm::ModulePassManager modulePassManager =
             passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
-        modulePassManager.run(*, moduleAnalysisManager);
+        modulePassManager.run(*module, moduleAnalysisManager);
 
         if (junkFunctionList.size() > 0) {
             #if PRINT_SERIALIZER_PROGRESS == 1
