@@ -414,10 +414,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         size_t ePoolEntriesSize = 0;
         std::vector<std::vector<std::vector<size_t>>> argOrderingData = c.getArgOrderingData();
 
-        int envCreation = c.getEnvCreation();
-        int optimization = c.getOptimization();
-        unsigned numArguments = c.getNumArguments();
-        size_t dotsPosition = c.getDotsPosition();
+        rir::FunctionSignature fs = c.getFunctionSignature();
         std::string mainName = c.getMainName();
         std::string childrenData = c.getChildrenData();
         std::string srcData = c.getSrcData();
@@ -438,7 +435,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         backend.deserialize(
             argOrderingData,
             hast, Context(con),
-            envCreation, optimization, numArguments, dotsPosition,
+            fs,
             bitcodePath.str(), poolPath.str(), mainName, childrenData, srcData, argData,
             cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize, promiseSrcPoolEntriesSize); // passing the context and fileName (remove context later)
 

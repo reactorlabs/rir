@@ -55,7 +55,7 @@ class PirJitLLVM {
     void deserializeAndAddModule(
       std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
       size_t hast, Context context,
-      int & envCreation, int & optimization, unsigned int & numArguments, size_t & dotsPosition,
+      rir::FunctionSignature fs,
       std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string srcData, std::string argData,
       size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize, size_t & promiseSrcPoolEntriesSize
       );

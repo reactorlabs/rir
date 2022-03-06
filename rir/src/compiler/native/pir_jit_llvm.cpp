@@ -338,7 +338,7 @@ void PirJitLLVM::finalizeAndFixup() {
 void PirJitLLVM::deserializeAndAddModule(
     std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
     size_t hast, Context context,
-    int & envCreation, int & optimization, unsigned int & numArguments, size_t & dotsPosition,
+    rir::FunctionSignature fs,
     std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string srcData, std::string argData,
     size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize, size_t & promiseSrcPoolEntriesSize
     ) {
@@ -664,11 +664,6 @@ void PirJitLLVM::deserializeAndAddModule(
     std::cout << "(*) Linking code objects" << std::endl;
     #endif
 
-    // Function Signature
-    FunctionSignature fs((FunctionSignature::Environment) envCreation, (FunctionSignature::OptimizationLevel) optimization);
-    fs.numArguments = numArguments;
-    fs.dotsPosition = dotsPosition;
-
     auto separateUsingDel = [&](std::string cSep, char c) {
         std::vector<std::string> res;
 
@@ -776,7 +771,7 @@ void PirJitLLVM::deserializeAndAddModule(
 
     FunctionWriter function;
     Preserve preserve;
-    for (size_t i = 0; i < numArguments; ++i) {
+    for (size_t i = 0; i < fs.numArguments; ++i) {
         function.addArgWithoutDefault();
     }
 

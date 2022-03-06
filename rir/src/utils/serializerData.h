@@ -11,6 +11,31 @@ namespace rir {
         public:
             SEXP container;
 
+            void printSpace(int size) {
+                for (int i = 0; i < size; i++) {
+                    std::cout << " ";
+                }
+            }
+
+            void addFS(rir::FunctionSignature fs, int index) {
+                SEXP store;
+                PROTECT(store = Rf_allocVector(RAWSXP, sizeof(fs)));
+                rir::FunctionSignature * tmp = (rir::FunctionSignature *) DATAPTR(store);
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wclass-memaccess"
+                memcpy(tmp, &fs, sizeof(fs));
+                #pragma GCC diagnostic pop
+
+                SET_VECTOR_ELT(container, index, store);
+                UNPROTECT(1);
+            }
+
+            rir::FunctionSignature getFS(int index) {
+                SEXP dataContainer = VECTOR_ELT(container, index);
+                rir::FunctionSignature* res = (rir::FunctionSignature *) DATAPTR(dataContainer);
+                return *res;
+            }
+
             void addSizeT(size_t data, int index) {
                 SEXP store;
                 PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
@@ -106,15 +131,7 @@ namespace rir {
                 return container;
             }
             contextData(SEXP c) {
-                PROTECT(container = c);
-            }
-
-            contextData() {
-                PROTECT(container = Rf_allocVector(VECSXP, 14));
-            }
-
-            ~contextData() {
-                UNPROTECT(1);
+                container = c;
             }
 
             // ENTRY 0: Con
@@ -126,40 +143,13 @@ namespace rir {
                 return getUnsignedLong(0);
             }
 
-            // ENTRY 1: EnvCreation
-            void addEnvCreation(int data) {
-                addInt(data, 1);
+            // ENTRY 1: Function Signature
+            void addFunctionSignature(rir::FunctionSignature fs) {
+                addFS(fs, 1);
             }
 
-            int getEnvCreation() {
-                return getInt(1);
-            }
-
-            // ENTRY 2: Optimization
-            void addOptimization(int data) {
-                addInt(data, 2);
-            }
-
-            int getOptimization() {
-                return getInt(2);
-            }
-
-            // ENTRY 3: NumArguments
-            void addNumArguments(unsigned data) {
-                addUnsigned(data, 3);
-            }
-
-            unsigned getNumArguments() {
-                return getUnsigned(3);
-            }
-
-            // ENTRY 4: DotsPosition
-            void addDotsPosition(size_t data) {
-                addSizeT(data, 4);
-            }
-
-            size_t getDotsPosition() {
-                return getSizeT(4);
+            rir::FunctionSignature getFunctionSignature() {
+                return getFS(1);
             }
 
             // ENTRY 5: MainName
@@ -277,20 +267,36 @@ namespace rir {
             }
 
             void print() {
+                print(0);
+            }
+
+
+
+            void print(int space) {
+                printSpace(space);
                 std::cout << "context: " << rir::Context(getContext()) << std::endl;
+                space += 2;
+                printSpace(space);
                 std::cout << "ENTRY(0)[context]: " << getContext() << std::endl;
-                std::cout << "ENTRY(1)[envCreation]: " << getEnvCreation() << std::endl;
-                std::cout << "ENTRY(2)[optimization]: " << getOptimization() << std::endl;
-                std::cout << "ENTRY(3)[numArguments]: " << getNumArguments() << std::endl;
-                std::cout << "ENTRY(4)[dotsPosition]: " << getDotsPosition() << std::endl;
+                printSpace(space);
+                rir::FunctionSignature fs = getFunctionSignature();
+                std::cout << "ENTRY(1)[Function Signature]: " << (int)fs.envCreation << ", " << (int)fs.optimization << ", " <<  fs.numArguments << ", " << fs.hasDotsFormals << ", " << fs.hasDefaultArgs << ", " << fs.dotsPosition << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(5)[mainName]: " << getMainName() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(6)[cPoolEntriesSize]: " << getCPoolEntriesSize() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(7)[srcPoolEntriesSize]: " << getSrcPoolEntriesSize() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(8)[promiseSrcPoolEntriesSize]: " << getPromiseSrcPoolEntriesSize() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(9)[childrenData]: " << getChildrenData() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(10)[srcData]: " << getSrcData() << std::endl;
+                printSpace(space);
                 std::cout << "ENTRY(11)[argData]: " << getArgData() << std::endl;
                 auto argOrderingData = getArgOrderingData();
+                printSpace(space);
                 std::cout << "ENTRY(12)[argOrderingData]: <";
                 for (auto & i : argOrderingData) {
                     std::cout << "<";
@@ -306,6 +312,7 @@ namespace rir {
                 std::cout << ">" << std::endl;
 
                 auto rData = getReqMapForCompilation();
+                printSpace(space);
                 std::cout << "ENTRY(13)[reqMapForCompilation]: <";
                 for (auto & ele : rData) {
                     std::cout << ele << " ";
@@ -324,25 +331,19 @@ namespace rir {
                 return container;
             }
 
-            void updateContainer(SEXP newContainer) {
-                UNPROTECT(1);
-                PROTECT(container = newContainer);
-            }
-
             serializerData(SEXP c) {
-                PROTECT(container = c);
+                container = c;
             }
 
-            serializerData(size_t hast, std::string name) {
-                PROTECT(container = Rf_allocVector(VECSXP, 3));
-
+            serializerData(SEXP c, size_t hast, std::string name) {
+                container = c;
                 addSizeT(hast, 0);
                 addString(name, 1);
                 SET_VECTOR_ELT(container, 2, UMap::createMap());
             }
 
-            ~serializerData() {
-                UNPROTECT(1);
+            void updateContainer(SEXP c) {
+                container = c;
             }
 
             void addContextData(SEXP cData, std::string context) {
@@ -375,6 +376,26 @@ namespace rir {
                     SEXP ele = UMap::get(map, keySym);
                     contextData c(ele);
                     c.print();
+                    // std::cout << i << " " << TYPEOF(ele) << std::endl;
+                }
+
+            }
+
+            void print(int space) {
+                // std::cout << "serializerData: " << std::endl;
+                printSpace(space);
+                std::cout << "ENTRY(-3): " << getHastData() << std::endl;
+                printSpace(space);
+                std::cout << "ENTRY(-2): " << getNameData() << std::endl;
+                SEXP map = VECTOR_ELT(container, 2);
+                printSpace(space);
+                std::cout << "ENTRY(-1): " << TYPEOF(map) << std::endl;
+                SEXP keys = VECTOR_ELT(map, 0);
+                for (int i = 0; i < Rf_length(keys); i++) {
+                    SEXP keySym = VECTOR_ELT(keys, i);
+                    SEXP ele = UMap::get(map, keySym);
+                    contextData c(ele);
+                    c.print(space + 2);
                     // std::cout << i << " " << TYPEOF(ele) << std::endl;
                 }
 
