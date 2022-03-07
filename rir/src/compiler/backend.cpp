@@ -646,8 +646,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         UNPROTECT(4);
         conData.addFunctionSignature(signature);
-        conData.addMainName(mainName);
-
 
         SEXP rData;
         PROTECT(rData = Rf_allocVector(VECSXP, rMap.size()));
