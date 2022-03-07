@@ -338,7 +338,7 @@ void PirJitLLVM::finalizeAndFixup() {
 
 auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
 
-void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIndices, SEXP cData, std::vector<std::string> & relevantNames) {
+void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames) {
 
     std::vector<int64_t> cpEntries;
     std::vector<int64_t> spEntries;
@@ -557,13 +557,12 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
     // Creating a vector containing all pool references
     SEXP serializationObjects;
     PROTECT(serializationObjects = Rf_allocVector(VECSXP,
-        cpEntries.size() + spEntries.size() + srcIndices.size()));
+        cpEntries.size() + spEntries.size()));
 
     contextData conData(cData);
 
     conData.addCPoolEntriesSize(cpEntries.size());
     conData.addSrcPoolEntriesSize(spEntries.size());
-    conData.addPromiseSrcPoolEntriesSize(srcIndices.size());
 
     #if PRINT_SERIALIZER_PROGRESS == 1
     std::cout << "    (*) Pool data stored" << std::endl;
@@ -626,22 +625,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, std::vector<unsigned> & srcIn
     std::cout << " ]" << std::endl;
     #endif
 
-
-    #if PRINT_PROM_ENTRIES == 1
-    std::cout << "    (*) Promise Src Entries: [ ";
-    #endif
-
-    for (auto & ele : srcIndices) {
-        SEXP obj = src_pool_at(globalContext(), ele);
-        #if PRINT_PROM_ENTRIES == 1
-        std::cout << "{ " << ele  << " at " << i << "} ";
-        #endif
-        SET_VECTOR_ELT(serializationObjects, i++, obj);
-    }
-
-    #if PRINT_PROM_ENTRIES == 1
-    std::cout << " ]" << std::endl;
-    #endif
 
     // SERIALIZE THE CONSTANT POOL
     #if PRINT_SERIALIZER_PROGRESS == 1

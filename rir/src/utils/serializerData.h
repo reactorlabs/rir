@@ -152,6 +152,24 @@ namespace rir {
                 return getFS(1);
             }
 
+            // ENTRY 2: Function Names
+            void addFNames(SEXP data) {
+                SET_VECTOR_ELT(container, 2, data);
+            }
+
+            SEXP getFNames() {
+                return VECTOR_ELT(container, 2);
+            }
+
+            // ENTRY 3: Function Src
+            void addFSrc(SEXP data) {
+                SET_VECTOR_ELT(container, 3, data);
+            }
+
+            SEXP getFSrc() {
+                return VECTOR_ELT(container, 3);
+            }
+
             // ENTRY 5: MainName
             void addMainName(std::string data) {
                 addString(data, 5);
@@ -179,15 +197,6 @@ namespace rir {
                 return getSizeT(7);
             }
 
-            // ENTRY 8: PromiseSrcPoolEntriesSize
-            void addPromiseSrcPoolEntriesSize(size_t data) {
-                addSizeT(data, 8);
-            }
-
-            size_t getPromiseSrcPoolEntriesSize() {
-                return getSizeT(8);
-            }
-
             // ENTRY 9: childrenData
             void addChildrenData(std::string data) {
                 addString(data, 9);
@@ -195,15 +204,6 @@ namespace rir {
 
             std::string getChildrenData() {
                 return getString(9);
-            }
-
-            // ENTRY 10: srcData
-            void addSrcData(std::string data) {
-                addString(data, 10);
-            }
-
-            std::string getSrcData() {
-                return getString(10);
             }
 
             // ENTRY 11: argData
@@ -282,17 +282,31 @@ namespace rir {
                 rir::FunctionSignature fs = getFunctionSignature();
                 std::cout << "ENTRY(1)[Function Signature]: " << (int)fs.envCreation << ", " << (int)fs.optimization << ", " <<  fs.numArguments << ", " << fs.hasDotsFormals << ", " << fs.hasDefaultArgs << ", " << fs.dotsPosition << std::endl;
                 printSpace(space);
+                std::cout << "ENTRY(2)[Function names]: [ ";
+                auto fNames = getFNames();
+                for (int i = 0; i < Rf_length(fNames); i++) {
+                    auto c = VECTOR_ELT(fNames, i);
+                    std::cout << CHAR(STRING_ELT(c, 0)) << " ";
+                }
+                std::cout << "]" << std::endl;
+
+                printSpace(space);
+                std::cout << "ENTRY(3)[Function Src]: [ ";
+                auto fSrc = getFSrc();
+                for (int i = 0; i < Rf_length(fSrc); i++) {
+                    auto c = VECTOR_ELT(fSrc, i);
+                    std::cout << TYPEOF(c) << " ";
+                }
+                std::cout << "]" << std::endl;
+
+                printSpace(space);
                 std::cout << "ENTRY(5)[mainName]: " << getMainName() << std::endl;
                 printSpace(space);
                 std::cout << "ENTRY(6)[cPoolEntriesSize]: " << getCPoolEntriesSize() << std::endl;
                 printSpace(space);
                 std::cout << "ENTRY(7)[srcPoolEntriesSize]: " << getSrcPoolEntriesSize() << std::endl;
                 printSpace(space);
-                std::cout << "ENTRY(8)[promiseSrcPoolEntriesSize]: " << getPromiseSrcPoolEntriesSize() << std::endl;
-                printSpace(space);
                 std::cout << "ENTRY(9)[childrenData]: " << getChildrenData() << std::endl;
-                printSpace(space);
-                std::cout << "ENTRY(10)[srcData]: " << getSrcData() << std::endl;
                 printSpace(space);
                 std::cout << "ENTRY(11)[argData]: " << getArgData() << std::endl;
                 auto argOrderingData = getArgOrderingData();

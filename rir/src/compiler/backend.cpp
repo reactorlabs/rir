@@ -502,17 +502,16 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         }
         #endif
 
-        std::vector<unsigned> srcIndices;
+        std::unordered_map<std::string, SEXP> srcDataMap;
+
         std::vector<rir::Code*> argDataCodes;
 
         int uid = 0;
         std::unordered_map<Code *, std::string> processedName;
 
         std::stringstream childrenData;
-        std::stringstream srcData;
         std::stringstream argData;
 
-        int sid = 0;
         int argId = 0;
 
         auto getProcessedName = [&](Code * c) {
@@ -531,11 +530,10 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                     *serializerError = true;
                     std::cout << "  (E) Src hast is 0 for " << name << std::endl;
                 }
-                // srcData << name << "|" << data.hast << "|" << data.index << ",";
-                srcData << name << "," << sid++ << ",";
-                srcIndices.push_back(c->rirSrc()->src);
 
                 argData << name << ",";
+
+                srcDataMap[name] = src_pool_at(globalContext(), c->rirSrc()->src);
 
                 if (done[c]->arglistOrder() != nullptr) {
                     argData << argId++ << ",";
@@ -604,20 +602,49 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
 
 
-        jit.serializeModule(done[mainFunCodeObj], srcIndices, cData, relevantNames);
+        jit.serializeModule(done[mainFunCodeObj], cData, relevantNames);
 
         std::string mainName = getProcessedName(mainFunCodeObj);
 
+        if (relevantNames.at(0).compare(mainName) != 0) {
+            std::string firstName = relevantNames.at(0);
+            relevantNames[0] = mainName;
+            for (size_t i = 0; i < relevantNames.size(); i++) {
+                if (relevantNames.at(i).compare(mainName) == 0) {
+                    relevantNames[i] = firstName;
+                    break;
+                }
+            }
+        }
+
+        SEXP fNamesVec, fSrcDataVec;
+        PROTECT(fNamesVec = Rf_allocVector(VECSXP, relevantNames.size()));
+        PROTECT(fSrcDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
+
+        for (size_t i = 0; i < relevantNames.size(); i++) {
+            SEXP store;
+            PROTECT(store = Rf_mkString(relevantNames[i].c_str()));
+            SET_VECTOR_ELT(fNamesVec, i, store);
+            UNPROTECT(1);
+            SET_VECTOR_ELT(fSrcDataVec, i, srcDataMap[relevantNames[i]]);
+        }
+
         contextData conData(cData);
+
+        conData.addFNames(fNamesVec);
+        conData.addFSrc(fSrcDataVec);
+
+        UNPROTECT(2);
 
         std::cout << "[ORIG Signature]: " << (int)signature.envCreation << ", " << (int)signature.optimization << ", " <<  signature.numArguments << ", " << signature.hasDotsFormals << ", " << signature.hasDefaultArgs << ", " << signature.dotsPosition << std::endl;
         conData.addFunctionSignature(signature);                 // 1
 
         conData.addMainName(mainName);                        // 5
 
+
+
     //     // 6(cPoolEntriesSize), 7(srcPoolEntriesSize), 8(promiseSrcPoolEntriesSize)
         conData.addChildrenData(childrenData.str());          // 9
-        conData.addSrcData(srcData.str().substr(0,srcData.str().size() - 1)); // 10
         conData.addArgData(argData.str().substr(0,argData.str().size() - 1)); // 11
 
         std::vector<std::vector<std::vector<size_t>>> argOrderingData;
