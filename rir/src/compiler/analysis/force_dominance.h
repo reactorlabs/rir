@@ -168,15 +168,12 @@ struct ForcedBy {
     AbstractResult merge(const ForcedBy& other, bool exitMerge = false) {
         AbstractResult res;
 
-        {
-            auto sc = inScope.begin();
-            while (sc != inScope.end()) {
-                if (other.inScope.count(*sc)) {
-                    ++sc;
-                } else {
-                    sc = inScope.erase(sc);
-                    res.update();
-                }
+        for (auto sc = inScope.begin(); sc != inScope.end(); /* nothing */) {
+            if (other.inScope.count(*sc)) {
+                ++sc;
+            } else {
+                sc = inScope.erase(sc);
+                res.update();
             }
         }
 
