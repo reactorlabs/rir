@@ -25,10 +25,10 @@ class Backend {
 
     void deserialize(
       SEXP fNames, SEXP fSrc,
-      SEXP fArg,
+      SEXP fArg, SEXP fChildren,
       size_t hast, Context context,
       rir::FunctionSignature fs, // for function signature
-      std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData,
+      std::string bcPath, std::string poolPath, std::string startingHandle,
       size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
       );
 

@@ -337,10 +337,10 @@ void PirJitLLVM::finalizeAndFixup() {
 
 void PirJitLLVM::deserializeAndAddModule(
     SEXP fNames, SEXP fSrc,
-    SEXP fArg,
+    SEXP fArg, SEXP fChildren,
     size_t hast, Context context,
     rir::FunctionSignature fs,
-    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData,
+    std::string bcPath, std::string poolPath, std::string startingHandle,
     size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
     ) {
 
@@ -612,24 +612,6 @@ void PirJitLLVM::deserializeAndAddModule(
     std::cout << "(*) Inserting native code into jit" << std::endl;
     #endif
 
-    llvm::PassBuilder passBuilder;
-    llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
-    llvm::FunctionAnalysisManager functionAnalysisManager(false);
-    llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
-    llvm::ModuleAnalysisManager moduleAnalysisManager(false);
-
-    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
-    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
-    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
-    passBuilder.registerLoopAnalyses(loopAnalysisManager);
-    // This is the important line:
-    passBuilder.crossRegisterProxies(
-        loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
-
-    llvm::ModulePassManager modulePassManager =
-        passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O1);
-    modulePassManager.run(*llModuleHolder.get(), moduleAnalysisManager);
-
     // Insert native code into the JIT
     auto TSM = llvm::orc::ThreadSafeModule(std::move(llModuleHolder.get()), TSC);
     ExitOnErr(JIT->addIRModule(std::move(TSM)));
@@ -640,59 +622,6 @@ void PirJitLLVM::deserializeAndAddModule(
 
     #if PRINT_DESERIALIZER_PROGRESS == 1
     std::cout << "(*) Linking code objects" << std::endl;
-    #endif
-
-    auto separateUsingDel = [&](std::string cSep, char c) {
-        std::vector<std::string> res;
-
-        std::stringstream ss(cSep);
-
-        while (ss.good()) {
-            std::string substr;
-            getline(ss, substr, c);
-            res.push_back(substr);
-        }
-
-        return res;
-    };
-
-    auto separateUsingCommas = [&](std::string cSep) {
-        return separateUsingDel(cSep, ',');
-    };
-
-    // auto separateUsingPipe = [&](std::string cSep) {
-    //     return separateUsingDel(cSep, '|');
-    // };
-
-    // Shows the linking of promises and their owners
-    std::unordered_map<std::string, std::vector<std::string>> promMap;
-
-    auto promiseVector = separateUsingCommas(promiseData);
-
-    int i = 0;
-    std::string parent;
-    for (auto & ele : promiseVector) {
-        if (ele.compare("|") == 0) {
-            i = 0;
-            continue;
-        }
-        if (i == 0) {
-            parent = ele;
-        } else {
-            promMap[parent].push_back(ele);
-        }
-        i++;
-    }
-
-    #if PRINT_PROMISE_MAP == 1
-    std::cout << "(*) promMap: " << std::endl;
-    for (auto & ele : promMap) {
-        std::cout << "    " << ele.first << ": [ ";
-        for (auto & prom : ele.second) {
-            std::cout << prom  << " ";
-        }
-        std::cout << " ]" << std::endl;
-    }
     #endif
 
     FunctionWriter function;
@@ -729,9 +658,6 @@ void PirJitLLVM::deserializeAndAddModule(
             // Add the handle to the promise
             p->lazyCodeHandle(handle);
             codeMap[handle] = p;
-
-            // p->nativeCode();
-
             if (patchedArgs[handle] != 0) {
                 p->arglistOrder(ArglistOrder::unpack(Pool::get(patchedArgs[handle])));
             }
@@ -739,40 +665,20 @@ void PirJitLLVM::deserializeAndAddModule(
         return codeMap[handle];
     };
 
-    #if PRINT_PROMISE_MAP == 1
-    std::cout << "(*) promiseLinkage: " << std::endl;
-    for (auto & ele : promMap) {
-        std::cout << "    " << ele.first << ": [ ";
-        for (auto & prom : ele.second) {
-            std::cout << prom  << " ";
-        }
-        std::cout << " ]" << std::endl;
-    }
-    #endif
+    for (int i = 0; i < Rf_length(fChildren); i++) {
+        auto cVector = VECTOR_ELT(fChildren, i);
 
-    #if PRINT_PROMISE_LINKAGE_MAP == 1
-    std::cout << "(*) Linking promises to code objs" << std::endl;
-    #endif
-    for (auto & ele : promMap) {
-        auto currCodeElement = getCodeObj(ele.first);
-        #if PRINT_PROMISE_LINKAGE_MAP == 1
-        std::cout << "    " << ele.first << "(" << currCodeElement << ")" << " : [ ";
-        #endif
-        for (auto & prom : ele.second) {
-            auto promObj = getCodeObj(prom);
+        auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
+
+        auto currCodeElement = getCodeObj(handle);
+        for (int j = 0; j < Rf_length(cVector); j++) {
+            auto d = VECTOR_ELT(cVector, j);
+            auto handleC = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, Rf_asInteger(d)), 0)));
+
+            auto promObj = getCodeObj(handleC);
             currCodeElement->addExtraPoolEntry(promObj->container());
-
-            #if PRINT_PROMISE_LINKAGE_MAP == 1
-            std::cout << prom << "(" << promObj << "), ";
-            #endif
         }
-        #if PRINT_PROMISE_LINKAGE_MAP == 1
-        std::cout << " ]";
-        #endif
     }
-    #if PRINT_PROMISE_LINKAGE_MAP == 1
-        std::cout << std::endl;
-    #endif
 
     auto res = getCodeObj(startingHandle);
     function.finalize(res, fs, context);
@@ -1332,20 +1238,7 @@ void PirJitLLVM::initializeLLVM() {
                     *tmp = res;
                     Pool::insert(store);
                     UNPROTECT(1);
-
-                    std::cout << "resolved offset: " << res << std::endl;
-
-                    // #if PRINT_PATCH_ERRORS == 1
-                    // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    // SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
-                    // SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
-
-                    // if (oldVal != newVal) {
-                    //     std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
-                    //     std::cerr << "CODE patch failed" << std::endl;
-                    // }
-                    // #endif
-
+                    // std::cout << "resolved offset: " << res << std::endl;
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
                             reinterpret_cast<uintptr_t>(tmp)),
@@ -1361,9 +1254,7 @@ void PirJitLLVM::initializeLLVM() {
 
                     SEXP map = Pool::get(HAST_CLOS_MAP);
                     auto addr = UMap::get(map, Rf_install(hast.c_str()));
-
-                    std::cout << "cppp PATC: " << (uintptr_t) addr << std::endl;
-
+                    // std::cout << "cppp PATC: " << (uintptr_t) addr << std::endl;
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
                             reinterpret_cast<uintptr_t>(addr)),

@@ -111,13 +111,16 @@ namespace rir {
 
     class contextData : containerDataAbstraction {
         // {
-        // 0 (unsigned long) context,
+        // 0 (unsigned long) Context
+        // 1 (rir::FunctionSignature) Function Signature
+        // 2 (SEXP) Function Names
+        // 3 (SEXP) Function Src
+        // 4 (SEXP) Function Arglist Order
         // 5 (std::string) mainName,
         // 6 (size_t) cPoolEntriesSize,
         // 7 (size_t) srcPoolEntriesSize,
-        // 9 (std::string) childrenData,
-        // 10 (std::string) srcData,
-        // 13 (VECTOR) reqMapForCompilation
+        // 8 (SEXP) Children Data,
+        // 9 (SEXP) reqMapForCompilation
         // }
         public:
             SEXP getContainer() {
@@ -199,23 +202,23 @@ namespace rir {
                 return getSizeT(7);
             }
 
-            // ENTRY 9: childrenData
-            void addChildrenData(std::string data) {
-                addString(data, 9);
+            // ENTRY 8: childrenData
+            void addFChildren(SEXP data) {
+                SET_VECTOR_ELT(container, 8, data);
             }
 
-            std::string getChildrenData() {
-                return getString(9);
+            SEXP getFChildren() {
+                return VECTOR_ELT(container, 8);
             }
 
-
+            // ENTRY 10: reqMap
             void addReqMapForCompilation(SEXP data) {
-                SET_VECTOR_ELT(container, 13, data);
+                SET_VECTOR_ELT(container, 9, data);
             }
 
             std::vector<size_t> getReqMapForCompilation() {
                 std::vector<size_t> resData;
-                SEXP rMap = VECTOR_ELT(container, 13);
+                SEXP rMap = VECTOR_ELT(container, 9);
                 for (int i = 0; i < Rf_length(rMap); i++) {
                     SEXP dataContainer = VECTOR_ELT(rMap, i);
                     size_t* res = (size_t *) DATAPTR(dataContainer);
@@ -225,15 +228,13 @@ namespace rir {
             }
 
             SEXP getReqMapAsVector() {
-                SEXP rMap = VECTOR_ELT(container, 13);
+                SEXP rMap = VECTOR_ELT(container, 9);
                 return rMap;
             }
 
             void print() {
                 print(0);
             }
-
-
 
             void print(int space) {
                 printSpace(space);
@@ -277,7 +278,24 @@ namespace rir {
                 printSpace(space);
                 std::cout << "ENTRY(7)[srcPoolEntriesSize]: " << getSrcPoolEntriesSize() << std::endl;
                 printSpace(space);
-                std::cout << "ENTRY(9)[childrenData]: " << getChildrenData() << std::endl;
+                std::cout << "ENTRY(4)[childrenData]" << std::endl;
+                auto fChildren = getFChildren();
+                for (int i = 0; i < Rf_length(fChildren); i++) {
+                    auto cVector = VECTOR_ELT(fChildren, i);
+
+                    auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
+
+                    printSpace(space);
+
+                    std::cout << handle << " : [ ";
+                    for (int j = 0; j < Rf_length(cVector); j++) {
+                        auto d = VECTOR_ELT(cVector, j);
+                        auto handleC = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, Rf_asInteger(d)), 0)));
+
+                        std::cout << handleC << " ";
+                    }
+                    std::cout << "] " << std::endl;
+                }
 
                 auto rData = getReqMapForCompilation();
                 printSpace(space);
