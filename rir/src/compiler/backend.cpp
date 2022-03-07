@@ -607,14 +607,28 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::string mainName = getProcessedName(mainFunCodeObj);
 
         if (relevantNames.at(0).compare(mainName) != 0) {
-            std::string firstName = relevantNames.at(0);
-            relevantNames[0] = mainName;
+            std::cout << "relevant names before: [ ";
+            for (auto & ele : relevantNames) {
+                std::cout << ele << " ";
+            }
+            std::cout << "]" << std::endl;
+            std::cout << "MAKING FIRST NAME CORRECT "  << std::endl;
+
+            int mainNameIndex = 0;
             for (size_t i = 0; i < relevantNames.size(); i++) {
                 if (relevantNames.at(i).compare(mainName) == 0) {
-                    relevantNames[i] = firstName;
+                    std::cout << "main Name at " << i << std::endl;
+                    mainNameIndex = i;
                     break;
                 }
             }
+            std::swap(relevantNames[0],relevantNames[mainNameIndex]);
+
+            std::cout << "relevant names after: [ ";
+            for (auto & ele : relevantNames) {
+                std::cout << ele << " ";
+            }
+            std::cout << "]" << std::endl;
         }
 
         SEXP fNamesVec, fSrcDataVec;
