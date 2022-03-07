@@ -795,7 +795,7 @@ void PirJitLLVM::compile(
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
     if (funCompiler.hasArgReordering()) {
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
-        target->argOrderingVec = funCompiler.getArgReordering();
+        target->argOrderingVec = ArglistOrder::Newt(funCompiler.getArgReordering());
     }
     // jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
     jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName().str()));

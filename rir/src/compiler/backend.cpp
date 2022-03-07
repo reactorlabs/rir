@@ -503,17 +503,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         #endif
 
         std::unordered_map<std::string, SEXP> srcDataMap;
-
-        std::vector<rir::Code*> argDataCodes;
+        std::unordered_map<std::string, SEXP> srcArgMap;
 
         int uid = 0;
         std::unordered_map<Code *, std::string> processedName;
 
         std::stringstream childrenData;
-        std::stringstream argData;
-
-        int argId = 0;
-
         auto getProcessedName = [&](Code * c) {
             if (processedName.find(c) == processedName.end()) {
                 std::stringstream nn;
@@ -531,15 +526,13 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                     std::cout << "  (E) Src hast is 0 for " << name << std::endl;
                 }
 
-                argData << name << ",";
 
                 srcDataMap[name] = src_pool_at(globalContext(), c->rirSrc()->src);
 
                 if (done[c]->arglistOrder() != nullptr) {
-                    argData << argId++ << ",";
-                    argDataCodes.push_back(done[c]);
+                    srcArgMap[name] = done[c]->argOrderingVec;
                 } else {
-                    argData << "|" << ",";
+                    srcArgMap[name] = R_NilValue;
                 }
 
                 #if BACKEND_PRINT_NAME_UPDATES == 1
@@ -607,33 +600,20 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::string mainName = getProcessedName(mainFunCodeObj);
 
         if (relevantNames.at(0).compare(mainName) != 0) {
-            std::cout << "relevant names before: [ ";
-            for (auto & ele : relevantNames) {
-                std::cout << ele << " ";
-            }
-            std::cout << "]" << std::endl;
-            std::cout << "MAKING FIRST NAME CORRECT "  << std::endl;
-
             int mainNameIndex = 0;
             for (size_t i = 0; i < relevantNames.size(); i++) {
                 if (relevantNames.at(i).compare(mainName) == 0) {
-                    std::cout << "main Name at " << i << std::endl;
                     mainNameIndex = i;
                     break;
                 }
             }
             std::swap(relevantNames[0],relevantNames[mainNameIndex]);
-
-            std::cout << "relevant names after: [ ";
-            for (auto & ele : relevantNames) {
-                std::cout << ele << " ";
-            }
-            std::cout << "]" << std::endl;
         }
 
-        SEXP fNamesVec, fSrcDataVec;
+        SEXP fNamesVec, fSrcDataVec, fArgDataVec;
         PROTECT(fNamesVec = Rf_allocVector(VECSXP, relevantNames.size()));
         PROTECT(fSrcDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
+        PROTECT(fArgDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
 
         for (size_t i = 0; i < relevantNames.size(); i++) {
             SEXP store;
@@ -641,95 +621,24 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             SET_VECTOR_ELT(fNamesVec, i, store);
             UNPROTECT(1);
             SET_VECTOR_ELT(fSrcDataVec, i, srcDataMap[relevantNames[i]]);
+
+            SET_VECTOR_ELT(fArgDataVec, i, srcArgMap[relevantNames[i]]);
         }
 
         contextData conData(cData);
 
         conData.addFNames(fNamesVec);
         conData.addFSrc(fSrcDataVec);
+        conData.addFArg(fArgDataVec);
 
-        UNPROTECT(2);
+        UNPROTECT(3);
 
         std::cout << "[ORIG Signature]: " << (int)signature.envCreation << ", " << (int)signature.optimization << ", " <<  signature.numArguments << ", " << signature.hasDotsFormals << ", " << signature.hasDefaultArgs << ", " << signature.dotsPosition << std::endl;
         conData.addFunctionSignature(signature);                 // 1
 
         conData.addMainName(mainName);                        // 5
 
-
-
-    //     // 6(cPoolEntriesSize), 7(srcPoolEntriesSize), 8(promiseSrcPoolEntriesSize)
         conData.addChildrenData(childrenData.str());          // 9
-        conData.addArgData(argData.str().substr(0,argData.str().size() - 1)); // 11
-
-        std::vector<std::vector<std::vector<size_t>>> argOrderingData;
-        for (auto & codeObj : argDataCodes) {
-            std::vector<std::vector<size_t>> outerData;
-
-            for (auto & outer : codeObj->argOrderingVec) {
-                std::vector<size_t> innerData;
-
-                for (auto & inner : outer) {
-                    innerData.push_back(inner);
-                }
-                outerData.push_back(innerData);
-            }
-            argOrderingData.push_back(outerData);
-        }
-
-
-        SEXP aOrderingData;
-        PROTECT(aOrderingData = Rf_allocVector(VECSXP, argOrderingData.size()));
-
-        int in_i = 0;
-
-        for (auto & i : argOrderingData) {
-
-            SEXP innerData;
-            PROTECT(innerData = Rf_allocVector(VECSXP, i.size()));
-            int in_j = 0;
-            for (auto & j : i) {
-
-                SEXP innermostData;
-                PROTECT(innermostData = Rf_allocVector(VECSXP, j.size()));
-                int in_k = 0;
-
-                for (auto & ele : j) {
-
-                    SEXP store;
-                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
-                    size_t * tmp = (size_t *) DATAPTR(store);
-                    *tmp = ele;
-                    SET_VECTOR_ELT(innermostData, in_k++, store);
-                    UNPROTECT(1);
-                }
-
-                SET_VECTOR_ELT(innerData, in_j++, innermostData);
-                UNPROTECT(1);
-            }
-
-            SET_VECTOR_ELT(aOrderingData, in_i++, innerData);
-            UNPROTECT(1);
-        }
-
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) original argOrderingData: <";
-        for (auto & i : argOrderingData) {
-            std::cout << "<";
-            for (auto & j : i) {
-                std::cout << "< ";
-
-                for (auto & ele : j) {
-                    std::cout << ele << " ";
-                }
-                std::cout << ">";
-            }
-            std::cout << ">";
-        }
-        std::cout << ">" << std::endl;
-        #endif
-
-        conData.addArgOrderingData(aOrderingData);
-        UNPROTECT(1);
 
         SEXP rData;
         PROTECT(rData = Rf_allocVector(VECSXP, rMap.size()));

@@ -140,7 +140,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     std::string mName = ""; /// name of the function in JIT
 
-    std::vector<ArglistOrder::CallArglistOrder> argOrderingVec; /// callArglist order, raw
+    SEXP argOrderingVec; /// callArglist order, raw
 
     uint8_t data[]; /// the instructions
 

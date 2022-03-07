@@ -60,6 +60,12 @@ struct ArglistOrder
         return res;
     }
 
+    static SEXP Newt(std::vector<CallArglistOrder> const& reordering) {
+        SEXP cont = Rf_allocVector(RAWSXP, size(reordering));
+        new (DATAPTR(cont)) ArglistOrder(reordering);
+        return cont;
+    }
+
     explicit ArglistOrder(std::vector<CallArglistOrder> const& reordering)
         : RirRuntimeObject(0, 0), nCalls(reordering.size()) {
         auto offset = nCalls * 2;

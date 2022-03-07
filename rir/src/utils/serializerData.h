@@ -112,18 +112,11 @@ namespace rir {
     class contextData : containerDataAbstraction {
         // {
         // 0 (unsigned long) context,
-        // 1 (int) envCreation,
-        // 2 (int) optimization,
-        // 3 (unsigned) numArguments,
-        // 4 (size_t) dotsPosition,
         // 5 (std::string) mainName,
         // 6 (size_t) cPoolEntriesSize,
         // 7 (size_t) srcPoolEntriesSize,
-        // 8 (size_t) promiseSrcPoolEntriesSize,
         // 9 (std::string) childrenData,
         // 10 (std::string) srcData,
-        // 11 (std::string) argData,
-        // 12 (VECTOR) argOrderingData,
         // 13 (VECTOR) reqMapForCompilation
         // }
         public:
@@ -170,6 +163,15 @@ namespace rir {
                 return VECTOR_ELT(container, 3);
             }
 
+            // ENTRY 4: Function Arglist Order
+            void addFArg(SEXP data) {
+                SET_VECTOR_ELT(container, 4, data);
+            }
+
+            SEXP getFArg() {
+                return VECTOR_ELT(container, 4);
+            }
+
             // ENTRY 5: MainName
             void addMainName(std::string data) {
                 addString(data, 5);
@@ -206,45 +208,6 @@ namespace rir {
                 return getString(9);
             }
 
-            // ENTRY 11: argData
-            void addArgData(std::string data) {
-                addString(data, 11);
-            }
-
-            std::string getArgData() {
-                return getString(11);
-            }
-
-            void addArgOrderingData(SEXP data) {
-                SET_VECTOR_ELT(container, 12, data);
-            }
-
-            std::vector<std::vector<std::vector<size_t>>> getArgOrderingData() {
-                std::vector<std::vector<std::vector<size_t>>> result;
-                SEXP aOrderingData = VECTOR_ELT(container, 12);
-                for (int i = 0; i < Rf_length(aOrderingData); i++) {
-                    SEXP iData = VECTOR_ELT(aOrderingData, i);
-
-                    std::vector<std::vector<size_t>> innerData;
-                    for (int j = 0; j < Rf_length(iData); j++) {
-
-                        SEXP jData = VECTOR_ELT(iData, j);
-
-                        std::vector<size_t> innerMostData;
-
-                        for (int k = 0; k < Rf_length(jData); k++) {
-
-                            SEXP dataContainer = VECTOR_ELT(jData, k);
-                            size_t* res = (size_t *) DATAPTR(dataContainer);
-                            innerMostData.push_back(*res);
-                        }
-                        innerData.push_back(innerMostData);
-                    }
-                    result.push_back(innerData);
-                }
-
-                return result;
-            }
 
             void addReqMapForCompilation(SEXP data) {
                 SET_VECTOR_ELT(container, 13, data);
@@ -299,6 +262,14 @@ namespace rir {
                 }
                 std::cout << "]" << std::endl;
 
+                std::cout << "ENTRY(4)[Function Arglist Order]: [ ";
+                auto fArg = getFArg();
+                for (int i = 0; i < Rf_length(fArg); i++) {
+                    auto c = VECTOR_ELT(fArg, i);
+                    std::cout << TYPEOF(c) << " ";
+                }
+                std::cout << "]" << std::endl;
+
                 printSpace(space);
                 std::cout << "ENTRY(5)[mainName]: " << getMainName() << std::endl;
                 printSpace(space);
@@ -307,23 +278,6 @@ namespace rir {
                 std::cout << "ENTRY(7)[srcPoolEntriesSize]: " << getSrcPoolEntriesSize() << std::endl;
                 printSpace(space);
                 std::cout << "ENTRY(9)[childrenData]: " << getChildrenData() << std::endl;
-                printSpace(space);
-                std::cout << "ENTRY(11)[argData]: " << getArgData() << std::endl;
-                auto argOrderingData = getArgOrderingData();
-                printSpace(space);
-                std::cout << "ENTRY(12)[argOrderingData]: <";
-                for (auto & i : argOrderingData) {
-                    std::cout << "<";
-                    for (auto & j : i) {
-                        std::cout << "<";
-                        for (auto & ele : j) {
-                            std::cout << ele << " ";
-                        }
-                        std::cout << ">";
-                    }
-                    std::cout << ">";
-                }
-                std::cout << ">" << std::endl;
 
                 auto rData = getReqMapForCompilation();
                 printSpace(space);
