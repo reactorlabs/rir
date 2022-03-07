@@ -630,61 +630,43 @@ void PirJitLLVM::deserializeAndAddModule(
         function.addArgWithoutDefault();
     }
 
-    std::unordered_map<std::string, int> patchedSrcs;
-    std::unordered_map<std::string, int> patchedArgs;
+    std::vector<rir::Code *> codeObjs;
 
     for (int i = 0; i < Rf_length(fNames); i++) {
-        auto c = VECTOR_ELT(fNames, i);
-        auto handle = std::string(CHAR(STRING_ELT(c, 0)));
-
+        // AST Data
         auto astData = VECTOR_ELT(fSrc, i);
-        patchedSrcs[handle] = src_pool_add(globalContext(), astData);
+        auto p = rir::Code::New(src_pool_add(globalContext(), astData));
 
+        // ARG Data
         auto argData = VECTOR_ELT(fArg, i);
-        if (TYPEOF(argData) == 0) {
-            patchedArgs[handle] = 0;
-        } else {
+        if (TYPEOF(argData) != 0) {
             SET_TYPEOF(argData, EXTERNALSXP);
-            patchedArgs[handle] = Pool::insert(argData);
+            p->arglistOrder(ArglistOrder::unpack(argData));
         }
-    }
 
-    std::unordered_map<std::string, rir::Code *> codeMap;
-    auto getCodeObj = [&](std::string handle) {
-        if (codeMap.find(handle) == codeMap.end()) {
-            unsigned patchedSrcIdx = patchedSrcs[handle];
-            auto p = rir::Code::New(patchedSrcIdx);
-            preserve(p->container());
-            // Add the handle to the promise
-            p->lazyCodeHandle(handle);
-            codeMap[handle] = p;
-            if (patchedArgs[handle] != 0) {
-                p->arglistOrder(ArglistOrder::unpack(Pool::get(patchedArgs[handle])));
-            }
-        }
-        return codeMap[handle];
-    };
+        // Code handle
+        auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
+        p->lazyCodeHandle(handle);
+
+        codeObjs.push_back(p);
+    }
 
     for (int i = 0; i < Rf_length(fChildren); i++) {
+        auto currCodeElement = codeObjs[i];
+
         auto cVector = VECTOR_ELT(fChildren, i);
-
-        auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
-
-        auto currCodeElement = getCodeObj(handle);
         for (int j = 0; j < Rf_length(cVector); j++) {
             auto d = VECTOR_ELT(cVector, j);
-            auto handleC = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, Rf_asInteger(d)), 0)));
-
-            auto promObj = getCodeObj(handleC);
-            currCodeElement->addExtraPoolEntry(promObj->container());
+            auto childCodeElement = codeObjs[Rf_asInteger(d)];
+            currCodeElement->addExtraPoolEntry(childCodeElement->container());
         }
     }
 
-    auto res = getCodeObj(startingHandle);
+    auto res = codeObjs[0];
     function.finalize(res, fs, context);
 
-    for (auto& item : codeMap) {
-        item.second->function(function.function());
+    for (auto& item : codeObjs) {
+        item->function(function.function());
     }
 
     auto map = Pool::get(HAST_DEPENDENCY_MAP);
