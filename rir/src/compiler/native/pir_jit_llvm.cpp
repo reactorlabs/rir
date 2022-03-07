@@ -405,14 +405,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
             #endif
         }
 
-        // for (auto & global : module->getGlobalList()) {
-        //     auto pre = global.getName().str().substr(0,6) == "copool";
-        //     auto srp = global.getName().str().substr(0,6) == "srpool";
-        //     if (pre || srp) {
-        //         global.users
-        //     }
-        // }
-
         // Patch all CP and SRC pool entries
         int patchValue = 0;
         // Iterating over all globals
@@ -555,30 +547,14 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
     }
 
     // Creating a vector containing all pool references
-    SEXP serializationObjects;
-    PROTECT(serializationObjects = Rf_allocVector(VECSXP,
-        cpEntries.size() + spEntries.size()));
-
     contextData conData(cData);
 
-    conData.addCPoolEntriesSize(cpEntries.size());
-    conData.addSrcPoolEntriesSize(spEntries.size());
+    SEXP cPool, sPool;
+    PROTECT(cPool = Rf_allocVector(VECSXP, cpEntries.size()));
+    PROTECT(sPool = Rf_allocVector(VECSXP, spEntries.size()));
 
-    #if PRINT_SERIALIZER_PROGRESS == 1
-    std::cout << "    (*) Pool data stored" << std::endl;
-    #endif
-
-    int i = 0;
-
-    // Restore the original bodies of the closures
-    std::unordered_map<SEXP, SEXP> restoreMap;
-
-    #if PRINT_CP_ENTRIES == 1
-    std::cout << "    (*) Constant Pool Entries: [ ";
-    #endif
-
-    for (auto & ele : cpEntries) {
-        SEXP obj = Pool::get(ele);
+    for (int i = 0; i < Rf_length(cPool); i++) {
+        SEXP obj = Pool::get(cpEntries[i]);
         // Dont serialize external code, we serialize the original AST
         if (TYPEOF(obj) == CLOSXP) {
             *serializerError = true;
@@ -592,62 +568,22 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
             std::cout << "  (E) Trying to serialize a EXTERNALSXP" << std::endl;
             #endif
         }
-        #if PRINT_CP_ENTRIES == 1
-        std::cout << i << "{ TYPE: " << TYPEOF(obj) << ", " << obj << "} ";
-        #endif
-        SET_VECTOR_ELT(serializationObjects, i++, obj);
+        SET_VECTOR_ELT(cPool, i, obj);
     }
 
-    #if PRINT_CP_ENTRIES == 1
-    std::cout << " ]" << std::endl;
-    #endif
-
-    // RESTORE THE ORIGINAL BODIES
-    for (auto & ele : restoreMap) {
-        SET_BODY(ele.first, ele.second);
+    for (int i = 0; i < Rf_length(sPool); i++) {
+        SEXP obj = src_pool_at(globalContext(), spEntries[i]);
+        SET_VECTOR_ELT(sPool, i, obj);
     }
 
-    #if PRINT_SRC_ENTRIES == 1
-    int j = 0;
-    std::cout << "    (*) Source Pool Entries: [ ";
-    #endif
-
-    for (auto & ele : spEntries) {
-        SEXP obj = src_pool_at(globalContext(), ele);
-        #if PRINT_SRC_ENTRIES == 1
-        std::cout << "{" <<  j << " at "<< i << ", TYPE: " << TYPEOF(obj) << "}" << " ";
-        j++;
-        #endif
-        SET_VECTOR_ELT(serializationObjects, i++, obj);
-    }
-
-    #if PRINT_SRC_ENTRIES == 1
-    std::cout << " ]" << std::endl;
-    #endif
-
-
-    // SERIALIZE THE CONSTANT POOL
-    #if PRINT_SERIALIZER_PROGRESS == 1
-    std::cout << "    (*) Starting Constant Pool Serialization" << std::endl;
-    #endif
-    R_outpstream_st outputStream;
-    std::stringstream bcPath;
-    bcPath << prefix << "/" << "temp.pool";
-    FILE *fptr;
-    fptr = fopen(bcPath.str().c_str(),"w");
-    R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
-    R_Serialize(serializationObjects, &outputStream);
-    fclose(fptr);
-
-    #if PRINT_SERIALIZER_PROGRESS == 1
-    std::cout << "    (*) Module pool serialized: " << bcPath.str() << std::endl;
-    #endif
+    conData.addCPool(cPool);
+    conData.addSPool(sPool);
 
     #if PRINT_SERIALIZER_PROGRESS == 1
     std::cout << "  (/) Module Serialized Successfully" << std::endl;
     #endif
 
-    UNPROTECT(1);
+    UNPROTECT(2);
 }
 
 void PirJitLLVM::updateFunctionNameInModule(std::string oldName, std::string newName) {
