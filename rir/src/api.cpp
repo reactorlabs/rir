@@ -407,22 +407,16 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         std::stringstream bitcodePath;
         bitcodePath << mainPrefix.str() << ".bc";
 
-        // PATH TO BITCODE POOL
-        std::stringstream poolPath;
-        poolPath << mainPrefix.str() << ".pool";
-
-        size_t ePoolEntriesSize = 0;
-
         rir::FunctionSignature fs = c.getFunctionSignature();
         std::string mainName = c.getMainName();
-        size_t cPoolEntriesSize = c.getCPoolEntriesSize();
-        size_t srcPoolEntriesSize = c.getSrcPoolEntriesSize();
 
 
         SEXP fNames = c.getFNames();
         SEXP fSrc = c.getFSrc();
         SEXP fArg = c.getFArg();
-        auto fChildren = c.getFChildren();
+        SEXP fChildren = c.getFChildren();
+        SEXP cPool = c.getCPool();
+        SEXP sPool = c.getSPool();
 
         std::vector<size_t> reqMapForCompilation = c.getReqMapForCompilation();
 
@@ -434,12 +428,12 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         pir::Backend backend(m, logger, functionName);
 
         backend.deserialize(
+            cPool, sPool,
             fNames, fSrc,
             fArg, fChildren,
             hast, Context(con),
             fs,
-            bitcodePath.str(), poolPath.str(), mainName,
-            cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize); // passing the context and fileName (remove context later)
+            bitcodePath.str(), mainName); // passing the context and fileName (remove context later)
 
         SEXP map = Pool::get(HAST_DEPENDENCY_MAP);
         DeserialDataMap::addDependencies(map, hast, con, reqMapForCompilation);

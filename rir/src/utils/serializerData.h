@@ -117,8 +117,8 @@ namespace rir {
         // 3 (SEXP) Function Src
         // 4 (SEXP) Function Arglist Order
         // 5 (std::string) mainName,
-        // 6 (size_t) cPoolEntriesSize,
-        // 7 (size_t) srcPoolEntriesSize,
+        // 6 (SEXP) CPool,
+        // 7 (SEXP) SPool,
         // 8 (SEXP) Children Data,
         // 9 (SEXP) reqMapForCompilation
         // }
@@ -184,22 +184,22 @@ namespace rir {
                 return getString(5);
             }
 
-            // ENTRY 6: cPoolEntriesSize
-            void addCPoolEntriesSize(size_t data) {
-                addSizeT(data, 6);
+            // ENTRY 6: cPool
+            void addCPool(SEXP data) {
+                SET_VECTOR_ELT(container, 6, data);
             }
 
-            size_t getCPoolEntriesSize() {
-                return getSizeT(6);
+            SEXP getCPool() {
+                return VECTOR_ELT(container, 6);
             }
 
-            // ENTRY 7: srcPoolEntriesSize
-            void addSrcPoolEntriesSize(size_t data) {
-                addSizeT(data, 7);
+            // ENTRY 7: sPool
+            void addSPool(SEXP data) {
+                SET_VECTOR_ELT(container, 7, data);
             }
 
-            size_t getSrcPoolEntriesSize() {
-                return getSizeT(7);
+            SEXP getSPool() {
+                return VECTOR_ELT(container, 7);
             }
 
             // ENTRY 8: childrenData
@@ -263,6 +263,7 @@ namespace rir {
                 }
                 std::cout << "]" << std::endl;
 
+                printSpace(space);
                 std::cout << "ENTRY(4)[Function Arglist Order]: [ ";
                 auto fArg = getFArg();
                 for (int i = 0; i < Rf_length(fArg); i++) {
@@ -273,12 +274,27 @@ namespace rir {
 
                 printSpace(space);
                 std::cout << "ENTRY(5)[mainName]: " << getMainName() << std::endl;
+
                 printSpace(space);
-                std::cout << "ENTRY(6)[cPoolEntriesSize]: " << getCPoolEntriesSize() << std::endl;
+                auto cPool = getCPool();
+                std::cout << "ENTRY(6)[CPool]: (" << Rf_length(cPool) << ") [ ";
+                for (int i = 0; i < Rf_length(cPool); i++) {
+                    auto c = VECTOR_ELT(cPool, i);
+                    std::cout << TYPEOF(c) << " ";
+                }
+                std::cout << "]" << std::endl;
+
                 printSpace(space);
-                std::cout << "ENTRY(7)[srcPoolEntriesSize]: " << getSrcPoolEntriesSize() << std::endl;
+                auto sPool = getSPool();
+                std::cout << "ENTRY(6)[SPool]: (" << Rf_length(sPool) << ") [ ";
+                for (int i = 0; i < Rf_length(sPool); i++) {
+                    auto c = VECTOR_ELT(sPool, i);
+                    std::cout << TYPEOF(c) << " ";
+                }
+                std::cout << "]" << std::endl;
+
                 printSpace(space);
-                std::cout << "ENTRY(4)[childrenData]" << std::endl;
+                std::cout << "ENTRY(8)[children Data]" << std::endl;
                 auto fChildren = getFChildren();
                 for (int i = 0; i < Rf_length(fChildren); i++) {
                     auto cVector = VECTOR_ELT(fChildren, i);
@@ -299,7 +315,7 @@ namespace rir {
 
                 auto rData = getReqMapForCompilation();
                 printSpace(space);
-                std::cout << "ENTRY(13)[reqMapForCompilation]: <";
+                std::cout << "ENTRY(9)[reqMapForCompilation]: <";
                 for (auto & ele : rData) {
                     std::cout << ele << " ";
                 }

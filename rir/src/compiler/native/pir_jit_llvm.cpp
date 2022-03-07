@@ -336,138 +336,33 @@ void PirJitLLVM::finalizeAndFixup() {
 }
 
 void PirJitLLVM::deserializeAndAddModule(
+    SEXP cPool, SEXP sPool,
     SEXP fNames, SEXP fSrc,
     SEXP fArg, SEXP fChildren,
     size_t hast, Context context,
     rir::FunctionSignature fs,
-    std::string bcPath, std::string poolPath, std::string startingHandle,
-    size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
-    ) {
-
-    #if PRINT_DESERIALIZER_PROGRESS == 1
-    std::cout << "(*) Loading pool file: " << poolPath << std::endl;
-    #endif
-
-    // Load the serialized pool from the .pool file
-    FILE *reader;
-    reader = fopen(poolPath.c_str(),"r");
-
-    // Initialize the deserializing stream
-    R_inpstream_st inputStream;
-    R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
-
-    // Vector storing the result of deserialized pool
-    SEXP result = R_Unserialize(&inputStream);
-
-    #if PRINT_DESERIALIZER_PROGRESS == 1
-    std::cout << "(*) Pool deserialized" << std::endl;
-    #endif
-
-    // size_t totalEntriesInSerializedPool = (size_t)Rf_length(result);
-    size_t streamIndex = 0;
+    std::string bcPath, std::string startingHandle) {
 
     // Constant Pool patches
     std::unordered_map<int64_t, int64_t> poolPatch;
-    size_t cpIndex = 0;
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << "(*) ConstantPool: [ ";
-    #endif
-    while (streamIndex < cPoolEntriesSize) {
-        // Load element from the serialized pool
-        auto ele = VECTOR_ELT(result, streamIndex);
-
-
-        auto runtimeCpIndex = Pool::insert(ele);
-        poolPatch[cpIndex] = runtimeCpIndex;
-
-        #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-        std::cout << "{ " << streamIndex << " to " << runtimeCpIndex << ", TYPE: " << TYPEOF(ele) << ", " << ele << " } ";
-        #endif
-
-        if (TYPEOF(ele) == LANGSXP || TYPEOF(ele) == CLOSXP) {
-            // std::cout << "LANGSXP IN CP: " << std::endl;
-            // printAST(0, ele);
-            SEXP map = Pool::get(6);
-            if (map == R_NilValue) {
-                UMap::createMapInCp(6);
-                map = Pool::get(6);
-            }
-
-            SEXP lhsSym = Rf_install(std::to_string((uintptr_t)ele).c_str());
-            SEXP runtimeSym = Rf_install(std::to_string(runtimeCpIndex).c_str());
-
-            if (!UMap::symbolExistsInMap(lhsSym, map)) {
-                UMap::insert(map, lhsSym, runtimeSym);
-            }
-        }
-        streamIndex++;
-        cpIndex++;
+    for (int i = 0; i < Rf_length(cPool); i++) {
+        auto ele = VECTOR_ELT(cPool, i);
+        poolPatch[i] = Pool::insert(ele);
     }
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << " ]" << std::endl;
-    #endif
-
     // Source Pool patches
     std::unordered_map<int64_t, int64_t> sPoolPatch;
-    size_t srcIndex = 0;
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << "(*) SourcePool: [ ";
-    #endif
-    while (streamIndex < cPoolEntriesSize + srcPoolEntriesSize) {
-        auto ele = VECTOR_ELT(result, streamIndex);
-        auto patchedIndex = src_pool_add(globalContext(), ele);
-
-        #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-        std::cout << "{ " << srcIndex << " to " << patchedIndex << " from " << streamIndex << ", TYPE: " << TYPEOF(ele) << " } ";
-        #endif
-
-        sPoolPatch[srcIndex] = patchedIndex;
-
-        streamIndex++;
-        srcIndex++;
-
-        // if (TYPEOF(ele) != SYMSXP)
-        //     std::cout << "SRC POOL patch: " << ele << std::endl;
-
+    for (int i = 0; i < Rf_length(sPool); i++) {
+        auto ele = VECTOR_ELT(sPool, i);
+        sPoolPatch[i] = Pool::insert(ele);
     }
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << " ]" << std::endl;
-    #endif
-
-    // Extra Pool patches
-    size_t epIndex = 0;
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << "(*) ExtraPool: [ ";
-    #endif
-    while (streamIndex < cPoolEntriesSize + srcPoolEntriesSize + ePoolEntriesSize) {
-        auto ele = VECTOR_ELT(result, streamIndex);
-        auto patchedIndex = Pool::insert(ele);
-
-        poolPatch[epIndex] = patchedIndex;
-
-        #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-        std::cout << "{ " << epIndex << " to " << patchedIndex << " from " << streamIndex << ", TYPE: " << TYPEOF(ele) << " } ";
-        #endif
-
-        streamIndex++;
-        epIndex++;
-    }
-
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << " ]" << std::endl;
+    #if PRINT_DESERIALIZER_PROGRESS == 1
+    std::cout << "(*) Pool patches prepared" << std::endl;
     #endif
 
     #if PRINT_DESERIALIZED_MODULE_BEFORE_PATCH == 1
     llvm::raw_os_ostream dbg1(std::cout);
     dbg1 << *llModuleHolder.get();
     #endif
-
-    fclose(reader);
-
-    #if PRINT_DESERIALIZER_PROGRESS == 1
-    std::cout << "(*) Pool patches prepared" << std::endl;
-    #endif
-
 
     #if PRINT_DESERIALIZER_PROGRESS == 1
     std::cout << "(*) Loading bc file: " << bcPath << std::endl;
@@ -590,10 +485,7 @@ void PirJitLLVM::deserializeAndAddModule(
                 auto val = v->getSExtValue();
                 // Offset relative to the serialized pool
                 llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, sPoolPatch[val]));
-
                 global.setInitializer(replacementValue);
-
-                // std::cout << "src pool patch: " << sPoolPatch[val] << std::endl;
             }
             global.setExternallyInitialized(false);
         }

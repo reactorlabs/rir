@@ -24,13 +24,12 @@ class Backend {
     rir::Function* getOrCompile(ClosureVersion* cls);
 
     void deserialize(
+      SEXP cPool, SEXP sPool,
       SEXP fNames, SEXP fSrc,
       SEXP fArg, SEXP fChildren,
       size_t hast, Context context,
       rir::FunctionSignature fs, // for function signature
-      std::string bcPath, std::string poolPath, std::string startingHandle,
-      size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
-      );
+      std::string bcPath, std::string startingHandle);
 
   private:
     struct LastDestructor {

@@ -53,13 +53,12 @@ class PirJitLLVM {
                  ClosureStreamLogger& log);
 
     void deserializeAndAddModule(
+      SEXP cPool, SEXP sPool,
       SEXP fNames, SEXP fSrc,
       SEXP fArg, SEXP fChildren,
       size_t hast, Context context,
       rir::FunctionSignature fs,
-      std::string bcPath, std::string poolPath, std::string startingHandle,
-      size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
-      );
+      std::string bcPath, std::string startingHandle);
 
     using GetModule = std::function<llvm::Module&()>;
     using GetFunction = std::function<llvm::Function*(Code*)>;

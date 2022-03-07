@@ -408,20 +408,19 @@ Backend::LastDestructor::LastDestructor() {
 }
 
 void Backend::deserialize(
+    SEXP cPool, SEXP sPool,
     SEXP fNames, SEXP fSrc,
     SEXP fArg, SEXP fChildren,
     size_t hast, Context context,
     rir::FunctionSignature fs, // for function signature
-    std::string bcPath, std::string poolPath, std::string startingHandle,
-    size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
-    ) {
+    std::string bcPath, std::string startingHandle) {
     jit.deserializeAndAddModule(
+        cPool, sPool,
         fNames, fSrc,
         fArg, fChildren,
         hast, context,
         fs,
-        bcPath, poolPath, startingHandle,
-        cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize);
+        bcPath, startingHandle);
 }
 
 rir::Function* Backend::getOrCompile(ClosureVersion* cls) {
