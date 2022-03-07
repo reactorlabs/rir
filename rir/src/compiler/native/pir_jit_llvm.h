@@ -58,7 +58,7 @@ class PirJitLLVM {
       SEXP fArg, SEXP fChildren,
       size_t hast, Context context,
       rir::FunctionSignature fs,
-      std::string bcPath, std::string startingHandle);
+      std::string bcPath);
 
     using GetModule = std::function<llvm::Module&()>;
     using GetFunction = std::function<llvm::Function*(Code*)>;

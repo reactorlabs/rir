@@ -116,11 +116,10 @@ namespace rir {
         // 2 (SEXP) Function Names
         // 3 (SEXP) Function Src
         // 4 (SEXP) Function Arglist Order
-        // 5 (std::string) mainName,
-        // 6 (SEXP) CPool,
-        // 7 (SEXP) SPool,
-        // 8 (SEXP) Children Data,
-        // 9 (SEXP) reqMapForCompilation
+        // 5 (SEXP) CPool,
+        // 6 (SEXP) SPool,
+        // 7 (SEXP) Children Data,
+        // 8 (SEXP) reqMapForCompilation
         // }
         public:
             SEXP getContainer() {
@@ -175,50 +174,41 @@ namespace rir {
                 return VECTOR_ELT(container, 4);
             }
 
-            // ENTRY 5: MainName
-            void addMainName(std::string data) {
-                addString(data, 5);
-            }
-
-            std::string getMainName() {
-                return getString(5);
-            }
-
             // ENTRY 6: cPool
             void addCPool(SEXP data) {
-                SET_VECTOR_ELT(container, 6, data);
+                SET_VECTOR_ELT(container, 5, data);
             }
 
             SEXP getCPool() {
-                return VECTOR_ELT(container, 6);
+                return VECTOR_ELT(container, 5);
             }
 
             // ENTRY 7: sPool
             void addSPool(SEXP data) {
-                SET_VECTOR_ELT(container, 7, data);
+                SET_VECTOR_ELT(container, 6, data);
             }
 
             SEXP getSPool() {
-                return VECTOR_ELT(container, 7);
+                return VECTOR_ELT(container, 6);
             }
 
             // ENTRY 8: childrenData
             void addFChildren(SEXP data) {
-                SET_VECTOR_ELT(container, 8, data);
+                SET_VECTOR_ELT(container, 7, data);
             }
 
             SEXP getFChildren() {
-                return VECTOR_ELT(container, 8);
+                return VECTOR_ELT(container, 7);
             }
 
             // ENTRY 10: reqMap
             void addReqMapForCompilation(SEXP data) {
-                SET_VECTOR_ELT(container, 9, data);
+                SET_VECTOR_ELT(container, 8, data);
             }
 
             std::vector<size_t> getReqMapForCompilation() {
                 std::vector<size_t> resData;
-                SEXP rMap = VECTOR_ELT(container, 9);
+                SEXP rMap = VECTOR_ELT(container, 8);
                 for (int i = 0; i < Rf_length(rMap); i++) {
                     SEXP dataContainer = VECTOR_ELT(rMap, i);
                     size_t* res = (size_t *) DATAPTR(dataContainer);
@@ -228,7 +218,7 @@ namespace rir {
             }
 
             SEXP getReqMapAsVector() {
-                SEXP rMap = VECTOR_ELT(container, 9);
+                SEXP rMap = VECTOR_ELT(container, 8);
                 return rMap;
             }
 
@@ -273,11 +263,8 @@ namespace rir {
                 std::cout << "]" << std::endl;
 
                 printSpace(space);
-                std::cout << "ENTRY(5)[mainName]: " << getMainName() << std::endl;
-
-                printSpace(space);
                 auto cPool = getCPool();
-                std::cout << "ENTRY(6)[CPool]: (" << Rf_length(cPool) << ") [ ";
+                std::cout << "ENTRY(5)[CPool]: (" << Rf_length(cPool) << ") [ ";
                 for (int i = 0; i < Rf_length(cPool); i++) {
                     auto c = VECTOR_ELT(cPool, i);
                     std::cout << TYPEOF(c) << " ";
@@ -294,7 +281,7 @@ namespace rir {
                 std::cout << "]" << std::endl;
 
                 printSpace(space);
-                std::cout << "ENTRY(8)[children Data]" << std::endl;
+                std::cout << "ENTRY(7)[children Data]" << std::endl;
                 auto fChildren = getFChildren();
                 for (int i = 0; i < Rf_length(fChildren); i++) {
                     auto cVector = VECTOR_ELT(fChildren, i);
@@ -315,7 +302,7 @@ namespace rir {
 
                 auto rData = getReqMapForCompilation();
                 printSpace(space);
-                std::cout << "ENTRY(9)[reqMapForCompilation]: <";
+                std::cout << "ENTRY(8)[reqMapForCompilation]: <";
                 for (auto & ele : rData) {
                     std::cout << ele << " ";
                 }

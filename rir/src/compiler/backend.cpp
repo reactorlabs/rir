@@ -413,14 +413,14 @@ void Backend::deserialize(
     SEXP fArg, SEXP fChildren,
     size_t hast, Context context,
     rir::FunctionSignature fs, // for function signature
-    std::string bcPath, std::string startingHandle) {
+    std::string bcPath) {
     jit.deserializeAndAddModule(
         cPool, sPool,
         fNames, fSrc,
         fArg, fChildren,
         hast, context,
         fs,
-        bcPath, startingHandle);
+        bcPath);
 }
 
 rir::Function* Backend::getOrCompile(ClosureVersion* cls) {

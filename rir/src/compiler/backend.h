@@ -29,7 +29,7 @@ class Backend {
       SEXP fArg, SEXP fChildren,
       size_t hast, Context context,
       rir::FunctionSignature fs, // for function signature
-      std::string bcPath, std::string startingHandle);
+      std::string bcPath);
 
   private:
     struct LastDestructor {

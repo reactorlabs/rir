@@ -408,8 +408,6 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         bitcodePath << mainPrefix.str() << ".bc";
 
         rir::FunctionSignature fs = c.getFunctionSignature();
-        std::string mainName = c.getMainName();
-
 
         SEXP fNames = c.getFNames();
         SEXP fSrc = c.getFSrc();
@@ -433,7 +431,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
             fArg, fChildren,
             hast, Context(con),
             fs,
-            bitcodePath.str(), mainName); // passing the context and fileName (remove context later)
+            bitcodePath.str()); // passing the context and fileName (remove context later)
 
         SEXP map = Pool::get(HAST_DEPENDENCY_MAP);
         DeserialDataMap::addDependencies(map, hast, con, reqMapForCompilation);

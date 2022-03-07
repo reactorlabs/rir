@@ -341,7 +341,7 @@ void PirJitLLVM::deserializeAndAddModule(
     SEXP fArg, SEXP fChildren,
     size_t hast, Context context,
     rir::FunctionSignature fs,
-    std::string bcPath, std::string startingHandle) {
+    std::string bcPath) {
 
     // Constant Pool patches
     std::unordered_map<int64_t, int64_t> poolPatch;
