@@ -67,14 +67,12 @@ struct ForcedBy {
             f->second = nullptr;
             changed = true;
         }
-        auto mk = MkArg::Cast(arg);
-        if (!mk)
-            return changed;
-
-        auto e = escaped.find(mk);
-        if (e != escaped.end()) {
-            escaped.erase(e);
-            changed = true;
+        if (auto mk = MkArg::Cast(arg)) {
+            auto e = escaped.find(mk);
+            if (e != escaped.end()) {
+                escaped.erase(e);
+                changed = true;
+            }
         }
         return changed;
     }
@@ -116,8 +114,7 @@ struct ForcedBy {
         rir::SmallSet<Phi*> seen;
         std::function<bool(Value*, bool)> apply = [&](Value* val, bool phiArg) {
             bool res = false;
-            auto p = Phi::Cast(val);
-            if (p) {
+            if (auto p = Phi::Cast(val)) {
                 if (seen.includes(p))
                     return false;
                 seen.insert(p);
@@ -304,7 +301,8 @@ struct ForcedBy {
     }
 
     bool isDominatingForce(Force* f) const {
-        return f == getDominatingForce(f);
+        auto forcee = f->arg<0>().val()->followCasts();
+        return f == getDominatingForce(forcee);
     }
 
     bool isUnused(MkArg* a) const {
@@ -316,15 +314,11 @@ struct ForcedBy {
         return false;
     }
 
-    Instruction* getDominatingForce(Force* f) const {
-        auto a = f->arg<0>().val()->followCasts();
-        auto res = forcedBy.find(a);
-        if (res == forcedBy.end())
-            return nullptr;
-        if (res->second == ambiguous()) {
-            return nullptr;
-        }
-        return res->second;
+    Instruction* getDominatingForce(Value* v) const {
+        auto f = forcedBy.find(v);
+        return (f != forcedBy.end() && f->second && f->second != ambiguous())
+                   ? f->second
+                   : nullptr;
     }
 
     struct PromiseInlineable {
