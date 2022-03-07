@@ -504,11 +504,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         std::unordered_map<std::string, SEXP> srcDataMap;
         std::unordered_map<std::string, SEXP> srcArgMap;
+        std::unordered_map<std::string, std::vector<std::string>> childrenData;
+        std::unordered_map<std::string, int> codeOffset;
 
         int uid = 0;
         std::unordered_map<Code *, std::string> processedName;
 
-        std::stringstream childrenData;
         auto getProcessedName = [&](Code * c) {
             if (processedName.find(c) == processedName.end()) {
                 std::stringstream nn;
@@ -523,7 +524,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 auto data = getHastAndIndex(c->rirSrc()->src);
                 if (data.hast == 0) {
                     *serializerError = true;
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "  (E) Src hast is 0 for " << name << std::endl;
+                    #endif
                 }
 
 
@@ -545,38 +548,36 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             }
         };
 
+        // std::cout << "ORIG CHILDREN" << std::endl;
         std::function<void(Code* c)>
             updateModuleNames = [&](Code* c) {
-
             std::string name = getProcessedName(c);
-
             // Traverse over all the promises for the current code object
             auto & promisesForThisObj = promMap[c];
+            std::vector<std::string> children;
+            // std::cout << name << " : [ ";
             // If there are promises, then work on this
             if (promisesForThisObj.size() > 0) {
-                childrenData << name << ",";
                 for (size_t i = 0; i < promisesForThisObj.size(); i++) {
                     // get i'th promise
                     auto curr = done[c]->getExtraPoolEntry(i);
                     for (auto & promise : promisesForThisObj) {
                         if (curr == done[promise.first]->container()) {
-                            childrenData << getProcessedName(promise.first) << ",";
+                            auto nn = getProcessedName(promise.first);
+                            children.push_back(nn);
+                            // std::cout << nn << " ";
                             break;
                         }
                     }
-
-
                 }
-                childrenData << "|,";
-
             }
-
+            // std::cout << "] " << std::endl;
+            childrenData[name] = children;
         };
 
         for (auto & ele : promMap) {
             updateModuleNames(ele.first);
         }
-        childrenData << "|";
 
         std::vector<std::string> relevantNames;
 
@@ -584,15 +585,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         for (auto & ele : processedName) {
             relevantNames.push_back(ele.second);
         }
-
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) Revelant names: [ ";
-        for (auto & ele : relevantNames) {
-            std::cout << ele << " ";
-        }
-        std::cout << "]" << std::endl;
-        #endif
-
 
 
         jit.serializeModule(done[mainFunCodeObj], cData, relevantNames);
@@ -610,19 +602,39 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             std::swap(relevantNames[0],relevantNames[mainNameIndex]);
         }
 
-        SEXP fNamesVec, fSrcDataVec, fArgDataVec;
+        for (size_t i = 0; i < relevantNames.size(); i++) {
+            codeOffset[relevantNames[i]] = i;
+        }
+
+        SEXP fNamesVec, fSrcDataVec, fArgDataVec, fChildrenData;
         PROTECT(fNamesVec = Rf_allocVector(VECSXP, relevantNames.size()));
         PROTECT(fSrcDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
         PROTECT(fArgDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
+        PROTECT(fChildrenData = Rf_allocVector(VECSXP, relevantNames.size()));
 
         for (size_t i = 0; i < relevantNames.size(); i++) {
             SEXP store;
             PROTECT(store = Rf_mkString(relevantNames[i].c_str()));
             SET_VECTOR_ELT(fNamesVec, i, store);
             UNPROTECT(1);
-            SET_VECTOR_ELT(fSrcDataVec, i, srcDataMap[relevantNames[i]]);
 
+            // AST
+            SET_VECTOR_ELT(fSrcDataVec, i, srcDataMap[relevantNames[i]]);
+            // Arglist Order
             SET_VECTOR_ELT(fArgDataVec, i, srcArgMap[relevantNames[i]]);
+
+            auto children = childrenData[relevantNames[i]];
+
+            SEXP childrenContainer;
+            PROTECT(childrenContainer = Rf_allocVector(VECSXP, children.size()));
+
+            for (size_t j = 0; j < children.size(); j++) {
+                SET_VECTOR_ELT(childrenContainer, j, Rf_ScalarInteger(codeOffset[children[j]]));
+            }
+
+            SET_VECTOR_ELT(fChildrenData, i, childrenContainer);
+
+            UNPROTECT(1);
         }
 
         contextData conData(cData);
@@ -630,15 +642,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         conData.addFNames(fNamesVec);
         conData.addFSrc(fSrcDataVec);
         conData.addFArg(fArgDataVec);
+        conData.addFChildren(fChildrenData);
 
-        UNPROTECT(3);
+        UNPROTECT(4);
+        conData.addFunctionSignature(signature);
+        conData.addMainName(mainName);
 
-        std::cout << "[ORIG Signature]: " << (int)signature.envCreation << ", " << (int)signature.optimization << ", " <<  signature.numArguments << ", " << signature.hasDotsFormals << ", " << signature.hasDefaultArgs << ", " << signature.dotsPosition << std::endl;
-        conData.addFunctionSignature(signature);                 // 1
-
-        conData.addMainName(mainName);                        // 5
-
-        conData.addChildrenData(childrenData.str());          // 9
 
         SEXP rData;
         PROTECT(rData = Rf_allocVector(VECSXP, rMap.size()));
@@ -653,6 +662,11 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             UNPROTECT(1);
         }
 
+
+        conData.addReqMapForCompilation(rData);
+
+        UNPROTECT(1);
+
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (*) Original reqMapForCompilation: < ";
         for (auto & ele : rMap) {
@@ -660,11 +674,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         }
         std::cout << ">" << std::endl;
         #endif
-
-        conData.addReqMapForCompilation(rData);
-
-        UNPROTECT(1);
-
         if (getenv("PIR_SERIALIZE_NO_REQ") && rMap.size() > 0) {
             *serializerError = true;
             std::cout << "  (F) PIR_SERIALIZE_NO_REQ" << std::endl;
