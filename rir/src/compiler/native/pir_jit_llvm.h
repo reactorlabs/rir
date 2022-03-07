@@ -54,10 +54,10 @@ class PirJitLLVM {
 
     void deserializeAndAddModule(
       SEXP fNames, SEXP fSrc,
-      std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
+      SEXP fArg,
       size_t hast, Context context,
       rir::FunctionSignature fs,
-      std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string argData,
+      std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData,
       size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
       );
 

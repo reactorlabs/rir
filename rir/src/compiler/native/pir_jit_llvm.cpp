@@ -337,10 +337,10 @@ void PirJitLLVM::finalizeAndFixup() {
 
 void PirJitLLVM::deserializeAndAddModule(
     SEXP fNames, SEXP fSrc,
-    std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
+    SEXP fArg,
     size_t hast, Context context,
     rir::FunctionSignature fs,
-    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string argData,
+    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData,
     size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
     ) {
 
@@ -666,8 +666,6 @@ void PirJitLLVM::deserializeAndAddModule(
 
     // Shows the linking of promises and their owners
     std::unordered_map<std::string, std::vector<std::string>> promMap;
-    // Gives the index of argData if it exists, otherwise -1
-    std::unordered_map<std::string, int> argMap;
 
     auto promiseVector = separateUsingCommas(promiseData);
 
@@ -697,26 +695,6 @@ void PirJitLLVM::deserializeAndAddModule(
     }
     #endif
 
-
-    auto argDataVec = separateUsingCommas(argData);
-
-    for (long unsigned int j = 0; j < argDataVec.size() - 1; j+=2) {
-        auto ele1 = argDataVec.at(j);
-        auto ele2 = argDataVec.at(j + 1);
-        if (ele2.compare("|") == 0) {
-            argMap[ele1] = -1;
-        } else {
-            argMap[ele1] = std::stoi(ele2);
-        }
-    }
-
-    #if PRINT_ARG_MAP == 1
-    std::cout << "(*) argMap: " << std::endl;
-    for (auto & ele : argMap) {
-        std::cout << "    " << ele.first << " : " << ele.second << std::endl;
-    }
-    #endif
-
     FunctionWriter function;
     Preserve preserve;
     for (size_t i = 0; i < fs.numArguments; ++i) {
@@ -724,6 +702,7 @@ void PirJitLLVM::deserializeAndAddModule(
     }
 
     std::unordered_map<std::string, int> patchedSrcs;
+    std::unordered_map<std::string, int> patchedArgs;
 
     for (int i = 0; i < Rf_length(fNames); i++) {
         auto c = VECTOR_ELT(fNames, i);
@@ -731,6 +710,14 @@ void PirJitLLVM::deserializeAndAddModule(
 
         auto astData = VECTOR_ELT(fSrc, i);
         patchedSrcs[handle] = src_pool_add(globalContext(), astData);
+
+        auto argData = VECTOR_ELT(fArg, i);
+        if (TYPEOF(argData) == 0) {
+            patchedArgs[handle] = 0;
+        } else {
+            SET_TYPEOF(argData, EXTERNALSXP);
+            patchedArgs[handle] = Pool::insert(argData);
+        }
     }
 
     std::unordered_map<std::string, rir::Code *> codeMap;
@@ -745,8 +732,8 @@ void PirJitLLVM::deserializeAndAddModule(
 
             // p->nativeCode();
 
-            if (argMap[handle] != -1) {
-                p->arglistOrder(ArglistOrder::New(argOrderingData[argMap[handle]]));
+            if (patchedArgs[handle] != 0) {
+                p->arglistOrder(ArglistOrder::unpack(Pool::get(patchedArgs[handle])));
             }
         }
         return codeMap[handle];

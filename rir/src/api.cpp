@@ -412,18 +412,17 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         poolPath << mainPrefix.str() << ".pool";
 
         size_t ePoolEntriesSize = 0;
-        std::vector<std::vector<std::vector<size_t>>> argOrderingData = c.getArgOrderingData();
 
         rir::FunctionSignature fs = c.getFunctionSignature();
         std::string mainName = c.getMainName();
         std::string childrenData = c.getChildrenData();
-        std::string argData = c.getArgData();
         size_t cPoolEntriesSize = c.getCPoolEntriesSize();
         size_t srcPoolEntriesSize = c.getSrcPoolEntriesSize();
 
 
         SEXP fNames = c.getFNames();
         SEXP fSrc = c.getFSrc();
+        SEXP fArg = c.getFArg();
 
         std::vector<size_t> reqMapForCompilation = c.getReqMapForCompilation();
 
@@ -436,10 +435,10 @@ SEXP deserializeFromFile(std::string metaDataPath) {
 
         backend.deserialize(
             fNames, fSrc,
-            argOrderingData,
+            fArg,
             hast, Context(con),
             fs,
-            bitcodePath.str(), poolPath.str(), mainName, childrenData, argData,
+            bitcodePath.str(), poolPath.str(), mainName, childrenData,
             cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize); // passing the context and fileName (remove context later)
 
         SEXP map = Pool::get(HAST_DEPENDENCY_MAP);

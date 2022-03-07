@@ -409,18 +409,18 @@ Backend::LastDestructor::LastDestructor() {
 
 void Backend::deserialize(
     SEXP fNames, SEXP fSrc,
-    std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
+    SEXP fArg,
     size_t hast, Context context,
     rir::FunctionSignature fs, // for function signature
-    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string argData,
+    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData,
     size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
     ) {
     jit.deserializeAndAddModule(
         fNames, fSrc,
-        argOrderingData,
+        fArg,
         hast, context,
         fs,
-        bcPath, poolPath, startingHandle, promiseData, argData,
+        bcPath, poolPath, startingHandle, promiseData,
         cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize);
 }
 
