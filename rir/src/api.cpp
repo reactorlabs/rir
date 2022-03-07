@@ -417,11 +417,13 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         rir::FunctionSignature fs = c.getFunctionSignature();
         std::string mainName = c.getMainName();
         std::string childrenData = c.getChildrenData();
-        std::string srcData = c.getSrcData();
         std::string argData = c.getArgData();
         size_t cPoolEntriesSize = c.getCPoolEntriesSize();
         size_t srcPoolEntriesSize = c.getSrcPoolEntriesSize();
-        size_t promiseSrcPoolEntriesSize = c.getPromiseSrcPoolEntriesSize();
+
+
+        SEXP fNames = c.getFNames();
+        SEXP fSrc = c.getFSrc();
 
         std::vector<size_t> reqMapForCompilation = c.getReqMapForCompilation();
 
@@ -433,11 +435,12 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         pir::Backend backend(m, logger, functionName);
 
         backend.deserialize(
+            fNames, fSrc,
             argOrderingData,
             hast, Context(con),
             fs,
-            bitcodePath.str(), poolPath.str(), mainName, childrenData, srcData, argData,
-            cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize, promiseSrcPoolEntriesSize); // passing the context and fileName (remove context later)
+            bitcodePath.str(), poolPath.str(), mainName, childrenData, argData,
+            cPoolEntriesSize, srcPoolEntriesSize, ePoolEntriesSize); // passing the context and fileName (remove context later)
 
         SEXP map = Pool::get(HAST_DEPENDENCY_MAP);
         DeserialDataMap::addDependencies(map, hast, con, reqMapForCompilation);

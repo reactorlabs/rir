@@ -336,11 +336,12 @@ void PirJitLLVM::finalizeAndFixup() {
 }
 
 void PirJitLLVM::deserializeAndAddModule(
+    SEXP fNames, SEXP fSrc,
     std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
     size_t hast, Context context,
     rir::FunctionSignature fs,
-    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string srcData, std::string argData,
-    size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize, size_t & promiseSrcPoolEntriesSize
+    std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string argData,
+    size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
     ) {
 
     #if PRINT_DESERIALIZER_PROGRESS == 1
@@ -450,29 +451,6 @@ void PirJitLLVM::deserializeAndAddModule(
 
         streamIndex++;
         epIndex++;
-    }
-
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    std::cout << " ]" << std::endl;
-    #endif
-
-    // Promise src entries, ordered in depth first manner
-    std::vector<unsigned> srcEntriesForCode;
-
-    #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    int pIndex = 0;
-    std::cout << "(*) Promise Src Entries: [ ";
-    #endif
-
-    while (streamIndex  < cPoolEntriesSize + srcPoolEntriesSize + ePoolEntriesSize + promiseSrcPoolEntriesSize) {
-        auto ele = VECTOR_ELT(result, streamIndex);
-        auto patchedIndex = src_pool_add(globalContext(), ele);
-        srcEntriesForCode.push_back(patchedIndex);
-        #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-        std::cout << "{ " << pIndex++ << " to " << patchedIndex << " from " << streamIndex << ", TYPE: " << TYPEOF(ele) << " } ";
-        #endif
-
-        streamIndex++;
     }
 
     #if DESERIALIZED_PRINT_POOL_PATCHES == 1
@@ -688,8 +666,6 @@ void PirJitLLVM::deserializeAndAddModule(
 
     // Shows the linking of promises and their owners
     std::unordered_map<std::string, std::vector<std::string>> promMap;
-    // Gives the relative index to srcAst from the const pool
-    std::unordered_map<std::string, int> srcMap;
     // Gives the index of argData if it exists, otherwise -1
     std::unordered_map<std::string, int> argMap;
 
@@ -721,34 +697,6 @@ void PirJitLLVM::deserializeAndAddModule(
     }
     #endif
 
-    auto srcDataVec = separateUsingCommas(srcData);
-
-    // for (long unsigned int j = 0; j < srcDataVec.size() - 1; j++) {
-    //     // auto dataVec = separateUsingPipe(srcDataVec.at(j));
-    //     // auto handle = dataVec.at(0);
-    //     // auto hast   = dataVec.at(1);
-    //     // auto index  = dataVec.at(2);
-    //     // srcMap[handle] = 0;
-    //     auto srcDataVec = separateUsingCommas(srcData);
-
-    //     auto ele1 = srcDataVec.at(j);
-    //     auto ele2 = srcDataVec.at(j + 1);
-    //     srcMap[ele1] = std::stoi(ele2);
-    //     // auto ele1 = srcDataVec.at(j);
-    //     // auto ele2 = srcDataVec.at(j + 1);
-    // }
-    for (long unsigned int j = 0; j < srcDataVec.size() - 1; j+=2) {
-        auto ele1 = srcDataVec.at(j);
-        auto ele2 = srcDataVec.at(j + 1);
-        srcMap[ele1] = std::stoi(ele2);
-    }
-
-    #if PRINT_SRC_MAP == 1
-    std::cout << "(*) srcMap: " << std::endl;
-    for (auto & ele : srcMap) {
-        std::cout << "    " << ele.first << " : " << ele.second << std::endl;
-    }
-    #endif
 
     auto argDataVec = separateUsingCommas(argData);
 
@@ -775,11 +723,20 @@ void PirJitLLVM::deserializeAndAddModule(
         function.addArgWithoutDefault();
     }
 
+    std::unordered_map<std::string, int> patchedSrcs;
+
+    for (int i = 0; i < Rf_length(fNames); i++) {
+        auto c = VECTOR_ELT(fNames, i);
+        auto handle = std::string(CHAR(STRING_ELT(c, 0)));
+
+        auto astData = VECTOR_ELT(fSrc, i);
+        patchedSrcs[handle] = src_pool_add(globalContext(), astData);
+    }
+
     std::unordered_map<std::string, rir::Code *> codeMap;
     auto getCodeObj = [&](std::string handle) {
         if (codeMap.find(handle) == codeMap.end()) {
-            unsigned patchedSrcIdx = srcEntriesForCode[srcMap[handle]];
-            // unsigned patchedSrcIdx = srcMap[handle];
+            unsigned patchedSrcIdx = patchedSrcs[handle];
             auto p = rir::Code::New(patchedSrcIdx);
             preserve(p->container());
             // Add the handle to the promise

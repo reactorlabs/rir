@@ -24,11 +24,12 @@ class Backend {
     rir::Function* getOrCompile(ClosureVersion* cls);
 
     void deserialize(
+      SEXP fNames, SEXP fSrc,
       std::vector<std::vector<std::vector<size_t>>> & argOrderingData,
       size_t hast, Context context,
       rir::FunctionSignature fs, // for function signature
-      std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string srcData, std::string argData,
-      size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize, size_t & promiseSrcPoolEntriesSize
+      std::string bcPath, std::string poolPath, std::string startingHandle, std::string promiseData, std::string argData,
+      size_t & cPoolEntriesSize, size_t & srcPoolEntriesSize, size_t & ePoolEntriesSize
       );
 
   private:
