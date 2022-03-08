@@ -445,6 +445,13 @@ bool DominanceGraph::dominates(BB* a, BB* b) const {
     return false;
 }
 
+bool DominanceGraph::dominates(Instruction* a, Instruction* b) const {
+    if (a->bb() == b->bb()) {
+        return a->bb()->before(a, b);
+    }
+    return dominates(a->bb(), b->bb());
+}
+
 bool DominanceGraph::strictlyDominates(BB* a, BB* b) const {
     return a != b && dominates(a, b);
 }

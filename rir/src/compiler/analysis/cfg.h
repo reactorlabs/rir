@@ -54,6 +54,7 @@ class DominanceGraph {
     // Note that a node dominates itself. Nodes may dominate multiple nodes,
     // and be dominated by multiple nodes.
     bool dominates(BB* a, BB* b) const;
+    bool dominates(Instruction* a, Instruction* b) const;
 
     // `a` strictly dominates `b` if `a` dominates `b` and `a` does not equal
     // `b`.

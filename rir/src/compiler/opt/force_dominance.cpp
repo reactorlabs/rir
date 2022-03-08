@@ -72,7 +72,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                             if (j->arg(a).type().isA(RType::prom))
                                 j->arg(a).type() = eager->type;
                         },
-                        [&](Instruction* j) { return j->tag != Tag::CastType; });
+                        [&](Instruction* j) {
+                            return j->tag != Tag::CastType;
+                        });
                     anyChange = true;
                 }
             }
@@ -80,7 +82,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     });
 
     std::unordered_map<Force*, ForcedBy::PromiseInlineable> toInline;
-    SmallMap<Force*, Instruction*> dominatedBy;
+    SmallMap<Force*, Instruction*> dominatingForceForForcee;
 
     bool isHuge =
         cls->numNonDeoptInstrs() > Parameter::PROMISE_INLINER_MAX_SIZE;
@@ -153,9 +155,13 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 }
                             }
                         }
-                    } else if (auto dom = a.getDominatingForce(f)) {
-                        if (f != dom)
-                            dominatedBy[f] = dom;
+                    } else {
+                        auto forcee = f->arg<0>().val()->followCasts();
+                        if (auto dom = a.getDominatingForce(forcee)) {
+                            assert(f != dom &&
+                                   "isDominatingForce should hold!");
+                            dominatingForceForForcee[f] = dom;
+                        }
                     }
                 } else if (auto u = UpdatePromise::Cast(i)) {
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
@@ -389,9 +395,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     return false;
                                 return true;
                             };
-                            cast->replaceUsesIn(eager, bb,
-                                                [](Instruction*, size_t) {},
-                                                allowedToReplace);
+                            cast->replaceUsesIn(
+                                eager, bb, [](Instruction*, size_t) {},
+                                allowedToReplace);
                         }
                     }
                 }
@@ -399,6 +405,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             ip = next;
         }
     });
+
+    DominanceGraph dom(code);
 
     // 2. replace dominated promises
     Visitor::run(code->entry, [&](BB* bb) {
@@ -408,18 +416,19 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (auto f = Force::Cast(*ip)) {
                 // If this force instruction is dominated by another force
                 // we can replace it with the dominating instruction
-                auto dom = dominatedBy.find(f);
-                if (dom != dominatedBy.end()) {
-                    assert(f != dom->second);
-                    if (auto otherForce = Force::Cast(dom->second)) {
+                auto domF = dominatingForceForForcee.find(f);
+                if (domF != dominatingForceForForcee.end() &&
+                    dom.dominates(domF->second, f)) {
+                    assert(f != domF->second);
+                    if (auto otherForce = Force::Cast(domF->second)) {
                         if (inlinedPromise.count(otherForce)) {
                             f->replaceUsesWith(inlinedPromise.at(otherForce));
                         } else {
-                            f->replaceUsesWith(dom->second);
+                            f->replaceUsesWith(domF->second);
                         }
                         next = bb->remove(ip);
                     } else if (auto otherUpdate =
-                                   UpdatePromise::Cast(dom->second)) {
+                                   UpdatePromise::Cast(domF->second)) {
                         f->replaceUsesWith(otherUpdate->arg(1).val());
                         next = bb->remove(ip);
                     }
@@ -431,7 +440,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     // 3. replace remaining uses of the mkarg itself
     if (!forcedMkArg.empty()) {
-        DominanceGraph dom(code);
         for (auto m : forcedMkArg) {
             m.first->replaceDominatedUses(m.second.first, dom);
         }
