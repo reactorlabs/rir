@@ -1675,7 +1675,12 @@ void LowerFunctionLLVM::compileBinop(
 
     auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
         if (type.maybeNAOrNaN()) {
-            if (r == Rep::i32) {
+            if (rep == Rep::f64) {
+                if (!isNaBr)
+                    isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
+                                                "isNa", fun);
+                nacheck(llvmValue, type, isNaBr);
+            } else if (r == Rep::i32) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
                                                 "isNa", fun);
@@ -1697,17 +1702,15 @@ void LowerFunctionLLVM::compileBinop(
     }
     builder.CreateBr(done);
 
-    if (lhsRep == Rep::i32 || rhsRep == Rep::i32) {
-        if (isNaBr) {
-            builder.SetInsertPoint(isNaBr);
+    if (isNaBr) {
+        builder.SetInsertPoint(isNaBr);
 
-            if (r == t::Int)
-                res.addInput(c(NA_INTEGER));
-            else
-                res.addInput(c((double)R_NaN));
+        if (r == t::Int)
+            res.addInput(c(NA_INTEGER));
+        else
+            res.addInput(c((double)R_NaN));
 
-            builder.CreateBr(done);
-        }
+        builder.CreateBr(done);
     }
 
     builder.SetInsertPoint(done);
