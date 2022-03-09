@@ -1708,7 +1708,7 @@ void LowerFunctionLLVM::compileBinop(
         if (r == t::Int)
             res.addInput(c(NA_INTEGER));
         else
-            res.addInput(c((double)R_NaN));
+            res.addInput(c(NA_REAL));
 
         builder.CreateBr(done);
     }
