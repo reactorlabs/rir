@@ -1364,7 +1364,7 @@ void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
         // Don't actually check NA
         isNotNa = builder.getTrue();
     } else if (v->getType() == t::Double) {
-        isNotNa = builder.CreateFCmpUEQ(v, v);
+        isNotNa = builder.CreateFCmpORD(v, v);
     } else {
         assert(v->getType() == t::Int);
         isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
@@ -4275,7 +4275,7 @@ void LowerFunctionLLVM::compile() {
                                 res,
                                 [&]() {
                                     auto va = unboxReal(a);
-                                    return builder.CreateFCmpUEQ(va, va);
+                                    return builder.CreateFCmpORD(va, va);
                                 },
                                 [&]() { return builder.getFalse(); });
                         setVal(i, builder.CreateZExt(res, t::Int));
