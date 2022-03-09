@@ -129,6 +129,9 @@ class ScopeAnalysis
         subAnalysis;
 
   protected:
+    AbstractResult compute(ScopeAnalysisState& state, Instruction* i) override {
+        return doCompute(state, i, true);
+    }
     AbstractResult apply(ScopeAnalysisState& state,
                          Instruction* i) const override {
         return const_cast<ScopeAnalysis*>(this)->doCompute(state, i, false);
