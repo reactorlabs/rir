@@ -2721,11 +2721,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-                double real_res = myfloor(*REAL(lhs), (double)*INTEGER(rhs));
+                double real_res;
+                int r = *INTEGER(rhs);
+                if (r == NA_INTEGER) {
+                    real_res = NA_REAL;
+                } else {
+                    real_res = myfloor(*REAL(lhs), (double)r);
+                }
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-                double real_res = myfloor((double)*INTEGER(lhs), *REAL(rhs));
+                double real_res;
+                int l = *INTEGER(lhs);
+                if (l == NA_INTEGER) {
+                    real_res = NA_REAL;
+                } else {
+                    real_res = myfloor((double)l, *REAL(rhs));
+                }
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
@@ -2757,11 +2769,23 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, REALSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-                double real_res = myfmod(*REAL(lhs), (double)*INTEGER(rhs));
+                double real_res;
+                int r = *INTEGER(rhs);
+                if (r == NA_INTEGER) {
+                    real_res = NA_REAL;
+                } else {
+                    real_res = myfmod(*REAL(lhs), (double)r);
+                }
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-                double real_res = myfmod((double)*INTEGER(lhs), *REAL(rhs));
+                double real_res;
+                int l = *INTEGER(lhs);
+                if (l == NA_INTEGER) {
+                    real_res = NA_REAL;
+                } else {
+                    real_res = myfmod((double)l, *REAL(rhs));
+                }
                 STORE_BINOP(REALSXP, 0, real_res);
             } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                        IS_SIMPLE_SCALAR(rhs, INTSXP)) {
