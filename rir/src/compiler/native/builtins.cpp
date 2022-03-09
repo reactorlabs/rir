@@ -408,7 +408,7 @@ SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
     return res;
 }
 
-SEXP newIntImpl(int i) { return ScalarInteger(i); }
+SEXP newIntImpl(int i) { return Rf_ScalarInteger(i); }
 
 SEXP newIntDebugImpl(int i, void* debug) {
     std::cout << (char*)debug << "\n";
@@ -418,11 +418,13 @@ SEXP newIntDebugImpl(int i, void* debug) {
 }
 
 SEXP newIntFromRealImpl(double d) {
-    return ScalarInteger(d != d ? NA_INTEGER : d);
+    return Rf_ScalarInteger(d != d ? NA_INTEGER : d);
 }
 
-SEXP newRealImpl(double i) { return ScalarReal(i); }
-SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
+SEXP newRealImpl(double i) { return Rf_ScalarReal(i); }
+SEXP newRealFromIntImpl(int i) {
+    return Rf_ScalarReal(i == NA_INTEGER ? NAN : i);
+}
 
 #define OPERATION_FALLBACK(op)                                                 \
     do {                                                                       \
@@ -2623,7 +2625,7 @@ void NativeBuiltins::initializeBuiltins() {
         "nonLocalReturn", (void*)&nonLocalReturnImpl,
         llvm::FunctionType::get(t::t_void, {t::SEXP, t::SEXP}, false)};
     get_(Id::clsEq) = {
-        "cksEq",
+        "clsEq",
         (void*)&clsEqImpl,
         llvm::FunctionType::get(t::i1, {t::SEXP, t::SEXP}, false),
         {llvm::Attribute::ReadOnly, llvm::Attribute::Speculatable}};

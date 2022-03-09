@@ -190,8 +190,6 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
-
-
 }
 
 llvm::Value* LowerFunctionLLVM::constant(SEXP co, llvm::Type* needed) {
@@ -637,14 +635,15 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     if (ct->isReordered())
         callId = pushArgReordering(ct->getArgOrderOrig());
 
-    withCallFrame(arglist,
-                  [&]() -> llvm::Value* {
-                      return call(NativeBuiltins::get(
-                                      NativeBuiltins::Id::initClosureContext),
-                                  {c(callId), paramCode(), ast, data.rcntxt,
-                                   sysparent, op, c(ct->narglist())});
-                  },
-                  false);
+    withCallFrame(
+        arglist,
+        [&]() -> llvm::Value* {
+            return call(
+                NativeBuiltins::get(NativeBuiltins::Id::initClosureContext),
+                {c(callId), paramCode(), ast, data.rcntxt, sysparent, op,
+                 c(ct->narglist())});
+        },
+        false);
 
     // Create a copy of all live variables to be able to restart
     // SEXPs are stored as local vars, primitive values are placed in an
@@ -1228,7 +1227,7 @@ void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-};
+}
 
 llvm::Value* LowerFunctionLLVM::shared(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
@@ -1294,7 +1293,7 @@ void LowerFunctionLLVM::ensureNamed(llvm::Value* v) {
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(ok);
-};
+}
 
 void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
@@ -1323,7 +1322,7 @@ void LowerFunctionLLVM::ensureShared(llvm::Value* v) {
     builder.CreateBr(done);
 
     builder.SetInsertPoint(done);
-};
+}
 
 void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     assert(v->getType() == t::SEXP);
@@ -1353,7 +1352,7 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.CreateBr(done);
 
     builder.SetInsertPoint(done);
-};
+}
 
 void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
@@ -1387,16 +1386,17 @@ llvm::Value* LowerFunctionLLVM::checkDoubleToInt(llvm::Value* ld,
     auto lt = type.maybeNAOrNaN() ? builder.CreateFCmpULT(ld, upper)
                                   : builder.CreateFCmpOLT(ld, upper);
     auto inrange = builder.CreateAnd(lt, gt);
-    auto conv = createSelect2(inrange,
-                              [&]() {
-                                  // converting to signed int is not undefined
-                                  // here since we first check that it does not
-                                  // overflow
-                                  auto conv = builder.CreateFPToSI(ld, t::Int);
-                                  conv = builder.CreateSIToFP(conv, t::Double);
-                                  return builder.CreateFCmpOEQ(ld, conv);
-                              },
-                              [&]() { return builder.getFalse(); });
+    auto conv = createSelect2(
+        inrange,
+        [&]() {
+            // converting to signed int is not undefined
+            // here since we first check that it does not
+            // overflow
+            auto conv = builder.CreateFPToSI(ld, t::Int);
+            conv = builder.CreateSIToFP(conv, t::Double);
+            return builder.CreateFCmpOEQ(ld, conv);
+        },
+        [&]() { return builder.getFalse(); });
     return conv;
 }
 
@@ -1634,7 +1634,7 @@ void LowerFunctionLLVM::compileRelop(
     } else {
         setVal(i, res());
     }
-};
+}
 
 void LowerFunctionLLVM::compileBinop(
     Instruction* i, Value* lhs, Value* rhs,
@@ -1716,7 +1716,7 @@ void LowerFunctionLLVM::compileBinop(
     } else {
         setVal(i, res());
     }
-};
+}
 
 void LowerFunctionLLVM::compileUnop(
     Instruction* i, Value* arg,
@@ -1786,7 +1786,7 @@ void LowerFunctionLLVM::compileUnop(
     if (Rep::Of(i) == Rep::SEXP)
         theRes = box(theRes, arg->type);
     setVal(i, theRes);
-};
+}
 
 void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
                                      std::function<void()> no,
@@ -1829,7 +1829,7 @@ void LowerFunctionLLVM::writeBarrier(llvm::Value* x, llvm::Value* y,
     builder.CreateBr(done);
 
     builder.SetInsertPoint(done);
-};
+}
 
 bool LowerFunctionLLVM::compileDotcall(
     Instruction* i, const std::function<llvm::Value*()>& callee,
@@ -1969,7 +1969,7 @@ llvm::Value* LowerFunctionLLVM::isObj(llvm::Value* v) {
     return builder.CreateICmpNE(
         c(0, 64),
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 1)))));
-};
+}
 
 llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
     checkIsSexp(v, "in IsFastVeceltOkNative");
@@ -1985,7 +1985,7 @@ llvm::Value* LowerFunctionLLVM::fastVeceltOkNative(llvm::Value* v) {
                 builder.CreateICmpEQ(cdr(attrs), constant(R_NilValue, t::SEXP));
             return builder.CreateAnd(isMatr1, isMatr2);
         });
-};
+}
 
 llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
     checkIsSexp(v, "in is altrep");
@@ -1993,7 +1993,7 @@ llvm::Value* LowerFunctionLLVM::isAltrep(llvm::Value* v) {
     return builder.CreateICmpNE(
         c(0, 64),
         builder.CreateAnd(sxpinfo, c((unsigned long)(1ul << (TYPE_BITS + 2)))));
-};
+}
 
 llvm::Value* LowerFunctionLLVM::createSelect2(
     llvm::Value* cond, std::function<llvm::Value*()> trueValueAction,
@@ -2057,7 +2057,7 @@ llvm::Value* LowerFunctionLLVM::createSelect2(
     auto r = res();
 
     return r;
-};
+}
 
 void LowerFunctionLLVM::compile() {
 
@@ -3049,7 +3049,7 @@ void LowerFunctionLLVM::compile() {
                         break;
                     default:
                         done = false;
-                    };
+                    }
                     if (done) {
                         fixVisibility();
                         break;
@@ -3317,8 +3317,9 @@ void LowerFunctionLLVM::compile() {
             case Tag::Call: {
                 auto b = Call::Cast(i);
 
-                if (compileDotcall(b, [&]() { return loadSxp(b->cls()); },
-                                   [&](size_t i) { return R_NilValue; })) {
+                if (compileDotcall(
+                        b, [&]() { return loadSxp(b->cls()); },
+                        [&](size_t i) { return R_NilValue; })) {
                     break;
                 }
 
@@ -3342,8 +3343,9 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::NamedCall: {
                 auto b = NamedCall::Cast(i);
-                if (compileDotcall(b, [&]() { return loadSxp(b->cls()); },
-                                   [&](size_t i) { return b->names[i]; })) {
+                if (compileDotcall(
+                        b, [&]() { return loadSxp(b->cls()); },
+                        [&](size_t i) { return b->names[i]; })) {
                     break;
                 }
                 std::vector<Value*> args;
@@ -3672,81 +3674,84 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Add:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA
-                                 auto res =
-                                     builder.CreateAdd(a, b, "", false, true);
-                                 return res;
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFAdd(a, b);
-                             },
-                             BinopKind::ADD);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        auto res = builder.CreateAdd(a, b, "", false, true);
+                        return res;
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFAdd(a, b);
+                    },
+                    BinopKind::ADD);
                 break;
 
             case Tag::Sub:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA
-                                 return builder.CreateSub(a, b, "", false,
-                                                          true);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFSub(a, b);
-                             },
-                             BinopKind::SUB);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateSub(a, b, "", false, true);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFSub(a, b);
+                    },
+                    BinopKind::SUB);
                 break;
 
             case Tag::Mul:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA
-                                 return builder.CreateMul(a, b, "", false,
-                                                          true);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFMul(a, b);
-                             },
-                             BinopKind::MUL);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateMul(a, b, "", false, true);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFMul(a, b);
+                    },
+                    BinopKind::MUL);
                 break;
 
             case Tag::Div:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA
-                                 return builder.CreateSDiv(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFDiv(a, b);
-                             },
-                             BinopKind::DIV);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA
+                        return builder.CreateSDiv(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFDiv(a, b);
+                    },
+                    BinopKind::DIV);
                 break;
 
             case Tag::Pow:
-                compileBinop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 // TODO: Check NA?
-                                 return builder.CreateIntrinsic(
-                                     Intrinsic::powi,
-                                     {a->getType(), b->getType()}, {a, b});
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateBinaryIntrinsic(
-                                     Intrinsic::pow, a, b);
-                             },
-                             BinopKind::POW);
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA?
+                        return builder.CreateIntrinsic(
+                            Intrinsic::powi, {a->getType(), b->getType()},
+                            {a, b});
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
+                                                             b);
+                    },
+                    BinopKind::POW);
                 break;
 
             case Tag::Neq:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpNE(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpUNE(a, b);
-                             },
-                             BinopKind::NE);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpNE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpUNE(a, b);
+                    },
+                    BinopKind::NE);
                 break;
 
             case Tag::Minus: {
@@ -3758,8 +3763,9 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Plus: {
-                compileUnop(i, [&](llvm::Value* a) { return a; },
-                            [&](llvm::Value* a) { return a; }, UnopKind::PLUS);
+                compileUnop(
+                    i, [&](llvm::Value* a) { return a; },
+                    [&](llvm::Value* a) { return a; }, UnopKind::PLUS);
                 break;
             }
 
@@ -3819,95 +3825,101 @@ void LowerFunctionLLVM::compile() {
             }
 
             case Tag::Eq:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpEQ(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOEQ(a, b);
-                             },
-                             BinopKind::EQ);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpEQ(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOEQ(a, b);
+                    },
+                    BinopKind::EQ);
                 break;
 
             case Tag::Lte:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpSLE(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLE(a, b);
-                             },
-                             BinopKind::LTE);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSLE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOLE(a, b);
+                    },
+                    BinopKind::LTE);
                 break;
 
             case Tag::Lt:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpSLT(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOLT(a, b);
-                             },
-                             BinopKind::LT);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSLT(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOLT(a, b);
+                    },
+                    BinopKind::LT);
                 break;
 
             case Tag::Gte:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpSGE(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGE(a, b);
-                             },
-                             BinopKind::GTE);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSGE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOGE(a, b);
+                    },
+                    BinopKind::GTE);
                 break;
 
             case Tag::Gt:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateICmpSGT(a, b);
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 return builder.CreateFCmpOGT(a, b);
-                             },
-                             BinopKind::GT);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSGT(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOGT(a, b);
+                    },
+                    BinopKind::GT);
                 break;
 
             case Tag::LAnd:
-                compileRelop(i,
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 auto afalse = builder.CreateICmpEQ(a, c(0));
-                                 auto bfalse = builder.CreateICmpEQ(b, c(0));
-                                 return createSelect2(
-                                     builder.CreateOr(afalse, bfalse),
-                                     [&]() { return c(0); },
-                                     [&]() {
-                                         auto aNa = builder.CreateICmpEQ(
-                                             a, c(NA_LOGICAL));
-                                         auto bNa = builder.CreateICmpEQ(
-                                             b, c(NA_LOGICAL));
-                                         return createSelect2(
-                                             builder.CreateOr(aNa, bNa),
-                                             []() { return c(NA_LOGICAL); },
-                                             []() { return c(1); });
-                                     });
-                             },
-                             [&](llvm::Value* a, llvm::Value* b) {
-                                 auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
-                                 auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
-                                 return createSelect2(
-                                     builder.CreateOr(afalse, bfalse),
-                                     [&]() { return c(0); },
-                                     [&]() {
-                                         auto aNa = builder.CreateFCmpUNE(a, b);
-                                         auto bNa = builder.CreateFCmpUNE(b, b);
-                                         return createSelect2(
-                                             builder.CreateOr(aNa, bNa),
-                                             []() { return c(NA_LOGICAL); },
-                                             []() { return c(1); });
-                                     });
-                             },
-                             BinopKind::LAND, false);
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateICmpEQ(a, c(0));
+                        auto bfalse = builder.CreateICmpEQ(b, c(0));
+                        return createSelect2(
+                            builder.CreateOr(afalse, bfalse),
+                            [&]() { return c(0); },
+                            [&]() {
+                                auto aNa =
+                                    builder.CreateICmpEQ(a, c(NA_LOGICAL));
+                                auto bNa =
+                                    builder.CreateICmpEQ(b, c(NA_LOGICAL));
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(1); });
+                            });
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
+                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
+                        return createSelect2(
+                            builder.CreateOr(afalse, bfalse),
+                            [&]() { return c(0); },
+                            [&]() {
+                                auto aNa = builder.CreateFCmpUNE(a, b);
+                                auto bNa = builder.CreateFCmpUNE(b, b);
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(1); });
+                            });
+                    },
+                    BinopKind::LAND, false);
                 break;
 
             case Tag::LOr:
@@ -6082,37 +6094,38 @@ void LowerFunctionLLVM::compile() {
         std::unordered_set<rir::Code*> codes;
         std::unordered_map<size_t, const pir::TypeFeedback&> variableMapping;
 #ifdef DEBUG_REGISTER_MAP
-    std::unordered_set<size_t> usedSlots;
+        std::unordered_set<size_t> usedSlots;
 #endif
-    for (auto& var : variables_) {
-        auto i = var.first;
-        if (Rep::Of(i) != Rep::SEXP)
-            continue;
-        if (!i->typeFeedback().feedbackOrigin.pc())
-            continue;
-        if (!var.second.initialized)
-            continue;
-        if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
-            codes.insert(i->typeFeedback().feedbackOrigin.srcCode());
-            variableMapping.emplace(var.second.stackSlot, i->typeFeedback());
+        for (auto& var : variables_) {
+            auto i = var.first;
+            if (Rep::Of(i) != Rep::SEXP)
+                continue;
+            if (!i->typeFeedback().feedbackOrigin.pc())
+                continue;
+            if (!var.second.initialized)
+                continue;
+            if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
+                codes.insert(i->typeFeedback().feedbackOrigin.srcCode());
+                variableMapping.emplace(var.second.stackSlot,
+                                        i->typeFeedback());
 #ifdef DEBUG_REGISTER_MAP
-            assert(!usedSlots.count(var.second.stackSlot));
-            usedSlots.insert(var.second.stackSlot);
+                assert(!usedSlots.count(var.second.stackSlot));
+                usedSlots.insert(var.second.stackSlot);
+#endif
+            }
+            if (variableMapping.size() == PirTypeFeedback::MAX_SLOT_IDX)
+                break;
+        }
+        if (!variableMapping.empty()) {
+            pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
+            p_(pirTypeFeedback->container());
+#ifdef DEBUG_REGISTER_MAP
+            for (auto m : variableMapping) {
+                auto origin = registerMap->getOriginOfSlot(m.first);
+                assert(origin == m.second.second);
+            }
 #endif
         }
-        if (variableMapping.size() == PirTypeFeedback::MAX_SLOT_IDX)
-            break;
-    }
-    if (!variableMapping.empty()) {
-        pirTypeFeedback = PirTypeFeedback::New(codes, variableMapping);
-        p_(pirTypeFeedback->container());
-#ifdef DEBUG_REGISTER_MAP
-        for (auto m : variableMapping) {
-            auto origin = registerMap->getOriginOfSlot(m.first);
-            assert(origin == m.second.second);
-        }
-#endif
-    }
     }
 }
 
