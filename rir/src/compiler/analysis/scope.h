@@ -6,6 +6,7 @@
 #include "../pir/closure_version.h"
 #include "../pir/pir.h"
 #include "abstract_value.h"
+#include "compiler/util/visitor.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -117,6 +118,7 @@ class ScopeAnalysis
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     bool inPromise = false;
+    bool canDeopt = false;
 
     AbstractResult doCompute(ScopeAnalysisState& state, Instruction* i,
                              bool updateGlobalState);
@@ -143,14 +145,10 @@ class ScopeAnalysis
         : StaticAnalysis("Scope", cls, code, log), depth(0),
           globalStateStore(new ScopeAnalysisResults) {
         globalState = globalStateStore;
-    }
-
-    ScopeAnalysis(const ScopeAnalysis&) = delete;
-    ScopeAnalysis& operator=(const ScopeAnalysis& other) = delete;
-
-    ~ScopeAnalysis() {
-        if (globalStateStore)
-            delete globalStateStore;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (Assume::Cast(i))
+                canDeopt = true;
+        });
     }
 
     // For interprocedural analysis of a function
@@ -162,13 +160,32 @@ class ScopeAnalysis
         : StaticAnalysis("Scope", cls, cls, initialState, globalState, log),
           depth(depth), staticClosureEnv(staticClosureEnv) {
         assert(args.size() == cls->effectiveNArgs());
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (Assume::Cast(i))
+                canDeopt = true;
+        });
     }
 
     // For interprocedural analysis of a promise
     ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                   const ScopeAnalysisState& initialState,
                   ScopeAnalysisResults* globalState, size_t depth,
-                  AbstractLog& log);
+                  AbstractLog& log)
+        : StaticAnalysis("Scope", cls, prom, initialState, globalState, log),
+          depth(depth), staticClosureEnv(promEnv), inPromise(true) {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (Assume::Cast(i))
+                canDeopt = true;
+        });
+    }
+
+    ScopeAnalysis(const ScopeAnalysis&) = delete;
+    ScopeAnalysis& operator=(const ScopeAnalysis& other) = delete;
+
+    ~ScopeAnalysis() {
+        if (globalStateStore)
+            delete globalStateStore;
+    }
 
     typedef std::function<void(const AbstractLoad&)> LoadMaybe;
     typedef std::function<void(const AbstractPirValue&)> ValueMaybe;
