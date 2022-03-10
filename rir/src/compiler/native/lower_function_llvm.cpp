@@ -4,12 +4,12 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/reference_count.h"
+#include "compiler/native/allocator.h"
 #include "compiler/native/builtins.h"
 #include "compiler/native/representation_llvm.h"
 #include "compiler/native/types_llvm.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/pir_impl.h"
-#include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/builtins.h"
 #include "interpreter/instance.h"
@@ -63,30 +63,6 @@ llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     phi_ = builder.CreatePHI(type, inputs.size());
     return phi_;
 }
-
-class NativeAllocator : public SSAAllocator {
-  public:
-    NativeAllocator(Code* code, const LivenessIntervals& livenessIntervals)
-        : SSAAllocator(code, livenessIntervals) {}
-
-    bool needsAVariable(Value* v) const {
-        return Instruction::Cast(v) && !LdArg::Cast(v) && !v->type.isVoid() &&
-               !v->type.isVirtualValue() && !v->type.isCompositeValue();
-    }
-    bool needsASlot(Value* v) const override final {
-        return needsAVariable(v) && Rep::Of(v) == Rep::SEXP;
-    }
-    bool interfere(Instruction* a, Instruction* b) const override final {
-        // Ensure we preserve slots for variables with typefeedback to make them
-        // accessible to the runtime profiler.
-        // TODO: this needs to be replaced by proper mapping of slots.
-        if (RuntimeProfiler::enabled() && a != b &&
-            (a->typeFeedback().feedbackOrigin.pc() ||
-             b->typeFeedback().feedbackOrigin.pc()))
-            return true;
-        return SSAAllocator::interfere(a, b);
-    }
-};
 
 llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                             llvm::Type* ty) {
@@ -2155,8 +2131,6 @@ void LowerFunctionLLVM::compile() {
     std::unordered_map<Instruction*, Instruction*> phis;
     {
         NativeAllocator allocator(code, liveness);
-        allocator.compute();
-        allocator.verify();
         auto numLocalsBase = numLocals;
         numLocals += allocator.slots();
 
