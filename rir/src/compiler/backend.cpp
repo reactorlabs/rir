@@ -525,7 +525,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 if (data.hast == 0) {
                     *serializerError = true;
                     #if PRINT_SERIALIZER_PROGRESS == 1
-                    std::cout << "  (E) Src hast is 0 for " << name << std::endl;
+                    std::cout << "  (E) Src hast is 0 for " << name << ", src: " << c->rirSrc()->src << std::endl;
                     #endif
                 }
 

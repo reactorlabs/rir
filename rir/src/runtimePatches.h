@@ -37,9 +37,9 @@
 /*************************************/
 // Debugging for runtime patches
 //
-#define DEBUG_TABLE_ENTRIES 0
+#define DEBUG_TABLE_ENTRIES 1
 #define DEBUG_BLACKLIST 0
-#define PRINT_SRC_HAST_MAP_UPDATES 0
+#define PRINT_SRC_HAST_MAP_UPDATES 1
 #define PRINT_PATCH_ERRORS 0
 /*************************************/
 

@@ -443,9 +443,13 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             return convertToExternalSymbol(ss.str());
         }
         else {
+            #if PRINT_SERIALIZER_PROGRESS == 1
             std::cout << "  (E) PATCH_SPECIALSXP: non-function type, offset: " << co->u.primsxp.offset << ", kind: " << R_FunTab[co->u.primsxp.offset].gram.kind << std::endl;
+            #endif
             if (serializerError == nullptr) {
+                #if PRINT_SERIALIZER_PROGRESS == 1
                 std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                #endif
             } else {
                 *serializerError = true;
             }
@@ -749,15 +753,18 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         // If the hast is blacklisted, patch will not work
         SEXP blMap = Pool::get(BL_MAP);
         if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-            std::cout << "  (*) not patching deopt reason" << std::endl;
+            #if PRINT_SERIALIZER_PROGRESS == 1
             std::cout << "  (E) TRY_PATCH_DEOPTREASON failed" << std::endl;
             if (hast == 0) {
                 std::cout << "  (E) hast == 0" << std::endl;
             } else {
                 std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
             }
+            #endif
             if (serializerError == nullptr) {
+                #if PRINT_SERIALIZER_PROGRESS == 1
                 std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                #endif
             } else {
                 *serializerError = true;
             }
@@ -793,7 +800,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                 // tt << "deon_" << hast << "_" << data.index << "_" << realOffset;
                 if (serializerError != nullptr) {
                     *serializerError = true;
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "  (E) [DeoptReason patch] reqMap not available (ERROR)" << std::endl;
+                    #endif
                 }
             }
 
@@ -4020,15 +4029,19 @@ void LowerFunctionLLVM::compile() {
                         // If the hast is blacklisted, patch will not work
                         SEXP blMap = Pool::get(BL_MAP);
                         if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                            #if PRINT_SERIALIZER_PROGRESS == 1
                             std::cout << "  (E) TRY_PATCH_OPT_DISPATCH failed" << std::endl;
                             if (hast == 0) {
                                 std::cout << "  (E) hast == 0" << std::endl;
                             } else {
                                 std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
                             }
+                            #endif
 
                             if (serializerError == nullptr) {
+                                #if PRINT_SERIALIZER_PROGRESS == 1
                                 std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                                #endif
                             } else {
                                 *serializerError = true;
                             }
@@ -4080,7 +4093,9 @@ void LowerFunctionLLVM::compile() {
                                 ss2 << "optn_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
                                 if (serializerError != nullptr) {
                                     *serializerError = true;
+                                    #if PRINT_SERIALIZER_PROGRESS == 1
                                     std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
+                                    #endif
                                 }
                             }
 
@@ -4166,15 +4181,19 @@ void LowerFunctionLLVM::compile() {
                 // If the hast is blacklisted, patch will not work
                 SEXP blMap = Pool::get(BL_MAP);
                 if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "  (E) TRY_PATCH_STATIC_CALL3 failed" << std::endl;
                     if (hast == 0) {
                         std::cout << "  (E) hast == 0" << std::endl;
                     } else {
                         std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
                     }
+                    #endif
 
                     if (serializerError == nullptr) {
+                        #if PRINT_SERIALIZER_PROGRESS == 1
                         std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                        #endif
                     } else {
                         *serializerError = true;
                     }
@@ -4209,7 +4228,9 @@ void LowerFunctionLLVM::compile() {
                         ss << "clsn_" << track++ << "_" << hast;
                         if (serializerError != nullptr) {
                             *serializerError = true;
+                            #if PRINT_SERIALIZER_PROGRESS == 1
                             std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
+                            #endif
                         }
                     }
 
@@ -4398,7 +4419,9 @@ void LowerFunctionLLVM::compile() {
                             } else {
                                 if (serializerError != nullptr) {
                                     *serializerError = true;
+                                    #if PRINT_SERIALIZER_PROGRESS == 1
                                     std::cout << "  (E) [DeoptMetadata patch] reqMap not available (ERROR)" << std::endl;
+                                    #endif
                                 }
                             }
 
@@ -4418,9 +4441,13 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateUnreachable();
                     break;
                 } else {
+                    #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
+                    #endif
                     if (serializerError == nullptr) {
+                        #if PRINT_SERIALIZER_PROGRESS == 1
                         std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                        #endif
                     } else {
                         *serializerError = true;
                     }
