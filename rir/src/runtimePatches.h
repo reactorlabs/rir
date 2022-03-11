@@ -8,10 +8,10 @@
 /*************************************/
 // Deserializer specific
 //
-#define PRINT_DESERIALIZER_PROGRESS 1
+#define PRINT_DESERIALIZER_PROGRESS 0
 #define PRINT_DEPENDENCY_MAP 0
 #define PRINT_UNLOCK_MAP 0
-#define PRINT_LINKING_STATUS 1
+#define PRINT_LINKING_STATUS 0
 #define DESERIALIZED_PRINT_POOL_PATCHES 0
 #define PRINT_PROMISE_MAP 0
 #define PRINT_SRC_MAP 0

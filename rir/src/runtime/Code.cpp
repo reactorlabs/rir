@@ -185,15 +185,35 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
-Code * Code::getSrcAtOffset(int & index) {
+Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
+
     Opcode* pc = code();
-    if (index == 0) {
-        return this;
+    size_t label = 0;
+    std::map<Opcode*, size_t> targets;
+    targets[pc] = label++;
+    while (pc < endCode()) {
+        if (BC::decodeShallow(pc).isJmp()) {
+            auto t = BC::jmpTarget(pc);
+            if (!targets.count(t))
+                targets[t] = label++;
+        }
+        pc = BC::next(pc);
     }
 
-    index--;
+    // sort labels ascending
+    label = 0;
+    for (auto& t : targets)
+        t.second = label++;
 
+    pc = code();
     std::vector<BC::FunIdx> promises;
+
+    Protect p;
+    index++;
+
+
+    if (index == reqOffset) return this;
+
     while (pc < endCode()) {
         BC bc = BC::decode(pc, this);
         bc.addMyPromArgsTo(promises);
@@ -201,12 +221,26 @@ Code * Code::getSrcAtOffset(int & index) {
         pc = BC::next(pc);
     }
 
-    Code * res;
 
     for (auto i : promises) {
         auto c = getPromise(i);
-        res = c->getSrcAtOffset(index);
+        Code * res = c->getSrcAtOffset(false, index, reqOffset);
         if (res != nullptr) return res;
+    }
+
+
+    if (mainSrc) {
+        rir::Function* func = function();
+        if (func) {
+            auto nargs = func->nargs();
+            for (unsigned i = 0; i < nargs; i++) {
+                auto code = func->defaultArg(i);
+                if (code != nullptr) {
+                    index++;
+                    if (index == reqOffset) return code;
+                }
+            }
+        }
     }
     return nullptr;
 }

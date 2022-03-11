@@ -1069,7 +1069,8 @@ void PirJitLLVM::initializeLLVM() {
                     SEXP map = Pool::get(HAST_VTAB_MAP);
                     DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
                     auto addr = vtable->baseline()->body();
-                    addr = addr->getSrcAtOffset(index);
+                    int idx = 0;
+                    addr = addr->getSrcAtOffset(true, idx, index);
 
                     // #if PRINT_PATCH_ERRORS == 1
                     // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
@@ -1100,7 +1101,8 @@ void PirJitLLVM::initializeLLVM() {
                     SEXP map = Pool::get(HAST_VTAB_MAP);
                     DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
                     auto addr = vtable->baseline()->body();
-                    addr = addr->getSrcAtOffset(index);
+                    int idx = 0;
+                    addr = addr->getSrcAtOffset(true, idx, index);
 
                     auto pc = (uintptr_t)addr->code() + (uintptr_t)realOffset;
 

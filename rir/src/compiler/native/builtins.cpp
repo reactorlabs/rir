@@ -829,7 +829,6 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    std::cout << "deoptImpl" << std::endl;
     deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
@@ -966,7 +965,8 @@ void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args
             size_t hast = m->frames[i].hast;
             DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
             rir::Code * code = vtable->baseline()->body();
-            code = code->getSrcAtOffset(m->frames[i].index);
+            int idx = 0;
+            code = code->getSrcAtOffset(true, idx, m->frames[i].index);
             m->frames[i].code = code;
             m->frames[i].pc = (Opcode*)((uintptr_t)code + m->frames[i].offset);
 
