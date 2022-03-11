@@ -13,6 +13,8 @@
 
 #include <asm/msr.h>
 
+#include "runtimePatches.h"
+
 namespace rir {
 
 typedef SEXP FunctionSEXP;
@@ -106,10 +108,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return *lazyCodeHandle_ != '\0' && nativeCode_ != nullptr;
     }
 
-    std::string getNativecodeHandle() {
-        return (std::string(lazyCodeHandle_));
-    }
-
     static unsigned pad4(unsigned sizeInBytes) {
         unsigned x = sizeInBytes % 4;
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
@@ -139,6 +137,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned srcLength; /// number of sources attached
 
     unsigned extraPoolSize; /// Number of elements in the per code constant pool
+
+    std::string mName = ""; /// name of the function in JIT
+
+    SEXP argOrderingVec; /// callArglist order, raw
 
     uint8_t data[]; /// the instructions
 
@@ -216,7 +218,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
-    // deserializer
+    // serializer
+    void populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index);
     Code * getSrcAtOffset(int & index);
 
     static size_t extraPtrOffset() {

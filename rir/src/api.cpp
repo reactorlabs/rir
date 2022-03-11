@@ -375,7 +375,10 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     R_inpstream_st inputStream;
     R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
 
-    serializerData sData(R_Unserialize(&inputStream));
+    SEXP serDataContainer;
+    PROTECT(serDataContainer = R_Unserialize(&inputStream));
+
+    serializerData sData(serDataContainer);
 
     size_t hast = sData.getHastData();
     std::string functionName = sData.getNameData();
@@ -436,6 +439,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         SEXP map = Pool::get(HAST_DEPENDENCY_MAP);
         DeserialDataMap::addDependencies(map, hast, con, reqMapForCompilation);
     }
+    UNPROTECT(1);
     return R_FalseValue;
 }
 
