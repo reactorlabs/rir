@@ -166,15 +166,11 @@ struct FeedbackOrigin {
     FeedbackOrigin() {}
     FeedbackOrigin(rir::Code* src, Opcode* pc);
 
-    #if TRY_PATCH_DEOPTREASON == 1
-    Opcode* pc() const;
-    #else
     Opcode* pc() const {
         if (offset_ == 0)
             return nullptr;
         return (Opcode*)((uintptr_t)srcCode() + offset_);
     }
-    #endif
 
     uint32_t offset() const { return offset_; }
     Code* srcCode() const { return srcCode_; }

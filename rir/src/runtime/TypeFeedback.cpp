@@ -31,11 +31,7 @@ SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
 
 FeedbackOrigin::FeedbackOrigin(rir::Code* src, Opcode* p)
     : offset_(
-        #if TRY_PATCH_DEOPTREASON == 1
-        (uintptr_t)p - (uintptr_t)src->code()
-        #else
         (uintptr_t)p - (uintptr_t)src
-        #endif
         ), srcCode_(src) {
     if (p) {
         assert(p >= src->code());
@@ -43,14 +39,6 @@ FeedbackOrigin::FeedbackOrigin(rir::Code* src, Opcode* p)
         assert(pc() == p);
     }
 }
-
-#if TRY_PATCH_DEOPTREASON == 1
-Opcode* FeedbackOrigin::pc() const {
-    if (srcCode_ == 0)
-        return nullptr;
-    return (Opcode*)((uintptr_t)srcCode_->code() + offset_);
-}
-#endif
 
 DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                          DeoptReason::Reason reason)

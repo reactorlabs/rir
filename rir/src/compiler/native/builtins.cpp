@@ -966,7 +966,7 @@ void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args
             rir::Code * code = vtable->baseline()->body();
             code = code->getSrcAtOffset(m->frames[i].index);
             m->frames[i].code = code;
-            m->frames[i].pc = code->code() + m->frames[i].offset;
+            m->frames[i].pc = (Opcode*)((uintptr_t)code + m->frames[i].offset);
 
             // std::cout << "DEOPTMETADATA patc: {";
             //                 std::cout << "PC: " << (uintptr_t)m->frames[i].pc << ", ";

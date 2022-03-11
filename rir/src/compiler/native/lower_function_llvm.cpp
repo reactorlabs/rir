@@ -777,14 +777,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                                 false)),
                 t::voidPtr);
 
-            // std::cout << "DeoptReason[]: { srcCode_: " << (uintptr_t)dr->reason.origin.srcCode()
-            //     << ", offset: " << (uintptr_t)(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code())
-            //     << ", pc: " << (uintptr_t)dr->reason.origin.pc() << "}" << std::endl;
-
-
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                                c(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code(), 32), srcAddr});
+                            c(dr->reason.origin.offset(), 32), srcAddr});
             res = globalConst(drs);
         } else {
             std::stringstream ss;
@@ -823,7 +818,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
 
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                                c(dr->reason.origin.pc() - dr->reason.origin.srcCode()->code(), 32), srcAddr});
+                            c(dr->reason.origin.offset(), 32), srcAddr});
             res = globalConst(drs);
         }
         #else
@@ -4408,7 +4403,7 @@ void LowerFunctionLLVM::compile() {
                                 args.push_back(fs->arg(pos).val());
                             args.push_back(fs->env());
 
-                            uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code->code();
+                            uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code;
 
                             auto srcData = getHastAndIndex(fs->code->src);
                             size_t hast = srcData.hast;
