@@ -220,7 +220,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void print(std::ostream&) const;
     // serializer
     void populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index);
-    Code * getSrcAtOffset(int & index);
+    Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
+    void printSource(bool mainSrc, int & index);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

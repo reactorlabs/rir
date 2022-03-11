@@ -788,6 +788,19 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
 
             if (reqMap) {
                 ss << "code_" << hast << "_" << data.index;
+                // std::cout << "CODE-src: " << ((DeoptReasonWrapper*)val)->reason.srcCode()->src << std::endl;
+                // std::cout << ss.str() << " - " << dr->reason.srcCode() << std::endl;
+
+                // SEXP map = Pool::get(HAST_VTAB_MAP);
+                // auto hastStr = std::to_string(hast);
+                // DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hastStr.c_str())));
+                // auto addr = vtable->baseline()->body();
+                // int idx = 0;
+                // addr = addr->getSrcAtOffset(true, idx, data.index);
+                // std::cout << "resolved: " << addr << std::endl;
+                // if (addr != dr->reason.srcCode()) {
+                //     std::cout << "  (E) non serialization call!, error status not set" << std::endl;
+                // }
                 // tt << "deop_" << hast << "_" << data.index << "_" << realOffset;
                 reqMap->insert(hast);
             } else {
