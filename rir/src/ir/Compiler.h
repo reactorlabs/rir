@@ -149,6 +149,16 @@ class Compiler {
         Compiler c(ast);
         auto res = c.finalize();
 
+        if (Code::check(res)) {
+            Code * c = Code::unpack(res);
+            std::cout << "compileExpression(C): " << c->src << std::endl;
+        } else if (DispatchTable::check(res)) {
+            auto vtab = DispatchTable::unpack(res);
+            std::cout << "compileExpression(D): " << vtab->baseline()->body()->src << std::endl;
+        } else {
+            std::cout << "compileExpression(F): " << TYPEOF(res) << std::endl;
+        }
+
         return res;
     }
 
@@ -171,7 +181,7 @@ class Compiler {
         size_t hast = getHast(vtable);
         if (readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
+            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << vtable->container() << std::endl;
             #endif
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);
@@ -213,7 +223,7 @@ class Compiler {
         size_t hast = getHast(vtable);
         if (readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map)" << std::endl;
+            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
             #endif
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);
