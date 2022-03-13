@@ -20,9 +20,9 @@
 #define BACKEND_PRINT_FINAL_LLVM 0
 #define PRINT_PROM_MAP 0
 #define PRINT_MODULE_BEFORE_POOL_PATCHES 0
-#define PRINT_CP_ENTRIES 1
-#define PRINT_SRC_ENTRIES 1
-#define PRINT_PROM_ENTRIES 1
+#define PRINT_CP_ENTRIES 0
+#define PRINT_SRC_ENTRIES 0
+#define PRINT_PROM_ENTRIES 0
 #define PRINT_MODULE_AFTER_POOL_PATCHES 0
 //
 /*************************************/
@@ -37,9 +37,9 @@
 /*************************************/
 // Debugging for runtime patches
 //
-#define DEBUG_TABLE_ENTRIES 1
+#define DEBUG_TABLE_ENTRIES 0
 #define DEBUG_BLACKLIST 0
-#define PRINT_SRC_HAST_MAP_UPDATES 1
+#define PRINT_SRC_HAST_MAP_UPDATES 0
 #define PRINT_PATCH_ERRORS 0
 /*************************************/
 

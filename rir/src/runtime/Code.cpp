@@ -236,8 +236,8 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
             for (unsigned i = 0; i < nargs; i++) {
                 auto code = func->defaultArg(i);
                 if (code != nullptr) {
-                    index++;
-                    if (index == reqOffset) return code;
+                    Code * res = code->getSrcAtOffset(false, index, reqOffset);
+                    if (res != nullptr) return res;
                 }
             }
         }
@@ -292,8 +292,7 @@ void Code::printSource(bool mainSrc, int & index) {
             for (unsigned i = 0; i < nargs; i++) {
                 auto code = func->defaultArg(i);
                 if (code != nullptr) {
-                    index++;
-                    std::cout << "(" << index << "," << code->src << ")" << code << std::endl;
+                    code->printSource(false, index);
                 }
             }
         }
@@ -367,19 +366,7 @@ void Code::populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & inde
             for (unsigned i = 0; i < nargs; i++) {
                 auto code = func->defaultArg(i);
                 if (code != nullptr) {
-                    index++;
-                    #if PRINT_SRC_HAST_MAP_UPDATES == 1
-                    std::cout << code->src << " ";
-                    #endif
-                    SEXP srcSym = Rf_install(std::to_string(code->src).c_str());
-
-                    SEXP hastSym = Rf_install(std::to_string(parentHast).c_str());
-                    SEXP indexSym = Rf_install(std::to_string(index).c_str());
-                    SEXP resVec;
-                    p(resVec = Rf_allocVector(VECSXP, 2));
-                    SET_VECTOR_ELT(resVec, 0, hastSym);
-                    SET_VECTOR_ELT(resVec, 1, indexSym);
-                    UMap::insert(map, srcSym, resVec);
+                    code->populateSrcData(parentHast, map, false, index);
                 }
             }
             #if PRINT_SRC_HAST_MAP_UPDATES == 1

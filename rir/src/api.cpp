@@ -314,26 +314,41 @@ hastAndIndex getHastAndIndex(unsigned src) {
     }
 }
 
-static int charToInt(const char* p) {
-    int result = 0;
+static size_t charToInt(const char* p, size_t & hast) {
     for (size_t i = 0; i < strlen(p); ++i) {
-        result += p[i];
+        hast = ((hast << 5) + hast) + p[i];
     }
-    return result;
+    return hast;
 }
 
 void hash_ast(SEXP ast, size_t & hast) {
-    if (TYPEOF(ast) == SYMSXP) {
+    int len = Rf_length(ast);
+    int type = TYPEOF(ast);
+
+    if (type == SYMSXP) {
         const char * pname = CHAR(PRINTNAME(ast));
         hast = hast * 31;
-        hast += charToInt(pname);
-    }
-    if (TYPEOF(ast) == STRSXP) {
+        charToInt(pname, hast);
+    } else if (type == STRSXP) {
         const char * pname = CHAR(STRING_ELT(ast, 0));
         hast = hast * 31;
-        hast += charToInt(pname);
-    }
-    if (TYPEOF(ast) == LISTSXP || TYPEOF(ast) == LANGSXP) {
+        charToInt(pname, hast);
+    } else if (type == LGLSXP) {
+        for (int i = 0; i < len; i++) {
+            int ival = LOGICAL(ast)[i];
+            hast += ival;
+        }
+    } else if (type == INTSXP) {
+        for (int i = 0; i < len; i++) {
+            int ival = INTEGER(ast)[i];
+            hast += ival;
+        }
+    } else if (type == REALSXP) {
+        for (int i = 0; i < len; i++) {
+            double dval = REAL(ast)[i];
+            hast += dval;
+        }
+    } else if (type == LISTSXP || type == LANGSXP) {
         hast *= 31;
         hash_ast(CAR(ast), ++hast);
         hast *= 31;
