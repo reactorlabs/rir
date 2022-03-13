@@ -236,8 +236,8 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
             for (unsigned i = 0; i < nargs; i++) {
                 auto code = func->defaultArg(i);
                 if (code != nullptr) {
-                    index++;
-                    if (index == reqOffset) return code;
+                    Code * res = code->getSrcAtOffset(false, index, reqOffset);
+                    if (res != nullptr) return res;
                 }
             }
         }
