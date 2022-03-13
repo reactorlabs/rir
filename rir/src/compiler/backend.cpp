@@ -647,11 +647,19 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         UNPROTECT(4);
         conData.addFunctionSignature(signature);
 
+        // get rid of yourself from the req map
+        std::vector<size_t> reqMap;
+        for (auto & ele : rMap) {
+            if (ele != hast) {
+                reqMap.push_back(ele);
+            }
+        }
+
         SEXP rData;
-        PROTECT(rData = Rf_allocVector(VECSXP, rMap.size()));
+        PROTECT(rData = Rf_allocVector(VECSXP, reqMap.size()));
 
         int i = 0;
-        for (auto & ele : rMap) {
+        for (auto & ele : reqMap) {
             SEXP store;
             PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
             size_t * tmp = (size_t *) DATAPTR(store);
@@ -667,7 +675,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (*) Original reqMapForCompilation: < ";
-        for (auto & ele : rMap) {
+        for (auto & ele : reqMap) {
             std::cout << ele << " ";
         }
         std::cout << ">" << std::endl;
