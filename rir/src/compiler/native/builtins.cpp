@@ -953,7 +953,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
 }
-
+#if TRY_PATCH_DEOPTMETADATA == 1
 void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     DeoptMetadata* m = (DeoptMetadata *)DATAPTR(metaDataStore);
@@ -978,7 +978,7 @@ void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args
     }
     deoptImpl(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);
 }
-
+#endif
 void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
     switch (*pos) {
     case Opcode::record_test_: {

@@ -21,10 +21,16 @@ namespace rir {
                 SEXP store;
                 PROTECT(store = Rf_allocVector(RAWSXP, sizeof(fs)));
                 rir::FunctionSignature * tmp = (rir::FunctionSignature *) DATAPTR(store);
-                #pragma GCC diagnostic push
-                #pragma GCC diagnostic ignored "-Wclass-memaccess"
+                #if defined(__GNUC__) || defined(__GNUG__)
+                    #pragma GCC diagnostic push
+                    #pragma GCC diagnostic ignored "-Wclass-memaccess"
+                #endif
+
                 memcpy(tmp, &fs, sizeof(fs));
-                #pragma GCC diagnostic pop
+
+                #if defined(__clang__)
+                    #pragma GCC diagnostic pop
+                #endif
 
                 SET_VECTOR_ELT(container, index, store);
                 UNPROTECT(1);
@@ -125,7 +131,7 @@ namespace rir {
             SEXP getContainer() {
                 return container;
             }
-            contextData(SEXP c) {
+            explicit contextData(SEXP c) {
                 container = c;
             }
 
@@ -320,11 +326,11 @@ namespace rir {
                 return container;
             }
 
-            serializerData(SEXP c) {
+            explicit serializerData(SEXP c) {
                 container = c;
             }
 
-            serializerData(SEXP c, size_t hast, std::string name) {
+            serializerData(SEXP c, size_t hast, const std::string & name) {
                 container = c;
                 addSizeT(hast, 0);
                 addString(name, 1);

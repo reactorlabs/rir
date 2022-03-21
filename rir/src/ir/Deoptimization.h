@@ -30,7 +30,7 @@ struct FrameInfo {
             pc = 0;
         }
     FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
-        : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
+        : pc(pc), offset(0), code(code), hast(0), index(0), stackSize(stackSize), inPromise(promise) {}
     #else
     Opcode* pc;
     Code* code;

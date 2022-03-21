@@ -595,7 +595,7 @@ static bool fileExists(std::string fName) {
     return f.good();
 }
 
-static void serializeClosure(unsigned src, std::string name, bool & serializerError, contextData & cData) {
+static void serializeClosure(unsigned src, std::string name, const bool & serializerError, contextData & cData) {
     size_t hast = getHastAndIndex(src).hast;
     if (hast == 0) {
         #if PRINT_SERIALIZER_PROGRESS == 1
@@ -872,9 +872,9 @@ REXPORT SEXP serializerCleanup() {
     DIR *dir;
     struct dirent *ent;
 
-    int blacklisted = 0, failed = 0;
 
     if ((dir = opendir (savePath.str().c_str())) != NULL) {
+        int blacklisted = 0, failed = 0;
         while ((ent = readdir (dir)) != NULL) {
             std::string fName = ent->d_name;
             if (fName.find(".meta") != std::string::npos) {

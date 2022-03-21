@@ -507,10 +507,11 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::unordered_map<std::string, std::vector<std::string>> childrenData;
         std::unordered_map<std::string, int> codeOffset;
 
-        int uid = 0;
+
         std::unordered_map<Code *, std::string> processedName;
 
         auto getProcessedName = [&](Code * c) {
+            static int uid = 0;
             if (processedName.find(c) == processedName.end()) {
                 std::stringstream nn;
                 nn << startingUID << "_" << uid++;

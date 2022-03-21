@@ -144,7 +144,7 @@ class PirJitLLVM {
     bool debugStatements = false;
     void serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames);
     void updateFunctionNameInModule(std::string, std::string);
-    void patchFixupHandle(std::string newName, Code * code);
+    void patchFixupHandle(const std::string & newName, Code * code);
     void printModule();
     void enableDebugStatements();
     void disableDebugStatements();

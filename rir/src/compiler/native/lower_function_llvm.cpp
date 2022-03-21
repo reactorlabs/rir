@@ -107,7 +107,7 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
     name << "copool_" << num++;
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
-    res->setExternallyInitialized(true);
+    // res->setExternallyInitialized(true);
     return res;
 
     #else
@@ -154,7 +154,7 @@ llvm::Value* LowerFunctionLLVM::namedGlobalConst(std::string name, llvm::Constan
 
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name);
-    res->setExternallyInitialized(true);
+    // res->setExternallyInitialized(true);
     return res;
 }
 
@@ -170,7 +170,7 @@ llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
     name << "srpool_" << num++;
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
-    res->setExternallyInitialized(true);
+    // res->setExternallyInitialized(true);
     return res;
 
     #else
@@ -443,16 +443,13 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             return convertToExternalSymbol(ss.str());
         }
         else {
-            #if PRINT_SERIALIZER_PROGRESS == 1
-            std::cout << "  (E) PATCH_SPECIALSXP: non-function type, offset: " << co->u.primsxp.offset << ", kind: " << R_FunTab[co->u.primsxp.offset].gram.kind << std::endl;
-            #endif
-            if (serializerError == nullptr) {
-                #if PRINT_SERIALIZER_PROGRESS == 1
-                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                #endif
-            } else {
+            if (serializerError != nullptr) {
                 *serializerError = true;
+                #if PRINT_SERIALIZER_PROGRESS == 1
+                std::cout << "  (E) PATCH_SPECIALSXP: non-function type, offset: " << co->u.primsxp.offset << ", kind: " << R_FunTab[co->u.primsxp.offset].gram.kind << std::endl;
+                #endif
             }
+            return convertToPointer(co, true);
         }
         #else
         return convertToPointer(co, true);
@@ -461,78 +458,91 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
 
     #if PATCH_CP_ENTRIES == 1
     // handle common cases for comparisons
-    if (TYPEOF(co) == EXTERNALSXP || TYPEOF(co) == CLOSXP) {
-        SEXP curr;
-        if (TYPEOF(co) == EXTERNALSXP) {
-            curr = co;
-        } else if (TYPEOF(BODY(co)) == EXTERNALSXP) {
-            curr = BODY(co);
-        } else {
-            #if PRINT_UNHANDLED_ERRORS == 1
-            std::cout << "  (E) no EXTERNALSXP for CLOSXP" << std::endl;
-            #endif
-            if (serializerError == nullptr) {
-                #if PRINT_SERIALIZER_ERRORS == 1
-                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                #endif
-            } else {
-                *serializerError = true;
-            }
-            curr = R_NilValue;
-        }
-
+    if (TYPEOF(co) == EXTERNALSXP) {
+        SEXP curr = co;
         if (DispatchTable::check(curr)) {
-            auto vtable = DispatchTable::unpack(curr);
+            DispatchTable * vtable = DispatchTable::unpack(curr);
             auto data = getHastAndIndex(vtable->baseline()->body()->src);
-            auto hast = data.hast;
-            auto index = data.index;
+            size_t hast = data.hast;
 
             // If the hast is blacklisted, patch will not work
             SEXP blMap = Pool::get(BL_MAP);
-            if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-                #if PRINT_SERIALIZER_ERRORS == 1
-                if (hast == 0) {
-                    std::cout << "  (E) hast == 0" << std::endl;
-                } else {
-                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
-                }
-                #endif
-
-                if (serializerError == nullptr) {
-                    #if PRINT_SERIALIZER_ERRORS == 1
-                    std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                    #endif
-                } else {
+            if ((vtable->container() != co) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                if (serializerError != nullptr) {
                     *serializerError = true;
+                    #if PRINT_SERIALIZER_ERRORS == 1
+                    if ((vtable->container() != co)) {
+                        std::cout << "  (E) CPPP invalid container" << std::endl;
+                    }
+                    if (hast == 0) {
+                        std::cout << "  (E) hast == 0" << std::endl;
+                    } else {
+                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                    }
+                    #endif
                 }
             } else {
+                Pool::insert(vtable->container());
                 // patch case
                 std::stringstream ss;
+                ss << "vtab_" << hast;
                 if (reqMap) {
-                    ss << "cppp_" << hast << "_" << index;
                     reqMap->insert(hast);
-                } else {
-                    ss << "cppp_" << hast << "_" << index;
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        #if PRINT_SERIALIZER_ERRORS == 1
-                        std::cout << "  (E) [CPPP patch] reqMap not available (ERROR)" << std::endl;
-                        #endif
-                    }
                 }
-
                 return convertToExternalSymbol(ss.str());
             }
+
         } else {
-            #if PRINT_UNHANDLED_ERRORS == 1
-            std::cout << "  (E) EXTERNALSXP not in BC" << std::endl;
-            #endif
-            if (serializerError == nullptr) {
-                #if PRINT_SERIALIZER_ERRORS == 1
-                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                #endif
-            } else {
+            if (serializerError != nullptr) {
                 *serializerError = true;
+                #if PRINT_SERIALIZER_ERRORS == 1
+                std::cout << "  (E) EXTERNALSXP not in BC" << std::endl;
+                #endif
+            }
+        }
+    } else if (TYPEOF(co) == CLOSXP) {
+        if (TYPEOF(BODY(co)) == EXTERNALSXP) {
+            SEXP curr = BODY(co);
+            DispatchTable * vtable = DispatchTable::unpack(curr);
+            auto data = getHastAndIndex(vtable->baseline()->body()->src);
+            size_t hast = data.hast;
+
+            SEXP lMap = Pool::get(HAST_CLOS_MAP);
+            auto resolvedContainer = UMap::get(lMap, Rf_install(std::to_string(hast).c_str()));
+
+            // If the hast is blacklisted, patch will not work
+            SEXP blMap = Pool::get(BL_MAP);
+            if ((resolvedContainer != co) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+                    #if PRINT_SERIALIZER_ERRORS == 1
+                    if ((resolvedContainer != co)) {
+                        std::cout << "  (E) CPPP invalid container for CLOSXP" << std::endl;
+                    }
+                    if (hast == 0) {
+                        std::cout << "  (E) hast == 0" << std::endl;
+                    } else {
+                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                    }
+                    #endif
+                }
+            } else {
+                Pool::insert(co);
+                // patch case
+                std::stringstream ss;
+                ss << "clos_" << hast;
+                if (reqMap) {
+                    reqMap->insert(hast);
+                }
+                return convertToExternalSymbol(ss.str());
+            }
+
+        } else {
+            if (serializerError != nullptr) {
+                *serializerError = true;
+                #if PRINT_SERIALIZER_ERRORS == 1
+                std::cout << "  (E) CLOSXP's BODY is not EXTERNALSXP" << std::endl;
+                #endif
             }
         }
     }
@@ -753,20 +763,16 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         // If the hast is blacklisted, patch will not work
         SEXP blMap = Pool::get(BL_MAP);
         if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-            #if PRINT_SERIALIZER_PROGRESS == 1
-            std::cout << "  (E) TRY_PATCH_DEOPTREASON failed" << std::endl;
-            if (hast == 0) {
-                std::cout << "  (E) hast == 0" << std::endl;
-            } else {
-                std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
-            }
-            #endif
-            if (serializerError == nullptr) {
-                #if PRINT_SERIALIZER_PROGRESS == 1
-                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                #endif
-            } else {
+            if (serializerError != nullptr) {
                 *serializerError = true;
+                #if PRINT_SERIALIZER_PROGRESS == 1
+                std::cout << "  (E) TRY_PATCH_DEOPTREASON failed" << std::endl;
+                if (hast == 0) {
+                    std::cout << "  (E) hast == 0" << std::endl;
+                } else {
+                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                }
+                #endif
             }
             auto dr = (DeoptReasonWrapper*)val;
             auto srcAddr = (Constant*)builder.CreateIntToPtr(
@@ -788,20 +794,6 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
 
             if (reqMap) {
                 ss << "code_" << hast << "_" << data.index;
-                // std::cout << "CODE-src: " << ((DeoptReasonWrapper*)val)->reason.srcCode()->src << std::endl;
-                // std::cout << ss.str() << " - " << dr->reason.srcCode() << std::endl;
-
-                // SEXP map = Pool::get(HAST_VTAB_MAP);
-                // auto hastStr = std::to_string(hast);
-                // DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hastStr.c_str())));
-                // auto addr = vtable->baseline()->body();
-                // int idx = 0;
-                // addr = addr->getSrcAtOffset(true, idx, data.index);
-                // std::cout << "resolved: " << addr << std::endl;
-                // if (addr != dr->reason.srcCode()) {
-                //     std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                // }
-                // tt << "deop_" << hast << "_" << data.index << "_" << realOffset;
                 reqMap->insert(hast);
             } else {
                 ss << "codn_" << hast << "_" << data.index;
@@ -4034,24 +4026,26 @@ void LowerFunctionLLVM::compile() {
                     if (nativeTarget) {
                         #if TRY_PATCH_OPT_DISPATCH == 1
                         size_t hast = getHastAndIndex(dt->baseline()->body()->src).hast;
+
+                        SEXP lMap = Pool::get(HAST_CLOS_MAP);
+                        auto resolvedContainer = UMap::get(lMap, Rf_install(std::to_string(hast).c_str()));
+
                         // If the hast is blacklisted, patch will not work
                         SEXP blMap = Pool::get(BL_MAP);
-                        if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-                            #if PRINT_SERIALIZER_PROGRESS == 1
-                            std::cout << "  (E) TRY_PATCH_OPT_DISPATCH failed" << std::endl;
-                            if (hast == 0) {
-                                std::cout << "  (E) hast == 0" << std::endl;
-                            } else {
-                                std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
-                            }
-                            #endif
-
-                            if (serializerError == nullptr) {
-                                #if PRINT_SERIALIZER_PROGRESS == 1
-                                std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                                #endif
-                            } else {
+                        if ((resolvedContainer != callee) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                            if (serializerError != nullptr) {
                                 *serializerError = true;
+                                #if PRINT_SERIALIZER_PROGRESS == 1
+                                std::cout << "  (E) TRY_PATCH_OPT_DISPATCH failed" << std::endl;
+                                if (resolvedContainer != callee) {
+                                    std::cout << "  (E) TRY_PATCH_OPT_DISPATCH invalid container for CLOSXP" << std::endl;
+                                }
+                                if (hast == 0) {
+                                    std::cout << "  (E) hast == 0" << std::endl;
+                                } else {
+                                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                                }
+                                #endif
                             }
                             assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
@@ -4084,40 +4078,21 @@ void LowerFunctionLLVM::compile() {
                         } else {
                             assert(
                                 asmpt.includes(Assumption::StaticallyArgmatched));
-                            // auto idx = Pool::makeSpace();
-                            // NativeBuiltins::targetCaches.push_back(idx);
-                            // Pool::patch(idx, nativeTarget->container());
 
-                            static int track = 0;
-                            std::stringstream ss1;
-                            std::stringstream ss2;
+                            Pool::insert(callee);
+                            Pool::insert(nativeTarget->container());
 
+                            auto iValAST = globalConst(c(calli->srcIdx), t::i32);
+                            auto iLoadAST = builder.CreateLoad(iValAST);
+
+                            Pool::insert(calli->cls()->rirClosure());
+                            // patch case
+                            std::stringstream ss1, ss2;
+                            ss1 << "clos_" << hast;
+                            ss2 << "optd_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
                             if (reqMap) {
-                                ss1 << "clso_" << track++ << "_" << hast;
-                                ss2 << "optd_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
                                 reqMap->insert(hast);
-                            } else {
-                                ss1 << "clsn_" << track++ << "_" << hast;
-                                ss2 << "optn_" << hast << "_" << nativeTarget->context().toI() << "_" << args.size();
-                                if (serializerError != nullptr) {
-                                    *serializerError = true;
-                                    #if PRINT_SERIALIZER_PROGRESS == 1
-                                    std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
-                                    #endif
-                                }
                             }
-
-                            // --------------------- DEBUGGING ---------------------
-                            SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                            if (debugMap == R_NilValue) {
-                                UMap::createMapInCp(PATCH_DEBUG_MAP);
-                                debugMap = Pool::get(PATCH_DEBUG_MAP);
-                            }
-
-                            SEXP key = Rf_install(ss1.str().c_str());
-                            SEXP val = Rf_install(std::to_string((uintptr_t) callee).c_str());
-                            UMap::insert(debugMap, key, val);
-                            // ------------------------------------------ -----------
 
                             auto missAsmptStore =
                                 Rf_allocVector(RAWSXP, sizeof(Context));
@@ -4135,7 +4110,7 @@ void LowerFunctionLLVM::compile() {
                                         paramCode(),
                                         convertToExternalSymbol(ss1.str()), // constant(callee, t::SEXP),
                                         builder.CreateLoad(convertToExternalSymbol(ss2.str(), t::Int)), // c(idx),
-                                        builder.CreateLoad(globalConst(c(calli->srcIdx), t::i32)), // c(calli->srcIdx)
+                                        iLoadAST, // c(calli->srcIdx)
                                         loadSxp(calli->env()),
                                         c(args.size()),
                                         c(asmpt.toI()),
@@ -4180,79 +4155,56 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 #if TRY_PATCH_STATIC_CALL3 == 1
-
                 SEXP body = BODY(calli->cls()->rirClosure());
 
                 auto vtable = DispatchTable::unpack(body);
                 size_t hast = getHastAndIndex(vtable->baseline()->body()->src).hast;
 
+                SEXP lMap = Pool::get(HAST_CLOS_MAP);
+                auto resolvedContainer = UMap::get(lMap, Rf_install(std::to_string(hast).c_str()));
+
                 // If the hast is blacklisted, patch will not work
                 SEXP blMap = Pool::get(BL_MAP);
-                if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
-                    #if PRINT_SERIALIZER_PROGRESS == 1
-                    std::cout << "  (E) TRY_PATCH_STATIC_CALL3 failed" << std::endl;
-                    if (hast == 0) {
-                        std::cout << "  (E) hast == 0" << std::endl;
-                    } else {
-                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
-                    }
-                    #endif
-
-                    if (serializerError == nullptr) {
-                        #if PRINT_SERIALIZER_PROGRESS == 1
-                        std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                        #endif
-                    } else {
+                if ((resolvedContainer != calli->cls()->rirClosure()) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                    if (serializerError != nullptr) {
                         *serializerError = true;
+                        #if PRINT_SERIALIZER_ERRORS == 1
+                        if ((resolvedContainer != calli->cls()->rirClosure())) {
+                            std::cout << "  (E) STATIC CALL invalid container for CLOSXP" << std::endl;
+                        }
+                        if (hast == 0) {
+                            std::cout << "  (E) hast == 0" << std::endl;
+                        } else {
+                            std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                        }
+                        #endif
+                        assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                                return call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::call),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        c(calli->srcIdx),
+                                        builder.CreateIntToPtr(
+                                            c(calli->cls()->rirClosure()), t::SEXP),
+                                        loadSxp(calli->env()),
+                                        c(calli->nCallArgs()),
+                                        c(asmpt.toI()),
+                                    });
+                            }));
                     }
-
-                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                            return call(
-                                NativeBuiltins::get(NativeBuiltins::Id::call),
-                                {
-                                    c(callId),
-                                    paramCode(),
-                                    c(calli->srcIdx),
-                                    builder.CreateIntToPtr(
-                                        c(calli->cls()->rirClosure()), t::SEXP),
-                                    loadSxp(calli->env()),
-                                    c(calli->nCallArgs()),
-                                    c(asmpt.toI()),
-                                });
-                        }));
                 } else {
                     auto iValAST = globalConst(c(calli->srcIdx), t::i32);
                     auto iLoadAST = builder.CreateLoad(iValAST);
 
-                    static int track = 0;
-
+                    Pool::insert(calli->cls()->rirClosure());
+                    // patch case
                     std::stringstream ss;
-
+                    ss << "clos_" << hast;
                     if (reqMap) {
-                        ss << "clso_" << track++ << "_" << hast;
                         reqMap->insert(hast);
-                    } else {
-                        ss << "clsn_" << track++ << "_" << hast;
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            #if PRINT_SERIALIZER_PROGRESS == 1
-                            std::cout << "  (E) reqMap not available (ERROR)" << std::endl;
-                            #endif
-                        }
                     }
-
-                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    if (debugMap == R_NilValue) {
-                        UMap::createMapInCp(PATCH_DEBUG_MAP);
-                        debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    }
-
-                    SEXP key = Rf_install(ss.str().c_str());
-                    SEXP val = Rf_install(std::to_string((uintptr_t) calli->cls()->rirClosure()).c_str());
-
-                    UMap::insert(debugMap, key, val);
-
                     assert(asmpt.includes(Assumption::StaticallyArgmatched));
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4267,7 +4219,6 @@ void LowerFunctionLLVM::compile() {
                                     c(asmpt.toI()),
                                 });
                         }));
-
                 }
 
                 #else
@@ -4449,15 +4400,11 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateUnreachable();
                     break;
                 } else {
-                    #if PRINT_SERIALIZER_PROGRESS == 1
-                    std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
-                    #endif
-                    if (serializerError == nullptr) {
-                        #if PRINT_SERIALIZER_PROGRESS == 1
-                        std::cout << "  (E) non serialization call!, error status not set" << std::endl;
-                        #endif
-                    } else {
+                    if (serializerError != nullptr) {
                         *serializerError = true;
+                        #if PRINT_SERIALIZER_PROGRESS == 1
+                        std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
+                        #endif
                     }
                     std::vector<Value*> args;
                     {
