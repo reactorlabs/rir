@@ -4178,22 +4178,22 @@ void LowerFunctionLLVM::compile() {
                             std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
                         }
                         #endif
-                        assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                                return call(
-                                    NativeBuiltins::get(NativeBuiltins::Id::call),
-                                    {
-                                        c(callId),
-                                        paramCode(),
-                                        c(calli->srcIdx),
-                                        builder.CreateIntToPtr(
-                                            c(calli->cls()->rirClosure()), t::SEXP),
-                                        loadSxp(calli->env()),
-                                        c(calli->nCallArgs()),
-                                        c(asmpt.toI()),
-                                    });
-                            }));
                     }
+                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {
+                                    c(callId),
+                                    paramCode(),
+                                    c(calli->srcIdx),
+                                    builder.CreateIntToPtr(
+                                        c(calli->cls()->rirClosure()), t::SEXP),
+                                    loadSxp(calli->env()),
+                                    c(calli->nCallArgs()),
+                                    c(asmpt.toI()),
+                                });
+                        }));
                 } else {
                     auto iValAST = globalConst(c(calli->srcIdx), t::i32);
                     auto iLoadAST = builder.CreateLoad(iValAST);

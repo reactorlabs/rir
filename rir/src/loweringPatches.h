@@ -113,7 +113,7 @@
 // Static Call Patches
 //
   #define TRY_PATCH_STATIC_CALL3 1
-  #define TRY_PATCH_OPT_DISPATCH 1
+  #define TRY_PATCH_OPT_DISPATCH 0
 /*************************************/
 
 /*************************************/
