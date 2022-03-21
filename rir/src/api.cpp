@@ -852,7 +852,8 @@ static bool dependencyBlacklisted(SEXP map) {
 REXPORT SEXP serializerCleanup() {
     SEXP blMap = Pool::get(BL_MAP);
     if (blMap == R_NilValue) {
-        std::cout << "no blacklist exists!" << std::endl;
+        std::cout << "Serializer: " << "(" << serializerSuccess << "," << serializerFailed << ") " << (int)(((double)serializerSuccess/(serializerSuccess+serializerFailed))*100) << "% success" << std::endl;
+        std::cout << "Serializer cleanup: no blacklist exists!" << std::endl;
         return R_TrueValue;
     }
 

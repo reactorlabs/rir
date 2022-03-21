@@ -148,17 +148,6 @@ class Compiler {
         // Rf_PrintValue(ast);
         Compiler c(ast);
         auto res = c.finalize();
-
-        if (Code::check(res)) {
-            Code * c = Code::unpack(res);
-            std::cout << "compileExpression(C): " << c->src << std::endl;
-        } else if (DispatchTable::check(res)) {
-            auto vtab = DispatchTable::unpack(res);
-            std::cout << "compileExpression(D): " << vtab->baseline()->body()->src << std::endl;
-        } else {
-            std::cout << "compileExpression(F): " << TYPEOF(res) << std::endl;
-        }
-
         return res;
     }
 
