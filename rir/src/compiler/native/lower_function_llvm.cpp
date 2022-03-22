@@ -762,7 +762,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
 
         // If the hast is blacklisted, patch will not work
         SEXP blMap = Pool::get(BL_MAP);
-        if ((hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+        if (!reqMap || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
             if (serializerError != nullptr) {
                 *serializerError = true;
                 #if PRINT_SERIALIZER_PROGRESS == 1
@@ -788,6 +788,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                             c(dr->reason.origin.offset(), 32), srcAddr});
             res = globalConst(drs);
         } else {
+            SEXP map = Pool::get(HAST_VTAB_MAP);
+            DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
+            Pool::insert(vtable->container());
             std::stringstream ss;
 
             auto dr = (DeoptReasonWrapper*)val;
@@ -4032,7 +4035,7 @@ void LowerFunctionLLVM::compile() {
 
                         // If the hast is blacklisted, patch will not work
                         SEXP blMap = Pool::get(BL_MAP);
-                        if ((resolvedContainer != callee) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                        if (!reqMap || (resolvedContainer != callee) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
                             if (serializerError != nullptr) {
                                 *serializerError = true;
                                 #if PRINT_SERIALIZER_PROGRESS == 1
@@ -4165,7 +4168,7 @@ void LowerFunctionLLVM::compile() {
 
                 // If the hast is blacklisted, patch will not work
                 SEXP blMap = Pool::get(BL_MAP);
-                if ((resolvedContainer != calli->cls()->rirClosure()) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
+                if (!reqMap || (resolvedContainer != calli->cls()->rirClosure()) || (hast == 0) || (blMap != R_NilValue && UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap))) {
                     if (serializerError != nullptr) {
                         *serializerError = true;
                         #if PRINT_SERIALIZER_ERRORS == 1
@@ -4341,7 +4344,7 @@ void LowerFunctionLLVM::compile() {
                     }
                 }
 
-                if (patchPossible) {
+                if (reqMap && patchPossible) {
                     std::vector<Value*> args;
                     {
                         std::vector<FrameState*> frames;
@@ -4369,9 +4372,13 @@ void LowerFunctionLLVM::compile() {
 
                             uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code;
 
+
                             auto srcData = getHastAndIndex(fs->code->src);
                             size_t hast = srcData.hast;
                             int index = srcData.index;
+                            SEXP map = Pool::get(HAST_VTAB_MAP);
+                            DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
+                            Pool::insert(vtable->container());
 
                             if (reqMap) {
                                 reqMap->insert(hast);
