@@ -107,7 +107,7 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
     name << "copool_" << num++;
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
-    // res->setExternallyInitialized(true);
+    res->setExternallyInitialized(true);
     return res;
 
     #else
@@ -154,7 +154,7 @@ llvm::Value* LowerFunctionLLVM::namedGlobalConst(std::string name, llvm::Constan
 
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name);
-    // res->setExternallyInitialized(true);
+    res->setExternallyInitialized(true);
     return res;
 }
 
@@ -170,7 +170,7 @@ llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
     name << "srpool_" << num++;
     auto res = new llvm::GlobalVariable(getModule(), ty, true,
                                     llvm::GlobalValue::PrivateLinkage, init, name.str());
-    // res->setExternallyInitialized(true);
+    res->setExternallyInitialized(true);
     return res;
 
     #else

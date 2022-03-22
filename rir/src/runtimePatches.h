@@ -10,7 +10,7 @@
 /*************************************/
 // Serializer specific
 //
-#define PRINT_SERIALIZER_PROGRESS 1
+#define PRINT_SERIALIZER_PROGRESS 0
 #define PRINT_SERIALIZER_ERRORS 0
 #define PRINT_UNHANDLED_ERRORS 0
 #define PRINT_POOL_SERIALIZATION_ERRORS 0

@@ -103,17 +103,17 @@
 /*************************************/
 // Deopt patches
 //
-#define ENABLE_DEOPT_PATCHES 0
+#define ENABLE_DEOPT_PATCHES 1
 //
-  #define TRY_PATCH_DEOPTREASON 0
-  #define TRY_PATCH_DEOPTMETADATA 0
+  #define TRY_PATCH_DEOPTREASON 1
+  #define TRY_PATCH_DEOPTMETADATA 1
 /*************************************/
 
 /*************************************/
 // Static Call Patches
 //
   #define TRY_PATCH_STATIC_CALL3 1
-  #define TRY_PATCH_OPT_DISPATCH 0
+  #define TRY_PATCH_OPT_DISPATCH 1
 /*************************************/
 
 /*************************************/

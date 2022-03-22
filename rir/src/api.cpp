@@ -588,7 +588,7 @@ REXPORT SEXP stopSerializer() {
     return R_NilValue;
 }
 
-auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
+
 
 static bool fileExists(std::string fName) {
     std::ifstream f(fName.c_str());
@@ -606,6 +606,7 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
         std::cout << "  (E) Serializer Error Occured" << std::endl;
         #endif
     } else {
+        auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
         std::stringstream fN;
         fN << prefix << "/" << "m_" << hast << ".meta";
         std::string fName = fN.str();

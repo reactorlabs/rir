@@ -336,9 +336,8 @@ void PirJitLLVM::finalizeAndFixup() {
         fix.second.first->lazyCodeHandle(fix.second.second);
 }
 
-auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
-
 void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames) {
+    auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
 
     std::vector<int64_t> cpEntries;
     std::vector<int64_t> spEntries;
@@ -1039,20 +1038,67 @@ void PirJitLLVM::initializeLLVM() {
                 #endif
                 #if ENABLE_DEOPT_PATCHES == 1
                 else if (code || codn) {
-                    // auto firstDel = n.find('_');
-                    // auto secondDel = n.find('_', firstDel + 1);
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
 
-                    // auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    // int index = std::stoi(n.substr(secondDel + 1));
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    int index = std::stoi(n.substr(secondDel + 1));
 
-                    // SEXP map = Pool::get(HAST_VTAB_MAP);
-                    // if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
-                    //     Rf_error("code_ error dispatch table corrupted");
-                    // }
-                    // DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
-                    // auto addr = vtable->baseline()->body();
-                    // int idx = 0;
-                    // addr = addr->getSrcAtOffset(true, idx, index);
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
+                        Rf_error("code_ error dispatch table corrupted");
+                    }
+                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    auto addr = vtable->baseline()->body();
+                    int idx = 0;
+                    addr = addr->getSrcAtOffset(true, idx, index);
+
+                    #if PRINT_PATCH_ERRORS == 1
+                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
+                    SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
+                    SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
+
+                    if (oldVal != newVal) {
+                        std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
+                        std::cerr << "CODE patch failed" << std::endl;
+                    }
+                    #endif
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                }
+                else if (deop || deon) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+                    auto thirdDel = n.find('_', secondDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    auto index = std::stoi(n.substr(secondDel + 1, thirdDel - secondDel - 1));
+                    int realOffset = std::stoi(n.substr(thirdDel + 1));
+
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
+                        Rf_error("deop_ error dispatch table corrupted");
+                    }
+                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    auto addr = vtable->baseline()->body();
+                    int idx = 0;
+                    addr = addr->getSrcAtOffset(true, idx, index);
+
+                    auto pc = (uintptr_t)addr->code() + (uintptr_t)realOffset;
+
+                    auto res = (uintptr_t)pc - (uintptr_t)addr;
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(uintptr_t)));
+                    uintptr_t * tmp = (uintptr_t *) DATAPTR(store);
+                    *tmp = res;
+                    Pool::insert(store);
+                    UNPROTECT(1);
+
 
                     // #if PRINT_PATCH_ERRORS == 1
                     // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
@@ -1067,55 +1113,7 @@ void PirJitLLVM::initializeLLVM() {
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(nullptr)),
-                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
-
-                }
-                else if (deop || deon) {
-                    // auto firstDel = n.find('_');
-                    // auto secondDel = n.find('_', firstDel + 1);
-                    // auto thirdDel = n.find('_', secondDel + 1);
-
-                    // auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    // auto index = std::stoi(n.substr(secondDel + 1, thirdDel - secondDel - 1));
-                    // int realOffset = std::stoi(n.substr(thirdDel + 1));
-
-                    // SEXP map = Pool::get(HAST_VTAB_MAP);
-                    // if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
-                    //     Rf_error("deop_ error dispatch table corrupted");
-                    // }
-                    // DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
-                    // auto addr = vtable->baseline()->body();
-                    // int idx = 0;
-                    // addr = addr->getSrcAtOffset(true, idx, index);
-
-                    // auto pc = (uintptr_t)addr->code() + (uintptr_t)realOffset;
-
-                    // auto res = (uintptr_t)pc - (uintptr_t)addr;
-
-                    // SEXP store;
-                    // PROTECT(store = Rf_allocVector(RAWSXP, sizeof(uintptr_t)));
-                    // uintptr_t * tmp = (uintptr_t *) DATAPTR(store);
-                    // *tmp = res;
-                    // Pool::insert(store);
-                    // UNPROTECT(1);
-
-                    // std::cout << "resolved offset: " << res << std::endl;
-
-                    // // #if PRINT_PATCH_ERRORS == 1
-                    // // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    // // SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
-                    // // SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
-
-                    // // if (oldVal != newVal) {
-                    // //     std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
-                    // //     std::cerr << "CODE patch failed" << std::endl;
-                    // // }
-                    // // #endif
-
-                    NewSymbols[Name] = JITEvaluatedSymbol(
-                        static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(nullptr)),
+                            reinterpret_cast<uintptr_t>(tmp)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
                 #endif
