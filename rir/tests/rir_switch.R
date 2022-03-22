@@ -65,3 +65,13 @@ stopifnot(f5(2) == "42")
 stopifnot(f5(3) == c(1, 2))
 stopifnot(f5(3.002) == c(1, 2))
 stopifnot(f5(42) == NULL)
+
+
+f6 <- rir.compile(function(x) {
+    switch(x, a=17, 42)
+})
+f7 <- rir.compile(function(x) {
+    switch(x, "NA"=17, 42)
+})
+stopifnot(f6(NA_character_) == 42)
+stopifnot(f7(NA_character_) == 17)

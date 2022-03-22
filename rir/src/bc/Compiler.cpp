@@ -1411,6 +1411,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
          *   br nil
          *
          * str:
+         *   if (not is.na(value)) br strNACont
+         *   value <- "NA"
+         * strNACont:
          *   if (value == group[0]) br groupLabels[0]
          *   ...
          *   if (value == group[k]) br groupLabels[k]
@@ -1465,6 +1468,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         BC::Label vecEContBr = cs.mkLabel();
         BC::Label facWContBr = cs.mkLabel();
         BC::Label strBr = cs.mkLabel();
+        BC::Label strNAContBr = cs.mkLabel();
         BC::Label nilBr = cs.mkLabel();
         BC::Label contBr = cs.mkLabel();
 
@@ -1536,6 +1540,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (dupDflt) {
             ctx.emitError("duplicate 'switch' defaults", ast);
         } else {
+
+            // If value is NA, set it to the string "NA". This solves two
+            // problems: 1) In an R switch(), NA_character_ should match the
+            // string "NA". 2) It ensures that BC:eq will always return a
+            // boolean instead of NA. This allows us to use BC::eq and
+            // BC::asbool to compare the cases.
+            cs << BC::dup()
+               << BC::callBuiltin(1, R_NilValue, getBuiltinFun("is.na"))
+               << BC::asbool() << BC::recordTest() << BC::brfalse(strNAContBr)
+               << BC::pop() << BC::push(Rf_mkString("NA")) << strNAContBr;
+
             for (size_t i = 0; i < expressions.size(); ++i) {
                 for (auto& n : groups[i]) {
                     cs << BC::dup() << BC::push(n) << BC::eq();
@@ -1544,6 +1559,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                        << BC::brtrue(groupLabels[i]);
                 }
             }
+
             auto fallbackLabel =
                 (dftLabelIdx == -1) ? nilBr : labels[dftLabelIdx];
             cs << BC::br(fallbackLabel);
