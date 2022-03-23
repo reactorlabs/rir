@@ -18,7 +18,7 @@ innerBenchmarkLoop.default <- function(class, benchmarkParameter) {
 doRuns <- function(name, iterations, benchmarkParameter) {
     total <- 0
     class(name) <- tolower(name)
-    path <- paste("/opt/bitcodes/", name,sep ="")
+    path <- paste("/opt/bitcodes/", gsub("/","_",name), sep ="")
     dir.create(path)
     Sys.setenv(PIR_SERIALIZE_PREFIX = path)
 
