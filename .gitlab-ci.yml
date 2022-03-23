@@ -130,7 +130,7 @@ benchmark_llvm:
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
-    - /opt/bitcodes
+    - /opt/bitcodes/
     - benchmarks.data
     expire_in: 24 month
   retry: 1
