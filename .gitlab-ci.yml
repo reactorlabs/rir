@@ -461,3 +461,24 @@ benchmark_fastr:
     - benchmarks.data
     - memory.data
     expire_in: 6 month
+
+update_containers:
+  image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+  stage: Deploy
+  variables:
+    GIT_STRATEGY: none
+  only:
+    refs:
+      - schedules
+  script:
+    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - docker pull docker.io/library/docker:19.03.0-dind
+    - docker pull docker.io/library/docker:stable
+    - docker pull docker.io/library/ubuntu:20.04
+    - docker tag docker.io/library/docker:19.03.0-dind registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - docker tag docker.io/library/docker:stable registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker tag docker.io/library/ubuntu:20.04 registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
+    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
+    - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
+    - cd container/benchmark-baseline && sh update.sh
