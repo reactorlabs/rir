@@ -39,6 +39,8 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 
 static size_t totalCompileTime = 0;
+static size_t bitcodeTotalLoadTime = 0;
+static size_t compilerInvocations = 0;
 
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
@@ -466,6 +468,7 @@ REXPORT SEXP loadBitcode(SEXP metaData) {
 auto prefix = getenv("BC_FOLDER") ? getenv("BC_FOLDER") : ".";
 
 REXPORT SEXP loadBitcodes() {
+    auto start = high_resolution_clock::now();
     Protect prot;
     DIR *dir;
     struct dirent *ent;
@@ -498,17 +501,26 @@ REXPORT SEXP loadBitcodes() {
         DeserialDataMap::printUnlockMap();
         #endif
     } else {
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        bitcodeTotalLoadTime = duration.count();
         /* could not open directory */
         perror ("");
         return R_FalseValue;
     }
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    bitcodeTotalLoadTime = duration.count();
     return R_TrueValue;
 }
 
 REXPORT SEXP compileStats() {
-    std::cout << "totalCompileTime: " << totalCompileTime << "ms" << std::endl;
-    R_Visible = (Rboolean) false;
-    return R_NilValue;
+    // std::cout << "==== RUN STATS ====" << std::endl;
+    // std::cout << "Bitcode Load Time: " << bitcodeTotalLoadTime << "us" << std::endl;
+    // std::cout << "Compiler invocations: " << compilerInvocations << std::endl;
+    // std::cout << "  Compilation time: " << totalCompileTime << "us" << std::endl;
+    // std::cout << "Runtime Linking Time: " << Compiler::linkTime << "us" << std::endl;
+    return Rf_ScalarInteger(compilerInvocations);
 }
 
 REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
@@ -714,6 +726,7 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
+    compilerInvocations++;
     static unsigned int stack = 0;
     stack++;
     auto start = high_resolution_clock::now();
@@ -792,7 +805,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     stack--;
     if (stack == 0) {
         auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<milliseconds>(stop - start);
+        auto duration = duration_cast<microseconds>(stop - start);
         // std::cout << "compileTime: " << duration.count() << std::endl;
         totalCompileTime += duration.count();
     }

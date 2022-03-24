@@ -833,14 +833,6 @@ void PirJitLLVM::initializeLLVM() {
                 auto gcode = n.substr(0, 4) == "cod_"; // callable pointer to builtin
                 #endif
 
-                #if ENABLE_SCALL_PATCHES == 1
-                auto clso = n.substr(0, 5) == "clso_"; // closure objs for staticCalls
-                auto clsn = n.substr(0, 5) == "clsn_"; // should be ideally ignored, but we can skip patching in the deserializer
-
-                auto optd = n.substr(0, 5) == "optd_"; // cp pool index containing pointer to a suitable function that can dispatch to the context
-                auto optn = n.substr(0, 5) == "optn_"; // should be ideally ignored, but we can skip patching in the deserializer
-                #endif
-
                 #if ENABLE_DEOPT_PATCHES == 1
                 auto code = n.substr(0, 5) == "code_"; // code objs for DeoptReason
                 auto codn = n.substr(0, 5) == "codn_"; // should be ideally ignored, but we can skip patching in the deserializer
@@ -849,7 +841,9 @@ void PirJitLLVM::initializeLLVM() {
                 auto deon = n.substr(0, 5) == "deon_"; // should be ideally ignored, but we can skip patching in the deserializer
                 #endif
 
-                auto cppp = n.substr(0, 5) == "cppp_";
+                auto vtab = n.substr(0, 5) == "vtab_"; // Hast to dispatch table
+                auto clos = n.substr(0, 5) == "clos_"; // Hast to container closure
+                auto optd = n.substr(0, 5) == "optd_"; // Try optimistic dispatch to optd_HAST_CONTEXT_NARGS
 
                 if (ept || efn) {
                     auto addrStr = n.substr(4);
@@ -987,77 +981,6 @@ void PirJitLLVM::initializeLLVM() {
 
                 }
                 #endif
-                #if ENABLE_SCALL_PATCHES == 1
-                else if (clso || clsn) {
-                    auto firstDel = n.find('_');
-                    auto secondDel = n.find('_', firstDel + 1);
-
-                    auto hast = n.substr(secondDel + 1);
-                    SEXP map = Pool::get(HAST_CLOS_MAP);
-                    auto addr = UMap::get(map, Rf_install(hast.c_str()));
-
-                    // #if PRINT_PATCH_ERRORS == 1
-                    // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    // SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
-                    // SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
-
-                    // if (oldVal != newVal) {
-                    //     std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
-                    //     std::cerr << "CLSO patch failed" << std::endl;
-                    // }
-                    // #endif
-
-                    NewSymbols[Name] = JITEvaluatedSymbol(
-                        static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(addr)),
-                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
-
-                } else if (optd || optn) {
-
-                    auto firstDel = n.find('_');
-                    auto secondDel = n.find('_', firstDel + 1);
-                    auto thirdDel = n.find('_', secondDel + 1);
-
-                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    unsigned long con = std::stoul(n.substr(secondDel + 1, thirdDel - secondDel - 1));
-                    size_t numArgs = std::stoull((n.substr(thirdDel + 1)));
-
-                    SEXP map = Pool::get(HAST_VTAB_MAP);
-                    DispatchTable * dt = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
-                    SEXP nativeTargetContainer;
-                    rir::Function* nativeTarget = nullptr;
-                    for (size_t i = 0; i < dt->size(); i++) {
-                        auto entry = dt->get(i);
-                        if (entry->context().toI() == con &&
-                            entry->signature().numArguments >= numArgs) {
-                            nativeTarget = entry;
-                            nativeTargetContainer = entry->container();
-                        }
-                    }
-
-                    if (nativeTarget == nullptr) {
-                        nativeTargetContainer = dt->dispatch(Context(con))->container();
-                    }
-
-
-                    auto at = Pool::insert(nativeTargetContainer);
-
-                    SEXP store;
-                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
-                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
-                    *tmp = at;
-                    Pool::insert(store);
-                    UNPROTECT(1);
-
-
-                    NativeBuiltins::targetCaches.push_back(at);
-                    NewSymbols[Name] = JITEvaluatedSymbol(
-                        static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(tmp)),
-                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
-
-                }
-                #endif
                 #if ENABLE_DEOPT_PATCHES == 1
                 else if (code || codn) {
                     auto firstDel = n.find('_');
@@ -1121,20 +1044,72 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
                 #endif
-                else if (cppp) {
+                else if (vtab) {
                     auto firstDel = n.find('_');
-                    auto secondDel = n.find('_', firstDel + 1);
+                    auto hast = n.substr(firstDel + 1);
 
-                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    // auto index = std::stoi(n.substr(secondDel + 1));
-
-                    SEXP map = Pool::get(HAST_CLOS_MAP);
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
                     auto addr = UMap::get(map, Rf_install(hast.c_str()));
-                    // std::cout << "cppp PATC: " << (uintptr_t) addr << std::endl;
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
                             reinterpret_cast<uintptr_t>(addr)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                } else if (clos) {
+                    auto firstDel = n.find('_');
+                    auto hast = n.substr(firstDel + 1);
+
+                    SEXP lMap = Pool::get(HAST_CLOS_MAP);
+                    auto addr = UMap::get(lMap, Rf_install(hast.c_str()));
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(addr)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+                }  else if (optd) {
+
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+                    auto thirdDel = n.find('_', secondDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    unsigned long con = std::stoul(n.substr(secondDel + 1, thirdDel - secondDel - 1));
+                    size_t numArgs = std::stoull((n.substr(thirdDel + 1)));
+
+                    SEXP map = Pool::get(HAST_VTAB_MAP);
+                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
+                        Rf_error("optd_ error dispatch table corrupted");
+                    }
+                    DispatchTable * dt = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    SEXP nativeTargetContainer;
+                    rir::Function* nativeTarget = nullptr;
+                    for (size_t i = 0; i < dt->size(); i++) {
+                        auto entry = dt->get(i);
+                        if (entry->context().toI() == con &&
+                            entry->signature().numArguments >= numArgs) {
+                            nativeTarget = entry;
+                            nativeTargetContainer = entry->container();
+                        }
+                    }
+
+                    if (nativeTarget == nullptr) {
+                        nativeTargetContainer = dt->dispatch(Context(con))->container();
+                    }
+
+                    auto at = Pool::insert(nativeTargetContainer);
+                    NativeBuiltins::targetCaches.push_back(at);
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
+                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
+                    *tmp = at;
+                    Pool::insert(store);
+                    UNPROTECT(1);
+
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(tmp)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
                 }
                 else {
                     std::cout << "unknown symbol " << n << "\n";

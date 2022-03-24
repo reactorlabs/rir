@@ -16,6 +16,9 @@
 #include "utils/UMap.h"
 #include "runtimePatches.h"
 #include "api.h"
+#include <chrono>
+using namespace std::chrono;
+
 
 typedef struct RCNTXT RCNTXT;
 extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
@@ -52,17 +55,17 @@ static void insertClosObj(SEXP clos, size_t hast) {
 
 
 static void tryLinking(DispatchTable* vtable, SEXP hSym) {
-    static int linkingLimit = 0;
-    if (linkingLimit >= 100) {
-        Pool::patch(1, R_NilValue);
-    }
+    // static int linkingLimit = 0;
+    // if (linkingLimit >= 100) {
+    //     Pool::patch(1, R_NilValue);
+    // }
     SEXP serMap = Pool::get(HAST_DEPENDENCY_MAP);
     if (serMap == R_NilValue) return;
 
 
     SEXP tabMap = Pool::get(HAST_VTAB_MAP);
 
-    linkingLimit++;
+    // linkingLimit++;
 
 
 
@@ -168,6 +171,7 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
+    static size_t linkTime;
 
     SEXP finalize();
 
@@ -215,10 +219,15 @@ class Compiler {
         // Set the closure fields.
         UNPROTECT(1);
 
+        auto start = high_resolution_clock::now();
         size_t hast = getHast(vtable);
         insertVTable(vtable, hast);
         insertClosObj(vtable->container(), hast);
         tryLinking(vtable, hast);
+
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        linkTime += duration.count();
 
         return vtable->container();
     }
@@ -253,10 +262,15 @@ class Compiler {
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
+        auto start = high_resolution_clock::now();
         size_t hast = getHast(vtable);
         insertVTable(vtable, hast);
         insertClosObj(inClosure, hast);
         tryLinking(vtable, hast);
+
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        linkTime += duration.count();
     }
 };
 
