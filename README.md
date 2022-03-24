@@ -1,6 +1,6 @@
 # Ř
 
-## Giving it as spin
+## Giving it a spin
 
 The easiest way to try Ř is using our pre-built docker container
 
@@ -48,11 +48,6 @@ Then, we can proceed with the compilation:
 Congratulations! You can now run Ř with
 
     bin/R
-
-### In-tree builds
-
-If you just want to build Ř once and are not interested in hacking on it, then it might be OK to do an in-tree build.
-You can skip the step of creating a separate directory for the build and then use `cmake .` instead of `cmake ..`.
 
 ### make vs ninja
 
