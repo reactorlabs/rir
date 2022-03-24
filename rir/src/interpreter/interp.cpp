@@ -2485,7 +2485,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SEXP body = ostack_at(ctx, 1);
             SEXP formals = ostack_at(ctx, 2);
             res = Rf_allocSExp(CLOSXP);
-            assert(DispatchTable::check(body));
+            if (!DispatchTable::check(body)) {
+                std::cout << body << "\n";
+                Rf_PrintValue(body);
+                assert(false);
+            }
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
             SET_CLOENV(res, env);
