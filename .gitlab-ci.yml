@@ -127,11 +127,13 @@ benchmark_llvm:
     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
     - mkdir /opt/bitcodes
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-    - ls /opt/bitcodes
+    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq zip
+    - zip -r /opt/bitcodes.zip /opt/bitcodes
+    - ls /opt
     - ls /opt/bitcodes/bytecodes
   artifacts:
     paths:
-    - /opt/bitcodes/
+    - /opt/bitcodes.zip
     - benchmarks.data
     expire_in: 24 month
   retry: 1
