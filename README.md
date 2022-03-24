@@ -36,7 +36,7 @@ Then, we can proceed with the compilation:
     cmake -GNinja -DCMAKE_BUILD_TYPE=release -DFORCE_COLORED_OUTPUT=1 ..
 
     # Fetch and/or build LLVM and Gnu R.
-    # Ubuntu and MacOS download pre-compiled LLVM binaries, which takes around 10 minutes.
+    # On Ubuntu this downloads pre-compiled LLVM binaries, which takes around 10 minutes.
     # On other systems, or if you set BUILD_LLVM_FROM_SRC, this takes a very long time.
     ninja setup
 
@@ -53,21 +53,6 @@ Congratulations! You can now run Ř with
 
 If you prefer to use `make` instead of `ninja`, remove the `-GNinja` and `-DFORCE_COLORED_OUTPUT=1` flags when you call `cmake`.
 Then use `make` in all the places where we told you to use `ninja`.
-
-### macOS
-
-It should be possible to build Ř on a Mac.
-However, we haven't tested the instructions for that in a while.
-If you can get it to work on a Mac, please update this README.
-
-There are some extra pre-requesites on macOS:
-
-- A Fortran compiler (e.g. `brew install gcc@9`)
-- Xcode Command line tools
-
-By default, macOS uses clang while Ubuntu uses GCC.
-There might be some differences between the two and it may be desirable to also use GCC on macOS.
-You can do this by passing the `-GMACOS_USE_GCC_9` flag to `cmake`.
 
 ## Running tests
 
