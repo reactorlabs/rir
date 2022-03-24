@@ -12,7 +12,6 @@
 #include "compiler/pir/pir_impl.h"
 #include "compiler/pir/value_list.h"
 #include "compiler/util/bb_transform.h"
-#include "compiler/util/lowering/allocators.h"
 #include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
