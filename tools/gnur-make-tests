@@ -25,7 +25,7 @@ XVFB=`which Xvfb 2> /dev/null`
 if [[ "$DISPLAY" == "" && "$XVFB" != "" ]]; then
   # Some tests fail without display
   echo "Starting virtual FB display"
-  Xvfb :1 -ac -screen 0 800x166x16&
+  Xvfb :1 -ac -noreset -screen 0 800x166x16&
   export DISPLAY=:1
   USING_XVFB=true
 fi
