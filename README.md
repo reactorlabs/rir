@@ -1,44 +1,86 @@
 # Ř
 
-To give it a spin try
+## Giving it as spin
+
+The easiest way to try Ř is using our pre-built docker container
 
     docker run -it registry.gitlab.com/rirvm/rir_mirror:master /opt/rir/build/release/bin/R
 
-## Building from Source
+## Building
 
-This is currently only tested on Ubuntu.
+If you want to build Ř from source, we strongly recommend that you use Ubuntu.
+This way, the build scripts can download pre-compiled LLVM binaries instead of compiling LLVM from scratch.
+If you're not sure if your OS can benefit from pre-compiled LLVM binaries, check the tools/fetch-llvm.sh script.
 
+Before we can begin, we must install the dependencies.
+The optional ninja-build dependency improves the compilation time.
+For the R build-dep step you may need to enable source code repositories (deb-src) via GNOME Software or /etc/apt/sources.list.
+
+    sudo apt install build-essential cmake curl
+    sudo apt install ninja-build
+    sudo apt build-dep r-base
+
+Then, we can proceed with the compilation:
+
+    # Clone this repository
     git clone https://github.com/reactorlabs/rir
     cd rir
-    cmake -DCMAKE_BUILD_TYPE=build_type .    # possible build_types: release, debugopt, debug
-    # Fetch and build dependencies. This will build gnur from source, which takes a while.
-    # To build llvm from source (for debug symbols) set the following. This can take a long time to build.
-    # export BUILD_LLVM_FROM_SRC=1
-    make setup
-    # Run cmake again, this should now say "Found LLVM 11"
-    cmake .
-    make
 
-Now run Ř with
+    # Create a directory for the build.
+    # You can use any name.
+    mkdir build
+    cd build
+
+    # Invoke cmake for the first time.
+    # Possible build types: release, debugopt, debug
+    cmake -GNinja -DCMAKE_BUILD_TYPE=release -DFORCE_COLORED_OUTPUT=1 ..
+
+    # Fetch and/or build LLVM and Gnu R.
+    # Ubuntu and MacOS download pre-compiled LLVM binaries, which takes around 10 minutes.
+    # On other systems, or if you set BUILD_LLVM_FROM_SRC, this takes a very long time.
+    ninja setup
+
+    # Now we can build Ř itself.
+    # The cmake should output "Found LLVM 12"
+    cmake ..
+    ninja
+
+Congratulations! You can now run Ř with
 
     bin/R
 
-If you want to develop Ř then it is highly recommended to use off-tree builds and ninja instead of make. See further down (Hacking).
+### In-tree builds
+
+If you just want to build Ř once and are not interested in hacking on it, then it might be OK to do an in-tree build.
+You can skip the step of creating a separate directory for the build and then use `cmake .` instead of `cmake ..`.
+
+### make vs ninja
+
+If you prefer to use `make` instead of `ninja`, remove the `-GNinja` and `-DFORCE_COLORED_OUTPUT=1` flags when you call `cmake`.
+Then use `make` in all the places where we told you to use `ninja`.
 
 ### macOS
 
-macOS has some extra prerequisites:
+It should be possible to build Ř on a Mac.
+However, we haven't tested the instructions for that in a while.
+If you can get it to work on a Mac, please update this README.
 
-- A Fortran compiler (e.g. `brew install gcc`)
+There are some extra pre-requesites on macOS:
+
+- A Fortran compiler (e.g. `brew install gcc@9`)
 - Xcode Command line tools
+
+By default, macOS uses clang while Ubuntu uses GCC.
+There might be some differences between the two and it may be desirable to also use GCC on macOS.
+You can do this by passing the `-GMACOS_USE_GCC_9` flag to `cmake`.
 
 ## Running tests
 
-To run the basic test, just execute
+To run the basic Ř tests, execute
 
     bin/tests
 
-To run tests from gnur with rir enabled as a jit:
+To run tests from GNU R with Ř enabled as a JIT:
 
     bin/gnur-make check-devel
 
@@ -62,39 +104,26 @@ For instance to show all functions that are optimized use:
 To make changes to this repository please open a pull request. Ask somebody to
 review your changes and make sure [CI](https://gitlab.com/rirvm/rir_mirror/pipelines) is green.
 
-Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises. Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
-
-### Off-Tree builds
-
-It is highly recommended to use off-tree builds for hacking Ř.
-You can have multiple builds at the same time.
-Follow the build instructions as above, but run cmake in a separate directory.
-For instance you can create a sub-directory called `build`, cd into that
-directory, then replace `.` with `..` in all the cmake commands from the build instructions.
-This will build Ř in the `build` directory. You can then have multiple build directories, with different build types.
-
-### Building with ninja
-
-For faster build use ninja. To generate ninja files instead of makefiles add `-GNinja` to the cmake commands.
-
-Using ninja means GCC and Clang will disable color output. To force color, run cmake with `-DFORCE_COLORED_OUTPUT=true`.
+Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises.
+Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
 
 ### LLVM backend
 
-If you need to debug issues in the llvm backend then it is useful to run `make setup` with `BUILD_LLVM_FROM_SRC=1` set. This will give you debug symbols for LLVM, which unfortunately increases linking time. To switch between source and prebuilt LLVM you can switch the `llvm-11` symlink between `llvm-11-build` and `clang+llvm...ubuntu-...`. After the switch a `make clean` is needed.
+If you need to debug issues in the LLVM backend then it might be useful to build it from source.
+This way, you will have debug symbols available.
+To build LLVM from source, set the `BUILD_LLVM_FROM_SRC` environment variable before `ninja setup`, as shown below.
+However, be aware that compiling LLVM takes a long time and it also increases the linking times. 
+
+    export BUILD_LLVM_FROM_SRC=1
+    ninja setup
+
+To switch between source and prebuilt LLVM you can switch the `llvm-12` symlink between `llvm-12-build` and `clang+llvm...ubuntu-...`.
+After the switch a `ninja clean` is needed.
+If there are any issues with LLVM includes, you can `rm -rf external/llvm-12*` and then run `make setup` again.
 
 Assertions in native code are disabled in release builds.
 
-If there are any issues with LLVM includes, you can `rm -rf external/llvm-11*` and then run `make setup` again.
-
-### Building on macOS with GCC 9
-
-By default macOS will build gnuR and rir with clang, while Linux always uses GCC. There might be some differences between the 2 compilers. However, you can force macOS to use GCC via the following:
-
-- Install GCC 9 with homebrew (`brew install gcc@9`)
-- Pass `-GMACOS_USE_GCC_9` to `cmake`
-
-### Making changes to gnur
+### Making changes to GNU R
 
 R with Ř patches is a submodule under external/custom-r. This is how you edit:
 
@@ -149,4 +178,4 @@ Fetch updated R:
     git submodule update
     cd external/custom-r && make -j4 
 
-Or use `make setup`
+Or use `ninja setup`
