@@ -126,7 +126,6 @@ benchmark_llvm:
     - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
     - mkdir /opt/bitcodes
-    - ls /opt
     - ls /opt/bitcodes
     - ls /opt/bitcodes/bytecodes
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
