@@ -300,16 +300,15 @@ void printAST(int space, SEXP ast) {
 hastAndIndex getHastAndIndex(unsigned src) {
     SEXP srcToHastMap = Pool::get(SRC_HAST_MAP);
     SEXP srcSym = Rf_install(std::to_string(src).c_str());
-    if (srcToHastMap != R_NilValue && UMap::symbolExistsInMap(srcSym, srcToHastMap)) {
-        SEXP r = UMap::get(srcToHastMap, srcSym);
+    if (srcToHastMap != R_NilValue && Rf_findVarInFrame(srcToHastMap, srcSym) != R_UnboundValue) {
+        SEXP r = Rf_findVarInFrame(srcToHastMap, srcSym);
         SEXP hastS = VECTOR_ELT(r, 0);
-        size_t hast = std::stoull(CHAR(PRINTNAME(hastS)));
         SEXP indexS = VECTOR_ELT(r, 1);
         int index = std::stoi(CHAR(PRINTNAME(indexS)));
-        hastAndIndex res = { hast, index };
+        hastAndIndex res = { hastS, index };
         return res;
     } else {
-        hastAndIndex res = { 0, 0 };
+        hastAndIndex res = { R_NilValue, 0 };
         return res;
     }
 }
@@ -576,7 +575,7 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-bool serializeLL = false;
+bool serializeLL = getenv("PIR_SERIALIZE_ALL") ? true : false;
 
 REXPORT SEXP startSerializer() {
     serializeLL = true;
@@ -596,8 +595,10 @@ static bool fileExists(std::string fName) {
 }
 
 static void serializeClosure(unsigned src, std::string name, const bool & serializerError, contextData & cData) {
-    size_t hast = getHastAndIndex(src).hast;
-    if (hast == 0) {
+    auto data = getHastAndIndex(src);
+    SEXP hast = data.hast;
+    int indexOffset = data.index;
+    if (hast == R_NilValue) {
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (E) unavailable hast, cannot serialize" << std::endl;
         #endif
@@ -608,7 +609,7 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
     } else {
         auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
         std::stringstream fN;
-        fN << prefix << "/" << "m_" << hast << ".meta";
+        fN << prefix << "/" << "m_" << CHAR(PRINTNAME(hast)) << ".meta";
         std::string fName = fN.str();
 
         #if PRINT_SERIALIZER_PROGRESS == 1
@@ -645,10 +646,10 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
 
             sData.updateContainer(result);
 
-            sData.addContextData(cData.getContainer(), std::to_string(cData.getContext()));
+            sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
             fclose(reader);
         } else {
-            sData.addContextData(cData.getContainer(), std::to_string(cData.getContext()));
+            sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
         }
 
         #if PRINT_SERIALIZER_PROGRESS == 1
@@ -667,13 +668,13 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
         // rename temp files
         std::stringstream bcFName;
         std::stringstream bcOldName;
-        bcFName << prefix << "/" << hast << "_" << cData.getContext() << ".bc";
+        bcFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".bc";
         bcOldName << prefix << "/" << "temp.bc";
         std::rename(bcOldName.str().c_str(), bcFName.str().c_str());
 
         std::stringstream poolFName;
         std::stringstream poolOldName;
-        poolFName << prefix << "/" << hast << "_" << cData.getContext() << ".pool";
+        poolFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".pool";
         poolOldName << prefix << "/" << "temp.pool";
         std::rename(poolOldName.str().c_str(), poolFName.str().c_str());
     }
@@ -799,7 +800,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // they have incomplete type-feedback.
                 if (dt->size() == 1 && dt->baseline()->invocationCount() < 2)
                     return;
+                PROTECT(body);
                 apply(body, c);
+                UNPROTECT(1);
             }
         });
         if (!done)
@@ -819,35 +822,43 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     return what;
 }
 
-static bool dependencyBlacklisted(SEXP map) {
+// static bool dependencyBlacklisted(SEXP map) {
+//     // SEXP blMap = Pool::get(BL_MAP);
+//     // if (blMap == R_NilValue) {
+//     //     return false;
+//     // }
+//     // SEXP keys = R_lsInternal(blMap, (Rboolean) false);
+//     // for (int i = 0; i < Rf_length(keys); i++) {
+//     //     SEXP keySym = Rf_install(CHAR(STRING_ELT(keys, i)));
+//     //     SEXP ele = Rf_findVarInFrame(map, keySym);
+//     //     contextData c(ele);
+
+//     //     SEXP rMap = c.getReqMapAsVector();
+
+//     //     // std::cout << "   " << CHAR(PRINTNAME(keySym)) << " : [ ";
+
+//     //     for (int j = 0; j < Rf_length(rMap); j++) {
+//     //         SEXP dataContainer = VECTOR_ELT(rMap, j);
+//     //         size_t* res = (size_t *) DATAPTR(dataContainer);
+//     //         // std::cout << *res << " ";
+//     //         SEXP depSym = Rf_install(std::to_string(*res).c_str());
+//     //         if (Rf_findVarInFrame(map, keySym) != R_UnboundValue) {
+//     //             return true;
+//     //         }
+//     //     }
+//     //     // std::cout << "]" << std::endl;
+//     // }
+
+//     return false;
+// }
+
+static bool isHastBlacklisted(SEXP hastSym) {
     SEXP blMap = Pool::get(BL_MAP);
-    if (blMap == R_NilValue) {
+    if (blMap != R_NilValue && Rf_findVarInFrame(blMap, hastSym) != R_UnboundValue) {
+        return true;
+    } else {
         return false;
     }
-    SEXP keys = VECTOR_ELT(map, 0);
-    for (int i = 0; i < Rf_length(keys); i++) {
-        SEXP keySym = VECTOR_ELT(keys, i);
-        SEXP ele = UMap::get(map, keySym);
-        contextData c(ele);
-
-        SEXP rMap = c.getReqMapAsVector();
-
-        // std::cout << "   " << CHAR(PRINTNAME(keySym)) << " : [ ";
-
-        for (int j = 0; j < Rf_length(rMap); j++) {
-            SEXP dataContainer = VECTOR_ELT(rMap, j);
-            size_t* res = (size_t *) DATAPTR(dataContainer);
-            // std::cout << *res << " ";
-            SEXP depSym = Rf_install(std::to_string(*res).c_str());
-            if (UMap::symbolExistsInMap(depSym, blMap)) {
-                // if even one dependency is blacklisted, we cannot use it
-                return true;
-            }
-        }
-        // std::cout << "]" << std::endl;
-    }
-
-    return false;
 }
 
 REXPORT SEXP serializerCleanup() {
@@ -857,13 +868,6 @@ REXPORT SEXP serializerCleanup() {
         std::cout << "Serializer cleanup: no blacklist exists!" << std::endl;
         return R_TrueValue;
     }
-
-    // SEXP keys = VECTOR_ELT(blMap, 0);
-
-    // for (int i = 0; i < Rf_length(keys); i++) {
-    //     SEXP key = VECTOR_ELT(keys, 0);
-    //     std::cout << "blacklist(" << i << "): " << CHAR(PRINTNAME(key)) << std::endl;
-    // }
 
     auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
 
@@ -896,9 +900,9 @@ REXPORT SEXP serializerCleanup() {
 
                 // check if the currentHast is blacklisted
                 serializerData sData(result);
-                size_t hast = sData.getHastData();
+                SEXP hast = sData.getHastData();
 
-                if (UMap::symbolExistsInMap(Rf_install(std::to_string(hast).c_str()), blMap)) {
+                if (isHastBlacklisted(hast)) {
                     const int removeRes = remove(metaPath.str().c_str());
                     if( removeRes == 0 ){
                         blacklisted++;
@@ -909,9 +913,25 @@ REXPORT SEXP serializerCleanup() {
                     continue;
                 }
 
-                SEXP contextMap = sData.getContextMap();
+                // Todo, blacklist specific contexts instead of the whole file...
+                bool err = false;
+                serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+                    serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
 
-                if (dependencyBlacklisted(contextMap)) {
+                        contextData c(cData);
+
+                        SEXP rMap = c.getReqMapAsVector();
+                        for (int j = 0; j < Rf_length(rMap); j++) {
+                            SEXP dep = VECTOR_ELT(rMap, j);
+
+                            if (isHastBlacklisted(dep)) {
+                                err = true;
+                            }
+                        }
+                    });
+                });
+
+                if (err) {
                     const int removeRes = remove(metaPath.str().c_str());
                     if( removeRes == 0 ){
                         blacklisted++;
@@ -1181,7 +1201,6 @@ bool startup() {
     Pool::makeSpace(); // (2) Hast to vtable map
     Pool::makeSpace(); // (3) Hast to closObj
     Pool::makeSpace(); // (4) Hast blacklist, discard serialized code for these functions
-    Pool::makeSpace(); // (5) Comparing old and new values for the static call patch
     #endif
     return true;
 }

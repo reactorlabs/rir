@@ -14,7 +14,8 @@
 #include <cassert>
 
 #include "runtimePatches.h"
-#include "utils/UMap.h"
+#include "R/Printing.h"
+#include "api.h"
 
 typedef struct RCNTXT RCNTXT;
 extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
@@ -22,78 +23,110 @@ extern "C" SEXP R_sysfunction(int n, RCNTXT *cptr);
 
 namespace rir {
 
-static size_t getHast(DispatchTable* vtable) {
-    auto rirBody = vtable->baseline()->body();
-    SEXP ast_1 = src_pool_at(globalContext(), rirBody->src);
-
+static SEXP getHast(SEXP body, SEXP env) {
+    std::stringstream qHast;
+    SEXP x = env;
+    if (x == R_GlobalEnv) {
+        qHast << "GE:";
+    } else if (x == R_BaseEnv) {
+        qHast << "BE:";
+    } else if (x == R_EmptyEnv) {
+        qHast << "EE:";
+    } else if (R_IsPackageEnv(x)) {
+        qHast << "PE:" << Rf_translateChar(STRING_ELT(R_PackageEnvName(x), 0)) << ":";
+    } else if (R_IsNamespaceEnv(x)) {
+        qHast << "NS:" << Rf_translateChar(STRING_ELT(R_NamespaceEnvSpec(x), 0)) << ":";
+    } else {
+        return R_NilValue;
+        qHast << "AE:";
+    }
     size_t hast = 0;
-    hash_ast(ast_1, hast);
-
-    return hast;
+    hash_ast(body, hast);
+    qHast << hast;
+    SEXP calcHast = Rf_install(qHast.str().c_str());
+    return calcHast;
 }
 
-static void populateHastSrcData(DispatchTable* vtable, size_t hast) {
-    int index = 0;
+static void populateHastSrcData(DispatchTable* vtable, SEXP hastSym) {
     SEXP map = Pool::get(SRC_HAST_MAP);
     if (map == R_NilValue) {
-        UMap::createMapInCp(SRC_HAST_MAP);
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(SRC_HAST_MAP, tmp);
+        UNPROTECT(1);
         map = Pool::get(SRC_HAST_MAP);
     }
-    vtable->baseline()->body()->populateSrcData(hast, map, true, index);
+    int index = 0;
+    vtable->baseline()->body()->populateSrcData(hastSym, map, true, index);
+    // int j = 0;
+    // vtable->baseline()->body()->printSource(true, j);
 }
 
-static void insertVTable(DispatchTable* vtable, size_t hast) {
+static void insertVTable(DispatchTable* vtable, SEXP hastSym) {
     SEXP map = Pool::get(HAST_VTAB_MAP);
     if (map == R_NilValue) {
-        UMap::createMapInCp(HAST_VTAB_MAP);
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_VTAB_MAP, tmp);
+        UNPROTECT(1);
         map = Pool::get(HAST_VTAB_MAP);
     }
-    SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-    UMap::insert(map, hastSym, vtable->container());
+    assert(TYPEOF(map) == ENVSXP);
+    Rf_defineVar(hastSym, vtable->container(), map);
+    Pool::insert(vtable->container());
 }
 
-static void insertClosObj(SEXP clos, size_t hast) {
+static void insertClosObj(SEXP clos, SEXP hastSym) {
     SEXP map = Pool::get(HAST_CLOS_MAP);
     if (map == R_NilValue) {
-        UMap::createMapInCp(HAST_CLOS_MAP);
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_CLOS_MAP, tmp);
+        UNPROTECT(1);
         map = Pool::get(HAST_CLOS_MAP);
     }
-    SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-    UMap::insert(map, hastSym, clos);
+    assert(TYPEOF(map) == ENVSXP);
+    Rf_defineVar(hastSym, clos, map);
+    Pool::insert(clos);
 }
 
-static void insertToBlacklist(size_t hast) {
+static void insertToBlacklist(SEXP hastSym) {
     SEXP map = Pool::get(BL_MAP);
     if (map == R_NilValue) {
-        UMap::createMapInCp(BL_MAP);
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(BL_MAP, tmp);
+        UNPROTECT(1);
         map = Pool::get(BL_MAP);
     }
 
-    SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-
-    if (!UMap::symbolExistsInMap(hastSym, map)) {
-        UMap::insert(map, hastSym, R_TrueValue);
+    if (Rf_findVarInFrame(map, hastSym) == R_UnboundValue) {
+        assert(TYPEOF(map) == ENVSXP);
+        Rf_defineVar(hastSym, R_TrueValue, map);
         #if DEBUG_BLACKLIST == 1
         std::cout << "(R) Blacklisting: " << hast << " (" << hastSym << ")" << std::endl;
         #endif
     }
 }
 
-static bool readyForSerialization(DispatchTable* vtable, size_t hast) {
+static bool readyForSerialization(DispatchTable* vtable, SEXP hastSym) {
     // if the hast already corresponds to other src addresses and is a different closureObj then
     // there was a collision and we cannot use this function and all functions that depend on it
-    auto rirBody = vtable->baseline()->body();
+    // auto rirBody = vtable->baseline()->body();
 
-    SEXP hastSym = Rf_install(std::to_string(hast).c_str());
 
     SEXP vTableMap = Pool::get(HAST_VTAB_MAP);
-    if (vTableMap != R_NilValue && UMap::symbolExistsInMap(hastSym, vTableMap)) {
-        DispatchTable * oldTab = DispatchTable::unpack(UMap::get(vTableMap, hastSym));
-        auto oldRirBody = oldTab->baseline()->body();
-        if (oldRirBody->src != rirBody->src) {
-            insertToBlacklist(hast);
-            return false;
-        }
+    if (vTableMap != R_NilValue && Rf_findVarInFrame(vTableMap, hastSym) != R_UnboundValue) {
+        // SEXP vtabContainer = Rf_findVarInFrame(vTableMap, hastSym);
+        // if (!DispatchTable::check(vtabContainer)) {
+        //     Rf_error("corrupted vtable, serializer error!");
+        // }
+        // DispatchTable * oldTab = DispatchTable::unpack(vtabContainer);
+        // auto oldRirBody = oldTab->baseline()->body();
+        // if (oldRirBody->src != rirBody->src) {
+        // }
+        insertToBlacklist(hastSym);
+        return false;
     }
     return true;
 }
@@ -167,15 +200,6 @@ class Compiler {
         // Set the closure fields.
         UNPROTECT(1);
 
-        size_t hast = getHast(vtable);
-        if (readyForSerialization(vtable, hast)) {
-            #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << vtable->container() << std::endl;
-            #endif
-            insertVTable(vtable, hast);
-            populateHastSrcData(vtable, hast);
-            insertClosObj(vtable->container(), hast);
-        }
         return vtable->container();
     }
 
@@ -206,13 +230,13 @@ class Compiler {
         if (origBC)
             vtable->baseline()->body()->addExtraPoolEntry(origBC);
 
+        SEXP hast = getHast(body, CLOENV(inClosure));
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
-        size_t hast = getHast(vtable);
-        if (readyForSerialization(vtable, hast)) {
+        if (hast != R_NilValue && readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << hast << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
+            std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
             #endif
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);

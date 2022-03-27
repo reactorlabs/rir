@@ -219,8 +219,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
     // serializer
-    void populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index);
+    void populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index);
     Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
+    SEXP getTabAtOffset(bool mainSrc, int & index, int reqOffset);
     void printSource(bool mainSrc, int & index);
 
     static size_t extraPtrOffset() {

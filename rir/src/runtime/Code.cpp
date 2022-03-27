@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include "utils/UMap.h"
+#include "runtime/DispatchTable.h"
 
 namespace rir {
 
@@ -218,6 +219,13 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
         BC bc = BC::decode(pc, this);
         bc.addMyPromArgsTo(promises);
 
+        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+            SEXP iConst = bc.immediateConst();
+            if (DispatchTable::check(iConst)) {
+                Code * res = DispatchTable::unpack(iConst)->baseline()->body()->getSrcAtOffset(false, index, reqOffset);
+                if (res != nullptr) return res;
+            }
+        }
         pc = BC::next(pc);
     }
 
@@ -245,6 +253,77 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
     return nullptr;
 }
 
+SEXP Code::getTabAtOffset(bool mainSrc, int & index, int reqOffset) {
+
+    Opcode* pc = code();
+    size_t label = 0;
+    std::map<Opcode*, size_t> targets;
+    targets[pc] = label++;
+    while (pc < endCode()) {
+        if (BC::decodeShallow(pc).isJmp()) {
+            auto t = BC::jmpTarget(pc);
+            if (!targets.count(t))
+                targets[t] = label++;
+        }
+        pc = BC::next(pc);
+    }
+
+    // sort labels ascending
+    label = 0;
+    for (auto& t : targets)
+        t.second = label++;
+
+    pc = code();
+    std::vector<BC::FunIdx> promises;
+
+    Protect p;
+    index++;
+
+
+    if (index == reqOffset) return R_TrueValue;
+
+    while (pc < endCode()) {
+        BC bc = BC::decode(pc, this);
+        bc.addMyPromArgsTo(promises);
+
+        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+            SEXP iConst = bc.immediateConst();
+            if (DispatchTable::check(iConst)) {
+                SEXP res = DispatchTable::unpack(iConst)->baseline()->body()->getTabAtOffset(false, index, reqOffset);
+                if (res && res == R_TrueValue) {
+                    return iConst;
+                }
+            }
+        }
+
+        pc = BC::next(pc);
+    }
+
+
+    for (auto i : promises) {
+        auto c = getPromise(i);
+        SEXP res = c->getTabAtOffset(false, index, reqOffset);
+        if (res != nullptr) return res;
+    }
+
+
+    if (mainSrc) {
+        rir::Function* func = function();
+        if (func) {
+            auto nargs = func->nargs();
+            for (unsigned i = 0; i < nargs; i++) {
+                auto code = func->defaultArg(i);
+                if (code != nullptr) {
+                    SEXP res = code->getTabAtOffset(false, index, reqOffset);
+                    if (res != nullptr) return res;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+
 void Code::printSource(bool mainSrc, int & index) {
         Opcode* pc = code();
     size_t label = 0;
@@ -270,11 +349,18 @@ void Code::printSource(bool mainSrc, int & index) {
     Protect p;
     index++;
 
-    std::cout << "(" << index << "," << src << ")" << this << std::endl;
+    std::cout << "(" << index << "," << src << "), ";
 
     while (pc < endCode()) {
         BC bc = BC::decode(pc, this);
         bc.addMyPromArgsTo(promises);
+
+        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+            SEXP iConst = bc.immediateConst();
+            if (DispatchTable::check(iConst)) {
+                DispatchTable::unpack(iConst)->baseline()->body()->printSource(false, index);
+            }
+        }
 
         pc = BC::next(pc);
     }
@@ -296,11 +382,12 @@ void Code::printSource(bool mainSrc, int & index) {
                 }
             }
         }
+        std::cout << std::endl;
     }
 }
 
 
-void Code::populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & index) {
+void Code::populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index) {
     Opcode* pc = code();
     size_t label = 0;
     std::map<Opcode*, size_t> targets;
@@ -327,7 +414,7 @@ void Code::populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & inde
 
     if (mainSrc) {
         #if PRINT_SRC_HAST_MAP_UPDATES == 1
-        std::cout << "hast(" << parentHast << ", " << src << "): [ ";
+        std::cout << "hast(" << CHAR(PRINTNAME(parentHast)) << ", " << src << "): [ ";
         #endif
     } else {
         #if PRINT_SRC_HAST_MAP_UPDATES == 1
@@ -336,17 +423,24 @@ void Code::populateSrcData(size_t parentHast, SEXP map, bool mainSrc, int & inde
     }
 
     SEXP srcSym = Rf_install(std::to_string(src).c_str());
-    SEXP hastSym = Rf_install(std::to_string(parentHast).c_str());
+    SEXP hastSym = parentHast;
     SEXP indexSym = Rf_install(std::to_string(index).c_str());
     SEXP resVec;
     p(resVec = Rf_allocVector(VECSXP, 2));
     SET_VECTOR_ELT(resVec, 0, hastSym);
     SET_VECTOR_ELT(resVec, 1, indexSym);
-    UMap::insert(map, srcSym, resVec);
+    Rf_defineVar(srcSym, resVec, map);
 
     while (pc < endCode()) {
         BC bc = BC::decode(pc, this);
         bc.addMyPromArgsTo(promises);
+
+        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+            SEXP iConst = bc.immediateConst();
+            if (DispatchTable::check(iConst)) {
+                DispatchTable::unpack(iConst)->baseline()->body()->populateSrcData(parentHast, map, false, index);
+            }
+        }
 
         pc = BC::next(pc);
     }

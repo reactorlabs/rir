@@ -18,19 +18,20 @@ struct FrameInfo {
     Opcode* pc;
     uintptr_t offset;
     Code* code;
-    size_t hast;
+    char hast[1000];
     int index;
     size_t stackSize;
     bool inPromise;
 
     FrameInfo() {}
-    FrameInfo(uintptr_t offset, size_t hast, int index, size_t stackSize, bool promise)
-        : offset(offset), hast(hast), index(index), stackSize(stackSize), inPromise(promise) {
+    FrameInfo(uintptr_t offset, const char * hast1, int index, size_t stackSize, bool promise)
+        : offset(offset), hast(""), index(index), stackSize(stackSize), inPromise(promise) {
+            strcpy(hast, hast1);
             code = 0;
             pc = 0;
         }
     FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
-        : pc(pc), offset(0), code(code), hast(0), index(0), stackSize(stackSize), inPromise(promise) {}
+        : pc(pc), offset(0), code(code), hast(""), index(0), stackSize(stackSize), inPromise(promise) {}
     #else
     Opcode* pc;
     Code* code;

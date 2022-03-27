@@ -399,7 +399,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         Measuring::startTimer("backend.cpp: pir2llvm");
     }
 
-    std::set<size_t> rMap;
+    std::set<SEXP> rMap;
     if (cData != nullptr) {
         #if ADD_EXTRA_DEBUGGING_DATA == 1
         jit.enableDebugStatements();
@@ -452,9 +452,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         std::cout << "  (*) Found mainFunCodeObj: " << mainFunCodeObj << std::endl;
         #endif
 
-        size_t hast = getHastAndIndex(done[mainFunCodeObj]->src).hast;
+        SEXP hast = getHastAndIndex(done[mainFunCodeObj]->src).hast;
 
-        if (hast == 0) {
+        if (hast == R_NilValue) {
             *serializerError = true;
             #if PRINT_SERIALIZER_ERRORS == 1
             std::cout << "  (E) Hast unavailable, cannot populate cData" << std::endl;
@@ -469,7 +469,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             std::stringstream ss;
             ss << "f_";
             ss << dis(gen) << "_"; // random 5 digit number
-            ss << std::hex << std::uppercase << hast; // random 5 digit number
+            ss << std::hex << std::uppercase << CHAR(PRINTNAME(hast)); // random 5 digit number
             ss << "_";
             ss << std::hex << std::uppercase << cls->context().toI();
             auto e = jit.JIT->lookup(ss.str() + "_0");
@@ -523,7 +523,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 processedName[c] = name;
 
                 auto data = getHastAndIndex(c->rirSrc()->src);
-                if (data.hast == 0) {
+                if (data.hast == R_NilValue) {
                     *serializerError = true;
                     #if PRINT_SERIALIZER_PROGRESS == 1
                     std::cout << "  (E) Src hast is 0 for " << name << ", src: " << c->rirSrc()->src << std::endl;
@@ -649,7 +649,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         conData.addFunctionSignature(signature);
 
         // get rid of yourself from the req map
-        std::vector<size_t> reqMap;
+        std::vector<SEXP> reqMap;
         for (auto & ele : rMap) {
             if (ele != hast) {
                 reqMap.push_back(ele);
@@ -661,12 +661,12 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
         int i = 0;
         for (auto & ele : reqMap) {
-            SEXP store;
-            PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
-            size_t * tmp = (size_t *) DATAPTR(store);
-            *tmp = ele;
-            SET_VECTOR_ELT(rData, i++, store);
-            UNPROTECT(1);
+            // SEXP store;
+            // PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
+            // size_t * tmp = (size_t *) DATAPTR(store);
+            // *tmp = ele;
+            SET_VECTOR_ELT(rData, i++, ele);
+            // UNPROTECT(1);
         }
 
 
@@ -677,14 +677,14 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (*) Original reqMapForCompilation: < ";
         for (auto & ele : reqMap) {
-            std::cout << ele << " ";
+            std::cout << CHAR(PRINTNAME(ele)) << " ";
         }
         std::cout << ">" << std::endl;
         #endif
-        if (getenv("PIR_SERIALIZE_NO_REQ") && rMap.size() > 0) {
-            *serializerError = true;
-            std::cout << "  (F) PIR_SERIALIZE_NO_REQ" << std::endl;
-        }
+        // if (getenv("PIR_SERIALIZE_NO_REQ") && rMap.size() > 0) {
+        //     *serializerError = true;
+        //     std::cout << "  (F) PIR_SERIALIZE_NO_REQ" << std::endl;
+        // }
         #if PRINT_SERIALIZER_PROGRESS == 1
         std::cout << "  (*) metadata added" << std::endl;
         #endif

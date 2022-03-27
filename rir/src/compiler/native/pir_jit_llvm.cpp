@@ -751,6 +751,29 @@ void PirJitLLVM::compile(
 
 llvm::LLVMContext& PirJitLLVM::getContext() { return *TSC.getContext(); }
 
+static SEXP getVtableContainer(SEXP hastSym) {
+    SEXP lMap = Pool::get(HAST_VTAB_MAP);
+    auto resolvedContainer = Rf_findVarInFrame(lMap, hastSym);
+    return resolvedContainer;
+}
+
+static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
+    SEXP lMap = Pool::get(HAST_VTAB_MAP);
+    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
+
+    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
+    auto addr = vt->baseline()->body();
+
+    int idx = 0;
+    return addr->getSrcAtOffset(true, idx, offset);
+}
+
+static SEXP getClosContainer(SEXP hastSym) {
+    SEXP lMap = Pool::get(HAST_CLOS_MAP);
+    auto resolvedContainer = Rf_findVarInFrame(lMap, hastSym);
+    return resolvedContainer;
+}
+
 void PirJitLLVM::initializeLLVM() {
     #if ENABLE_SPE_PATCHES == 1
     static int opaqueTrue = 1;
@@ -1044,29 +1067,11 @@ void PirJitLLVM::initializeLLVM() {
                     auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
                     int index = std::stoi(n.substr(secondDel + 1));
 
-                    SEXP map = Pool::get(HAST_VTAB_MAP);
-                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
-                        Rf_error("code_ error dispatch table corrupted");
-                    }
-                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
-                    auto addr = vtable->baseline()->body();
-                    int idx = 0;
-                    addr = addr->getSrcAtOffset(true, idx, index);
-
-                    #if PRINT_PATCH_ERRORS == 1
-                    SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
-                    SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
-
-                    if (oldVal != newVal) {
-                        std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
-                        std::cerr << "CODE patch failed" << std::endl;
-                    }
-                    #endif
+                    rir::Code * resolvedCode = getCodeContainer(Rf_install(hast.c_str()), index);
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(addr)),
+                            reinterpret_cast<uintptr_t>(resolvedCode)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }
@@ -1079,11 +1084,11 @@ void PirJitLLVM::initializeLLVM() {
                     auto index = std::stoi(n.substr(secondDel + 1, thirdDel - secondDel - 1));
                     int realOffset = std::stoi(n.substr(thirdDel + 1));
 
-                    SEXP map = Pool::get(HAST_VTAB_MAP);
-                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
+                    SEXP vtabContainer = getVtableContainer(Rf_install(hast.c_str()));
+                    if (!DispatchTable::check(vtabContainer)) {
                         Rf_error("deop_ error dispatch table corrupted");
                     }
-                    DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
                     auto addr = vtable->baseline()->body();
                     int idx = 0;
                     addr = addr->getSrcAtOffset(true, idx, index);
@@ -1099,18 +1104,6 @@ void PirJitLLVM::initializeLLVM() {
                     Pool::insert(store);
                     UNPROTECT(1);
 
-
-                    // #if PRINT_PATCH_ERRORS == 1
-                    // SEXP debugMap = Pool::get(PATCH_DEBUG_MAP);
-                    // SEXP oldVal = UMap::get(debugMap, Rf_install(n.c_str()));
-                    // SEXP newVal = Rf_install(std::to_string((uintptr_t) addr).c_str());
-
-                    // if (oldVal != newVal) {
-                    //     std::cout << "(E) invalid patch: " << n << ", expected: " << CHAR(PRINTNAME(oldVal)) << ", got: " << CHAR(PRINTNAME(newVal)) << std::endl;
-                    //     std::cerr << "CODE patch failed" << std::endl;
-                    // }
-                    // #endif
-
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
                             reinterpret_cast<uintptr_t>(tmp)),
@@ -1119,20 +1112,30 @@ void PirJitLLVM::initializeLLVM() {
                 #endif
                 else if (vtab) {
                     auto firstDel = n.find('_');
-                    auto hast = n.substr(firstDel + 1);
+                    auto secondDel = n.find('_', firstDel + 1);
 
-                    SEXP map = Pool::get(HAST_VTAB_MAP);
-                    auto addr = UMap::get(map, Rf_install(hast.c_str()));
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    int index = std::stoi(n.substr(secondDel + 1));
+
+                    SEXP vtabContainer = getVtableContainer(Rf_install(hast.c_str()));
+                    if (!DispatchTable::check(vtabContainer)) {
+                        Rf_error("vtab_ error dispatch table corrupted");
+                    }
+                    DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
+                    auto addr = vtable->baseline()->body();
+
+                    int idx = 0;
+                    auto tab = addr->getTabAtOffset(true, idx, index);
+
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(addr)),
+                            reinterpret_cast<uintptr_t>(tab)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 } else if (clos) {
                     auto firstDel = n.find('_');
                     auto hast = n.substr(firstDel + 1);
 
-                    SEXP lMap = Pool::get(HAST_CLOS_MAP);
-                    auto addr = UMap::get(lMap, Rf_install(hast.c_str()));
+                    auto addr = getClosContainer(Rf_install(hast.c_str()));
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
                             reinterpret_cast<uintptr_t>(addr)),
@@ -1147,11 +1150,11 @@ void PirJitLLVM::initializeLLVM() {
                     unsigned long con = std::stoul(n.substr(secondDel + 1, thirdDel - secondDel - 1));
                     size_t numArgs = std::stoull((n.substr(thirdDel + 1)));
 
-                    SEXP map = Pool::get(HAST_VTAB_MAP);
-                    if (!DispatchTable::check(UMap::get(map, Rf_install(hast.c_str())))) {
+                    SEXP vtabContainer = getVtableContainer(Rf_install(hast.c_str()));
+                    if (!DispatchTable::check(vtabContainer)) {
                         Rf_error("optd_ error dispatch table corrupted");
                     }
-                    DispatchTable * dt = DispatchTable::unpack(UMap::get(map, Rf_install(hast.c_str())));
+                    DispatchTable * dt = DispatchTable::unpack(vtabContainer);
                     SEXP nativeTargetContainer;
                     rir::Function* nativeTarget = nullptr;
                     for (size_t i = 0; i < dt->size(); i++) {

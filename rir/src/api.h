@@ -31,7 +31,7 @@ REXPORT SEXP serializerCleanup();
 
 // serializer
 struct hastAndIndex {
-    size_t hast;
+    SEXP hast;
     int index;
 };
 void hash_ast(SEXP ast, size_t & hast);

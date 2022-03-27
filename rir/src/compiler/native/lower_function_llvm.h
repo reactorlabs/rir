@@ -125,9 +125,14 @@ class LowerFunctionLLVM {
     llvm::Value* globalSrcConst(llvm::Constant* init, llvm::Type* ty = nullptr);
     llvm::FunctionCallee convertToFunctionSymbol(SEXP what, llvm::FunctionType* ty);
     void addDebugMsg(llvm::Value *v, int tag, int location);
-    std::set<size_t>* reqMap = nullptr;
+    std::set<SEXP>* reqMap = nullptr;
     bool* serializerError = nullptr;
     bool debugStatements = false;
+    bool isHastInvalid(SEXP hast);
+    bool isHastBlacklisted(SEXP hast);
+    SEXP getVtableContainer(SEXP hast, int offset);
+    rir::Code * getCodeContainer(SEXP hast, int offset);
+    SEXP getClosContainer(SEXP hast);
 
     struct Variable {
         bool deadMove(const Variable& other) const;

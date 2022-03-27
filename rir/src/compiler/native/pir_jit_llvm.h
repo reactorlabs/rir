@@ -139,7 +139,7 @@ class PirJitLLVM {
     std::unique_ptr<llvm::DIBuilder> DIB;
 
     // serializer
-    std::set<size_t> * reqMapForCompilation = nullptr;
+    std::set<SEXP> * reqMapForCompilation = nullptr;
     bool* serializerError = nullptr;
     bool debugStatements = false;
     void serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames);
