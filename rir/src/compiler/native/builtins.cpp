@@ -959,7 +959,7 @@ static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
     SEXP lMap = Pool::get(HAST_VTAB_MAP);
     auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
 
-    if (DispatchTable::check(vtabContainer)) {
+    if (!DispatchTable::check(vtabContainer)) {
         Rf_error("SERIALIZER ERROR: deoptpool vtable not found");
     }
 
@@ -978,17 +978,10 @@ void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args
         if (m->frames[i].code == 0) {
             auto hast = m->frames[i].hast;
             int index = m->frames[i].index;
-            std::cout << "deopt pool: " << hast << std::endl;
             rir::Code * code = getCodeContainer(Rf_install(hast), index);
 
             m->frames[i].code = code;
             m->frames[i].pc = (Opcode*)((uintptr_t)code + m->frames[i].offset);
-
-            // std::cout << "DEOPTMETADATA patc: {";
-            //                 std::cout << "PC: " << (uintptr_t)m->frames[i].pc << ", ";
-            //                 std::cout << "CODE: " << (uintptr_t)code->code() << ", ";
-            //                 std::cout << "SRC: " << (uintptr_t)code;
-            //                 std::cout << " }" << std::endl;
         }
     }
     deoptImpl(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);
