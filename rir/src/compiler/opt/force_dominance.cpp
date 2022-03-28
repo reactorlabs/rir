@@ -308,7 +308,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());
-                        // Ensure we don't loose inferred type information
+                        // Ensure we don't lose inferred type information
                         promRes->type = promRes->type & f->type;
                         assert(f);
                         f->replaceUsesWith(promRes);

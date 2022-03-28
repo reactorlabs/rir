@@ -371,7 +371,7 @@ struct ArglistView {
         }
         auto arg = getArgFromStore(i);
 
-        // Sometimes we loose the name and have to restore it from the ast
+        // Sometimes we lose the name and have to restore it from the ast
         // TODO: why? and why do we even keep the names separately then?
         auto name = names ? cp_pool_at(names[i]) : astName;
         return {arg, name};
