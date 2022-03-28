@@ -290,8 +290,10 @@ SEXP Code::getTabAtOffset(bool mainSrc, int & index, int reqOffset) {
             SEXP iConst = bc.immediateConst();
             if (DispatchTable::check(iConst)) {
                 SEXP res = DispatchTable::unpack(iConst)->baseline()->body()->getTabAtOffset(false, index, reqOffset);
-                if (res && res == R_TrueValue) {
+                if (res == R_TrueValue) {
                     return iConst;
+                } else if (res) {
+                    return res;
                 }
             }
         }

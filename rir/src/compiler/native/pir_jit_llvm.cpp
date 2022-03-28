@@ -1121,15 +1121,22 @@ void PirJitLLVM::initializeLLVM() {
                     if (!DispatchTable::check(vtabContainer)) {
                         Rf_error("vtab_ error dispatch table corrupted");
                     }
-                    DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
-                    auto addr = vtable->baseline()->body();
 
-                    int idx = 0;
-                    auto tab = addr->getTabAtOffset(true, idx, index);
+                    SEXP resTab;
+                    if (index == 1) {
+                        resTab = vtabContainer;
+                    } else {
+                        DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
+                        auto addr = vtable->baseline()->body();
+
+                        int idx = 0;
+                        resTab = addr->getTabAtOffset(true, idx, index);
+                    }
+
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(tab)),
+                            reinterpret_cast<uintptr_t>(resTab)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 } else if (clos) {
                     auto firstDel = n.find('_');

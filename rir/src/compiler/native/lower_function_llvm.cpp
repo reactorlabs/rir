@@ -520,13 +520,13 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             SEXP hast = data.hast;
             int index = data.index;
 
-            SEXP vtabContainer;
+            SEXP vtabContainer = R_NilValue;
             if (!isHastInvalid(hast)) {
                 vtabContainer = getVtableContainer(hast, index);
             }
 
             // If the hast is blacklisted, patch will not work
-            if ((vtabContainer != curr) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+            if (!reqMap || (vtabContainer != curr) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                 if (serializerError != nullptr) {
                     *serializerError = true;
                     #if PRINT_SERIALIZER_ERRORS == 1
@@ -545,9 +545,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                 // patch case
                 std::stringstream ss;
                 ss << "vtab_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                if (reqMap) {
-                    reqMap->insert(hast);
-                }
+                reqMap->insert(hast);
                 return convertToExternalSymbol(ss.str());
             }
 
@@ -571,7 +569,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                 resolvedContainer = getClosContainer(hast);
             }
             // If the hast is blacklisted, patch will not work
-            if ((resolvedContainer != co) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+            if (!reqMap || (resolvedContainer != co) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                 if (serializerError != nullptr) {
                     *serializerError = true;
                     #if PRINT_SERIALIZER_ERRORS == 1
@@ -590,9 +588,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                 // patch case
                 std::stringstream ss;
                 ss << "clos_" << CHAR(PRINTNAME(hast));
-                if (reqMap) {
-                    reqMap->insert(hast);
-                }
+                reqMap->insert(hast);
                 return convertToExternalSymbol(ss.str());
             }
 
@@ -827,7 +823,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         }
 
         // If the hast is blacklisted, patch will not work
-        if ((((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+        if (!reqMap || (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
             if (serializerError != nullptr) {
                 *serializerError = true;
                 #if PRINT_SERIALIZER_PROGRESS == 1
@@ -860,11 +856,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
             auto dr = (DeoptReasonWrapper*)val;
 
             ss << "code_" << CHAR(PRINTNAME(hast)) << "_" << data.index;
-            if (reqMap) {
-                reqMap->insert(hast);
-            }
+            reqMap->insert(hast);
 
-            auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i64);
+            auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
 
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
@@ -4078,7 +4072,7 @@ void LowerFunctionLLVM::compile() {
                         }
 
                         // If the hast is blacklisted, patch will not work
-                        if ((resolvedContainer != callee) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (!reqMap || (resolvedContainer != callee) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                             if (serializerError != nullptr) {
                                 *serializerError = true;
                                 #if PRINT_SERIALIZER_PROGRESS == 1
@@ -4135,9 +4129,7 @@ void LowerFunctionLLVM::compile() {
                             std::stringstream ss1, ss2;
                             ss1 << "clos_" << CHAR(PRINTNAME(hast));
                             ss2 << "optd_" << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
-                            if (reqMap) {
-                                reqMap->insert(hast);
-                            }
+                            reqMap->insert(hast);
 
                             auto missAsmptStore =
                                 Rf_allocVector(RAWSXP, sizeof(Context));
@@ -4211,7 +4203,7 @@ void LowerFunctionLLVM::compile() {
                 }
 
                 // If the hast is blacklisted, patch will not work
-                if ((resolvedContainer != calli->cls()->rirClosure()) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                if (!reqMap || (resolvedContainer != calli->cls()->rirClosure()) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                     if (serializerError != nullptr) {
                         *serializerError = true;
                         #if PRINT_SERIALIZER_ERRORS == 1
@@ -4247,9 +4239,7 @@ void LowerFunctionLLVM::compile() {
                     // patch case
                     std::stringstream ss;
                     ss << "clos_" << CHAR(PRINTNAME(hast));
-                    if (reqMap) {
-                        reqMap->insert(hast);
-                    }
+                    reqMap->insert(hast);
                     assert(asmpt.includes(Assumption::StaticallyArgmatched));
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4391,7 +4381,7 @@ void LowerFunctionLLVM::compile() {
                     }
                 }
 
-                if (patchPossible) {
+                if (reqMap && patchPossible) {
                     std::vector<Value*> args;
                     {
                         std::vector<FrameState*> frames;
@@ -4424,9 +4414,7 @@ void LowerFunctionLLVM::compile() {
                             SEXP hast = srcData.hast;
                             int index = srcData.index;
 
-                            if (reqMap) {
-                                reqMap->insert(hast);
-                            }
+                            reqMap->insert(hast);
 
                             m->frames[frameNr--] = {offset, CHAR(PRINTNAME(hast)), index, fs->stackSize,
                                                     fs->inPromise};
