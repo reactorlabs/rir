@@ -23,7 +23,7 @@ innerBenchmarkLoop.default <- function(class, benchmarkParameter, innerIteration
 doRuns <- function(name, iterations, benchmarkParameter, innerIterations) {
     total <- 0
     class(name) <- tolower(name)
-    path <- paste("/opt/rir/harnesses/bitcodes/", name, "/", sep ="")
+    path <- paste("/opt/rir/harnesses/bitcodes/", gsub("/","_",name), "/", sep ="")
     Sys.setenv(PIR_DESERIALIZE_PREFIX = path)
 
     startTime <- Sys.time()
