@@ -3,7 +3,6 @@
 #include "R/r.h"
 #include "R/Protect.h"
 #include "ir/BC.h"
-#include "utils/UMap.h"
 
 namespace rir {
 
@@ -11,7 +10,8 @@ namespace rir {
         public:
             SEXP container;
 
-            void printSpace(int size) {
+            inline void printSpace(int size) {
+                assert(size >= 0);
                 for (int i = 0; i < size; i++) {
                     std::cout << " ";
                 }
@@ -21,10 +21,16 @@ namespace rir {
                 SEXP store;
                 PROTECT(store = Rf_allocVector(RAWSXP, sizeof(fs)));
                 rir::FunctionSignature * tmp = (rir::FunctionSignature *) DATAPTR(store);
-                #pragma GCC diagnostic push
-                #pragma GCC diagnostic ignored "-Wclass-memaccess"
+                #if defined(__GNUC__) || defined(__GNUG__)
+                    #pragma GCC diagnostic push
+                    #pragma GCC diagnostic ignored "-Wclass-memaccess"
+                #endif
+
                 memcpy(tmp, &fs, sizeof(fs));
-                #pragma GCC diagnostic pop
+
+                #if defined(__clang__)
+                    #pragma GCC diagnostic pop
+                #endif
 
                 SET_VECTOR_ELT(container, index, store);
                 UNPROTECT(1);
@@ -125,7 +131,7 @@ namespace rir {
             SEXP getContainer() {
                 return container;
             }
-            contextData(SEXP c) {
+            explicit contextData(SEXP c) {
                 container = c;
             }
 
@@ -204,17 +210,6 @@ namespace rir {
             // ENTRY 10: reqMap
             void addReqMapForCompilation(SEXP data) {
                 SET_VECTOR_ELT(container, 8, data);
-            }
-
-            std::vector<size_t> getReqMapForCompilation() {
-                std::vector<size_t> resData;
-                SEXP rMap = VECTOR_ELT(container, 8);
-                for (int i = 0; i < Rf_length(rMap); i++) {
-                    SEXP dataContainer = VECTOR_ELT(rMap, i);
-                    size_t* res = (size_t *) DATAPTR(dataContainer);
-                    resData.push_back(*res);
-                }
-                return resData;
             }
 
             SEXP getReqMapAsVector() {
@@ -300,11 +295,12 @@ namespace rir {
                     std::cout << "] " << std::endl;
                 }
 
-                auto rData = getReqMapForCompilation();
+                auto rData = getReqMapAsVector();
                 printSpace(space);
                 std::cout << "ENTRY(8)[reqMapForCompilation]: <";
-                for (auto & ele : rData) {
-                    std::cout << ele << " ";
+                for (int i = 0; i < Rf_length(rData); i++) {
+                    SEXP ele = VECTOR_ELT(rData, i);
+                    std::cout << CHAR(PRINTNAME(ele)) << " ";
                 }
                 std::cout << ">" << std::endl;
             }
@@ -320,74 +316,92 @@ namespace rir {
                 return container;
             }
 
-            serializerData(SEXP c) {
+            explicit serializerData(SEXP c) {
                 container = c;
             }
 
-            serializerData(SEXP c, size_t hast, std::string name) {
+            serializerData(SEXP c, SEXP hastSym, const std::string & name) {
                 container = c;
-                addSizeT(hast, 0);
+                SET_VECTOR_ELT(container, 0, hastSym);
                 addString(name, 1);
-                SET_VECTOR_ELT(container, 2, UMap::createMap());
+                SEXP envObj;
+                PROTECT(envObj = R_NewEnv(R_EmptyEnv,0,0));
+                SET_VECTOR_ELT(container, 2, envObj);
+                UNPROTECT(1);
             }
 
             void updateContainer(SEXP c) {
                 container = c;
             }
 
-            void addContextData(SEXP cData, std::string context) {
+            void addContextData(SEXP cData, int offsetIndex, std::string context) {
                 SEXP symSxp = Rf_install(context.c_str());
-                SEXP map = VECTOR_ELT(container, 2);
-                UMap::insert(map, symSxp, cData);
+                SEXP mainMap = VECTOR_ELT(container, 2);
+                SEXP offsetSym = Rf_install(std::to_string(offsetIndex).c_str());
+                if (Rf_findVarInFrame(mainMap, offsetSym) == R_UnboundValue) {
+                    SEXP envObj;
+                    PROTECT(envObj = R_NewEnv(R_EmptyEnv,0,0));
+                    Rf_defineVar(offsetSym, envObj, mainMap);
+                    UNPROTECT(1);
+                }
+                SEXP offsetMap = Rf_findVarInFrame(mainMap, offsetSym);
+                Rf_defineVar(symSxp, cData, offsetMap);
             }
 
             std::string getNameData() {
                 return getString(1);
             }
 
-            size_t getHastData() {
-                return getSizeT(0);
+            SEXP getHastData() {
+                return VECTOR_ELT(container, 0);
             }
 
             SEXP getContextMap() {
                 return VECTOR_ELT(container, 2);
             }
 
-            void print() {
-                std::cout << "serializerData: " << std::endl;
-                std::cout << "ENTRY(-3): " << getHastData() << std::endl;
-                std::cout << "ENTRY(-2): " << getNameData() << std::endl;
-                SEXP map = VECTOR_ELT(container, 2);
-                std::cout << "ENTRY(-1): " << TYPEOF(map) << std::endl;
-                SEXP keys = VECTOR_ELT(map, 0);
-                for (int i = 0; i < Rf_length(keys); i++) {
-                    SEXP keySym = VECTOR_ELT(keys, i);
-                    SEXP ele = UMap::get(map, keySym);
-                    contextData c(ele);
-                    c.print();
-                    // std::cout << i << " " << TYPEOF(ele) << std::endl;
+            static void iterateOverOffsets(SEXP mainMap, const std::function< void(SEXP, SEXP) >& callback) {
+                SEXP offsetBindings = R_lsInternal(mainMap, (Rboolean) false);
+                for (int i = 0; i < Rf_length(offsetBindings); i++) {
+                    SEXP offsetKeySym = Rf_install(CHAR(STRING_ELT(offsetBindings, i)));
+                    SEXP offsetMap = Rf_findVarInFrame(mainMap, offsetKeySym);
+                    callback(offsetKeySym, offsetMap);
                 }
-
             }
 
+            static void iterateOverContexts(SEXP offsetMap, const std::function< void(SEXP, SEXP) >& callback) {
+                SEXP contextBindings = R_lsInternal(offsetMap, (Rboolean) false);
+                for (int i = 0; i < Rf_length(contextBindings); i++) {
+                    SEXP contextKeySym = Rf_install(CHAR(STRING_ELT(contextBindings, i)));
+                    SEXP contextData = Rf_findVarInFrame(offsetMap, contextKeySym);
+                    callback(contextKeySym, contextData);
+                }
+            }
+
+            void print() {
+                print(0);
+            }
+
+
             void print(int space) {
-                // std::cout << "serializerData: " << std::endl;
                 printSpace(space);
-                std::cout << "ENTRY(-3): " << getHastData() << std::endl;
+                std::cout << "serializerData: " << std::endl;
+                space += 2;
+                printSpace(space);
+                std::cout << "ENTRY(-3): " << CHAR(PRINTNAME(getHastData())) << std::endl;
                 printSpace(space);
                 std::cout << "ENTRY(-2): " << getNameData() << std::endl;
-                SEXP map = VECTOR_ELT(container, 2);
-                printSpace(space);
-                std::cout << "ENTRY(-1): " << TYPEOF(map) << std::endl;
-                SEXP keys = VECTOR_ELT(map, 0);
-                for (int i = 0; i < Rf_length(keys); i++) {
-                    SEXP keySym = VECTOR_ELT(keys, i);
-                    SEXP ele = UMap::get(map, keySym);
-                    contextData c(ele);
-                    c.print(space + 2);
-                    // std::cout << i << " " << TYPEOF(ele) << std::endl;
-                }
 
+                SEXP mainMap = VECTOR_ELT(container, 2);
+                space += 2;
+                iterateOverOffsets(mainMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+                    printSpace(space);
+                    std::cout << "offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
+                    iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
+                        contextData c(cData);
+                        c.print(space);
+                    });
+                });
             }
     };
 };;

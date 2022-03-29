@@ -955,26 +955,33 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
+static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
+    SEXP lMap = Pool::get(HAST_VTAB_MAP);
+    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
+
+    if (!DispatchTable::check(vtabContainer)) {
+        Rf_error("SERIALIZER ERROR: deoptpool vtable not found");
+    }
+
+    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
+    auto addr = vt->baseline()->body();
+
+    int idx = 0;
+    return addr->getSrcAtOffset(true, idx, offset);
+}
+
 void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     DeoptMetadata* m = (DeoptMetadata *)DATAPTR(metaDataStore);
 
-    SEXP map = Pool::get(HAST_VTAB_MAP);
     for (size_t i = 0; i < m->numFrames; i++) {
         if (m->frames[i].code == 0) {
-            size_t hast = m->frames[i].hast;
-            DispatchTable * vtable = DispatchTable::unpack(UMap::get(map, Rf_install(std::to_string(hast).c_str())));
-            rir::Code * code = vtable->baseline()->body();
-            int idx = 0;
-            code = code->getSrcAtOffset(true, idx, m->frames[i].index);
+            auto hast = m->frames[i].hast;
+            int index = m->frames[i].index;
+            rir::Code * code = getCodeContainer(Rf_install(hast), index);
+
             m->frames[i].code = code;
             m->frames[i].pc = (Opcode*)((uintptr_t)code + m->frames[i].offset);
-
-            // std::cout << "DEOPTMETADATA patc: {";
-            //                 std::cout << "PC: " << (uintptr_t)m->frames[i].pc << ", ";
-            //                 std::cout << "CODE: " << (uintptr_t)code->code() << ", ";
-            //                 std::cout << "SRC: " << (uintptr_t)code;
-            //                 std::cout << " }" << std::endl;
         }
     }
     deoptImpl(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);

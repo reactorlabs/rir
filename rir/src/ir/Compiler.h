@@ -13,12 +13,13 @@
 #include <functional>
 #include <cassert>
 
-#include "utils/UMap.h"
 #include "runtimePatches.h"
 #include "api.h"
 #include <chrono>
+#include "utils/serializerData.h"
 using namespace std::chrono;
 
+#define PRINT_LINKING_STATUS_OVERRIDE 0
 
 typedef struct RCNTXT RCNTXT;
 extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
@@ -26,126 +27,170 @@ extern "C" SEXP R_sysfunction(int n, RCNTXT *cptr);
 
 namespace rir {
 
-static size_t getHast(DispatchTable* vtable) {
-    auto rirBody = vtable->baseline()->body();
-    SEXP ast_1 = src_pool_at(globalContext(), rirBody->src);
-
+static SEXP getHast(SEXP body, SEXP env) {
+    std::stringstream qHast;
+    SEXP x = env;
+    if (x == R_GlobalEnv) {
+        qHast << "GE:";
+    } else if (x == R_BaseEnv) {
+        qHast << "BE:";
+    } else if (x == R_EmptyEnv) {
+        qHast << "EE:";
+    } else if (R_IsPackageEnv(x)) {
+        qHast << "PE:" << Rf_translateChar(STRING_ELT(R_PackageEnvName(x), 0)) << ":";
+    } else if (R_IsNamespaceEnv(x)) {
+        qHast << "NS:" << Rf_translateChar(STRING_ELT(R_NamespaceEnvSpec(x), 0)) << ":";
+    } else {
+        return R_NilValue;
+        qHast << "AE:";
+    }
     size_t hast = 0;
-    hash_ast(ast_1, hast);
-
-    return hast;
+    hash_ast(body, hast);
+    qHast << hast;
+    SEXP calcHast = Rf_install(qHast.str().c_str());
+    return calcHast;
 }
 
-static void insertVTable(DispatchTable* vtable, size_t hast) {
+
+static void insertVTable(DispatchTable* vtable, SEXP hastSym) {
     SEXP map = Pool::get(HAST_VTAB_MAP);
-    if (map != R_NilValue) {
-        // std::cout << "adding table for: " << hast << std::endl;
-        SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-        UMap::insert(map, hastSym, vtable->container());
+    if (map == R_NilValue) {
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_VTAB_MAP, tmp);
+        UNPROTECT(1);
+        map = Pool::get(HAST_VTAB_MAP);
     }
+    assert(TYPEOF(map) == ENVSXP);
+    Rf_defineVar(hastSym, vtable->container(), map);
+    Pool::insert(vtable->container());
 }
 
-static void insertClosObj(SEXP clos, size_t hast) {
+static void insertClosObj(SEXP clos, SEXP hastSym) {
     SEXP map = Pool::get(HAST_CLOS_MAP);
-    if (map != R_NilValue) {
-        SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-        UMap::insert(map, hastSym, clos);
+    if (map == R_NilValue) {
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_CLOS_MAP, tmp);
+        UNPROTECT(1);
+        map = Pool::get(HAST_CLOS_MAP);
     }
+    assert(TYPEOF(map) == ENVSXP);
+    Rf_defineVar(hastSym, clos, map);
+    Pool::insert(clos);
 }
 
 
 static void tryLinking(DispatchTable* vtable, SEXP hSym) {
-    // static int linkingLimit = 0;
-    // if (linkingLimit >= 100) {
-    //     Pool::patch(1, R_NilValue);
-    // }
+
     SEXP serMap = Pool::get(HAST_DEPENDENCY_MAP);
     if (serMap == R_NilValue) return;
 
 
     SEXP tabMap = Pool::get(HAST_VTAB_MAP);
+    if (tabMap == R_NilValue) {
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_VTAB_MAP, tmp);
+        UNPROTECT(1);
+        tabMap = Pool::get(HAST_VTAB_MAP);
+    }
 
-    // linkingLimit++;
-
-
-
-    if (UMap::symbolExistsInMap(hSym, serMap)) {
-        #if PRINT_LINKING_STATUS == 1
+    if (Rf_findVarInFrame(serMap, hSym) != R_UnboundValue && Rf_findVarInFrame(serMap, hSym) != R_NilValue) {
+        #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
         std::cout << "symbolExistsInMap: " << CHAR(PRINTNAME(hSym)) << std::endl;
         #endif
-        SEXP hMap = DeserialDataMap::getHastEnv(serMap, hSym);
-        SEXP contexts = VECTOR_ELT(hMap, 0);
-        bool noMoreContexts = true;
-        for (int i = 0; i < Rf_length(contexts); i++) {
-            SEXP contextSym = VECTOR_ELT(contexts, i);
-            if (contextSym == R_NilValue) continue;
-            #if PRINT_LINKING_STATUS == 1
-            std::cout << "contextSym: " << CHAR(PRINTNAME(contextSym)) << std::endl;
-            #endif
-            SEXP vec = UMap::get(hMap, contextSym);
-            bool dependenciesSatisfied = true;
-            for (int j = 1; j < Rf_length(vec); j++) {
-                SEXP depSym = VECTOR_ELT(vec, j);
-                if (depSym == R_NilValue) continue;
-                if (UMap::symbolExistsInMap(depSym, tabMap)) {
-                    VecOpr::remove(vec, j);
-                } else {
-                    dependenciesSatisfied = false;
-                }
-            }
+        SEXP hastEnvMap = Rf_findVarInFrame(serMap, hSym);
 
-            if (dependenciesSatisfied) {
-                SEXP func = VECTOR_ELT(vec, 0);
-                Function * function = Function::unpack(func);
-                function->inheritFlags(vtable->baseline());
-                vtable->insert(function);
-                #if PRINT_LINKING_STATUS == 1
-                std::cout << "linking successful " << CHAR(PRINTNAME(hSym)) <<  "_" << CHAR(PRINTNAME(contextSym)) << std::endl;
+        bool allOffsetsDone = true;
+
+        serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+            if (offsetEnv != R_NilValue) {
+                bool offsetCompletelyLinked = true;
+                #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
                 #endif
-                UMap::remove(hMap, contextSym);
-            }
-            else {
-                noMoreContexts = false;
-            }
-        }
+                int reqOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
+                serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
+                    if (cData != R_NilValue) {
+                        #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                        std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
+                        #endif
+                        bool allSatisfied = true;
+                        for (int j = 1; j < Rf_length(cData); j++) {
+                            SEXP dep = VECTOR_ELT(cData, j);
+                            if (dep == R_NilValue) continue;
+                            if (Rf_findVarInFrame(tabMap, dep) != R_UnboundValue) {
+                                SET_VECTOR_ELT(cData, j, R_NilValue);
+                            } else {
+                                allSatisfied = false;
+                            }
+                        }
+                        if (allSatisfied) {
+                            SEXP functionContainer = VECTOR_ELT(cData, 0);
 
-        if (noMoreContexts) {
-            #if PRINT_LINKING_STATUS == 1
-            std::cout << "noMoreContexts for " << CHAR(PRINTNAME(hSym)) << std::endl;
-            #endif
-            UMap::remove(serMap, hSym);
-        }
-    }
-    SEXP unlMap = Pool::get(HAST_UNLOCK_MAP);
-    if (UMap::symbolExistsInMap(hSym, unlMap)) {
-        SEXP unlockVec = UMap::get(unlMap, hSym);
-        for (int i = 0; i < Rf_length(unlockVec); i++) {
-            SEXP unlSym = VECTOR_ELT(unlockVec, i);
-            if (UMap::symbolExistsInMap(unlSym, tabMap)) {
-                SEXP tableContainer = UMap::get(tabMap, unlSym);
-                if (DispatchTable::check(tableContainer)) {
-                    #if PRINT_LINKING_STATUS == 1
-                    std::cout << "trying to link symbol: " << CHAR(PRINTNAME(unlSym)) << std::endl;
-                    #endif
-                    if (!DispatchTable::check(tableContainer)) {
-                        std::cout << "Error at 5" << std::endl;
+                            DispatchTable * requiredVtab;
+                            if (reqOffset == 1) {
+                                requiredVtab = vtable;
+                            } else {
+                                int idx = 0;
+                                // int aaa = 0;
+                                // vtable->baseline()->body()->printSource(true, aaa);
+                                // std::cout << "ReqSrc: " << reqOffset << std::endl;
+                                SEXP requiredVtabContainer = vtable->baseline()->body()->getTabAtOffset(true, idx, reqOffset);
+                                requiredVtab = DispatchTable::unpack(requiredVtabContainer);
+                            }
+
+                            Function * function = Function::unpack(functionContainer);
+                            function->inheritFlags(requiredVtab->baseline());
+                            requiredVtab->insert(function);
+                            #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                            std::cout << "      Linking Success!" << std::endl;
+                            #endif
+                            // do not need to link this again, linking happens only once.
+                            Rf_defineVar(contextSym, R_NilValue, offsetEnv);
+                        } else {
+                            offsetCompletelyLinked = false;
+                            #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                            std::cout << "      Not Linked Yet!" << std::endl;
+                            #endif
+                        }
                     }
-                    DispatchTable * vtable = DispatchTable::unpack(tableContainer);
-                    tryLinking(vtable, unlSym);
+
+                });
+                if (offsetCompletelyLinked) {
+                    // we never need to look into this anymore
+                    Rf_defineVar(offsetSymbol, R_NilValue, hastEnvMap);
+                } else {
+                    allOffsetsDone = false;
                 }
-            } else {
-                #if PRINT_LINKING_STATUS == 1
-                std::cout << "cannot link symbol yet: " << CHAR(PRINTNAME(unlSym)) << std::endl ;
-                #endif
+            }
+
+
+        });
+
+        if (allOffsetsDone) {
+            Rf_defineVar(hSym, R_NilValue, serMap);
+        }
+    }
+
+
+    SEXP unlMap = Pool::get(HAST_UNLOCK_MAP);
+    if (Rf_findVarInFrame(unlMap, hSym) != R_UnboundValue && Rf_findVarInFrame(unlMap, hSym) != R_NilValue) {
+        SEXP workVec = Rf_findVarInFrame(unlMap, hSym);
+
+        for (int j = 0; j < Rf_length(workVec); j++) {
+            SEXP workData = VECTOR_ELT(workVec, j);
+            SEXP maybeUnlocksHastKey = VECTOR_ELT(workData, 0);
+            if (Rf_findVarInFrame(tabMap, maybeUnlocksHastKey) != R_UnboundValue) {
+                SEXP tabC = Rf_findVarInFrame(tabMap, maybeUnlocksHastKey);
+                DispatchTable * v = DispatchTable::unpack(tabC);
+                tryLinking(v, maybeUnlocksHastKey);
             }
         }
-        UMap::remove(unlMap, hSym);
-    }
-}
 
-static void tryLinking(DispatchTable* vtable, size_t hast) {
-    SEXP hastSym = Rf_install(std::to_string(hast).c_str());
-    tryLinking(vtable, hastSym);
+        Rf_defineVar(hSym, R_NilValue, unlMap);
+    }
 }
 
 class Compiler {
@@ -196,7 +241,6 @@ class Compiler {
         }
 #endif
 
-        // Rf_PrintValue(ast);
         Compiler c(ast);
         auto res = c.finalize();
 
@@ -218,16 +262,6 @@ class Compiler {
 
         // Set the closure fields.
         UNPROTECT(1);
-
-        auto start = high_resolution_clock::now();
-        size_t hast = getHast(vtable);
-        insertVTable(vtable, hast);
-        insertClosObj(vtable->container(), hast);
-        tryLinking(vtable, hast);
-
-        auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop - start);
-        linkTime += duration.count();
 
         return vtable->container();
     }
@@ -259,15 +293,18 @@ class Compiler {
         if (origBC)
             vtable->baseline()->body()->addExtraPoolEntry(origBC);
 
+        SEXP hast = getHast(body, CLOENV(inClosure));
+
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
-        auto start = high_resolution_clock::now();
-        size_t hast = getHast(vtable);
-        insertVTable(vtable, hast);
-        insertClosObj(inClosure, hast);
-        tryLinking(vtable, hast);
 
+        auto start = high_resolution_clock::now();
+        if (hast != R_NilValue) {
+            insertVTable(vtable, hast);
+            insertClosObj(inClosure, hast);
+            tryLinking(vtable, hast);
+        }
         auto stop = high_resolution_clock::now();
         auto duration = duration_cast<microseconds>(stop - start);
         linkTime += duration.count();

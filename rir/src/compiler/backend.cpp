@@ -411,14 +411,14 @@ void Backend::deserialize(
     SEXP cPool, SEXP sPool,
     SEXP fNames, SEXP fSrc,
     SEXP fArg, SEXP fChildren,
-    size_t hast, Context context,
+    SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
     rir::FunctionSignature fs, // for function signature
     std::string bcPath) {
     jit.deserializeAndAddModule(
         cPool, sPool,
         fNames, fSrc,
         fArg, fChildren,
-        hast, context,
+        hast, context, rMap, offsetSym,
         fs,
         bcPath);
 }

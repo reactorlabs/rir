@@ -56,7 +56,7 @@ class PirJitLLVM {
       SEXP cPool, SEXP sPool,
       SEXP fNames, SEXP fSrc,
       SEXP fArg, SEXP fChildren,
-      size_t hast, Context context,
+      SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
       rir::FunctionSignature fs,
       std::string bcPath);
 
