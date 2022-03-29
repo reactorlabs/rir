@@ -130,7 +130,7 @@ benchmark_llvm:
     - ls /opt
     - ls /opt/bitcodes/bytecodes
     - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq zip
-    - zip -r $CI_BUILDS_DIR/bitcodes.zip /opt/bitcodes
+    - zip -r $CI_PROJECT_DIR/bitcodes.zip /opt/bitcodes
     - ls /opt
     - ls /opt/bitcodes/bytecodes
   artifacts:
