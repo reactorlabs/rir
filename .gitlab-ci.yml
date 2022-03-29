@@ -122,6 +122,7 @@ benchmark_llvm_warmup:
   tags:
     - benchmarks
   script:
+    - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
