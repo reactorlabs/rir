@@ -20,6 +20,7 @@ doRuns <- function(name, iterations, innerIterations) {
   startTime <- Sys.time()
   f.loadBitcodes()
   endTime <- Sys.time()
+  loadTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 
   for (i in 1:iterations) {
     startTime =  Sys.time()
@@ -28,6 +29,10 @@ doRuns <- function(name, iterations, innerIterations) {
     }
     endTime <- Sys.time()
     runTime = (as.numeric(endTime) - as.numeric(startTime)) * 1000000
+
+    if (i == 1) {
+      runTime = runTime + loadTime
+    }
 
     cat(paste(paste(paste(name, ": iterations=1 runtime:", sep = ""),
             round(runTime)), "us\n", sep = ""))

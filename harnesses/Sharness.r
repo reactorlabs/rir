@@ -24,6 +24,7 @@ doRuns <- function(name, iterations, benchmarkParameter) {
     startTime <- Sys.time()
     f.loadBitcodes()
     endTime <- Sys.time()
+    loadTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 
     for (i in 1:iterations) {
         startTime <- Sys.time()
@@ -32,6 +33,10 @@ doRuns <- function(name, iterations, benchmarkParameter) {
         }
         endTime <- Sys.time()
         runTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
+
+        if (i == 1) {
+            runTime = runTime + loadTime
+        }
 
         cat(name, ": iterations=1 runtime: ", round(runTime), "us\n", sep = "")
         total <- total + runTime
