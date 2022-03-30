@@ -1,7 +1,7 @@
 stages:
   - Build container
   - Build benchmark container
-  - Run tests
+  # - Run tests
   - Deploy
   - Cleanup
   - BenchmarkNoBc
@@ -58,17 +58,17 @@ benchmark_container:
   retry: 1
 
 # Test the benchmarks container before deploying
-test_benchmarks:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-  stage: Run tests
-  needs:
-    - benchmark_container
-  script:
-    - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
-    - PIR_DEOPT_CHAOS=100000 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+# test_benchmarks:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   variables:
+#     GIT_STRATEGY: none
+#   stage: Run tests
+#   needs:
+#     - benchmark_container
+#   script:
+#     - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
+#     - PIR_DEOPT_CHAOS=100000 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
+#     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:
   stage: Deploy
@@ -115,14 +115,15 @@ report_results:
 benchmark_llvm_warmup:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: BenchmarkNoBc
-  needs:
-    - test_benchmarks
+  # needs:
+  #   - test_benchmarks
   variables:
     GIT_STRATEGY: none
   tags:
     - benchmarks
   script:
     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
+    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq time
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
@@ -133,8 +134,8 @@ benchmark_llvm_warmup:
 benchmark_llvm_warmup_bc:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: BenchmarkBc
-  needs:
-    - test_benchmarks
+  # needs:
+  #   - test_benchmarks
   variables:
     GIT_STRATEGY: none
   tags:
@@ -145,6 +146,7 @@ benchmark_llvm_warmup_bc:
     - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
+    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq time
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   artifacts:
     paths:
