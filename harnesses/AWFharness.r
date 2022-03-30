@@ -63,6 +63,7 @@ run <- function(args) {
   cat(paste(paste(name, ": iterations=", sep=""), numIterations, sep=""))
   cat(paste("; average:", round(total / numIterations)))
   cat(paste(paste(" us; total:", round(total)), "us\n\n", sep=""))
+  stopifnot(FALSE)
   #cat("\n")
   #cat(paste(paste("Total Runtime:", round(total)), "us\n\n", sep=""))
 }
