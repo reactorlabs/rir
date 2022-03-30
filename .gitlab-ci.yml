@@ -4,7 +4,7 @@ stages:
   # - Run tests
   - Deploy
   - Cleanup
-  - BenchmarkNoBc
+  # - BenchmarkNoBc
   - BenchmarkBc
   - Report
 
@@ -112,24 +112,24 @@ report_results:
   script:
     - ruby tools/report_ci_results.rb
 
-benchmark_llvm_warmup:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkNoBc
-  # needs:
-  #   - test_benchmarks
-  variables:
-    GIT_STRATEGY: none
-  tags:
-    - benchmarks
-  script:
-    - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
-    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq time
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-  retry: 1
+# benchmark_llvm_warmup:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   stage: BenchmarkNoBc
+#   # needs:
+#   #   - test_benchmarks
+#   variables:
+#     GIT_STRATEGY: none
+#   tags:
+#     - benchmarks
+#   script:
+#     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
+#     - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq time
+#     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+#   artifacts:
+#     paths:
+#     - benchmarks.data
+#     expire_in: 24 month
+#   retry: 1
 
 benchmark_llvm_warmup_bc:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA

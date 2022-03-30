@@ -23,11 +23,9 @@ doRuns <- function(name, iterations, innerIterations) {
 
   for (i in 1:iterations) {
     startTime =  Sys.time()
-    f.startSerializer()
     if (!innerBenchmarkLoop(name, innerIterations)) {
       stop ("Benchmark failed with incorrect result")
     }
-    f.stopSerializer()
     endTime <- Sys.time()
     runTime = (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 
