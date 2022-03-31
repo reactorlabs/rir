@@ -14,7 +14,7 @@ innerBenchmarkLoop <- function(x, ...) {
 doRuns <- function(name, iterations, innerIterations) {
   total <- 0
   class(name) = tolower(name)
-  path <- paste("/opt/rir/harnesses/bitcodes/", gsub("/","_",name), "/", sep ="")
+  path <- paste("/opt/rir/bitcodes/", gsub("/","_",name), "/", sep ="")
   Sys.setenv(PIR_DESERIALIZE_PREFIX = path)
 
   startTime <- Sys.time()
@@ -63,7 +63,7 @@ run <- function(args) {
   cat(paste(paste(name, ": iterations=", sep=""), numIterations, sep=""))
   cat(paste("; average:", round(total / numIterations)))
   cat(paste(paste(" us; total:", round(total)), "us\n\n", sep=""))
-  stopifnot(FALSE)
+  # stopifnot(FALSE)
   #cat("\n")
   #cat(paste(paste("Total Runtime:", round(total)), "us\n\n", sep=""))
 }
