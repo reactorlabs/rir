@@ -29,6 +29,8 @@
 #include "dirent.h"
 using namespace rir;
 
+#define PRINT_SERIALIZER_PROGRESS_OVERRIDE 0
+
 extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
@@ -599,11 +601,11 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
     SEXP hast = data.hast;
     int indexOffset = data.index;
     if (hast == R_NilValue) {
-        #if PRINT_SERIALIZER_PROGRESS == 1
+        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
         std::cout << "  (E) unavailable hast, cannot serialize" << std::endl;
         #endif
     } else if (serializerError) {
-        #if PRINT_SERIALIZER_PROGRESS == 1
+        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
         std::cout << "  (E) Serializer Error Occured" << std::endl;
         #endif
     } else {
@@ -612,7 +614,7 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
         fN << prefix << "/" << "m_" << CHAR(PRINTNAME(hast)) << ".meta";
         std::string fName = fN.str();
 
-        #if PRINT_SERIALIZER_PROGRESS == 1
+        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
         std::cout << "  (>) Writing Metadata: " << fName << std::endl;
         #endif
 
@@ -623,7 +625,7 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
         serializerData sData(container, hast, name);
 
         if (fileExists(fName)) {
-            #if PRINT_SERIALIZER_PROGRESS == 1
+            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
             std::cout << "    (*) Metadata already exists for this hast" << std::endl;
             #endif
 
@@ -636,11 +638,11 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
             R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
 
             SEXP result;
-            #if PRINT_SERIALIZER_PROGRESS == 1
+            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
             std::cout << "    (*) Deserializing meta" << std::endl;
             #endif
             p(result= R_Unserialize(&inputStream));
-            #if PRINT_SERIALIZER_PROGRESS == 1
+            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
             std::cout << "    (*) Deserialized meta successfully" << std::endl;
             #endif
 
@@ -652,7 +654,7 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
             sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
         }
 
-        #if PRINT_SERIALIZER_PROGRESS == 1
+        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
         std::cout << "    (*) Serializing metadata" << std::endl;
         sData.print(6);
         #endif
@@ -664,6 +666,10 @@ static void serializeClosure(unsigned src, std::string name, const bool & serial
         R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
         R_Serialize(sData.getContainer(), &outputStream);
         fclose(fptr);
+
+        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
+        std::cout << "    (*) metadata written:" << fName << std::endl;
+        #endif
 
         // rename temp files
         std::stringstream bcFName;
@@ -710,11 +716,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         rir::Function* done = nullptr;
         auto apply = [&](SEXP body, pir::ClosureVersion* c) {
             if (serializeLL) {
-                #if PRINT_SERIALIZER_PROGRESS == 1
+                #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
                 std::cout << "(>) Serializer Started" << std::endl;
                 #endif
 
-                #if PRINT_SERIALIZER_PROGRESS == 1
+                #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
                 std::cout << "  (*) Function Name: " << c->name() << std::endl;
                 #endif
 
@@ -747,7 +753,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
                 if (!serializerError) {
                     serializerSuccess++;
-                    #if PRINT_SERIALIZER_PROGRESS == 1
+                    #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
                     std::cout << "(/) Serializer Success" << std::endl;
                     #endif
                     // Adding the type feedback for the RIR BC
@@ -771,7 +777,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     // }
                 } else {
                     serializerFailed++;
-                    #if PRINT_SERIALIZER_PROGRESS == 1
+                    #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
                     std::cout << "(/) Serializer Error" << std::endl;
                     #endif
                 }

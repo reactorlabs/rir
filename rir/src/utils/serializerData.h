@@ -244,7 +244,11 @@ namespace rir {
                 auto fSrc = getFSrc();
                 for (int i = 0; i < Rf_length(fSrc); i++) {
                     auto c = VECTOR_ELT(fSrc, i);
-                    std::cout << TYPEOF(c) << " ";
+                    if (c != R_NilValue) {
+                        std::cout << "(" << CHAR(PRINTNAME(VECTOR_ELT(c, 0))) << "," << *INTEGER(VECTOR_ELT(c, 1)) << ") ";
+                    } else {
+                        std::cout << "(SRC_NULL) ";
+                    }
                 }
                 std::cout << "]" << std::endl;
 

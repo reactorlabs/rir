@@ -502,7 +502,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         }
         #endif
 
-        std::unordered_map<std::string, SEXP> srcDataMap;
+        std::unordered_map<std::string, unsigned> srcDataMap;
         std::unordered_map<std::string, SEXP> srcArgMap;
         std::unordered_map<std::string, std::vector<std::string>> childrenData;
         std::unordered_map<std::string, int> codeOffset;
@@ -531,7 +531,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                 }
 
 
-                srcDataMap[name] = src_pool_at(globalContext(), c->rirSrc()->src);
+                srcDataMap[name] = c->rirSrc()->src;
+
+
 
                 if (done[c]->arglistOrder() != nullptr) {
                     srcArgMap[name] = done[c]->argOrderingVec;
@@ -620,7 +622,33 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             UNPROTECT(1);
 
             // AST
-            SET_VECTOR_ELT(fSrcDataVec, i, srcDataMap[relevantNames[i]]);
+            auto data = getHastAndIndex(srcDataMap[relevantNames[i]]);
+            if (data.hast == R_NilValue) {
+                SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);
+            } else {
+                SEXP lMap = Pool::get(HAST_VTAB_MAP);
+                auto resolvedContainer = Rf_findVarInFrame(lMap, data.hast);
+                DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
+
+                int idx = 0;
+                unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, data.index);
+
+                if (calc != srcDataMap[relevantNames[i]]) {
+                    std::cout << "[src mismatch]: " << calc << ", " << srcDataMap[relevantNames[i]] << std::endl;
+                    SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);
+                } else {
+                    SEXP dd;
+                    PROTECT(dd = Rf_allocVector(VECSXP, 2));
+
+                    SET_VECTOR_ELT(dd, 0, data.hast);
+                    SET_VECTOR_ELT(dd, 1, Rf_ScalarInteger(data.index));
+
+                    SET_VECTOR_ELT(fSrcDataVec, i, dd);
+
+                    UNPROTECT(1);
+                }
+            }
+
             // Arglist Order
             SET_VECTOR_ELT(fArgDataVec, i, srcArgMap[relevantNames[i]]);
 
