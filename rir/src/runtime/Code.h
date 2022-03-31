@@ -81,11 +81,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
-    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
   public:
+    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
         auto l = h.length() + 1;
@@ -141,6 +141,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     std::string mName = ""; /// name of the function in JIT
 
     SEXP argOrderingVec; /// callArglist order, raw
+
+    SEXP hast;
+
+    int offsetIndex;
 
     uint8_t data[]; /// the instructions
 
@@ -219,8 +223,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
     // serializer
+    void populateSrcIdxData();
     void populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index);
     Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
+    unsigned getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset);
     SEXP getTabAtOffset(bool mainSrc, int & index, int reqOffset);
     void printSource(bool mainSrc, int & index);
 

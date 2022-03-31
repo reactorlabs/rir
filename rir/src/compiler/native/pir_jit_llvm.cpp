@@ -353,7 +353,7 @@ void PirJitLLVM::deserializeAndAddModule(
     std::unordered_map<int64_t, int64_t> sPoolPatch;
     for (int i = 0; i < Rf_length(sPool); i++) {
         auto ele = VECTOR_ELT(sPool, i);
-        sPoolPatch[i] = Pool::insert(ele);
+        sPoolPatch[i] = src_pool_add(globalContext(),ele);
     }
     #if PRINT_DESERIALIZER_PROGRESS == 1
     std::cout << "(*) Pool patches prepared" << std::endl;
@@ -527,7 +527,14 @@ void PirJitLLVM::deserializeAndAddModule(
     for (int i = 0; i < Rf_length(fNames); i++) {
         // AST Data
         auto astData = VECTOR_ELT(fSrc, i);
-        auto p = rir::Code::New(src_pool_add(globalContext(), astData));
+        rir::Code * p = rir::Code::New(0);
+        if (astData == R_NilValue) {
+            p = rir::Code::New(src_pool_add(globalContext(), R_NilValue));
+            p->hast = nullptr;
+        } else {
+            p->hast = VECTOR_ELT(astData, 0);
+            p->offsetIndex = *INTEGER(VECTOR_ELT(astData, 1));
+        }
 
         // ARG Data
         auto argData = VECTOR_ELT(fArg, i);

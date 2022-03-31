@@ -253,6 +253,73 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
     return nullptr;
 }
 
+unsigned Code::getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset) {
+
+    Opcode* pc = code();
+    size_t label = 0;
+    std::map<Opcode*, size_t> targets;
+    targets[pc] = label++;
+    while (pc < endCode()) {
+        if (BC::decodeShallow(pc).isJmp()) {
+            auto t = BC::jmpTarget(pc);
+            if (!targets.count(t))
+                targets[t] = label++;
+        }
+        pc = BC::next(pc);
+    }
+
+    // sort labels ascending
+    label = 0;
+    for (auto& t : targets)
+        t.second = label++;
+
+    pc = code();
+    std::vector<BC::FunIdx> promises;
+
+    Protect p;
+    index++;
+
+
+    if (index == reqOffset) return this->src;
+
+    while (pc < endCode()) {
+        BC bc = BC::decode(pc, this);
+        bc.addMyPromArgsTo(promises);
+
+        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+            SEXP iConst = bc.immediateConst();
+            if (DispatchTable::check(iConst)) {
+                unsigned res = DispatchTable::unpack(iConst)->baseline()->body()->getSrcIdxAtOffset(false, index, reqOffset);
+                if (res != 0) return res;
+            }
+        }
+        pc = BC::next(pc);
+    }
+
+
+    for (auto i : promises) {
+        auto c = getPromise(i);
+        unsigned res = c->getSrcIdxAtOffset(false, index, reqOffset);
+        if (res != 0) return res;
+    }
+
+
+    if (mainSrc) {
+        rir::Function* func = function();
+        if (func) {
+            auto nargs = func->nargs();
+            for (unsigned i = 0; i < nargs; i++) {
+                auto code = func->defaultArg(i);
+                if (code != nullptr) {
+                    unsigned res = code->getSrcIdxAtOffset(false, index, reqOffset);
+                    if (res != 0) return res;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 SEXP Code::getTabAtOffset(bool mainSrc, int & index, int reqOffset) {
 
     Opcode* pc = code();
@@ -360,7 +427,6 @@ void Code::printSource(bool mainSrc, int & index) {
         if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
             SEXP iConst = bc.immediateConst();
             if (DispatchTable::check(iConst)) {
-                std::cout << " |TAB| {" << iConst << "}" << std::endl;
                 DispatchTable::unpack(iConst)->baseline()->body()->printSource(false, index);
             }
         }
@@ -389,6 +455,36 @@ void Code::printSource(bool mainSrc, int & index) {
     }
 }
 
+void Code::populateSrcIdxData() {
+
+    if (hast && hast != R_NilValue) {
+        // std::cout << "updating src: " << container() << ", " << CHAR(PRINTNAME(hast)) << ", " << offsetIndex << std::endl;
+        SEXP lMap = Pool::get(HAST_VTAB_MAP);
+        auto resolvedContainer = Rf_findVarInFrame(lMap, hast);
+        if (!DispatchTable::check(resolvedContainer)) {
+            Rf_error("Deserializer: Invalid vtable container while updating src idx");
+        }
+        DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
+
+        int idx = 0;
+        unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, offsetIndex);
+
+        src = calc;
+        SEXP astAtSrc = src_pool_at(globalContext(), src);
+        if (astAtSrc && TYPEOF(astAtSrc) == SYMSXP) {
+            trivialExpr = astAtSrc;
+        }
+        hast = R_NilValue;
+        offsetIndex = 0;
+    }
+
+    for (unsigned int i = 0; i < extraPoolSize; i++) {
+        SEXP ele = VECTOR_ELT(getEntry(0), i);
+        if (TYPEOF(ele) == EXTERNALSXP && Code::check(ele)) {
+            Code::unpack(ele)->populateSrcIdxData();
+        }
+    }
+}
 
 void Code::populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index) {
     // Opcode* pc = code();

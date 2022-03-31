@@ -142,6 +142,8 @@ static void tryLinking(DispatchTable* vtable, SEXP hSym) {
                             }
 
                             Function * function = Function::unpack(functionContainer);
+                            function->body()->populateSrcIdxData();
+
                             function->inheritFlags(requiredVtab->baseline());
                             requiredVtab->insert(function);
                             #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
