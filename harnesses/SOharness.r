@@ -1,4 +1,6 @@
 
+JitDisabled <- Sys.getenv(x = "PIR_DISABLE_COMPILATION", unset = "1", names = TRUE)
+
 verifyResult <- function(x, ...) {
     UseMethod("verifyResult", x)
 }
@@ -27,7 +29,14 @@ doRuns <- function(name, iterations, benchmarkParameter, innerIterations) {
     Sys.setenv(PIR_DESERIALIZE_PREFIX = path)
 
     startTime <- Sys.time()
-    f.loadBitcodes()
+    if (JitDisabled == "1") {
+        f.loadBitcodes()
+    end <- Sys.time()
+    } else {
+        Sys.setenv(PIR_DISABLE_COMPILATION = "1")
+        f.loadBitcodes()
+        Sys.unsetenv("PIR_DISABLE_COMPILATION")
+    }
     endTime <- Sys.time()
     loadTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 

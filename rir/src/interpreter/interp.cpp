@@ -989,7 +989,9 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         Function* fun = dispatch(call, table);
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(fun)) {
+        bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+
+        if (!isDeoptimizing() && RecompileHeuristic(fun) && !skipPirCompilation) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of

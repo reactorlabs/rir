@@ -31,6 +31,8 @@
 #include <chrono>
 using namespace std::chrono;
 
+#define PRINT_DESERIALIZER_PROGRESS_OVERRIDE 0
+
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
@@ -406,7 +408,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
 
 
     serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-        #if PRINT_DESERIALIZER_PROGRESS == 1
+        #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
         std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
         #endif
         int indexOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
@@ -418,7 +420,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
             // PATH TO BITCODE FILE
             std::stringstream bitcodePath;
             bitcodePath << prefix << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << c.getContext() << ".bc";
-            #if PRINT_DESERIALIZER_PROGRESS == 1
+            #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
             std::cout << "    (*) Bitcode Path: " << bitcodePath.str() << std::endl;
             int space = 4;
             c.print(space);
@@ -459,7 +461,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     //     SEXP keySym = VECTOR_ELT(keys, i);
     //     SEXP ele = UMap::get(contextMap, keySym);
     //     contextData c(ele);
-    //     #if PRINT_DESERIALIZER_PROGRESS == 1
+    //     #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
     //     std::cout << "============ ============ ============" << std::endl;
     //     c.print();
     //     #endif
@@ -480,6 +482,12 @@ REXPORT SEXP loadBitcode(SEXP metaData) {
 
 
 REXPORT SEXP loadBitcodes() {
+    // auto compilationEnabled = getenv("PIR_DISABLE_COMPILATION") ? false : true;
+
+    // if (compilationEnabled) {
+    //     setenv("PIR_DISABLE_COMPILATION", "1", 1);
+    // }
+
     auto start = high_resolution_clock::now();
     Protect prot;
     DIR *dir;
@@ -490,7 +498,7 @@ REXPORT SEXP loadBitcodes() {
     std::stringstream ss;
     ss << path;
 
-    #if PRINT_DESERIALIZER_PROGRESS == 1
+    #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
     std::cout << "loadBitcodes: " << ss.str() << std::endl;
     #endif
 
@@ -569,6 +577,9 @@ REXPORT SEXP loadBitcodes() {
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
     bitcodeTotalLoadTime = duration.count();
+    // if (compilationEnabled) {
+    //     unsetenv("PIR_DISABLE_COMPILATION");
+    // }
     return R_TrueValue;
 }
 
