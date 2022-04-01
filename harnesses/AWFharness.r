@@ -1,4 +1,4 @@
-JitDisabled <- Sys.getenv(x = "PIR_DISABLE_COMPILATION", unset = "1", names = TRUE)
+
 
 innerBenchmarkLoop.default <- function(class, iterations) {
   for (i in 1:iterations) {
@@ -19,10 +19,11 @@ doRuns <- function(name, iterations, innerIterations) {
   path <- paste("/opt/rir/bitcodes/", gsub("/","_",name), "/", sep ="")
   Sys.setenv(PIR_DESERIALIZE_PREFIX = path)
 
+  JitDisabled <- Sys.getenv(x = "PIR_DISABLE_COMPILATION")
+
   startTime <- Sys.time()
   if (JitDisabled == "1") {
     f.loadBitcodes()
-  end <- Sys.time()
   } else {
     Sys.setenv(PIR_DISABLE_COMPILATION = "1")
     f.loadBitcodes()
