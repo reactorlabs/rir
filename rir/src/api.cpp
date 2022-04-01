@@ -85,7 +85,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         return result;
     }
 }
-
+ 
 REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
                              SEXP forceInline_, SEXP disableInline_,
                              SEXP disableSpecialization_,
