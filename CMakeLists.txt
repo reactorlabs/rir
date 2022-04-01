@@ -79,7 +79,7 @@ SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
 # Due to the way ninja pipes compiler output, by default it has no color.
 # To get colors we must manually set some compilation flags. See also:
 #  * https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
-#  * ttps://github.com/ninja-build/ninja/issues/174
+#  * https://github.com/ninja-build/ninja/issues/174
 execute_process(
     COMMAND /usr/bin/test -t 1
     OUTPUT_FILE /dev/stdout
