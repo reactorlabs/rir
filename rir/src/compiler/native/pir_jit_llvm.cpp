@@ -994,6 +994,9 @@ void PirJitLLVM::initializeLLVM() {
                         case 111:
                             ptr = R_DimSymbol;
                             break;
+                        case 112:
+                            ptr = R_DotsSymbol;
+                            break;
                     }
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(

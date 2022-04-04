@@ -21,6 +21,8 @@
 #include <libintl.h>
 #include <set>
 #include <unordered_set>
+#include "R/Printing.h"
+
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -59,7 +61,7 @@ static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
             std::cout << " ...";
             break;
         }
-        std::cout << " " << dumpSexp(sexp);
+        std::cout << " " << Print::dumpSexp(sexp);
     }
     std::cout << "\n";
     printingStackSize = false;
@@ -68,7 +70,7 @@ static void printInterp(Opcode* pc, Code* c, InterpreterInstance* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx != 0) {
         SEXP src = src_pool_at(ctx, sidx);
-        std::cout << "#; " << dumpSexp(src) << "\n";
+        std::cout << "#; " << Print::dumpSexp(src) << "\n";
     }
     // Print bc
     BC bc = BC::decode(pc, c);

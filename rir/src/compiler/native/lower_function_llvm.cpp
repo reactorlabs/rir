@@ -251,10 +251,15 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
     return getModule().getOrInsertFunction(name, ty);
 }
 
-void LowerFunctionLLVM::addDebugMsg(llvm::Value *v, int tag, int location) {
-    auto pos = builder.CreateBitCast(v, t::i64ptr);
+
+//
+// Example: addDebugMsg("message", 0, arg, 2);
+//
+void LowerFunctionLLVM::addDebugMsg(const char *m, int space, llvm::Value *debugVal, int tag) {
+    auto msg = builder.CreateGlobalString(m);
+    auto dVal = builder.CreateBitCast(debugVal, t::i64ptr);
     call(NativeBuiltins::get(NativeBuiltins::Id::llDebugMsg),
-         {pos, c(tag), c(location)});
+         {builder.CreateInBoundsGEP(msg, {c(0), c(0)}), c(space), dVal, c(tag)});
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
@@ -289,13 +294,7 @@ llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
     builder.CreateCondBr(tv, needsEval, isPromVal, branchMostlyFalse);
 
     builder.SetInsertPoint(needsEval);
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "force() call");
-        addDebugMsg(msg, -1, location++);
-    }
-    #endif
+
     auto evaled =
         call(NativeBuiltins::get(NativeBuiltins::Id::forcePromise), {arg});
     checkIsSexp(evaled, "force result");
@@ -458,14 +457,27 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
     if (co == R_DimSymbol) {
         return convertToExternalSymbol("dcs_111");
     }
+
+    if (co == R_DotsSymbol) {
+        return convertToExternalSymbol("dcs_112");
+    }
     #endif
 
     #if PATCH_SYMSXP == 1
     if (TYPEOF(co) == SYMSXP) {
-        std::stringstream ss;
-        ss << "sym_";
-        ss << CHAR(PRINTNAME(co));
-        return convertToExternalSymbol(ss.str());
+
+        if (strlen(CHAR(PRINTNAME(co))) == 0) {
+            std::cout << "serializer: unnamed symbols not handled (" << CHAR(PRINTNAME(co)) << ")" << std::endl;
+            if (serializerError) {
+                *serializerError = true;
+            }
+            return convertToPointer(co);
+        } else {
+            std::stringstream ss;
+            ss << "sym_";
+            ss << CHAR(PRINTNAME(co));
+            return convertToExternalSymbol(ss.str());
+        }
     }
     #else
     if (TYPEOF(co) == SYMSXP)
@@ -1968,13 +1980,6 @@ llvm::Value* LowerFunctionLLVM::depromise(
 #endif
         return arg;
     }
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise: START");
-        addDebugMsg(msg, -1, location++);
-    }
-    #endif
     auto isProm = BasicBlock::Create(PirJitLLVM::getContext(), "isProm", fun);
     auto isVal = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
     auto ok = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
@@ -1983,56 +1988,19 @@ llvm::Value* LowerFunctionLLVM::depromise(
 
     auto type = sexptype(arg);
     auto tt = builder.CreateICmpEQ(type, c(PROMSXP));
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise: TYPE == PROMSXP ? isProm : isVal");
-        addDebugMsg(msg, -1, location++);
-    }
-    #endif
     builder.CreateCondBr(tt, isProm, isVal, branchMostlyFalse);
 
     builder.SetInsertPoint(isProm);
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise(isProm)");
-        addDebugMsg(msg, -1, location++);
-    }
-    #endif
     auto val = promsxpValue(arg);
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise(isProm): VALUE");
-        addDebugMsg(msg, -1, location++);
-        addDebugMsg(val, 1, location++);
-    }
-    #endif
     extraPromiseCase(val);
     res.addInput(val);
     builder.CreateBr(ok);
 
     builder.SetInsertPoint(isVal);
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise(isVal)");
-        addDebugMsg(msg, -1, location++);
-    }
-    #endif
 #ifdef ENABLE_SLOWASSERT
     insn_assert(builder.CreateICmpNE(sexptype(arg), c(PROMSXP)),
                 "Depromise returned promise");
 #endif
-    #if DEBUG_LOCATIONS == 1
-    if (debugStatements) {
-        auto msg = builder.CreateGlobalString(
-                "Depromise(isVal): VALUE");
-        addDebugMsg(msg, -1, location++);
-        addDebugMsg(arg, 1, location++);
-    }
-    #endif
     nonPromiseCase();
     res.addInput(arg);
     builder.CreateBr(ok);
@@ -2928,40 +2896,12 @@ void LowerFunctionLLVM::compile() {
                 auto b = i->arg(1).val();
 
                 auto rep = Rep::Of(a) < Rep::Of(b) ? Rep::Of(b) : Rep::Of(a);
-                #if DEBUG_LOCATIONS == 1
-                if (debugStatements) {
-                    auto msg = builder.CreateGlobalString(
-                            "Identical load a");
-                    addDebugMsg(msg, -1, location++);
-                }
-                #endif
                 auto ai = load(a, rep);
-                #if DEBUG_LOCATIONS == 1
-                if (debugStatements) {
-                    auto msg = builder.CreateGlobalString(
-                            "Identical load b");
-                    addDebugMsg(msg, -1, location++);
-                }
-                #endif
                 auto bi = load(b, rep);
                 if (Rep::Of(a) == Rep::SEXP && a->type.maybePromiseWrapped()){
-                    #if DEBUG_LOCATIONS == 1
-                    if (debugStatements) {
-                        auto msg = builder.CreateGlobalString(
-                                "Identical depromise a");
-                        addDebugMsg(msg, -1, location++);
-                    }
-                    #endif
                     ai = depromise(ai, a->type);
                 }
                 if (Rep::Of(b) == Rep::SEXP && b->type.maybePromiseWrapped()) {
-                    #if DEBUG_LOCATIONS == 1
-                    if (debugStatements) {
-                        auto msg = builder.CreateGlobalString(
-                                "Identical depromise b");
-                        addDebugMsg(msg, -1, location++);
-                    }
-                    #endif
                     bi = depromise(bi, b->type);
                 }
 
@@ -2987,27 +2927,6 @@ void LowerFunctionLLVM::compile() {
                 // here?
                 if (a->type.maybe(RType::closure) ||
                     b->type.maybe(RType::closure)) {
-                    #if DEBUG_LOCATIONS == 1
-                    if (debugStatements) {
-                        auto msg = builder.CreateGlobalString(
-                                "Identical a || b closure");
-                        addDebugMsg(msg, -1, location++);
-                    }
-                    #endif
-                    #if DEBUG_LOCATIONS == 1
-                    if (debugStatements) {
-                        auto msg = builder.CreateGlobalString(
-                                "Identical: ai");
-                        addDebugMsg(msg, -1, location++);
-                        addDebugMsg(ai, 1, location++);
-
-
-                        auto msg2 = builder.CreateGlobalString(
-                                "Identical: bi");
-                        addDebugMsg(msg2, -1, location++);
-                        addDebugMsg(bi, 1, location++);
-                    }
-                    #endif
                     res = createSelect2(
                         res, [&]() { return builder.getTrue(); },
                         [&]() {
@@ -3017,25 +2936,11 @@ void LowerFunctionLLVM::compile() {
                             return createSelect2(
                                 cls,
                                 [&]() {
-                                    #if DEBUG_LOCATIONS == 1
-                                    if (debugStatements) {
-                                        auto msg = builder.CreateGlobalString(
-                                                "Identical clsEq");
-                                        addDebugMsg(msg, -1, location++);
-                                    }
-                                    #endif
                                     return call(NativeBuiltins::get(
                                                     NativeBuiltins::Id::clsEq),
                                                 {ai, bi});
                                 },
                                 [&]() {
-                                    #if DEBUG_LOCATIONS == 1
-                                    if (debugStatements) {
-                                        auto msg = builder.CreateGlobalString(
-                                                "Identical clsEqFail");
-                                        addDebugMsg(msg, -1, location++);
-                                    }
-                                    #endif
                                     return builder.getFalse();
                                 });
                         });
@@ -4126,10 +4031,12 @@ void LowerFunctionLLVM::compile() {
 
                             Pool::insert(calli->cls()->rirClosure());
                             // patch case
-                            std::stringstream ss1, ss2;
+                            std::stringstream ss1, ss2, ss3;
                             ss1 << "clos_" << CHAR(PRINTNAME(hast));
                             ss2 << "optd_" << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
-                            reqMap->insert(hast);
+                            ss3 << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
+
+                            reqMap->insert(Rf_install(ss3.str().c_str()));
 
                             auto missAsmptStore =
                                 Rf_allocVector(RAWSXP, sizeof(Context));
@@ -4336,13 +4243,6 @@ void LowerFunctionLLVM::compile() {
                                  {builder.getFalse()}));
                     weight = branchAlwaysTrue;
                 }
-                #if DEBUG_LOCATIONS == 1
-                if (debugStatements) {
-                    auto msg = builder.CreateGlobalString(
-                            "Branch Inst");
-                    addDebugMsg(msg, -1, location++);
-                }
-                #endif
                 builder.CreateCondBr(cond, getBlock(bb->trueBranch()),
                                      getBlock(bb->falseBranch()), weight);
                 break;
@@ -5182,13 +5082,6 @@ void LowerFunctionLLVM::compile() {
                     // be extra fast.
                     auto depromiseIfNeeded = [&]() {
                         if (t->typeTest.maybePromiseWrapped()) {
-                            #if DEBUG_LOCATIONS == 1
-                            if (debugStatements) {
-                                auto msg = builder.CreateGlobalString(
-                                        "Tag::IsType");
-                                addDebugMsg(msg, -1, location++);
-                            }
-                            #endif
                             return depromise(a, arg->type);
                         }
                         return a;
@@ -5264,13 +5157,6 @@ void LowerFunctionLLVM::compile() {
                     // type can change with forcing.
                     auto phi = phiBuilder(t::i1);
                     if (t->typeTest.maybePromiseWrapped()) {
-                        #if DEBUG_LOCATIONS == 1
-                        if (debugStatements) {
-                            auto msg = builder.CreateGlobalString(
-                                    "Tag::IsType 1");
-                            addDebugMsg(msg, -1, location++);
-                        }
-                        #endif
                         a = depromise(
                             a, arg->type,
                             [&](llvm::Value* promisedVal) {
@@ -5573,13 +5459,6 @@ void LowerFunctionLLVM::compile() {
                     if (!arg->type.maybePromiseWrapped()) {
                         setVal(i, load(arg, Rep::Of(i)));
                     } else {
-                        #if DEBUG_LOCATIONS == 1
-                        if (debugStatements) {
-                            auto msg = builder.CreateGlobalString(
-                                    "Tag::Force");
-                            addDebugMsg(msg, -1, location++);
-                        }
-                        #endif
                         auto res = depromise(arg);
                         setVal(i, res);
 #ifdef ENABLE_SLOWASSERT

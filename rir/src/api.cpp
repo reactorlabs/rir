@@ -29,7 +29,7 @@
 #include "dirent.h"
 using namespace rir;
 
-#define PRINT_SERIALIZER_PROGRESS_OVERRIDE 0
+#define PRINT_SERIALIZER_PROGRESS_OVERRIDE 1
 
 extern "C" Rboolean R_Visible;
 

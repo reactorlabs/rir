@@ -2236,17 +2236,32 @@ SEXP makeVectorImpl(int mode, size_t len) {
     return s;
 }
 
-void llDebugMsgImpl(void * ptr, int tag, int location) {
-    #if DEBUG_NATIVE_LOCATIONS == 1
-    if (tag == 1) {
-        SEXP obj = (SEXP) ptr;
-        std::cout << "(" << location << ") TYPEOF OBJ: " << TYPEOF(obj) << std::endl;
-        // printAST(0, obj);
-        // Print::dumpSexp(obj);
-        return;
+void llDebugMsgImpl(const char * msg, int space, void * obj, int tag) {
+    for (int i = 0; i < space; i++) {
+        std::cout << " ";
     }
-    std::cout << "At location: " << location << " (" << (char *) ptr << ")"  << std::endl;
-    #endif
+    std::cout << msg << std::endl;
+    switch(tag) {
+        case 2: // SEXP
+            for (int i = 0; i < space; i++) {
+                std::cout << " ";
+            }
+            SEXP o = (SEXP) obj;
+            std::cout << "  " << "SEXP: " << TYPEOF(o) << std::endl;
+            // printAST(space + 2, o);
+            break;
+    }
+
+    // #if DEBUG_NATIVE_LOCATIONS == 1
+    // if (tag == 1) {
+    //     SEXP obj = (SEXP) ptr;
+    //     std::cout << "(" << location << ") TYPEOF OBJ: " << TYPEOF(obj) << std::endl;
+    //     // printAST(0, obj);
+    //     // Print::dumpSexp(obj);
+    //     return;
+    // }
+    // std::cout << "At location: " << location << " (" << (char *) ptr << ")"  << std::endl;
+    // #endif
 
     // switch (tag) {
     // case 0:
@@ -2720,7 +2735,7 @@ void NativeBuiltins::initializeBuiltins() {
         {}};
     get_(Id::llDebugMsg) = {
         "llDebugMsg", (void*)&llDebugMsgImpl,
-        llvm::FunctionType::get(t::t_void, {t::i64ptr, t::Int, t::Int}, false)};
+        llvm::FunctionType::get(t::t_void, {t::charPtr, t::Int, t::i64ptr, t::Int}, false)};
 #ifdef __APPLE__
     get_(Id::sigsetjmp) = {
         "sigsetjmp", (void*)&sigsetjmp,

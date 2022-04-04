@@ -124,7 +124,7 @@ class LowerFunctionLLVM {
     llvm::Value* namedGlobalConst(std::string name, llvm::Constant* init, llvm::Type* ty);
     llvm::Value* globalSrcConst(llvm::Constant* init, llvm::Type* ty = nullptr);
     llvm::FunctionCallee convertToFunctionSymbol(SEXP what, llvm::FunctionType* ty);
-    void addDebugMsg(llvm::Value *v, int tag, int location);
+    void addDebugMsg(const char *m, int space, llvm::Value *debugVal, int tag);
     std::set<SEXP>* reqMap = nullptr;
     bool* serializerError = nullptr;
     bool debugStatements = false;
