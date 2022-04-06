@@ -74,15 +74,25 @@ SET( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE STRING
     "Choose the type of build, options are: None Release DebugOpt Debug."
     FORCE )
 
-# Take from https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
-option(FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." FALSE)
-if (${FORCE_COLORED_OUTPUT})
+# Force the Ninja compilation output to be colored.
+#
+# Due to the way ninja pipes compiler output, by default it has no color.
+# To get colors we must manually set some compilation flags. See also:
+#  * https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
+#  * https://github.com/ninja-build/ninja/issues/174
+execute_process(
+    COMMAND /usr/bin/test -t 1
+    OUTPUT_FILE /dev/stdout
+    RESULT_VARIABLE STDOUT_IS_TERMINAL)
+if(STDOUT_IS_TERMINAL EQUAL 0)
+    # Looks like we are in an Unix system and that a human invoked cmake from a terminal.
+    # Let's make things pretty for them!
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
        add_compile_options (-fdiagnostics-color=always)
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
        add_compile_options (-fcolor-diagnostics)
     endif ()
-endif ()
+endif()
 
 # Create proxy scripts for the scripts in /tools
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/.bin_create")

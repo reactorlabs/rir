@@ -33,7 +33,7 @@ Then, we can proceed with the compilation:
 
     # Invoke cmake for the first time.
     # Possible build types: release, debugopt, debug
-    cmake -GNinja -DCMAKE_BUILD_TYPE=release -DFORCE_COLORED_OUTPUT=1 ..
+    cmake -GNinja -DCMAKE_BUILD_TYPE=release ..
 
     # Fetch and/or build LLVM and Gnu R.
     # On Ubuntu this downloads pre-compiled LLVM binaries, which takes around 10 minutes.
@@ -51,7 +51,7 @@ Congratulations! You can now run Ř with
 
 ### make vs ninja
 
-If you prefer to use `make` instead of `ninja`, remove the `-GNinja` and `-DFORCE_COLORED_OUTPUT=1` flags when you call `cmake`.
+If you prefer to use `make` instead of `ninja`, remove the `-GNinja` flag when you call `cmake`.
 Then use `make` in all the places where we told you to use `ninja`.
 
 ## Running tests
