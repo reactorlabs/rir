@@ -1,19 +1,16 @@
-#ifndef interpreter_context_h
-#define interpreter_context_h
+#ifndef INTERPRETER_CONTEXT_H
+#define INTERPRETER_CONTEXT_H
 
 #include "R/r.h"
 #include "bc/BC_inc.h"
-#include "runtime/Context.h"
-
 #include "interp_incl.h"
-
-#include <stdio.h>
+#include "runtime/Context.h"
+#include "runtime/Function.h"
 
 #include <assert.h>
 #include <functional>
 #include <stdint.h>
-
-#include "runtime/Function.h"
+#include <stdio.h>
 
 namespace rir {
 
@@ -28,9 +25,6 @@ typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
                            SEXP name)>
     ClosureOptimizer;
 
-#define POOL_CAPACITY 4096
-#define STACK_CAPACITY 4096
-
 /** Resizeable R list.
 
  Allocates large list and then tricks R into believing that the list is actually
@@ -39,13 +33,13 @@ typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
  This works because R uses non-moving GC and is used for constant and source
  pools as well as the interpreter object stack.
  */
-typedef struct {
+struct ResizeableList {
     SEXP list;
     size_t capacity;
-} ResizeableList;
-
-#define CONTEXT_INDEX_CP 0
-#define CONTEXT_INDEX_SRC 1
+    static const size_t CONTEXT_INDEX_CP = 0;
+    static const size_t CONTEXT_INDEX_SRC = 1;
+    static const size_t POOL_CAPACITY = 4096;
+};
 
 /** Interpreter's context.
 
@@ -95,41 +89,43 @@ inline void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-#define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
+inline size_t ostack_length() {
+    return abs(R_BCNodeStackTop - R_BCNodeStackBase);
+}
 
-#define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
+inline SEXP ostack_top() { return R_BCNodeStackTop[-1].u.sxpval; }
 
-#define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
-#define ostack_at_cell(cell) ((cell)->u.sxpval)
+inline SEXP ostack_at(size_t i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
 
-#define ostack_set(c, i, v)                                                    \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        int idx = (i);                                                         \
-        (R_BCNodeStackTop - 1 - idx)->u.sxpval = __tmp__;                      \
-        (R_BCNodeStackTop - 1 - idx)->tag = 0;                                 \
-    } while (0)
+inline SEXP ostack_at_cell(const R_bcstack_t* cell) { return cell->u.sxpval; }
 
-#define ostack_cell_at(c, i) (R_BCNodeStackTop - 1 - (i))
+inline void ostack_set(size_t i, SEXP v) {
+    R_BCNodeStackTop[-1 - i].u.sxpval = v;
+    R_BCNodeStackTop[-1 - i].tag = 0;
+}
 
-#define ostack_empty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
+inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
+    cell->u.sxpval = v;
+    cell->tag = 0;
+}
 
-#define ostack_popn(c, p)                                                      \
-    do {                                                                       \
-        R_BCNodeStackTop -= (p);                                               \
-    } while (0)
+inline R_bcstack_t* ostack_cell_at(size_t i) {
+    return R_BCNodeStackTop - 1 - i;
+}
 
-#define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
+inline bool ostack_empty() { return R_BCNodeStackTop == R_BCNodeStackBase; }
 
-#define ostack_push(c, v)                                                      \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        R_BCNodeStackTop->u.sxpval = __tmp__;                                  \
-        R_BCNodeStackTop->tag = 0;                                             \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
+inline void ostack_popn(size_t n) { R_BCNodeStackTop -= n; }
 
-inline void ostack_ensureSize(InterpreterInstance* c, unsigned minFree) {
+inline SEXP ostack_pop() { return (--R_BCNodeStackTop)->u.sxpval; }
+
+inline void ostack_push(SEXP v) {
+    R_BCNodeStackTop->u.sxpval = v;
+    R_BCNodeStackTop->tag = 0;
+    ++R_BCNodeStackTop;
+}
+
+inline void ostack_ensureSize(unsigned minFree) {
     if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
         // TODO....
         assert(false);
@@ -178,18 +174,23 @@ class Locals final {
 
 InterpreterInstance* context_create();
 
-#define cp_pool_length(c) (rl_length(&(c)->cp))
-#define src_pool_length(c) (rl_length(&(c)->src))
+inline size_t cp_pool_length(InterpreterInstance* c) {
+    return rl_length(&c->cp);
+}
+
+inline size_t src_pool_length(InterpreterInstance* c) {
+    return rl_length(&c->src);
+}
 
 inline size_t cp_pool_add(InterpreterInstance* c, SEXP v) {
     size_t result = rl_length(&c->cp);
-    rl_append(&c->cp, v, c->list, CONTEXT_INDEX_CP);
+    rl_append(&c->cp, v, c->list, ResizeableList::CONTEXT_INDEX_CP);
     return result;
 }
 
 inline size_t src_pool_add(InterpreterInstance* c, SEXP v) {
     size_t result = rl_length(&c->src);
-    rl_append(&c->src, v, c->list, CONTEXT_INDEX_SRC);
+    rl_append(&c->src, v, c->list, ResizeableList::CONTEXT_INDEX_SRC);
     return result;
 }
 
@@ -210,4 +211,4 @@ inline void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
 
 } // namespace rir
 
-#endif // interpreter_context_h
+#endif // INTERPRETER_CONTEXT_H

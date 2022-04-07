@@ -295,7 +295,7 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     ostack_cell_at((long)nargs - 1), env, R_NilValue,
                      Context(), ctx);
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
@@ -323,7 +323,7 @@ static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
                      unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     ostack_cell_at((long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
@@ -337,8 +337,8 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate* names, unsigned long available) {
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
-                     R_NilValue, Context(available), ctx);
+                     ostack_cell_at((long)nargs - 1), names, env, R_NilValue,
+                     Context(available), ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
@@ -356,7 +356,7 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
         nargs = expandDotDotDotCallArgs(
             ctx, nargs, names, env,
             given.includes(Assumption::StaticallyArgmatched));
-        auto namesStore = ostack_at(ctx, nargs);
+        auto namesStore = ostack_at(nargs);
         if (namesStore == R_NilValue)
             names = nullptr;
         else
@@ -365,13 +365,13 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     }
 
     CallContext call(callId, c, callee, nargs, ast,
-                     ostack_cell_at(ctx, (long)nargs - 1), names, env,
-                     R_NilValue, given, ctx);
+                     ostack_cell_at((long)nargs - 1), names, env, R_NilValue,
+                     given, ctx);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
-    ostack_popn(ctx, call.passedArgs + pushed);
+    ostack_popn(call.passedArgs + pushed);
     return res;
 }
 
@@ -839,7 +839,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     }
 
     SEXP env =
-        ostack_at(ctx, stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
+        ostack_at(stackHeight - m->frames[m->numFrames - 1].stackSize - 1);
 
     static int deoptless =
         getenv("PIR_DEOPTLESS") ? std::atoi(getenv("PIR_DEOPTLESS")) : 0;
@@ -860,7 +860,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
         size_t envSize = le ? le->nargs : Rf_length(FRAME(env));
         if (envSize <= DeoptContext::MAX_ENV &&
             m->frames[0].stackSize <= DeoptContext::MAX_STACK) {
-            auto base = ostack_cell_at(ctx, m->frames[0].stackSize);
+            auto base = ostack_cell_at(m->frames[0].stackSize);
             rir::Function* fun = nullptr;
             RCNTXT* originalCntxt = findFunctionContextFor(env);
             assert(originalCntxt);
@@ -892,7 +892,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 // Adapting calling convention: deoptless wants the env as
                 // individual arguments on the stack.
                 // TODO: speed this up by already passing it that way...
-                ostack_pop(ctx);
+                ostack_pop();
                 if (!leakedEnv || le) {
                     assert(!le || !le->materialized());
                     if (deoptlessDebug)
@@ -915,7 +915,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                                     Rf_PrintValue(v);
                             }
                         }
-                        ostack_push(ctx, v);
+                        ostack_push(v);
                         if (f)
                             f = CDR(f);
                     }
@@ -1327,7 +1327,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
-                     ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
+                     ostack_cell_at((long)nargs - 1), env, R_NilValue,
                      Context(available), ctx);
 
     auto missingAsmpt =
@@ -1449,9 +1449,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto missing = fun->nargs() - nargs;
     for (size_t i = 0; i < missing; ++i)
-        ostack_push(globalContext(), R_MissingArg);
+        ostack_push(R_MissingArg);
 
-    R_bcstack_t* args = ostack_cell_at(ctx, (long)(nargs + missing) - 1);
+    R_bcstack_t* args = ostack_cell_at((long)(nargs + missing) - 1);
     auto ast = cp_pool_at(globalContext(), astP);
 
     LazyArglistOnStack lazyArgs(call.callId,
@@ -1496,7 +1496,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     R_ReturnedValue = R_NilValue;
 
     UNPROTECT(2);
-    ostack_popn(globalContext(), missing);
+    ostack_popn(missing);
 
     SLOWASSERT(t == R_BCNodeStackTop);
     fun->registerEndInvocation();
@@ -2172,8 +2172,8 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
                             size_t nargs) {
     auto lazyArglist =
         LazyArglistOnHeap::New(callId, c->arglistOrderContainer(), nargs,
-                               ostack_cell_at(ctx, (long)nargs - 1), ast);
-    ostack_popn(globalContext(), nargs);
+                               ostack_cell_at((long)nargs - 1), ast);
+    ostack_popn(nargs);
 
     auto global = (RCNTXT*)R_GlobalContext;
     if (global->callflag == CTXT_GENERIC)

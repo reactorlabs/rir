@@ -74,7 +74,7 @@ struct LazyEnvironment
                                 InterpreterInstance* ctx) {
         auto le = BasicNew(parent, nargs, names);
         for (long i = nargs - 1; i >= 0; --i) {
-            auto v = ostack_pop(ctx);
+            auto v = ostack_pop();
             INCREMENT_NAMED(v);
             le->setArg(i, v, false);
             if (v == R_MissingArg ||

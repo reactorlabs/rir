@@ -81,7 +81,7 @@ struct CallContext {
 
     void setStackArg(SEXP what, unsigned i) const {
         assert(stackArgs && i < passedArgs);
-        ostack_at_cell(stackArgs + i) = what;
+        ostack_set_cell(stackArgs + i, what);
     }
 
     SEXP name(unsigned i, InterpreterInstance* ctx) const {

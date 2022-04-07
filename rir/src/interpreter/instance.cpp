@@ -25,9 +25,10 @@ InterpreterInstance* context_create() {
     InterpreterInstance* c = new InterpreterInstance;
     c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
-    initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
-    initializeResizeableList(&c->src, POOL_CAPACITY, c->list,
-                             CONTEXT_INDEX_SRC);
+    initializeResizeableList(&c->cp, ResizeableList::POOL_CAPACITY, c->list,
+                             ResizeableList::CONTEXT_INDEX_CP);
+    initializeResizeableList(&c->src, ResizeableList::POOL_CAPACITY, c->list,
+                             ResizeableList::CONTEXT_INDEX_SRC);
     // first item in source and constant pools is R_NilValue so that we can use
     // the index 0 for other purposes
     src_pool_add(c, R_NilValue);
