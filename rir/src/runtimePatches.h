@@ -5,6 +5,9 @@
 #define HAST_VTAB_MAP   2 // (2) Hast to vtable map
 #define HAST_CLOS_MAP   3 // (3) Hast to closObj
 #define BL_MAP          4 // (4) Hast blacklist, discard serialized code for these functions
+#define HAST_DEPENDENCY_MAP   5 // (5) Hast to dependency map {map of contexts}
+#define HAST_UNLOCK_MAP       6 // (6) Hast to unlock vector map
+#define OPT_UNLOCK_MAP        7 // (7) Optimistic dispatch unlock map: [table to unlock from, hSym for lookup in dependency map]
 
 /*************************************/
 // Serializer specific

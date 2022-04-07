@@ -155,6 +155,162 @@ class Compiler {
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
 
+    static void tryLinking(DispatchTable* vtable, SEXP hSym, bool unlock = true) {
+        SEXP serMap = Pool::get(HAST_DEPENDENCY_MAP);
+        if (serMap == R_NilValue) return;
+
+
+        SEXP tabMap = Pool::get(HAST_VTAB_MAP);
+        if (tabMap == R_NilValue) {
+            SEXP tmp;
+            PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+            Pool::patch(HAST_VTAB_MAP, tmp);
+            UNPROTECT(1);
+            tabMap = Pool::get(HAST_VTAB_MAP);
+        }
+
+        if (Rf_findVarInFrame(serMap, hSym) != R_UnboundValue && Rf_findVarInFrame(serMap, hSym) != R_NilValue) {
+            vtable->disableFurtherSpecialization = true;
+            #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+            std::cout << "symbolExistsInMap: " << CHAR(PRINTNAME(hSym)) << std::endl;
+            #endif
+
+            SEXP hastEnvMap = Rf_findVarInFrame(serMap, hSym);
+
+
+            bool allOffsetsDone = true;
+
+            serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+
+                if (offsetEnv != R_NilValue) {
+                    bool offsetCompletelyLinked = true;
+                    #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                    std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
+                    #endif
+                    int reqOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
+                    serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
+                        if (cData != R_NilValue) {
+                            #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                            std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
+                            #endif
+                            bool allSatisfied = true;
+                            for (int j = 1; j < Rf_length(cData); j++) {
+                                SEXP dep = VECTOR_ELT(cData, j);
+                                if (dep == R_NilValue) continue;
+                                if (TYPEOF(dep) == SYMSXP) {
+                                    // normal case
+                                    if (Rf_findVarInFrame(tabMap, dep) != R_UnboundValue) {
+                                        SET_VECTOR_ELT(cData, j, R_NilValue);
+                                    } else {
+                                        allSatisfied = false;
+                                    }
+                                } else {
+                                    // optimistic dispatch cast
+                                    SEXP depHastSym = VECTOR_ELT(dep, 0);
+                                    unsigned long* depCon = (unsigned long *) DATAPTR(VECTOR_ELT(dep, 1));
+                                    unsigned* numArgs = (unsigned *) DATAPTR(VECTOR_ELT(dep, 2));
+                                    if (Rf_findVarInFrame(tabMap, depHastSym) != R_UnboundValue) {
+                                        // check if optimistic dispatch will succeed?
+                                        DispatchTable * dt = DispatchTable::unpack(Rf_findVarInFrame(tabMap, depHastSym));
+
+                                        bool entryFound = false;
+
+                                        for (size_t i = 0; i < dt->size(); i++) {
+                                            auto entry = dt->get(i);
+                                            if (entry->context().toI() == *depCon &&
+                                                entry->signature().numArguments >= *numArgs) {
+                                                    entryFound = true;
+                                            }
+                                        }
+
+                                        if (entryFound) {
+                                            #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                                            std::cout << "      [optimistic dispatch success]" << std::endl;
+                                            #endif
+                                            SET_VECTOR_ELT(cData, j, R_NilValue);
+                                        } else {
+                                            dt->addUnlockDependency(depHastSym, vtable->container(), hSym);
+                                            allSatisfied = false;
+                                        }
+
+                                    } else {
+                                        allSatisfied = false;
+                                    }
+                                }
+                            }
+                            if (allSatisfied) {
+                                SEXP functionContainer = VECTOR_ELT(cData, 0);
+
+                                DispatchTable * requiredVtab;
+                                if (reqOffset == 1) {
+                                    requiredVtab = vtable;
+                                } else {
+                                    int idx = 0;
+                                    // int aaa = 0;
+                                    // vtable->baseline()->body()->printSource(true, aaa);
+                                    // std::cout << "ReqSrc: " << reqOffset << std::endl;
+                                    SEXP requiredVtabContainer = vtable->baseline()->body()->getTabAtOffset(true, idx, reqOffset);
+                                    requiredVtab = DispatchTable::unpack(requiredVtabContainer);
+                                }
+
+                                Function * function = Function::unpack(functionContainer);
+                                function->body()->populateSrcIdxData();
+
+                                function->inheritFlags(requiredVtab->baseline());
+                                requiredVtab->insert(function);
+                                #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                                std::cout << "      Linking Success!" << std::endl;
+                                #endif
+                                // do not need to link this again, linking happens only once.
+                                Rf_defineVar(contextSym, R_NilValue, offsetEnv);
+                            } else {
+                                offsetCompletelyLinked = false;
+                                #if PRINT_LINKING_STATUS == 1  || PRINT_LINKING_STATUS_OVERRIDE == 1
+                                std::cout << "      Not Linked Yet!" << std::endl;
+                                #endif
+                            }
+                        }
+
+                    });
+                    if (offsetCompletelyLinked) {
+                        // we never need to look into this anymore
+                        Rf_defineVar(offsetSymbol, R_NilValue, hastEnvMap);
+                    } else {
+                        allOffsetsDone = false;
+                    }
+                }
+
+
+            });
+
+            if (allOffsetsDone) {
+                vtable->disableFurtherSpecialization = false;
+                Rf_defineVar(hSym, R_NilValue, serMap);
+            }
+        }
+
+        if (unlock) {
+            SEXP unlMap = Pool::get(HAST_UNLOCK_MAP);
+            if (Rf_findVarInFrame(unlMap, hSym) != R_UnboundValue && Rf_findVarInFrame(unlMap, hSym) != R_NilValue) {
+                SEXP workVec = Rf_findVarInFrame(unlMap, hSym);
+
+                for (int j = 0; j < Rf_length(workVec); j++) {
+                    SEXP workData = VECTOR_ELT(workVec, j);
+                    SEXP maybeUnlocksHastKey = VECTOR_ELT(workData, 0);
+                    if (Rf_findVarInFrame(tabMap, maybeUnlocksHastKey) != R_UnboundValue) {
+                        SEXP tabC = Rf_findVarInFrame(tabMap, maybeUnlocksHastKey);
+                        DispatchTable * v = DispatchTable::unpack(tabC);
+                        tryLinking(v, maybeUnlocksHastKey);
+                    }
+                }
+
+                Rf_defineVar(hSym, R_NilValue, unlMap);
+            }
+        }
+
+
+    }
+
     SEXP finalize();
 
     static SEXP compileExpression(SEXP ast) {
@@ -241,6 +397,7 @@ class Compiler {
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);
             insertClosObj(inClosure, hast);
+            tryLinking(vtable, hast);
         }
     }
 };

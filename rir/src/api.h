@@ -40,5 +40,6 @@ void printAST(int space, int val);
 hastAndIndex getHastAndIndex(unsigned src);
 REXPORT SEXP startSerializer();
 REXPORT SEXP stopSerializer();
-
+REXPORT SEXP loadBitcodes();
+REXPORT SEXP compileStats();
 #endif // API_H_

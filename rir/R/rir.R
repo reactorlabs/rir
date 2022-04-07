@@ -81,6 +81,16 @@ pir.tests <- function() {
     invisible(.Call("pirTests"))
 }
 
+# loadup bitcode
+f.loadBitcodes <- function() {
+    .Call("loadBitcodes")
+}
+
+f.compileStats <- function() {
+    .Call("compileStats")
+}
+
+
 # returns TRUE if, when PIR compiled, satisfies the the given checks (e.g.
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
 # warmup=<FUN> will call <FUN> repeatedly to get better assumptions.

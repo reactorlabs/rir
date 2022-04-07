@@ -223,7 +223,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
     // serializer
-    void populateSrcIdxData(bool mainSrc);
+    void populateSrcIdxData();
     void populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index);
     Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
     unsigned getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset);

@@ -455,30 +455,9 @@ void Code::printSource(bool mainSrc, int & index) {
     }
 }
 
-void Code::populateSrcIdxData(bool mainSrc) {
-    Opcode* pc = code();
-    size_t label = 0;
-    std::map<Opcode*, size_t> targets;
-    targets[pc] = label++;
-    while (pc < endCode()) {
-        if (BC::decodeShallow(pc).isJmp()) {
-            auto t = BC::jmpTarget(pc);
-            if (!targets.count(t))
-                targets[t] = label++;
-        }
-        pc = BC::next(pc);
-    }
+void Code::populateSrcIdxData() {
 
-    // sort labels ascending
-    label = 0;
-    for (auto& t : targets)
-        t.second = label++;
-
-    pc = code();
-    std::vector<BC::FunIdx> promises;
-
-    if (hast != R_NilValue) {
-        std::cout << "updating src: " << CHAR(PRINTNAME(hast)) << ", " << offsetIndex << std::endl;
+    if (hast && hast != R_NilValue) {
         SEXP lMap = Pool::get(HAST_VTAB_MAP);
         auto resolvedContainer = Rf_findVarInFrame(lMap, hast);
         if (!DispatchTable::check(resolvedContainer)) {
@@ -498,44 +477,14 @@ void Code::populateSrcIdxData(bool mainSrc) {
         offsetIndex = 0;
     }
 
-
-
-
-
-    while (pc < endCode()) {
-        BC bc = BC::decode(pc, this);
-        bc.addMyPromArgsTo(promises);
-
-        if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
-            SEXP iConst = bc.immediateConst();
-            if (DispatchTable::check(iConst)) {
-                DispatchTable::unpack(iConst)->baseline()->body()->populateSrcIdxData(false);
-            }
-        }
-
-        pc = BC::next(pc);
-    }
-
-
-    for (auto i : promises) {
-        auto c = getPromise(i);
-        c->populateSrcIdxData(false);
-    }
-    if (mainSrc) {
-        rir::Function* func = function();
-        if (func) {
-            auto nargs = func->nargs();
-            for (unsigned i = 0; i < nargs; i++) {
-                auto code = func->defaultArg(i);
-                if (code != nullptr) {
-                    code->populateSrcIdxData(false);
-                }
-            }
+    for (unsigned int i = 0; i < extraPoolSize; i++) {
+        SEXP ele = VECTOR_ELT(getEntry(0), i);
+        if (TYPEOF(ele) == EXTERNALSXP && Code::check(ele)) {
+            Code::unpack(ele)->populateSrcIdxData();
         }
     }
-
-
 }
+
 
 void Code::populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index) {
     Opcode* pc = code();

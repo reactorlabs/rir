@@ -23,6 +23,14 @@ class Backend {
 
     rir::Function* getOrCompile(ClosureVersion* cls);
 
+    void deserialize(
+      SEXP cPool, SEXP sPool,
+      SEXP fNames, SEXP fSrc,
+      SEXP fArg, SEXP fChildren,
+      SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
+      rir::FunctionSignature fs, // for function signature
+      std::string bcPath);
+
     SEXP cData = nullptr;
     bool* serializerError = nullptr;
 

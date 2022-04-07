@@ -148,6 +148,13 @@ class PirJitLLVM {
     void printModule();
     void enableDebugStatements();
     void disableDebugStatements();
+    void deserializeAndAddModule(
+      SEXP cPool, SEXP sPool,
+      SEXP fNames, SEXP fSrc,
+      SEXP fArg, SEXP fChildren,
+      SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
+      rir::FunctionSignature fs,
+      std::string bcPath);
 };
 
 } // namespace pir
