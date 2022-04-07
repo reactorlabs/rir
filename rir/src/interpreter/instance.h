@@ -88,7 +88,7 @@ inline void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
 }
 
 inline size_t ostack_length() {
-    return abs(R_BCNodeStackTop - R_BCNodeStackBase);
+    return std::abs(R_BCNodeStackTop - R_BCNodeStackBase);
 }
 
 inline SEXP ostack_top() { return R_BCNodeStackTop[-1].u.sxpval; }
