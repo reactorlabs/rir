@@ -44,7 +44,6 @@ InterpreterInstance* context_create() {
 
     auto pir = getenv("PIR_ENABLE");
 
-    c->exprCompiler = rirCompile;
     c->closureCompiler = [](SEXP closure, SEXP name) {
         return rirCompile(closure, R_NilValue);
     };

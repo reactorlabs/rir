@@ -19,7 +19,6 @@ namespace rir {
 
   The idea is to call this if we want on demand compilation of closures.
  */
-typedef std::function<SEXP(SEXP expr, SEXP env)> ExprCompiler;
 typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureCompiler;
 typedef std::function<SEXP(SEXP closure, const rir::Context& assumptions,
                            SEXP name)>
@@ -53,7 +52,6 @@ struct InterpreterInstance {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
-    ExprCompiler exprCompiler;
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
 };
