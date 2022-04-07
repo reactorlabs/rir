@@ -27,19 +27,19 @@ class Pool {
             return contents.at(e);
 
         SET_NAMED(e, 2);
-        size_t i = cp_pool_add(globalContext(), e);
+        size_t i = cp_pool_add(e);
         contents[e] = i;
         return i;
     }
 
     static BC::PoolIdx makeSpace() {
-        size_t i = cp_pool_add(globalContext(), R_NilValue);
+        size_t i = cp_pool_add(R_NilValue);
         return i;
     }
 
     static void patch(BC::PoolIdx idx, SEXP e) {
         SET_NAMED(e, 2);
-        cp_pool_set(globalContext(), idx, e);
+        cp_pool_set(idx, e);
         if (!contents.count(e))
             contents[e] = idx;
     }
@@ -47,7 +47,7 @@ class Pool {
     static BC::PoolIdx getNum(double n);
     static BC::PoolIdx getInt(int n);
 
-    static SEXP get(BC::PoolIdx i) { return cp_pool_at(globalContext(), i); }
+    static SEXP get(BC::PoolIdx i) { return cp_pool_at(i); }
 };
 }
 

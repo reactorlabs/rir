@@ -193,10 +193,10 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     // rewrite the ast (essential if the callee is
                     // special)
-                    auto origSrc = cp_pool_at(globalContext(), call->srcIdx);
+                    auto origSrc = cp_pool_at(call->srcIdx);
                     auto newSrc =
                         PROTECT(LCONS(CADDR(origSrc), CDDDR(origSrc)));
-                    auto newSrcIdx = cp_pool_add(globalContext(), newSrc);
+                    auto newSrcIdx = cp_pool_add(newSrc);
                     UNPROTECT(1);
 
                     // replace the old forceAndCall

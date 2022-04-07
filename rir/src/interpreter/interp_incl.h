@@ -27,7 +27,7 @@ void initializeRuntime();
 InterpreterInstance* globalContext();
 Configurations* pirConfigurations();
 
-SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
+SEXP evalRirCodeExtCaller(Code* c, SEXP env);
 
 SEXP rirEval(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -37,11 +37,10 @@ SEXP createLegacyArglist(ArglistOrder::CallId id, size_t length,
                          const R_bcstack_t* stackArgs, SEXP* heapArgs,
                          const Immediate* names, SEXP ast,
                          ArglistOrder* reordering, bool eagerCallee,
-                         bool recreateOriginalPromargs,
-                         InterpreterInstance* ctx);
+                         bool recreateOriginalPromargs);
 
 SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, InterpreterInstance* ctx, SEXP stub);
+                       const Opcode* pc, SEXP stub);
 
 SEXP rirDecompile(SEXP s);
 
@@ -54,14 +53,8 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx, Opcode* pc,
-                     bool delayNamed = false);
-inline SEXP evaluatePromise(SEXP e, InterpreterInstance* ctx) {
-    return evaluatePromise(e, ctx, nullptr);
-}
-inline SEXP evaluatePromise(SEXP e) {
-    return evaluatePromise(e, globalContext());
-}
+SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed = false);
+inline SEXP evaluatePromise(SEXP e) { return evaluatePromise(e, nullptr); }
 
 } // namespace rir
 

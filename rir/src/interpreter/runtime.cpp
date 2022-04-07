@@ -25,7 +25,8 @@ bool isValidClosureSEXP(SEXP closure) {
 
 void initializeRuntime() {
     // initialize the global context
-    globalContext_ = context_create();
+    globalContext_ = new InterpreterInstance;
+    context_init();
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
                          rirDecompile, rirPrint, deserializeRir, serializeRir,
                          materialize);
@@ -33,4 +34,5 @@ void initializeRuntime() {
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }
+
 } // namespace rir

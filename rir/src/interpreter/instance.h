@@ -170,39 +170,40 @@ class Locals final {
     static void* operator new(size_t) = delete;
 };
 
-InterpreterInstance* context_create();
+void context_init();
 
-inline size_t cp_pool_length(InterpreterInstance* c) {
-    return rl_length(&c->cp);
-}
+inline size_t cp_pool_length() { return rl_length(&globalContext()->cp); }
 
-inline size_t src_pool_length(InterpreterInstance* c) {
-    return rl_length(&c->src);
-}
+inline size_t src_pool_length() { return rl_length(&globalContext()->src); }
 
-inline size_t cp_pool_add(InterpreterInstance* c, SEXP v) {
+inline size_t cp_pool_add(SEXP v) {
+    InterpreterInstance* c = globalContext();
     size_t result = rl_length(&c->cp);
     rl_append(&c->cp, v, c->list, ResizeableList::CONTEXT_INDEX_CP);
     return result;
 }
 
-inline size_t src_pool_add(InterpreterInstance* c, SEXP v) {
+inline size_t src_pool_add(SEXP v) {
+    InterpreterInstance* c = globalContext();
     size_t result = rl_length(&c->src);
     rl_append(&c->src, v, c->list, ResizeableList::CONTEXT_INDEX_SRC);
     return result;
 }
 
-inline SEXP cp_pool_at(InterpreterInstance* c, unsigned index) {
+inline SEXP cp_pool_at(unsigned index) {
+    InterpreterInstance* c = globalContext();
     SLOWASSERT(c->cp.capacity > index);
     return VECTOR_ELT(c->cp.list, index);
 }
 
-inline SEXP src_pool_at(InterpreterInstance* c, unsigned index) {
+inline SEXP src_pool_at(unsigned index) {
+    InterpreterInstance* c = globalContext();
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
 }
 
-inline void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
+inline void cp_pool_set(unsigned index, SEXP e) {
+    InterpreterInstance* c = globalContext();
     SLOWASSERT(c->cp.capacity > index);
     SET_VECTOR_ELT(c->cp.list, index, e);
 }

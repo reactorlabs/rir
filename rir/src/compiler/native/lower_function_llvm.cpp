@@ -337,7 +337,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
     if (args.size() > 0)
         protectTemp(arglist);
 
-    auto ast = constant(cp_pool_at(globalContext(), srcIdx), t::SEXP);
+    auto ast = constant(cp_pool_at(srcIdx), t::SEXP);
     // TODO: ensure that we cover all the fast builtin cases
     int flag = getFlag(builtin);
     if (flag < 2)

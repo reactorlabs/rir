@@ -29,7 +29,6 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 auto staticCall = StaticCall::Cast(i);
                 if (staticCall && staticCall->nCallArgs() > 0) {
                     auto ast = src_pool_at(
-                        globalContext(),
                         staticCall->tryGetCls()->rirFunction()->body()->src);
                     if (CAR(ast) == symbol::UseMethod &&
                         TYPEOF(CADR(ast)) == STRSXP &&

@@ -17,15 +17,15 @@ namespace rir {
 
 SEXP rirDecompile(SEXP s) {
     if (auto c = Code::check(s)) {
-        return src_pool_at(globalContext(), c->src);
+        return src_pool_at(c->src);
     }
     if (auto f = Function::check(s)) {
-        return src_pool_at(globalContext(), f->body()->src);
+        return src_pool_at(f->body()->src);
     }
     if (auto t = DispatchTable::check(s)) {
         // Default is the source of the first function in the dispatch table
         Function* f = t->baseline();
-        return src_pool_at(globalContext(), f->body()->src);
+        return src_pool_at(f->body()->src);
     }
     return s;
 }

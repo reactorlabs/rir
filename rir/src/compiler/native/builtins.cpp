@@ -239,7 +239,7 @@ void defvarImpl(SEXP var, SEXP value, SEXP env) {
 SEXP chkfunImpl(SEXP sym, SEXP res) {
     switch (TYPEOF(res)) {
     case CLOSXP:
-        jit(res, sym, globalContext());
+        jit(res, sym);
         break;
     case SPECIALSXP:
     case BUILTINSXP:
@@ -293,10 +293,9 @@ static void errorImpl(const char* e) { Rf_error(e); }
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
-    auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
                      ostack_cell_at((long)nargs - 1), env, R_NilValue,
-                     Context(), ctx);
+                     Context());
     if (debugPrintCallBuiltinImpl) {
         debugPrintCallBuiltinImpl = false;
         std::cout << "call builtin " << nargs << " with\n";
@@ -312,8 +311,7 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
     }
     SLOWASSERT(TYPEOF(callee) == BUILTINSXP);
     SLOWASSERT(TYPEOF(env) == ENVSXP || LazyEnvironment::check(env));
-    SLOWASSERT(ctx);
-    auto res = doCall(call, ctx);
+    auto res = doCall(call);
     SLOWASSERT(res);
     return res;
 }
@@ -321,40 +319,35 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
                      SEXP callee, SEXP env, size_t nargs,
                      unsigned long available) {
-    auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at((long)nargs - 1), env, R_NilValue,
-                     Context(available), ctx);
+                     Context(available));
 
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env) || env == R_NilValue);
-    SLOWASSERT(ctx);
-    return doCall(call, globalContext(), true);
+    return doCall(call, true);
 }
 
 static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate ast, SEXP callee, SEXP env, size_t nargs,
                           Immediate* names, unsigned long available) {
-    auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at((long)nargs - 1), names, env, R_NilValue,
-                     Context(available), ctx);
+                     Context(available));
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
-    SLOWASSERT(ctx);
-    return doCall(call, ctx, true);
+    return doCall(call, true);
 }
 
 static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                          Immediate ast, SEXP callee, SEXP env, size_t nargs,
                          Immediate* names, unsigned long available) {
-    auto ctx = globalContext();
     auto given = Context(available);
     int pushed = 0;
 
     if (needsExpandedDots(callee)) {
         nargs = expandDotDotDotCallArgs(
-            ctx, nargs, names, env,
+            nargs, names, env,
             given.includes(Assumption::StaticallyArgmatched));
         auto namesStore = ostack_at(nargs);
         if (namesStore == R_NilValue)
@@ -366,11 +359,10 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at((long)nargs - 1), names, env, R_NilValue,
-                     given, ctx);
+                     given);
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                LazyEnvironment::check(env));
-    SLOWASSERT(ctx);
-    auto res = doCall(call, ctx);
+    auto res = doCall(call);
     ostack_popn(call.passedArgs + pushed);
     return res;
 }
@@ -447,7 +439,7 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
                         UnopKind op) {
     SEXP res = nullptr;
     SEXP arglist = CONS_NR(argument, R_NilValue);
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     PROTECT(arglist);
     if (isObject(argument)) {
         if (auto e = LazyEnvironment::check(env)) {
@@ -495,7 +487,7 @@ static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
     SEXP arglist;
     FAKE_ARGS1(arglist, argument);
     MATERIALIZE_IF_OBJ1(arglist, argument);
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     PROTECT(arglist);
     OPERATION_FALLBACK("!");
     UNPROTECT(1);
@@ -522,7 +514,7 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     SEXP arglist;
     FAKE_ARGS2(arglist, lhs, rhs);
     MATERIALIZE_IF_OBJ2(arglist, lhs, rhs);
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     PROTECT(arglist);
     if (isObject(lhs) || isObject(rhs)) {
         if (auto e = LazyEnvironment::check(env)) {
@@ -946,12 +938,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 Pool::patch(idx, deoptSentinelContainer);
 
     CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
-                     /* nargs */ -1, src_pool_at(globalContext(), c->src), args,
-                     (Immediate*)nullptr, env, R_NilValue, Context(),
-                     globalContext());
+                     /* nargs */ -1, src_pool_at(c->src), args,
+                     (Immediate*)nullptr, env, R_NilValue, Context());
 
-    deoptFramesWithContext(globalContext(), &call, m, R_NilValue,
-                           m->numFrames - 1, stackHeight,
+    deoptFramesWithContext(&call, m, R_NilValue, m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
 }
@@ -1064,20 +1054,19 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
         return res;
 
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
+        SEXP call = src_pool_at(srcIdx);
         SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
         PROTECT(args);
-        res = dispatchApply(call, vector, args, symbol::Bracket, env,
-                            globalContext());
+        res = dispatchApply(call, vector, args, symbol::Bracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset_dflt(call, symbol::Bracket, args, env);
         }
         UNPROTECT(1);
     } else {
         SEXP args;
         FAKE_ARGS2(args, vector, index);
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     return res;
@@ -1091,15 +1080,14 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
     PROTECT(args);
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1116,15 +1104,14 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(ScalarInteger(index), R_NilValue));
     PROTECT(args);
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1141,15 +1128,14 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
     SEXP args = CONS_NR(vector, CONS_NR(ScalarReal(index), R_NilValue));
     PROTECT(args);
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1162,15 +1148,14 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
     PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::Bracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset_dflt(call, symbol::Bracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1184,15 +1169,14 @@ SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
         vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(index3, R_NilValue))));
     PROTECT(args);
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::Bracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::Bracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset_dflt(call, symbol::Bracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
     }
     UNPROTECT(1);
@@ -1205,15 +1189,14 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
     PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1243,15 +1226,14 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
     PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1281,15 +1263,14 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
     PROTECT(args);
     SEXP res = nullptr;
     if (isObject(vector)) {
-        SEXP call = src_pool_at(globalContext(), srcIdx);
-        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env,
-                            globalContext());
+        SEXP call = src_pool_at(srcIdx);
+        res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
-            forceAll(args, globalContext());
+            forceAll(args);
             res = do_subset2_dflt(call, symbol::DoubleBracket, args, env);
         }
     } else {
-        forceAll(args, globalContext());
+        forceAll(args);
         res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args, env);
     }
     UNPROTECT(1);
@@ -1325,13 +1306,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto fun = Function::unpack(Pool::get(target));
 
-    auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, astP,
                      ostack_cell_at((long)nargs - 1), env, R_NilValue,
-                     Context(available), ctx);
+                     Context(available));
 
-    auto missingAsmpt =
-        (Context*)(DATAPTR(cp_pool_at(globalContext(), missingAsmpt_)));
+    auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
     auto fail = !missingAsmpt->empty();
     if (fail) {
         if (missingAsmpt->numMissing() == 0 &&
@@ -1418,7 +1397,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         }
 
         if (fail) {
-            inferCurrentContext(call, fun->nargs(), ctx);
+            inferCurrentContext(call, fun->nargs());
             fail = !call.givenContext.smaller(fun->context());
         }
     }
@@ -1431,10 +1410,10 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
         recheck = 0;
-        inferCurrentContext(call, fun->nargs(), ctx);
+        inferCurrentContext(call, fun->nargs());
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             fun->unregisterInvocation();
-            auto res = doCall(call, globalContext(), true);
+            auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
             *missingAsmpt = trg->context() - Context(available);
@@ -1452,7 +1431,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         ostack_push(R_MissingArg);
 
     R_bcstack_t* args = ostack_cell_at((long)(nargs + missing) - 1);
-    auto ast = cp_pool_at(globalContext(), astP);
+    auto ast = cp_pool_at(astP);
 
     LazyArglistOnStack lazyArgs(call.callId,
                                 call.caller->arglistOrderContainer(),
@@ -1512,13 +1491,12 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
     SET_TAG(CDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
     if (isObject(vector))
-        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
         SET_NAMED(res, 0);
@@ -1592,13 +1570,12 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
     SET_TAG(CDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -1798,13 +1775,12 @@ SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
     if (isObject(vector))
-        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
         SET_NAMED(res, 0);
@@ -1826,13 +1802,12 @@ SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
     if (isObject(vector))
-        res = dispatchApply(call, vector, args, symbol::AssignBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
         SET_NAMED(res, 0);
@@ -1899,13 +1874,12 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -1953,13 +1927,12 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -2007,13 +1980,12 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -2068,13 +2040,12 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);
@@ -2130,13 +2101,12 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
     SET_TAG(CDDDR(args), symbol::value);
     PROTECT(args);
     SEXP res = nullptr;
-    SEXP call = src_pool_at(globalContext(), srcIdx);
+    SEXP call = src_pool_at(srcIdx);
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
     if (isObject(vec))
-        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env,
-                            globalContext());
+        res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
         SET_NAMED(res, 0);

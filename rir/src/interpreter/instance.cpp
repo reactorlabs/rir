@@ -21,8 +21,8 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
-InterpreterInstance* context_create() {
-    InterpreterInstance* c = new InterpreterInstance;
+void context_init() {
+    InterpreterInstance* c = globalContext();
     c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, ResizeableList::POOL_CAPACITY, c->list,
@@ -31,8 +31,8 @@ InterpreterInstance* context_create() {
                              ResizeableList::CONTEXT_INDEX_SRC);
     // first item in source and constant pools is R_NilValue so that we can use
     // the index 0 for other purposes
-    src_pool_add(c, R_NilValue);
-    cp_pool_add(c, R_NilValue);
+    src_pool_add(R_NilValue);
+    cp_pool_add(R_NilValue);
     R_Subset2Sym = Rf_install("[[");
     R_SubsetSym = Rf_install("[");
     R_SubassignSym = Rf_install("[<-");
@@ -65,10 +65,6 @@ InterpreterInstance* context_create() {
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
     }
-
-    return c;
 }
-
-extern InterpreterInstance* globalInterpreterInstance_;
 
 } // namespace rir

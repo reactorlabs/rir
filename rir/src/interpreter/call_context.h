@@ -26,7 +26,7 @@ struct CallContext {
     CallContext(ArglistOrder::CallId callId, const Code* c, SEXP callee,
                 size_t nargs, SEXP ast, R_bcstack_t* stackArgs,
                 const Immediate* names, SEXP callerEnv, SEXP suppliedvars,
-                const Context& givenContext, InterpreterInstance* ctx)
+                const Context& givenContext)
         : callId(callId), caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), names(names), callerEnv(callerEnv),
           suppliedvars(suppliedvars), ast(ast), callee(callee),
@@ -43,18 +43,16 @@ struct CallContext {
     // cppcheck-suppress uninitMemberVar
     CallContext(ArglistOrder::CallId callId, Code* c, SEXP callee, size_t nargs,
                 Immediate ast, R_bcstack_t* stackArgs, Immediate* names,
-                SEXP callerEnv, SEXP suppliedvars, const Context& givenContext,
-                InterpreterInstance* ctx)
-        : CallContext(callId, c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      names, callerEnv, suppliedvars, givenContext, ctx) {}
+                SEXP callerEnv, SEXP suppliedvars, const Context& givenContext)
+        : CallContext(callId, c, callee, nargs, cp_pool_at(ast), stackArgs,
+                      names, callerEnv, suppliedvars, givenContext) {}
 
     // cppcheck-suppress uninitMemberVar
     CallContext(ArglistOrder::CallId callId, Code* c, SEXP callee, size_t nargs,
                 Immediate ast, R_bcstack_t* stackArgs, SEXP callerEnv,
-                SEXP suppliedvars, const Context& givenContext,
-                InterpreterInstance* ctx)
-        : CallContext(callId, c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, callerEnv, suppliedvars, givenContext, ctx) {}
+                SEXP suppliedvars, const Context& givenContext)
+        : CallContext(callId, c, callee, nargs, cp_pool_at(ast), stackArgs,
+                      nullptr, callerEnv, suppliedvars, givenContext) {}
 
     const ArglistOrder::CallId callId;
     const Code* caller;
@@ -84,9 +82,9 @@ struct CallContext {
         ostack_set_cell(stackArgs + i, what);
     }
 
-    SEXP name(unsigned i, InterpreterInstance* ctx) const {
+    SEXP name(unsigned i) const {
         assert(hasNames() && i < suppliedArgs);
-        return cp_pool_at(ctx, names[i]);
+        return cp_pool_at(names[i]);
     }
 
     void safeForceArgs() const {

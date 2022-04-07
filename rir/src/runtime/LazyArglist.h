@@ -61,11 +61,11 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
         }
     }
 
-    SEXP createArglist(InterpreterInstance* ctx) {
+    SEXP createArglist() {
         return createLegacyArglist(
             callId, length, stackArgs, stackArgs ? nullptr : heapArgs, nullptr,
             ast, reordering ? ArglistOrder::unpack(reordering) : nullptr, false,
-            true, ctx);
+            true);
     }
 
   private:
