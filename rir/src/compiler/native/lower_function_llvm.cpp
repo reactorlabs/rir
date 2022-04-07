@@ -1617,6 +1617,7 @@ void LowerFunctionLLVM::compileBinop(
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     BinopKind kind) {
+
     auto rep = Rep::Of(i);
     auto lhsRep = Rep::Of(lhs);
     auto rhsRep = Rep::Of(rhs);
@@ -1643,7 +1644,15 @@ void LowerFunctionLLVM::compileBinop(
     BasicBlock* isNaBr = nullptr;
     auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-    auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64) ? t::Double : t::Int;
+    // If one or both arguments are numeric, the result will be numeric.
+    // If both arguments are of type integer, the type of the
+    // result of ‘/’ and ‘^’ is numeric and for the other operators it is
+    // integer (with overflow returned as ‘NA_integer_’ with warning).
+    bool intIntToReal = lhsRep == Rep::i32 && rhsRep == Rep::i32 &&
+                        (kind == BinopKind::DIV || kind == BinopKind::POW);
+    auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64 || intIntToReal)
+                 ? t::Double
+                 : t::Int;
 
     auto res = phiBuilder(r);
     auto a = load(lhs, lhsRep);
@@ -1667,7 +1676,7 @@ void LowerFunctionLLVM::compileBinop(
     checkNa(a, lhs->type, lhsRep);
     checkNa(b, rhs->type, rhsRep);
 
-    if (a->getType() == t::Int && b->getType() == t::Int) {
+    if (r == t::Int) {
         res.addInput(intInsert(a, b));
     } else {
         if (a->getType() == t::Int)
@@ -1691,7 +1700,10 @@ void LowerFunctionLLVM::compileBinop(
 
     builder.SetInsertPoint(done);
     if (rep == Rep::SEXP) {
-        setVal(i, box(res(), lhs->type.mergeWithConversion(rhs->type), false));
+        auto to = lhs->type.mergeWithConversion(rhs->type);
+        if (intIntToReal)
+            to = to.notT(RType::integer).orT(RType::real);
+        setVal(i, box(res(), to, false));
     } else {
         setVal(i, res());
     }
