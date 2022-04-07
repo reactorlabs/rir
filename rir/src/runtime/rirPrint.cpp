@@ -17,23 +17,23 @@ void rirPrint(SEXP s) {
     assert(TYPEOF(s) == EXTERNALSXP);
 
     // TODO: print more info / contents
-    if (Code::check(s)) {
-        Rprintf("<rir::Code: %p>\n", s);
-    } else if (Function::check(s)) {
-        Rprintf("<rir::Function: %p>\n", s);
-    } else if (DispatchTable::check(s)) {
-        Rprintf("<rir::DispatchTable: %p>\n", s);
-    } else if (ArglistOrder::check(s)) {
-        Rprintf("<rir::ArglistOrder: %p>\n", s);
-    } else if (LazyArglist::check(s)) {
-        Rprintf("<rir::LazyArglist: %p>\n", s);
-    } else if (LazyEnvironment::check(s)) {
-        Rprintf("<rir::LazyEnvironment: %p>\n", s);
-    } else if (PirTypeFeedback::check(s)) {
-        Rprintf("<rir::PirTypeFeedback: %p>\n", s);
+    if (auto p = Code::check(s)) {
+        Rprintf("<rir::Code container:%p payload:%p>\n", s, p);
+    } else if (auto p = Function::check(s)) {
+        Rprintf("<rir::Function container:%p payload:%p>\n", s, p);
+    } else if (auto p = DispatchTable::check(s)) {
+        Rprintf("<rir::DispatchTable container:%p payload:%p>\n", s, p);
+    } else if (auto p = ArglistOrder::check(s)) {
+        Rprintf("<rir::ArglistOrder container:%p payload:%p>\n", s, p);
+    } else if (auto p = LazyArglist::check(s)) {
+        Rprintf("<rir::LazyArglist container:%p payload:%p>\n", s, p);
+    } else if (auto p = LazyEnvironment::check(s)) {
+        Rprintf("<rir::LazyEnvironment container:%p payload:%p>\n", s, p);
+    } else if (auto p = PirTypeFeedback::check(s)) {
+        Rprintf("<rir::PirTypeFeedback container:%p payload:%p>\n", s, p);
     } else {
         assert(false && "missing RirRuntimeObject printing");
     }
 }
 
-}; // namespace rir
+} // namespace rir
