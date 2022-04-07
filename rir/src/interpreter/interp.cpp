@@ -1,5 +1,6 @@
 #include "interp.h"
 #include "R/Funtab.h"
+#include "R/Printing.h"
 #include "R/Protect.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
@@ -42,6 +43,7 @@ static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c) {
 #ifdef PRINT_STACK_SIZE
+#define INTSEQSXP 9999
     // Prevent printing instructions (and recursing) while printing stack
     static bool printingStackSize = false;
     if (printingStackSize)
@@ -49,25 +51,35 @@ static void printInterp(Opcode* pc, Code* c) {
 
     // Print stack
     printingStackSize = true;
-    std::cout << "#; Stack:";
+    std::cout << "#; Stack:\n";
     for (int i = 0;; i++) {
+        auto typ = ostack_cell_at(i)->tag;
         SEXP sexp = ostack_at(i);
         if (sexp == nullptr || ostack_length() - i == 0)
             break;
         else if (i == PRINT_STACK_SIZE) {
-            std::cout << " ...";
+            std::cout << "    ...\n";
             break;
         }
-        std::cout << " " << dumpSexp(sexp);
+        if (typ == 0) {
+            std::cout << "    >>> " << Print::dumpSexp(sexp) << " <<<\n";
+        } else if (typ == INTSXP || typ == LGLSXP) {
+            std::cout << "    int/lgl >>> " << ostack_cell_at(i)->u.ival
+                      << " <<<\n";
+        } else if (typ == REALSXP) {
+            std::cout << "    real >>> " << ostack_cell_at(i)->u.dval
+                      << " <<<\n";
+        } else if (typ == INTSEQSXP) {
+            std::cout << "    intseq >>> " << Print::dumpSexp(sexp) << " <<<\n";
+        }
     }
-    std::cout << "\n";
     printingStackSize = false;
 #endif
     // Print source
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx != 0) {
         SEXP src = src_pool_at(sidx);
-        std::cout << "#; " << dumpSexp(src) << "\n";
+        std::cout << "#; " << Print::dumpSexp(src) << "\n";
     }
     // Print bc
     BC bc = BC::decode(pc, c);
