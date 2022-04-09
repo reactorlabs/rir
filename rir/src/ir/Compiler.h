@@ -17,6 +17,9 @@
 #include "R/Printing.h"
 #include "api.h"
 
+#include <chrono>
+using namespace std::chrono;
+
 typedef struct RCNTXT RCNTXT;
 extern "C" SEXP R_syscall(int n, RCNTXT *cptr);
 extern "C" SEXP R_sysfunction(int n, RCNTXT *cptr);
@@ -154,6 +157,7 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
+    static size_t linkTime;
 
     static void tryLinking(DispatchTable* vtable, SEXP hSym, bool unlock = true) {
         SEXP serMap = Pool::get(HAST_DEPENDENCY_MAP);
@@ -397,7 +401,11 @@ class Compiler {
             insertVTable(vtable, hast);
             populateHastSrcData(vtable, hast);
             insertClosObj(inClosure, hast);
+            auto start = high_resolution_clock::now();
             tryLinking(vtable, hast);
+            auto stop = high_resolution_clock::now();
+            auto duration = duration_cast<microseconds>(stop - start);
+            linkTime += duration.count();
         }
     }
 };

@@ -46,8 +46,8 @@ static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
 static bool oldDeoptChaos = false;
 
+static size_t compilerSuccesses = 0;
 static size_t bitcodeTotalLoadTime = 0;
-static size_t compilerInvocations = 0;
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -424,8 +424,6 @@ SEXP deserializeFromFile(std::string metaDataPath) {
             SEXP sPool = c.getSPool();
             SEXP rMap = c.getReqMapAsVector();
 
-            // std::vector<size_t> reqMapForCompilation = c.getReqMapForCompilation();
-
             // INSERT THE FUNCTION INTO THE JIT
             pir::Module* m = new pir::Module;
 
@@ -438,8 +436,10 @@ SEXP deserializeFromFile(std::string metaDataPath) {
                 fArg, fChildren,
                 hast, Context(con), rMap, offsetSymbol,
                 fs,
-                bitcodePath.str());
-            });
+                bitcodePath.str()
+            );
+
+        });
 
 
     });
@@ -448,7 +448,6 @@ SEXP deserializeFromFile(std::string metaDataPath) {
 }
 
 REXPORT SEXP loadBitcodes() {
-    auto start = high_resolution_clock::now();
     Protect prot;
     DIR *dir;
     struct dirent *ent;
@@ -550,20 +549,24 @@ REXPORT SEXP loadBitcodes() {
         // DeserialDataMap::printUnlockMap();
         // #endif
     } else {
-        auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop - start);
-        bitcodeTotalLoadTime = duration.count();
         /* could not open directory */
         perror ("");
         return R_FalseValue;
     }
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    bitcodeTotalLoadTime = duration.count();
     return R_TrueValue;
 }
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
+    static bool initializeBitcodes = false;
+    if (!initializeBitcodes) {
+        auto start = high_resolution_clock::now();
+        loadBitcodes();
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<milliseconds>(stop - start);
+        bitcodeTotalLoadTime = duration.count();
+        initializeBitcodes = true;
+        std::cout << "Bitcode load time: " << bitcodeTotalLoadTime << "ms" << std::endl;
+    }
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
@@ -614,12 +617,10 @@ REXPORT SEXP compileStats() {
             }
         }
     }
-    // std::cout << "==== RUN STATS ====" << std::endl;
-    // std::cout << "Bitcode Load Time: " << bitcodeTotalLoadTime << "us" << std::endl;
-    // std::cout << "Compiler invocations: " << compilerInvocations << std::endl;
-    // std::cout << "  Compilation time: " << totalCompileTime << "us" << std::endl;
-    // std::cout << "Runtime Linking Time: " << Compiler::linkTime << "us" << std::endl;
-    return Rf_ScalarInteger(compilerInvocations);
+    std::cout << "==== RUN STATS ====" << std::endl;
+    std::cout << "Bitcode Load Time: " << bitcodeTotalLoadTime << "ms" << std::endl;
+    std::cout << "Linking time: : " << Compiler::linkTime << "us" << std::endl;
+    return Rf_ScalarInteger(compilerSuccesses);
 }
 
 REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
@@ -1061,7 +1062,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             apply(BODY(what), c);
         // Eagerly compile the main function
         done->body()->nativeCode();
-        compilerInvocations++;
+        compilerSuccesses++;
     };
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
