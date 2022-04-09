@@ -365,6 +365,22 @@ void hash_ast(SEXP ast, size_t & hast) {
     }
 }
 
+static inline void createBitcodeEntry(SEXP hastSym, SEXP cData) {
+    auto hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
+    // Create hast dependency map if it does not exist
+    if (hastDepMap == R_NilValue) {
+        SEXP tmp;
+        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        Pool::patch(HAST_DEPENDENCY_MAP, tmp);
+        UNPROTECT(1);
+        hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
+    }
+    assert(TYPEOF(hastDepMap) == ENVSXP);
+
+    // Create entry for context
+    Rf_defineVar(hastSym, cData, hastDepMap);
+}
+
 SEXP deserializeFromFile(std::string metaDataPath) {
     std::string prefix = "";
 
@@ -388,61 +404,72 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     serializerData sData(serDataContainer);
 
     SEXP hast = sData.getHastData();
-    std::string functionName = sData.getNameData();
+    // std::string functionName = sData.getNameData();
 
-    pir::StreamLogger logger(pir::DebugOptions::DefaultDebugOptions);
-    logger.title("(>) Deserializer Start " + functionName);
+    // pir::StreamLogger logger(pir::DebugOptions::DefaultDebugOptions);
+    // logger.title("(>) Deserializer Start " + functionName);
 
+    createBitcodeEntry(hast, sData.getContextMap());
 
-
-    serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-        #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
-        #endif
-        int indexOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
-        serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
-            contextData c(cData);
-
+    auto hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
+    SEXP prefSym = Rf_install("prefix");
+    if (Rf_findVarInFrame(hastDepMap, prefSym) == R_UnboundValue) {
+        Rf_defineVar(prefSym, Rf_mkString(prefix.c_str()), hastDepMap);
+        std::cout << "added prefix: " << CHAR(STRING_ELT(Rf_findVarInFrame(hastDepMap, prefSym), 0)) << std::endl;
+    }
 
 
-            // PATH TO BITCODE FILE
-            std::stringstream bitcodePath;
-            bitcodePath << prefix << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << c.getContext() << ".bc";
-            #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
-            std::cout << "    (*) Bitcode Path: " << bitcodePath.str() << std::endl;
-            int space = 4;
-            c.print(space);
-            #endif
-            unsigned long con = c.getContext();
-            rir::FunctionSignature fs = c.getFunctionSignature();
+// );
 
-            SEXP fNames = c.getFNames();
-            SEXP fSrc = c.getFSrc();
-            SEXP fArg = c.getFArg();
-            SEXP fChildren = c.getFChildren();
-            SEXP cPool = c.getCPool();
-            SEXP sPool = c.getSPool();
-            SEXP rMap = c.getReqMapAsVector();
+    // serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+    //     #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
+    //     std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
+    //     #endif
+    //     // int indexOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
+    //     serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
 
-            // INSERT THE FUNCTION INTO THE JIT
-            pir::Module* m = new pir::Module;
-
-            pir::Compiler cmp(m, logger);
-            pir::Backend backend(m, logger, functionName);
-
-            backend.deserialize(
-                cPool, sPool,
-                fNames, fSrc,
-                fArg, fChildren,
-                hast, Context(con), rMap, offsetSymbol,
-                fs,
-                bitcodePath.str()
-            );
-
-        });
+    //         // SEXP currOffsetMap = getHastOffsetMap(hast, offsetSymbol);
 
 
-    });
+    //         // contextData c(cData);
+    //         // // PATH TO BITCODE FILE
+    //         // std::stringstream bitcodePath;
+    //         // bitcodePath << prefix << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << c.getContext() << ".bc";
+    //         // #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
+    //         // std::cout << "    (*) Bitcode Path: " << bitcodePath.str() << std::endl;
+    //         // int space = 4;
+    //         // c.print(space);
+    //         // #endif
+    //         // unsigned long con = c.getContext();
+    //         // rir::FunctionSignature fs = c.getFunctionSignature();
+
+    //         // SEXP fNames = c.getFNames();
+    //         // SEXP fSrc = c.getFSrc();
+    //         // SEXP fArg = c.getFArg();
+    //         // SEXP fChildren = c.getFChildren();
+    //         // SEXP cPool = c.getCPool();
+    //         // SEXP sPool = c.getSPool();
+    //         // SEXP rMap = c.getReqMapAsVector();
+
+    //         // // INSERT THE FUNCTION INTO THE JIT
+    //         // pir::Module* m = new pir::Module;
+
+    //         // pir::Compiler cmp(m, logger);
+    //         // pir::Backend backend(m, logger, functionName);
+
+    //         // backend.deserialize(
+    //         //     cPool, sPool,
+    //         //     fNames, fSrc,
+    //         //     fArg, fChildren,
+    //         //     hast, Context(con), rMap, offsetSymbol,
+    //         //     fs,
+    //         //     bitcodePath.str()
+    //         // );
+
+    //     });
+
+
+    // });
     UNPROTECT(1);
     return R_FalseValue;
 }
@@ -471,55 +498,58 @@ REXPORT SEXP loadBitcodes() {
 
         closedir (dir);
 
-        SEXP tabMap = Pool::get(HAST_VTAB_MAP);
-        if (tabMap == R_NilValue) {
-            SEXP tmp;
-            PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-            Pool::patch(HAST_VTAB_MAP, tmp);
-            UNPROTECT(1);
-            tabMap = Pool::get(HAST_VTAB_MAP);
-        }
-        auto map = Pool::get(HAST_DEPENDENCY_MAP);
-        if (map != R_NilValue) {
-            SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
-            for (int i = 0; i < Rf_length(hastsInEnv); i++) {
-                SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-                if (Rf_findVarInFrame(tabMap, hastKey) != R_UnboundValue) {
-                    SEXP tabC = Rf_findVarInFrame(tabMap, hastKey);
-                    DispatchTable * v = DispatchTable::unpack(tabC);
-                    rir::Compiler::tryLinking(v, hastKey, true);
-                }
 
-            }
-            std::cout << "early linking done" << std::endl;
-        }
-
-        // #if PRINT_DEPENDENCY_MAP == 1
-        // map = Pool::get(HAST_DEPENDENCY_MAP);
+        // SEXP tabMap = Pool::get(HAST_VTAB_MAP);
+        // if (tabMap == R_NilValue) {
+        //     SEXP tmp;
+        //     PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
+        //     Pool::patch(HAST_VTAB_MAP, tmp);
+        //     UNPROTECT(1);
+        //     tabMap = Pool::get(HAST_VTAB_MAP);
+        // }
+        // auto map = Pool::get(HAST_DEPENDENCY_MAP);
         // if (map != R_NilValue) {
         //     SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
         //     for (int i = 0; i < Rf_length(hastsInEnv); i++) {
         //         SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-        //         SEXP hastEnvMap = Rf_findVarInFrame(map, hastKey);
-        //         std::cout << "hast: " << CHAR(PRINTNAME(hastKey)) << std::endl;
-        //         serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-        //             std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
-        //             serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
-        //                 std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
-        //                 for (int j = 0; j < Rf_length(cData); j++) {
-        //                     SEXP ele = VECTOR_ELT(cData, j);
-        //                     std::cout << "      [" << j << "]: ";
-        //                     if (TYPEOF(ele) == SYMSXP) {
-        //                         std::cout << CHAR(PRINTNAME(ele)) << std::endl;
-        //                     } else {
-        //                         std::cout << TYPEOF(ele) << std::endl;
-        //                     }
-        //                 }
-        //             });
-        //         });
+        //         if (Rf_findVarInFrame(tabMap, hastKey) != R_UnboundValue) {
+        //             SEXP tabC = Rf_findVarInFrame(tabMap, hastKey);
+        //             DispatchTable * v = DispatchTable::unpack(tabC);
+        //             rir::Compiler::tryLinking(v, hastKey, true);
+        //         }
+
         //     }
+        //     std::cout << "early linking done" << std::endl;
         // }
-        // #endif
+
+        #if PRINT_DEPENDENCY_MAP == 1
+        auto map = Pool::get(HAST_DEPENDENCY_MAP);
+        if (map != R_NilValue) {
+            SEXP preSym = Rf_install("prefix");
+            SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
+            for (int i = 0; i < Rf_length(hastsInEnv); i++) {
+                SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
+                if (hastKey == preSym) continue;
+                SEXP hastEnvMap = Rf_findVarInFrame(map, hastKey);
+                std::cout << "hast: " << CHAR(PRINTNAME(hastKey)) << std::endl;
+                serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+                    std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
+                    serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
+                        std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
+                        for (int j = 0; j < Rf_length(cData); j++) {
+                            SEXP ele = VECTOR_ELT(cData, j);
+                            std::cout << "      [" << j << "]: ";
+                            if (TYPEOF(ele) == SYMSXP) {
+                                std::cout << CHAR(PRINTNAME(ele)) << std::endl;
+                            } else {
+                                std::cout << TYPEOF(ele) << std::endl;
+                            }
+                        }
+                    });
+                });
+            }
+        }
+        #endif
         // #if PRINT_UNLOCK_MAP == 1
         // auto ulMap = Pool::get(HAST_UNLOCK_MAP);
         // if (ulMap != R_NilValue) {
@@ -590,8 +620,10 @@ REXPORT SEXP compileStats() {
     if (map != R_NilValue) {
         std::cout << "unlinked bitcodes:" << std::endl;
         SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
+        SEXP preSym = Rf_install("prefix");
         for (int i = 0; i < Rf_length(hastsInEnv); i++) {
             SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
+            if (hastKey == preSym) continue;
             SEXP hastEnvMap = Rf_findVarInFrame(map, hastKey);
             if (hastEnvMap != R_NilValue) {
                 std::cout << "hast: " << CHAR(PRINTNAME(hastKey)) << std::endl;
@@ -975,7 +1007,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
                 // Context data container
                 SEXP cDataContainer;
-                PROTECT(cDataContainer = Rf_allocVector(VECSXP, 14));
+                PROTECT(cDataContainer = Rf_allocVector(VECSXP, 9));
                 Pool::insert(cDataContainer);
                 UNPROTECT(1);
                 contextData cData(cDataContainer);
@@ -1455,9 +1487,9 @@ bool startup() {
     Pool::makeSpace(); // (2) Hast to vtable map
     Pool::makeSpace(); // (3) Hast to closObj
     Pool::makeSpace(); // (4) Hast blacklist, discard serialized code for these functions
-    Pool::makeSpace();
-    Pool::makeSpace();
-    Pool::makeSpace();
+    Pool::makeSpace(); // (5) Hast to dependency map {map of contexts}
+    Pool::makeSpace(); // (6) Hast to unlock vector map [worklist 1]
+    Pool::makeSpace(); // (7) Hast -> { C1: [Worklist 2...],.. }
     #endif
     return true;
 }

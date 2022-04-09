@@ -81,11 +81,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
-    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
   public:
+    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
         auto l = h.length() + 1;

@@ -751,21 +751,25 @@ Backend::LastDestructor::LastDestructor() {
     }
 }
 
-void Backend::deserialize(
-    SEXP cPool, SEXP sPool,
-    SEXP fNames, SEXP fSrc,
-    SEXP fArg, SEXP fChildren,
-    SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
-    rir::FunctionSignature fs, // for function signature
-    std::string bcPath) {
-    jit.deserializeAndAddModule(
-        cPool, sPool,
-        fNames, fSrc,
-        fArg, fChildren,
-        hast, context, rMap, offsetSym,
-        fs,
-        bcPath);
+void Backend::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offsetSym, DispatchTable * vtab) {
+    jit.deserializeAndPopulateBitcode(cData, hast, offsetSym, vtab);
 }
+
+// void Backend::deserialize(
+//     SEXP cPool, SEXP sPool,
+//     SEXP fNames, SEXP fSrc,
+//     SEXP fArg, SEXP fChildren,
+//     SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
+//     rir::FunctionSignature fs, // for function signature
+//     std::string bcPath) {
+//     jit.deserializeAndAddModule(
+//         cPool, sPool,
+//         fNames, fSrc,
+//         fArg, fChildren,
+//         hast, context, rMap, offsetSym,
+//         fs,
+//         bcPath);
+// }
 
 rir::Function* Backend::getOrCompile(ClosureVersion* cls) {
     auto res = done.find(cls);

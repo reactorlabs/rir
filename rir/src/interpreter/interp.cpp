@@ -1928,6 +1928,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
+        // std::cout << "exec native code: " << c->lazyCodeHandle_ << std::endl;
         return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
                       callCtxt ? callCtxt->callee : nullptr);
     }
