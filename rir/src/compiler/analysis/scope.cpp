@@ -424,11 +424,12 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
                         .first->second.get();
             } else {
                 nextFun = subAnalysis.at(i).get();
-                nextFun->setInitialState([&](ScopeAnalysisState& init) {
-                    init = state;
-                    if (possibleEnvChange)
-                        init.envs.at(i->env()).leak();
-                });
+                nextFun->setInitialState(
+                    [&state, i, possibleEnvChange](ScopeAnalysisState& init) {
+                        init = state;
+                        if (possibleEnvChange)
+                            init.envs.at(i->env()).leak();
+                    });
             }
 
             (*nextFun)();
