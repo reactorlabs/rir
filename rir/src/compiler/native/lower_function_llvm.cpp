@@ -4076,13 +4076,15 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(cnt);
                     return res();
                 };
-
-                compileBinop(
-                    i,
+                auto myimod =
                     [&](llvm::Value* a, llvm::Value* b) {
                         auto fast = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
                         auto fast1 = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto fast2 = BasicBlock::Create(
+                            PirJitLLVM::getContext(), "", fun);
+                        auto fastNA = BasicBlock::Create(
                             PirJitLLVM::getContext(), "", fun);
                         auto slow = BasicBlock::Create(PirJitLLVM::getContext(),
                                                        "", fun);
@@ -4093,11 +4095,20 @@ void LowerFunctionLLVM::compile() {
                                              fast1, slow, branchMostlyTrue);
 
                         builder.SetInsertPoint(fast1);
+                        builder.CreateCondBr(builder.CreateICmpNE(b, c(0)),
+                                             fast2, fastNA, branchMostlyTrue);
+
+                        builder.SetInsertPoint(fast2);
                         builder.CreateCondBr(builder.CreateICmpSGT(b, c(0)),
                                              fast, slow, branchMostlyTrue);
 
                         builder.SetInsertPoint(fast);
                         res.addInput(builder.CreateSRem(a, b));
+                        builder.CreateBr(cnt);
+
+                        builder.SetInsertPoint(fastNA);
+                        // a %% 0L
+                        res.addInput(c(NA_INTEGER));
                         builder.CreateBr(cnt);
 
                         builder.SetInsertPoint(slow);
@@ -4109,8 +4120,9 @@ void LowerFunctionLLVM::compile() {
 
                         builder.SetInsertPoint(cnt);
                         return res();
-                    },
-                    myfmod, BinopKind::MOD);
+                    };
+
+                compileBinop(i, myimod, myfmod, BinopKind::MOD);
                 break;
             }
 
