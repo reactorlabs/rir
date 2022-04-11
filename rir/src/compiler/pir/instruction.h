@@ -1943,15 +1943,14 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
             // be numeric
             t = t.notT(RType::integer).notT(RType::logical);
         } else if (t.maybe(RType::integer)) {
-            // If both arguments are of type integer, the type of the
-            // result is
+            // If both arguments are of type integer, the type of the result is
             // integer
             t = t.notT(RType::logical);
         }
         if (TAG == Tag::Div || TAG == Tag::Pow) {
             if (t.maybe(RType::integer)) {
-                // If both arguments are of type integer, the type of the
-                // result of ‘/’ and ‘^’ is numeric
+                // If both arguments are of type integer, the type of the result
+                // of ‘/’ and ‘^’ is numeric
                 t = t.notT(RType::integer).orT(RType::real);
             }
             // 0 / 0 = NaN

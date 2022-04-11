@@ -53,6 +53,7 @@ SEXP qt(SEXP c, Preserve& p) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
 #define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
@@ -60,6 +61,7 @@ SEXP qt(SEXP c, Preserve& p) {
                 Operation(arg);                                                \
         }                                                                      \
     } while (false)
+
 #define FOLD_BINARY(Instruction, Operation)                                    \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
@@ -70,6 +72,7 @@ SEXP qt(SEXP c, Preserve& p) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
 #define FOLD_BINARY_EITHER(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
@@ -82,6 +85,7 @@ SEXP qt(SEXP c, Preserve& p) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
 static bool convertsToRealWithoutWarning(SEXP arg) {
     if (Rf_isVectorAtomic(arg) && XLENGTH(arg) == 1) {
         switch (TYPEOF(arg)) {
@@ -97,7 +101,8 @@ static bool convertsToRealWithoutWarning(SEXP arg) {
     } else {
         return false;
     }
-};
+}
+
 static bool convertsToLogicalWithoutWarning(SEXP arg) {
     switch (TYPEOF(arg)) {
     case LGLSXP:
@@ -110,7 +115,7 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
     default:
         return false;
     }
-};
+}
 
 static bool isStaticallyTrue(Value* i) {
     if (i == True::instance())
@@ -329,6 +334,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         return false;
                     }
                 };
+
                 if (ChkMissing::Cast(i)) {
                     if (i->arg(0).val() == MissingArg::instance())
                         killUnreachable();
@@ -416,20 +422,23 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 FOLD_BINARY_NATIVE(Sub, symbol::Sub);
                 FOLD_BINARY_NATIVE(Mul, symbol::Mul);
                 FOLD_BINARY_NATIVE(Div, symbol::Div);
+                FOLD_BINARY_NATIVE(Pow, symbol::Pow);
                 FOLD_BINARY_NATIVE(IDiv, symbol::Idiv);
+                FOLD_BINARY_NATIVE(Mod, symbol::Mod);
                 FOLD_BINARY_NATIVE(Lt, symbol::Lt);
                 FOLD_BINARY_NATIVE(Gt, symbol::Gt);
                 FOLD_BINARY_NATIVE(Lte, symbol::Le);
                 FOLD_BINARY_NATIVE(Gte, symbol::Ge);
-                FOLD_BINARY_NATIVE(Pow, symbol::Pow);
                 FOLD_BINARY_NATIVE(Eq, symbol::Eq);
                 FOLD_BINARY_NATIVE(Neq, symbol::Ne);
+
                 FOLD_BINARY_EITHER(Eq, [&](SEXP carg, Value* varg) {
                     return foldLglCmp(carg, varg, true);
                 });
                 FOLD_BINARY_EITHER(Neq, [&](SEXP carg, Value* varg) {
                     return foldLglCmp(carg, varg, false);
                 });
+
                 FOLD_UNARY(Minus, [&](SEXP arg) {
                     auto t = TYPEOF(arg);
                     if (!isObject(arg) &&
@@ -1068,5 +1077,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
     return anyChange;
 }
+
 } // namespace pir
 } // namespace rir
