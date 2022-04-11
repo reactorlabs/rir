@@ -1934,7 +1934,34 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     using Super::inferredTypeForArithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForArithmeticInstruction(getType);
+        auto t = inferredTypeForArithmeticInstruction(getType);
+        if (t.maybe(RType::cplx)) {
+            // If either argument is complex the result will be complex
+            t = t.notT(RType::real).notT(RType::integer).notT(RType::logical);
+        } else if (t.maybe(RType::real)) {
+            // Otherwise if one or both arguments are numeric, the result will
+            // be numeric
+            t = t.notT(RType::integer).notT(RType::logical);
+        } else if (t.maybe(RType::integer)) {
+            // If both arguments are of type integer, the type of the
+            // result is
+            // integer
+            t = t.notT(RType::logical);
+        }
+        if (TAG == Tag::Div || TAG == Tag::Pow) {
+            if (t.maybe(RType::integer)) {
+                // If both arguments are of type integer, the type of the
+                // result of ‘/’ and ‘^’ is numeric
+                t = t.notT(RType::integer).orT(RType::real);
+            }
+            // 0 / 0 = NaN
+            t = t.orNAOrNaN();
+        }
+        if (TAG == Tag::Mod) {
+            // 0 %% 0 = NaN or NA_integer_
+            t = t.orNAOrNaN();
+        }
+        return t;
     }
     Effects inferEffects(const GetType& getType) const override {
         return inferredEffectsForArithmeticInstruction(getType);
@@ -1948,36 +1975,13 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
             : ArithmeticBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}       \
     }
 
-ARITHMETIC_BINOP(Mul);
-ARITHMETIC_BINOP(IDiv);
 ARITHMETIC_BINOP(Add);
-ARITHMETIC_BINOP(Pow);
 ARITHMETIC_BINOP(Sub);
-
-class Div : public ArithmeticBinop<Div, Tag::Div> {
-  public:
-    Div(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : ArithmeticBinop<Div, Tag::Div>(lhs, rhs, env, srcIdx) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        // 0 / 0 = NaN
-        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType).orNAOrNaN();
-        if (t.maybe(RType::integer) || t.maybe(RType::logical))
-            return t | RType::real;
-        return t;
-    }
-};
-
-class Mod : public ArithmeticBinop<Mod, Tag::Mod> {
-  public:
-    Mod(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : ArithmeticBinop<Mod, Tag::Mod>(lhs, rhs, env, srcIdx) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        // 0 %% 0 = NaN
-        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNAOrNaN();
-    }
-};
+ARITHMETIC_BINOP(Mul);
+ARITHMETIC_BINOP(Div);
+ARITHMETIC_BINOP(Pow);
+ARITHMETIC_BINOP(IDiv);
+ARITHMETIC_BINOP(Mod);
 
 template <typename BASE, Tag TAG>
 class LogicalBinop : public Binop<BASE, TAG> {
