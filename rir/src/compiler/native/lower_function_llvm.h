@@ -421,37 +421,44 @@ class LowerFunctionLLVM {
     void compilePushContext(Instruction* i);
     void compilePopContext(Instruction* i);
 
+    using Action = std::function<void()>;
+    using CheckNaBypass = std::function<void(llvm::Value*, llvm::Value*,
+                                             const Action&, const Action&)>;
     void compileBinop(
-        Instruction* i,
+        BinopKind kind, Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind) {
-        compileBinop(i, i->arg(0).val(), i->arg(1).val(), intInsert, fpInsert,
-                     kind);
+        const CheckNaBypass& checkNaBypassInsert =
+            [](llvm::Value*, llvm::Value*, const Action& checkA,
+               const Action& checkB) {
+                checkA();
+                checkB();
+            }) {
+        compileBinop(kind, i, i->arg(0).val(), i->arg(1).val(), intInsert,
+                     fpInsert, checkNaBypassInsert);
     }
     void compileBinop(
-        Instruction* i, Value* lhs, Value* rhs,
+        BinopKind kind, Instruction* i, Value* lhs, Value* rhs,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind);
-    void compileUnop(Instruction* i,
-                     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
-                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
-                     UnopKind kind) {
-        compileUnop(i, i->arg(0).val(), intInsert, fpInsert, kind);
+        const CheckNaBypass& checkNaBypassInsert);
+    void
+    compileUnop(UnopKind kind, Instruction* i,
+                const std::function<llvm::Value*(llvm::Value*)>& intInsert,
+                const std::function<llvm::Value*(llvm::Value*)>& fpInsert) {
+        compileUnop(kind, i, i->arg(0).val(), intInsert, fpInsert);
     }
-    void compileUnop(Instruction* i, Value* lhs,
+    void compileUnop(UnopKind kind, Instruction* i, Value* lhs,
                      const std::function<llvm::Value*(llvm::Value*)>& intInsert,
-                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
-                     UnopKind kind);
+                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert);
     void compileRelop(
-        Instruction* i,
+        BinopKind kind, Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind, bool testNa = true);
+        bool testNa = true);
 
     void compile();
 
