@@ -1338,22 +1338,24 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.SetInsertPoint(done);
 }
 
+llvm::Value* LowerFunctionLLVM::isNotNa(llvm::Value* v, PirType type) {
+    assert(type.isA(PirType::num().scalar()));
+    if (!type.maybeNAOrNaN())
+        // Don't actually check NA
+        return builder.getTrue();
+    if (v->getType() == t::Int)
+        return builder.CreateICmpNE(v, c(NA_INTEGER));
+    if (v->getType() == t::Double)
+        return builder.CreateFCmpORD(v, v);
+    assert(false);
+}
+
 void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     assert(type.isA(PirType::num().scalar()));
     if (!notNa)
         notNa = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-    llvm::Value* isNotNa;
-    if (!type.maybeNAOrNaN()) {
-        // Don't actually check NA
-        isNotNa = builder.getTrue();
-    } else if (v->getType() == t::Double) {
-        isNotNa = builder.CreateFCmpORD(v, v);
-    } else {
-        assert(v->getType() == t::Int);
-        isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
-    }
-    builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+    builder.CreateCondBr(isNotNa(v, type), notNa, isNa, branchMostlyTrue);
     builder.SetInsertPoint(notNa);
 }
 

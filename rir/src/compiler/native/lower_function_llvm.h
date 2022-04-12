@@ -383,6 +383,7 @@ class LowerFunctionLLVM {
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
     // We explicitly require the type of the argument to ensure we use non-NA
     // info. If the type is not NA, this will not actually emit a check
+    llvm::Value* isNotNa(llvm::Value* v, PirType type);
     void nacheck(llvm::Value* v, PirType type, llvm::BasicBlock* isNa,
                  llvm::BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
