@@ -412,26 +412,45 @@ class Instruction : public Value {
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
         if (!m.maybeObj()) {
-            auto t = PirType::bottom();
-            eachArg([&](Value* v) {
-                if (!mayHaveEnv() || v != env())
-                    t = t.mergeWithConversion(getType(v));
-            });
             // Everything but numbers throws an error
-            t = t & PirType::num().notMissing().orAttribsOrObj();
-            // e.g. TRUE + TRUE == 2
-            if (m.maybe(RType::logical)) {
-                t = t.orT(RType::integer);
-                t = t.notT(RType::logical);
-            }
-            // the binop result becomes NA if it can't be represented in a
+            auto t = m & PirType::num().notMissing().orAttribsOrObj();
+
+            // TRUE + TRUE == 2
+            if (m.maybe(RType::logical))
+                t = t.orT(RType::integer).notT(RType::logical);
+
+            // If either argument is complex the result will be complex
+            // If one or both arguments are numeric, the result will
+            // be numeric
+            eachArg([&](Value* v) {
+                if (getType(v).isA(RType::cplx))
+                    t = t.notT(RType::real).notT(RType::integer);
+                if (getType(v).isA(RType::real))
+                    t = t.notT(RType::integer);
+            });
+
+            // The binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
-            // * the condition checks iff at least one of the arguments is an
+            // The condition checks if at least one of the arguments is an
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer))
                 t = t.orNAOrNaN();
-            return type & t;
+
+            // If both arguments are of type integer, the type of the result
+            // of ‘/’ and ‘^’ is numeric
+            if (tag == Tag::Div || tag == Tag::Pow)
+                if (!t.maybe(RType::cplx))
+                    t = t.orT(RType::real).notT(RType::integer);
+
+            // 0 / 0 = NaN
+            // 0 %% 0 = NaN or NA_integer_
+            if (tag == Tag::Div || tag == Tag::Mod)
+                t = t.orNAOrNaN();
+
+            t = type & t;
+            assert(!t.isVoid());
+            return t;
         }
         return type;
     }
@@ -1934,33 +1953,7 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     using Super::inferredTypeForArithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        auto t = inferredTypeForArithmeticInstruction(getType);
-        if (t.maybe(RType::cplx)) {
-            // If either argument is complex the result will be complex
-            t = t.notT(RType::real).notT(RType::integer).notT(RType::logical);
-        } else if (t.maybe(RType::real)) {
-            // Otherwise if one or both arguments are numeric, the result will
-            // be numeric
-            t = t.notT(RType::integer).notT(RType::logical);
-        } else if (t.maybe(RType::integer)) {
-            // If both arguments are of type integer, the type of the result is
-            // integer
-            t = t.notT(RType::logical);
-        }
-        if (TAG == Tag::Div || TAG == Tag::Pow) {
-            if (t.maybe(RType::integer)) {
-                // If both arguments are of type integer, the type of the result
-                // of ‘/’ and ‘^’ is numeric
-                t = t.notT(RType::integer).orT(RType::real);
-            }
-            // 0 / 0 = NaN
-            t = t.orNAOrNaN();
-        }
-        if (TAG == Tag::Mod) {
-            // 0 %% 0 = NaN or NA_integer_
-            t = t.orNAOrNaN();
-        }
-        return t;
+        return inferredTypeForArithmeticInstruction(getType);
     }
     Effects inferEffects(const GetType& getType) const override {
         return inferredEffectsForArithmeticInstruction(getType);
