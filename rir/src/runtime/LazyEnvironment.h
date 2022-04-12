@@ -70,15 +70,13 @@ struct LazyEnvironment
         return le;
     }
 
-    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names,
-                                InterpreterInstance* ctx) {
+    static LazyEnvironment* New(SEXP parent, size_t nargs, Immediate* names) {
         auto le = BasicNew(parent, nargs, names);
         for (long i = nargs - 1; i >= 0; --i) {
-            auto v = ostack_pop(ctx);
+            auto v = ostack_pop();
             INCREMENT_NAMED(v);
             le->setArg(i, v, false);
-            if (v == R_MissingArg ||
-                TYPEOF(cp_pool_at(ctx, names[i])) == LISTSXP)
+            if (v == R_MissingArg || TYPEOF(cp_pool_at(names[i])) == LISTSXP)
                 le->missing[i] = true;
         }
         return le;

@@ -164,7 +164,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
     code->stackLength = max.ostack;
 }
 
-void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
+void CodeVerifier::verifyFunctionLayout(SEXP sexp) {
     if (TYPEOF(sexp) != EXTERNALSXP)
         Rf_error("RIR Verifier: Invalid SEXPTYPE");
     Function* f = Function::unpack(sexp);
@@ -229,9 +229,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 *cptr == Opcode::ldvar_for_update_ ||
                 *cptr == Opcode::ldvar_noforce_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
-                if (*argsIndex >= cp_pool_length(ctx))
+                if (*argsIndex >= cp_pool_length())
                     Rf_error("RIR Verifier: Invalid arglist index");
-                SEXP sym = cp_pool_at(ctx, *argsIndex);
+                SEXP sym = cp_pool_at(*argsIndex);
                 if (TYPEOF(sym) != SYMSXP)
                     Rf_error("RIR Verifier: load/store binding not a symbol");
                 if (!(strlen(CHAR(PRINTNAME(sym)))))
@@ -241,9 +241,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 *cptr == Opcode::stvar_cached_ ||
                 *cptr == Opcode::ldvar_for_update_cache_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
-                if (*argsIndex >= cp_pool_length(ctx))
+                if (*argsIndex >= cp_pool_length())
                     Rf_error("RIR Verifier: Invalid arglist index");
-                SEXP sym = cp_pool_at(ctx, *argsIndex);
+                SEXP sym = cp_pool_at(*argsIndex);
                 if (TYPEOF(sym) != SYMSXP)
                     Rf_error("RIR Verifier: load/store binding not a symbol");
                 if (!(strlen(CHAR(PRINTNAME(sym)))))
@@ -272,7 +272,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.callExtra().callArgumentNames[i];
                     if (offset) {
-                        SEXP name = cp_pool_at(ctx, offset);
+                        SEXP name = cp_pool_at(offset);
                         if (TYPEOF(name) != SYMSXP && name != R_NilValue)
                             Rf_error(
                                 "RIR Verifier: Calling target not a symbol");

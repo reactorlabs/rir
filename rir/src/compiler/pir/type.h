@@ -232,15 +232,11 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
-    static constexpr PirType intRealLgl() {
-        return PirType(RType::integer) | RType::real | RType::logical;
-    }
     static constexpr PirType intReal() {
         return PirType(RType::integer) | RType::real;
     }
-    static constexpr PirType num() {
-        return intReal() | RType::logical | RType::cplx;
-    }
+    static constexpr PirType intRealLgl() { return intReal() | RType::logical; }
+    static constexpr PirType num() { return intRealLgl() | RType::cplx; }
     static constexpr PirType atomOrSimpleVec() {
         return num() | RType::sym | RType::chr | RType::str | RType::code;
     }
@@ -859,6 +855,6 @@ template <>
 struct hash<rir::pir::PirType> {
     size_t operator()(const rir::pir::PirType& t) const { return t.hash(); }
 };
-}
+} // namespace std
 
 #endif

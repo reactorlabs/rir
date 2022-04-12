@@ -19,7 +19,7 @@ BC::PoolIdx Pool::getNum(double n) {
     REAL(s)[0] = n;
     SET_NAMED(s, 2);
 
-    size_t i = cp_pool_add(globalContext(), s);
+    size_t i = cp_pool_add(s);
     assert(i < BC::MAX_POOL_IDX);
 
     numbers[n] = i;
@@ -36,7 +36,7 @@ BC::PoolIdx Pool::getInt(int n) {
     INTEGER(s)[0] = n;
     SET_NAMED(s, 2);
 
-    size_t i = cp_pool_add(globalContext(), s);
+    size_t i = cp_pool_add(s);
     assert(i < BC::MAX_POOL_IDX);
 
     ints[n] = i;

@@ -124,7 +124,7 @@ static IsVectorCheck whichIsVectorCheck(SEXP str) {
     return IsVectorCheck::unsupported;
 }
 
-SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
+SEXP tryFastSpecialCall(CallContext& call) {
     auto nargs = call.passedArgs;
     switch (call.callee->u.primsxp.offset) {
     case blt("substitute"): {
@@ -147,7 +147,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
 
         if (nargs == 2 && s && TYPEOF(s) == CHARSXP) {
             if (TYPEOF(x) == PROMSXP)
-                x = evaluatePromise(x, ctx, nullptr, true);
+                x = evaluatePromise(x, nullptr, true);
 
             if (isObject(x)) {
                 ENSURE_NAMEDMAX(x);
@@ -157,7 +157,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
                 PROTECT(args);
                 SEXP ans;
                 if (R_DispatchOrEvalSP(call.ast, call.callee, "$", args,
-                                       materializeCallerEnv(call, ctx), &ans)) {
+                                       materializeCallerEnv(call), &ans)) {
                     UNPROTECT(2); /* args */
                     if (NAMED(ans))
                         ENSURE_NAMEDMAX(ans);
@@ -176,14 +176,14 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
 
         auto nArg = call.stackArg(0);
         if (TYPEOF(nArg) == PROMSXP)
-            nArg = evaluatePromise(nArg, ctx);
+            nArg = evaluatePromise(nArg);
         int n = Rf_asInteger(nArg);
         if (n == NA_INTEGER)
             n = 0;
 
         auto fun = call.stackArg(1);
         if (TYPEOF(fun) == PROMSXP)
-            fun = evaluatePromise(fun, ctx);
+            fun = evaluatePromise(fun);
         assert(call.stackArgs);
 
         // Remove the first arg and create a new CallContext for the actual
@@ -220,7 +220,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
         CallContext innerCall(ArglistOrder::NOT_REORDERED, call.caller, fun,
                               nargs, ast, call.stackArgs + 2,
                               call.names ? call.names + 2 : nullptr,
-                              call.callerEnv, R_NilValue, innerCtxt, ctx);
+                              call.callerEnv, R_NilValue, innerCtxt);
         assert(call.passedArgs == innerCall.passedArgs + 2);
 
         bool builtin = TYPEOF(fun) == BUILTINSXP;
@@ -238,7 +238,7 @@ SEXP tryFastSpecialCall(CallContext& call, InterpreterInstance* ctx) {
         } else if (TYPEOF(fun) != SPECIALSXP) {
             Rf_error("attempt to apply non-function");
         }
-        auto res = doCall(innerCall, ctx);
+        auto res = doCall(innerCall);
 
         // In case the args were padded with missing we need to communicate this
         // back to avoid leaving them on the stack.
@@ -341,17 +341,16 @@ static bool doesNotAccessEnv(SEXP b) {
     return pir::SafeBuiltinsList::nonObject(b->u.primsxp.offset);
 }
 
-SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
-                         size_t nargs, SEXP (&args)[MAXARGS]) {
+SEXP tryFastBuiltinCall2(CallContext& call, size_t nargs,
+                         SEXP (&args)[MAXARGS]) {
     assert(nargs <= 5);
 
     {
         SEXP arglist;
         CCODE f = getBuiltin(call.callee);
         SEXP res = nullptr;
-        auto env = doesNotAccessEnv(call.callee)
-                       ? R_BaseEnv
-                       : materializeCallerEnv(call, ctx);
+        auto env = doesNotAccessEnv(call.callee) ? R_BaseEnv
+                                                 : materializeCallerEnv(call);
         switch (call.passedArgs) {
         case 0: {
             return f(call.ast, call.callee, R_NilValue, env);
@@ -392,8 +391,8 @@ SEXP tryFastBuiltinCall2(CallContext& call, InterpreterInstance* ctx,
     return nullptr;
 }
 
-SEXP tryFastBuiltinCall1(const CallContext& call, InterpreterInstance* ctx,
-                         size_t nargs, bool hasAttrib, SEXP (&args)[MAXARGS]) {
+SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
+                         SEXP (&args)[MAXARGS]) {
     switch (call.callee->u.primsxp.offset) {
     case blt("is.logical"): {
         if (nargs != 1)
@@ -1097,7 +1096,7 @@ bool supportsFastBuiltinCall(SEXP b, size_t nargs) {
     return false;
 }
 
-SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
+SEXP tryFastBuiltinCall(CallContext& call) {
     SEXP args[MAXARGS];
     auto nargs = call.suppliedArgs;
 
@@ -1116,7 +1115,7 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
         args[i] = arg;
     }
 
-    if (auto res = tryFastBuiltinCall1(call, ctx, nargs, hasAttrib, args))
+    if (auto res = tryFastBuiltinCall1(call, nargs, hasAttrib, args))
         return res;
 
     if (hasAttrib)
@@ -1125,7 +1124,7 @@ SEXP tryFastBuiltinCall(CallContext& call, InterpreterInstance* ctx) {
     if (!supportsFastBuiltinCall2(call.callee, nargs))
         return nullptr;
 
-    return tryFastBuiltinCall2(call, ctx, nargs, args);
+    return tryFastBuiltinCall2(call, nargs, args);
 }
 
 } // namespace rir

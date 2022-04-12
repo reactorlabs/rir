@@ -120,7 +120,7 @@ class CodeStream {
         pos += s;
     }
 
-    void addSrc(SEXP src) { sources[pos] = src_pool_add(globalContext(), src); }
+    void addSrc(SEXP src) { sources[pos] = src_pool_add(src); }
 
     void addSrcIdx(unsigned idx) { sources[pos] = idx; }
 

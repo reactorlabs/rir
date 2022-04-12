@@ -35,7 +35,7 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
 
 Code* Code::New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
                 size_t bindingCache) {
-    auto src = src_pool_add(globalContext(), ast);
+    auto src = src_pool_add(ast);
     return New(src, codeSize, sources, locals, bindingCache);
 }
 
@@ -44,8 +44,8 @@ Code* Code::New(Immediate ast, size_t codeSize, size_t sources, size_t locals,
     unsigned totalSize = Code::size(codeSize, sources);
     SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
     void* payload = DATAPTR(store);
-    return new (payload) Code(nullptr, src_pool_at(globalContext(), ast), ast,
-                              codeSize, sources, locals, bindingCache);
+    return new (payload) Code(nullptr, src_pool_at(ast), ast, codeSize, sources,
+                              locals, bindingCache);
 }
 
 Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
@@ -135,8 +135,7 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     // Srclist
     for (unsigned i = 0; i < code->srcLength; i++) {
         code->srclist()[i].pcOffset = InInteger(inp);
-        code->srclist()[i].srcIdx =
-            src_pool_add(globalContext(), ReadItem(refTable, inp));
+        code->srclist()[i].srcIdx = src_pool_add(ReadItem(refTable, inp));
     }
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
@@ -178,22 +177,21 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
         OutInteger(out, srclist()[i].pcOffset);
-        WriteItem(src_pool_at(globalContext(), srclist()[i].srcIdx), refTable,
-                  out);
+        WriteItem(src_pool_at(srclist()[i].srcIdx), refTable, out);
     }
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     if (auto map = pirTypeFeedback()) {
-        map->forEachSlot([&](size_t i,
-                             const PirTypeFeedback::MDEntry& mdEntry) {
-            auto feedback = mdEntry.feedback;
-            out << " - slot #" << i << ": " << mdEntry.offset << " : [";
-            feedback.print(out);
-            out << "] (" << mdEntry.sampleCount << " records - "
-                << (mdEntry.readyForReopt ? "ready" : "not ready")
-                << ") prev: " << mdEntry.previousType << "\n";
-        });
+        map->forEachSlot(
+            [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
+                auto feedback = mdEntry.feedback;
+                out << " - slot #" << i << ": " << mdEntry.offset << " : [";
+                feedback.print(out);
+                out << "] (" << mdEntry.sampleCount << " records - "
+                    << (mdEntry.readyForReopt ? "ready" : "not ready")
+                    << ") prev: " << mdEntry.previousType << "\n";
+            });
     }
 
     Opcode* pc = code();
@@ -234,8 +232,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
-            out << "   ; " << Print::dumpSexp(src_pool_at(globalContext(), s))
-                << "\n"
+            out << "   ; " << Print::dumpSexp(src_pool_at(s)) << "\n"
                 << std::setw(OFFSET_WIDTH) << "";
 
         // Print call ast
@@ -247,7 +244,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 << "\n"
                 << std::setw(OFFSET_WIDTH) << "";
             break;
-        default: {}
+        default: {
+        }
         }
 
         if (bc.isJmp()) {

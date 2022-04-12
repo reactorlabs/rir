@@ -2060,8 +2060,7 @@ SEXP Compiler::finalize() {
     function.finalize(body, signature, Context());
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(function.function()->container(),
-                                       globalContext());
+    CodeVerifier::verifyFunctionLayout(function.function()->container());
 #endif
 
     return function.function()->container();

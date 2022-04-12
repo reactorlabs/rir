@@ -816,8 +816,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // This helps determine the object type of the caller.
             {
                 auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
-                auto calleeAst =
-                    src_pool_at(globalContext(), dt->baseline()->body()->src);
+                auto calleeAst = src_pool_at(dt->baseline()->body()->src);
                 auto isUseMethod = CAR(calleeAst) == symbol::UseMethod &&
                                    TYPEOF(CADR(calleeAst)) == STRSXP &&
                                    CDDR(calleeAst) == R_NilValue;
@@ -873,8 +872,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                 formals.defaultArgs()[pos] != R_NilValue) {
                                 if (auto options = rir::Code::check(
                                         formals.defaultArgs()[pos])) {
-                                    auto ast = src_pool_at(globalContext(),
-                                                           options->src);
+                                    auto ast = src_pool_at(options->src);
                                     if (CAR(ast) == symbol::c) {
                                         bool allStrings = true;
                                         for (auto c : RList(CDR(ast))) {
