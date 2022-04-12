@@ -387,6 +387,10 @@ AbstractResult ScopeAnalysis::doCompute(ScopeAnalysisState& state,
             while (args.size() < version->effectiveNArgs())
                 args.push_back(MissingArg::instance());
 
+            // While analyzing the callee we have to assume the caller's
+            // envrionment leaked. Because the callee can always access it
+            // reflectively. If when the callee returns the env was not tainted,
+            // it can be un-leaked again.
             ScopeAnalysis* nextFun;
             bool myEnvWasLeaked = state.envs.at(i->env()).leaked();
             if (!subAnalysis.count(i)) {
