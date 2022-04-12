@@ -2001,12 +2001,12 @@ class LogicalBinop : public Binop<BASE, TAG> {
             : LogicalBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}          \
     }
 
-LOGICAL_BINOP(Gte);
-LOGICAL_BINOP(Gt);
-LOGICAL_BINOP(Lte);
-LOGICAL_BINOP(Lt);
 LOGICAL_BINOP(Eq);
 LOGICAL_BINOP(Neq);
+LOGICAL_BINOP(Lt);
+LOGICAL_BINOP(Lte);
+LOGICAL_BINOP(Gt);
+LOGICAL_BINOP(Gte);
 
 #undef BINOP
 #undef ARITHMETIC_BINOP

@@ -19,8 +19,8 @@
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
-#include <llvm/IR/Constants.h>
 
 #include <algorithm>
 #include <cassert>
@@ -50,6 +50,7 @@ static_assert(sizeof(unsigned long) == sizeof(uint64_t),
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
 }
+
 llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     assert(!created);
     created = true;
@@ -376,6 +377,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* v, Rep r) {
 llvm::Value* LowerFunctionLLVM::load(Value* v) {
     return load(v, v->type, Rep::Of(v));
 }
+
 llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) { return load(v, Rep::SEXP); }
 
 llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
@@ -784,6 +786,7 @@ llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -792,6 +795,7 @@ llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -805,6 +809,7 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
         builder.CreateSelect(builder.CreateICmpEQ(unbox, c(NA_LOGICAL)),
                              c(NA_LOGICAL), c(1)));
 }
+
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -814,6 +819,7 @@ llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     auto res = builder.CreateLoad(pos);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
                                                 PirType toType) {
     assert(v->getType() == t::SEXP);
@@ -1175,6 +1181,7 @@ llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -1183,6 +1190,7 @@ llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
     auto named = builder.CreateAnd(sxpinfo, c(namedMask));
     return builder.CreateICmpNE(named, c(0, 64));
 }
+
 void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -1421,15 +1429,16 @@ llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
 
 llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     llvm::Value* res = nullptr;
-    if (t.isA(PirType(RType::integer).notObject()))
-        res = boxInt(v, protect);
     if (t.isA(PirType(RType::logical).notObject()))
         res = boxLgl(v);
+    if (t.isA(PirType(RType::integer).notObject()))
+        res = boxInt(v, protect);
     if (t.isA(PirType(RType::real).notObject()))
         res = boxReal(v, protect);
     assert(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
     llvm::Value* res = nullptr;
     if (v->getType() == t::Int) {
@@ -1449,6 +1458,7 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
         protectTemp(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
     llvm::Value* res = nullptr;
     if (v->getType() == t::Double) {
@@ -1462,6 +1472,7 @@ llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
         protectTemp(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     if (v->getType() == t::Int) {
         insn_assert(
@@ -1483,6 +1494,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
 }
+
 llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v) {
     assert(v->getType() == t::Int);
     return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
@@ -1622,8 +1634,7 @@ void LowerFunctionLLVM::compileBinop(
     auto lhsRep = Rep::Of(lhs);
     auto rhsRep = Rep::Of(rhs);
 
-    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP ||
-        (!fpInsert && (lhsRep != Rep::i32 || rhsRep != Rep::i32))) {
+    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP) {
         auto a = loadSxp(lhs);
         auto b = loadSxp(rhs);
 
