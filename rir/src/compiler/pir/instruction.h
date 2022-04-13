@@ -448,9 +448,7 @@ class Instruction : public Value {
             if (tag == Tag::Div || tag == Tag::Mod)
                 t = t.orNAOrNaN();
 
-            t = type & t;
-            assert(!t.isVoid());
-            return t;
+            return type & t;
         }
         return type;
     }
@@ -1953,7 +1951,9 @@ class ArithmeticBinop : public Binop<BASE, TAG> {
     using Super::inferredTypeForArithmeticInstruction;
     using typename Super::GetType;
     PirType inferType(const GetType& getType) const override {
-        return inferredTypeForArithmeticInstruction(getType);
+        auto t = inferredTypeForArithmeticInstruction(getType);
+        assert(!t.isVoid());
+        return t;
     }
     Effects inferEffects(const GetType& getType) const override {
         return inferredEffectsForArithmeticInstruction(getType);
