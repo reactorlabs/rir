@@ -1705,7 +1705,10 @@ void LowerFunctionLLVM::compileBinop(
 
     builder.SetInsertPoint(done);
     if (rep == Rep::SEXP) {
-        setVal(i, box(res(), i->type, false));
+        auto to = lhs->type.mergeWithConversion(rhs->type);
+        if (intIntToReal)
+            to = to.notT(RType::integer).orT(RType::real);
+        setVal(i, box(res(), to, false));
     } else {
         setVal(i, res());
     }
