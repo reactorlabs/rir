@@ -1076,13 +1076,12 @@ class FLI(ChkMissing, 1, Effect::Error) {
         // would be void, which will mess up the consumer instructions (even
         // though they will never be executed due to the error, it would still
         // confuse the compiler...)
-        : FixedLenInstruction(
-              in == MissingArg::instance() ? in->type : in->type.notMissing(),
-              {{PirType::any()}}, {{in}}) {}
+        : FixedLenInstruction(in->type, {{PirType::any()}}, {{in}}) {}
     size_t gvnBase() const override { return tagHash(); }
 
     PirType inferType(const GetType& getType) const override final {
         auto t = getType(arg<0>().val()).notMissing();
+
         if (t.isVoid())
             return type;
         return t;
