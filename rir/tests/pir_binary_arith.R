@@ -42,17 +42,23 @@ if (generating) {
 }
 # ================ Test generation ends here ================
 
+testrir <- TRUE
+
 if (!exists("rir.compile"))
   rir.compile <- pir.compile <- function(x) x
 
 test <- function(f, expected) {
   f <- rir.compile(f)
+  if (testrir) {
+    res <- f()
+    if (paste(res, typeof(res)) != expected)
+      stop(">>> \"", res, " ", typeof(res), "\" != \"", expected, "\" <<<")
+  }
   f(); f(); f();
   f <- pir.compile(f)
   res <- f()
-  if (paste(res, typeof(res)) != expected) {
+  if (paste(res, typeof(res)) != expected)
     stop(">>> \"", res, " ", typeof(res), "\" != \"", expected, "\" <<<")
-  }
 }
 
 # ================ Generated tests, do not change by hand ================

@@ -2779,7 +2779,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                        IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double real_res;
                 int l = *INTEGER(lhs);
-                if (l == NA_INTEGER) {
+                if (l == NA_INTEGER && *REAL(rhs) != 0.0) {
                     real_res = NA_REAL;
                 } else {
                     real_res = myfmod((double)l, *REAL(rhs));
