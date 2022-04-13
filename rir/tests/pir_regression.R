@@ -246,3 +246,8 @@ for (i in 1:10) {
   stopifnot(identical(f11(F), F))
   stopifnot(identical(f11(T), T))
 }
+
+
+f <- function() {assign("qqq", 1); qqq}
+for (i in 1:1000)
+  stopifnot(f() == 1)
