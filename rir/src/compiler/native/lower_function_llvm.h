@@ -421,29 +421,27 @@ class LowerFunctionLLVM {
     void compilePushContext(Instruction* i);
     void compilePopContext(Instruction* i);
 
-    using Action = std::function<void()>;
-    using CheckNaBypass = std::function<void(llvm::Value*, llvm::Value*,
-                                             const Action&, const Action&)>;
+    // This can be used to customize which NA checks should be performed for a
+    // binop. The customNACheck lambda should generate branches to a new NA-case
+    // basic block and return a pointer to it, or nullptr if no checks are
+    // needed.
+    using CustomNaCheck =
+        std::function<llvm::BasicBlock*(llvm::Value*, llvm::Value*)>;
     void compileBinop(
         Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        const CheckNaBypass& checkNaBypassInsert =
-            [](llvm::Value*, llvm::Value*, const Action& checkA,
-               const Action& checkB) {
-                checkA();
-                checkB();
-            }) {
+        const CustomNaCheck& customNaCheck = {}) {
         compileBinop(i, i->arg(0).val(), i->arg(1).val(), intInsert, fpInsert,
-                     checkNaBypassInsert);
+                     customNaCheck);
     }
     void compileBinop(
         Instruction* i, Value* lhs, Value* rhs,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        const CheckNaBypass& checkNaBypassInsert);
+        const CustomNaCheck& customNaCheck);
     void
     compileUnop(Instruction* i,
                 const std::function<llvm::Value*(llvm::Value*)>& intInsert,

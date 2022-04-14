@@ -1631,13 +1631,14 @@ void LowerFunctionLLVM::compileBinop(
     Instruction* i, Value* lhs, Value* rhs,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-    const CheckNaBypass& checkNaBypassInsert) {
+    const CustomNaCheck& customNaCheck) {
 
     auto rep = Rep::Of(i);
     auto lhsRep = Rep::Of(lhs);
     auto rhsRep = Rep::Of(rhs);
 
-    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP) {
+    if (lhsRep == Rep::SEXP || rhsRep == Rep::SEXP ||
+        (!fpInsert && (lhsRep != Rep::i32 || rhsRep != Rep::i32))) {
         auto a = loadSxp(lhs);
         auto b = loadSxp(rhs);
 
@@ -1654,6 +1655,8 @@ void LowerFunctionLLVM::compileBinop(
         setVal(i, res);
         return;
     }
+    assert(lhsRep == Rep::i32 || lhsRep == Rep::f64);
+    assert(rhsRep == Rep::i32 || rhsRep == Rep::f64);
 
     BasicBlock* isNaBr = nullptr;
     auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
@@ -1672,19 +1675,20 @@ void LowerFunctionLLVM::compileBinop(
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
-        if (type.maybeNAOrNaN()) {
-            if (r == Rep::f64 || r == Rep::i32) {
+    if (customNaCheck) {
+        isNaBr = customNaCheck(a, b);
+    } else {
+        auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
+            if (type.maybeNAOrNaN()) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
                                                 "isNa", fun);
                 nacheck(llvmValue, type, isNaBr);
             }
-        }
-    };
-    checkNaBypassInsert(
-        a, b, [&]() { checkNa(a, lhs->type, lhsRep); },
-        [&]() { checkNa(b, rhs->type, rhsRep); });
+        };
+        checkNa(a, lhs->type, lhsRep);
+        checkNa(b, rhs->type, rhsRep);
+    }
 
     if (r == t::Int) {
         res.addInput(intInsert(a, b));
@@ -1768,10 +1772,7 @@ void LowerFunctionLLVM::compileUnop(
         if (isNaBr) {
             builder.SetInsertPoint(isNaBr);
 
-            if (r == t::Int)
-                res.addInput(c(NA_INTEGER));
-            else
-                res.addInput(c((double)R_NaN));
+            res.addInput(r == t::Int ? c(NA_INTEGER) : c(NA_REAL));
 
             builder.CreateBr(done);
         }
@@ -3717,9 +3718,9 @@ void LowerFunctionLLVM::compile() {
                 break;
 
             case Tag::Pow: {
-                auto bypassNaCheck = [&](llvm::Value* a, llvm::Value* b,
-                                         const Action& checkA,
-                                         const Action& checkB) {
+                auto pow = Pow::Cast(i);
+                auto customNaCheck = [&](llvm::Value* a,
+                                         llvm::Value* b) -> BasicBlock* {
                     // In the following cases we observe GNU R to return 1 but
                     // our check for NA would take precedence and result in NA:
                     //   TRUE ^ NA
@@ -3759,13 +3760,23 @@ void LowerFunctionLLVM::compile() {
                     auto cntB =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
+                    BasicBlock* isNaBr = nullptr;
+                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
+                        if (type.maybeNAOrNaN()) {
+                            if (!isNaBr)
+                                isNaBr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "isNa", fun);
+                            nacheck(llvmValue, type, isNaBr);
+                        }
+                    };
+
                     builder.CreateCondBr(b->getType() == t::Int
                                              ? builder.CreateICmpNE(b, c(0))
                                              : builder.CreateFCmpONE(b, c(0.0)),
                                          shouldCheckA, cntA, branchMostlyTrue);
 
                     builder.SetInsertPoint(shouldCheckA);
-                    checkA();
+                    checkNa(a, pow->lhs()->type);
                     builder.CreateBr(cntA);
 
                     builder.SetInsertPoint(cntA);
@@ -3775,10 +3786,11 @@ void LowerFunctionLLVM::compile() {
                                          shouldCheckB, cntB, branchMostlyTrue);
 
                     builder.SetInsertPoint(shouldCheckB);
-                    checkB();
+                    checkNa(b, pow->rhs()->type);
                     builder.CreateBr(cntB);
 
                     builder.SetInsertPoint(cntB);
+                    return isNaBr;
                 };
 
                 compileBinop(
@@ -3793,7 +3805,7 @@ void LowerFunctionLLVM::compile() {
                         return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
                                                              b);
                     },
-                    bypassNaCheck);
+                    customNaCheck);
                 break;
             }
 
@@ -3863,6 +3875,7 @@ void LowerFunctionLLVM::compile() {
                 break;
 
             case Tag::Mod: {
+                auto mod = Mod::Cast(i);
                 auto myfmod = [&](llvm::Value* a, llvm::Value* b) {
                     // from myfmod
                     auto isZero =
@@ -3961,9 +3974,8 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(cnt);
                     return res();
                 };
-                auto bypassNaCheck = [&](llvm::Value* a, llvm::Value* b,
-                                         const Action& checkA,
-                                         const Action& checkB) {
+                auto customNaCheck = [&](llvm::Value* a,
+                                         llvm::Value* b) -> BasicBlock* {
                     // In the following cases we observe GNU R to return NaN but
                     // our check for NA would take precedence and result in NA:
                     //   NA %% 0
@@ -3988,6 +4000,16 @@ void LowerFunctionLLVM::compile() {
                     auto cnt =
                         BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
+                    BasicBlock* isNaBr = nullptr;
+                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
+                        if (type.maybeNAOrNaN()) {
+                            if (!isNaBr)
+                                isNaBr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "isNa", fun);
+                            nacheck(llvmValue, type, isNaBr);
+                        }
+                    };
+
                     builder.CreateCondBr(
                         builder.CreateOr(
                             realRes ? builder.getFalse() : builder.getTrue(),
@@ -3997,14 +4019,15 @@ void LowerFunctionLLVM::compile() {
                         shouldCheckA, cnt, branchMostlyTrue);
 
                     builder.SetInsertPoint(shouldCheckA);
-                    checkA();
+                    checkNa(a, mod->lhs()->type);
                     builder.CreateBr(cnt);
 
                     builder.SetInsertPoint(cnt);
-                    checkB();
+                    checkNa(b, mod->rhs()->type);
+                    return isNaBr;
                 };
 
-                compileBinop(i, myimod, myfmod, bypassNaCheck);
+                compileBinop(i, myimod, myfmod, customNaCheck);
                 break;
             }
 
