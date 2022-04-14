@@ -412,8 +412,14 @@ class Instruction : public Value {
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
         if (!m.maybeObj()) {
+            auto t = PirType::bottom();
+            eachArg([&](Value* v) {
+                if (!mayHaveEnv() || v != env())
+                    t = t.mergeWithConversion(getType(v));
+            });
+
             // Everything but numbers throws an error
-            auto t = m & PirType::num().notMissing().orAttribsOrObj();
+            auto t = t & PirType::num().notMissing().orAttribsOrObj();
 
             // TRUE + TRUE == 2
             if (m.maybe(RType::logical))
@@ -429,6 +435,12 @@ class Instruction : public Value {
                     t = t.notT(RType::integer);
             });
 
+            // If both arguments are of type integer, the type of the result
+            // of ‘/’ and ‘^’ is numeric
+            if (tag == Tag::Div || tag == Tag::Pow)
+                if (!t.maybe(RType::cplx))
+                    t = t.orT(RType::real).notT(RType::integer);
+
             // The binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
             // The condition checks if at least one of the arguments is an
@@ -436,12 +448,6 @@ class Instruction : public Value {
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer))
                 t = t.orNAOrNaN();
-
-            // If both arguments are of type integer, the type of the result
-            // of ‘/’ and ‘^’ is numeric
-            if (tag == Tag::Div || tag == Tag::Pow)
-                if (!t.maybe(RType::cplx))
-                    t = t.orT(RType::real).notT(RType::integer);
 
             // 0 / 0 = NaN
             // 0 %% 0 = NaN or NA_integer_
