@@ -419,7 +419,7 @@ class Instruction : public Value {
             });
 
             // Everything but numbers throws an error
-            auto t = t & PirType::num().notMissing().orAttribsOrObj();
+            t = t & PirType::num().notMissing().orAttribsOrObj();
 
             // TRUE + TRUE == 2
             if (m.maybe(RType::logical))
