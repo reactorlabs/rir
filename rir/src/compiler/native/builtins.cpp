@@ -435,8 +435,7 @@ SEXP newRealFromIntImpl(int i) {
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
     } while (false)
 
-static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
-                        UnopKind op) {
+static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx, Tag op) {
     SEXP res = nullptr;
     SEXP arglist = CONS_NR(argument, R_NilValue);
     SEXP call = src_pool_at(srcIdx);
@@ -450,19 +449,21 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
         }
     }
     switch (op) {
-    case UnopKind::MINUS:
-        OPERATION_FALLBACK("-");
-        break;
-    case UnopKind::PLUS:
+    case Tag::Plus:
         OPERATION_FALLBACK("+");
         break;
+    case Tag::Minus:
+        OPERATION_FALLBACK("-");
+        break;
+    default:
+        assert(false && "not an unop");
     }
     UNPROTECT(1);
     SLOWASSERT(res);
     return res;
 }
 
-static SEXP unopImpl(SEXP argument, UnopKind op) {
+static SEXP unopImpl(SEXP argument, Tag op) {
     SEXP res = nullptr;
     SEXPREC arglistStruct;
     createFakeCONS(arglistStruct, R_NilValue);
@@ -471,12 +472,14 @@ static SEXP unopImpl(SEXP argument, UnopKind op) {
     SEXP env = R_NilValue;
     SEXP call = R_NilValue;
     switch (op) {
-    case UnopKind::MINUS:
-        OPERATION_FALLBACK("-");
-        break;
-    case UnopKind::PLUS:
+    case Tag::Plus:
         OPERATION_FALLBACK("+");
         break;
+    case Tag::Minus:
+        OPERATION_FALLBACK("-");
+        break;
+    default:
+        assert(false && "not an unop");
     }
     SLOWASSERT(res);
     return res;
@@ -509,7 +512,7 @@ static SEXP notImpl(SEXP argument) {
 }
 
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
-                         BinopKind kind) {
+                         Tag kind) {
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS2(arglist, lhs, rhs);
@@ -525,54 +528,56 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
         }
     }
     switch (kind) {
-    case BinopKind::ADD:
+    case Tag::Add:
         OPERATION_FALLBACK("+");
         break;
-    case BinopKind::SUB:
+    case Tag::Sub:
         OPERATION_FALLBACK("-");
         break;
-    case BinopKind::MUL:
+    case Tag::Mul:
         OPERATION_FALLBACK("*");
         break;
-    case BinopKind::IDIV:
-        OPERATION_FALLBACK("%/%");
-        break;
-    case BinopKind::DIV:
+    case Tag::Div:
         OPERATION_FALLBACK("/");
         break;
-    case BinopKind::EQ:
-        OPERATION_FALLBACK("==");
+    case Tag::IDiv:
+        OPERATION_FALLBACK("%/%");
         break;
-    case BinopKind::NE:
-        OPERATION_FALLBACK("!=");
-        break;
-    case BinopKind::GT:
-        OPERATION_FALLBACK(">");
-        break;
-    case BinopKind::GTE:
-        OPERATION_FALLBACK(">=");
-        break;
-    case BinopKind::LT:
-        OPERATION_FALLBACK("<");
-        break;
-    case BinopKind::LTE:
-        OPERATION_FALLBACK("<=");
-        break;
-    case BinopKind::LAND:
-        OPERATION_FALLBACK("&&");
-        break;
-    case BinopKind::LOR:
-        OPERATION_FALLBACK("||");
-        break;
-    case BinopKind::COLON:
-        OPERATION_FALLBACK(":");
-        break;
-    case BinopKind::MOD:
+    case Tag::Mod:
         OPERATION_FALLBACK("%%");
         break;
-    case BinopKind::POW:
+    case Tag::Pow:
         OPERATION_FALLBACK("^");
         break;
+    case Tag::Eq:
+        OPERATION_FALLBACK("==");
+        break;
+    case Tag::Neq:
+        OPERATION_FALLBACK("!=");
+        break;
+    case Tag::Lt:
+        OPERATION_FALLBACK("<");
+        break;
+    case Tag::Lte:
+        OPERATION_FALLBACK("<=");
+        break;
+    case Tag::Gt:
+        OPERATION_FALLBACK(">");
+        break;
+    case Tag::Gte:
+        OPERATION_FALLBACK(">=");
+        break;
+    case Tag::LAnd:
+        OPERATION_FALLBACK("&&");
+        break;
+    case Tag::LOr:
+        OPERATION_FALLBACK("||");
+        break;
+    case Tag::Colon:
+        OPERATION_FALLBACK(":");
+        break;
+    default:
+        assert(false && "not a binop");
     }
     UNPROTECT(1);
     SLOWASSERT(res);
@@ -580,7 +585,7 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
 }
 
 bool debugBinopImpl = false;
-static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
+static SEXP binopImpl(SEXP lhs, SEXP rhs, Tag kind) {
     SEXP res = nullptr;
 
     SEXP arglist;
@@ -600,46 +605,52 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 
     // Why we do not need a protect here?
     switch (kind) {
-    case BinopKind::ADD:
+    case Tag::Add:
         OPERATION_FALLBACK("+");
         break;
-    case BinopKind::SUB:
+    case Tag::Sub:
         OPERATION_FALLBACK("-");
         break;
-    case BinopKind::MUL:
+    case Tag::Mul:
         OPERATION_FALLBACK("*");
         break;
-    case BinopKind::IDIV:
-        OPERATION_FALLBACK("%/%");
-        break;
-    case BinopKind::DIV:
+    case Tag::Div:
         OPERATION_FALLBACK("/");
         break;
-    case BinopKind::EQ:
+    case Tag::IDiv:
+        OPERATION_FALLBACK("%/%");
+        break;
+    case Tag::Mod:
+        OPERATION_FALLBACK("%%");
+        break;
+    case Tag::Pow:
+        OPERATION_FALLBACK("^");
+        break;
+    case Tag::Eq:
         OPERATION_FALLBACK("==");
         break;
-    case BinopKind::NE:
+    case Tag::Neq:
         OPERATION_FALLBACK("!=");
         break;
-    case BinopKind::GT:
-        OPERATION_FALLBACK(">");
-        break;
-    case BinopKind::GTE:
-        OPERATION_FALLBACK(">=");
-        break;
-    case BinopKind::LT:
+    case Tag::Lt:
         OPERATION_FALLBACK("<");
         break;
-    case BinopKind::LTE:
+    case Tag::Lte:
         OPERATION_FALLBACK("<=");
         break;
-    case BinopKind::LAND:
+    case Tag::Gt:
+        OPERATION_FALLBACK(">");
+        break;
+    case Tag::Gte:
+        OPERATION_FALLBACK(">=");
+        break;
+    case Tag::LAnd:
         OPERATION_FALLBACK("&&");
         break;
-    case BinopKind::LOR:
+    case Tag::LOr:
         OPERATION_FALLBACK("||");
         break;
-    case BinopKind::COLON:
+    case Tag::Colon:
         if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
             int from = *INTEGER(lhs);
             if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
@@ -679,12 +690,8 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
             OPERATION_FALLBACK(":");
         }
         break;
-    case BinopKind::MOD:
-        OPERATION_FALLBACK("%%");
-        break;
-    case BinopKind::POW:
-        OPERATION_FALLBACK("^");
-        break;
+    default:
+        assert(false && "not a binop");
     }
     SLOWASSERT(res);
 
@@ -2381,12 +2388,22 @@ void NativeBuiltins::initializeBuiltins() {
         llvm::FunctionType::get(t::SEXP, {t::Int, t::i64}, false)};
     get_(Id::newReal) = {"newReal", (void*)&newRealImpl,
                          llvm::FunctionType::get(t::SEXP, {t::Double}, false)};
-    get_(Id::unopEnv) = {"unopEnv", (void*)&unopEnvImpl, t::sexp_sexp2int2};
-    get_(Id::unop) = {"unop", (void*)&unopImpl, t::sexp_sexpint};
+    get_(Id::unopEnv) = {
+        "unopEnv", (void*)&unopEnvImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::Int, t::i8},
+                                false)};
+    get_(Id::unop) = {
+        "unop", (void*)&unopImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::i8}, false)};
     get_(Id::notEnv) = {"notEnv", (void*)&notEnvImpl, t::sexp_sexpsexpint};
     get_(Id::notOp) = {"not", (void*)&notImpl, t::sexp_sexp};
-    get_(Id::binopEnv) = {"binopEnv", (void*)&binopEnvImpl, t::sexp_sexp3int2};
-    get_(Id::binop) = {"binop", (void*)&binopImpl, t::sexp_sexpsexpint};
+    get_(Id::binopEnv) = {
+        "binopEnv", (void*)&binopEnvImpl,
+        llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int, t::i8}, false)};
+    get_(Id::binop) = {
+        "binop", (void*)&binopImpl,
+        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::i8}, false)};
     get_(Id::colon) = {
         "colon", (void*)&colonImpl,
         llvm::FunctionType::get(t::SEXP, {t::Int, t::Int}, false)};

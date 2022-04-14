@@ -417,20 +417,43 @@ class Instruction : public Value {
                 if (!mayHaveEnv() || v != env())
                     t = t.mergeWithConversion(getType(v));
             });
+
             // Everything but numbers throws an error
             t = t & PirType::num().notMissing().orAttribsOrObj();
-            // e.g. TRUE + TRUE == 2
-            if (m.maybe(RType::logical)) {
-                t = t.orT(RType::integer);
-                t = t.notT(RType::logical);
-            }
-            // the binop result becomes NA if it can't be represented in a
+
+            // TRUE + TRUE == 2
+            if (m.maybe(RType::logical))
+                t = t.orT(RType::integer).notT(RType::logical);
+
+            // If either argument is complex the result will be complex
+            // If one or both arguments are numeric, the result will
+            // be numeric
+            eachArg([&](Value* v) {
+                if (getType(v).isA(RType::cplx))
+                    t = t.notT(RType::real).notT(RType::integer);
+                if (getType(v).isA(RType::real))
+                    t = t.notT(RType::integer);
+            });
+
+            // If both arguments are of type integer, the type of the result
+            // of ‘/’ and ‘^’ is numeric
+            if (tag == Tag::Div || tag == Tag::Pow)
+                if (!t.maybe(RType::cplx))
+                    t = t.orT(RType::real).notT(RType::integer);
+
+            // The binop result becomes NA if it can't be represented in a
             // fixpoint integer (e.g. INT_MAX + 1 == NA)
-            // * the condition checks iff at least one of the arguments is an
+            // The condition checks if at least one of the arguments is an
             // integer (doesn't happen with only logicals), and the result is an
             // integer (doesn't happen with real coercion)
             if (m.maybe(RType::integer) && t.maybe(RType::integer))
                 t = t.orNAOrNaN();
+
+            // 0 / 0 = NaN
+            // 0 %% 0 = NaN or NA_integer_
+            if (tag == Tag::Div || tag == Tag::Mod)
+                t = t.orNAOrNaN();
+
             return type & t;
         }
         return type;
@@ -1750,15 +1773,6 @@ class FLIE(Extract1_3D, 5, Effects::Any()) {
     }
 };
 
-class FLI(Inc, 1, Effects::None()) {
-  public:
-    explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).simpleScalar(),
-                              {{PirType(RType::integer).simpleScalar()}},
-                              {{v}}) {}
-    size_t gvnBase() const override { return tagHash(); }
-};
-
 class FLI(Is, 1, Effects::None()) {
   public:
     Is(BC::RirTypecheck typecheck, Value* v)
@@ -1859,28 +1873,13 @@ class FLI(Identical, 2, Effects::None()) {
     size_t gvnBase() const override { return tagHash(); }
 };
 
-class FLIE(Colon, 3, Effects::Any()) {
+class FLI(Inc, 1, Effects::None()) {
   public:
-    Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
-                                         {{PirType::val(), PirType::val()}},
-                                         {{lhs, rhs}}, env, srcIdx) {}
-    VisibilityFlag visibilityFlag() const override {
-        if (lhs()->type.isA(PirType::anySimpleScalar()) &&
-            rhs()->type.isA(PirType::anySimpleScalar())) {
-            return VisibilityFlag::On;
-        } else {
-            return VisibilityFlag::Unknown;
-        }
-    }
-    Value* lhs() const { return arg<0>().val(); }
-    Value* rhs() const { return arg<1>().val(); }
-
-    PirType inferType(const GetType& getType) const override;
-
-    Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForArithmeticInstruction(getType);
-    }
+    explicit Inc(Value* v)
+        : FixedLenInstruction(PirType(RType::integer).simpleScalar(),
+                              {{PirType(RType::integer).simpleScalar()}},
+                              {{v}}) {}
+    size_t gvnBase() const override { return tagHash(); }
 };
 
 #define V(NESTED, name, Name)                                                  \
@@ -1890,143 +1889,6 @@ class FLIE(Colon, 3, Effects::Any()) {
     };
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
-
-template <typename BASE, Tag TAG>
-class Binop
-    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
-                                            HasEnvSlot::Yes> {
-  public:
-    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
-                                           HasEnvSlot::Yes>
-        Super;
-
-    Binop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : Super(PirType::val(), {{PirType::val(), PirType::val()}},
-                {{lhs, rhs}}, env, srcIdx) {}
-
-    using Super::arg;
-    using Super::effects;
-    using Super::tagHash;
-    Value* lhs() const { return arg(0).val(); }
-    Value* rhs() const { return arg(1).val(); }
-
-    VisibilityFlag visibilityFlag() const override final {
-        return VisibilityFlag::Unknown;
-    }
-
-    size_t gvnBase() const override {
-        if (effects.contains(Effect::ExecuteCode))
-            return 0;
-        return tagHash();
-    }
-};
-
-template <typename BASE, Tag TAG>
-class ArithmeticBinop : public Binop<BASE, TAG> {
-  public:
-    typedef Binop<BASE, TAG> Super;
-
-    ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : Super(lhs, rhs, env, srcIdx) {}
-
-    using Super::inferredEffectsForArithmeticInstruction;
-    using Super::inferredTypeForArithmeticInstruction;
-    using typename Super::GetType;
-    PirType inferType(const GetType& getType) const override {
-        return inferredTypeForArithmeticInstruction(getType);
-    }
-    Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForArithmeticInstruction(getType);
-    }
-};
-
-#define ARITHMETIC_BINOP(Kind)                                                 \
-    class Kind : public ArithmeticBinop<Kind, Tag::Kind> {                     \
-      public:                                                                  \
-        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
-            : ArithmeticBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}       \
-    }
-
-ARITHMETIC_BINOP(Mul);
-ARITHMETIC_BINOP(IDiv);
-ARITHMETIC_BINOP(Add);
-ARITHMETIC_BINOP(Pow);
-ARITHMETIC_BINOP(Sub);
-
-class Div : public ArithmeticBinop<Div, Tag::Div> {
-  public:
-    Div(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : ArithmeticBinop<Div, Tag::Div>(lhs, rhs, env, srcIdx) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        // 0 / 0 = NaN
-        auto t = ArithmeticBinop<Div, Tag::Div>::inferType(getType).orNAOrNaN();
-        if (t.maybe(RType::integer) || t.maybe(RType::logical))
-            return t | RType::real;
-        return t;
-    }
-};
-
-class Mod : public ArithmeticBinop<Mod, Tag::Mod> {
-  public:
-    Mod(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : ArithmeticBinop<Mod, Tag::Mod>(lhs, rhs, env, srcIdx) {}
-
-    PirType inferType(const GetType& getType) const override final {
-        // 0 %% 0 = NaN
-        return ArithmeticBinop<Mod, Tag::Mod>::inferType(getType).orNAOrNaN();
-    }
-};
-
-template <typename BASE, Tag TAG>
-class LogicalBinop : public Binop<BASE, TAG> {
-  public:
-    typedef Binop<BASE, TAG> Super;
-
-    LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
-        : Super(lhs, rhs, env, srcIdx) {}
-
-    using Super::inferredEffectsForLogicalInstruction;
-    using Super::inferredTypeForLogicalInstruction;
-    using typename Super::GetType;
-    PirType inferType(const GetType& getType) const override {
-        return inferredTypeForLogicalInstruction(getType);
-    }
-    Effects inferEffects(const GetType& getType) const override {
-        return inferredEffectsForLogicalInstruction(getType);
-    }
-};
-
-#define LOGICAL_BINOP(Kind)                                                    \
-    class Kind : public LogicalBinop<Kind, Tag::Kind> {                        \
-      public:                                                                  \
-        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
-            : LogicalBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}          \
-    }
-
-LOGICAL_BINOP(Gte);
-LOGICAL_BINOP(Gt);
-LOGICAL_BINOP(Lte);
-LOGICAL_BINOP(Lt);
-LOGICAL_BINOP(Eq);
-LOGICAL_BINOP(Neq);
-
-#undef BINOP
-#undef ARITHMETIC_BINOP
-#undef LOGICAL_BINOP
-
-#define BINOP_NOENV(Name, Type)                                                \
-    class FLI(Name, 2, Effects::None()) {                                      \
-      public:                                                                  \
-        Name(Value* lhs, Value* rhs)                                           \
-            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}) {}                             \
-    }
-
-BINOP_NOENV(LAnd, PirType::simpleScalarLogical());
-BINOP_NOENV(LOr, PirType::simpleScalarLogical());
-
-#undef BINOP_NOENV
 
 template <typename BASE, Tag TAG>
 class Unop
@@ -2076,6 +1938,21 @@ class ArithmeticUnop : public Unop<BASE, TAG> {
     }
 };
 
+#define ARITHMETIC_UNOP(Kind)                                                  \
+    class Kind : public ArithmeticUnop<Kind, Tag::Kind> {                      \
+      public:                                                                  \
+        Kind(Value* val, Value* env, unsigned srcIdx)                          \
+            : ArithmeticUnop<Kind, Tag::Kind>(val, env, srcIdx) {}             \
+        PirType inferType(const GetType& getType) const override {             \
+            return inferredTypeForArithmeticInstruction(getType);              \
+        }                                                                      \
+    }
+
+ARITHMETIC_UNOP(Plus);
+ARITHMETIC_UNOP(Minus);
+
+#undef ARITHMETIC_UNOP
+
 template <typename BASE, Tag TAG>
 class LogicalUnop : public Unop<BASE, TAG> {
   public:
@@ -2095,15 +1972,6 @@ class LogicalUnop : public Unop<BASE, TAG> {
     }
 };
 
-#define ARITHMETIC_UNOP(Kind)                                                  \
-    class Kind : public ArithmeticUnop<Kind, Tag::Kind> {                      \
-      public:                                                                  \
-        Kind(Value* val, Value* env, unsigned srcIdx)                          \
-            : ArithmeticUnop<Kind, Tag::Kind>(val, env, srcIdx) {}             \
-        PirType inferType(const GetType& getType) const override {             \
-            return inferredTypeForArithmeticInstruction(getType);              \
-        }                                                                      \
-    }
 #define LOGICAL_UNOP(Kind)                                                     \
     class Kind : public LogicalUnop<Kind, Tag::Kind> {                         \
       public:                                                                  \
@@ -2112,11 +1980,148 @@ class LogicalUnop : public Unop<BASE, TAG> {
     }
 
 LOGICAL_UNOP(Not);
-ARITHMETIC_UNOP(Plus);
-ARITHMETIC_UNOP(Minus);
 
-#undef ARITHMETIC_UNOP
 #undef LOGICAL_UNOP
+
+template <typename BASE, Tag TAG>
+class Binop
+    : public FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
+                                            HasEnvSlot::Yes> {
+  public:
+    typedef FixedLenInstructionWithEnvSlot<TAG, BASE, 3, Effects::AnyI(),
+                                           HasEnvSlot::Yes>
+        Super;
+
+    Binop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(PirType::val(), {{PirType::val(), PirType::val()}},
+                {{lhs, rhs}}, env, srcIdx) {}
+
+    using Super::arg;
+    using Super::effects;
+    using Super::tagHash;
+    Value* lhs() const { return arg(0).val(); }
+    Value* rhs() const { return arg(1).val(); }
+
+    VisibilityFlag visibilityFlag() const override final {
+        return VisibilityFlag::Unknown;
+    }
+
+    size_t gvnBase() const override {
+        if (effects.contains(Effect::ExecuteCode))
+            return 0;
+        return tagHash();
+    }
+};
+
+template <typename BASE, Tag TAG>
+class ArithmeticBinop : public Binop<BASE, TAG> {
+  public:
+    typedef Binop<BASE, TAG> Super;
+
+    ArithmeticBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(lhs, rhs, env, srcIdx) {}
+
+    using Super::inferredEffectsForArithmeticInstruction;
+    using Super::inferredTypeForArithmeticInstruction;
+    using typename Super::GetType;
+    PirType inferType(const GetType& getType) const override {
+        auto t = inferredTypeForArithmeticInstruction(getType);
+        assert(!t.isVoid());
+        return t;
+    }
+    Effects inferEffects(const GetType& getType) const override {
+        return inferredEffectsForArithmeticInstruction(getType);
+    }
+};
+
+#define ARITHMETIC_BINOP(Kind)                                                 \
+    class Kind : public ArithmeticBinop<Kind, Tag::Kind> {                     \
+      public:                                                                  \
+        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
+            : ArithmeticBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}       \
+    }
+
+ARITHMETIC_BINOP(Add);
+ARITHMETIC_BINOP(Sub);
+ARITHMETIC_BINOP(Mul);
+ARITHMETIC_BINOP(Div);
+ARITHMETIC_BINOP(IDiv);
+ARITHMETIC_BINOP(Mod);
+ARITHMETIC_BINOP(Pow);
+
+#undef ARITHMETIC_BINOP
+
+template <typename BASE, Tag TAG>
+class LogicalBinop : public Binop<BASE, TAG> {
+  public:
+    typedef Binop<BASE, TAG> Super;
+
+    LogicalBinop(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : Super(lhs, rhs, env, srcIdx) {}
+
+    using Super::inferredEffectsForLogicalInstruction;
+    using Super::inferredTypeForLogicalInstruction;
+    using typename Super::GetType;
+    PirType inferType(const GetType& getType) const override {
+        return inferredTypeForLogicalInstruction(getType);
+    }
+    Effects inferEffects(const GetType& getType) const override {
+        return inferredEffectsForLogicalInstruction(getType);
+    }
+};
+
+#define LOGICAL_BINOP(Kind)                                                    \
+    class Kind : public LogicalBinop<Kind, Tag::Kind> {                        \
+      public:                                                                  \
+        Kind(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
+            : LogicalBinop<Kind, Tag::Kind>(lhs, rhs, env, srcIdx) {}          \
+    }
+
+LOGICAL_BINOP(Eq);
+LOGICAL_BINOP(Neq);
+LOGICAL_BINOP(Lt);
+LOGICAL_BINOP(Lte);
+LOGICAL_BINOP(Gt);
+LOGICAL_BINOP(Gte);
+
+#undef LOGICAL_BINOP
+
+#define BINOP_NOENV(Name, Type)                                                \
+    class FLI(Name, 2, Effects::None()) {                                      \
+      public:                                                                  \
+        Name(Value* lhs, Value* rhs)                                           \
+            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
+                                  {{lhs, rhs}}) {}                             \
+    }
+
+BINOP_NOENV(LAnd, PirType::simpleScalarLogical());
+BINOP_NOENV(LOr, PirType::simpleScalarLogical());
+
+#undef BINOP_NOENV
+
+class FLIE(Colon, 3, Effects::Any()) {
+  public:
+    Colon(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
+                                         {{PirType::val(), PirType::val()}},
+                                         {{lhs, rhs}}, env, srcIdx) {}
+    VisibilityFlag visibilityFlag() const override {
+        if (lhs()->type.isA(PirType::anySimpleScalar()) &&
+            rhs()->type.isA(PirType::anySimpleScalar())) {
+            return VisibilityFlag::On;
+        } else {
+            return VisibilityFlag::Unknown;
+        }
+    }
+    Value* lhs() const { return arg<0>().val(); }
+    Value* rhs() const { return arg<1>().val(); }
+
+    PirType inferType(const GetType& getType) const override;
+
+    Effects inferEffects(const GetType& getType) const override {
+        return inferredEffectsForArithmeticInstruction(getType);
+    }
+};
 
 // Common interface to all call instructions
 class CallInstruction {

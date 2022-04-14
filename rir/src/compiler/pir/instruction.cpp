@@ -475,32 +475,17 @@ const Value* Instruction::cFollowCastsAndForce() const {
 }
 
 bool Instruction::envOnlyForObj() {
-#define V(Name)                                                                \
-    if (Tag::Name == tag) {                                                    \
-        return true;                                                           \
-    }
-    BINOP_INSTRUCTIONS(V)
-#undef V
     switch (tag) {
-    case Tag::Extract1_1D:
-    case Tag::Extract2_1D:
-    case Tag::Extract1_2D:
-    case Tag::Extract2_2D:
-    case Tag::Extract1_3D:
-    case Tag::Subassign1_1D:
-    case Tag::Subassign2_1D:
-    case Tag::Subassign1_2D:
-    case Tag::Subassign2_2D:
-    case Tag::Subassign1_3D:
-    case Tag::Not:
-    case Tag::LOr:
-    case Tag::LAnd:
-    case Tag::Minus:
-    case Tag::Plus:
+#define V(Name) case Tag::Name:
+        UNOP_INSTRUCTIONS(V)
+        BINOP_INSTRUCTIONS(V)
+        VECTOR_EXTRACT_INSTRUCTIONS(V)
+        VECTOR_SUBASSIGN_INSTRUCTIONS(V)
+#undef V
         return true;
-    default: {}
+    default:
+        return false;
     }
-    return false;
 }
 
 void Branch::printArgs(std::ostream& out, bool tty) const {
@@ -692,8 +677,8 @@ PirType Is::lowerBound() const {
 
 void IsType::printArgs(std::ostream& out, bool tty) const {
     arg<0>().val()->printRef(out);
-        out << " isA " << typeTest;
-    }
+    out << " isA " << typeTest;
+}
 
 void Phi::printArgs(std::ostream& out, bool tty) const {
     if (nargs() > 0) {

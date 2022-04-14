@@ -19,8 +19,8 @@
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Intrinsics.h"
-#include <llvm/IR/Constants.h>
 
 #include <algorithm>
 #include <cassert>
@@ -50,6 +50,7 @@ static_assert(sizeof(unsigned long) == sizeof(uint64_t),
 void LowerFunctionLLVM::PhiBuilder::addInput(llvm::Value* v) {
     addInput(v, builder.GetInsertBlock());
 }
+
 llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     assert(!created);
     created = true;
@@ -376,6 +377,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* v, Rep r) {
 llvm::Value* LowerFunctionLLVM::load(Value* v) {
     return load(v, v->type, Rep::Of(v));
 }
+
 llvm::Value* LowerFunctionLLVM::loadSxp(Value* v) { return load(v, Rep::SEXP); }
 
 llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
@@ -784,6 +786,7 @@ llvm::Value* LowerFunctionLLVM::unboxIntLgl(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -792,6 +795,7 @@ llvm::Value* LowerFunctionLLVM::unboxInt(llvm::Value* v) {
     auto pos = builder.CreateBitCast(dataPtr(v), t::IntPtr);
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -805,6 +809,7 @@ llvm::Value* LowerFunctionLLVM::unboxLgl(llvm::Value* v) {
         builder.CreateSelect(builder.CreateICmpEQ(unbox, c(NA_LOGICAL)),
                              c(NA_LOGICAL), c(1)));
 }
+
 llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
 #ifdef ENABLE_SLOWASSERT
@@ -814,6 +819,7 @@ llvm::Value* LowerFunctionLLVM::unboxReal(llvm::Value* v) {
     auto res = builder.CreateLoad(pos);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::unboxRealIntLgl(llvm::Value* v,
                                                 PirType toType) {
     assert(v->getType() == t::SEXP);
@@ -1175,6 +1181,7 @@ llvm::Value* LowerFunctionLLVM::vectorLength(llvm::Value* v) {
     pos = builder.CreateGEP(pos, {c(0), c(4), c(0)});
     return builder.CreateLoad(pos);
 }
+
 llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
     auto sxpinfo = builder.CreateLoad(sxpinfoP);
@@ -1183,6 +1190,7 @@ llvm::Value* LowerFunctionLLVM::isNamed(llvm::Value* v) {
     auto named = builder.CreateAnd(sxpinfo, c(namedMask));
     return builder.CreateICmpNE(named, c(0, 64));
 }
+
 void LowerFunctionLLVM::assertNamed(llvm::Value* v) {
     assert(v->getType() == t::SEXP);
     auto sxpinfoP = builder.CreateBitCast(sxpinfoPtr(v), t::i64ptr);
@@ -1330,22 +1338,24 @@ void LowerFunctionLLVM::incrementNamed(llvm::Value* v, int max) {
     builder.SetInsertPoint(done);
 }
 
+llvm::Value* LowerFunctionLLVM::isNotNa(llvm::Value* v, PirType type) {
+    assert(type.isA(PirType::num().scalar()));
+    if (!type.maybeNAOrNaN())
+        // Don't actually check NA
+        return builder.getTrue();
+    if (v->getType() == t::Int)
+        return builder.CreateICmpNE(v, c(NA_INTEGER));
+    if (v->getType() == t::Double)
+        return builder.CreateFCmpORD(v, v);
+    assert(false);
+}
+
 void LowerFunctionLLVM::nacheck(llvm::Value* v, PirType type, BasicBlock* isNa,
                                 BasicBlock* notNa) {
     assert(type.isA(PirType::num().scalar()));
     if (!notNa)
         notNa = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-    llvm::Value* isNotNa;
-    if (!type.maybeNAOrNaN()) {
-        // Don't actually check NA
-        isNotNa = builder.getTrue();
-    } else if (v->getType() == t::Double) {
-        isNotNa = builder.CreateFCmpORD(v, v);
-    } else {
-        assert(v->getType() == t::Int);
-        isNotNa = builder.CreateICmpNE(v, c(NA_INTEGER));
-    }
-    builder.CreateCondBr(isNotNa, notNa, isNa, branchMostlyTrue);
+    builder.CreateCondBr(isNotNa(v, type), notNa, isNa, branchMostlyTrue);
     builder.SetInsertPoint(notNa);
 }
 
@@ -1421,15 +1431,16 @@ llvm::CallInst* LowerFunctionLLVM::call(const NativeBuiltin& builtin,
 
 llvm::Value* LowerFunctionLLVM::box(llvm::Value* v, PirType t, bool protect) {
     llvm::Value* res = nullptr;
-    if (t.isA(PirType(RType::integer).notObject()))
-        res = boxInt(v, protect);
     if (t.isA(PirType(RType::logical).notObject()))
         res = boxLgl(v);
+    if (t.isA(PirType(RType::integer).notObject()))
+        res = boxInt(v, protect);
     if (t.isA(PirType(RType::real).notObject()))
         res = boxReal(v, protect);
     assert(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
     llvm::Value* res = nullptr;
     if (v->getType() == t::Int) {
@@ -1449,6 +1460,7 @@ llvm::Value* LowerFunctionLLVM::boxInt(llvm::Value* v, bool protect) {
         protectTemp(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
     llvm::Value* res = nullptr;
     if (v->getType() == t::Double) {
@@ -1462,6 +1474,7 @@ llvm::Value* LowerFunctionLLVM::boxReal(llvm::Value* v, bool protect) {
         protectTemp(res);
     return res;
 }
+
 llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
     if (v->getType() == t::Int) {
         insn_assert(
@@ -1483,6 +1496,7 @@ llvm::Value* LowerFunctionLLVM::boxLgl(llvm::Value* v) {
                              constant(R_LogicalNAValue, t::SEXP),
                              constant(R_TrueValue, t::SEXP)));
 }
+
 llvm::Value* LowerFunctionLLVM::boxTst(llvm::Value* v) {
     assert(v->getType() == t::Int);
     return builder.CreateSelect(builder.CreateICmpNE(v, c(0)),
@@ -1549,7 +1563,8 @@ void LowerFunctionLLVM::compileRelop(
     Instruction* i,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-    BinopKind kind, bool testNa) {
+    bool testNa) {
+
     auto rep = Rep::Of(i);
     auto lhs = i->arg(0).val();
     auto rhs = i->arg(1).val();
@@ -1563,10 +1578,10 @@ void LowerFunctionLLVM::compileRelop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
-                       {a, b, c((int)kind)});
+                       {a, b, c((uint8_t)i->tag, 8)});
         }
         setVal(i, res);
         return;
@@ -1616,7 +1631,8 @@ void LowerFunctionLLVM::compileBinop(
     Instruction* i, Value* lhs, Value* rhs,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-    BinopKind kind) {
+    const CustomNaCheck& customNaCheck) {
+
     auto rep = Rep::Of(i);
     auto lhsRep = Rep::Of(lhs);
     auto rhsRep = Rep::Of(rhs);
@@ -1630,44 +1646,51 @@ void LowerFunctionLLVM::compileBinop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
-                       {a, b, c((int)kind)});
+                       {a, b, c((uint8_t)i->tag, 8)});
         }
 
         setVal(i, res);
         return;
     }
+    assert(lhsRep == Rep::i32 || lhsRep == Rep::f64);
+    assert(rhsRep == Rep::i32 || rhsRep == Rep::f64);
 
     BasicBlock* isNaBr = nullptr;
     auto done = BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
 
-    auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64) ? t::Double : t::Int;
+    // If one or both arguments are numeric, the result will be numeric.
+    // If both arguments are of type integer, the type of the
+    // result of ‘/’ and ‘^’ is numeric and for the other operators it is
+    // integer (with overflow returned as ‘NA_integer_’ with warning).
+    bool intIntToReal = (i->tag == Tag::Div || i->tag == Tag::Pow) &&
+                        lhsRep == Rep::i32 && rhsRep == Rep::i32;
+    auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64 || intIntToReal)
+                 ? t::Double
+                 : t::Int;
 
     auto res = phiBuilder(r);
     auto a = load(lhs, lhsRep);
     auto b = load(rhs, rhsRep);
 
-    auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
-        if (type.maybeNAOrNaN()) {
-            if (rep == Rep::f64) {
-                if (!isNaBr)
-                    isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
-                                                "isNa", fun);
-                nacheck(llvmValue, type, isNaBr);
-            } else if (r == Rep::i32) {
+    if (customNaCheck) {
+        isNaBr = customNaCheck(a, b);
+    } else {
+        auto checkNa = [&](llvm::Value* llvmValue, PirType type, Rep r) {
+            if (type.maybeNAOrNaN()) {
                 if (!isNaBr)
                     isNaBr = BasicBlock::Create(PirJitLLVM::getContext(),
                                                 "isNa", fun);
                 nacheck(llvmValue, type, isNaBr);
             }
-        }
-    };
-    checkNa(a, lhs->type, lhsRep);
-    checkNa(b, rhs->type, rhsRep);
+        };
+        checkNa(a, lhs->type, lhsRep);
+        checkNa(b, rhs->type, rhsRep);
+    }
 
-    if (a->getType() == t::Int && b->getType() == t::Int) {
+    if (r == t::Int) {
         res.addInput(intInsert(a, b));
     } else {
         if (a->getType() == t::Int)
@@ -1680,18 +1703,15 @@ void LowerFunctionLLVM::compileBinop(
 
     if (isNaBr) {
         builder.SetInsertPoint(isNaBr);
-
-        if (r == t::Int)
-            res.addInput(c(NA_INTEGER));
-        else
-            res.addInput(c(NA_REAL));
-
+        res.addInput(r == t::Int ? c(NA_INTEGER) : c(NA_REAL));
         builder.CreateBr(done);
     }
 
     builder.SetInsertPoint(done);
     if (rep == Rep::SEXP) {
-        setVal(i, box(res(), lhs->type.mergeWithConversion(rhs->type), false));
+        auto boxTo = lhs->type.mergeWithConversion(rhs->type);
+        assert(boxTo.isA(i->type));
+        setVal(i, box(res(), boxTo, false));
     } else {
         setVal(i, res());
     }
@@ -1700,7 +1720,8 @@ void LowerFunctionLLVM::compileBinop(
 void LowerFunctionLLVM::compileUnop(
     Instruction* i, Value* arg,
     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
-    const std::function<llvm::Value*(llvm::Value*)>& fpInsert, UnopKind kind) {
+    const std::function<llvm::Value*(llvm::Value*)>& fpInsert) {
+
     auto argRep = Rep::Of(arg);
 
     if (argRep == Rep::SEXP) {
@@ -1710,10 +1731,10 @@ void LowerFunctionLLVM::compileUnop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e, c(i->srcIdx), c((int)kind)});
+                       {a, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
-                       {a, c((int)kind)});
+                       {a, c((uint8_t)i->tag, 8)});
         }
 
         setVal(i, res);
@@ -1751,10 +1772,7 @@ void LowerFunctionLLVM::compileUnop(
         if (isNaBr) {
             builder.SetInsertPoint(isNaBr);
 
-            if (r == t::Int)
-                res.addInput(c(NA_INTEGER));
-            else
-                res.addInput(c((double)R_NaN));
+            res.addInput(r == t::Int ? c(NA_INTEGER) : c(NA_REAL));
 
             builder.CreateBr(done);
         }
@@ -3650,99 +3668,17 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Add:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        auto res = builder.CreateAdd(a, b, "", false, true);
-                        return res;
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFAdd(a, b);
-                    },
-                    BinopKind::ADD);
+            case Tag::Plus: {
+                compileUnop(
+                    i, [&](llvm::Value* a) { return a; },
+                    [&](llvm::Value* a) { return a; });
                 break;
-
-            case Tag::Sub:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateSub(a, b, "", false, true);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFSub(a, b);
-                    },
-                    BinopKind::SUB);
-                break;
-
-            case Tag::Mul:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateMul(a, b, "", false, true);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFMul(a, b);
-                    },
-                    BinopKind::MUL);
-                break;
-
-            case Tag::Div:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA
-                        return builder.CreateSDiv(a, b);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFDiv(a, b);
-                    },
-                    BinopKind::DIV);
-                break;
-
-            case Tag::Pow:
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA?
-                        return builder.CreateIntrinsic(
-                            Intrinsic::powi, {a->getType(), b->getType()},
-                            {a, b});
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
-                                                             b);
-                    },
-                    BinopKind::POW);
-                break;
-
-            case Tag::Neq:
-                compileRelop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpNE(a, b);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpUNE(a, b);
-                    },
-                    BinopKind::NE);
-                break;
+            }
 
             case Tag::Minus: {
                 compileUnop(
                     i, [&](llvm::Value* a) { return builder.CreateNeg(a); },
-                    [&](llvm::Value* a) { return builder.CreateFNeg(a); },
-                    UnopKind::MINUS);
-                break;
-            }
-
-            case Tag::Plus: {
-                compileUnop(
-                    i, [&](llvm::Value* a) { return a; },
-                    [&](llvm::Value* a) { return a; }, UnopKind::PLUS);
+                    [&](llvm::Value* a) { return builder.CreateFNeg(a); });
                 break;
             }
 
@@ -3801,146 +3737,53 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Eq:
-                compileRelop(
+            case Tag::Add:
+                compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpEQ(a, b);
+                        // TODO: Check NA
+                        auto res = builder.CreateAdd(a, b, "", false, true);
+                        return res;
                     },
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpOEQ(a, b);
-                    },
-                    BinopKind::EQ);
+                        return builder.CreateFAdd(a, b);
+                    });
                 break;
 
-            case Tag::Lte:
-                compileRelop(
+            case Tag::Sub:
+                compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpSLE(a, b);
+                        // TODO: Check NA
+                        return builder.CreateSub(a, b, "", false, true);
                     },
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpOLE(a, b);
-                    },
-                    BinopKind::LTE);
+                        return builder.CreateFSub(a, b);
+                    });
                 break;
 
-            case Tag::Lt:
-                compileRelop(
+            case Tag::Mul:
+                compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpSLT(a, b);
+                        // TODO: Check NA
+                        return builder.CreateMul(a, b, "", false, true);
                     },
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpOLT(a, b);
-                    },
-                    BinopKind::LT);
+                        return builder.CreateFMul(a, b);
+                    });
                 break;
 
-            case Tag::Gte:
-                compileRelop(
+            case Tag::Div:
+                compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpSGE(a, b);
+                        // TODO: Check NA
+                        return builder.CreateSDiv(a, b);
                     },
                     [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpOGE(a, b);
-                    },
-                    BinopKind::GTE);
-                break;
-
-            case Tag::Gt:
-                compileRelop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateICmpSGT(a, b);
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateFCmpOGT(a, b);
-                    },
-                    BinopKind::GT);
-                break;
-
-            case Tag::LAnd:
-                compileRelop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        auto afalse = builder.CreateICmpEQ(a, c(0));
-                        auto bfalse = builder.CreateICmpEQ(b, c(0));
-                        return createSelect2(
-                            builder.CreateOr(afalse, bfalse),
-                            [&]() { return c(0); },
-                            [&]() {
-                                auto aNa =
-                                    builder.CreateICmpEQ(a, c(NA_LOGICAL));
-                                auto bNa =
-                                    builder.CreateICmpEQ(b, c(NA_LOGICAL));
-                                return createSelect2(
-                                    builder.CreateOr(aNa, bNa),
-                                    []() { return c(NA_LOGICAL); },
-                                    []() { return c(1); });
-                            });
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
-                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
-                        return createSelect2(
-                            builder.CreateOr(afalse, bfalse),
-                            [&]() { return c(0); },
-                            [&]() {
-                                auto aNa = builder.CreateFCmpUNE(a, b);
-                                auto bNa = builder.CreateFCmpUNE(b, b);
-                                return createSelect2(
-                                    builder.CreateOr(aNa, bNa),
-                                    []() { return c(NA_LOGICAL); },
-                                    []() { return c(1); });
-                            });
-                    },
-                    BinopKind::LAND, false);
-                break;
-
-            case Tag::LOr:
-                compileRelop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        auto afalse = builder.CreateICmpEQ(a, c(0));
-                        auto bfalse = builder.CreateICmpEQ(b, c(0));
-                        auto aNa = builder.CreateICmpEQ(a, c(NA_LOGICAL));
-                        auto bNa = builder.CreateICmpEQ(b, c(NA_LOGICAL));
-                        auto atrue = builder.CreateAnd(
-                            builder.CreateNot(afalse), builder.CreateNot(aNa));
-                        auto btrue = builder.CreateAnd(
-                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
-                        return createSelect2(
-                            builder.CreateOr(atrue, btrue),
-                            [&]() { return c(1); },
-                            [&]() {
-                                return createSelect2(
-                                    builder.CreateOr(aNa, bNa),
-                                    []() { return c(NA_LOGICAL); },
-                                    []() { return c(0); });
-                            });
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
-                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
-                        auto aNa = builder.CreateFCmpUNE(a, b);
-                        auto bNa = builder.CreateFCmpUNE(b, b);
-                        auto atrue = builder.CreateAnd(
-                            builder.CreateNot(afalse), builder.CreateNot(aNa));
-                        auto btrue = builder.CreateAnd(
-                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
-                        return createSelect2(
-                            builder.CreateOr(atrue, btrue),
-                            [&]() { return c(1); },
-                            [&]() {
-                                return createSelect2(
-                                    builder.CreateOr(aNa, bNa),
-                                    []() { return c(NA_LOGICAL); },
-                                    []() { return c(0); });
-                            });
-                    },
-                    BinopKind::LOR, false);
+                        return builder.CreateFDiv(a, b);
+                    });
                 break;
 
             case Tag::IDiv:
@@ -4005,11 +3848,11 @@ void LowerFunctionLLVM::compile() {
 
                         builder.SetInsertPoint(cnt);
                         return res();
-                    },
-                    BinopKind::IDIV);
+                    });
                 break;
 
             case Tag::Mod: {
+                auto mod = Mod::Cast(i);
                 auto myfmod = [&](llvm::Value* a, llvm::Value* b) {
                     // from myfmod
                     auto isZero =
@@ -4064,43 +3907,346 @@ void LowerFunctionLLVM::compile() {
                     builder.SetInsertPoint(cnt);
                     return res();
                 };
+                auto myimod = [&](llvm::Value* a, llvm::Value* b) {
+                    auto fast =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto fast1 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto fast2 =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto fastNA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto slow =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cnt =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto res = phiBuilder(t::Int);
+                    builder.CreateCondBr(builder.CreateICmpSGE(a, c(0)), fast1,
+                                         slow, branchMostlyTrue);
+
+                    builder.SetInsertPoint(fast1);
+                    builder.CreateCondBr(builder.CreateICmpNE(b, c(0)), fast2,
+                                         fastNA, branchMostlyTrue);
+
+                    builder.SetInsertPoint(fast2);
+                    builder.CreateCondBr(builder.CreateICmpSGT(b, c(0)), fast,
+                                         slow, branchMostlyTrue);
+
+                    builder.SetInsertPoint(fast);
+                    res.addInput(builder.CreateSRem(a, b));
+                    builder.CreateBr(cnt);
+
+                    builder.SetInsertPoint(fastNA);
+                    // a %% 0L
+                    res.addInput(c(NA_INTEGER));
+                    builder.CreateBr(cnt);
+
+                    builder.SetInsertPoint(slow);
+                    res.addInput(builder.CreateFPToSI(
+                        myfmod(builder.CreateSIToFP(a, t::Double),
+                               builder.CreateSIToFP(b, t::Double)),
+                        t::Int));
+                    builder.CreateBr(cnt);
+
+                    builder.SetInsertPoint(cnt);
+                    return res();
+                };
+                auto customNaCheck = [&](llvm::Value* a,
+                                         llvm::Value* b) -> BasicBlock* {
+                    // In the following cases we observe GNU R to return NaN but
+                    // our check for NA would take precedence and result in NA:
+                    //   NA %% 0
+                    //   NA_integer_ %% 0
+                    //   NA_real_ %% FALSE
+                    //   NA_real_ %% 0L
+                    //   NA_real_ %% 0
+                    // Thus we only check the first arg if the result is not
+                    // real or the second arg is not zero:
+                    //   if (!real || b != 0)
+                    //     check(a)
+                    //   check(b)
+
+                    assert(a->getType() == t::Int || a->getType() == t::Double);
+                    assert(b->getType() == t::Int || b->getType() == t::Double);
+
+                    bool realRes =
+                        a->getType() == t::Double || b->getType() == t::Double;
+
+                    auto shouldCheckA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cnt =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
+                    BasicBlock* isNaBr = nullptr;
+                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
+                        if (type.maybeNAOrNaN()) {
+                            if (!isNaBr)
+                                isNaBr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "isNa", fun);
+                            nacheck(llvmValue, type, isNaBr);
+                        }
+                    };
+
+                    builder.CreateCondBr(
+                        builder.CreateOr(
+                            realRes ? builder.getFalse() : builder.getTrue(),
+                            b->getType() == t::Int
+                                ? builder.CreateICmpNE(b, c(0))
+                                : builder.CreateFCmpONE(b, c(0.0))),
+                        shouldCheckA, cnt, branchMostlyTrue);
+
+                    builder.SetInsertPoint(shouldCheckA);
+                    checkNa(a, mod->lhs()->type);
+                    builder.CreateBr(cnt);
+
+                    builder.SetInsertPoint(cnt);
+                    checkNa(b, mod->rhs()->type);
+                    return isNaBr;
+                };
+
+                compileBinop(i, myimod, myfmod, customNaCheck);
+                break;
+            }
+
+            case Tag::Pow: {
+                auto pow = Pow::Cast(i);
+                auto customNaCheck = [&](llvm::Value* a,
+                                         llvm::Value* b) -> BasicBlock* {
+                    // In the following cases we observe GNU R to return 1 but
+                    // our check for NA would take precedence and result in NA:
+                    //   TRUE ^ NA
+                    //   TRUE ^ NA_integer_
+                    //   TRUE ^ NA_real_
+                    //   1L ^ NA
+                    //   1L ^ NA_integer_
+                    //   1L ^ NA_real_
+                    //   1 ^ NA
+                    //   1 ^ NA_integer_
+                    //   1 ^ NA_real_
+                    //   NA ^ FALSE
+                    //   NA ^ 0L
+                    //   NA ^ 0
+                    //   NA_integer_ ^ FALSE
+                    //   NA_integer_ ^ 0L
+                    //   NA_integer_ ^ 0
+                    //   NA_real_ ^ FALSE
+                    //   NA_real_ ^ 0L
+                    //   NA_real_ ^ 0
+                    // Thus we only check the first arg if the second arg is not
+                    // zero, and the second arg if the first one is not one:
+                    //   if (b != 0)
+                    //     check(a)
+                    //   if (a != 1)
+                    //     check(b)
+
+                    assert(a->getType() == t::Int || a->getType() == t::Double);
+                    assert(b->getType() == t::Int || b->getType() == t::Double);
+
+                    auto shouldCheckA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto shouldCheckB =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cntA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cntB =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
+                    BasicBlock* isNaBr = nullptr;
+                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
+                        if (type.maybeNAOrNaN()) {
+                            if (!isNaBr)
+                                isNaBr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "isNa", fun);
+                            nacheck(llvmValue, type, isNaBr);
+                        }
+                    };
+
+                    builder.CreateCondBr(b->getType() == t::Int
+                                             ? builder.CreateICmpNE(b, c(0))
+                                             : builder.CreateFCmpONE(b, c(0.0)),
+                                         shouldCheckA, cntA, branchMostlyTrue);
+
+                    builder.SetInsertPoint(shouldCheckA);
+                    checkNa(a, pow->lhs()->type);
+                    builder.CreateBr(cntA);
+
+                    builder.SetInsertPoint(cntA);
+                    builder.CreateCondBr(a->getType() == t::Int
+                                             ? builder.CreateICmpNE(a, c(1))
+                                             : builder.CreateFCmpONE(a, c(1.0)),
+                                         shouldCheckB, cntB, branchMostlyTrue);
+
+                    builder.SetInsertPoint(shouldCheckB);
+                    checkNa(b, pow->rhs()->type);
+                    builder.CreateBr(cntB);
+
+                    builder.SetInsertPoint(cntB);
+                    return isNaBr;
+                };
 
                 compileBinop(
                     i,
                     [&](llvm::Value* a, llvm::Value* b) {
-                        auto fast = BasicBlock::Create(PirJitLLVM::getContext(),
-                                                       "", fun);
-                        auto fast1 = BasicBlock::Create(
-                            PirJitLLVM::getContext(), "", fun);
-                        auto slow = BasicBlock::Create(PirJitLLVM::getContext(),
-                                                       "", fun);
-                        auto cnt = BasicBlock::Create(PirJitLLVM::getContext(),
-                                                      "", fun);
-                        auto res = phiBuilder(t::Int);
-                        builder.CreateCondBr(builder.CreateICmpSGE(a, c(0)),
-                                             fast1, slow, branchMostlyTrue);
-
-                        builder.SetInsertPoint(fast1);
-                        builder.CreateCondBr(builder.CreateICmpSGT(b, c(0)),
-                                             fast, slow, branchMostlyTrue);
-
-                        builder.SetInsertPoint(fast);
-                        res.addInput(builder.CreateSRem(a, b));
-                        builder.CreateBr(cnt);
-
-                        builder.SetInsertPoint(slow);
-                        res.addInput(builder.CreateFPToSI(
-                            myfmod(builder.CreateSIToFP(a, t::Double),
-                                   builder.CreateSIToFP(b, t::Double)),
-                            t::Int));
-                        builder.CreateBr(cnt);
-
-                        builder.SetInsertPoint(cnt);
-                        return res();
+                        // TODO: Check NA?
+                        return builder.CreateIntrinsic(
+                            Intrinsic::powi, {a->getType(), b->getType()},
+                            {a, b});
                     },
-                    myfmod, BinopKind::MOD);
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
+                                                             b);
+                    },
+                    customNaCheck);
                 break;
             }
+
+            case Tag::Eq:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpEQ(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOEQ(a, b);
+                    });
+                break;
+
+            case Tag::Neq:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpNE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpUNE(a, b);
+                    });
+                break;
+
+            case Tag::Lt:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSLT(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOLT(a, b);
+                    });
+                break;
+
+            case Tag::Lte:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSLE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOLE(a, b);
+                    });
+                break;
+
+            case Tag::Gt:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSGT(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOGT(a, b);
+                    });
+                break;
+
+            case Tag::Gte:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateICmpSGE(a, b);
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateFCmpOGE(a, b);
+                    });
+                break;
+
+            case Tag::LAnd:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateICmpEQ(a, c(0));
+                        auto bfalse = builder.CreateICmpEQ(b, c(0));
+                        return createSelect2(
+                            builder.CreateOr(afalse, bfalse),
+                            [&]() { return c(0); },
+                            [&]() {
+                                auto aNa =
+                                    builder.CreateICmpEQ(a, c(NA_LOGICAL));
+                                auto bNa =
+                                    builder.CreateICmpEQ(b, c(NA_LOGICAL));
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(1); });
+                            });
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
+                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
+                        return createSelect2(
+                            builder.CreateOr(afalse, bfalse),
+                            [&]() { return c(0); },
+                            [&]() {
+                                auto aNa = builder.CreateFCmpUNE(a, b);
+                                auto bNa = builder.CreateFCmpUNE(b, b);
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(1); });
+                            });
+                    },
+                    false);
+                break;
+
+            case Tag::LOr:
+                compileRelop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateICmpEQ(a, c(0));
+                        auto bfalse = builder.CreateICmpEQ(b, c(0));
+                        auto aNa = builder.CreateICmpEQ(a, c(NA_LOGICAL));
+                        auto bNa = builder.CreateICmpEQ(b, c(NA_LOGICAL));
+                        auto atrue = builder.CreateAnd(
+                            builder.CreateNot(afalse), builder.CreateNot(aNa));
+                        auto btrue = builder.CreateAnd(
+                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
+                        return createSelect2(
+                            builder.CreateOr(atrue, btrue),
+                            [&]() { return c(1); },
+                            [&]() {
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(0); });
+                            });
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        auto afalse = builder.CreateFCmpUEQ(a, c(0.0));
+                        auto bfalse = builder.CreateFCmpUEQ(b, c(0.0));
+                        auto aNa = builder.CreateFCmpUNE(a, b);
+                        auto bNa = builder.CreateFCmpUNE(b, b);
+                        auto atrue = builder.CreateAnd(
+                            builder.CreateNot(afalse), builder.CreateNot(aNa));
+                        auto btrue = builder.CreateAnd(
+                            builder.CreateNot(bfalse), builder.CreateNot(bNa));
+                        return createSelect2(
+                            builder.CreateOr(atrue, btrue),
+                            [&]() { return c(1); },
+                            [&]() {
+                                return createSelect2(
+                                    builder.CreateOr(aNa, bNa),
+                                    []() { return c(NA_LOGICAL); },
+                                    []() { return c(0); });
+                            });
+                    },
+                    false);
+                break;
 
             case Tag::Colon: {
                 assert(Rep::Of(i) == Rep::SEXP);
@@ -4112,14 +4258,13 @@ void LowerFunctionLLVM::compile() {
                     res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                              {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
-                              c((int)BinopKind::COLON)});
+                              c((uint8_t)i->tag, 8)});
                 } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
                                {load(a), load(b)});
                 } else {
-                    res = call(
-                        NativeBuiltins::get(NativeBuiltins::Id::binop),
-                        {loadSxp(a), loadSxp(b), c((int)BinopKind::COLON)});
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
+                               {loadSxp(a), loadSxp(b), c((uint8_t)i->tag, 8)});
                 }
                 setVal(i, res);
                 break;

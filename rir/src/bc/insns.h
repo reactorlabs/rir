@@ -178,45 +178,15 @@ DEF_INSTR(pick_, 1, 0, 0)
 DEF_INSTR(pull_, 1, 0, 1)
 
 /**
- * add_:: pop two values from object stack, add them, push result on object
- * stack. Works on any SEXP.
- */
-DEF_INSTR(add_, 0, 2, 1)
-
-/**
- * uplus_:: unary plus
- */
-DEF_INSTR(uplus_, 0, 1, 1)
-
-/**
  * inc_ :: increment tos integer
  */
 DEF_INSTR(inc_, 0, 1, 1)
 
 /**
- * as_switch_idx_ :: silently convert tos to integer, -1 if non-int
+ * uplus_:: unary plus
  */
-DEF_INSTR(as_switch_idx_, 0, 1, 1)
-
-DEF_INSTR(sub_, 0, 2, 1)
+DEF_INSTR(uplus_, 0, 1, 1)
 DEF_INSTR(uminus_, 0, 1, 1)
-DEF_INSTR(mul_, 0, 2, 1)
-DEF_INSTR(div_, 0, 2, 1)
-DEF_INSTR(idiv_, 0, 2, 1)
-DEF_INSTR(mod_, 0, 2, 1)
-DEF_INSTR(pow_, 0, 2, 1)
-
-/**
- * lt_:: relational operator <
- */
-DEF_INSTR(lt_, 0, 2, 1)
-DEF_INSTR(gt_, 0, 2, 1)
-DEF_INSTR(le_, 0, 2, 1)
-DEF_INSTR(ge_, 0, 2, 1)
-DEF_INSTR(eq_, 0, 2, 1)
-DEF_INSTR(ne_, 0, 2, 1)
-
-DEF_INSTR(identical_noforce_, 0, 2, 1)
 
 /**
  * not_:: unary negation operator !
@@ -224,14 +194,48 @@ DEF_INSTR(identical_noforce_, 0, 2, 1)
 DEF_INSTR(not_, 0, 1, 1)
 
 /**
- * lgl_or_:: computes the logical (ternary) or of the two tos vals
+ * add_:: pop two values from object stack, add them, push result on object
+ * stack. Works on any SEXP.
  */
-DEF_INSTR(lgl_or_, 0, 2, 1)
+DEF_INSTR(add_, 0, 2, 1)
+DEF_INSTR(sub_, 0, 2, 1)
+DEF_INSTR(mul_, 0, 2, 1)
+DEF_INSTR(div_, 0, 2, 1)
+DEF_INSTR(idiv_, 0, 2, 1)
+DEF_INSTR(mod_, 0, 2, 1)
+DEF_INSTR(pow_, 0, 2, 1)
+
+/**
+ * eq_:: relational operator <
+ */
+DEF_INSTR(eq_, 0, 2, 1)
+DEF_INSTR(ne_, 0, 2, 1)
+DEF_INSTR(lt_, 0, 2, 1)
+DEF_INSTR(le_, 0, 2, 1)
+DEF_INSTR(gt_, 0, 2, 1)
+DEF_INSTR(ge_, 0, 2, 1)
 
 /**
  * lgl_and_:: computes the logical (ternary) and of the two tos vals
  */
 DEF_INSTR(lgl_and_, 0, 2, 1)
+
+/**
+ * lgl_or_:: computes the logical (ternary) or of the two tos vals
+ */
+DEF_INSTR(lgl_or_, 0, 2, 1)
+
+/**
+ * colon_:: takes two bounds a and b and pushes a:b
+ */
+DEF_INSTR(colon_, 0, 2, 1)
+
+/**
+ * as_switch_idx_ :: silently convert tos to integer, -1 if non-int
+ */
+DEF_INSTR(as_switch_idx_, 0, 1, 1)
+
+DEF_INSTR(identical_noforce_, 0, 2, 1)
 
 /**
  * aslogical_:: converts tos to a (ternary) logical
@@ -376,11 +380,6 @@ DEF_INSTR(subassign2_2_, 0, 4, 1)
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
  */
 DEF_INSTR(guard_fun_, 3, 0, 0)
-
-/**
- * colon_:: takes two bounds a and b and pushes a:b
- */
-DEF_INSTR(colon_, 0, 2, 1)
 
 /**
  * names_ :: read out names of a vector

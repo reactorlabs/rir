@@ -383,6 +383,7 @@ class LowerFunctionLLVM {
     void incrementNamed(llvm::Value* v, int max = NAMEDMAX);
     // We explicitly require the type of the argument to ensure we use non-NA
     // info. If the type is not NA, this will not actually emit a check
+    llvm::Value* isNotNa(llvm::Value* v, PirType type);
     void nacheck(llvm::Value* v, PirType type, llvm::BasicBlock* isNa,
                  llvm::BasicBlock* notNa = nullptr);
     void checkMissing(llvm::Value* v);
@@ -420,37 +421,42 @@ class LowerFunctionLLVM {
     void compilePushContext(Instruction* i);
     void compilePopContext(Instruction* i);
 
+    // This can be used to customize which NA checks should be performed for a
+    // binop. The customNACheck lambda should generate branches to a new NA-case
+    // basic block and return a pointer to it, or nullptr if no checks are
+    // needed.
+    using CustomNaCheck =
+        std::function<llvm::BasicBlock*(llvm::Value*, llvm::Value*)>;
     void compileBinop(
         Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind) {
+        const CustomNaCheck& customNaCheck = {}) {
         compileBinop(i, i->arg(0).val(), i->arg(1).val(), intInsert, fpInsert,
-                     kind);
+                     customNaCheck);
     }
     void compileBinop(
         Instruction* i, Value* lhs, Value* rhs,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind);
-    void compileUnop(Instruction* i,
-                     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
-                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
-                     UnopKind kind) {
-        compileUnop(i, i->arg(0).val(), intInsert, fpInsert, kind);
+        const CustomNaCheck& customNaCheck);
+    void
+    compileUnop(Instruction* i,
+                const std::function<llvm::Value*(llvm::Value*)>& intInsert,
+                const std::function<llvm::Value*(llvm::Value*)>& fpInsert) {
+        compileUnop(i, i->arg(0).val(), intInsert, fpInsert);
     }
     void compileUnop(Instruction* i, Value* lhs,
                      const std::function<llvm::Value*(llvm::Value*)>& intInsert,
-                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert,
-                     UnopKind kind);
+                     const std::function<llvm::Value*(llvm::Value*)>& fpInsert);
     void compileRelop(
         Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
-        BinopKind kind, bool testNa = true);
+        bool testNa = true);
 
     void compile();
 

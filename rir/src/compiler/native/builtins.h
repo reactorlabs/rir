@@ -30,30 +30,6 @@ struct NativeBuiltin {
     std::vector<llvm::Attribute::AttrKind> attrs;
 };
 
-enum class BinopKind : int {
-    ADD,
-    MUL,
-    SUB,
-    DIV,
-    IDIV,
-    EQ,
-    NE,
-    LT,
-    LTE,
-    GT,
-    GTE,
-    LAND,
-    LOR,
-    COLON,
-    MOD,
-    POW,
-};
-
-enum class UnopKind : int {
-    MINUS,
-    PLUS,
-};
-
 struct NativeBuiltins {
 
     enum class Id : uint8_t {

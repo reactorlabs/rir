@@ -27,31 +27,31 @@
     V(NESTED, dup2, dup2)                                                      \
     V(NESTED, forSeqSize, for_seq_size)                                        \
     V(NESTED, length_, length)                                                 \
-    V(NESTED, inc, inc)                                                        \
     V(NESTED, close, close)                                                    \
-    V(NESTED, add, add)                                                        \
-    V(NESTED, mul, mul)                                                        \
-    V(NESTED, div, div)                                                        \
-    V(NESTED, pow, pow)                                                        \
-    V(NESTED, idiv, idiv)                                                      \
-    V(NESTED, mod, mod)                                                        \
-    V(NESTED, sub, sub)                                                        \
+    V(NESTED, inc, inc)                                                        \
     V(NESTED, uplus, uplus)                                                    \
     V(NESTED, uminus, uminus)                                                  \
     V(NESTED, not_, not )                                                      \
-    V(NESTED, lt, lt)                                                          \
-    V(NESTED, gt, gt)                                                          \
-    V(NESTED, le, le)                                                          \
-    V(NESTED, ge, ge)                                                          \
+    V(NESTED, add, add)                                                        \
+    V(NESTED, sub, sub)                                                        \
+    V(NESTED, mul, mul)                                                        \
+    V(NESTED, div, div)                                                        \
+    V(NESTED, idiv, idiv)                                                      \
+    V(NESTED, mod, mod)                                                        \
+    V(NESTED, pow, pow)                                                        \
     V(NESTED, eq, eq)                                                          \
-    V(NESTED, identicalNoforce, identical_noforce)                             \
     V(NESTED, ne, ne)                                                          \
+    V(NESTED, lt, lt)                                                          \
+    V(NESTED, le, le)                                                          \
+    V(NESTED, gt, gt)                                                          \
+    V(NESTED, ge, ge)                                                          \
+    V(NESTED, lglAnd, lgl_and)                                                 \
+    V(NESTED, lglOr, lgl_or)                                                   \
     V(NESTED, colon, colon)                                                    \
+    V(NESTED, identicalNoforce, identical_noforce)                             \
     V(NESTED, setShared, set_shared)                                           \
     V(NESTED, ensureNamed, ensure_named)                                       \
     V(NESTED, aslogical, aslogical)                                            \
-    V(NESTED, lglOr, lgl_or)                                                   \
-    V(NESTED, lglAnd, lgl_and)                                                 \
     V(NESTED, checkFunction, check_function)                                   \
     V(NESTED, invisible, invisible)                                            \
     V(NESTED, visible, visible)                                                \
