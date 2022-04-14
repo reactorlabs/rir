@@ -3668,6 +3668,75 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::Plus: {
+                compileUnop(
+                    i, [&](llvm::Value* a) { return a; },
+                    [&](llvm::Value* a) { return a; });
+                break;
+            }
+
+            case Tag::Minus: {
+                compileUnop(
+                    i, [&](llvm::Value* a) { return builder.CreateNeg(a); },
+                    [&](llvm::Value* a) { return builder.CreateFNeg(a); });
+                break;
+            }
+
+            case Tag::Not: {
+                auto resultRep = Rep::Of(i);
+                auto argument = i->arg(0).val();
+                auto argumentRep = Rep::Of(argument);
+                if (argumentRep == Rep::SEXP) {
+                    auto argumentNative = loadSxp(argument);
+
+                    llvm::Value* res = nullptr;
+                    if (i->hasEnv()) {
+                        res = call(
+                            NativeBuiltins::get(NativeBuiltins::Id::notEnv),
+                            {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
+                    } else {
+                        res =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
+                                 {argumentNative});
+                    }
+                    setVal(i, res);
+                    break;
+                }
+
+                auto done =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                auto isNa =
+                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
+                auto argumentNative = load(argument, argumentRep);
+
+                nacheck(argumentNative, argument->type, isNa);
+
+                auto res = phiBuilder(t::Int);
+
+                if (argumentRep == Rep::f64) {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateFCmpUEQ(argumentNative, c(0.0)), t::Int));
+                } else {
+                    res.addInput(builder.CreateZExt(
+                        builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
+                }
+                builder.CreateBr(done);
+
+                builder.SetInsertPoint(isNa);
+                // Maybe we need to model R_LogicalNAValue?
+                res.addInput(c(NA_INTEGER));
+                builder.CreateBr(done);
+                builder.SetInsertPoint(done);
+
+                if (resultRep == Rep::SEXP) {
+                    setVal(i, boxLgl(res()));
+                } else {
+                    setVal(i, res());
+                }
+                break;
+            }
+
             case Tag::Add:
                 compileBinop(
                     i,
@@ -3716,98 +3785,6 @@ void LowerFunctionLLVM::compile() {
                         return builder.CreateFDiv(a, b);
                     });
                 break;
-
-            case Tag::Pow: {
-                auto pow = Pow::Cast(i);
-                auto customNaCheck = [&](llvm::Value* a,
-                                         llvm::Value* b) -> BasicBlock* {
-                    // In the following cases we observe GNU R to return 1 but
-                    // our check for NA would take precedence and result in NA:
-                    //   TRUE ^ NA
-                    //   TRUE ^ NA_integer_
-                    //   TRUE ^ NA_real_
-                    //   1L ^ NA
-                    //   1L ^ NA_integer_
-                    //   1L ^ NA_real_
-                    //   1 ^ NA
-                    //   1 ^ NA_integer_
-                    //   1 ^ NA_real_
-                    //   NA ^ FALSE
-                    //   NA ^ 0L
-                    //   NA ^ 0
-                    //   NA_integer_ ^ FALSE
-                    //   NA_integer_ ^ 0L
-                    //   NA_integer_ ^ 0
-                    //   NA_real_ ^ FALSE
-                    //   NA_real_ ^ 0L
-                    //   NA_real_ ^ 0
-                    // Thus we only check the first arg if the second arg is not
-                    // zero, and the second arg if the first one is not one:
-                    //   if (b != 0)
-                    //     check(a)
-                    //   if (a != 1)
-                    //     check(b)
-
-                    assert(a->getType() == t::Int || a->getType() == t::Double);
-                    assert(b->getType() == t::Int || b->getType() == t::Double);
-
-                    auto shouldCheckA =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                    auto shouldCheckB =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                    auto cntA =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                    auto cntB =
-                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-
-                    BasicBlock* isNaBr = nullptr;
-                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
-                        if (type.maybeNAOrNaN()) {
-                            if (!isNaBr)
-                                isNaBr = BasicBlock::Create(
-                                    PirJitLLVM::getContext(), "isNa", fun);
-                            nacheck(llvmValue, type, isNaBr);
-                        }
-                    };
-
-                    builder.CreateCondBr(b->getType() == t::Int
-                                             ? builder.CreateICmpNE(b, c(0))
-                                             : builder.CreateFCmpONE(b, c(0.0)),
-                                         shouldCheckA, cntA, branchMostlyTrue);
-
-                    builder.SetInsertPoint(shouldCheckA);
-                    checkNa(a, pow->lhs()->type);
-                    builder.CreateBr(cntA);
-
-                    builder.SetInsertPoint(cntA);
-                    builder.CreateCondBr(a->getType() == t::Int
-                                             ? builder.CreateICmpNE(a, c(1))
-                                             : builder.CreateFCmpONE(a, c(1.0)),
-                                         shouldCheckB, cntB, branchMostlyTrue);
-
-                    builder.SetInsertPoint(shouldCheckB);
-                    checkNa(b, pow->rhs()->type);
-                    builder.CreateBr(cntB);
-
-                    builder.SetInsertPoint(cntB);
-                    return isNaBr;
-                };
-
-                compileBinop(
-                    i,
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        // TODO: Check NA?
-                        return builder.CreateIntrinsic(
-                            Intrinsic::powi, {a->getType(), b->getType()},
-                            {a, b});
-                    },
-                    [&](llvm::Value* a, llvm::Value* b) {
-                        return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
-                                                             b);
-                    },
-                    customNaCheck);
-                break;
-            }
 
             case Tag::IDiv:
                 compileBinop(
@@ -4031,6 +4008,98 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::Pow: {
+                auto pow = Pow::Cast(i);
+                auto customNaCheck = [&](llvm::Value* a,
+                                         llvm::Value* b) -> BasicBlock* {
+                    // In the following cases we observe GNU R to return 1 but
+                    // our check for NA would take precedence and result in NA:
+                    //   TRUE ^ NA
+                    //   TRUE ^ NA_integer_
+                    //   TRUE ^ NA_real_
+                    //   1L ^ NA
+                    //   1L ^ NA_integer_
+                    //   1L ^ NA_real_
+                    //   1 ^ NA
+                    //   1 ^ NA_integer_
+                    //   1 ^ NA_real_
+                    //   NA ^ FALSE
+                    //   NA ^ 0L
+                    //   NA ^ 0
+                    //   NA_integer_ ^ FALSE
+                    //   NA_integer_ ^ 0L
+                    //   NA_integer_ ^ 0
+                    //   NA_real_ ^ FALSE
+                    //   NA_real_ ^ 0L
+                    //   NA_real_ ^ 0
+                    // Thus we only check the first arg if the second arg is not
+                    // zero, and the second arg if the first one is not one:
+                    //   if (b != 0)
+                    //     check(a)
+                    //   if (a != 1)
+                    //     check(b)
+
+                    assert(a->getType() == t::Int || a->getType() == t::Double);
+                    assert(b->getType() == t::Int || b->getType() == t::Double);
+
+                    auto shouldCheckA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto shouldCheckB =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cntA =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+                    auto cntB =
+                        BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
+
+                    BasicBlock* isNaBr = nullptr;
+                    auto checkNa = [&](llvm::Value* llvmValue, PirType type) {
+                        if (type.maybeNAOrNaN()) {
+                            if (!isNaBr)
+                                isNaBr = BasicBlock::Create(
+                                    PirJitLLVM::getContext(), "isNa", fun);
+                            nacheck(llvmValue, type, isNaBr);
+                        }
+                    };
+
+                    builder.CreateCondBr(b->getType() == t::Int
+                                             ? builder.CreateICmpNE(b, c(0))
+                                             : builder.CreateFCmpONE(b, c(0.0)),
+                                         shouldCheckA, cntA, branchMostlyTrue);
+
+                    builder.SetInsertPoint(shouldCheckA);
+                    checkNa(a, pow->lhs()->type);
+                    builder.CreateBr(cntA);
+
+                    builder.SetInsertPoint(cntA);
+                    builder.CreateCondBr(a->getType() == t::Int
+                                             ? builder.CreateICmpNE(a, c(1))
+                                             : builder.CreateFCmpONE(a, c(1.0)),
+                                         shouldCheckB, cntB, branchMostlyTrue);
+
+                    builder.SetInsertPoint(shouldCheckB);
+                    checkNa(b, pow->rhs()->type);
+                    builder.CreateBr(cntB);
+
+                    builder.SetInsertPoint(cntB);
+                    return isNaBr;
+                };
+
+                compileBinop(
+                    i,
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        // TODO: Check NA?
+                        return builder.CreateIntrinsic(
+                            Intrinsic::powi, {a->getType(), b->getType()},
+                            {a, b});
+                    },
+                    [&](llvm::Value* a, llvm::Value* b) {
+                        return builder.CreateBinaryIntrinsic(Intrinsic::pow, a,
+                                                             b);
+                    },
+                    customNaCheck);
+                break;
+            }
+
             case Tag::Eq:
                 compileRelop(
                     i,
@@ -4178,75 +4247,6 @@ void LowerFunctionLLVM::compile() {
                     },
                     false);
                 break;
-
-            case Tag::Not: {
-                auto resultRep = Rep::Of(i);
-                auto argument = i->arg(0).val();
-                auto argumentRep = Rep::Of(argument);
-                if (argumentRep == Rep::SEXP) {
-                    auto argumentNative = loadSxp(argument);
-
-                    llvm::Value* res = nullptr;
-                    if (i->hasEnv()) {
-                        res = call(
-                            NativeBuiltins::get(NativeBuiltins::Id::notEnv),
-                            {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
-                    } else {
-                        res =
-                            call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
-                                 {argumentNative});
-                    }
-                    setVal(i, res);
-                    break;
-                }
-
-                auto done =
-                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-                auto isNa =
-                    BasicBlock::Create(PirJitLLVM::getContext(), "", fun);
-
-                auto argumentNative = load(argument, argumentRep);
-
-                nacheck(argumentNative, argument->type, isNa);
-
-                auto res = phiBuilder(t::Int);
-
-                if (argumentRep == Rep::f64) {
-                    res.addInput(builder.CreateZExt(
-                        builder.CreateFCmpUEQ(argumentNative, c(0.0)), t::Int));
-                } else {
-                    res.addInput(builder.CreateZExt(
-                        builder.CreateICmpEQ(argumentNative, c(0)), t::Int));
-                }
-                builder.CreateBr(done);
-
-                builder.SetInsertPoint(isNa);
-                // Maybe we need to model R_LogicalNAValue?
-                res.addInput(c(NA_INTEGER));
-                builder.CreateBr(done);
-                builder.SetInsertPoint(done);
-
-                if (resultRep == Rep::SEXP) {
-                    setVal(i, boxLgl(res()));
-                } else {
-                    setVal(i, res());
-                }
-                break;
-            }
-
-            case Tag::Plus: {
-                compileUnop(
-                    i, [&](llvm::Value* a) { return a; },
-                    [&](llvm::Value* a) { return a; });
-                break;
-            }
-
-            case Tag::Minus: {
-                compileUnop(
-                    i, [&](llvm::Value* a) { return builder.CreateNeg(a); },
-                    [&](llvm::Value* a) { return builder.CreateFNeg(a); });
-                break;
-            }
 
             case Tag::Colon: {
                 assert(Rep::Of(i) == Rep::SEXP);
