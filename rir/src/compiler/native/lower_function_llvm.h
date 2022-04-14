@@ -425,7 +425,7 @@ class LowerFunctionLLVM {
     using CheckNaBypass = std::function<void(llvm::Value*, llvm::Value*,
                                              const Action&, const Action&)>;
     void compileBinop(
-        BinopKind kind, Instruction* i,
+        Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
@@ -435,26 +435,26 @@ class LowerFunctionLLVM {
                 checkA();
                 checkB();
             }) {
-        compileBinop(kind, i, i->arg(0).val(), i->arg(1).val(), intInsert,
-                     fpInsert, checkNaBypassInsert);
+        compileBinop(i, i->arg(0).val(), i->arg(1).val(), intInsert, fpInsert,
+                     checkNaBypassInsert);
     }
     void compileBinop(
-        BinopKind kind, Instruction* i, Value* lhs, Value* rhs,
+        Instruction* i, Value* lhs, Value* rhs,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
         const CheckNaBypass& checkNaBypassInsert);
     void
-    compileUnop(UnopKind kind, Instruction* i,
+    compileUnop(Instruction* i,
                 const std::function<llvm::Value*(llvm::Value*)>& intInsert,
                 const std::function<llvm::Value*(llvm::Value*)>& fpInsert) {
-        compileUnop(kind, i, i->arg(0).val(), intInsert, fpInsert);
+        compileUnop(i, i->arg(0).val(), intInsert, fpInsert);
     }
-    void compileUnop(UnopKind kind, Instruction* i, Value* lhs,
+    void compileUnop(Instruction* i, Value* lhs,
                      const std::function<llvm::Value*(llvm::Value*)>& intInsert,
                      const std::function<llvm::Value*(llvm::Value*)>& fpInsert);
     void compileRelop(
-        BinopKind kind, Instruction* i,
+        Instruction* i,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>&
             intInsert,
         const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,

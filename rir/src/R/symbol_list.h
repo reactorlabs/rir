@@ -29,24 +29,24 @@
     V(Switch, "switch")                                                        \
     V(Add, "+")                                                                \
     V(Sub, "-")                                                                \
+    V(Not, "!")                                                                \
     V(Mul, "*")                                                                \
     V(Div, "/")                                                                \
-    V(Pow, "^")                                                                \
     V(Idiv, "%/%")                                                             \
     V(Mod, "%%")                                                               \
-    V(Sqrt, "sqrt")                                                            \
-    V(Exp, "exp")                                                              \
+    V(Pow, "^")                                                                \
     V(Eq, "==")                                                                \
     V(Ne, "!=")                                                                \
     V(Lt, "<")                                                                 \
     V(Le, "<=")                                                                \
     V(Ge, ">=")                                                                \
     V(Gt, ">")                                                                 \
-    V(BitAnd, "&")                                                             \
-    V(BitOr, "|")                                                              \
-    V(Not, "!")                                                                \
-    V(Ellipsis, "...")                                                         \
+    V(And, "&&")                                                               \
+    V(Or, "||")                                                                \
     V(Colon, ":")                                                              \
+    V(Sqrt, "sqrt")                                                            \
+    V(Exp, "exp")                                                              \
+    V(Ellipsis, "...")                                                         \
     V(Internal, ".Internal")                                                   \
     V(tmp, "*tmp*")                                                            \
     V(vtmp, "*vtmp*")                                                          \
@@ -55,8 +55,6 @@
     V(islist, "is.list")                                                       \
     V(ispairlist, "is.pairlist")                                               \
     V(quote, "quote")                                                          \
-    V(And, "&&")                                                               \
-    V(Or, "||")                                                                \
     V(Missing, "missing")                                                      \
     V(seq, "seq")                                                              \
     V(lapply, "lapply")                                                        \

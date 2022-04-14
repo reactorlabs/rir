@@ -1560,7 +1560,7 @@ llvm::Value* LowerFunctionLLVM::depromise(Value* v) {
 }
 
 void LowerFunctionLLVM::compileRelop(
-    BinopKind kind, Instruction* i,
+    Instruction* i,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     bool testNa) {
@@ -1578,10 +1578,10 @@ void LowerFunctionLLVM::compileRelop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
-                       {a, b, c((int)kind)});
+                       {a, b, c((uint8_t)i->tag, 8)});
         }
         setVal(i, res);
         return;
@@ -1628,7 +1628,7 @@ void LowerFunctionLLVM::compileRelop(
 }
 
 void LowerFunctionLLVM::compileBinop(
-    BinopKind kind, Instruction* i, Value* lhs, Value* rhs,
+    Instruction* i, Value* lhs, Value* rhs,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*, llvm::Value*)>& fpInsert,
     const CheckNaBypass& checkNaBypassInsert) {
@@ -1645,10 +1645,10 @@ void LowerFunctionLLVM::compileBinop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
-                       {a, b, c((int)kind)});
+                       {a, b, c((uint8_t)i->tag, 8)});
         }
 
         setVal(i, res);
@@ -1662,7 +1662,7 @@ void LowerFunctionLLVM::compileBinop(
     // If both arguments are of type integer, the type of the
     // result of ‘/’ and ‘^’ is numeric and for the other operators it is
     // integer (with overflow returned as ‘NA_integer_’ with warning).
-    bool intIntToReal = (kind == BinopKind::DIV || kind == BinopKind::POW) &&
+    bool intIntToReal = (i->tag == Tag::Div || i->tag == Tag::Pow) &&
                         lhsRep == Rep::i32 && rhsRep == Rep::i32;
     auto r = (lhsRep == Rep::f64 || rhsRep == Rep::f64 || intIntToReal)
                  ? t::Double
@@ -1714,7 +1714,7 @@ void LowerFunctionLLVM::compileBinop(
 }
 
 void LowerFunctionLLVM::compileUnop(
-    UnopKind kind, Instruction* i, Value* arg,
+    Instruction* i, Value* arg,
     const std::function<llvm::Value*(llvm::Value*)>& intInsert,
     const std::function<llvm::Value*(llvm::Value*)>& fpInsert) {
 
@@ -1727,10 +1727,10 @@ void LowerFunctionLLVM::compileUnop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e, c(i->srcIdx), c((int)kind)});
+                       {a, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
-                       {a, c((int)kind)});
+                       {a, c((uint8_t)i->tag, 8)});
         }
 
         setVal(i, res);
@@ -3669,7 +3669,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Add:
                 compileBinop(
-                    BinopKind::ADD, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         // TODO: Check NA
                         auto res = builder.CreateAdd(a, b, "", false, true);
@@ -3682,7 +3682,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Sub:
                 compileBinop(
-                    BinopKind::SUB, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         // TODO: Check NA
                         return builder.CreateSub(a, b, "", false, true);
@@ -3694,7 +3694,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Mul:
                 compileBinop(
-                    BinopKind::MUL, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         // TODO: Check NA
                         return builder.CreateMul(a, b, "", false, true);
@@ -3706,7 +3706,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Div:
                 compileBinop(
-                    BinopKind::DIV, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         // TODO: Check NA
                         return builder.CreateSDiv(a, b);
@@ -3782,7 +3782,7 @@ void LowerFunctionLLVM::compile() {
                 };
 
                 compileBinop(
-                    BinopKind::POW, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         // TODO: Check NA?
                         return builder.CreateIntrinsic(
@@ -3799,7 +3799,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::IDiv:
                 compileBinop(
-                    BinopKind::IDIV, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         auto isZero = BasicBlock::Create(
                             PirJitLLVM::getContext(), "", fun);
@@ -4004,13 +4004,13 @@ void LowerFunctionLLVM::compile() {
                     checkB();
                 };
 
-                compileBinop(BinopKind::MOD, i, myimod, myfmod, bypassNaCheck);
+                compileBinop(i, myimod, myfmod, bypassNaCheck);
                 break;
             }
 
             case Tag::Eq:
                 compileRelop(
-                    BinopKind::EQ, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpEQ(a, b);
                     },
@@ -4021,7 +4021,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Neq:
                 compileRelop(
-                    BinopKind::NE, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpNE(a, b);
                     },
@@ -4032,7 +4032,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Lt:
                 compileRelop(
-                    BinopKind::LT, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpSLT(a, b);
                     },
@@ -4043,7 +4043,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Lte:
                 compileRelop(
-                    BinopKind::LTE, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpSLE(a, b);
                     },
@@ -4054,7 +4054,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Gt:
                 compileRelop(
-                    BinopKind::GT, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpSGT(a, b);
                     },
@@ -4065,7 +4065,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Gte:
                 compileRelop(
-                    BinopKind::GTE, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         return builder.CreateICmpSGE(a, b);
                     },
@@ -4076,7 +4076,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::LAnd:
                 compileRelop(
-                    BinopKind::LAND, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         auto afalse = builder.CreateICmpEQ(a, c(0));
                         auto bfalse = builder.CreateICmpEQ(b, c(0));
@@ -4114,7 +4114,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::LOr:
                 compileRelop(
-                    BinopKind::LOR, i,
+                    i,
                     [&](llvm::Value* a, llvm::Value* b) {
                         auto afalse = builder.CreateICmpEQ(a, c(0));
                         auto bfalse = builder.CreateICmpEQ(b, c(0));
@@ -4213,15 +4213,14 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Plus: {
                 compileUnop(
-                    UnopKind::PLUS, i, [&](llvm::Value* a) { return a; },
+                    i, [&](llvm::Value* a) { return a; },
                     [&](llvm::Value* a) { return a; });
                 break;
             }
 
             case Tag::Minus: {
                 compileUnop(
-                    UnopKind::MINUS, i,
-                    [&](llvm::Value* a) { return builder.CreateNeg(a); },
+                    i, [&](llvm::Value* a) { return builder.CreateNeg(a); },
                     [&](llvm::Value* a) { return builder.CreateFNeg(a); });
                 break;
             }
@@ -4236,14 +4235,13 @@ void LowerFunctionLLVM::compile() {
                     res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                              {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
-                              c((int)BinopKind::COLON)});
+                              c((uint8_t)i->tag, 8)});
                 } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
                                {load(a), load(b)});
                 } else {
-                    res = call(
-                        NativeBuiltins::get(NativeBuiltins::Id::binop),
-                        {loadSxp(a), loadSxp(b), c((int)BinopKind::COLON)});
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
+                               {loadSxp(a), loadSxp(b), c((uint8_t)i->tag, 8)});
                 }
                 setVal(i, res);
                 break;

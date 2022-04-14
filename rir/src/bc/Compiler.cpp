@@ -503,9 +503,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
     if (args.length() == 2 &&
         (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Mul ||
          fun == symbol::Div || fun == symbol::Idiv || fun == symbol::Mod ||
-         fun == symbol::Pow || fun == symbol::Lt || fun == symbol::Gt ||
-         fun == symbol::Le || fun == symbol::Ge || fun == symbol::Eq ||
-         fun == symbol::Ne || fun == symbol::Colon)) {
+         fun == symbol::Pow || fun == symbol::Eq || fun == symbol::Ne ||
+         fun == symbol::Lt || fun == symbol::Le || fun == symbol::Gt ||
+         fun == symbol::Ge || fun == symbol::Colon)) {
         emitGuardForNamePrimitive(cs, fun);
 
         compileExpr(ctx, args[0]);
@@ -515,28 +515,28 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::add();
         else if (fun == symbol::Sub)
             cs << BC::sub();
-        else if (fun == symbol::Lt)
-            cs << BC::lt();
-        else if (fun == symbol::Gt)
-            cs << BC::gt();
-        else if (fun == symbol::Le)
-            cs << BC::le();
-        else if (fun == symbol::Ge)
-            cs << BC::ge();
-        else if (fun == symbol::Eq)
-            cs << BC::eq();
-        else if (fun == symbol::Ne)
-            cs << BC::ne();
         else if (fun == symbol::Mul)
             cs << BC::mul();
         else if (fun == symbol::Div)
             cs << BC::div();
-        else if (fun == symbol::Mod)
-            cs << BC::mod();
         else if (fun == symbol::Idiv)
             cs << BC::idiv();
+        else if (fun == symbol::Mod)
+            cs << BC::mod();
         else if (fun == symbol::Pow)
             cs << BC::pow();
+        else if (fun == symbol::Eq)
+            cs << BC::eq();
+        else if (fun == symbol::Ne)
+            cs << BC::ne();
+        else if (fun == symbol::Lt)
+            cs << BC::lt();
+        else if (fun == symbol::Le)
+            cs << BC::le();
+        else if (fun == symbol::Gt)
+            cs << BC::gt();
+        else if (fun == symbol::Ge)
+            cs << BC::ge();
         else if (fun == symbol::Colon)
             cs << BC::colon();
         cs.addSrc(ast);
@@ -546,25 +546,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else if (Compiler::profile)
             cs << BC::recordType();
 
-        return true;
-    }
-
-    if (args.length() == 1 &&
-        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Not)) {
-        emitGuardForNamePrimitive(cs, fun);
-
-        compileExpr(ctx, args[0]);
-
-        if (fun == symbol::Add)
-            cs << BC::uplus();
-        else if (fun == symbol::Sub)
-            cs << BC::uminus();
-        else if (fun == symbol::Not)
-            cs << BC::not_();
-        cs.addSrc(ast);
-
-        if (voidContext)
-            cs << BC::pop();
         return true;
     }
 
@@ -610,6 +591,25 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << BC::lglOr();
 
         cs << nextBranch;
+
+        if (voidContext)
+            cs << BC::pop();
+        return true;
+    }
+
+    if (args.length() == 1 &&
+        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Not)) {
+        emitGuardForNamePrimitive(cs, fun);
+
+        compileExpr(ctx, args[0]);
+
+        if (fun == symbol::Add)
+            cs << BC::uplus();
+        else if (fun == symbol::Sub)
+            cs << BC::uminus();
+        else if (fun == symbol::Not)
+            cs << BC::not_();
+        cs.addSrc(ast);
 
         if (voidContext)
             cs << BC::pop();

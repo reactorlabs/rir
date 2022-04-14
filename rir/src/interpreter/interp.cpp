@@ -2614,19 +2614,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(add_) {
-            SEXP lhs = ostack_at(1);
-            SEXP rhs = ostack_at(0);
-            DO_BINOP(+, Binop::PLUSOP);
-            NEXT();
-        }
-
-        INSTRUCTION(uplus_) {
-            SEXP val = ostack_at(0);
-            DO_UNOP(+, Unop::PLUSOP);
-            NEXT();
-        }
-
         INSTRUCTION(inc_) {
             SEXP val = ostack_top();
             SLOWASSERT(TYPEOF(val) == INTSXP);
@@ -2642,16 +2629,59 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(sub_) {
-            SEXP lhs = ostack_at(1);
-            SEXP rhs = ostack_at(0);
-            DO_BINOP(-, Binop::MINUSOP);
+        INSTRUCTION(uplus_) {
+            SEXP val = ostack_at(0);
+            DO_UNOP(+, Unop::PLUSOP);
             NEXT();
         }
 
         INSTRUCTION(uminus_) {
             SEXP val = ostack_at(0);
             DO_UNOP(-, Unop::MINUSOP);
+            NEXT();
+        }
+
+        INSTRUCTION(not_) {
+            SEXP val = ostack_at(0);
+
+            if (IS_SIMPLE_SCALAR(val, LGLSXP)) {
+                if (*LOGICAL(val) == NA_LOGICAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *LOGICAL(val) == 0 ? R_TrueValue : R_FalseValue;
+                }
+            } else if (IS_SIMPLE_SCALAR(val, REALSXP)) {
+                if (*REAL(val) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(val) == 0.0 ? R_TrueValue : R_FalseValue;
+                }
+            } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {
+                if (*INTEGER(val) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(val) == 0 ? R_TrueValue : R_FalseValue;
+                }
+            } else {
+                UNOP_FALLBACK("!");
+            }
+
+            ostack_popn(1);
+            ostack_push(res);
+            NEXT();
+        }
+
+        INSTRUCTION(add_) {
+            SEXP lhs = ostack_at(1);
+            SEXP rhs = ostack_at(0);
+            DO_BINOP(+, Binop::PLUSOP);
+            NEXT();
+        }
+
+        INSTRUCTION(sub_) {
+            SEXP lhs = ostack_at(1);
+            SEXP rhs = ostack_at(0);
+            DO_BINOP(-, Binop::MINUSOP);
             NEXT();
         }
 
@@ -2815,19 +2845,29 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(lt_) {
+        INSTRUCTION(eq_) {
             SEXP lhs = ostack_at(1);
             SEXP rhs = ostack_at(0);
-            DO_RELOP(<);
+            DO_RELOP(==);
             ostack_popn(2);
             ostack_push(res);
             NEXT();
         }
 
-        INSTRUCTION(gt_) {
+        INSTRUCTION(ne_) {
+            assert(R_PPStackTop >= 0);
             SEXP lhs = ostack_at(1);
             SEXP rhs = ostack_at(0);
-            DO_RELOP(>);
+            DO_RELOP(!=);
+            ostack_popn(2);
+            ostack_push(res);
+            NEXT();
+        }
+
+        INSTRUCTION(lt_) {
+            SEXP lhs = ostack_at(1);
+            SEXP rhs = ostack_at(0);
+            DO_RELOP(<);
             ostack_popn(2);
             ostack_push(res);
             NEXT();
@@ -2842,6 +2882,15 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(gt_) {
+            SEXP lhs = ostack_at(1);
+            SEXP rhs = ostack_at(0);
+            DO_RELOP(>);
+            ostack_popn(2);
+            ostack_push(res);
+            NEXT();
+        }
+
         INSTRUCTION(ge_) {
             SEXP lhs = ostack_at(1);
             SEXP rhs = ostack_at(0);
@@ -2851,10 +2900,88 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(eq_) {
+        INSTRUCTION(lgl_and_) {
+            SEXP s2 = ostack_pop();
+            SEXP s1 = ostack_pop();
+            assert(TYPEOF(s2) == LGLSXP);
+            assert(TYPEOF(s1) == LGLSXP);
+            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
+            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
+            assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
+            assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
+            if (x1 == 1 && x2 == 1)
+                ostack_push(R_TrueValue);
+            else if (x1 == 0 || x2 == 0)
+                ostack_push(R_FalseValue);
+            else
+                ostack_push(R_LogicalNAValue);
+            NEXT();
+        }
+
+        INSTRUCTION(lgl_or_) {
+            SEXP s2 = ostack_pop();
+            SEXP s1 = ostack_pop();
+            assert(TYPEOF(s2) == LGLSXP);
+            assert(TYPEOF(s1) == LGLSXP);
+            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
+            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
+            assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
+            assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
+            if (x1 == 1 || x2 == 1)
+                ostack_push(R_TrueValue);
+            else if (x1 == 0 && x2 == 0)
+                ostack_push(R_FalseValue);
+            else
+                ostack_push(R_LogicalNAValue);
+            NEXT();
+        }
+
+        INSTRUCTION(colon_) {
+
             SEXP lhs = ostack_at(1);
             SEXP rhs = ostack_at(0);
-            DO_RELOP(==);
+            res = NULL;
+
+            if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
+                int from = *INTEGER(lhs);
+                if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                    int to = *INTEGER(rhs);
+                    if (from != NA_INTEGER && to != NA_INTEGER) {
+                        res = seq_int(from, to);
+                    }
+                } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                    double to = *REAL(rhs);
+                    if (from != NA_INTEGER && to != NA_REAL && R_FINITE(to) &&
+                        INT_MIN <= to && INT_MAX >= to && to == (int)to) {
+                        res = seq_int(from, (int)to);
+                    }
+                }
+            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {
+                double from = *REAL(lhs);
+                if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
+                    int to = *INTEGER(rhs);
+                    if (from != NA_REAL && to != NA_INTEGER && R_FINITE(from) &&
+                        INT_MIN <= from && INT_MAX >= from &&
+                        from == (int)from) {
+                        res = seq_int((int)from, to);
+                    }
+                } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
+                    double to = *REAL(rhs);
+                    if (from != NA_REAL && to != NA_REAL && R_FINITE(from) &&
+                        R_FINITE(to) && INT_MIN <= from && INT_MAX >= from &&
+                        INT_MIN <= to && INT_MAX >= to && from == (int)from &&
+                        to == (int)to) {
+                        res = seq_int((int)from, (int)to);
+                    }
+                }
+            }
+
+            if (res != NULL) {
+                R_Visible = (Rboolean) true;
+            } else {
+                BINOP_FALLBACK(":");
+            }
+
             ostack_popn(2);
             ostack_push(res);
             NEXT();
@@ -2881,82 +3008,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             else
                 ostack_push(rhs == lhs ? R_TrueValue : R_FalseValue);
 
-            NEXT();
-        }
-
-        INSTRUCTION(ne_) {
-            assert(R_PPStackTop >= 0);
-            SEXP lhs = ostack_at(1);
-            SEXP rhs = ostack_at(0);
-            DO_RELOP(!=);
-            ostack_popn(2);
-            ostack_push(res);
-            NEXT();
-        }
-
-        INSTRUCTION(not_) {
-            SEXP val = ostack_at(0);
-
-            if (IS_SIMPLE_SCALAR(val, LGLSXP)) {
-                if (*LOGICAL(val) == NA_LOGICAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *LOGICAL(val) == 0 ? R_TrueValue : R_FalseValue;
-                }
-            } else if (IS_SIMPLE_SCALAR(val, REALSXP)) {
-                if (*REAL(val) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(val) == 0.0 ? R_TrueValue : R_FalseValue;
-                }
-            } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {
-                if (*INTEGER(val) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(val) == 0 ? R_TrueValue : R_FalseValue;
-                }
-            } else {
-                UNOP_FALLBACK("!");
-            }
-
-            ostack_popn(1);
-            ostack_push(res);
-            NEXT();
-        }
-
-        INSTRUCTION(lgl_or_) {
-            SEXP s2 = ostack_pop();
-            SEXP s1 = ostack_pop();
-            assert(TYPEOF(s2) == LGLSXP);
-            assert(TYPEOF(s1) == LGLSXP);
-            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
-            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
-            assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
-            assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
-            if (x1 == 1 || x2 == 1)
-                ostack_push(R_TrueValue);
-            else if (x1 == 0 && x2 == 0)
-                ostack_push(R_FalseValue);
-            else
-                ostack_push(R_LogicalNAValue);
-            NEXT();
-        }
-
-        INSTRUCTION(lgl_and_) {
-            SEXP s2 = ostack_pop();
-            SEXP s1 = ostack_pop();
-            assert(TYPEOF(s2) == LGLSXP);
-            assert(TYPEOF(s1) == LGLSXP);
-            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
-            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
-            assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
-            assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
-            if (x1 == 1 && x2 == 1)
-                ostack_push(R_TrueValue);
-            else if (x1 == 0 || x2 == 0)
-                ostack_push(R_FalseValue);
-            else
-                ostack_push(R_LogicalNAValue);
             NEXT();
         }
 
@@ -3726,57 +3777,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             if (res != Rf_findFun(sym, env))
                 Rf_error("Invalid Callee");
-            NEXT();
-        }
-
-        INSTRUCTION(colon_) {
-
-            SEXP lhs = ostack_at(1);
-            SEXP rhs = ostack_at(0);
-            res = NULL;
-
-            if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
-                int from = *INTEGER(lhs);
-                if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-                    int to = *INTEGER(rhs);
-                    if (from != NA_INTEGER && to != NA_INTEGER) {
-                        res = seq_int(from, to);
-                    }
-                } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-                    double to = *REAL(rhs);
-                    if (from != NA_INTEGER && to != NA_REAL && R_FINITE(to) &&
-                        INT_MIN <= to && INT_MAX >= to && to == (int)to) {
-                        res = seq_int(from, (int)to);
-                    }
-                }
-            } else if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {
-                double from = *REAL(lhs);
-                if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-                    int to = *INTEGER(rhs);
-                    if (from != NA_REAL && to != NA_INTEGER && R_FINITE(from) &&
-                        INT_MIN <= from && INT_MAX >= from &&
-                        from == (int)from) {
-                        res = seq_int((int)from, to);
-                    }
-                } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-                    double to = *REAL(rhs);
-                    if (from != NA_REAL && to != NA_REAL && R_FINITE(from) &&
-                        R_FINITE(to) && INT_MIN <= from && INT_MAX >= from &&
-                        INT_MIN <= to && INT_MAX >= to && from == (int)from &&
-                        to == (int)to) {
-                        res = seq_int((int)from, (int)to);
-                    }
-                }
-            }
-
-            if (res != NULL) {
-                R_Visible = (Rboolean) true;
-            } else {
-                BINOP_FALLBACK(":");
-            }
-
-            ostack_popn(2);
-            ostack_push(res);
             NEXT();
         }
 
