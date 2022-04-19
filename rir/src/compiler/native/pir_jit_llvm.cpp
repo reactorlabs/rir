@@ -23,7 +23,6 @@
 #include "loweringPatches.h"
 #include "runtimePatches.h"
 #include "R/Funtab.h"
-#include "utils/UMap.h"
 #include "runtime/DispatchTable.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -33,7 +32,7 @@
 #include "utils/FunctionWriter.h"
 
 #include "ir/Compiler.h"
-
+#include "utils/DebugMessages.h"
 #define PRINT_DESERIALIZER_PROGRESS 1
 #define PRINT_DESERIALIZED_MODULE_BEFORE_PATCH 0
 #define PRINT_DESERIALIZED_MODULE_AFTER_PATCH 0
@@ -349,7 +348,6 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
     contextData c(cData);
 
     // load bitcode from file, patch and link to
-    std::cout << "deserializing " << CHAR(PRINTNAME(hast)) << std::endl;
      // Constant Pool patches
     SEXP cPool = c.getCPool();
     std::unordered_map<int64_t, int64_t> poolPatch;
@@ -553,390 +551,12 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
         item->function(function.function());
     }
 
+    function.function()->inheritFlags(vtab->baseline());
     vtab->insert(function.function());
+    if (getenv("EAGER_BITCODES")) {
+        res->nativeCode();
+    }
 }
-
-// void PirJitLLVM::deserializeAndAddModule(
-//     SEXP cPool, SEXP sPool,
-//     SEXP fNames, SEXP fSrc,
-//     SEXP fArg, SEXP fChildren,
-//     SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
-//     rir::FunctionSignature fs,
-//     std::string bcPath) {
-
-    // // Constant Pool patches
-    // std::unordered_map<int64_t, int64_t> poolPatch;
-    // for (int i = 0; i < Rf_length(cPool); i++) {
-    //     auto ele = VECTOR_ELT(cPool, i);
-    //     poolPatch[i] = Pool::insert(ele);
-    // }
-    // // Source Pool patches
-    // std::unordered_map<int64_t, int64_t> sPoolPatch;
-    // for (int i = 0; i < Rf_length(sPool); i++) {
-    //     auto ele = VECTOR_ELT(sPool, i);
-    //     sPoolPatch[i] = src_pool_add(globalContext(),ele);
-    // }
-    // #if PRINT_DESERIALIZER_PROGRESS == 1
-    // std::cout << "(*) Pool patches prepared" << std::endl;
-    // #endif
-
-    // #if PRINT_DESERIALIZED_MODULE_BEFORE_PATCH == 1
-    // llvm::raw_os_ostream dbg1(std::cout);
-    // dbg1 << *llModuleHolder.get();
-    // #endif
-
-    // #if PRINT_DESERIALIZER_PROGRESS == 1
-    // std::cout << "(*) Loading bc file: " << bcPath << std::endl;
-    // #endif
-
-    // Load the bc file into a memory buffer
-    // llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> mb = llvm::MemoryBuffer::getFile(bcPath);
-    // rir::pir::PirJitLLVM jit("f");
-
-    // // Load the memory buffer into a module
-    // llvm::Expected<std::unique_ptr<llvm::Module>> llModuleHolder = llvm::parseBitcodeFile(mb->get()->getMemBufferRef(), jit.getContext());
-
-
-    // if (std::error_code ec = errorToErrorCode(llModuleHolder.takeError())) {
-    //     std::stringstream errMsg;
-    //     errMsg << "Error reading module from bitcode : " << bcPath << std::endl;
-    // }
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) bitcode successfully loaded" << std::endl;
-//     #endif
-
-    // std::set<std::string> existingFunctionHandles;
-    // #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    // std::cout << "FunctionList: [ ";
-    // #endif
-    // for (auto & fun : llModuleHolder.get()->getFunctionList()) {
-    //     existingFunctionHandles.insert(fun.getName().str());
-    //     #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    //     std::cout << fun.getName().str() << " ";
-    //     #endif
-    // }
-    // #if DESERIALIZED_PRINT_POOL_PATCHES == 1
-    // std::cout << " ]" << std::endl;
-    // #endif
-
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) Pool deserialized" << std::endl;
-//     #endif
-
-    // // Apply pool patches
-    // for (auto & global : llModuleHolder.get()->getGlobalList()) {
-    //     auto pre = global.getName().str().substr(0,6) == "copool";
-    //     auto srp = global.getName().str().substr(0,6) == "srpool";
-    //     auto namc = global.getName().str().substr(0,6) == "named_";
-
-    //     if (namc) {
-    //         // auto con = global.getInitializer();
-
-    //         uint64_t addr = (uint64_t)globalContext();
-
-    //         llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(64,addr));
-
-    //         // llvm::outs() << *con << "\n";
-    //         // llvm::outs() << "replacement: " << *replacementValue << "\n";
-
-    //         global.setInitializer(replacementValue);
-    //         global.setExternallyInitialized(false);
-    //     }
-
-    //     if (pre) {
-    //         auto con = global.getInitializer();
-
-    //         if (auto * v = llvm::dyn_cast<llvm::ConstantDataArray>(con)) {
-    //             std::vector<llvm::Constant*> patchedIndices;
-
-    //             auto arrSize = v->getNumElements();
-
-    //             for (unsigned int i = 0; i < arrSize; i++) {
-    //                 auto val = v->getElementAsAPInt(i).getSExtValue();
-
-    //                 // Offset relative to the serialized pool
-    //                 llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, poolPatch[val]));
-    //                 patchedIndices.push_back(replacementValue);
-
-    //             }
-
-    //             auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
-    //             auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
-
-    //             global.setInitializer(newInit);
-    //         } else if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
-    //             auto val = v->getSExtValue();
-    //             // Offset relative to the serialized pool
-    //             llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, poolPatch[val]));
-
-    //             global.setInitializer(replacementValue);
-    //         } else  if (auto * v = llvm::dyn_cast<llvm::ConstantAggregateZero>(con)) {
-    //             std::vector<llvm::Constant*> patchedIndices;
-
-    //             auto arrSize = v->getNumElements();
-
-    //             for (unsigned int i = 0; i < arrSize; i++) {
-
-    //                 // Offset relative to the serialized pool
-    //                 llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, poolPatch[0]));
-    //                 patchedIndices.push_back(replacementValue);
-
-    //             }
-
-    //             auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
-    //             auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
-
-    //             global.setInitializer(newInit);
-    //         } else {
-    //             if (!llvm::dyn_cast<llvm::ConstantStruct>(con)) {
-    //                 llvm::raw_os_ostream os(std::cout);
-    //                 global.getType()->print(os);
-    //                 std::cout << global.getName().str() << " -> Unknown Type " << std::endl;
-    //             }
-    //         }
-    //         global.setExternallyInitialized(false);
-    //     }
-
-    //     // All src pool references have a srpool prefix
-    //     if (srp) {
-    //         auto con = global.getInitializer();
-    //         if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
-    //             auto val = v->getSExtValue();
-    //             // Offset relative to the serialized pool
-    //             llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, sPoolPatch[val]));
-    //             global.setInitializer(replacementValue);
-    //         }
-    //         global.setExternallyInitialized(false);
-    //     }
-    // }
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) Pool patches applied" << std::endl;
-//     #endif
-
-//     #if PRINT_DESERIALIZED_MODULE_AFTER_PATCH == 1
-//     llvm::raw_os_ostream dbg2(std::cout);
-//     dbg2 << *llModuleHolder.get();
-//     #endif
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) Inserting native code into jit" << std::endl;
-//     #endif
-
-    // // Insert native code into the JIT
-    // auto TSM = llvm::orc::ThreadSafeModule(std::move(llModuleHolder.get()), TSC);
-    // ExitOnErr(JIT->addIRModule(std::move(TSM)));
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) native code added to JIT" << std::endl;
-//     #endif
-
-//     #if PRINT_DESERIALIZER_PROGRESS == 1
-//     std::cout << "(*) Linking code objects" << std::endl;
-//     #endif
-
-    // FunctionWriter function;
-    // Preserve preserve;
-    // for (size_t i = 0; i < fs.numArguments; ++i) {
-    //     function.addArgWithoutDefault();
-    // }
-
-    // std::vector<rir::Code *> codeObjs;
-
-    // for (int i = 0; i < Rf_length(fNames); i++) {
-    //     // AST Data
-    //     auto astData = VECTOR_ELT(fSrc, i);
-    //     rir::Code * p = rir::Code::New(0);
-    //     if (astData == R_NilValue) {
-    //         p = rir::Code::New(src_pool_add(globalContext(), R_NilValue));
-    //         p->hast = nullptr;
-    //     } else {
-    //         p->hast = VECTOR_ELT(astData, 0);
-    //         p->offsetIndex = *INTEGER(VECTOR_ELT(astData, 1));
-    //     }
-
-    //     // ARG Data
-    //     auto argData = VECTOR_ELT(fArg, i);
-    //     if (TYPEOF(argData) != 0) {
-    //         SET_TYPEOF(argData, EXTERNALSXP);
-    //         p->arglistOrder(ArglistOrder::unpack(argData));
-    //     }
-
-    //     // Code handle
-    //     auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
-    //     p->lazyCodeHandle(handle);
-
-    //     codeObjs.push_back(p);
-    // }
-
-    // for (int i = 0; i < Rf_length(fChildren); i++) {
-    //     auto currCodeElement = codeObjs[i];
-
-    //     auto cVector = VECTOR_ELT(fChildren, i);
-    //     for (int j = 0; j < Rf_length(cVector); j++) {
-    //         auto d = VECTOR_ELT(cVector, j);
-    //         auto childCodeElement = codeObjs[Rf_asInteger(d)];
-    //         currCodeElement->addExtraPoolEntry(childCodeElement->container());
-    //     }
-    // }
-
-    // auto res = codeObjs[0];
-    // function.finalize(res, fs, context);
-
-    // for (auto& item : codeObjs) {
-    //     item->function(function.function());
-    // }
-
-//     auto map = Pool::get(HAST_DEPENDENCY_MAP);
-//     // hast dependency map does not exist
-//     if (map == R_NilValue) {
-//         SEXP tmp;
-//         PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-//         Pool::patch(HAST_DEPENDENCY_MAP, tmp);
-//         UNPROTECT(1);
-//         map = Pool::get(HAST_DEPENDENCY_MAP);
-//     }
-//     assert(TYPEOF(map) == ENVSXP);
-
-//     // currentHastEnv does not exist
-//     if (Rf_findVarInFrame(map, hast) == R_UnboundValue) {
-//         SEXP tmp;
-//         PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-//         Rf_defineVar(hast, tmp, map);
-//         UNPROTECT(1);
-//     }
-//     SEXP currHastMap = Rf_findVarInFrame(map, hast);
-
-//     // offset map does not exist
-//     if (Rf_findVarInFrame(currHastMap, offsetSym) == R_UnboundValue) {
-//         SEXP tmp;
-//         PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-//         Rf_defineVar(offsetSym, tmp, currHastMap);
-//         UNPROTECT(1);
-//     }
-
-//     SEXP offsetMap = Rf_findVarInFrame(currHastMap, offsetSym);
-
-//     // Function pointer and dependencies
-//     SEXP funDataVec;
-//     PROTECT(funDataVec = Rf_allocVector(VECSXP, Rf_length(rMap) + 1));
-
-//     SET_VECTOR_ELT(funDataVec, 0, function.function()->container());
-
-//     for (int i = 1; i < Rf_length(funDataVec); i++) {
-//         SEXP reqHast = VECTOR_ELT(rMap, i-1);
-//         auto n = std::string(CHAR(PRINTNAME(reqHast)));
-
-//         auto firstDel = n.find('_');
-//         if (firstDel != std::string::npos) {
-//             // optimistic dispatch case
-//             auto secondDel = n.find('_', firstDel + 1);
-
-//             auto h1 = n.substr(0, firstDel);
-//             unsigned long con = std::stoul(n.substr(firstDel + 1, secondDel - firstDel - 1));
-//             unsigned numArgs = std::stoi((n.substr(secondDel + 1)));
-
-//             SEXP reqData;
-//             PROTECT(reqData = Rf_allocVector(VECSXP, 3));
-
-//             // Index 0: hast
-//             SET_VECTOR_ELT(reqData, 0, Rf_install(h1.c_str()));
-//             SEXP store;
-
-//             // Index 1: context
-//             PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned long)));
-//             unsigned long * t1 = (unsigned long *) DATAPTR(store);
-//             *t1 = con;
-//             SET_VECTOR_ELT(reqData, 1, store);
-//             UNPROTECT(1);
-
-//             // Index 2: args size
-//             PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned)));
-//             unsigned * t2 = (unsigned *) DATAPTR(store);
-//             *t2 = numArgs;
-//             SET_VECTOR_ELT(reqData, 2, store);
-//             UNPROTECT(1);
-
-//             SET_VECTOR_ELT(funDataVec, i, reqData);
-
-//             UNPROTECT(1);
-
-//         } else {
-//             // check if
-//             SET_VECTOR_ELT(funDataVec, i, reqHast);
-//         }
-//     }
-
-//     SEXP contextSym = Rf_install(std::to_string(context.toI()).c_str());
-
-//     Rf_defineVar(contextSym, funDataVec, offsetMap);
-
-//     UNPROTECT(1);
-
-//     auto ulMap = Pool::get(HAST_UNLOCK_MAP);
-//     if (ulMap == R_NilValue) {
-//         SEXP tmp;
-//         PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-//         Pool::patch(HAST_UNLOCK_MAP, tmp);
-//         UNPROTECT(1);
-//         ulMap = Pool::get(HAST_UNLOCK_MAP);
-//     }
-
-//     auto populateAndGrow = [&] (SEXP dep, SEXP data) {
-//         if (Rf_findVarInFrame(ulMap, dep) == R_UnboundValue) {
-//             SEXP workVector;
-//             PROTECT(workVector = Rf_allocVector(VECSXP, 1));
-//             SET_VECTOR_ELT(workVector, 0, data);
-//             Rf_defineVar(dep, workVector, ulMap);
-//             UNPROTECT(1);
-//         } else {
-//             SEXP oldVec = Rf_findVarInFrame(ulMap, dep);
-//             auto oldSize = Rf_length(oldVec);
-
-//             SEXP newWorkVec;
-//             PROTECT(newWorkVec = Rf_allocVector(VECSXP, oldSize + 1));
-//             memcpy(DATAPTR(newWorkVec), DATAPTR(oldVec), oldSize * sizeof(SEXP));
-//             SET_VECTOR_ELT(newWorkVec, oldSize, data);
-//             Rf_defineVar(dep, newWorkVec, ulMap);
-
-//             UNPROTECT(1);
-//         }
-//     };
-
-//     auto populateUnlockMap = [&] (SEXP dep) {
-//         SEXP unlockVec;
-//         PROTECT(unlockVec = Rf_allocVector(VECSXP, 3));
-//         SET_VECTOR_ELT(unlockVec, 0, hast);
-//         SET_VECTOR_ELT(unlockVec, 1, offsetSym);
-//         SET_VECTOR_ELT(unlockVec, 2, function.function()->container());
-//         populateAndGrow(dep, unlockVec);
-//         UNPROTECT(1);
-//     };
-
-//     // Populate unlock map
-//     for (int i = 0; i < Rf_length(rMap); i++) {
-//         SEXP ele = VECTOR_ELT(rMap, i);
-//         SEXP hastOfReq = ele;
-
-//         auto n = std::string(CHAR(PRINTNAME(ele)));
-
-//         auto firstDel = n.find('_');
-//         if (firstDel != std::string::npos) {
-//             // optimistic dispatch case
-//             auto secondDel = n.find('_', firstDel + 1);
-//             auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-//             hastOfReq = Rf_install(hast.c_str());
-//         }
-
-//         populateUnlockMap(hastOfReq);
-//     }
-
-//     // DeserialDataMap::addFunctionPtr(map, hast, context.toI(), function.function()->container());
-
-
-// }
 
 void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames) {
     auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
@@ -946,10 +566,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
 
     std::unordered_map<int64_t, int64_t> cpAlreadySeen;
     std::unordered_map<int64_t, int64_t> spAlreadySeen;
-
-    #if PRINT_SERIALIZER_PROGRESS == 1
-    std::cout << "  (>) Module Serialization Started" << std::endl;
-    #endif
 
     // Releasing the module as soon as globals are patched and the bc is serialized
     {
@@ -966,11 +582,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
             }
         }
 
-        #if PRINT_MODULE_BEFORE_POOL_PATCHES == 1
-        llvm::raw_os_ostream dbg_stream(std::cout);
-        dbg_stream << *m;
-        dbg_stream << "\n";
-        #endif
 
         std::vector<llvm::Function *> junkFunctionList;
 
@@ -1007,12 +618,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
         llvm::ModulePassManager modulePassManager =
             passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
         modulePassManager.run(*module, moduleAnalysisManager);
-
-        if (junkFunctionList.size() > 0) {
-            #if PRINT_SERIALIZER_PROGRESS == 1
-            std::cout << "    (*) junk functions cleared" << std::endl;
-            #endif
-        }
 
         size_t srcPoolOffset = 0;
 
@@ -1146,14 +751,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
         llvm::raw_os_ostream ooo(bitcodeFile);
         WriteBitcodeToFile(*module,ooo);
 
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "    (*) Module bitcode serialized: " << bcPath.str() << std::endl;
-        #endif
-
-        #if PRINT_MODULE_AFTER_POOL_PATCHES == 1
-        llvm::raw_os_ostream debugOp(std::cout);
-        debugOp << *module;
-        #endif
         module.reset();
     }
 
@@ -1169,15 +766,11 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
         // Dont serialize external code, we serialize the original AST
         if (TYPEOF(obj) == CLOSXP) {
             *serializerError = true;
-            #if PRINT_POOL_SERIALIZATION_ERRORS == 1
-            std::cout << "  (E) Trying to serialize CLOSXP with EXTERNALSXP body" << std::endl;
-            #endif
+            DebugMessages::printSerializerErrors("(*) constant pool contains CLOSXP, not supported.", 2);
         }
         if (TYPEOF(obj) == 26) {
             *serializerError = true;
-            #if PRINT_POOL_SERIALIZATION_ERRORS == 1
-            std::cout << "  (E) Trying to serialize a EXTERNALSXP" << std::endl;
-            #endif
+            DebugMessages::printSerializerErrors("(*) constant pool contains EXTERNALSXP, not supported.", 2);
         }
         SET_VECTOR_ELT(cPool, i, obj);
     }
@@ -1189,10 +782,6 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
 
     conData.addCPool(cPool);
     conData.addSPool(sPool);
-
-    #if PRINT_SERIALIZER_PROGRESS == 1
-    std::cout << "  (/) Module Serialized Successfully" << std::endl;
-    #endif
 
     UNPROTECT(2);
 }
@@ -1386,6 +975,22 @@ static SEXP getClosContainer(SEXP hastSym) {
     return resolvedContainer;
 }
 
+static unsigned getCodeInnerObjIdx(SEXP hastSym, int offset) {
+    SEXP lMap = Pool::get(HAST_VTAB_MAP);
+    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
+
+    if (!DispatchTable::check(vtabContainer)) {
+        std::cout << "ERROR: " << CHAR(PRINTNAME(hastSym)) << std::endl;
+        Rf_error("dispatch table missing: getCodeInnerObj");
+    }
+
+    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
+    auto addr = vt->baseline()->body();
+
+    int idx = 0;
+    return addr->getSrcForInnerObjs(true, idx, offset);
+}
+
 void PirJitLLVM::initializeLLVM() {
     #if ENABLE_SPE_PATCHES == 1
     static int opaqueTrue = 1;
@@ -1534,6 +1139,8 @@ void PirJitLLVM::initializeLLVM() {
                 auto vtab = n.substr(0, 5) == "vtab_"; // Hast to dispatch table
                 auto clos = n.substr(0, 5) == "clos_"; // Hast to container closure
                 auto optd = n.substr(0, 5) == "optd_"; // Try optimistic dispatch to optd_HAST_CONTEXT_NARGS
+
+                auto pluu = n.substr(0, 5) == "pluu_"; // Constant pool entry
 
                 if (ept || efn) {
                     auto addrStr = n.substr(4);
@@ -1802,6 +1409,27 @@ void PirJitLLVM::initializeLLVM() {
                     Pool::insert(store);
                     UNPROTECT(1);
 
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        static_cast<JITTargetAddress>(
+                            reinterpret_cast<uintptr_t>(tmp)),
+                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
+
+                } else if (pluu) {
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
+
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    int index = std::stoi(n.substr(secondDel + 1));
+
+                    unsigned idx = getCodeInnerObjIdx(Rf_install(hast.c_str()), index);
+
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
+                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
+                    *tmp = idx;
+                    Pool::insert(store);
+                    UNPROTECT(1);
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(

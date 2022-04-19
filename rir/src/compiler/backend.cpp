@@ -28,6 +28,8 @@
 #include <unordered_set>
 
 #include "utils/serializerData.h"
+#include "utils/DebugMessages.h"
+#include "api.h"
 
 namespace rir {
 namespace pir {
@@ -404,9 +406,9 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         #if ADD_EXTRA_DEBUGGING_DATA == 1
         jit.enableDebugStatements();
         #endif
-        jit.serializerError = serializerError;
         jit.reqMapForCompilation = &rMap;
     }
+    jit.serializerError = serializerError;
 
     std::unordered_map<Code*, rir::Code*> done;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
@@ -436,294 +438,231 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     };
     auto body = compile(cls);
 
-    if (cData != nullptr) {
-        #if ADD_EXTRA_DEBUGGING_DATA == 1
-        jit.disableDebugStatements();
-        #endif
-
-        #if BACKEND_PRINT_INITIAL_LLVM == 1
-        std::cout << "BACKEND_INITIAL_LLVM" << std::endl;
-        jit.printModule();
-        #endif
-
+    if (cData) {
+        // Find the head code object
         Code * mainFunCodeObj = findFunCodeObj(promMap);
-
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) Found mainFunCodeObj: " << mainFunCodeObj << std::endl;
-        #endif
-
         SEXP hast = getHastAndIndex(done[mainFunCodeObj]->src).hast;
 
-        if (hast == R_NilValue) {
+        // If lowering failed, skip further serialization process
+        if (*serializerError == true) {
+            DebugMessages::printSerializerMessage("(E) Lowering patches failed, skipping further serialization process.", 1);
+        } else if (hast == R_NilValue) {
             *serializerError = true;
-            #if PRINT_SERIALIZER_ERRORS == 1
-            std::cout << "  (E) Hast unavailable, cannot populate cData" << std::endl;
+            DebugMessages::printSerializerMessage("(E) Backend, src hast may be blacklisted.", 1);
+        } else {
+            #if ADD_EXTRA_DEBUGGING_DATA == 1
+            jit.disableDebugStatements();
             #endif
-        }
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 99999);
-        std::string startingUID;
-        while (true) {
-            std::stringstream ss;
-            ss << "f_";
-            ss << dis(gen) << "_"; // random 5 digit number
-            ss << std::hex << std::uppercase << CHAR(PRINTNAME(hast)); // random 5 digit number
-            ss << "_";
-            ss << std::hex << std::uppercase << cls->context().toI();
-            auto e = jit.JIT->lookup(ss.str() + "_0");
-            if (e.takeError()) {
-                startingUID = ss.str();
-                break;
-            }
-        }
-
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) StartingUID: " << startingUID << std::endl;
-        #endif
-
-        #if PRINT_DONE_MAP == 1
-        std::cout << "  (*) DONE MAP" << std::endl;
-        for (auto & ele : done) {
-            std::cout << "    " << ele.first << " -> " << ele.second << std::endl;
-        }
-        #endif
-
-        #if PRINT_PROM_MAP == 1
-        std::cout << "  (*) PROMISE MAP" << std::endl;
-        std::cout << "      ROOT: " << mainFunCodeObj << std::endl;
-        for (auto & ele : promMap) {
-            std::cout << "      " << ele.first << " - [ ";
-            for (auto & p : ele.second) {
-                std::cout << p.first << " ";
-            }
-            std::cout << "]" << std::endl;
-        }
-        #endif
-
-        std::unordered_map<std::string, unsigned> srcDataMap;
-        std::unordered_map<std::string, SEXP> srcArgMap;
-        std::unordered_map<std::string, std::vector<std::string>> childrenData;
-        std::unordered_map<std::string, int> codeOffset;
-
-
-        std::unordered_map<Code *, std::string> processedName;
-
-        auto getProcessedName = [&](Code * c) {
-            static int uid = 0;
-            if (processedName.find(c) == processedName.end()) {
-                std::stringstream nn;
-                nn << startingUID << "_" << uid++;
-                std::string name = nn.str();
-                // Update the name in module to the new one
-                jit.updateFunctionNameInModule(done[c]->mName, name);
-                // Update the name for the handle
-                jit.patchFixupHandle(name, c);
-                processedName[c] = name;
-
-                auto data = getHastAndIndex(c->rirSrc()->src);
-                if (data.hast == R_NilValue) {
-                    *serializerError = true;
-                    #if PRINT_SERIALIZER_PROGRESS == 1
-                    std::cout << "  (E) Src hast is 0 for " << name << ", src: " << c->rirSrc()->src << std::endl;
-                    #endif
-                }
-
-
-                srcDataMap[name] = c->rirSrc()->src;
-
-
-
-                if (done[c]->arglistOrder() != nullptr) {
-                    srcArgMap[name] = done[c]->argOrderingVec;
-                } else {
-                    srcArgMap[name] = R_NilValue;
-                }
-
-                #if BACKEND_PRINT_NAME_UPDATES == 1
-                std::cout << "  (*) Updating name: " << done[c]->mName << " -> " << name << std::endl;
-                #endif
-
-                return name;
-            } else {
-                return processedName[c];
-            }
-        };
-
-        // std::cout << "ORIG CHILDREN" << std::endl;
-        std::function<void(Code* c)>
-            updateModuleNames = [&](Code* c) {
-            std::string name = getProcessedName(c);
-            // Traverse over all the promises for the current code object
-            auto & promisesForThisObj = promMap[c];
-            std::vector<std::string> children;
-            // std::cout << name << " : [ ";
-            // If there are promises, then work on this
-            if (promisesForThisObj.size() > 0) {
-                for (size_t i = 0; i < promisesForThisObj.size(); i++) {
-                    // get i'th promise
-                    auto curr = done[c]->getExtraPoolEntry(i);
-                    for (auto & promise : promisesForThisObj) {
-                        if (curr == done[promise.first]->container()) {
-                            auto nn = getProcessedName(promise.first);
-                            children.push_back(nn);
-                            // std::cout << nn << " ";
-                            break;
-                        }
-                    }
-                }
-            }
-            // std::cout << "] " << std::endl;
-            childrenData[name] = children;
-        };
-
-        for (auto & ele : promMap) {
-            updateModuleNames(ele.first);
-        }
-
-        std::vector<std::string> relevantNames;
-
-        // List of relevant names in the module, to prevent duplicate symbols in the deserializer routine
-        for (auto & ele : processedName) {
-            relevantNames.push_back(ele.second);
-        }
-
-
-        jit.serializeModule(done[mainFunCodeObj], cData, relevantNames);
-
-        std::string mainName = getProcessedName(mainFunCodeObj);
-
-        if (relevantNames.at(0).compare(mainName) != 0) {
-            int mainNameIndex = 0;
-            for (size_t i = 0; i < relevantNames.size(); i++) {
-                if (relevantNames.at(i).compare(mainName) == 0) {
-                    mainNameIndex = i;
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, 999999);
+            std::string startingUID;
+            while (true) {
+                std::stringstream ss;
+                ss << "f_";
+                ss << dis(gen); // random 5 digit number
+                ss << std::hex << std::uppercase << CHAR(PRINTNAME(hast)); // random 5 digit number
+                ss << "_";
+                ss << std::hex << std::uppercase << cls->context().toI();
+                // _0 may not necessarily be the main code obj, maybe we can fix that in the future
+                auto e = jit.JIT->lookup(ss.str() + "_0");
+                if (e.takeError()) {
+                    startingUID = ss.str();
                     break;
                 }
             }
-            std::swap(relevantNames[0],relevantNames[mainNameIndex]);
-        }
 
-        for (size_t i = 0; i < relevantNames.size(); i++) {
-            codeOffset[relevantNames[i]] = i;
-        }
+            // handle to src idx
+            std::unordered_map<std::string, unsigned> srcDataMap;
+            // handle to Argument ordering vector
+            std::unordered_map<std::string, SEXP> srcArgMap;
+            // handle to vector of children handles
+            std::unordered_map<std::string, std::vector<std::string>> childrenData;
+            // handles offset in the processed vector that will be serialized
+            std::unordered_map<std::string, int> codeOffset;
+            // code objects to the native handles
+            std::unordered_map<Code *, std::string> processedName;
 
-        SEXP fNamesVec, fSrcDataVec, fArgDataVec, fChildrenData;
-        PROTECT(fNamesVec = Rf_allocVector(VECSXP, relevantNames.size()));
-        PROTECT(fSrcDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
-        PROTECT(fArgDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
-        PROTECT(fChildrenData = Rf_allocVector(VECSXP, relevantNames.size()));
+            auto getProcessedName = [&](Code * c) {
+                static int uid = 0;
+                if (processedName.find(c) == processedName.end()) {
+                    std::stringstream nn;
+                    nn << startingUID << "_" << uid++;
+                    std::string name = nn.str();
+                    // Update the name in module to the new one
+                    jit.updateFunctionNameInModule(done[c]->mName, name);
+                    // Update the name for the handle
+                    jit.patchFixupHandle(name, c);
+                    processedName[c] = name;
 
-        for (size_t i = 0; i < relevantNames.size(); i++) {
-            SEXP store;
-            PROTECT(store = Rf_mkString(relevantNames[i].c_str()));
-            SET_VECTOR_ELT(fNamesVec, i, store);
-            UNPROTECT(1);
+                    auto data = getHastAndIndex(c->rirSrc()->src);
+                    if (data.hast == R_NilValue) {
+                        *serializerError = true;
+                    }
 
-            // AST
-            auto data = getHastAndIndex(srcDataMap[relevantNames[i]]);
-            if (data.hast == R_NilValue) {
-                SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);
-            } else {
-                SEXP lMap = Pool::get(HAST_VTAB_MAP);
-                auto resolvedContainer = Rf_findVarInFrame(lMap, data.hast);
-                DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
 
-                int idx = 0;
-                unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, data.index);
+                    srcDataMap[name] = c->rirSrc()->src;
 
-                if (calc != srcDataMap[relevantNames[i]]) {
-                    std::cout << "[src mismatch]: " << calc << ", " << srcDataMap[relevantNames[i]] << std::endl;
-                    SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);
+                    if (done[c]->arglistOrder() != nullptr) {
+                        srcArgMap[name] = done[c]->argOrderingVec;
+                    } else {
+                        srcArgMap[name] = R_NilValue;
+                    }
+
+                    return name;
                 } else {
-                    SEXP dd;
-                    PROTECT(dd = Rf_allocVector(VECSXP, 2));
+                    return processedName[c];
+                }
+            };
 
-                    SET_VECTOR_ELT(dd, 0, data.hast);
-                    SET_VECTOR_ELT(dd, 1, Rf_ScalarInteger(data.index));
+            std::function<void(Code* c)>
+                updateModuleNames = [&](Code* c) {
+                std::string name = getProcessedName(c);
+                // Traverse over all the promises for the current code object
+                auto & promisesForThisObj = promMap[c];
+                std::vector<std::string> children;
+                // If there are promises, then work on this
+                if (promisesForThisObj.size() > 0) {
+                    for (size_t i = 0; i < promisesForThisObj.size(); i++) {
+                        // get i'th promise
+                        auto curr = done[c]->getExtraPoolEntry(i);
+                        for (auto & promise : promisesForThisObj) {
+                            if (curr == done[promise.first]->container()) {
+                                auto nn = getProcessedName(promise.first);
+                                children.push_back(nn);
+                                break;
+                            }
+                        }
+                    }
+                }
+                childrenData[name] = children;
+            };
 
-                    SET_VECTOR_ELT(fSrcDataVec, i, dd);
+            for (auto & ele : promMap) {
+                updateModuleNames(ele.first);
+            }
 
+            std::vector<std::string> relevantNames;
+
+            // List of relevant names in the module, to clear junk functions from the module
+            for (auto & ele : processedName) {
+                relevantNames.push_back(ele.second);
+            }
+
+            if (*serializerError == true) {
+                DebugMessages::printSerializerMessage("(E) Failed processing promise map.", 1);
+            } else {
+                // ENTRY 5: cPool, ENTRY 6: sPool
+                jit.serializeModule(done[mainFunCodeObj], cData, relevantNames);
+
+                if (*serializerError == true) {
+                    DebugMessages::printSerializerMessage("(E) Serializing module failed, pools may have unsupported type of values.", 1);
+                } else {
+                    std::string mainName = getProcessedName(mainFunCodeObj);
+
+                    // Move the main code handle to the 0th index
+                    if (relevantNames.at(0).compare(mainName) != 0) {
+                        int mainNameIndex = 0;
+                        for (size_t i = 0; i < relevantNames.size(); i++) {
+                            if (relevantNames.at(i).compare(mainName) == 0) {
+                                mainNameIndex = i;
+                                break;
+                            }
+                        }
+                        std::swap(relevantNames[0],relevantNames[mainNameIndex]);
+                    }
+
+                    for (size_t i = 0; i < relevantNames.size(); i++) {
+                        codeOffset[relevantNames[i]] = i;
+                    }
+
+                    SEXP fNamesVec, fSrcDataVec, fArgDataVec, fChildrenData;
+                    PROTECT(fNamesVec = Rf_allocVector(VECSXP, relevantNames.size()));
+                    PROTECT(fSrcDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
+                    PROTECT(fArgDataVec = Rf_allocVector(VECSXP, relevantNames.size()));
+                    PROTECT(fChildrenData = Rf_allocVector(VECSXP, relevantNames.size()));
+
+                    for (size_t i = 0; i < relevantNames.size(); i++) {
+                        SEXP store;
+                        // Entry [2]: native handles, first entry is always the main code obj
+                        PROTECT(store = Rf_mkString(relevantNames[i].c_str()));
+                        SET_VECTOR_ELT(fNamesVec, i, store);
+                        UNPROTECT(1);
+
+                        // Entry [3]: src ast data
+                        auto data = getHastAndIndex(srcDataMap[relevantNames[i]]);
+                        SEXP lMap = Pool::get(HAST_VTAB_MAP);
+                        auto resolvedContainer = Rf_findVarInFrame(lMap, data.hast);
+                        DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
+
+                        int idx = 0;
+                        unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, data.index);
+
+                        if (calc != srcDataMap[relevantNames[i]]) {
+                            std::cout << "[src mismatch]: " << calc << ", " << srcDataMap[relevantNames[i]] << std::endl;
+                            SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);
+                        } else {
+                            SEXP dd;
+                            PROTECT(dd = Rf_allocVector(VECSXP, 2));
+
+                            SET_VECTOR_ELT(dd, 0, data.hast);
+                            SET_VECTOR_ELT(dd, 1, Rf_ScalarInteger(data.index));
+
+                            SET_VECTOR_ELT(fSrcDataVec, i, dd);
+
+                            UNPROTECT(1);
+                        }
+
+                        // Entry [4]: arglist ordering data
+                        SET_VECTOR_ELT(fArgDataVec, i, srcArgMap[relevantNames[i]]);
+
+                        // Entry [7]: children data/promises
+                        auto children = childrenData[relevantNames[i]];
+
+                        SEXP childrenContainer;
+                        PROTECT(childrenContainer = Rf_allocVector(VECSXP, children.size()));
+
+                        for (size_t j = 0; j < children.size(); j++) {
+                            SET_VECTOR_ELT(childrenContainer, j, Rf_ScalarInteger(codeOffset[children[j]]));
+                        }
+
+                        SET_VECTOR_ELT(fChildrenData, i, childrenContainer);
+
+                        UNPROTECT(1);
+                    }
+
+                    contextData conData(cData);
+
+                    conData.addFNames(fNamesVec);
+                    conData.addFSrc(fSrcDataVec);
+                    conData.addFArg(fArgDataVec);
+                    conData.addFChildren(fChildrenData);
+
+                    UNPROTECT(4);
+                    conData.addFunctionSignature(signature);
+
+                    // Entry [8]: requirement map
+                    std::vector<SEXP> reqMap;
+                    for (auto & ele : rMap) {
+                        if (ele != hast) {
+                            reqMap.push_back(ele);
+                        }
+                    }
+
+                    SEXP rData;
+                    PROTECT(rData = Rf_allocVector(VECSXP, reqMap.size()));
+
+                    int i = 0;
+                    for (auto & ele : reqMap) {
+                        SET_VECTOR_ELT(rData, i++, ele);
+                    }
+
+                    conData.addReqMapForCompilation(rData);
                     UNPROTECT(1);
                 }
+
             }
-
-            // Arglist Order
-            SET_VECTOR_ELT(fArgDataVec, i, srcArgMap[relevantNames[i]]);
-
-            auto children = childrenData[relevantNames[i]];
-
-            SEXP childrenContainer;
-            PROTECT(childrenContainer = Rf_allocVector(VECSXP, children.size()));
-
-            for (size_t j = 0; j < children.size(); j++) {
-                SET_VECTOR_ELT(childrenContainer, j, Rf_ScalarInteger(codeOffset[children[j]]));
-            }
-
-            SET_VECTOR_ELT(fChildrenData, i, childrenContainer);
-
-            UNPROTECT(1);
-        }
-
-        contextData conData(cData);
-
-        conData.addFNames(fNamesVec);
-        conData.addFSrc(fSrcDataVec);
-        conData.addFArg(fArgDataVec);
-        conData.addFChildren(fChildrenData);
-
-        UNPROTECT(4);
-        conData.addFunctionSignature(signature);
-
-        // get rid of yourself from the req map
-        std::vector<SEXP> reqMap;
-        for (auto & ele : rMap) {
-            if (ele != hast) {
-                reqMap.push_back(ele);
-            }
-        }
-
-        SEXP rData;
-        PROTECT(rData = Rf_allocVector(VECSXP, reqMap.size()));
-
-        int i = 0;
-        for (auto & ele : reqMap) {
-            // SEXP store;
-            // PROTECT(store = Rf_allocVector(RAWSXP, sizeof(size_t)));
-            // size_t * tmp = (size_t *) DATAPTR(store);
-            // *tmp = ele;
-            SET_VECTOR_ELT(rData, i++, ele);
-            // UNPROTECT(1);
-        }
-
-
-        conData.addReqMapForCompilation(rData);
-
-        UNPROTECT(1);
-
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) Original reqMapForCompilation: < ";
-        for (auto & ele : reqMap) {
-            std::cout << CHAR(PRINTNAME(ele)) << " ";
-        }
-        std::cout << ">" << std::endl;
-        #endif
-        // if (getenv("PIR_SERIALIZE_NO_REQ") && rMap.size() > 0) {
-        //     *serializerError = true;
-        //     std::cout << "  (F) PIR_SERIALIZE_NO_REQ" << std::endl;
-        // }
-        #if PRINT_SERIALIZER_PROGRESS == 1
-        std::cout << "  (*) metadata added" << std::endl;
-        #endif
-
-        #if BACKEND_PRINT_FINAL_LLVM == 1
-        std::cout << "BACKEND_INITIAL_LLVM" << std::endl;
-        jit.printModule();
-        #endif
-        if (getenv("PIR_SERIALIZE_NO_INNER") && cls->owner()->rirFunction()->flags.contains(Function::InnerFunction)) {
-            *serializerError = true;
-            std::cout << "  (F) inner function" << std::endl;
         }
     }
 

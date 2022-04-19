@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "loweringPatches.h"
-#include "utils/UMap.h"
 
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);

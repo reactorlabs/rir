@@ -23,9 +23,11 @@
 #include <unordered_set>
 #include "R/Printing.h"
 
+#include "utils/DebugMessages.h"
 
 #define NOT_IMPLEMENTED assert(false)
-
+#define DEBUG_BC_INSN 0
+#define DEBUG_CHECKPOINTS 0
 #undef eval
 
 extern "C" {
@@ -1928,7 +1930,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
-        // std::cout << "exec native code: " << c->lazyCodeHandle_ << std::endl;
+        #if DEBUG_CHECKPOINTS == 1
+        DebugCheckpoints::updateCheckpoint(c->lazyCodeHandle_);
+        #endif
         return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
                       callCtxt ? callCtxt->callee : nullptr);
     }
@@ -1946,6 +1950,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     R_bcstack_t* basePtr = nullptr;
 
     BindingCache* bindingCache;
+    #if DEBUG_CHECKPOINTS == 1
+    DebugCheckpoints::updateCheckpoint(c, cache ? true : false);
+    #endif
     if (cache) {
         bindingCache = cache;
     } else {
@@ -2013,6 +2020,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(nop_) NEXT();
 
         INSTRUCTION(clear_binding_cache_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("clear_binding_cache_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             size_t start = readImmediate();
             advanceImmediate();
             size_t len = readImmediate();
@@ -2026,6 +2038,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldfun_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldfun_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findFun(sym, env);
@@ -2054,6 +2071,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_for_update_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_for_update_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             assert(!LazyEnvironment::check(env));
@@ -2094,6 +2116,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_for_update_cache_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_for_update_cache_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2136,6 +2163,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             assert(!LazyEnvironment::check(env));
@@ -2162,6 +2194,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_noforce_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_noforce_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             assert(!LazyEnvironment::check(env));
@@ -2189,6 +2226,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_cached_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_cached_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2219,6 +2261,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldvar_super_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldvar_super_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             assert(!LazyEnvironment::check(env));
@@ -2244,6 +2291,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ldddvar_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ldddvar_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_ddfindVar(sym, env);
@@ -2268,6 +2320,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(stvar_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("stvar_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
@@ -2281,6 +2338,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(stvar_cached_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("stvar_cached_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate cacheIndex = readImmediate();
@@ -2294,6 +2356,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(stvar_super_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("stvar_super_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
@@ -2310,6 +2377,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(record_call_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("record_call_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ObservedCallees* feedback = (ObservedCallees*)pc;
             SEXP callee = ostack_top(ctx);
             feedback->record(c, callee);
@@ -2318,6 +2390,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(record_test_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("record_test_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ObservedTest* feedback = (ObservedTest*)pc;
             SEXP t = ostack_top(ctx);
             feedback->record(t);
@@ -2326,6 +2403,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(record_type_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("record_type_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top(ctx);
             feedback->record(t);
@@ -2334,6 +2416,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(call_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("call_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
@@ -2367,6 +2454,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(named_call_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("named_call_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
@@ -2401,6 +2493,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(call_dots_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("call_dots_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
 #ifdef ENABLE_SLOWASSERT
             int ttt = R_PPStackTop;
             auto lll = ostack_length(ctx);
@@ -2453,6 +2550,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(call_builtin_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("call_builtin_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
 #ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
@@ -2479,6 +2581,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(close_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("close_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP srcref = ostack_at(ctx, 0);
             SEXP body = ostack_at(ctx, 1);
             SEXP formals = ostack_at(ctx, 2);
@@ -2494,6 +2601,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(check_function_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("check_function_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
 
             switch (TYPEOF(val)) {
@@ -2512,6 +2624,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(mk_eager_promise_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("mk_eager_promise_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
@@ -2524,6 +2641,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(mk_promise_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("mk_promise_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
@@ -2532,6 +2654,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(force_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("force_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             if (TYPEOF(ostack_top(ctx)) == PROMSXP) {
                 SEXP val = ostack_pop(ctx);
                 // If the promise is already evaluated then push the value
@@ -2543,6 +2670,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(push_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("push_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             res = readConst(ctx, readImmediate());
             advanceImmediate();
             ostack_push(ctx, res);
@@ -2550,22 +2682,42 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(dup_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("dup_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ostack_push(ctx, ostack_top(ctx));
             NEXT();
         }
 
         INSTRUCTION(dup2_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("dup2_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ostack_push(ctx, ostack_at(ctx, 1));
             ostack_push(ctx, ostack_at(ctx, 1));
             NEXT();
         }
 
         INSTRUCTION(pop_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("pop_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ostack_pop(ctx);
             NEXT();
         }
 
         INSTRUCTION(popn_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("popn_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate i = readImmediate();
             advanceImmediate();
             ostack_popn(ctx, i);
@@ -2573,6 +2725,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(swap_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("swap_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_pop(ctx);
             SEXP rhs = ostack_pop(ctx);
             ostack_push(ctx, lhs);
@@ -2581,6 +2738,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(put_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("put_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, 0);
@@ -2594,6 +2756,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(pick_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("pick_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, i);
@@ -2607,6 +2774,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(pull_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("pull_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             Immediate i = readImmediate();
             advanceImmediate();
             SEXP val = ostack_at(ctx, i);
@@ -2615,6 +2787,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(add_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("add_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_BINOP(+, Binop::PLUSOP);
@@ -2622,12 +2799,22 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(uplus_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("uplus_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 0);
             DO_UNOP(+, Unop::PLUSOP);
             NEXT();
         }
 
         INSTRUCTION(inc_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("inc_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
             SLOWASSERT(TYPEOF(val) == INTSXP);
             if (MAYBE_REFERENCED(val)) {
@@ -2643,6 +2830,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(sub_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("sub_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_BINOP(-, Binop::MINUSOP);
@@ -2650,12 +2842,22 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(uminus_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("uminus_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 0);
             DO_UNOP(-, Unop::MINUSOP);
             NEXT();
         }
 
         INSTRUCTION(mul_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("mul_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_BINOP(*, Binop::TIMESOP);
@@ -2663,6 +2865,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(div_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("div_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
@@ -2710,6 +2917,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(idiv_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("idiv_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
@@ -2746,6 +2958,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(mod_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("mod_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
@@ -2783,6 +3000,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(pow_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("pow_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             BINOP_FALLBACK("^");
@@ -2792,6 +3014,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(lt_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("lt_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_RELOP(<);
@@ -2801,6 +3028,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(gt_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("gt_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_RELOP(>);
@@ -2810,6 +3042,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(le_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("le_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_RELOP(<=);
@@ -2819,6 +3056,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ge_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ge_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_RELOP(>=);
@@ -2828,6 +3070,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(eq_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("eq_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
             DO_RELOP(==);
@@ -2837,6 +3084,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(identical_noforce_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("identical_noforce_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP rhs = ostack_pop(ctx);
             SEXP lhs = ostack_pop(ctx);
             // This instruction does not force, but we should still compare
@@ -2861,6 +3113,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(ne_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ne_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             assert(R_PPStackTop >= 0);
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
@@ -2871,6 +3128,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(not_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("not_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 0);
 
             if (IS_SIMPLE_SCALAR(val, LGLSXP)) {
@@ -2901,6 +3163,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(lgl_or_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("lgl_or_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP s2 = ostack_pop(ctx);
             SEXP s1 = ostack_pop(ctx);
             assert(TYPEOF(s2) == LGLSXP);
@@ -2919,6 +3186,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(lgl_and_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("lgl_and_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP s2 = ostack_pop(ctx);
             SEXP s1 = ostack_pop(ctx);
             assert(TYPEOF(s2) == LGLSXP);
@@ -2937,6 +3209,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(aslogical_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("aslogical_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
             // TODO
             // 1. currently aslogical_ is used for &&, || only, and this
@@ -2960,6 +3237,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(asbool_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("asbool_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
             int cond = NA_LOGICAL;
             if (XLENGTH(val) > 1)
@@ -2998,6 +3280,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(colon_input_effects_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("colon_input_effects_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
 
@@ -3008,6 +3295,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(colon_cast_lhs_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("colon_cast_lhs_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP lhs = ostack_pop(ctx);
             SEXP newLhs = colonCastLhs(lhs);
             ostack_push(ctx, newLhs);
@@ -3015,6 +3307,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(colon_cast_rhs_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("colon_cast_rhs_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP rhs = ostack_pop(ctx);
             SEXP newLhs = ostack_top(ctx);
             SEXP newRhs = colonCastRhs(newLhs, rhs);
@@ -3023,6 +3320,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(asast_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("asast_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_pop(ctx);
             assert(TYPEOF(val) == PROMSXP);
             res = PRCODE(val);
@@ -3038,6 +3340,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(is_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("is_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_pop(ctx);
             Immediate type = readImmediate();
             advanceImmediate();
@@ -3082,6 +3389,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(missing_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("missing_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
@@ -3093,6 +3405,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(brtrue_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("brtrue_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
@@ -3104,6 +3421,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(brfalse_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("brfalse_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
@@ -3115,6 +3437,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(br_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("br_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             JumpOffset offset = readJumpOffset();
             advanceJump();
             checkUserInterrupt();
@@ -3133,6 +3460,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(extract1_1_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("extract1_1_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
 
@@ -3159,6 +3491,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(extract1_2_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("extract1_2_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);
             SEXP idx2 = ostack_at(ctx, 0);
@@ -3186,6 +3523,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(extract1_3_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("extract1_3_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 3);
             SEXP idx = ostack_at(ctx, 2);
             SEXP idx2 = ostack_at(ctx, 1);
@@ -3215,6 +3557,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(extract2_1_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("extract2_1_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
             int i = -1;
@@ -3304,6 +3651,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(extract2_2_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("extract2_2_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);
             SEXP idx2 = ostack_at(ctx, 0);
@@ -3332,6 +3684,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(subassign1_1_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("subassign1_1_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
@@ -3372,6 +3729,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(subassign1_2_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("subassign1_2_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx1 = ostack_at(ctx, 1);
             SEXP mtx = ostack_at(ctx, 2);
@@ -3415,6 +3777,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(subassign1_3_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("subassign1_3_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx3 = ostack_at(ctx, 0);
             SEXP idx2 = ostack_at(ctx, 1);
             SEXP idx1 = ostack_at(ctx, 2);
@@ -3461,6 +3828,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(set_vec_elt_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("set_vec_elt_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
@@ -3474,6 +3846,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(subassign2_1_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("subassign2_1_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx = ostack_at(ctx, 0);
             SEXP vec = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
@@ -3581,6 +3958,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(subassign2_2_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("subassign2_2_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx1 = ostack_at(ctx, 1);
             SEXP mtx = ostack_at(ctx, 2);
@@ -3695,6 +4077,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(guard_fun_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("guard_fun_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = readConst(ctx, readImmediate());
@@ -3706,6 +4093,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(colon_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("colon_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
 
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
@@ -3757,23 +4149,43 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(names_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("names_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), R_NamesSymbol));
             NEXT();
         }
 
         INSTRUCTION(set_names_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("set_names_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP names = ostack_pop(ctx);
             Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, names);
             NEXT();
         }
 
         INSTRUCTION(length_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("length_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             auto res = Rf_ScalarInteger(Rf_length(ostack_pop(ctx)));
             ostack_push(ctx, res);
             NEXT();
         }
 
         INSTRUCTION(as_switch_idx_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("as_switch_idx_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             if (TYPEOF(ostack_top(ctx)) != INTSXP) {
                 auto v = asInteger(ostack_pop(ctx));
                 ostack_push(ctx, Rf_ScalarInteger(v == NA_INTEGER ? -1 : v));
@@ -3782,6 +4194,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(for_seq_size_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("for_seq_size_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of
             // the loop and generally have somthing more clever here...
@@ -3812,22 +4229,42 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(visible_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("visible_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             R_Visible = TRUE;
             NEXT();
         }
 
         INSTRUCTION(invisible_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("invisible_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             R_Visible = FALSE;
             NEXT();
         }
 
         INSTRUCTION(ensure_named_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ensure_named_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
             ENSURE_NAMED(val);
             NEXT();
         }
 
         INSTRUCTION(set_shared_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("set_shared_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SEXP val = ostack_top(ctx);
             if (NAMED(val) < 2)
                 SET_NAMED(val, 2);
@@ -3835,6 +4272,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(beginloop_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("beginloop_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
@@ -3846,9 +4288,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             NEXT();
         }
 
-        INSTRUCTION(endloop_) { return loopTrampolineMarker; }
+        INSTRUCTION(endloop_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("endloop_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
+            return loopTrampolineMarker;
+        }
 
         INSTRUCTION(return_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("return_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             res = ostack_pop(ctx);
             // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
@@ -3856,9 +4310,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             assert(false);
         }
 
-        INSTRUCTION(ret_) { goto eval_done; }
+        INSTRUCTION(ret_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("ret_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
+            goto eval_done;
+        }
 
         INSTRUCTION(int3_) {
+            #if DEBUG_BC_INSN == 1
+            DebugCheckpoints::printInstruction("int3_", [&] (){
+                // std::cout << "    dummy" << std::endl;
+            });
+            #endif
             asm("int3");
             NEXT();
         }

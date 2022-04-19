@@ -25,17 +25,29 @@
 
 #include "runtimePatches.h"
 #include "utils/serializerData.h"
+#include "utils/UMap.h"
 #include <chrono>
-using namespace std::chrono;
 
-
+#include "utils/BitcodeLinkUtility.h"
+#include "utils/DebugMessages.h"
 #include "dirent.h"
-using namespace rir;
-#define PRINT_UNLOCK_MAP 1
-#define PRINT_DEPENDENCY_MAP 1
-#define PRINT_DESERIALIZER_PROGRESS 1
-#define PRINT_SERIALIZER_PROGRESS_OVERRIDE 1
 
+using namespace std::chrono;
+using namespace rir;
+
+int DebugMessages::serializerDebug = getenv("SER_DBG") ? std::stoi(getenv("SER_DBG")) : 0;
+int DebugMessages::deserializerDebug = getenv("DES_DBG") ? std::stoi(getenv("DES_DBG")) : 0;
+
+rir::Code* DebugCheckpoints::lastCheckpoint = nullptr;
+unsigned DebugCheckpoints::checkpoint = 0;
+unsigned DebugCheckpoints::BCidx = 0;
+bool DebugCheckpoints::enabled = false;
+std::chrono::time_point<std::chrono::high_resolution_clock> DebugCheckpoints::lastCheckpointTime = high_resolution_clock::now();
+std::chrono::time_point<std::chrono::high_resolution_clock> DebugCheckpoints::lastInstructionTime = high_resolution_clock::now();
+
+#define PRINT_DEPENDENCY_MAP 0
+#define PRINT_DESERIALIZER_PROGRESS 0
+#define PRINT_DESERIALIZER_PROGRESS_OVERRIDE 0
 extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
@@ -48,6 +60,9 @@ static bool oldDeoptChaos = false;
 
 static size_t compilerSuccesses = 0;
 static size_t bitcodeTotalLoadTime = 0;
+static int serializerSuccess = 0, serializerFailed = 0;
+static int blacklisted = 0, failed = 0;
+
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -243,22 +258,12 @@ void printPROMSXP(int space, SEXP promSXP) {
 
 void printENVSXP(int space, SEXP envSXP) {
     printHeader(space, "ENVSXP");
-
-    auto frame = FRAME(envSXP);
-    auto encls = FRAME(envSXP);
-    auto hashtab = FRAME(envSXP);
-
-
-    printType(space, "FRAME", frame);
-    printAST(space, frame);
-
-    printType(space, "ENCLS", encls);
-    printAST(space, encls);
-
-    printType(space, "HASHTAB", hashtab);
-    printAST(space, hashtab);
-
-
+    REnvHandler envObj(envSXP);
+    space += 2;
+    envObj.iterate([&] (SEXP key, SEXP val){
+        printSpace(space);
+        std::cout << CHAR(PRINTNAME(key)) << " : " << TYPEOF(val) << std::endl;
+    });
 }
 
 void printRAWSXP(int space, SEXP rawSXP) {
@@ -323,6 +328,22 @@ hastAndIndex getHastAndIndex(unsigned src) {
     }
 }
 
+hastAndIndex getPoolHastAndIndex(unsigned src) {
+    SEXP srcToHastMap = Pool::get(SRC_HAST_MAP);
+    SEXP srcSym = Rf_install((std::to_string(src) + "_cp").c_str());
+    if (srcToHastMap != R_NilValue && Rf_findVarInFrame(srcToHastMap, srcSym) != R_UnboundValue) {
+        SEXP r = Rf_findVarInFrame(srcToHastMap, srcSym);
+        SEXP hastS = VECTOR_ELT(r, 0);
+        SEXP indexS = VECTOR_ELT(r, 1);
+        int index = std::stoi(CHAR(PRINTNAME(indexS)));
+        hastAndIndex res = { hastS, index };
+        return res;
+    } else {
+        hastAndIndex res = { R_NilValue, 0 };
+        return res;
+    }
+}
+
 static size_t charToInt(const char* p, size_t & hast) {
     for (size_t i = 0; i < strlen(p); ++i) {
         hast = ((hast << 5) + hast) + p[i];
@@ -365,21 +386,6 @@ void hash_ast(SEXP ast, size_t & hast) {
     }
 }
 
-static inline void createBitcodeEntry(SEXP hastSym, SEXP cData) {
-    auto hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
-    // Create hast dependency map if it does not exist
-    if (hastDepMap == R_NilValue) {
-        SEXP tmp;
-        PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-        Pool::patch(HAST_DEPENDENCY_MAP, tmp);
-        UNPROTECT(1);
-        hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
-    }
-    assert(TYPEOF(hastDepMap) == ENVSXP);
-
-    // Create entry for context
-    Rf_defineVar(hastSym, cData, hastDepMap);
-}
 
 SEXP deserializeFromFile(std::string metaDataPath) {
     std::string prefix = "";
@@ -390,7 +396,6 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         prefix = metaDataPath.substr(0, lastSlash + 1);
     }
 
-    // Load the serialized pool from the .pool file
     FILE *reader;
     reader = fopen(metaDataPath.c_str(),"r");
 
@@ -401,75 +406,27 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     SEXP serDataContainer;
     PROTECT(serDataContainer = R_Unserialize(&inputStream));
 
+    // Get serialized metadata
     serializerData sData(serDataContainer);
+    SEXP hastSym = sData.getHastData();
+    SEXP cData = sData.getContextMap();
 
-    SEXP hast = sData.getHastData();
-    // std::string functionName = sData.getNameData();
+    // Add to hast dependency map
+    REnvHandler hastDependencyMap(HAST_DEPENDENCY_MAP);
+    hastDependencyMap.set(hastSym, cData);
 
-    // pir::StreamLogger logger(pir::DebugOptions::DefaultDebugOptions);
-    // logger.title("(>) Deserializer Start " + functionName);
-
-    createBitcodeEntry(hast, sData.getContextMap());
-
-    auto hastDepMap = Pool::get(HAST_DEPENDENCY_MAP);
-    SEXP prefSym = Rf_install("prefix");
-    if (Rf_findVarInFrame(hastDepMap, prefSym) == R_UnboundValue) {
-        Rf_defineVar(prefSym, Rf_mkString(prefix.c_str()), hastDepMap);
-        std::cout << "added prefix: " << CHAR(STRING_ELT(Rf_findVarInFrame(hastDepMap, prefSym), 0)) << std::endl;
+    DebugMessages::printDeserializerMessage("loaded bitcode metadata for : " + metaDataPath, 0);
+    if (DebugMessages::deserializerDebugLevel() > 1) {
+        sData.print();
     }
 
+    // TODO: handle prefix separately to allow different bitcodes to load from different locations
+    // Install a prefix
+    static SEXP prefSym = Rf_install("prefix");
+    if (!hastDependencyMap.get(prefSym)) {
+        hastDependencyMap.set(prefSym, Rf_mkString(prefix.c_str()));
+    }
 
-// );
-
-    // serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-    //     #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
-    //     std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
-    //     #endif
-    //     // int indexOffset = std::stoi(CHAR(PRINTNAME(offsetSymbol)));
-    //     serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
-
-    //         // SEXP currOffsetMap = getHastOffsetMap(hast, offsetSymbol);
-
-
-    //         // contextData c(cData);
-    //         // // PATH TO BITCODE FILE
-    //         // std::stringstream bitcodePath;
-    //         // bitcodePath << prefix << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << c.getContext() << ".bc";
-    //         // #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
-    //         // std::cout << "    (*) Bitcode Path: " << bitcodePath.str() << std::endl;
-    //         // int space = 4;
-    //         // c.print(space);
-    //         // #endif
-    //         // unsigned long con = c.getContext();
-    //         // rir::FunctionSignature fs = c.getFunctionSignature();
-
-    //         // SEXP fNames = c.getFNames();
-    //         // SEXP fSrc = c.getFSrc();
-    //         // SEXP fArg = c.getFArg();
-    //         // SEXP fChildren = c.getFChildren();
-    //         // SEXP cPool = c.getCPool();
-    //         // SEXP sPool = c.getSPool();
-    //         // SEXP rMap = c.getReqMapAsVector();
-
-    //         // // INSERT THE FUNCTION INTO THE JIT
-    //         // pir::Module* m = new pir::Module;
-
-    //         // pir::Compiler cmp(m, logger);
-    //         // pir::Backend backend(m, logger, functionName);
-
-    //         // backend.deserialize(
-    //         //     cPool, sPool,
-    //         //     fNames, fSrc,
-    //         //     fArg, fChildren,
-    //         //     hast, Context(con), rMap, offsetSymbol,
-    //         //     fs,
-    //         //     bitcodePath.str()
-    //         // );
-
-    //     });
-
-
-    // });
     UNPROTECT(1);
     return R_FalseValue;
 }
@@ -484,10 +441,6 @@ REXPORT SEXP loadBitcodes() {
     std::stringstream ss;
     ss << path;
 
-    #if PRINT_DESERIALIZER_PROGRESS == 1 || PRINT_DESERIALIZER_PROGRESS_OVERRIDE == 1
-    std::cout << "loadBitcodes: " << ss.str() << std::endl;
-    #endif
-
     if ((dir = opendir (ss.str().c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
             std::string fName = ent->d_name;
@@ -498,86 +451,23 @@ REXPORT SEXP loadBitcodes() {
 
         closedir (dir);
 
-
-        // SEXP tabMap = Pool::get(HAST_VTAB_MAP);
-        // if (tabMap == R_NilValue) {
-        //     SEXP tmp;
-        //     PROTECT(tmp = R_NewEnv(R_EmptyEnv,0,0));
-        //     Pool::patch(HAST_VTAB_MAP, tmp);
-        //     UNPROTECT(1);
-        //     tabMap = Pool::get(HAST_VTAB_MAP);
-        // }
-        // auto map = Pool::get(HAST_DEPENDENCY_MAP);
-        // if (map != R_NilValue) {
-        //     SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
-        //     for (int i = 0; i < Rf_length(hastsInEnv); i++) {
-        //         SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-        //         if (Rf_findVarInFrame(tabMap, hastKey) != R_UnboundValue) {
-        //             SEXP tabC = Rf_findVarInFrame(tabMap, hastKey);
-        //             DispatchTable * v = DispatchTable::unpack(tabC);
-        //             rir::Compiler::tryLinking(v, hastKey, true);
-        //         }
-
-        //     }
-        //     std::cout << "early linking done" << std::endl;
-        // }
-
         #if PRINT_DEPENDENCY_MAP == 1
-        auto map = Pool::get(HAST_DEPENDENCY_MAP);
-        if (map != R_NilValue) {
-            SEXP preSym = Rf_install("prefix");
-            SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
-            for (int i = 0; i < Rf_length(hastsInEnv); i++) {
-                SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-                if (hastKey == preSym) continue;
-                SEXP hastEnvMap = Rf_findVarInFrame(map, hastKey);
-                std::cout << "hast: " << CHAR(PRINTNAME(hastKey)) << std::endl;
-                serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-                    std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
-                    serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
-                        std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
-                        for (int j = 0; j < Rf_length(cData); j++) {
-                            SEXP ele = VECTOR_ELT(cData, j);
-                            std::cout << "      [" << j << "]: ";
-                            if (TYPEOF(ele) == SYMSXP) {
-                                std::cout << CHAR(PRINTNAME(ele)) << std::endl;
-                            } else {
-                                std::cout << TYPEOF(ele) << std::endl;
-                            }
-                        }
-                    });
+        REnvHandler hastDependencyMap(HAST_DEPENDENCY_MAP);
+        SEXP prefixSymbol = Rf_install("prefix");
+        std::cout << "Hast Dependency Map" << std::endl;
+        hastDependencyMap.iterate([&] (SEXP key, SEXP val) {
+            if (key == prefixSymbol) return;
+            std::cout << "Hast: " << CHAR(PRINTNAME(key)) << std::endl;
+            REnvHandler offsetMap(val);
+            offsetMap.iterate([&] (SEXP key, SEXP val) {
+                std::cout << "  offset[" << CHAR(PRINTNAME(key)) << "]" << std::endl;
+                REnvHandler contextMap(val);
+                contextMap.iterate([&] (SEXP key, SEXP val) {
+                    std::cout << "    context[" << CHAR(PRINTNAME(key)) << "]" << std::endl;
                 });
-            }
-        }
+            });
+        });
         #endif
-        // #if PRINT_UNLOCK_MAP == 1
-        // auto ulMap = Pool::get(HAST_UNLOCK_MAP);
-        // if (ulMap != R_NilValue) {
-        //     std::cout << "UNLOCK MAP: " << std::endl;
-        //     SEXP hastsInEnv = R_lsInternal(ulMap, (Rboolean) false);
-        //     for (int i = 0; i < Rf_length(hastsInEnv); i++) {
-        //         SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-        //         SEXP workVec = Rf_findVarInFrame(ulMap, hastKey);
-        //         std::cout << "  " << CHAR(PRINTNAME(hastKey)) << " : [ ";
-        //         for (int j = 0; j < Rf_length(workVec); j++) {
-        //             SEXP workData = VECTOR_ELT(workVec, j);
-        //             SEXP maybeUnlocksHastKey = VECTOR_ELT(workData, 0);
-        //             SEXP maybeUnlocksHastKeyOffset = VECTOR_ELT(workData, 1);
-        //             SEXP maybeUnlocksHastKeyFunction = VECTOR_ELT(workData, 2);
-        //             std::cout << "{" << CHAR(PRINTNAME(maybeUnlocksHastKey)) << "," << CHAR(PRINTNAME(maybeUnlocksHastKeyOffset)) << "," << TYPEOF(maybeUnlocksHastKeyFunction) << "} ";
-        //         }
-        //         std::cout << "]" << std::endl;
-        //     }
-        // }
-        // #endif
-
-
-        // #if PRINT_DEPENDENCY_MAP == 1
-        // DeserialDataMap::printDependencies();
-        // #endif
-        // #if PRINT_UNLOCK_MAP == 1
-        // DeserialDataMap::printUnlockMap();
-        // #endif
     } else {
         /* could not open directory */
         perror ("");
@@ -595,7 +485,6 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         auto duration = duration_cast<milliseconds>(stop - start);
         bitcodeTotalLoadTime = duration.count();
         initializeBitcodes = true;
-        std::cout << "Bitcode load time: " << bitcodeTotalLoadTime << "ms" << std::endl;
     }
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
@@ -616,42 +505,28 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
 }
 
 REXPORT SEXP compileStats() {
-    auto map = Pool::get(HAST_DEPENDENCY_MAP);
-    if (map != R_NilValue) {
-        std::cout << "unlinked bitcodes:" << std::endl;
-        SEXP hastsInEnv = R_lsInternal(map, (Rboolean) false);
-        SEXP preSym = Rf_install("prefix");
-        for (int i = 0; i < Rf_length(hastsInEnv); i++) {
-            SEXP hastKey = Rf_install(CHAR(STRING_ELT(hastsInEnv, i)));
-            if (hastKey == preSym) continue;
-            SEXP hastEnvMap = Rf_findVarInFrame(map, hastKey);
-            if (hastEnvMap != R_NilValue) {
-                std::cout << "hast: " << CHAR(PRINTNAME(hastKey)) << std::endl;
-                serializerData::iterateOverOffsets(hastEnvMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
-                    std::cout << "  offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;
-                    if (offsetEnv != R_NilValue) {
-                        serializerData::iterateOverContexts(offsetEnv, [&] (SEXP contextSym, SEXP cData) {
-                            std::cout << "    context: " << CHAR(PRINTNAME(contextSym)) << std::endl;
-                            for (int j = 0; j < Rf_length(cData); j++) {
-                                SEXP ele = VECTOR_ELT(cData, j);
-                                std::cout << "      [" << j << "]: ";
-                                if (TYPEOF(ele) == SYMSXP) {
-                                    std::cout << CHAR(PRINTNAME(ele)) << std::endl;
-                                } else {
-                                    std::cout << TYPEOF(ele) << std::endl;
-                                }
-                            }
-                        });
 
-                    }
-                });
+    REnvHandler hastDepMap(HAST_DEPENDENCY_MAP);
+    size_t unused = 0;
+    hastDepMap.iterate([&] (SEXP key, SEXP val) {
+        unused++;
+    });
 
-            }
-        }
-    }
+    REnvHandler linkageMap(LINKAGE_MAP);
+    size_t unlinked = 0;
+    linkageMap.iterate([&] (SEXP key, SEXP val) {
+        unlinked++;
+    });
     std::cout << "==== RUN STATS ====" << std::endl;
-    std::cout << "Bitcode Load Time: " << bitcodeTotalLoadTime << "ms" << std::endl;
-    std::cout << "Linking time: : " << Compiler::linkTime << "us" << std::endl;
+    std::cout << "Unused bitcodes          : " << unused << std::endl;
+    std::cout << "Unlinked bitcodes        : " << unlinked << std::endl;
+    std::cout << "Bitcode Load Time        : " << bitcodeTotalLoadTime << "ms" << std::endl;
+    std::cout << "Linking time             : " << Compiler::linkTime << "ms" << std::endl;
+    std::cout << "Successful compilations: : " << compilerSuccesses << std::endl;
+    std::cout << "Serializer Success       : " << serializerSuccess << std::endl;
+    std::cout << "Serializer Failed        : " << serializerFailed << std::endl;
+    std::cout << "Blacklisted              : " << blacklisted << std::endl;
+    std::cout << "Failed                   : " << failed << std::endl;
     return Rf_ScalarInteger(compilerSuccesses);
 }
 
@@ -868,104 +743,69 @@ REXPORT SEXP stopSerializer() {
     return R_NilValue;
 }
 
+REXPORT SEXP startDebugMessages() {
+    DebugCheckpoints::startDebugMessages();
+    return R_NilValue;
+}
 
+REXPORT SEXP stopDebugMessages() {
+    DebugCheckpoints::stopDebugMessages();
+    return R_NilValue;
+}
 
 static bool fileExists(std::string fName) {
     std::ifstream f(fName.c_str());
     return f.good();
 }
 
-static void serializeClosure(unsigned src, std::string name, const bool & serializerError, contextData & cData) {
-    auto data = getHastAndIndex(src);
-    SEXP hast = data.hast;
-    int indexOffset = data.index;
-    if (hast == R_NilValue) {
-        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "  (E) unavailable hast, cannot serialize" << std::endl;
-        #endif
-    } else if (serializerError) {
-        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "  (E) Serializer Error Occured" << std::endl;
-        #endif
+static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std::string & name, contextData & cData) {
+    auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
+    std::stringstream fN;
+    fN << prefix << "/" << "m_" << CHAR(PRINTNAME(hast)) << ".meta";
+    std::string fName = fN.str();
+
+    SEXP container;
+    Protect p;
+    p(container = Rf_allocVector(VECSXP, 3));
+
+    serializerData sData(container, hast, name);
+
+    if (fileExists(fName)) {
+        FILE *reader;
+        reader = fopen(fName.c_str(),"r");
+
+        // Initialize the deserializing stream
+        R_inpstream_st inputStream;
+        R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
+
+        SEXP result;
+        p(result= R_Unserialize(&inputStream));
+
+        sData.updateContainer(result);
+
+        sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
+        fclose(reader);
     } else {
-        auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
-        std::stringstream fN;
-        fN << prefix << "/" << "m_" << CHAR(PRINTNAME(hast)) << ".meta";
-        std::string fName = fN.str();
-
-        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "  (>) Writing Metadata: " << fName << std::endl;
-        #endif
-
-        SEXP container;
-        Protect p;
-        p(container = Rf_allocVector(VECSXP, 3));
-
-        serializerData sData(container, hast, name);
-
-        if (fileExists(fName)) {
-            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-            std::cout << "    (*) Metadata already exists for this hast" << std::endl;
-            #endif
-
-            // Load the serialized pool from the .pool file
-            FILE *reader;
-            reader = fopen(fName.c_str(),"r");
-
-            // Initialize the deserializing stream
-            R_inpstream_st inputStream;
-            R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
-
-            SEXP result;
-            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-            std::cout << "    (*) Deserializing meta" << std::endl;
-            #endif
-            p(result= R_Unserialize(&inputStream));
-            #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-            std::cout << "    (*) Deserialized meta successfully" << std::endl;
-            #endif
-
-            sData.updateContainer(result);
-
-            sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
-            fclose(reader);
-        } else {
-            sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
-        }
-
-        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "    (*) Serializing metadata" << std::endl;
-        sData.print(6);
-        #endif
-
-        // 2. Write updated metadata
-        R_outpstream_st outputStream;
-        FILE *fptr;
-        fptr = fopen(fName.c_str(),"w");
-        R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
-        R_Serialize(sData.getContainer(), &outputStream);
-        fclose(fptr);
-
-        #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-        std::cout << "    (*) metadata written:" << fName << std::endl;
-        #endif
-
-        // rename temp files
-        std::stringstream bcFName;
-        std::stringstream bcOldName;
-        bcFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".bc";
-        bcOldName << prefix << "/" << "temp.bc";
-        std::rename(bcOldName.str().c_str(), bcFName.str().c_str());
-
-        std::stringstream poolFName;
-        std::stringstream poolOldName;
-        poolFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".pool";
-        poolOldName << prefix << "/" << "temp.pool";
-        std::rename(poolOldName.str().c_str(), poolFName.str().c_str());
+        sData.addContextData(cData.getContainer(), indexOffset, std::to_string(cData.getContext()));
     }
-}
 
-static int serializerSuccess = 0, serializerFailed = 0;
+    // 2. Write updated metadata
+    R_outpstream_st outputStream;
+    FILE *fptr;
+    fptr = fopen(fName.c_str(),"w");
+    R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
+    R_Serialize(sData.getContainer(), &outputStream);
+    fclose(fptr);
+    DebugMessages::printSerializerMessage("(*) Metadata written: " + fName, 1);
+
+    // rename temp files
+    std::stringstream bcFName;
+    std::stringstream bcOldName;
+    bcFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".bc";
+    bcOldName << prefix << "/" << "temp.bc";
+    std::rename(bcOldName.str().c_str(), bcFName.str().c_str());
+    DebugMessages::printSerializerMessage("(*) Bitcode written: " + bcFName.str(), 1);
+}
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
@@ -994,14 +834,17 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
         rir::Function* done = nullptr;
         auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+            auto data = getHastAndIndex(c->rirSrc()->src);
+            SEXP hast = data.hast;
             if (serializeLL) {
-                #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-                std::cout << "(>) Serializer Started" << std::endl;
-                #endif
-
-                #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-                std::cout << "  (*) Function Name: " << c->name() << std::endl;
-                #endif
+                backend.cData = nullptr;
+                backend.serializerError = nullptr;
+            }
+            if (serializeLL && hast == R_NilValue) {
+                DebugMessages::printSerializerMessage("*> Serializer Skipped, parent hast is null.", 0);
+            }
+            if (serializeLL && hast != R_NilValue) {
+                DebugMessages::printSerializerMessage("> Serializer Started", 0);
 
                 bool serializerError = false;
 
@@ -1020,47 +863,27 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // Compile
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
+
+                // Mark hast as stale in the runtime, loading the new bitcode will lead to duplicate LLVM symbols
+                if (hast != R_NilValue) {
+                    BitcodeLinkUtil::markStale(hast, cData.getContext());
+                }
+
                 DispatchTable::unpack(body)->insert(fun);
                 if (body == BODY(what)) {
                     done = fun;
                 }
 
-
-                // Complete writing serializer data and rename bitcode files
-                serializeClosure(c->rirSrc()->src, c->name(), serializerError, cData);
-
-
                 if (!serializerError) {
                     serializerSuccess++;
-                    #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-                    std::cout << "(/) Serializer Success" << std::endl;
-                    #endif
-                    // Adding the type feedback for the RIR BC
-                    // auto codeStart = DispatchTable::unpack(body)->baseline()->body()->code();
-                    // auto codeEnd = DispatchTable::unpack(body)->baseline()->body()->endCode();
-                    // auto pc = codeStart;
-                    // while (pc < codeEnd) {
-                    //     BC bc = BC::decode(pc, DispatchTable::unpack(body)->baseline()->body());
-                    //     switch(bc.bc) {
-                    //         case Opcode::record_type_: {
-                    //             std::cout << "sizeof: " << sizeof(bc) << std::endl;
-                    //             bc.print(std::cout);
-                    //             break;
-                    //         }
-                    //         default: {
-
-                    //         }
-
-                    //     }
-                    //     pc = BC::next(pc);
-                    // }
+                    serializeClosure(hast, data.index, c->name(), cData);
+                    DebugMessages::printSerializerMessage("/> Serializer Success", 0);
                 } else {
                     serializerFailed++;
-                    #if PRINT_SERIALIZER_PROGRESS == 1 || PRINT_SERIALIZER_PROGRESS_OVERRIDE == 1
-                    std::cout << "(/) Serializer Error" << std::endl;
-                    #endif
+                    DebugMessages::printSerializerMessage("/> Serializer Error", 0);
                 }
                 backend.cData = nullptr;
+                backend.serializerError = nullptr;
             } else {
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
@@ -1108,36 +931,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     return what;
 }
 
-// static bool dependencyBlacklisted(SEXP map) {
-//     // SEXP blMap = Pool::get(BL_MAP);
-//     // if (blMap == R_NilValue) {
-//     //     return false;
-//     // }
-//     // SEXP keys = R_lsInternal(blMap, (Rboolean) false);
-//     // for (int i = 0; i < Rf_length(keys); i++) {
-//     //     SEXP keySym = Rf_install(CHAR(STRING_ELT(keys, i)));
-//     //     SEXP ele = Rf_findVarInFrame(map, keySym);
-//     //     contextData c(ele);
-
-//     //     SEXP rMap = c.getReqMapAsVector();
-
-//     //     // std::cout << "   " << CHAR(PRINTNAME(keySym)) << " : [ ";
-
-//     //     for (int j = 0; j < Rf_length(rMap); j++) {
-//     //         SEXP dataContainer = VECTOR_ELT(rMap, j);
-//     //         size_t* res = (size_t *) DATAPTR(dataContainer);
-//     //         // std::cout << *res << " ";
-//     //         SEXP depSym = Rf_install(std::to_string(*res).c_str());
-//     //         if (Rf_findVarInFrame(map, keySym) != R_UnboundValue) {
-//     //             return true;
-//     //         }
-//     //     }
-//     //     // std::cout << "]" << std::endl;
-//     // }
-
-//     return false;
-// }
-
 static bool isHastBlacklisted(SEXP hastSym) {
     SEXP blMap = Pool::get(BL_MAP);
     if (blMap != R_NilValue && Rf_findVarInFrame(blMap, hastSym) != R_UnboundValue) {
@@ -1150,8 +943,6 @@ static bool isHastBlacklisted(SEXP hastSym) {
 REXPORT SEXP serializerCleanup() {
     SEXP blMap = Pool::get(BL_MAP);
     if (blMap == R_NilValue) {
-        std::cout << "Serializer: " << "(" << serializerSuccess << "," << serializerFailed << ") " << (int)(((double)serializerSuccess/(serializerSuccess+serializerFailed))*100) << "% success" << std::endl;
-        std::cout << "Serializer cleanup: no blacklist exists!" << std::endl;
         return R_TrueValue;
     }
 
@@ -1165,14 +956,12 @@ REXPORT SEXP serializerCleanup() {
 
 
     if ((dir = opendir (savePath.str().c_str())) != NULL) {
-        int blacklisted = 0, failed = 0;
         while ((ent = readdir (dir)) != NULL) {
             std::string fName = ent->d_name;
             if (fName.find(".meta") != std::string::npos) {
                 std::stringstream metaPath;
                 metaPath << prefix << "/" << fName;
 
-                // Load the serialized pool from the .pool file
                 FILE *reader;
                 reader = fopen(metaPath.str().c_str(),"r");
 
@@ -1231,8 +1020,6 @@ REXPORT SEXP serializerCleanup() {
 
         closedir (dir);
 
-        std::cout << "Serializer: " << "(" << serializerSuccess << "," << serializerFailed << ") " << (int)(((double)serializerSuccess/(serializerSuccess+serializerFailed))*100) << "% success" << std::endl;
-        std::cout << "Serializer cleanup: " << blacklisted << " blacklisted, " << failed << " failed" << std::endl;
     } else {
         /* could not open directory */
         perror ("");
@@ -1488,8 +1275,9 @@ bool startup() {
     Pool::makeSpace(); // (3) Hast to closObj
     Pool::makeSpace(); // (4) Hast blacklist, discard serialized code for these functions
     Pool::makeSpace(); // (5) Hast to dependency map {map of contexts}
-    Pool::makeSpace(); // (6) Hast to unlock vector map [worklist 1]
-    Pool::makeSpace(); // (7) Hast -> { C1: [Worklist 2...],.. }
+    Pool::makeSpace(); // (6) Worklist 1: For initial bytecode compilation
+    Pool::makeSpace(); // (7) Workiist 2: For disptach table insertions
+    Pool::makeSpace(); // (8) Linkage map: For linkage metadata
     #endif
     return true;
 }

@@ -90,6 +90,14 @@ f.compileStats <- function() {
     .Call("compileStats")
 }
 
+f.startDebugMessages <- function() {
+    invisible(.Call("startDebugMessages"))
+}
+
+f.stopDebugMessages <- function() {
+    invisible(.Call("stopDebugMessages"))
+}
+
 
 # returns TRUE if, when PIR compiled, satisfies the the given checks (e.g.
 # environment was elided). Max assumptions compiled (+ minimal) are used, if

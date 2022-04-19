@@ -227,6 +227,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index);
     Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
     unsigned getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset);
+    // unsigned getSrcForInnerObjs(bool mainSrc, int & index, int reqOffset);
     SEXP getTabAtOffset(bool mainSrc, int & index, int reqOffset);
     void printSource(bool mainSrc, int & index);
 

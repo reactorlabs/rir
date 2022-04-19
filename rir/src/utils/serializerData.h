@@ -180,7 +180,7 @@ namespace rir {
                 return VECTOR_ELT(container, 4);
             }
 
-            // ENTRY 6: cPool
+            // ENTRY 5: cPool
             void addCPool(SEXP data) {
                 SET_VECTOR_ELT(container, 5, data);
             }
@@ -189,7 +189,7 @@ namespace rir {
                 return VECTOR_ELT(container, 5);
             }
 
-            // ENTRY 7: sPool
+            // ENTRY 6: sPool
             void addSPool(SEXP data) {
                 SET_VECTOR_ELT(container, 6, data);
             }
@@ -198,7 +198,7 @@ namespace rir {
                 return VECTOR_ELT(container, 6);
             }
 
-            // ENTRY 8: childrenData
+            // ENTRY 7: childrenData
             void addFChildren(SEXP data) {
                 SET_VECTOR_ELT(container, 7, data);
             }
@@ -207,7 +207,7 @@ namespace rir {
                 return VECTOR_ELT(container, 7);
             }
 
-            // ENTRY 10: reqMap
+            // ENTRY 8: reqMap
             void addReqMapForCompilation(SEXP data) {
                 SET_VECTOR_ELT(container, 8, data);
             }

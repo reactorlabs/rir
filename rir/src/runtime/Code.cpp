@@ -12,8 +12,9 @@
 #include <iomanip>
 #include <sstream>
 
-#include "utils/UMap.h"
 #include "runtime/DispatchTable.h"
+
+#define PRINT_SRC_HAST_MAP_UPDATES 0
 
 namespace rir {
 
@@ -212,7 +213,6 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
     Protect p;
     index++;
 
-
     if (index == reqOffset) return this;
 
     while (pc < endCode()) {
@@ -226,6 +226,18 @@ Code * Code::getSrcAtOffset(bool mainSrc, int & index, int reqOffset) {
                 if (res != nullptr) return res;
             }
         }
+        // unsigned s = getSrcIdxAt(pc, true);
+        // if (s != 0) {
+        //     index++;
+        // }
+
+        // switch (bc.bc) {
+        //     case Opcode::call_:
+        //     case Opcode::named_call_:
+        //         index++;
+        //         break;
+        //     default: {}
+        // }
         pc = BC::next(pc);
     }
 
@@ -293,6 +305,18 @@ unsigned Code::getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset) {
                 if (res != 0) return res;
             }
         }
+        // unsigned s = getSrcIdxAt(pc, true);
+        // if (s != 0) {
+        //     index++;
+        // }
+
+        // switch (bc.bc) {
+        //     case Opcode::call_:
+        //     case Opcode::named_call_:
+        //         index++;
+        //         break;
+        //     default: {}
+        // }
         pc = BC::next(pc);
     }
 
@@ -365,6 +389,18 @@ SEXP Code::getTabAtOffset(bool mainSrc, int & index, int reqOffset) {
             }
         }
 
+        // unsigned s = getSrcIdxAt(pc, true);
+        // if (s != 0) {
+        //     index++;
+        // }
+
+        // switch (bc.bc) {
+        //     case Opcode::call_:
+        //     case Opcode::named_call_:
+        //         index++;
+        //         break;
+        //     default: {}
+        // }
         pc = BC::next(pc);
     }
 
@@ -392,6 +428,84 @@ SEXP Code::getTabAtOffset(bool mainSrc, int & index, int reqOffset) {
     return nullptr;
 }
 
+// unsigned Code::getSrcForInnerObjs(bool mainSrc, int & index, int reqOffset) {
+
+//     Opcode* pc = code();
+//     size_t label = 0;
+//     std::map<Opcode*, size_t> targets;
+//     targets[pc] = label++;
+//     while (pc < endCode()) {
+//         if (BC::decodeShallow(pc).isJmp()) {
+//             auto t = BC::jmpTarget(pc);
+//             if (!targets.count(t))
+//                 targets[t] = label++;
+//         }
+//         pc = BC::next(pc);
+//     }
+
+//     // sort labels ascending
+//     label = 0;
+//     for (auto& t : targets)
+//         t.second = label++;
+
+//     pc = code();
+//     std::vector<BC::FunIdx> promises;
+
+//     Protect p;
+//     index++;
+
+//     while (pc < endCode()) {
+//         BC bc = BC::decode(pc, this);
+//         bc.addMyPromArgsTo(promises);
+
+//         if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
+//             SEXP iConst = bc.immediateConst();
+//             if (DispatchTable::check(iConst)) {
+//                 unsigned res = DispatchTable::unpack(iConst)->baseline()->body()->getSrcForInnerObjs(false, index, reqOffset);
+//                 if (res != 0) return res;
+//             }
+//         }
+
+//         unsigned s = getSrcIdxAt(pc, true);
+//         if (s != 0) {
+//             index++;
+//             if (reqOffset == index) return s;
+//         }
+
+//         switch (bc.bc) {
+//             case Opcode::call_:
+//             case Opcode::named_call_:
+//                 index++;
+//                 if (reqOffset == index) return bc.immediate.callFixedArgs.ast;
+//                 break;
+//             default: {}
+//         }
+//         pc = BC::next(pc);
+//     }
+
+
+//     for (auto i : promises) {
+//         auto c = getPromise(i);
+//         unsigned res = c->getSrcForInnerObjs(false, index, reqOffset);
+//         if (res != 0) return res;
+//     }
+
+
+//     if (mainSrc) {
+//         rir::Function* func = function();
+//         if (func) {
+//             auto nargs = func->nargs();
+//             for (unsigned i = 0; i < nargs; i++) {
+//                 auto code = func->defaultArg(i);
+//                 if (code != nullptr) {
+//                     unsigned res = code->getSrcForInnerObjs(false, index, reqOffset);
+//                     if (res != 0) return res;
+//                 }
+//             }
+//         }
+//     }
+//     return 0;
+// }
 
 void Code::printSource(bool mainSrc, int & index) {
         Opcode* pc = code();
@@ -431,6 +545,18 @@ void Code::printSource(bool mainSrc, int & index) {
             }
         }
 
+        // unsigned s = getSrcIdxAt(pc, true);
+        // if (s != 0) {
+        //     index++;
+        // }
+
+        // switch (bc.bc) {
+        //     case Opcode::call_:
+        //     case Opcode::named_call_:
+        //         index++;
+        //         break;
+        //     default: {}
+        // }
         pc = BC::next(pc);
     }
 
@@ -541,6 +667,35 @@ void Code::populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index)
             }
         }
 
+        // unsigned s = getSrcIdxAt(pc, true);
+        // if (s != 0) {
+        //     index++;
+        //     SEXP srcSym = Rf_install(std::to_string(s).c_str());
+        //     SEXP hastSym = parentHast;
+        //     SEXP indexSym = Rf_install(std::to_string(index).c_str());
+        //     SEXP resVec;
+        //     p(resVec = Rf_allocVector(VECSXP, 2));
+        //     SET_VECTOR_ELT(resVec, 0, hastSym);
+        //     SET_VECTOR_ELT(resVec, 1, indexSym);
+        //     Rf_defineVar(srcSym, resVec, map);
+        // }
+
+        // switch (bc.bc) {
+        //     case Opcode::call_:
+        //     case Opcode::named_call_: {
+        //         index++;
+        //         SEXP srcSym = Rf_install((std::to_string(bc.immediate.callFixedArgs.ast) + "_cp").c_str());
+        //         SEXP hastSym = parentHast;
+        //         SEXP indexSym = Rf_install(std::to_string(index).c_str());
+        //         SEXP resVec;
+        //         p(resVec = Rf_allocVector(VECSXP, 2));
+        //         SET_VECTOR_ELT(resVec, 0, hastSym);
+        //         SET_VECTOR_ELT(resVec, 1, indexSym);
+        //         Rf_defineVar(srcSym, resVec, map);
+        //         break;
+        //     }
+        //     default: {}
+        // }
         pc = BC::next(pc);
     }
 

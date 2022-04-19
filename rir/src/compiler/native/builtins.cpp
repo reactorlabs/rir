@@ -22,9 +22,11 @@
 #include <R_ext/RS.h> /* for Memzero */
 
 #include "llvm/IR/Attributes.h"
-
 #include <random>
 
+#include "utils/DebugMessages.h"
+
+#define DEBUG_BI_INSN 1
 namespace rir {
 namespace pir {
 
@@ -45,12 +47,22 @@ static R_INLINE MatrixDimension getMatrixDim(SEXP mat) {
 }
 
 static SEXP forcePromiseImpl(SEXP prom) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("forcePromiseImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(prom) == PROMSXP);
     auto res = evaluatePromise(prom);
     return res;
 }
 
 static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createBindingCellImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (val == R_UnboundValue)
         return rest;
     SEXP res = CONS_NR(val, rest);
@@ -62,6 +74,11 @@ static SEXP createBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createMissingBindingCellImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (val == R_UnboundValue)
         return rest;
     SEXP res = CONS_NR(val, rest);
@@ -72,6 +89,11 @@ static SEXP createMissingBindingCellImpl(SEXP val, SEXP name, SEXP rest) {
 }
 
 SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createEnvironmentImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(parent) == ENVSXP);
     SLOWASSERT(TYPEOF(arglist) == LISTSXP || arglist == R_NilValue);
     SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent);
@@ -87,6 +109,11 @@ SEXP createEnvironmentImpl(SEXP parent, SEXP arglist, int contextPos) {
 
 SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
                                int contextPos) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createStubEnvironmentImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(parent) == ENVSXP || LazyEnvironment::check(parent));
     SEXP res = LazyEnvironment::BasicNew(parent, n, names)->container();
     if (contextPos > 0) {
@@ -98,6 +125,11 @@ SEXP createStubEnvironmentImpl(SEXP parent, int n, Immediate* names,
 }
 
 SEXP materializeEnvironmentImpl(SEXP environment) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("materializeEnvironmentImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto lazyEnv = LazyEnvironment::check(environment);
     assert(lazyEnv);
     if (!lazyEnv->materialized())
@@ -106,6 +138,11 @@ SEXP materializeEnvironmentImpl(SEXP environment) {
 }
 
 SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ldvarForUpdateImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     R_varloc_t loc = R_findVarLocInFrame(env, sym);
     bool isLocal = !R_VARLOC_IS_NULL(loc);
     SEXP res = nullptr;
@@ -124,6 +161,11 @@ SEXP ldvarForUpdateImpl(SEXP sym, SEXP env) {
 }
 
 SEXP ldvarImpl(SEXP n, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ldvarImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto e = LazyEnvironment::check(env);
     while (e) {
         if (e->materialized()) {
@@ -143,9 +185,21 @@ SEXP ldvarImpl(SEXP n, SEXP env) {
     return res;
 }
 
-SEXP ldvarGlobalImpl(SEXP a) { return Rf_findVar(a, R_GlobalEnv); }
+SEXP ldvarGlobalImpl(SEXP a) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ldvarGlobalImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_findVar(a, R_GlobalEnv);
+}
 
 SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ldvarCachedImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (*cache != (SEXP)NativeBuiltins::bindingsCacheFails) {
         R_varloc_t loc = R_findVarLocInFrame(env, sym);
         if (R_VARLOC_IS_NULL(loc)) {
@@ -164,6 +218,11 @@ SEXP ldvarCachedImpl(SEXP sym, SEXP env, SEXP* cache) {
 }
 
 void stvarSuperImpl(SEXP a, SEXP val, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("stvarSuperImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto le = LazyEnvironment::check(env);
     assert(!le || !le->materialized());
     SEXP superEnv;
@@ -174,13 +233,39 @@ void stvarSuperImpl(SEXP a, SEXP val, SEXP env) {
     rirSetVarWrapper(a, val, superEnv);
 }
 
-void stvarImpl(SEXP a, SEXP val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+void stvarImpl(SEXP a, SEXP val, SEXP c) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("stvarImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    rirDefineVarWrapper(a, val, c);
+}
 
-void stvarImplI(SEXP a, int val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+void stvarImplI(SEXP a, int val, SEXP c) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("stvarImplI", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    rirDefineVarWrapper(a, val, c);
+}
 
-void stvarImplR(SEXP a, double val, SEXP c) { rirDefineVarWrapper(a, val, c); }
+void stvarImplR(SEXP a, double val, SEXP c) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("stvarImplR", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    rirDefineVarWrapper(a, val, c);
+}
 
 void stargImpl(SEXP sym, SEXP val, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("stargImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     // In case there is a local binding we must honor missingness which
     // defineVar does not
     if (env != R_BaseEnv && env != R_BaseNamespace) {
@@ -204,6 +289,11 @@ void stargImpl(SEXP sym, SEXP val, SEXP env) {
 }
 
 void setCarImpl(SEXP x, SEXP y) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("setCarImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     //    assert(x->sxpinfo.mark && "Use fastpath setCar");
     //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
     //           "use fast path setCar");
@@ -211,6 +301,11 @@ void setCarImpl(SEXP x, SEXP y) {
 }
 
 void setCdrImpl(SEXP x, SEXP y) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("setCdrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     //    assert(x->sxpinfo.mark && "Use fastpath setCdr");
     //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
     //           "use fast path setCdr");
@@ -218,6 +313,11 @@ void setCdrImpl(SEXP x, SEXP y) {
 }
 
 void setTagImpl(SEXP x, SEXP y) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("setTagImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     //    assert(x->sxpinfo.mark && "Use fastpath setTag");
     //    assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
     //           "use fast path setTag");
@@ -225,6 +325,11 @@ void setTagImpl(SEXP x, SEXP y) {
 }
 
 void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("externalsxpSetEntryImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     // assert(x->sxpinfo.mark && "Use fastpath setEntry");
     // assert((!y->sxpinfo.mark || y->sxpinfo.gcgen < x->sxpinfo.gcgen) &&
     //        "use fast path setEntry");
@@ -232,11 +337,21 @@ void externalsxpSetEntryImpl(SEXP x, int i, SEXP y) {
 }
 
 void defvarImpl(SEXP var, SEXP value, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("defvarImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     assert(TYPEOF(env) == ENVSXP);
     rirSetVarWrapper(var, value, ENCLOS(env));
 }
 
 SEXP chkfunImpl(SEXP sym, SEXP res) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("chkfunImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     switch (TYPEOF(res)) {
     case CLOSXP:
         jit(res, sym, globalContext());
@@ -252,6 +367,11 @@ SEXP chkfunImpl(SEXP sym, SEXP res) {
 }
 
 SEXP ldfunImpl(SEXP sym, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ldfunImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto e = LazyEnvironment::check(env);
     SEXP res = nullptr;
     while (e) {
@@ -286,13 +406,32 @@ SEXP ldfunImpl(SEXP sym, SEXP env) {
     return res;
 }
 
-static void warnImpl(const char* w) { Rf_warning(w); }
+static void warnImpl(const char* w) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("warnImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    Rf_warning(w);
+}
 
-static void errorImpl(const char* e) { Rf_error(e); }
+static void errorImpl(const char* e) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("errorImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    Rf_error(e);
+}
 
 static bool debugPrintCallBuiltinImpl = false;
 static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
                             size_t nargs) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("callBuiltinImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto ctx = globalContext();
     CallContext call(ArglistOrder::NOT_REORDERED, c, callee, nargs, ast,
                      ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
@@ -321,6 +460,11 @@ static SEXP callBuiltinImpl(rir::Code* c, Immediate ast, SEXP callee, SEXP env,
 static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
                      SEXP callee, SEXP env, size_t nargs,
                      unsigned long available) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("callImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at(ctx, (long)nargs - 1), env, R_NilValue,
@@ -335,6 +479,27 @@ static SEXP callImpl(ArglistOrder::CallId callId, rir::Code* c, Immediate ast,
 static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                           Immediate ast, SEXP callee, SEXP env, size_t nargs,
                           Immediate* names, unsigned long available) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::updateCheckpoint("namedCallImpl:CP");
+    DebugCheckpoints::printInstruction("namedCallImpl", [&] (){
+        std::cout << "    callId: " << callId << std::endl;
+        std::cout << "    code: " << c << std::endl;
+        std::cout << "    ast: " << ast << std::endl;
+        std::cout << "    callee: " << TYPEOF(callee) << std::endl;
+        std::cout << "      ";
+        printAST(6, callee);
+        std::cout << "    env: " << TYPEOF(env) << std::endl;
+        std::cout << "      ";
+        printAST(6, env);
+        std::cout << "    nargs: " << nargs << std::endl;
+        std::cout << "    names: [ ";
+        for (size_t i = 0; i < nargs; i++) {
+            std::cout << names[i] << " ";
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "    available: " << available << std::endl;
+    });
+    #endif
     auto ctx = globalContext();
     CallContext call(callId, c, callee, nargs, ast,
                      ostack_cell_at(ctx, (long)nargs - 1), names, env,
@@ -348,6 +513,11 @@ static SEXP namedCallImpl(ArglistOrder::CallId callId, rir::Code* c,
 static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                          Immediate ast, SEXP callee, SEXP env, size_t nargs,
                          Immediate* names, unsigned long available) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("dotsCallImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto ctx = globalContext();
     auto given = Context(available);
     int pushed = 0;
@@ -376,12 +546,22 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
 }
 
 SEXP createPromiseImpl(SEXP expr, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createPromiseImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = Rf_mkPROMISE(expr, env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
 
 SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createPromiseNoEnvEagerImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(value) != PROMSXP);
     SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
     ENSURE_NAMEDMAX(value);
@@ -389,9 +569,21 @@ SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
     return res;
 }
 
-SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_EmptyEnv); }
+SEXP createPromiseNoEnvImpl(SEXP exp) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createPromiseNoEnvImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_mkPROMISE(exp, R_EmptyEnv);
+}
 
 SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createPromiseEagerImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(value) != PROMSXP);
     SEXP res = Rf_mkPROMISE(exp, env);
     ENSURE_NAMEDMAX(value);
@@ -400,6 +592,11 @@ SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
 }
 
 SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("createClosureImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto res = Rf_allocSExp(CLOSXP);
     SET_FORMALS(res, formals);
     SET_BODY(res, body);
@@ -408,9 +605,21 @@ SEXP createClosureImpl(SEXP body, SEXP formals, SEXP env, SEXP srcref) {
     return res;
 }
 
-SEXP newIntImpl(int i) { return ScalarInteger(i); }
+SEXP newIntImpl(int i) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("newIntImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return ScalarInteger(i);
+}
 
 SEXP newIntDebugImpl(int i, void* debug) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("newIntDebugImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     std::cout << (char*)debug << "\n";
     auto res = Rf_allocVector(INTSXP, 1);
     INTEGER(res)[0] = i;
@@ -418,11 +627,30 @@ SEXP newIntDebugImpl(int i, void* debug) {
 }
 
 SEXP newIntFromRealImpl(double d) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("newIntFromRealImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     return ScalarInteger(d != d ? NA_INTEGER : d);
 }
 
-SEXP newRealImpl(double i) { return ScalarReal(i); }
-SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
+SEXP newRealImpl(double i) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("newRealImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return ScalarReal(i);
+}
+SEXP newRealFromIntImpl(int i) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("newRealFromIntImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return ScalarReal(i == NA_INTEGER ? NAN : i);
+}
 
 #define OPERATION_FALLBACK(op)                                                 \
     do {                                                                       \
@@ -443,6 +671,11 @@ SEXP newRealFromIntImpl(int i) { return ScalarReal(i == NA_INTEGER ? NAN : i); }
 
 static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
                         UnopKind op) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("unopEnvImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXP arglist = CONS_NR(argument, R_NilValue);
     SEXP call = src_pool_at(globalContext(), srcIdx);
@@ -469,6 +702,11 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx,
 }
 
 static SEXP unopImpl(SEXP argument, UnopKind op) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("unopImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXPREC arglistStruct;
     createFakeCONS(arglistStruct, R_NilValue);
@@ -489,6 +727,11 @@ static SEXP unopImpl(SEXP argument, UnopKind op) {
 }
 
 static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("notEnvImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS1(arglist, argument);
@@ -502,6 +745,11 @@ static SEXP notEnvImpl(SEXP argument, SEXP env, Immediate srcIdx) {
 }
 
 static SEXP notImpl(SEXP argument) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("notImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS1(arglist, argument);
@@ -516,6 +764,11 @@ static SEXP notImpl(SEXP argument) {
 
 static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
                          BinopKind kind) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("binopEnvImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXP arglist;
     FAKE_ARGS2(arglist, lhs, rhs);
@@ -587,6 +840,11 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
 
 bool debugBinopImpl = false;
 static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("binopImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
 
     SEXP arglist;
@@ -706,6 +964,11 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, BinopKind kind) {
 }
 
 SEXP colonImpl(int from, int to) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("colonImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (from != NA_INTEGER && to != NA_INTEGER) {
         return seq_int(from, to);
     }
@@ -716,6 +979,11 @@ SEXP colonImpl(int from, int to) {
 }
 
 int isMissingImpl(SEXP symbol, SEXP environment) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("isMissingImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     // TODO: Send the proper src
     if (auto e = LazyEnvironment::check(environment)) {
         if (e->materialized()) {
@@ -755,15 +1023,30 @@ int isMissingImpl(SEXP symbol, SEXP environment) {
 }
 
 bool isFactorImpl(SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("isFactorImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     return TYPEOF(val) == INTSXP && isObject(val) && Rf_inherits(val, "factor");
 }
 
 int asSwitchIdxImpl(SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("asSwitchIdxImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int i = Rf_asInteger(val);
     return i == NA_INTEGER ? -1 : i;
 }
 
 int checkTrueFalseImpl(SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("checkTrueFalseImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int cond = NA_LOGICAL;
     if (XLENGTH(val) > 1)
         Rf_warningcall(
@@ -798,13 +1081,25 @@ int checkTrueFalseImpl(SEXP val) {
 }
 
 int asLogicalImpl(SEXP a) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("asLogicalImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (!Rf_isNumber(a)) {
         Rf_errorcall(R_NilValue, "argument has the wrong type for && or ||");
     }
     return Rf_asLogical(a);
 }
 
-int lengthImpl(SEXP e) { return Rf_length(e); }
+int lengthImpl(SEXP e) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("lengthImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_length(e);
+}
 
 std::vector<BC::PoolIdx> NativeBuiltins::targetCaches;
 
@@ -828,6 +1123,11 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("deoptImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
@@ -972,6 +1272,11 @@ static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
 
 void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("deoptPoolImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     DeoptMetadata* m = (DeoptMetadata *)DATAPTR(metaDataStore);
 
     for (size_t i = 0; i < m->numFrames; i++) {
@@ -988,6 +1293,11 @@ void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args
 }
 #endif
 void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("recordTypefeedbackImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     switch (*pos) {
     case Opcode::record_test_: {
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
@@ -1023,13 +1333,30 @@ void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
 }
 
 void assertFailImpl(const char* msg) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("assertFailImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
     asm("int3");
 }
 
-void printValueImpl(SEXP v) { Rf_PrintValue(v); }
+void printValueImpl(SEXP v) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("printValueImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    Rf_PrintValue(v);
+}
 
 static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("tryFastVeceltInt", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (i == NA_INTEGER)
         return nullptr;
     if (fastVeceltOk(vec)) {
@@ -1072,6 +1399,11 @@ static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
 }
 
 static SEXP tryFastVeceltSexp(SEXP vector, SEXP index, bool subset2) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("tryFastVeceltSexp", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (!fastVeceltOk(vector))
         return nullptr;
 
@@ -1090,6 +1422,11 @@ static SEXP tryFastVeceltSexp(SEXP vector, SEXP index, bool subset2) {
 }
 
 SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract11Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = tryFastVeceltSexp(vector, index, false);
     if (res)
         return res;
@@ -1115,6 +1452,11 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 }
 
 SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract21Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = tryFastVeceltSexp(vector, index, true);
     if (res)
         return res;
@@ -1138,6 +1480,11 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 }
 
 SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract21iImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     if (index > 0)
         res = tryFastVeceltInt(vector, index - 1, true);
@@ -1163,6 +1510,11 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
 }
 
 SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract21rImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     if (index < R_XLEN_T_MAX && index >= 1.0)
         res = tryFastVeceltInt(vector, index - 1.0, true);
@@ -1189,6 +1541,11 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
 
 SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
                    Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract12Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
@@ -1210,6 +1567,11 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
 
 SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
                    Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract13Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP res = nullptr;
     SEXP args = CONS_NR(
         vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(index3, R_NilValue))));
@@ -1232,6 +1594,11 @@ SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
 
 SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
                    Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract22Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
@@ -1253,7 +1620,11 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
 
 SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
                      Immediate srcIdx) {
-
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract22iiImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (!isObject(vector) && isMatrix(vector) && index1 != NA_INTEGER &&
         index2 != NA_INTEGER && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
@@ -1291,7 +1662,11 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
 
 SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
                      Immediate srcIdx) {
-
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("extract22rrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (!isObject(vector) && isMatrix(vector) && index1 == index1 &&
         index2 == index2 && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
@@ -1329,6 +1704,11 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
 
 void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("initClosureContext", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     /*  If we have a generic function we need to use the sysparent of
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
@@ -1342,6 +1722,11 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
 }
 
 static void endClosureContext(RCNTXT* cntxt, SEXP result) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("endClosureContext", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     cntxt->returnValue = result;
     Rf_endcontext(cntxt);
 }
@@ -1351,6 +1736,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                                      Immediate astP, SEXP env, size_t nargs,
                                      unsigned long available,
                                      Immediate missingAsmpt_) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("nativeCallTrampolineImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
@@ -1536,6 +1926,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
 SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
                      Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign11Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (MAYBE_SHARED(vector))
         vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
@@ -1560,6 +1955,11 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
 }
 
 SEXP setVecEltImpl(SEXP vec, SEXP idx, SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("setVecEltImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     assert(IS_SIMPLE_SCALAR(idx, INTSXP));
     if (MAYBE_REFERENCED(val))
         val = Rf_lazy_duplicate(val);
@@ -1568,6 +1968,11 @@ SEXP setVecEltImpl(SEXP vec, SEXP idx, SEXP val) {
 }
 
 SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign21Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1640,6 +2045,11 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
 
 SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
                        Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign21rrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1680,6 +2090,11 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
 }
 SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
                        Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign21irImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1720,6 +2135,11 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
 }
 SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
                        Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign21riImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1769,6 +2189,11 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
     return res;
 }
 SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign21iiImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1820,6 +2245,11 @@ SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
 
 SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
                      SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign12Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (MAYBE_SHARED(vector))
         vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
@@ -1846,6 +2276,11 @@ SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
 
 SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
                      SEXP value, SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign13Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (MAYBE_SHARED(vector))
         vector = Rf_shallow_duplicate(vector);
     PROTECT(vector);
@@ -1874,6 +2309,11 @@ SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
 
 SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
                      Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign22Impl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -1947,6 +2387,11 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
 
 SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
                         SEXP env, Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign22rrrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -2001,6 +2446,11 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
 
 SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
                         Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign22iirImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -2055,6 +2505,11 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
 
 SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
                         Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign22iiiImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -2116,6 +2571,11 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
 
 SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
                         Immediate srcIdx) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("subassign22rriImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     int prot = 0;
     if (MAYBE_SHARED(vec)) {
         vec = Rf_shallow_duplicate(vec);
@@ -2177,6 +2637,11 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
 }
 
 SEXP toForSeqImpl(SEXP seq) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("toForSeqImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     if (!Rf_isVector(seq) && !Rf_isList(seq) && !isNull(seq)) {
         Rf_errorcall(R_NilValue, "invalid for() loop sequence");
     }
@@ -2200,6 +2665,11 @@ SEXP toForSeqImpl(SEXP seq) {
 void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
                             RCNTXT* cntxt, SEXP sysparent, SEXP op,
                             size_t nargs) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("initClosureContextImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto lazyArglist =
         LazyArglistOnHeap::New(callId, c->arglistOrderContainer(), nargs,
                                ostack_cell_at(ctx, (long)nargs - 1), ast);
@@ -2215,15 +2685,37 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
 }
 
 static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("endClosureContextImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     cntxt->returnValue = result;
     Rf_endcontext(cntxt);
 }
 
-int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }
+int ncolsImpl(SEXP v) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("ncolsImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return getMatrixDim(v).col; }
 
-int nrowsImpl(SEXP v) { return getMatrixDim(v).row; }
+int nrowsImpl(SEXP v) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("nrowsImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return getMatrixDim(v).row; }
 
 SEXP makeVectorImpl(int mode, size_t len) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("makeVectorImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     auto s = Rf_allocVector(mode, len);
     if (mode == INTSXP || mode == LGLSXP)
         Memzero(INTEGER(s), len);
@@ -2237,6 +2729,11 @@ SEXP makeVectorImpl(int mode, size_t len) {
 }
 
 void llDebugMsgImpl(const char * msg, int space, void * obj, int tag) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("llDebugMsgImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     for (int i = 0; i < space; i++) {
         std::cout << " ";
     }
@@ -2288,6 +2785,11 @@ void llDebugMsgImpl(const char * msg, int space, void * obj, int tag) {
 }
 
 double prodrImpl(SEXP v) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("prodrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     double res = 1;
     auto len = XLENGTH(v);
     if (TYPEOF(v) == REALSXP) {
@@ -2305,6 +2807,11 @@ double prodrImpl(SEXP v) {
 }
 
 double sumrImpl(SEXP v) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("sumrImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     double res = 0;
     auto len = XLENGTH(v);
     if (TYPEOF(v) == REALSXP) {
@@ -2321,32 +2828,70 @@ double sumrImpl(SEXP v) {
     return res;
 }
 
-SEXP namesImpl(SEXP val) { return Rf_getAttrib(val, R_NamesSymbol); }
+SEXP namesImpl(SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("namesImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_getAttrib(val, R_NamesSymbol); }
 
 SEXP setNamesImpl(SEXP val, SEXP names) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("setNamesImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     // If names is R_NilValue, setAttrib doesn't return the val but rather
     // R_NilValue, hence we cannot return val directly...
     Rf_setAttrib(val, R_NamesSymbol, names);
     return val;
 }
 
-size_t xlengthImpl(SEXP val) { return Rf_xlength(val); }
+size_t xlengthImpl(SEXP val) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("xlengthImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_xlength(val); }
 
-SEXP getAttribImpl(SEXP val, SEXP sym) { return Rf_getAttrib(val, sym); }
+SEXP getAttribImpl(SEXP val, SEXP sym) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("getAttribImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
+    return Rf_getAttrib(val, sym); }
 
 void nonLocalReturnImpl(SEXP res, SEXP env) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("nonLocalReturnImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
 }
 
 // Not tagged NoReturn to avoid hot/cold splitting to assume it is cold
 
 bool clsEqImpl(SEXP lhs, SEXP rhs) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("clsEqImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     SLOWASSERT(TYPEOF(lhs) == CLOSXP && TYPEOF(rhs) == CLOSXP);
     return CLOENV(lhs) == CLOENV(rhs) && FORMALS(lhs) == FORMALS(rhs) &&
            BODY_EXPR(lhs) == BODY_EXPR(rhs);
 }
 
 bool deoptChaosTriggerImpl(bool deoptTrue) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("deoptChaosTriggerImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     assert(Parameter::DEOPT_CHAOS);
     static std::mt19937 gen(Parameter::DEOPT_CHAOS_SEED);
     static std::bernoulli_distribution coin(
@@ -2358,6 +2903,11 @@ bool deoptChaosTriggerImpl(bool deoptTrue) {
 }
 
 void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("checkTypeImpl", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
     pir::PirType typ(type);
     if (!typ.isInstance(val)) {

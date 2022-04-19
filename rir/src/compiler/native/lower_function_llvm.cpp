@@ -38,6 +38,9 @@
 
 #include "loweringPatches.h"
 #include "api.h"
+#include "utils/DebugMessages.h"
+#define DISABLE_OPTIMISTIC_DISPATCH 0
+#define USE_BINDINGS_CACHE 0
 
 namespace rir {
 namespace pir {
@@ -191,10 +194,10 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
 }
 
 // serializer
-llvm::Value* LowerFunctionLLVM::convertToExternalSymbol(std::string name, llvm::Type* ty = t::SEXPREC) {
+llvm::Value* LowerFunctionLLVM::convertToExternalSymbol(std::string name, llvm::Type* ty, bool constant) {
     return getModule().getOrInsertGlobal(name, ty, [&]() {
         return new llvm::GlobalVariable(
-            getModule(), ty, false,
+            getModule(), ty, constant,
             llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
             nullptr, name, nullptr,
             llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
@@ -421,25 +424,25 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
 
     #if PATCH_103_109 == 1
     if (co == R_TrueValue) {
-        return convertToExternalSymbol("dcs_103");
+        return convertToExternalSymbol("dcs_103", true);
     }
     if (co == R_NilValue) {
-        return convertToExternalSymbol("dcs_104");
+        return convertToExternalSymbol("dcs_104", true);
     }
     if (co == R_FalseValue) {
-        return convertToExternalSymbol("dcs_105");
+        return convertToExternalSymbol("dcs_105", true);
     }
     if (co == R_UnboundValue) {
-        return convertToExternalSymbol("dcs_106");
+        return convertToExternalSymbol("dcs_106", true);
     }
     if (co == R_MissingArg) {
-        return convertToExternalSymbol("dcs_107");
+        return convertToExternalSymbol("dcs_107", true);
     }
     if (co == R_LogicalNAValue) {
-        return convertToExternalSymbol("dcs_108");
+        return convertToExternalSymbol("dcs_108", true);
     }
     if (co == R_EmptyEnv) {
-        return convertToExternalSymbol("dcs_109");
+        return convertToExternalSymbol("dcs_109", true);
     }
     #else
     static std::unordered_set<SEXP> eternalConst = {
@@ -489,7 +492,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         std::stringstream ss;
         ss << "gcb_";
         ss << getBuiltinNr(co);
-        return convertToExternalSymbol(ss.str());
+        return convertToExternalSymbol(ss.str(), true);
     }
     #else
     if (TYPEOF(co) == BUILTINSXP) {
@@ -506,14 +509,14 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             std::stringstream ss;
             ss << "spe1_";
             ss << co->u.primsxp.offset;
-            return convertToExternalSymbol(ss.str());
+            return convertToExternalSymbol(ss.str(), true);
         }
         else {
             if (serializerError != nullptr) {
                 *serializerError = true;
-                #if PRINT_SERIALIZER_PROGRESS == 1
-                std::cout << "  (E) PATCH_SPECIALSXP: non-function type, offset: " << co->u.primsxp.offset << ", kind: " << R_FunTab[co->u.primsxp.offset].gram.kind << std::endl;
-                #endif
+
+                DebugMessages::printSerializerErrors("(*) PATCH_SPECIALSXP failed, non-function type, offset: " + std::to_string(co->u.primsxp.offset) + ", kind: " + std::to_string(R_FunTab[co->u.primsxp.offset].gram.kind), 2);
+
             }
             return convertToPointer(co, true);
         }
@@ -541,16 +544,14 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             if (!reqMap || (vtabContainer != curr) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                 if (serializerError != nullptr) {
                     *serializerError = true;
-                    #if PRINT_SERIALIZER_ERRORS == 1
                     if (vtabContainer != curr) {
-                        std::cout << "CPPP patch, VTAB container not equal" << std::endl;
+                        DebugMessages::printSerializerErrors("(*) CPPP patch failed, VTAB container not equal", 2);
                     }
                     if (isHastInvalid(hast)) {
-                        std::cout << "  (E) hast == 0" << std::endl;
-                    } else {
-                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                    } else if (isHastBlacklisted(hast)) {
+                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
                     }
-                    #endif
                 }
             } else {
                 Pool::insert(vtable->container());
@@ -564,9 +565,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         } else {
             if (serializerError != nullptr) {
                 *serializerError = true;
-                #if PRINT_SERIALIZER_ERRORS == 1
-                std::cout << "  (E) EXTERNALSXP not in BC" << std::endl;
-                #endif
+                DebugMessages::printSerializerErrors("(*) EXTERNALSXP not in BC", 2);
             }
         }
     } else if (TYPEOF(co) == CLOSXP) {
@@ -584,16 +583,14 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
             if (!reqMap || (resolvedContainer != co) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                 if (serializerError != nullptr) {
                     *serializerError = true;
-                    #if PRINT_SERIALIZER_ERRORS == 1
                     if ((resolvedContainer != co)) {
-                        std::cout << "  (E) CPPP invalid container for CLOSXP" << std::endl;
+                        DebugMessages::printSerializerErrors("(*) CPPP invalid container for CLOSXP", 2);
                     }
                     if (isHastInvalid(hast)) {
-                        std::cout << "  (E) hast == 0" << std::endl;
-                    } else {
-                        std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                    } else if (isHastBlacklisted(hast)) {
+                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
                     }
-                    #endif
                 }
             } else {
                 Pool::insert(co);
@@ -607,9 +604,10 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         } else {
             if (serializerError != nullptr) {
                 *serializerError = true;
-                #if PRINT_SERIALIZER_ERRORS == 1
-                std::cout << "  (E) CLOSXP's BODY is not EXTERNALSXP" << std::endl;
-                #endif
+                DebugMessages::printSerializerErrors("(*) CLOSXP's BODY is not EXTERNALSXP: " + std::to_string(TYPEOF(BODY(co))), 2);
+                if (DebugMessages::serializerDebugLevel() == 2) {
+                    printAST(0, co);
+                }
             }
         }
     }
@@ -814,7 +812,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     } else if (val == OpaqueTrue::instance()) {
         #if PATCH_OPAQUE_TRUE == 1
         // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToExternalSymbol("spe_opaqueTrue", t::Int));
+        res = builder.CreateLoad(convertToExternalSymbol("spe_opaqueTrue", t::Int, true));
         #else
         static int one = 1;
         // Something that is always true, but llvm does not know about
@@ -838,16 +836,14 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         if (!reqMap || (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
             if (serializerError != nullptr) {
                 *serializerError = true;
-                #if PRINT_SERIALIZER_PROGRESS == 1
                 if (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) {
-                    std::cout << "  (E) TRY_PATCH_DEOPTREASON resolved code is invalid" << std::endl;
+                    DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTREASON resolved code is invalid", 2);
                 }
                 if (isHastInvalid(hast)) {
-                    std::cout << "  (E) hast == 0" << std::endl;
-                } else {
-                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                } else if (isHastBlacklisted(hast)) {
+                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
                 }
-                #endif
             }
             auto dr = (DeoptReasonWrapper*)val;
             auto srcAddr = (Constant*)builder.CreateIntToPtr(
@@ -3919,7 +3915,9 @@ void LowerFunctionLLVM::compile() {
                 auto calli = StaticCall::Cast(i);
                 calli->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
                 auto target = calli->tryDispatch();
+                #if DISABLE_OPTIMISTIC_DISPATCH == 0
                 auto bestTarget = calli->tryOptimisticDispatch();
+                #endif
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
@@ -3956,6 +3954,7 @@ void LowerFunctionLLVM::compile() {
                     break;
                 }
 
+                #if DISABLE_OPTIMISTIC_DISPATCH == 0
                 if (target == bestTarget) {
                     auto callee = target->owner()->rirClosure();
                     auto dt = DispatchTable::check(BODY(callee));
@@ -3980,17 +3979,14 @@ void LowerFunctionLLVM::compile() {
                         if (!reqMap || (resolvedContainer != callee) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                             if (serializerError != nullptr) {
                                 *serializerError = true;
-                                #if PRINT_SERIALIZER_PROGRESS == 1
-                                std::cout << "  (E) TRY_PATCH_OPT_DISPATCH failed" << std::endl;
                                 if (resolvedContainer != callee) {
-                                    std::cout << "  (E) TRY_PATCH_OPT_DISPATCH invalid container for CLOSXP" << std::endl;
+                                    DebugMessages::printSerializerErrors("(*) TRY_PATCH_OPT_DISPATCH resolved code is invalid", 2);
                                 }
                                 if (isHastInvalid(hast)) {
-                                    std::cout << "  (E) hast == 0" << std::endl;
-                                } else {
-                                    std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
                                 }
-                                #endif
                             }
                             assert(
                             asmpt.includes(Assumption::StaticallyArgmatched));
@@ -4097,6 +4093,7 @@ void LowerFunctionLLVM::compile() {
 
                     }
                 }
+                #endif
 
                 #if TRY_PATCH_STATIC_CALL3 == 1
                 SEXP body = BODY(calli->cls()->rirClosure());
@@ -4113,16 +4110,14 @@ void LowerFunctionLLVM::compile() {
                 if (!reqMap || (resolvedContainer != calli->cls()->rirClosure()) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
                     if (serializerError != nullptr) {
                         *serializerError = true;
-                        #if PRINT_SERIALIZER_ERRORS == 1
                         if ((resolvedContainer != calli->cls()->rirClosure())) {
-                            std::cout << "  (E) STATIC CALL invalid container for CLOSXP" << std::endl;
+                            DebugMessages::printSerializerErrors("(*) STATIC CALL invalid container for CLOSXP", 2);
                         }
                         if (isHastInvalid(hast)) {
-                            std::cout << "  (E) hast == 0" << std::endl;
-                        } else {
-                            std::cout << "  (E) Trying to serialize to a blacklisted hast" << std::endl;
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
                         }
-                        #endif
                     }
                     assert(asmpt.includes(Assumption::StaticallyArgmatched));
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
@@ -4335,9 +4330,7 @@ void LowerFunctionLLVM::compile() {
                 } else {
                     if (serializerError != nullptr) {
                         *serializerError = true;
-                        #if PRINT_SERIALIZER_PROGRESS == 1
-                        std::cout << "  (E) TRY_PATCH_DEOPTMETADATA failed" << std::endl;
-                        #endif
+                        DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTMETADATA failed", 2);
                     }
                     std::vector<Value*> args;
                     {
@@ -5574,7 +5567,9 @@ void LowerFunctionLLVM::compile() {
                             },
                             [&]() { return res; });
                     }
-                } else if (bindingsCache.count(i->env())) {
+                }
+                #if USE_BINDINGS_CACHE == 1
+                else if (bindingsCache.count(i->env())) {
                     auto phi = phiBuilder(t::SEXP);
                     auto offset = bindingsCache.at(i->env()).at(varName);
 
@@ -5619,7 +5614,9 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateBr(done);
                     builder.SetInsertPoint(done);
                     res = phi();
-                } else if (i->env() == Env::global()) {
+                }
+                #endif
+                else if (i->env() == Env::global()) {
                     res = call(
                         NativeBuiltins::get(NativeBuiltins::Id::ldvarGlobal),
                         {constant(varName, t::SEXP)});
@@ -6588,6 +6585,7 @@ void LowerFunctionLLVM::compile() {
                 bool unboxed =
                     setter.llvmSignature->getFunctionParamType(1) != t::SEXP;
 
+                #if USE_BINDINGS_CACHE == 1
                 if (bindingsCache.count(environment)) {
                     auto offset = bindingsCache.at(environment).at(st->varName);
                     auto cachePtr =
@@ -6687,12 +6685,16 @@ void LowerFunctionLLVM::compile() {
 
                     builder.SetInsertPoint(done);
 
-                } else {
+                }
+                else {
+                #endif
                     llvm::Value* theValue =
                         unboxed ? load(pirVal) : loadSxp(pirVal);
                     call(setter, {constant(st->varName, t::SEXP), theValue,
                                   loadSxp(st->env())});
+                #if USE_BINDINGS_CACHE == 1
                 }
+                #endif
                 break;
             }
 
