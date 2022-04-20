@@ -64,6 +64,7 @@ namespace rir {
         static unsigned getSrcPoolIndexAtOffset(SEXP hastSym, int offset);
         static SEXP getVtableContainerAtOffset(SEXP hastSym, int offset);
         static DispatchTable * getVtableAtOffset(DispatchTable * vtab, int offset);
+        static void printSources(DispatchTable* vtable, SEXP hastSym);
     };
 
 }

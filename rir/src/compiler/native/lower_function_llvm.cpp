@@ -565,6 +565,16 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                     *serializerError = true;
                     if ((resolvedContainer != co)) {
                         DebugMessages::printSerializerErrors("(*) CPPP invalid container for CLOSXP", 2);
+                        if (data.index != 0) {
+                            DebugMessages::printSerializerErrors("CPPP: index is non zero, inner closures closed at runtime are not yet supported.", 3);
+                        }
+                        if (resolvedContainer == R_NilValue) {
+                            DebugMessages::printSerializerErrors("CPPP: resolved container is R_NilValue", 3);
+                        } else {
+                            DebugMessages::printSerializerErrors("Lookup: " + std::string(CHAR(PRINTNAME(hast))) + " at " + std::to_string(data.index) + " -- src: " + std::to_string(vtable->baseline()->body()->src) , 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)co), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)resolvedContainer), 3);
+                        }
                     }
                     if (isHastInvalid(hast)) {
                         DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);

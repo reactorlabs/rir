@@ -499,6 +499,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                     auto data = getHastAndIndex(c->rirSrc()->src);
                     if (data.hast == R_NilValue) {
                         *serializerError = true;
+                        DebugMessages::printSerializerErrors("backend, src hast is R_NilValue for src: " + std::to_string(c->rirSrc()->src) + ", index: " + std::to_string(data.index), 3);
                     }
 
 

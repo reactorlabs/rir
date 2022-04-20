@@ -138,7 +138,7 @@ class Compiler {
 
         if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
-            std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
+            std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;
             #endif
             vtable->hast = hast;
             BitcodeLinkUtil::insertVTable(vtable, hast);
@@ -153,6 +153,11 @@ class Compiler {
             auto stop = high_resolution_clock::now();
             auto duration = duration_cast<milliseconds>(stop - start);
             linkTime += duration.count();
+        } else {
+            #if DEBUG_TABLE_ENTRIES == 1
+            std::cout << "(BLACK) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;
+            BitcodeLinkUtil::printSources(vtable, hast);
+            #endif
         }
     }
 };
