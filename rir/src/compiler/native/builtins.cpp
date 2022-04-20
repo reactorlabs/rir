@@ -1256,18 +1256,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 #if TRY_PATCH_DEOPTMETADATA == 1
 
 static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
-    SEXP lMap = Pool::get(HAST_VTAB_MAP);
-    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
-
-    if (!DispatchTable::check(vtabContainer)) {
-        Rf_error("SERIALIZER ERROR: deoptpool vtable not found");
-    }
-
-    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
-    auto addr = vt->baseline()->body();
-
-    int idx = 0;
-    return addr->getSrcAtOffset(true, idx, offset);
+    return BitcodeLinkUtil::getCodeObjectAtOffset(hastSym, offset);
 }
 
 void deoptPoolImpl(rir::Code* c, SEXP cls, SEXP metaDataStore, R_bcstack_t* args,

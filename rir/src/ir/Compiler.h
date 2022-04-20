@@ -139,8 +139,6 @@ class Compiler {
         if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
             std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << inClosure << std::endl;
-            // int j = 0;
-            // vtable->baseline()->body()->printSource(true, j);
             #endif
             vtable->hast = hast;
             BitcodeLinkUtil::insertVTable(vtable, hast);

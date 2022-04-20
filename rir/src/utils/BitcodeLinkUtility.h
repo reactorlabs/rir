@@ -59,6 +59,11 @@ namespace rir {
         static void tryLinking(DispatchTable * vtab, SEXP hSym);
 
         static void markStale(SEXP currHastSym, const unsigned long & con);
+
+        static Code * getCodeObjectAtOffset(SEXP hastSym, int offset);
+        static unsigned getSrcPoolIndexAtOffset(SEXP hastSym, int offset);
+        static SEXP getVtableContainerAtOffset(SEXP hastSym, int offset);
+        static DispatchTable * getVtableAtOffset(DispatchTable * vtab, int offset);
     };
 
 }

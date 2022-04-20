@@ -142,10 +142,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     SEXP argOrderingVec; /// callArglist order, raw
 
-    SEXP hast;
-
-    int offsetIndex;
-
     uint8_t data[]; /// the instructions
 
     /*
@@ -222,14 +218,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
-    // serializer
-    void populateSrcIdxData();
-    void populateSrcData(SEXP parentHast, SEXP map, bool mainSrc, int & index);
-    Code * getSrcAtOffset(bool mainSrc, int & index, int reqOffset);
-    unsigned getSrcIdxAtOffset(bool mainSrc, int & index, int reqOffset);
-    // unsigned getSrcForInnerObjs(bool mainSrc, int & index, int reqOffset);
-    SEXP getTabAtOffset(bool mainSrc, int & index, int reqOffset);
-    void printSource(bool mainSrc, int & index);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

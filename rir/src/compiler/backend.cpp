@@ -592,13 +592,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
 
                         // Entry [3]: src ast data
                         auto data = getHastAndIndex(srcDataMap[relevantNames[i]]);
-                        SEXP lMap = Pool::get(HAST_VTAB_MAP);
-                        auto resolvedContainer = Rf_findVarInFrame(lMap, data.hast);
-                        DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
-
-                        int idx = 0;
-                        unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, data.index);
-
+                        unsigned calc = BitcodeLinkUtil::getSrcPoolIndexAtOffset(data.hast, data.index);
                         if (calc != srcDataMap[relevantNames[i]]) {
                             std::cout << "[src mismatch]: " << calc << ", " << srcDataMap[relevantNames[i]] << std::endl;
                             SET_VECTOR_ELT(fSrcDataVec, i, R_NilValue);

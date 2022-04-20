@@ -112,39 +112,11 @@ bool LowerFunctionLLVM::isHastBlacklisted(SEXP hastSym) {
 }
 
 SEXP LowerFunctionLLVM::getVtableContainer(SEXP hastSym, int offset) {
-    SEXP lMap = Pool::get(HAST_VTAB_MAP);
-    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
-
-    if (!DispatchTable::check(vtabContainer)) {
-        std::cout << "ERROR: " << CHAR(PRINTNAME(hastSym)) << std::endl;
-        Rf_error("dispatch table missing: getVtableContainer");
-    }
-
-    if (offset == 1) return vtabContainer;
-
-    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
-    auto addr = vt->baseline()->body();
-
-    int idx = 0;
-    auto tab = addr->getTabAtOffset(true, idx, offset);
-
-    return tab;
+    return BitcodeLinkUtil::getVtableContainerAtOffset(hastSym, offset);
 }
 
 rir::Code * LowerFunctionLLVM::getCodeContainer(SEXP hastSym, int offset) {
-    SEXP lMap = Pool::get(HAST_VTAB_MAP);
-    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
-
-    if (!DispatchTable::check(vtabContainer)) {
-        std::cout << "ERROR: " << CHAR(PRINTNAME(hastSym)) << std::endl;
-        Rf_error("dispatch table missing: getCodeContainer");
-    }
-
-    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
-    auto addr = vt->baseline()->body();
-
-    int idx = 0;
-    return addr->getSrcAtOffset(true, idx, offset);
+    return BitcodeLinkUtil::getCodeObjectAtOffset(hastSym, offset);
 }
 
 SEXP LowerFunctionLLVM::getClosContainer(SEXP hastSym) {
@@ -545,7 +517,15 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                 if (serializerError != nullptr) {
                     *serializerError = true;
                     if (vtabContainer != curr) {
+
                         DebugMessages::printSerializerErrors("(*) CPPP patch failed, VTAB container not equal", 2);
+                        if (vtabContainer == R_NilValue) {
+                            DebugMessages::printSerializerErrors("R_NilValue for container", 3);
+                        } else {
+                            DebugMessages::printSerializerErrors("hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)curr), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)vtabContainer), 3);
+                        }
                     }
                     if (isHastInvalid(hast)) {
                         DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);

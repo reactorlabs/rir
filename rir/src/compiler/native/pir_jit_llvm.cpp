@@ -506,16 +506,7 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
         {
             SEXP depHast = VECTOR_ELT(astData, 0);
             int offsetIndex = *INTEGER(VECTOR_ELT(astData, 1));
-            SEXP lMap = Pool::get(HAST_VTAB_MAP);
-            auto resolvedContainer = Rf_findVarInFrame(lMap, depHast);
-            if (!DispatchTable::check(resolvedContainer)) {
-                Rf_error("Deserializer: Invalid vtable container while updating src idx");
-            }
-            DispatchTable * vv = DispatchTable::unpack(resolvedContainer);
-
-            int idx = 0;
-            unsigned calc = vv->baseline()->body()->getSrcIdxAtOffset(true, idx, offsetIndex);
-
+            unsigned calc = BitcodeLinkUtil::getSrcPoolIndexAtOffset(depHast, offsetIndex);
             p = rir::Code::New(calc);
         }
 
@@ -959,14 +950,7 @@ static SEXP getVtableContainer(SEXP hastSym) {
 }
 
 static rir::Code * getCodeContainer(SEXP hastSym, int offset) {
-    SEXP lMap = Pool::get(HAST_VTAB_MAP);
-    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
-
-    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
-    auto addr = vt->baseline()->body();
-
-    int idx = 0;
-    return addr->getSrcAtOffset(true, idx, offset);
+    return BitcodeLinkUtil::getCodeObjectAtOffset(hastSym, offset);
 }
 
 static SEXP getClosContainer(SEXP hastSym) {
@@ -975,21 +959,21 @@ static SEXP getClosContainer(SEXP hastSym) {
     return resolvedContainer;
 }
 
-static unsigned getCodeInnerObjIdx(SEXP hastSym, int offset) {
-    SEXP lMap = Pool::get(HAST_VTAB_MAP);
-    auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
+// static unsigned getCodeInnerObjIdx(SEXP hastSym, int offset) {
+//     SEXP lMap = Pool::get(HAST_VTAB_MAP);
+//     auto vtabContainer = Rf_findVarInFrame(lMap, hastSym);
 
-    if (!DispatchTable::check(vtabContainer)) {
-        std::cout << "ERROR: " << CHAR(PRINTNAME(hastSym)) << std::endl;
-        Rf_error("dispatch table missing: getCodeInnerObj");
-    }
+//     if (!DispatchTable::check(vtabContainer)) {
+//         std::cout << "ERROR: " << CHAR(PRINTNAME(hastSym)) << std::endl;
+//         Rf_error("dispatch table missing: getCodeInnerObj");
+//     }
 
-    DispatchTable * vt = DispatchTable::unpack(vtabContainer);
-    auto addr = vt->baseline()->body();
+//     DispatchTable * vt = DispatchTable::unpack(vtabContainer);
+//     auto addr = vt->baseline()->body();
 
-    int idx = 0;
-    return addr->getSrcForInnerObjs(true, idx, offset);
-}
+//     int idx = 0;
+//     return addr->getSrcForInnerObjs(true, idx, offset);
+// }
 
 void PirJitLLVM::initializeLLVM() {
     #if ENABLE_SPE_PATCHES == 1
@@ -1131,9 +1115,6 @@ void PirJitLLVM::initializeLLVM() {
                 #if ENABLE_DEOPT_PATCHES == 1
                 auto code = n.substr(0, 5) == "code_"; // code objs for DeoptReason
                 auto codn = n.substr(0, 5) == "codn_"; // should be ideally ignored, but we can skip patching in the deserializer
-
-                auto deop = n.substr(0, 5) == "deop_"; // code objs for DeoptReason
-                auto deon = n.substr(0, 5) == "deon_"; // should be ideally ignored, but we can skip patching in the deserializer
                 #endif
 
                 auto vtab = n.substr(0, 5) == "vtab_"; // Hast to dispatch table
@@ -1297,40 +1278,6 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }
-                else if (deop || deon) {
-                    auto firstDel = n.find('_');
-                    auto secondDel = n.find('_', firstDel + 1);
-                    auto thirdDel = n.find('_', secondDel + 1);
-
-                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    auto index = std::stoi(n.substr(secondDel + 1, thirdDel - secondDel - 1));
-                    int realOffset = std::stoi(n.substr(thirdDel + 1));
-
-                    SEXP vtabContainer = getVtableContainer(Rf_install(hast.c_str()));
-                    if (!DispatchTable::check(vtabContainer)) {
-                        Rf_error("deop_ error dispatch table corrupted");
-                    }
-                    DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
-                    auto addr = vtable->baseline()->body();
-                    int idx = 0;
-                    addr = addr->getSrcAtOffset(true, idx, index);
-
-                    auto pc = (uintptr_t)addr->code() + (uintptr_t)realOffset;
-
-                    auto res = (uintptr_t)pc - (uintptr_t)addr;
-
-                    SEXP store;
-                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(uintptr_t)));
-                    uintptr_t * tmp = (uintptr_t *) DATAPTR(store);
-                    *tmp = res;
-                    Pool::insert(store);
-                    UNPROTECT(1);
-
-                    NewSymbols[Name] = JITEvaluatedSymbol(
-                        static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(tmp)),
-                        JITSymbolFlags::Exported | (JITSymbolFlags::None));
-                }
                 #endif
                 else if (vtab) {
                     auto firstDel = n.find('_');
@@ -1339,22 +1286,7 @@ void PirJitLLVM::initializeLLVM() {
                     auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
                     int index = std::stoi(n.substr(secondDel + 1));
 
-                    SEXP vtabContainer = getVtableContainer(Rf_install(hast.c_str()));
-                    if (!DispatchTable::check(vtabContainer)) {
-                        Rf_error("vtab_ error dispatch table corrupted");
-                    }
-
-                    SEXP resTab;
-                    if (index == 1) {
-                        resTab = vtabContainer;
-                    } else {
-                        DispatchTable * vtable = DispatchTable::unpack(vtabContainer);
-                        auto addr = vtable->baseline()->body();
-
-                        int idx = 0;
-                        resTab = addr->getTabAtOffset(true, idx, index);
-                    }
-
+                    SEXP resTab = BitcodeLinkUtil::getVtableContainerAtOffset(Rf_install(hast.c_str()), index);
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
@@ -1416,24 +1348,24 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 } else if (pluu) {
-                    auto firstDel = n.find('_');
-                    auto secondDel = n.find('_', firstDel + 1);
+                    // auto firstDel = n.find('_');
+                    // auto secondDel = n.find('_', firstDel + 1);
 
-                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    int index = std::stoi(n.substr(secondDel + 1));
+                    // auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    // int index = std::stoi(n.substr(secondDel + 1));
 
-                    unsigned idx = getCodeInnerObjIdx(Rf_install(hast.c_str()), index);
+                    // unsigned idx = getCodeInnerObjIdx(Rf_install(hast.c_str()), index);
 
-                    SEXP store;
-                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
-                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
-                    *tmp = idx;
-                    Pool::insert(store);
-                    UNPROTECT(1);
+                    // SEXP store;
+                    // PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
+                    // BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
+                    // *tmp = idx;
+                    // Pool::insert(store);
+                    // UNPROTECT(1);
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(tmp)),
+                            reinterpret_cast<uintptr_t>(nullptr)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }
