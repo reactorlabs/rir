@@ -361,7 +361,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
         approximateRefcount(cls, c, refcount, log);
         std::unordered_set<Instruction*> needsLdVarForUpdate;
         approximateNeedsLdVarForUpdate(c, needsLdVarForUpdate);
-        auto res = done[c] = rir::Code::New(c->rirSrc()->src);
+        auto res = done[c] = rir::Code::NewNative(c->rirSrc()->src);
         // Can we do better?
         preserve(res->container());
         auto& pm = promMap.at(c);

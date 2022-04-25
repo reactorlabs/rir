@@ -306,23 +306,25 @@ PirJitLLVM::PirJitLLVM(const std::string& name) : name(name) {
 // (including promises) are added to the Module. Hence, in the destructor,
 // we need to fixup all the native pointers.
 PirJitLLVM::~PirJitLLVM() {
+    assert(finalized && "forgot to call finalize?");
+}
+
+void PirJitLLVM::finalize() {
+    assert(!finalized);
     if (M) {
-        // Should this happen before finalizeAndFixup or after?
+        // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
             DIB->finalize();
         }
-        finalizeAndFixup();
+        // TODO: maybe later have TSM from the start and use locking
+        //       to allow concurrent compilation?
+        auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
+        ExitOnErr(JIT->addIRModule(std::move(TSM)));
+        for (auto& fix : jitFixup)
+            fix.second.first->lazyCodeHandle(fix.second.second.str());
         nModules++;
     }
-}
-
-void PirJitLLVM::finalizeAndFixup() {
-    // TODO: maybe later have TSM from the start and use locking
-    //       to allow concurrent compilation?
-    auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
-    ExitOnErr(JIT->addIRModule(std::move(TSM)));
-    for (auto& fix : jitFixup)
-        fix.second.first->lazyCodeHandle(fix.second.second.str());
+    finalized = true;
 }
 
 void PirJitLLVM::compile(
@@ -330,6 +332,7 @@ void PirJitLLVM::compile(
     const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
     const std::unordered_set<Instruction*>& needsLdVarForUpdate,
     ClosureLog& log) {
+    assert(!finalized);
 
     if (!M.get()) {
         M = std::make_unique<llvm::Module>("", *TSC.getContext());
@@ -530,7 +533,6 @@ void PirJitLLVM::initializeLLVM() {
     SymbolMap builtinSymbols(
         static_cast<size_t>(NativeBuiltins::Id::NUM_BUILTINS));
     NativeBuiltins::eachBuiltin([&](const NativeBuiltin& blt) {
-
         auto res = builtinSymbols.try_emplace(
             JIT->mangleAndIntern(blt.name),
             JITEvaluatedSymbol(pointerToJITTargetAddress(blt.fun),

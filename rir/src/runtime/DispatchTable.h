@@ -55,7 +55,7 @@ struct DispatchTable
                       << "\n";
 #endif
             auto e = get(i);
-            if (a.smaller(e->context()) && !e->disabled())
+            if (a.smaller(e->context()) && !e->disabled() && !e->pending())
                 return e;
         }
         return baseline();

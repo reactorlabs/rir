@@ -48,7 +48,12 @@ Code* Code::New(Immediate ast, size_t codeSize, size_t sources, size_t locals,
                               locals, bindingCache);
 }
 
-Code* Code::New(Immediate ast) { return New(ast, 0, 0, 0, 0); }
+Code* Code::NewNative(Immediate ast) {
+    auto res = New(ast, 0, 0, 0, 0);
+    // This code mustn't be executed until the lazyCodeHandle_ is filled
+    res->pending_ = true;
+    return res;
+}
 
 Code::~Code() {
     // TODO: Not sure if this is actually called

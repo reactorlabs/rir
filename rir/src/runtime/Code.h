@@ -74,12 +74,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
                      size_t bindingCache);
     static Code* New(Immediate ast, size_t codeSize, size_t sources,
                      size_t locals, size_t bindingCache);
-    static Code* New(Immediate ast);
+    static Code* NewNative(Immediate ast);
 
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
     char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
+    bool pending_ = false;
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
@@ -93,11 +94,12 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         }
         memcpy(&lazyCodeHandle_, h.c_str(), l);
         lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH - 1] = '\0';
+        pending_ = false;
     }
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
-        if (*lazyCodeHandle_ == '\0')
+        if (pending_ || *lazyCodeHandle_ == '\0')
             return nullptr;
         return lazyCompile();
     }
@@ -105,6 +107,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     bool isCompiled() const {
         return *lazyCodeHandle_ != '\0' && nativeCode_ != nullptr;
     }
+    bool pending() const { return pending_; }
 
     static unsigned pad4(unsigned sizeInBytes) {
         unsigned x = sizeInBytes % 4;

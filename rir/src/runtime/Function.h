@@ -135,7 +135,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         RIR_FUNCTION_FLAGS(V)
 #undef V
 
-            FIRST = Deopt,
+        FIRST = Deopt,
         LAST = DisableNumArgumentsSpezialization
     };
     EnumSet<Flag> flags;
@@ -162,6 +162,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const Context& context() const { return context_; }
 
     bool disabled() const { return flags.contains(Flag::Deopt); }
+    bool pending() const { return body()->pending(); }
 
     void registerDeopt() {
         // Deopt counts are kept on the optimized versions
