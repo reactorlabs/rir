@@ -110,6 +110,12 @@ Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) 
                 case Opcode::named_call_:
                     index++;
                     break;
+                case Opcode::call_dots_:
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    index++;
+                    break;
                 default: {}
             }
 
@@ -206,6 +212,27 @@ unsigned BitcodeLinkUtil::getSrcPoolIndexAtOffset(SEXP hastSym, int requiredOffs
             switch (bc.bc) {
                 case Opcode::call_:
                 case Opcode::named_call_:
+                    if (index == requiredOffset) {
+                        currentSrcPoolIndex = bc.immediate.callFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
+                    index++;
+                    break;
+                case Opcode::call_dots_:
+                    if (index == requiredOffset) {
+                        currentSrcPoolIndex = bc.immediate.callFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    if (index == requiredOffset) {
+                        currentSrcPoolIndex = bc.immediate.callBuiltinFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
                     index++;
                     break;
                 default: {}
@@ -303,6 +330,12 @@ SEXP BitcodeLinkUtil::getVtableContainerAtOffset(SEXP hastSym, int requiredOffse
                 case Opcode::named_call_:
                     index++;
                     break;
+                case Opcode::call_dots_:
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    index++;
+                    break;
                 default: {}
             }
 
@@ -380,6 +413,12 @@ DispatchTable * BitcodeLinkUtil::getVtableAtOffset(DispatchTable * vtab, int req
                 case Opcode::named_call_:
                     index++;
                     break;
+                case Opcode::call_dots_:
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    index++;
+                    break;
                 default: {}
             }
 
@@ -429,9 +468,14 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
     int index = 0;
     DispatchTable * currVtab = vtable;
 
-    auto addSrcToMap = [&] (const unsigned & src) {
+    auto addSrcToMap = [&] (const unsigned & src, bool sourcePool = true) {
         // create a mapping for each src [representing code object to its hast and offset index]
-        SEXP srcSym = Rf_install(std::to_string(src).c_str());
+        SEXP srcSym;
+        if (sourcePool) {
+            srcSym = Rf_install(std::to_string(src).c_str());
+        } else {
+            srcSym = Rf_install((std::to_string(src) + "_cp").c_str());
+        }
         SEXP indexSym = Rf_install(std::to_string(index).c_str());
 
         SEXP resVec;
@@ -469,8 +513,23 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
             switch (bc.bc) {
                 case Opcode::call_:
                 case Opcode::named_call_:
+                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
                     #if PRINT_HAST_SRC_ENTRIES == 1
-                    std::cout << "  [callsite] src: " << bc.immediate.callFixedArgs.ast << ", index: " << index << std::endl;
+                    std::cout << "  [callsite] src: " << bc.immediate.callFixedArgs.ast << "_cp, index: " << index << std::endl;
+                    #endif
+                    index++;
+                    break;
+                case Opcode::call_dots_:
+                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
+                    #if PRINT_HAST_SRC_ENTRIES == 1
+                    std::cout << "  [callsite_dots] src: " << bc.immediate.callFixedArgs.ast << "_cp, index: " << index << std::endl;
+                    #endif
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    addSrcToMap(bc.immediate.callBuiltinFixedArgs.ast, false);
+                    #if PRINT_HAST_SRC_ENTRIES == 1
+                    std::cout << "  [callsite_builtin] src: " << bc.immediate.callBuiltinFixedArgs.ast << "_cp, index: " << index << std::endl;
                     #endif
                     index++;
                     break;
@@ -572,6 +631,14 @@ void BitcodeLinkUtil::printSources(DispatchTable* vtable, SEXP parentHast) {
                 case Opcode::call_:
                 case Opcode::named_call_:
                     std::cout << "  [callsite] src: " << bc.immediate.callFixedArgs.ast << ", index: " << index << std::endl;
+                    index++;
+                    break;
+                case Opcode::call_dots_:
+                    std::cout << "  [callsite_dots] src: " << bc.immediate.callFixedArgs.ast << ", index: " << index << std::endl;
+                    index++;
+                    break;
+                case Opcode::call_builtin_:
+                    std::cout << "  [callsite_builtin] src: " << bc.immediate.callBuiltinFixedArgs.ast << ", index: " << index << std::endl;
                     index++;
                     break;
                 default: {}

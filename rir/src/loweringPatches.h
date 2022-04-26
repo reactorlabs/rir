@@ -90,6 +90,7 @@
   #define PATCH_CP_ENTRIES 1
   #define PATCH_SRCIDX_ENTRY 1
   #define PATCH_PLUU 1
+  #define CALL_SITE_PATCH 1
 /*************************************/
 
 /*************************************/

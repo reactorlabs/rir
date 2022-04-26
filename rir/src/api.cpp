@@ -48,6 +48,7 @@ std::chrono::time_point<std::chrono::high_resolution_clock> DebugCheckpoints::la
 #define PRINT_DEPENDENCY_MAP 0
 #define PRINT_DESERIALIZER_PROGRESS 0
 #define PRINT_DESERIALIZER_PROGRESS_OVERRIDE 0
+#define CREATE_DOT_GRAPH 1
 extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
@@ -312,27 +313,15 @@ void printAST(int space, SEXP ast) {
     currentStack.pop_back();
 }
 
-hastAndIndex getHastAndIndex(unsigned src) {
-    SEXP srcToHastMap = Pool::get(SRC_HAST_MAP);
-    SEXP srcSym = Rf_install(std::to_string(src).c_str());
-    if (srcToHastMap != R_NilValue && Rf_findVarInFrame(srcToHastMap, srcSym) != R_UnboundValue) {
-        SEXP r = Rf_findVarInFrame(srcToHastMap, srcSym);
-        SEXP hastS = VECTOR_ELT(r, 0);
-        SEXP indexS = VECTOR_ELT(r, 1);
-        int index = std::stoi(CHAR(PRINTNAME(indexS)));
-        hastAndIndex res = { hastS, index };
-        return res;
+hastAndIndex getHastAndIndex(unsigned src, bool constantPool) {
+    REnvHandler srcToHastMap(SRC_HAST_MAP);
+    SEXP srcSym;
+    if (constantPool) {
+        srcSym = Rf_install((std::to_string(src) + "_cp").c_str());
     } else {
-        hastAndIndex res = { R_NilValue, 0 };
-        return res;
+        srcSym = Rf_install(std::to_string(src).c_str());
     }
-}
-
-hastAndIndex getPoolHastAndIndex(unsigned src) {
-    SEXP srcToHastMap = Pool::get(SRC_HAST_MAP);
-    SEXP srcSym = Rf_install((std::to_string(src) + "_cp").c_str());
-    if (srcToHastMap != R_NilValue && Rf_findVarInFrame(srcToHastMap, srcSym) != R_UnboundValue) {
-        SEXP r = Rf_findVarInFrame(srcToHastMap, srcSym);
+    if (SEXP r = srcToHastMap.get(srcSym)) {
         SEXP hastS = VECTOR_ELT(r, 0);
         SEXP indexS = VECTOR_ELT(r, 1);
         int index = std::stoi(CHAR(PRINTNAME(indexS)));
@@ -420,6 +409,55 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         sData.print();
     }
 
+    #if CREATE_DOT_GRAPH == 1
+    REnvHandler mainMap(sData.getContextMap());
+    std::cout << "DOT_GRAPH: " << CHAR(PRINTNAME(hastSym)) << std::endl;
+    std::ofstream outfile ("dependencies.DOT", std::ios_base::app);
+    std::stringstream rankData;
+    rankData << "{ rank=same; ";
+
+    mainMap.iterate([&] (SEXP offsetKey, SEXP offsetEnv) {
+        // std::cout << "  " << CHAR(PRINTNAME(offsetKey)) << ":" << std::endl;
+        REnvHandler offsetContextMap(offsetEnv);
+        offsetContextMap.iterate([&] (SEXP contextKey, SEXP cData) {
+            // std::cout << "    " << CHAR(PRINTNAME(contextKey)) << std::endl;
+            contextData c(cData);
+
+            SEXP rData = c.getReqMapAsVector();
+            std::stringstream currSym;
+            currSym << CHAR(PRINTNAME(hastSym)) << "_" << CHAR(PRINTNAME(offsetKey)) << "_" << CHAR(PRINTNAME(contextKey));
+
+            for (int i = 0; i < Rf_length(rData); i++) {
+
+                SEXP ele = VECTOR_ELT(rData, i);
+                auto n = std::string(CHAR(PRINTNAME(ele)));
+
+                auto firstDel = n.find('_');
+                if (firstDel != std::string::npos) {
+                    // optimistic dispatch case
+                    auto secondDel = n.find('_', firstDel + 1);
+                    auto hast = n.substr(0, firstDel);
+                    auto context = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    // auto nargs = n.substr(secondDel + 1);
+                    outfile << "\"" << currSym.str() << "\" -> \"" << hast << "_0_" << context << "\"" << std::endl;
+
+                } else {
+                    outfile << "\"" << currSym.str() << "\" -> \"" << CHAR(PRINTNAME(ele)) << "\"" << std::endl;
+                }
+            }
+
+
+            rankData << "\"" << currSym.str() << "\", ";
+
+            outfile << "\"" << currSym.str() << "\" -> \"" << CHAR(PRINTNAME(hastSym)) << "\"" << std::endl;
+
+        });
+    });
+    rankData << " }";
+    outfile << rankData.str() << std::endl;
+    outfile.close();
+    #endif
+
     // TODO: handle prefix separately to allow different bitcodes to load from different locations
     // Install a prefix
     static SEXP prefSym = Rf_install("prefix");
@@ -440,6 +478,12 @@ REXPORT SEXP loadBitcodes() {
 
     std::stringstream ss;
     ss << path;
+
+    #if CREATE_DOT_GRAPH == 1
+    std::ofstream outfile ("dependencies.DOT");
+    outfile << "digraph {" << std::endl << "rankdir=BT;" << std::endl;
+    outfile.close();
+    #endif
 
     if ((dir = opendir (ss.str().c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
@@ -471,8 +515,12 @@ REXPORT SEXP loadBitcodes() {
     } else {
         /* could not open directory */
         perror ("");
-        return R_FalseValue;
     }
+    #if CREATE_DOT_GRAPH == 1
+    std::ofstream outfile1 ("dependencies.DOT", std::ios_base::app);
+    outfile1 << "}" << std::endl;
+    outfile1.close();
+    #endif
     return R_TrueValue;
 }
 

@@ -1348,24 +1348,24 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 } else if (pluu) {
-                    // auto firstDel = n.find('_');
-                    // auto secondDel = n.find('_', firstDel + 1);
+                    auto firstDel = n.find('_');
+                    auto secondDel = n.find('_', firstDel + 1);
 
-                    // auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                    // int index = std::stoi(n.substr(secondDel + 1));
+                    auto hast = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                    int index = std::stoi(n.substr(secondDel + 1));
 
-                    // unsigned idx = getCodeInnerObjIdx(Rf_install(hast.c_str()), index);
+                    unsigned idx = BitcodeLinkUtil::getSrcPoolIndexAtOffset(Rf_install(hast.c_str()), index);
 
-                    // SEXP store;
-                    // PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
-                    // BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
-                    // *tmp = idx;
-                    // Pool::insert(store);
-                    // UNPROTECT(1);
+                    SEXP store;
+                    PROTECT(store = Rf_allocVector(RAWSXP, sizeof(BC::PoolIdx)));
+                    BC::PoolIdx * tmp = (BC::PoolIdx *) DATAPTR(store);
+                    *tmp = idx;
+                    Pool::insert(store);
+                    UNPROTECT(1);
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
-                            reinterpret_cast<uintptr_t>(nullptr)),
+                            reinterpret_cast<uintptr_t>(tmp)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }

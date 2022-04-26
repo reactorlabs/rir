@@ -37,8 +37,7 @@ struct hastAndIndex {
 void hash_ast(SEXP ast, size_t & hast);
 void printAST(int space, SEXP ast);
 void printAST(int space, int val);
-hastAndIndex getHastAndIndex(unsigned src);
-hastAndIndex getPoolHastAndIndex(unsigned src);
+hastAndIndex getHastAndIndex(unsigned src, bool constantPool = false);
 REXPORT SEXP startSerializer();
 REXPORT SEXP stopSerializer();
 REXPORT SEXP loadBitcodes();
