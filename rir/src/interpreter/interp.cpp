@@ -1932,6 +1932,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 #endif
 
     assert(c->info.magic == CODE_MAGIC);
+    assert(c->codeSize != 0);
 
     R_bcstack_t* basePtr = nullptr;
 

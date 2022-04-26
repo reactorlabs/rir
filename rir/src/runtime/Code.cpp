@@ -15,16 +15,16 @@
 namespace rir {
 
 // cppcheck-suppress uninitMemberVar; symbol=data
-Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
+Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
            unsigned sourceLength, size_t localsCnt, size_t bindingsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr), stackLength(0),
-      localsCount(localsCnt), bindingCacheSize(bindingsCnt), codeSize(cs),
-      srcLength(sourceLength), extraPoolSize(0) {
+      kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
+      stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
+      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;
@@ -33,26 +33,22 @@ Code::Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
         setEntry(3, fun);
 }
 
-Code* Code::New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
-                size_t bindingCache) {
-    auto src = src_pool_add(ast);
-    return New(src, codeSize, sources, locals, bindingCache);
-}
-
-Code* Code::New(Immediate ast, size_t codeSize, size_t sources, size_t locals,
-                size_t bindingCache) {
+Code* Code::New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
+                size_t locals, size_t bindingCache) {
     unsigned totalSize = Code::size(codeSize, sources);
     SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
     void* payload = DATAPTR(store);
-    return new (payload) Code(nullptr, src_pool_at(ast), ast, codeSize, sources,
-                              locals, bindingCache);
+    return new (payload) Code(kind, nullptr, src_pool_at(ast), ast, codeSize,
+                              sources, locals, bindingCache);
+}
+
+Code* Code::NewBytecode(Immediate ast, size_t codeSize, size_t sources,
+                        size_t locals, size_t bindingCache) {
+    return New(Kind::Bytecode, ast, codeSize, sources, locals, bindingCache);
 }
 
 Code* Code::NewNative(Immediate ast) {
-    auto res = New(ast, 0, 0, 0, 0);
-    // This code mustn't be executed until the lazyCodeHandle_ is filled
-    res->pending_ = true;
-    return res;
+    return New(Kind::Native, ast, 0, 0, 0, 0);
 }
 
 Code::~Code() {
@@ -199,74 +195,94 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             });
     }
 
-    Opcode* pc = code();
-    size_t label = 0;
-    std::map<Opcode*, size_t> targets;
-    targets[pc] = label++;
-    while (pc < endCode()) {
-        if (BC::decodeShallow(pc).isJmp()) {
-            auto t = BC::jmpTarget(pc);
-            if (!targets.count(t))
-                targets[t] = label++;
+    switch (kind) {
+    case Kind::Bytecode: {
+        Opcode* pc = code();
+        size_t label = 0;
+        std::map<Opcode*, size_t> targets;
+        targets[pc] = label++;
+        while (pc < endCode()) {
+            if (BC::decodeShallow(pc).isJmp()) {
+                auto t = BC::jmpTarget(pc);
+                if (!targets.count(t))
+                    targets[t] = label++;
+            }
+            pc = BC::next(pc);
         }
-        pc = BC::next(pc);
+        // sort labels ascending
+        label = 0;
+        for (auto& t : targets)
+            t.second = label++;
+
+        auto formatLabel = [&](size_t label) { out << label; };
+
+        pc = code();
+        std::vector<BC::FunIdx> promises;
+
+        while (pc < endCode()) {
+
+            if (targets.count(pc)) {
+                formatLabel(targets[pc]);
+                out << ":\n";
+            }
+
+            BC bc = BC::decode(pc, this);
+            bc.addMyPromArgsTo(promises);
+
+            const size_t OFFSET_WIDTH = 7;
+            out << std::right << std::setw(OFFSET_WIDTH)
+                << ((uintptr_t)pc - (uintptr_t)code()) << std::left;
+
+            unsigned s = getSrcIdxAt(pc, true);
+            if (s != 0)
+                out << "   ; " << Print::dumpSexp(src_pool_at(s)) << "\n"
+                    << std::setw(OFFSET_WIDTH) << "";
+
+            // Print call ast
+            switch (bc.bc) {
+            case Opcode::call_:
+            case Opcode::named_call_:
+                out << "   ; "
+                    << Print::dumpSexp(
+                           Pool::get(bc.immediate.callFixedArgs.ast))
+                    << "\n"
+                    << std::setw(OFFSET_WIDTH) << "";
+                break;
+            default: {
+            }
+            }
+
+            if (bc.isJmp()) {
+                out << "   ";
+                bc.printOpcode(out);
+                formatLabel(targets[BC::jmpTarget(pc)]);
+                out << "\n";
+            } else {
+                bc.print(out);
+            }
+
+            pc = BC::next(pc);
+        }
+
+        for (auto i : promises) {
+            auto c = getPromise(i);
+            out << "\n[Prom (index " << prefix << i << ")]\n";
+            std::stringstream ss;
+            ss << prefix << i << ".";
+            c->disassemble(out, ss.str());
+        }
+        break;
     }
-    // sort labels ascending
-    label = 0;
-    for (auto& t : targets)
-        t.second = label++;
-
-    auto formatLabel = [&](size_t label) { out << label; };
-
-    pc = code();
-    std::vector<BC::FunIdx> promises;
-
-    while (pc < endCode()) {
-
-        if (targets.count(pc)) {
-            formatLabel(targets[pc]);
-            out << ":\n";
-        }
-
-        BC bc = BC::decode(pc, this);
-        bc.addMyPromArgsTo(promises);
-
-        const size_t OFFSET_WIDTH = 7;
-        out << std::right << std::setw(OFFSET_WIDTH)
-            << ((uintptr_t)pc - (uintptr_t)code()) << std::left;
-
-        unsigned s = getSrcIdxAt(pc, true);
-        if (s != 0)
-            out << "   ; " << Print::dumpSexp(src_pool_at(s)) << "\n"
-                << std::setw(OFFSET_WIDTH) << "";
-
-        // Print call ast
-        switch (bc.bc) {
-        case Opcode::call_:
-        case Opcode::named_call_:
-            out << "   ; "
-                << Print::dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast))
-                << "\n"
-                << std::setw(OFFSET_WIDTH) << "";
-            break;
-        default: {
-        }
-        }
-
-        if (bc.isJmp()) {
-            out << "   ";
-            bc.printOpcode(out);
-            formatLabel(targets[BC::jmpTarget(pc)]);
-            out << "\n";
+    case Kind::Native: {
+        if (nativeCode_) {
+            out << "nativeCode " << (void*)nativeCode_ << "\n";
         } else {
-            bc.print(out);
+            out << "nativeCode (compilation pending)\n";
         }
-
-        pc = BC::next(pc);
+        break;
     }
-
-    if (nativeCode_) {
-        out << "nativeCode " << (void*)nativeCode_ << "\n";
+    default:
+        assert(false);
     }
 
     if (auto a = arglistOrder()) {
@@ -279,14 +295,6 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             }
             out << "\n";
         }
-    }
-
-    for (auto i : promises) {
-        auto c = getPromise(i);
-        out << "\n[Prom (index " << prefix << i << ")]\n";
-        std::stringstream ss;
-        ss << prefix << i << ".";
-        c->disassemble(out, ss.str());
     }
 }
 
@@ -331,6 +339,8 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
 llvm::ExitOnError ExitOnErr;
 
 NativeCode Code::lazyCompile() {
+    assert(kind == Kind::Native);
+    assert(*lazyCodeHandle_ != '\0');
     auto symbol = ExitOnErr(pir::PirJitLLVM::JIT->lookup(lazyCodeHandle_));
     nativeCode_ = (NativeCode)symbol.getAddress();
     return nativeCode_;
