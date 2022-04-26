@@ -1,4 +1,5 @@
 stages:
+  - Build base container
   - Build container
   - Build benchmark container
   - Run tests
@@ -464,7 +465,7 @@ benchmark_fastr:
 
 update_containers:
   image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
-  stage: Deploy
+  stage: Build base container
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
