@@ -112,6 +112,8 @@
     "cfenv": "cpp",
     "csignal": "cpp",
     "__functional_base_03": "cpp",
-    "__memory": "cpp"
+    "__memory": "cpp",
+    "__bits": "cpp",
+    "__availability": "cpp"
   }
 }

@@ -62,6 +62,7 @@ namespace pir {
 
 class BB;
 class Closure;
+
 class Phi;
 
 struct InstrArg {
@@ -2268,6 +2269,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
                const ArglistOrder::CallArglistOrder& argOrderOrig, Value* fs,
                unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
 
+    ClosureVersion* lastSeen = nullptr;
     Context givenContext;
 
     ClosureVersion* hint = nullptr;
@@ -2278,6 +2280,8 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Closure* tryGetCls() const override final { return cls(); }
 
     size_t nCallArgs() const override { return nargs() - 3; }
+
+    Instruction* clone() const override;
 
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)

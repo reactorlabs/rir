@@ -1275,6 +1275,19 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
     assert(tryDispatch());
 }
 
+Instruction* StaticCall::clone() const {
+    auto r = InstructionImplementation::clone();
+
+    auto sc = StaticCall::Cast(r);
+    sc->lastSeen = nullptr;
+    auto target = sc->tryDispatch();
+    if (target) {
+        sc->lastSeen = target;
+        target->staticCallRefCount++;
+    }
+    return sc;
+}
+
 PirType StaticCall::inferType(const GetType& getType) const {
     auto t = PirType::bottom();
     if (auto v = tryDispatch()) {

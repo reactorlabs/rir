@@ -3388,6 +3388,9 @@ void LowerFunctionLLVM::compile() {
                 if (calli->isReordered())
                     callId = pushArgReordering(calli->getArgOrderOrig());
 
+                if (!target)
+                    assert(target && "target is null!");
+
                 if (!target->owner()->hasOriginClosure()) {
                     setVal(
                         i, withCallFrame(args, [&]() -> llvm::Value* {

@@ -54,6 +54,25 @@ ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
     return copy;
 }
 
+ClosureVersion* Closure::replaceWithAssumptions(ClosureVersion* version,
+                                                const Context& asmpt,
+                                                const MaybeClsVersion& change) {
+    assert(versions.count(version->context()) > 0);
+
+    auto newCtx = version->context() | asmpt;
+    if (versions.count(newCtx)) {
+        return versions.at(newCtx);
+    }
+
+    versions.erase(version->context());
+
+    version->setContext(newCtx);
+
+    versions[newCtx] = version;
+    change(version);
+    return version;
+}
+
 ClosureVersion* Closure::findCompatibleVersion(const Context& ctx) const {
     // ordered by number of assumptions
     for (auto& candidate : versions) {

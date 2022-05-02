@@ -243,6 +243,11 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
+    m->eachPirClosure([&](Closure* c) {
+        c->hasBeenCloned = false;
+        c->eachVersion([&](ClosureVersion* v) { v->staticCallRefCount = 0; });
+    });
+
     auto found = [&](ClosureVersion* v) {
         if (!v)
             return;
@@ -283,7 +288,12 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
                                 i->printRecursive(msg, 2);
                                 log.warn(msg.str());
                             }
-                            found(call->tryDispatch());
+
+                            auto dispatched = call->tryDispatch();
+                            found(dispatched);
+                            call->lastSeen = dispatched;
+                            dispatched->staticCallRefCount++;
+
                             found(call->tryOptimisticDispatch());
                             found(call->hint);
                         } else if (auto call = CallInstruction::CastCall(i)) {
@@ -310,6 +320,7 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     m->eachPirClosure([&](Closure* c) {
         const auto& reachableVersions = reachable[c];
         c->eachVersion([&](ClosureVersion* v) {
+            // assert(c->getVersion(v->context()) == v);
             if (!reachableVersions.count(v->context())) {
                 toErase.push_back({v->owner(), v->context()});
                 log.close(v);

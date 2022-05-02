@@ -287,8 +287,10 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
                 if (availableAssumptions.isImproving(version)) {
-                    auto newVersion = target->cloneWithAssumptions(
-                        version, availableAssumptions,
+
+                    ClosureVersion* newVersion;
+
+                    auto updateVersionWithNewAssumptions =
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
                                 if (auto f = Force::Cast(i)) {
@@ -308,7 +310,42 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     }
                                 }
                             });
-                        });
+                        };
+
+                    if (version != call->lastSeen) {
+                        version->staticCallRefCount++;
+                    }
+
+                    call->lastSeen = nullptr;
+                    if (version->owner()->hasBeenCloned ||
+                        version->staticCallRefCount > 1) {
+
+                        newVersion = target->cloneWithAssumptions(
+                            version, availableAssumptions,
+                            [&](ClosureVersion* newCls) {
+                                updateVersionWithNewAssumptions(newCls);
+                            });
+
+                        if (newVersion != version) {
+                            version->owner()->hasBeenCloned = true;
+
+                            // newVersion->staticCallRefCount++;
+                            // call->lastSeen = newVersion;
+                            // version->staticCallRefCount--;
+                        }
+
+                    } else {
+
+                        newVersion = target->replaceWithAssumptions(
+                            version, availableAssumptions,
+                            updateVersionWithNewAssumptions);
+
+                        call->lastSeen = newVersion;
+                        if (newVersion->staticCallRefCount == 0) {
+                            newVersion->staticCallRefCount = 1;
+                        }
+                    }
+
                     call->hint = newVersion;
                     assert(call->tryDispatch() == newVersion);
                     ip = next;

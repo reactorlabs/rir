@@ -51,6 +51,8 @@ class Closure {
     Context userContext_;
 
   public:
+    bool hasBeenCloned = false;
+
     bool matchesUserContext(Context c) const {
         return c.smaller(this->userContext_);
     }
@@ -89,6 +91,10 @@ class Closure {
     ClosureVersion* cloneWithAssumptions(ClosureVersion* cls,
                                          const Context& asmpt,
                                          const MaybeClsVersion& change);
+
+    ClosureVersion* replaceWithAssumptions(ClosureVersion* cls,
+                                           const Context& asmpt,
+                                           const MaybeClsVersion& change);
 
     typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
     void eachVersion(ClosureVersionIterator it) const;

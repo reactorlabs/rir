@@ -313,22 +313,23 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             return;
 
         rir::Function* done = nullptr;
-        auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-            auto fun = backend.getOrCompile(c);
+        auto apply = [&](SEXP body, pir::ClosureVersion* cv) {
+            auto fun = backend.getOrCompile(cv);
             Protect p(fun->container());
             DispatchTable::unpack(body)->insert(fun);
             if (body == BODY(what))
                 done = fun;
         };
-        m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
-            if (c->owner()->hasOriginClosure()) {
-                auto cls = c->owner()->rirClosure();
+
+        m->eachPirClosureVersion([&](pir::ClosureVersion* eachVersion) {
+            if (eachVersion->owner()->hasOriginClosure()) {
+                auto cls = eachVersion->owner()->rirClosure();
                 auto body = BODY(cls);
                 auto dt = DispatchTable::unpack(body);
-                if (dt->contains(c->context())) {
-                    auto other = dt->dispatch(c->context());
+                if (dt->contains(eachVersion->context())) {
+                    auto other = dt->dispatch(eachVersion->context());
                     assert(other != dt->baseline());
-                    assert(other->context() == c->context());
+                    assert(other->context() == eachVersion->context());
                     if (other->body()->isCompiled())
                         return;
                 }
@@ -336,7 +337,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // they have incomplete type-feedback.
                 if (dt->size() == 1 && dt->baseline()->invocationCount() < 2)
                     return;
-                apply(body, c);
+                apply(body, eachVersion);
             }
         });
         if (!done)
