@@ -3,39 +3,33 @@
 
 #include "common.h"
 
+#define R_NO_REMAP
+#define USE_RINTERNALS
 #include <R.h>
 #include <Rinterface.h>
-#define USE_RINTERNALS
 #include <Rinternals.h>
-
-// r print statement
 #include <R_ext/Print.h>
 
-#undef error
-#undef TRUE
-#undef FALSE
-#undef length
-#undef eval
-#undef cons
-
+// Use the function versions (some of them clash with LLVM)
 #undef isNull
-inline bool isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+#undef isSymbol
+#undef isLogical
+#undef isReal
 #undef isComplex
-inline bool isComplex(SEXP s) { return TYPEOF(s) == CPLXSXP; }
+#undef isExpression
+#undef isEnvironment
 #undef isString
-inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
-
 #undef isObject
-inline bool isObject(SEXP s) { return OBJECT(s) != 0; }
 
-#undef isVector
-
+// Clash with LLVM
 #undef PI
 
+// Get rid of the macro version of this
+#undef R_CheckStack
+
+// Bypass PREXPR from GNU R which causes code objects to be converted to AST
 #undef PREXPR
 inline SEXP PREXPR(SEXP pr) {
-    // bypassing PREXPR from Gnur, which causes code objects to be converted to
-    // AST
     SLOWASSERT(TYPEOF(pr) == PROMSXP);
     auto res = pr->u.promsxp.expr;
     if (TYPEOF(res) == BCODESXP)
@@ -44,10 +38,21 @@ inline SEXP PREXPR(SEXP pr) {
 }
 
 extern "C" {
+extern FUNTAB R_FunTab[];
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
-};
+
+Rboolean Rf_isNull(SEXP s);
+Rboolean Rf_isSymbol(SEXP s);
+Rboolean Rf_isLogical(SEXP s);
+Rboolean Rf_isReal(SEXP s);
+Rboolean Rf_isComplex(SEXP s);
+Rboolean Rf_isExpression(SEXP s);
+Rboolean Rf_isEnvironment(SEXP s);
+Rboolean Rf_isString(SEXP s);
+Rboolean Rf_isObject(SEXP s);
+}
 
 // Performance critical stuff copied from Rinlinedfun.h
 
@@ -119,5 +124,3 @@ extern int R_PPStackTop;
     } while (0)
 
 #endif
-
-#undef R_CheckStack

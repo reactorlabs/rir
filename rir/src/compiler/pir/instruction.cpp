@@ -719,7 +719,7 @@ size_t CallSafeBuiltin::gvnBase() const {
 
 PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     PirType inferred = PirType::bottom();
-    std::string name = getBuiltinName(getBuiltinNr(builtinSexp));
+    std::string name = getBuiltinName(builtinSexp);
 
     static const std::unordered_set<std::string> bitwise = {
         "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
@@ -838,7 +838,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     if ("vector" == name) {
         if (auto con = Const::Cast(arg(0).val())) {
             if (TYPEOF(con->c()) == STRSXP && XLENGTH(con->c()) == 1) {
-                SEXPTYPE type = str2type(CHAR(STRING_ELT(con->c(), 0)));
+                SEXPTYPE type = Rf_str2type(CHAR(STRING_ELT(con->c(), 0)));
                 switch (type) {
                 case LGLSXP:
                     inferred = RType::logical;

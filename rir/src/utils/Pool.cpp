@@ -14,7 +14,7 @@ BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))
         return numbers.at(n);
 
-    SEXP s = allocVector(REALSXP, 1);
+    SEXP s = Rf_allocVector(REALSXP, 1);
     Protect p(s);
 
     REAL(s)[0] = n;
@@ -31,7 +31,7 @@ BC::PoolIdx Pool::getInt(int n) {
     if (ints.count(n))
         return ints.at(n);
 
-    SEXP s = allocVector(INTSXP, 1);
+    SEXP s = Rf_allocVector(INTSXP, 1);
     Protect p(s);
 
     INTEGER(s)[0] = n;

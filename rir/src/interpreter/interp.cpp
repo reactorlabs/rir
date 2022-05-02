@@ -23,10 +23,6 @@
 #include <set>
 #include <unordered_set>
 
-#define NOT_IMPLEMENTED assert(false)
-
-#undef eval
-
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
@@ -206,14 +202,15 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
         SEXP val;
         if (PRSEEN(e)) {
             if (PRSEEN(e) == 1)
-                errorcall(R_NilValue,
-                          "promise already under evaluation: recursive default "
-                          "argument reference or earlier problems?");
+                Rf_errorcall(
+                    R_NilValue,
+                    "promise already under evaluation: recursive default "
+                    "argument reference or earlier problems?");
             else {
                 /* set PRSEEN to 1 to avoid infinite recursion */
                 SET_PRSEEN(e, 1);
-                warningcall(R_NilValue,
-                            "restarting interrupted promise evaluation");
+                Rf_warningcall(R_NilValue,
+                               "restarting interrupted promise evaluation");
             }
         }
         SET_PRSEEN(e, 1);
@@ -483,7 +480,7 @@ static SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
                        call.callee);
-    R_Srcref = getAttrib(call.callee, symbol::srcref);
+    R_Srcref = Rf_getAttrib(call.callee, symbol::srcref);
 
     closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
 
@@ -766,7 +763,7 @@ void inferCurrentContext(CallContext& call, size_t formalNargs) {
         // Without isEager, these are the results of executing a trivial
         // expression, given no reflective change happens.
         if (arg != R_UnboundValue && arg != R_MissingArg) {
-            if (!isObject(arg))
+            if (!Rf_isObject(arg))
                 given.setNotObj(i);
             if (IS_SIMPLE_SCALAR(arg, REALSXP))
                 given.setSimpleReal(i);
@@ -837,7 +834,7 @@ class SlowcaseCounter {
         Measuring::setEventThreshold(100);
         std::stringstream message;
         message << "Fast case " << kind << " failed for "
-                << getBuiltinName(getBuiltinNr(call.callee)) << " ("
+                << getBuiltinName(call.callee) << " ("
                 << getBuiltinNr(call.callee) << ") "
                 << "nargs : " << call.suppliedArgs;
         if (call.suppliedArgs > 0) {
@@ -1761,7 +1758,7 @@ bool isColonFastcase(SEXP lhs, SEXP rhs) {
     //   - rhs must not be a number which gets coerced into INT_MIN or INT_MAX
     //   (implying, it can't be the real/complex representation of INT_MIN or
     //   INT_MAX)
-    if (inherits(lhs, "factor") && inherits(rhs, "factor"))
+    if (Rf_inherits(lhs, "factor") && Rf_inherits(rhs, "factor"))
         return false;
 
     // TODO(o):
@@ -3061,7 +3058,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (cond == NA_LOGICAL) {
                 const char* msg =
                     XLENGTH(val)
-                        ? (isLogical(val)
+                        ? (Rf_isLogical(val)
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
                         : ("argument is of length zero");
@@ -3138,10 +3135,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 res = TYPEOF(val) == LISTSXP || TYPEOF(val) == NILSXP;
                 break;
             case BC::RirTypecheck::isNonObject:
-                res = !isObject(val);
+                res = !Rf_isObject(val);
                 break;
             case BC::RirTypecheck::isFactor:
-                res = TYPEOF(val) == INTSXP && inherits(val, "factor");
+                res = TYPEOF(val) == INTSXP && Rf_inherits(val, "factor");
                 break;
             case BC::RirTypecheck::isVector:
                 res = Rf_isVector(val);
@@ -3215,7 +3212,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(args);
 
-            if (isObject(val)) {
+            if (Rf_isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
@@ -3242,7 +3239,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             ostack_push(args);
 
-            if (isObject(val)) {
+            if (Rf_isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
@@ -3271,7 +3268,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 val, CONS_NR(idx, CONS_NR(idx2, CONS_NR(idx3, R_NilValue))));
             ostack_push(args);
 
-            if (isObject(val)) {
+            if (Rf_isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1);
                 res = dispatchApply(call, val, args, symbol::Bracket, env);
                 if (!res) {
@@ -3358,7 +3355,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         fallback : {
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(args);
-            if (isObject(val)) {
+            if (Rf_isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1);
                 res =
                     dispatchApply(call, val, args, symbol::DoubleBracket, env);
@@ -3387,7 +3384,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             ostack_push(args);
 
-            if (isObject(val)) {
+            if (Rf_isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1);
                 res =
                     dispatchApply(call, val, args, symbol::DoubleBracket, env);
@@ -3429,7 +3426,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
-            if (isObject(vec)) {
+            if (Rf_isObject(vec)) {
                 res =
                     dispatchApply(call, vec, args, symbol::AssignBracket, env);
             }
@@ -3471,7 +3468,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
-            if (isObject(mtx)) {
+            if (Rf_isObject(mtx)) {
                 res =
                     dispatchApply(call, mtx, args, symbol::AssignBracket, env);
             }
@@ -3517,7 +3514,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignBracket);
-            if (isObject(mtx)) {
+            if (Rf_isObject(mtx)) {
                 res =
                     dispatchApply(call, mtx, args, symbol::AssignBracket, env);
             }
@@ -3555,7 +3552,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP val = ostack_at(2);
 
             // Fast case
-            if (NOT_SHARED(vec) && !isObject(vec)) {
+            if (NOT_SHARED(vec) && !Rf_isObject(vec)) {
                 SEXPTYPE vectorT = TYPEOF(vec);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idxT = TYPEOF(idx);
@@ -3636,7 +3633,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignDoubleBracket);
-            if (isObject(vec)) {
+            if (Rf_isObject(vec)) {
                 res = dispatchApply(call, vec, args,
                                     symbol::AssignDoubleBracket, env);
             }
@@ -3663,7 +3660,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP val = ostack_at(3);
 
             // Fast case
-            if (NOT_SHARED(mtx) && !isObject(mtx)) {
+            if (NOT_SHARED(mtx) && !Rf_isObject(mtx)) {
                 SEXPTYPE matrixT = TYPEOF(mtx);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idx1T = TYPEOF(idx1);
@@ -3750,7 +3747,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
                             args, symbol::AssignDoubleBracket);
-            if (isObject(mtx)) {
+            if (Rf_isObject(mtx)) {
                 res = dispatchApply(call, mtx, args,
                                     symbol::AssignDoubleBracket, env);
             }
@@ -3800,7 +3797,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         INSTRUCTION(as_switch_idx_) {
             if (TYPEOF(ostack_top()) != INTSXP) {
-                auto v = asInteger(ostack_pop());
+                auto v = Rf_asInteger(ostack_pop());
                 ostack_push(Rf_ScalarInteger(v == NA_INTEGER ? -1 : v));
             }
             NEXT();
@@ -3813,7 +3810,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SEXP value = Rf_allocVector(INTSXP, 1);
             if (Rf_isVector(seq)) {
                 INTEGER(value)[0] = LENGTH(seq);
-            } else if (Rf_isList(seq) || isNull(seq)) {
+            } else if (Rf_isList(seq) || Rf_isNull(seq)) {
                 INTEGER(value)[0] = Rf_length(seq);
             } else {
                 Rf_errorcall(R_NilValue, "invalid for() loop sequence");
@@ -3823,9 +3820,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // BC on it, we would. To prevent this we strip the object
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
-            if (isObject(seq)) {
+            if (Rf_isObject(seq)) {
                 if (Rf_inherits(seq, "factor"))
-                    seq = asCharacterFactor(seq);
+                    seq = Rf_asCharacterFactor(seq);
                 else
                     seq = Rf_shallow_duplicate(seq);
                 SET_OBJECT(seq, 0);

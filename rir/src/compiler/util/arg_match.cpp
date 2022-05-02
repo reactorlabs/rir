@@ -61,7 +61,7 @@ bool ArgumentMatcher::reorder(MaybeDots maybeDots, SEXP formals,
             } else {
                 for (auto& s : supplied) {
                     if (s.used != 2 && s.name != R_NilValue &&
-                        pmatch(f.tag(), s.name, havedots ? TRUE : FALSE))
+                        Rf_pmatch(f.tag(), s.name, havedots ? TRUE : FALSE))
                         return false;
                 }
             }

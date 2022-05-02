@@ -111,7 +111,7 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
     case CPLXSXP:
     case STRSXP:
     case CHARSXP:
-        return !isObject(arg);
+        return !Rf_isObject(arg);
     default:
         return false;
     }
@@ -441,7 +441,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 FOLD_UNARY(Minus, [&](SEXP arg) {
                     auto t = TYPEOF(arg);
-                    if (!isObject(arg) &&
+                    if (!Rf_isObject(arg) &&
                         (t == INTSXP || t == LGLSXP || t == REALSXP)) {
                         auto res =
                             Rf_eval(Rf_lang2(symbol::Sub, arg), R_BaseEnv);

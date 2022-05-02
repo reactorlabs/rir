@@ -37,7 +37,7 @@ static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 inline bool fastVeceltOk(SEXP vec) {
-    return !isObject(vec) &&
+    return !Rf_isObject(vec) &&
            (ATTRIB(vec) == R_NilValue || (TAG(ATTRIB(vec)) == R_DimSymbol &&
                                           CDR(ATTRIB(vec)) == R_NilValue));
 }
@@ -134,7 +134,7 @@ struct ObservedValues {
         //     @56546cb06390 14 REALSXP g0c3 [OBJ,NAM(2)] (len=3, tl=0) 41,42,43
 
         notScalar = notScalar || XLENGTH(e) != 1;
-        object = object || isObject(e);
+        object = object || Rf_isObject(e);
         attribs = attribs || object || ATTRIB(e) != R_NilValue;
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
 

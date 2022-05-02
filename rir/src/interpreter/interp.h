@@ -13,8 +13,6 @@
 
 #include <R/r.h>
 
-#undef length
-
 #if defined(__GNUC__) && (!defined(NO_THREADED_CODE))
 #define THREADED_CODE
 #endif
@@ -171,15 +169,15 @@ inline SEXP getSymbolIfTrivialPromise(SEXP val) {
     auto pr = PREXPR(val);
     auto ppr = Code::check(pr);
     SEXP sym = nullptr;
-    if (isSymbol(pr)) {
+    if (Rf_isSymbol(pr)) {
         sym = pr;
     } else if (ppr) {
-        if (ppr->trivialExpr && isSymbol(ppr->trivialExpr)) {
+        if (ppr->trivialExpr && Rf_isSymbol(ppr->trivialExpr)) {
             sym = ppr->trivialExpr;
         }
     }
     if (!sym)
-        SLOWASSERT(!isSymbol(R_PromiseExpr(val)));
+        SLOWASSERT(!Rf_isSymbol(R_PromiseExpr(val)));
     return sym;
 }
 
@@ -211,12 +209,12 @@ inline SEXPREC createFakeCONS(SEXP cdr) {
 }
 
 #define MATERIALIZE_IF_OBJ1(res, a1)                                           \
-    if (isObject(a1)) {                                                        \
+    if (Rf_isObject(a1)) {                                                     \
         res = CONS_NR(a1, R_NilValue);                                         \
     }
 
 #define MATERIALIZE_IF_OBJ2(res, a1, a2)                                       \
-    if (isObject(a1) || isObject(a2)) {                                        \
+    if (Rf_isObject(a1) || Rf_isObject(a2)) {                                  \
         res = CONS_NR(a1, CONS_NR(a2, R_NilValue));                            \
     }
 
