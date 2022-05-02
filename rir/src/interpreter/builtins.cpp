@@ -437,10 +437,10 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
             if ((cptr->callflag & CTXT_FUNCTION) &&
                 cptr->cloenv == call.callerEnv) {
                 if (auto l = LazyArglist::check(cptr->promargs)) {
-                    nargs = l->nargs();
-                    break;
+                    nargs = l->promargsLength();
+                } else {
+                    nargs = Rf_length(cptr->promargs);
                 }
-                nargs = Rf_length(cptr->promargs);
                 break;
             }
         }
