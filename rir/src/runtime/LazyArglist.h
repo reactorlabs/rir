@@ -37,7 +37,7 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
         if (actualNargs != 0)
             return actualNargs;
 
-        if (reordering) {
+        if (callId != ArglistOrder::NOT_REORDERED && reordering) {
             auto a = ArglistOrder::unpack(reordering);
             actualNargs = a->originalArglistLength(callId);
         } else {
