@@ -27,4 +27,5 @@ class Random {
         return r;
     }
 };
+
 } // namespace rir

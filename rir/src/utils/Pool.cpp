@@ -1,7 +1,5 @@
-#include "Pool.h"
+#include "utils/Pool.h"
 #include "R/Protect.h"
-#include "R/r.h"
-#include "bc/BC.h"
 
 namespace rir {
 
@@ -43,4 +41,5 @@ BC::PoolIdx Pool::getInt(int n) {
     ints[n] = i;
     return i;
 }
-}
+
+} // namespace rir

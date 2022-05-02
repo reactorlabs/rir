@@ -1,21 +1,19 @@
 #ifndef RIR_INTERPRETER_DATA_C_H
 #define RIR_INTERPRETER_DATA_C_H
 
-#include "../config.h"
-#include <assert.h>
-#include <stdint.h>
-
+#include "R/Symbols.h"
+#include "R/r.h"
+#include "config.h"
+#include "instance.h"
+#include "interp_incl.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
-
-#include "R/Symbols.h"
-#include "R/r.h"
-
-#include "instance.h"
-#include "interp_incl.h"
 #include "runtime/LazyEnvironment.h"
 #include "safe_force.h"
+
+#include <assert.h>
+#include <stdint.h>
 
 namespace rir {
 

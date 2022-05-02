@@ -1,10 +1,6 @@
 #ifndef RJIT_RIR_BC
 #define RJIT_RIR_BC
 
-#include <cstddef>
-#include <cstdint>
-#include <map>
-
 #include "BC_inc.h"
 #include "R/Protect.h"
 #include "R/r.h"
@@ -13,6 +9,10 @@
 #include "runtime/Deoptimization.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <map>
 
 namespace rir {
 

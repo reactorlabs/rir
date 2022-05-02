@@ -1,16 +1,14 @@
 #ifndef RIR_FUNCTION_HANDLE_H
 #define RIR_FUNCTION_HANDLE_H
 
+#include "R/Preserve.h"
 #include "bc/BC_inc.h"
 #include "interpreter/instance.h"
-
-#include "R/Preserve.h"
-#include "bc/CodeVerifier.h"
 #include "runtime/Function.h"
-#include "utils/Pool.h"
 
 #include <iostream>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace rir {
@@ -192,6 +190,7 @@ class FunctionWriter {
         return code;
     }
 };
+
 } // namespace rir
 
 #endif

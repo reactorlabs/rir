@@ -1,22 +1,17 @@
-#include "Compiler.h"
-
-#include "BC.h"
-#include "CodeStream.h"
-
+#include "bc/Compiler.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-
-#include "../interpreter/cache.h"
-#include "../interpreter/interp.h"
-#include "../interpreter/safe_force.h"
+#include "bc/BC.h"
+#include "bc/CodeStream.h"
+#include "bc/CodeVerifier.h"
+#include "interpreter/cache.h"
+#include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
-#include "utils/Pool.h"
-
-#include "CodeVerifier.h"
-
+#include "interpreter/safe_force.h"
 #include "simple_instruction_list.h"
+#include "utils/Pool.h"
 
 #include <stack>
 

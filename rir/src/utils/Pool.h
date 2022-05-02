@@ -2,17 +2,11 @@
 #ifndef RJIT_RIR_POOL
 #define RJIT_RIR_POOL
 
-#include "R/RVector.h"
-
-#include <cassert>
-#include <cstddef>
-
 #include "R/r.h"
 #include "bc/BC_inc.h"
+#include "interpreter/instance.h"
 
 #include <unordered_map>
-
-#include "interpreter/instance.h"
 
 namespace rir {
 
@@ -58,6 +52,7 @@ class Pool {
 
     static SEXP get(BC::PoolIdx i) { return cp_pool_at(i); }
 };
-}
+
+} // namespace rir
 
 #endif

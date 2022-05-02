@@ -15,7 +15,6 @@
 #include "interpreter/instance.h"
 #include "interpreter/profiler.h"
 #include "runtime/DispatchTable.h"
-#include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 

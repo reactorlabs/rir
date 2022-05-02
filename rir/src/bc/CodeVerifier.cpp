@@ -1,12 +1,10 @@
-#include <stack>
+#include "bc/CodeVerifier.h"
+#include "R/Symbols.h"
+#include "bc/BC.h"
+#include "simple_instruction_list.h"
 
 #include <cassert>
-
-#include "BC.h"
-#include "CodeVerifier.h"
-#include "R/Symbols.h"
-
-#include "simple_instruction_list.h"
+#include <stack>
 
 namespace rir {
 

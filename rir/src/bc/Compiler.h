@@ -13,10 +13,6 @@
 #include <iostream>
 #include <unordered_map>
 
-typedef struct RCNTXT RCNTXT;
-extern "C" SEXP R_syscall(int n, RCNTXT* cptr);
-extern "C" SEXP R_sysfunction(int n, RCNTXT* cptr);
-
 namespace rir {
 
 class Compiler {
@@ -46,31 +42,8 @@ class Compiler {
     SEXP finalize();
 
     static SEXP compileExpression(SEXP ast) {
-#if 0
-        size_t count = 1;
-        static std::unordered_map<SEXP, size_t> counts;
-        if (counts.count(ast)) {
-            counts.at(ast) = count = 1 + counts.at(ast);
-        } else {
-            counts[ast] = 1;
-        }
-        if (count % 200 == 0) {
-            std::cout << "<<<<<<< Warning: expression compiled "
-                      << count << "x:\n";
-            Rf_PrintValue(ast);
-            std::cout << "== Call:\n";
-            Rf_PrintValue(R_syscall(0, R_GlobalContext));
-            std::cout << "== Function:\n";
-            Rf_PrintValue(R_sysfunction(0, R_GlobalContext));
-            std::cout << ">>>>>>>\n";
-        }
-#endif
-
-        // Rf_PrintValue(ast);
         Compiler c(ast);
-        auto res = c.finalize();
-
-        return res;
+        return c.finalize();
     }
 
     // To compile a function which is not yet closed

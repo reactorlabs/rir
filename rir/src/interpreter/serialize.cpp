@@ -1,7 +1,7 @@
+#include "R/r.h"
 #include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
-#include <R/r.h>
 
 namespace rir {
 
@@ -70,4 +70,4 @@ SEXP copyBySerial(SEXP x) {
     return copy;
 }
 
-}; // namespace rir
+} // namespace rir

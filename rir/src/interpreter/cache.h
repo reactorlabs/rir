@@ -4,6 +4,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "instance.h"
+
 #include <type_traits>
 
 namespace rir {
