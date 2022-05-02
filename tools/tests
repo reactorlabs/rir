@@ -47,26 +47,26 @@ function run_test {
   if [[ "$ENABLE_VALGRIND" == "1" ]]; then
       VALGRIND="-d valgrind --debugger-args=--error-exitcode=13 --debugger-args=--suppressions=$ROOT_DIR/.valgrind_suppressions"
   fi
-  
+
   if test "$(uname)" = "Darwin"; then
       LIB="dyn.load('${RIR_BUILD}/librir.dylib')"
   else
       LIB="dyn.load('${RIR_BUILD}/librir.so')"
   fi
-  
+
   name=`basename $test`
-  
+
   function status {
     done=`wc -l < $STATUS`
     echo -ne "\e[0K\r[${done}/${NUM_TESTS}] ${name} "
   }
   status
-  
+
   TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
   echo "source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
-  
+
   LOG=$(mktemp /tmp/r-test.XXXXXX)
   if [[ "$R_LD_PRELOAD" != "" ]]; then
     export LD_PRELOAD=$R_LD_PRELOAD
@@ -108,6 +108,11 @@ TESTS_PATH="${ROOT_DIR}/rir/tests"
 
 NUM_TESTS=`find ${TESTS_PATH} -name '*.[Rr]' | wc -l`
 export NUM_TESTS
+
+# The tests assumed prior to the introduction of the time-based compilation
+# heuristics that the warmup is 3, this makes sure that we actually compile
+# code...
+export PIR_WARMUP=3
 
 find ${TESTS_PATH} -name '*.[Rr]' | xargs -n 1 -P `ncores` bash -c 'run_test $@'
 
