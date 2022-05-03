@@ -124,7 +124,7 @@ test_release_2:
     expire_in: 1 week
 
 # Run some tests in the debug mode
-tests_debug:
+tests_debug_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -143,8 +143,11 @@ tests_debug:
     - R_ENABLE_JIT=3 bin/tests
     - PIR_ENABLE=off bin/tests
     - PIR_ENABLE=force bin/tests
+    - PIR_WARMUP=2 bin/tests
+    - PIR_WARMUP=3 bin/tests
+    - PIR_WARMUP=5 bin/tests
 
-tests_debug2:
+tests_debug_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -257,7 +260,6 @@ test_features_3:
     - PIR_DEOPTLESS=1 RIR_CHECK_PIR_TYPES=1 bin/tests
     - PIR_OSR=0 RIR_CHECK_PIR_TYPES=1 bin/tests
     - PIR_DEOPTLESS=1 PIR_OSR=0 bin/tests
-
   artifacts:
     paths:
     - logs
@@ -266,7 +268,7 @@ test_features_3:
 
 
 # Run ubsan and gc torture
-test_gctorture1:
+test_gctorture_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -286,7 +288,7 @@ test_gctorture1:
     when: on_failure
     expire_in: 1 week
 
-test_gctorture2:
+test_gctorture_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -444,6 +446,7 @@ benchmark_gnur:
     - benchmarks.data
     - memory.data
     expire_in: 6 month
+
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
