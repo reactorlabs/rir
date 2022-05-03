@@ -90,13 +90,13 @@ inline size_t ostack_length() {
     return std::abs(R_BCNodeStackTop - R_BCNodeStackBase);
 }
 
-inline SEXP ostack_top() { return R_BCNodeStackTop[-1].u.sxpval; }
+inline SEXP ostack_at(int i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
 
-inline SEXP ostack_at(size_t i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
+inline SEXP ostack_top() { return ostack_at(0); }
 
 inline SEXP ostack_at_cell(const R_bcstack_t* cell) { return cell->u.sxpval; }
 
-inline void ostack_set(size_t i, SEXP v) {
+inline void ostack_set(int i, SEXP v) {
     R_BCNodeStackTop[-1 - i].u.sxpval = v;
     R_BCNodeStackTop[-1 - i].tag = 0;
 }
@@ -106,9 +106,7 @@ inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
     cell->tag = 0;
 }
 
-inline R_bcstack_t* ostack_cell_at(size_t i) {
-    return R_BCNodeStackTop - 1 - i;
-}
+inline R_bcstack_t* ostack_cell_at(int i) { return R_BCNodeStackTop - 1 - i; }
 
 inline bool ostack_empty() { return R_BCNodeStackTop == R_BCNodeStackBase; }
 
