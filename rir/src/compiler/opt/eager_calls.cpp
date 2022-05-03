@@ -317,8 +317,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
 
                     call->lastSeen = nullptr;
-                    if (version->isClone ||
-                        version->staticCallRefCount > 1) {
+                    if (version->isClone || version->staticCallRefCount > 1) {
 
                         newVersion = target->cloneWithAssumptions(
                             version, availableAssumptions,
@@ -329,13 +328,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         if (newVersion != version) {
                             newVersion->isClone = true;
 
-
                             call->lastSeen = newVersion;
                             version->staticCallRefCount--;
                         }
 
                     } else {
-
 
                         newVersion = target->replaceWithAssumptions(
                             version, availableAssumptions,

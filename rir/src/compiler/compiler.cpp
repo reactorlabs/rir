@@ -243,8 +243,6 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
-
-
     auto found = [&](ClosureVersion* v) {
         if (!v)
             return;
@@ -286,7 +284,6 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
                                 log.warn(msg.str());
                             }
 
-
                             found(call->tryDispatch());
                             found(call->tryOptimisticDispatch());
                             found(call->hint);
@@ -326,8 +323,6 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     for (auto e : toErase)
         e.first->erase(e.second);
 
-
-
     // reset refCount state
     m->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
@@ -337,9 +332,7 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     });
 
     m->eachPirClosure([&](Closure* c) {
-
         c->eachVersion([&](ClosureVersion* v) {
-
             auto check = [&](Instruction* i) {
                 if (auto call = StaticCall::Cast(i)) {
 
@@ -361,14 +354,9 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
             };
 
             Visitor::run(v->entry, check);
-            v->eachPromise(
-                [&](Promise* p) { Visitor::run(p->entry, check); });
-
+            v->eachPromise([&](Promise* p) { Visitor::run(p->entry, check); });
         });
     });
-
-
-
 };
 
 void Compiler::optimizeClosureVersion(ClosureVersion* v) {
