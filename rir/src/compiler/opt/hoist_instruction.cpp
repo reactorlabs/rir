@@ -262,7 +262,7 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         if (auto f2 = Force::Cast(*it2)) {
                             if (f1->input() == f2->input()) {
                                 auto it = bb->end() - 1;
-                                auto f = new Force(f1->arg(0).val(),
+                                auto f = new Force(f1->input(),
                                                    f1->hasEnv() && f2->hasEnv()
                                                        ? f1->env()
                                                        : Env::elided(),
@@ -275,16 +275,16 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 it2 = bb2->remove(it2);
                             }
                         }
-                        if ((*it2)->hasObservableEffects())
-                            break;
                         if (it2 == bb2->end())
+                            break;
+                        if ((*it2)->hasObservableEffects())
                             break;
                         it2++;
                     }
                 }
-                if ((*it1)->hasObservableEffects())
+                if (it1 == bb1->end())
                     break;
-                if (it1 == bb2->end())
+                if ((*it1)->hasObservableEffects())
                     break;
                 it1++;
             }
