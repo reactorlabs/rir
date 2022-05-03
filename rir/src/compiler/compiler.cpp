@@ -336,7 +336,8 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
             auto check = [&](Instruction* i) {
                 if (auto call = StaticCall::Cast(i)) {
 
-                    auto dispatched = call->tryDispatch();
+                  call->lastSeen = nullptr;  
+                  auto dispatched = call->tryDispatch();
                     if (dispatched) {
                         call->lastSeen = dispatched;
                         dispatched->staticCallRefCount++;
