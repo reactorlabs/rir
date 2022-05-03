@@ -1,4 +1,5 @@
 stages:
+  - Build base container
   - Build container
   - Build benchmark container
   - Run tests
@@ -464,9 +465,15 @@ benchmark_fastr:
 
 update_containers:
   image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
-  stage: Deploy
+  stage: Build base container
   variables:
-    GIT_STRATEGY: none
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:19.03.0-dind
+      alias: docker
+  before_script:
+    - docker info
   only:
     refs:
       - schedules
@@ -482,3 +489,6 @@ update_containers:
     - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
     - docker push registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/ubuntu:20.04
     - cd container/benchmark-baseline && sh update.sh
+  tags:
+    - dockerInDocker
+  retry: 1

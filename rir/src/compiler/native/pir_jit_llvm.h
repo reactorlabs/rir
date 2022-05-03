@@ -52,6 +52,7 @@ class PirJitLLVM {
                  const PromMap& m, const NeedsRefcountAdjustment& refcount,
                  const std::unordered_set<Instruction*>& needsLdVarForUpdate,
                  ClosureLog& log);
+    void finalize();
 
     using GetModule = std::function<llvm::Module&()>;
     using GetFunction = std::function<llvm::Function*(Code*)>;
@@ -82,7 +83,7 @@ class PirJitLLVM {
     }
 
     std::unordered_map<Code*, std::pair<rir::Code*, llvm::StringRef>> jitFixup;
-    void finalizeAndFixup();
+    bool finalized = false;
 
     static size_t nModules;
     static void initializeLLVM();

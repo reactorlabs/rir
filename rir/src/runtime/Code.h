@@ -50,15 +50,21 @@ typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
+
+    enum class Kind { Bytecode, Native } kind;
+
     // extra pool, pir type feedback, arg reordering info
     static constexpr size_t NumLocals = 4;
 
-    Code(FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned codeSize,
-         unsigned sourceSize, size_t localsCnt, size_t bindingsCacheSize);
+    Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx,
+         unsigned codeSize, unsigned sourceSize, size_t localsCnt,
+         size_t bindingsCacheSize);
     ~Code();
 
   private:
-    Code() : Code(NULL, 0, 0, 0, 0, 0, 0) {}
+    Code() : Code(Kind::Bytecode, nullptr, 0, 0, 0, 0, 0, 0) {}
+    static Code* New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
+                     size_t locals, size_t bindingCache);
     /*
      * This array contains the GC reachable pointers. Currently there are three
      * of them.
@@ -70,11 +76,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     SEXP locals_[NumLocals];
 
   public:
-    static Code* New(SEXP ast, size_t codeSize, size_t sources, size_t locals,
-                     size_t bindingCache);
-    static Code* New(Immediate ast, size_t codeSize, size_t sources,
-                     size_t locals, size_t bindingCache);
-    static Code* New(Immediate ast);
+    static Code* NewBytecode(Immediate ast, size_t codeSize, size_t sources,
+                             size_t locals, size_t bindingCache);
+    static Code* NewNative(Immediate ast);
 
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
@@ -86,6 +90,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
   public:
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
+        assert(kind == Kind::Native);
         auto l = h.length() + 1;
         if (l > MAX_CODE_HANDLE_LENGTH) {
             assert(false);
@@ -97,13 +102,22 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
-        if (*lazyCodeHandle_ == '\0')
+        if (kind == Kind::Bytecode || *lazyCodeHandle_ == '\0')
             return nullptr;
         return lazyCompile();
     }
 
     bool isCompiled() const {
-        return *lazyCodeHandle_ != '\0' && nativeCode_ != nullptr;
+        return kind == Kind::Native && *lazyCodeHandle_ != '\0' &&
+               nativeCode_ != nullptr;
+    }
+    // For Kind::Native there is an in-between state when the Code is already
+    // placed in a Function but its code handle isn't yet filled by the
+    // finalizer of PirJitLLVM. We need to prevent such instances from being
+    // evaluated (if we trigger some code in the backend, eg. during printing).
+    // The current workaround is to skip them during dispatch.
+    bool pendingCompilation() const {
+        return kind == Kind::Native && *lazyCodeHandle_ == '\0';
     }
 
     static unsigned pad4(unsigned sizeInBytes) {

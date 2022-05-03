@@ -70,8 +70,8 @@ class FunctionWriter {
                "Trying to add more code after finalizing");
         unsigned codeSize = originalCodeSize - nops;
 
-        Code* code =
-            Code::New(ast, codeSize, sources.size(), localsCnt, bindingsCnt);
+        Code* code = Code::NewBytecode(src_pool_add(ast), codeSize,
+                                       sources.size(), localsCnt, bindingsCnt);
         preserve(code->container());
 
         size_t numberOfSources = 0;

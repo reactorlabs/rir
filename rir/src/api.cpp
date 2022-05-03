@@ -304,7 +304,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::Log logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
-    pir::Backend backend(m, logger, name);
     auto compile = [&](pir::ClosureVersion* c) {
         logger.flushAll();
         cmp.optimizeModule();
@@ -313,35 +312,41 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             return;
 
         rir::Function* done = nullptr;
-        auto apply = [&](SEXP body, pir::ClosureVersion* cv) {
-            auto fun = backend.getOrCompile(cv);
-            Protect p(fun->container());
-            DispatchTable::unpack(body)->insert(fun);
-            if (body == BODY(what))
-                done = fun;
-        };
-
-        m->eachPirClosureVersion([&](pir::ClosureVersion* eachVersion) {
-            if (eachVersion->owner()->hasOriginClosure()) {
-                auto cls = eachVersion->owner()->rirClosure();
-                auto body = BODY(cls);
-                auto dt = DispatchTable::unpack(body);
-                if (dt->contains(eachVersion->context())) {
-                    auto other = dt->dispatch(eachVersion->context());
-                    assert(other != dt->baseline());
-                    assert(other->context() == eachVersion->context());
-                    if (other->body()->isCompiled())
+        {
+            // Single Backend instance, gets destroyed at the end of this block
+            // to finalize the LLVM module so that we can eagerly compile the
+            // body
+            pir::Backend backend(m, logger, name);
+            auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+                auto fun = backend.getOrCompile(c);
+                Protect p(fun->container());
+                DispatchTable::unpack(body)->insert(fun);
+                if (body == BODY(what))
+                    done = fun;
+            };
+            m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
+                if (c->owner()->hasOriginClosure()) {
+                    auto cls = c->owner()->rirClosure();
+                    auto body = BODY(cls);
+                    auto dt = DispatchTable::unpack(body);
+                    if (dt->contains(c->context())) {
+                        auto other = dt->dispatch(c->context());
+                        assert(other != dt->baseline());
+                        assert(other->context() == c->context());
+                        if (other->body()->isCompiled())
+                            return;
+                    }
+                    // Don't lower functions that have not been called often, as
+                    // they have incomplete type-feedback.
+                    if (dt->size() == 1 &&
+                        dt->baseline()->invocationCount() < 2)
                         return;
+                    apply(body, c);
                 }
-                // Don't lower functions that have not been called often, as
-                // they have incomplete type-feedback.
-                if (dt->size() == 1 && dt->baseline()->invocationCount() < 2)
-                    return;
-                apply(body, eachVersion);
-            }
-        });
-        if (!done)
-            apply(BODY(what), c);
+            });
+            if (!done)
+                apply(BODY(what), c);
+        }
         // Eagerly compile the main function
         done->body()->nativeCode();
     };
