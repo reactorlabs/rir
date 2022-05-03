@@ -284,7 +284,7 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
                 if ((*it1)->hasObservableEffects())
                     break;
-                if (it1 == bb2->end())
+                if (it1 == bb1->end())
                     break;
                 it1++;
             }
