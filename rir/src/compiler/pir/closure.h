@@ -51,7 +51,6 @@ class Closure {
     Context userContext_;
 
   public:
-    bool hasBeenCloned = false;
 
     bool matchesUserContext(Context c) const {
         return c.smaller(this->userContext_);

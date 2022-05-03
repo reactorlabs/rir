@@ -243,10 +243,7 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
 
-    m->eachPirClosure([&](Closure* c) {
-        c->hasBeenCloned = false;
-        c->eachVersion([&](ClosureVersion* v) { v->staticCallRefCount = 0; });
-    });
+
 
     auto found = [&](ClosureVersion* v) {
         if (!v)
@@ -289,11 +286,8 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
                                 log.warn(msg.str());
                             }
 
-                            auto dispatched = call->tryDispatch();
-                            found(dispatched);
-                            call->lastSeen = dispatched;
-                            dispatched->staticCallRefCount++;
 
+                            found(call->tryDispatch());
                             found(call->tryOptimisticDispatch());
                             found(call->hint);
                         } else if (auto call = CallInstruction::CastCall(i)) {
@@ -331,6 +325,50 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
 
     for (auto e : toErase)
         e.first->erase(e.second);
+
+
+
+    // reset refCount state
+    m->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            v->staticCallRefCount = 0;
+            v->isClone = false;
+        });
+    });
+
+    m->eachPirClosure([&](Closure* c) {
+
+        c->eachVersion([&](ClosureVersion* v) {
+
+            auto check = [&](Instruction* i) {
+                if (auto call = StaticCall::Cast(i)) {
+
+                    auto dispatched = call->tryDispatch();
+                    call->lastSeen = dispatched;
+                    dispatched->staticCallRefCount++;
+                }
+                // else if (auto call = CallInstruction::CastCall(i)) {
+                //     if (auto cls = call->tryGetCls())
+                //         found(call->tryDispatch(cls));
+                // } else {
+                //     i->eachArg([&](Value* v) {
+                //         if (auto mk = MkCls::Cast(i)) {
+                //             if (mk->tryGetCls())
+                //                 mk->tryGetCls()->eachVersion(found);
+                //         }
+                //     });
+                // }
+            };
+
+            Visitor::run(v->entry, check);
+            v->eachPromise(
+                [&](Promise* p) { Visitor::run(p->entry, check); });
+
+        });
+    });
+
+
+
 };
 
 void Compiler::optimizeClosureVersion(ClosureVersion* v) {

@@ -60,6 +60,9 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+
+    bool isClone = false;
+
     ClosureVersion* clone(const Context& newContext);
 
     const Context& context() const { return optimizationContext_; }
