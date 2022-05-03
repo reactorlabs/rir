@@ -482,14 +482,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            SEXP fun = Compiler::compileFunction(args[1], args[0]);
-            Protect p(fun);
+            auto dt = Compiler::compileFunction(args[1], args[0]);
+            Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
-            DispatchTable::check(fun)->baseline()->flags.set(
+            DispatchTable::check(dt)->baseline()->flags.set(
                 Function::InnerFunction);
-            assert(TYPEOF(fun) == EXTERNALSXP);
-            cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
+            assert(TYPEOF(dt) == EXTERNALSXP);
+            cs << BC::push(args[0]) << BC::push(dt) << BC::push(args[2])
                << BC::close();
         }
         return true;
