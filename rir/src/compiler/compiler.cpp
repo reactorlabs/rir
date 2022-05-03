@@ -337,8 +337,10 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
                 if (auto call = StaticCall::Cast(i)) {
 
                     auto dispatched = call->tryDispatch();
-                    call->lastSeen = dispatched;
-                    dispatched->staticCallRefCount++;
+                    if (dispatched) {
+                        call->lastSeen = dispatched;
+                        dispatched->staticCallRefCount++;
+                    }
                 }
                 // else if (auto call = CallInstruction::CastCall(i)) {
                 //     if (auto cls = call->tryGetCls())
