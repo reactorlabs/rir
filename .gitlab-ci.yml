@@ -143,7 +143,6 @@ tests_debug_1:
     - R_ENABLE_JIT=3 bin/tests
     - PIR_ENABLE=off bin/tests
     - PIR_ENABLE=force bin/tests
-    - PIR_WARMUP=2 bin/tests
     - PIR_WARMUP=3 bin/tests
     - PIR_WARMUP=5 bin/tests
 
