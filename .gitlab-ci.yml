@@ -124,7 +124,7 @@ test_release_2:
     expire_in: 1 week
 
 # Run some tests in the debug mode
-tests_debug:
+tests_debug_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -137,14 +137,16 @@ tests_debug:
     - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - export UNSOUND_OPTS=off
-    - R_ENABLE_JIT=0 ./bin/tests
-    - R_ENABLE_JIT=1 ./bin/tests
-    - R_ENABLE_JIT=2 ./bin/tests
-    - R_ENABLE_JIT=3 ./bin/tests
-    - PIR_ENABLE=off ./bin/tests
-    - PIR_ENABLE=force ./bin/tests
+    - R_ENABLE_JIT=0 bin/tests
+    - R_ENABLE_JIT=1 bin/tests
+    - R_ENABLE_JIT=2 bin/tests
+    - R_ENABLE_JIT=3 bin/tests
+    - PIR_ENABLE=off bin/tests
+    - PIR_ENABLE=force bin/tests
+    - PIR_WARMUP=3 bin/tests
+    - PIR_WARMUP=5 bin/tests
 
-tests_debug2:
+tests_debug_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -158,7 +160,7 @@ tests_debug2:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check-devel || $SAVE_LOGS
+    - bin/gnur-make-tests check-devel || $SAVE_LOGS
     - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
@@ -201,14 +203,14 @@ test_features_1:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - PIR_DEOPT_CHAOS=100000 PIR_DEOPT_CHAOS_NO_RETRIGGER=1 ./bin/tests || $SAVE_LOGS
-    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=50000 ./bin/gnur-make-tests check || $SAVE_LOGS
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=2 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 FAST_TESTS=1 ./bin/tests
-    - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 FAST_TESTS=1 ./bin/tests
+    - PIR_DEOPT_CHAOS=100000 PIR_DEOPT_CHAOS_NO_RETRIGGER=1 bin/tests
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=50000 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=0 FAST_TESTS=1 bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=1 FAST_TESTS=1 bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=2 FAST_TESTS=1 bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=3 FAST_TESTS=1 bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=4 FAST_TESTS=1 bin/tests
+    - PIR_GLOBAL_SPECIALIZATION_LEVEL=5 FAST_TESTS=1 bin/tests
   artifacts:
     paths:
     - logs
@@ -228,7 +230,7 @@ test_features_2:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check || $SAVE_LOGS
+    - bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
@@ -248,7 +250,7 @@ test_features_3:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_DEOPT_CHAOS=10000 bin/gnur-make-tests check || $SAVE_LOGS
-    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 ./bin/tests
+    - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 RIR_SERIALIZE_CHAOS=1 FAST_TESTS=1 bin/tests
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_DEOPTLESS=1 bin/tests
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=1 PIR_OSR=0 bin/tests
     - PIR_LLVM_OPT_LEVEL=0 PIR_OPT_LEVEL=0 bin/tests
@@ -257,7 +259,6 @@ test_features_3:
     - PIR_DEOPTLESS=1 RIR_CHECK_PIR_TYPES=1 bin/tests
     - PIR_OSR=0 RIR_CHECK_PIR_TYPES=1 bin/tests
     - PIR_DEOPTLESS=1 PIR_OSR=0 bin/tests
-
   artifacts:
     paths:
     - logs
@@ -266,7 +267,7 @@ test_features_3:
 
 
 # Run ubsan and gc torture
-test_gctorture1:
+test_gctorture_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -279,14 +280,14 @@ test_gctorture1:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - R_GCTORTURE=5000 ./bin/gnur-make-tests check || $SAVE_LOGS
+    - R_GCTORTURE=5000 bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
     when: on_failure
     expire_in: 1 week
 
-test_gctorture2:
+test_gctorture_2:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
     GIT_STRATEGY: none
@@ -298,8 +299,8 @@ test_gctorture2:
     - schedules
   script:
     - cd /opt/rir/build/release
-    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
-    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100000 ./bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=2000 bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=1500 PIR_DEOPT_CHAOS=100000 bin/tests
     - /opt/rir/container/build-releaseassert.sh
     - cd /opt/rir/build/releaseassert
     - PIR_TEST_CLEAR_TEMPS=1 R_GCTORTURE=80 bin/tests
@@ -322,7 +323,7 @@ test_big_inline:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - ./bin/gnur-make-tests check || $SAVE_LOGS
+    - bin/gnur-make-tests check || $SAVE_LOGS
   artifacts:
     paths:
     - logs
@@ -444,6 +445,7 @@ benchmark_gnur:
     - benchmarks.data
     - memory.data
     expire_in: 6 month
+
 benchmark_fastr:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark-baseline
   stage: Benchmark
