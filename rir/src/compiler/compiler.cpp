@@ -239,6 +239,49 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 
 bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
 
+static void resetVersionsRefCountState(Module* m) {
+
+    m->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            v->staticCallRefCount = 0;
+            v->isClone = false;
+        });
+    });
+
+    m->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            auto check = [&](Instruction* i) {
+                if (auto call = StaticCall::Cast(i)) {
+
+                    call->lastSeen = nullptr;
+
+                    if (auto dispatchedVersion = call->tryDispatch()) {
+                        call->lastSeen = dispatchedVersion;
+                        dispatchedVersion->staticCallRefCount++;
+                    }
+                } else if (auto call = CallInstruction::CastCall(i)) {
+                    if (auto cls = call->tryGetCls()) {
+
+                        if (auto dispatchedVersion = call->tryDispatch(cls)) {
+                            dispatchedVersion->staticCallRefCount++;
+                        }
+                    }
+                }
+            };
+
+            Visitor::run(v->entry, check);
+            v->eachPromise([&](Promise* p) { Visitor::run(p->entry, check); });
+        });
+    });
+
+    m->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            if (v->staticCallRefCount == 0)
+                v->staticCallRefCount = 1;
+        });
+    });
+}
+
 static void findUnreachable(Module* m, Log& log, const std::string& where) {
     std::unordered_map<Closure*, std::unordered_set<Context>> reachable;
     bool changed = true;
@@ -323,43 +366,7 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
     for (auto e : toErase)
         e.first->erase(e.second);
 
-    // reset refCount state
-    m->eachPirClosure([&](Closure* c) {
-        c->eachVersion([&](ClosureVersion* v) {
-            v->staticCallRefCount = 0;
-            v->isClone = false;
-        });
-    });
-
-    m->eachPirClosure([&](Closure* c) {
-        c->eachVersion([&](ClosureVersion* v) {
-            auto check = [&](Instruction* i) {
-                if (auto call = StaticCall::Cast(i)) {
-
-                    call->lastSeen = nullptr;
-                    auto dispatched = call->tryDispatch();
-                    if (dispatched) {
-                        call->lastSeen = dispatched;
-                        dispatched->staticCallRefCount++;
-                    }
-                }
-                // else if (auto call = CallInstruction::CastCall(i)) {
-                //     if (auto cls = call->tryGetCls())
-                //         found(call->tryDispatch(cls));
-                // } else {
-                //     i->eachArg([&](Value* v) {
-                //         if (auto mk = MkCls::Cast(i)) {
-                //             if (mk->tryGetCls())
-                //                 mk->tryGetCls()->eachVersion(found);
-                //         }
-                //     });
-                // }
-            };
-
-            Visitor::run(v->entry, check);
-            v->eachPromise([&](Promise* p) { Visitor::run(p->entry, check); });
-        });
-    });
+    resetVersionsRefCountState(m);
 };
 
 void Compiler::optimizeClosureVersion(ClosureVersion* v) {
