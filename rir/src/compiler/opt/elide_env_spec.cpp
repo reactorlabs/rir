@@ -150,7 +150,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (!stub.allowedNotMaterializing)
                         materializableStubs.insert(m);
                 }
-                if (m->neverStub && !bannedEnvs.count(m)) {
+                if (true || (m->neverStub && !bannedEnvs.count(m))) {
                     bannedEnvs.insert(m);
                 }
                 if (!m->stub && !bannedEnvs.count(m)) {
