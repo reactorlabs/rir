@@ -120,7 +120,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             DeoptReason(fb.feedbackOrigin,
                                         DeoptReason::ForceAndCall),
                             given, fb.stableEnv, nullptr, cp, bb, ip);
-                    } else if (false) {
+                    } else {
                         auto type =
                             (fb.type == CLOSXP ? PirType::closure()
                                                : (fb.type == BUILTINSXP
