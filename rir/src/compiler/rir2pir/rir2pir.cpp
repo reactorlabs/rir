@@ -1458,7 +1458,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             auto asBool = insert(
                 new Identical(branchCondition, branchReason, PirType::val()));
 
-            if (!inPromise() && false) {
+            if (!inPromise()) {
                 if (auto c = Instruction::Cast(branchCondition)) {
                     auto likely = c->typeFeedback().value;
                     if (likely == True::instance() ||
