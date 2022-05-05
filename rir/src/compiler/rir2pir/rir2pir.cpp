@@ -671,7 +671,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (!staticMonomorphicBuiltin &&
             (monomorphicBuiltin || monomorphicClosure || monomorphicSpecial)) {
             // Can't speculate in promises
-            if (inPromise()) {
+            if (true || inPromise()) {
                 monomorphicBuiltin = monomorphicClosure = monomorphicSpecial =
                     false;
             } else {
