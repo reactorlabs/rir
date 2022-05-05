@@ -114,7 +114,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     given->typeFeedbackUsed = true;
 
                     Value* callee = given;
-                    if (fb.monomorphic && false) {
+                    if (fb.monomorphic) {
                         callee = BBTransform::insertCalleeGuard(
                             cmp, fb,
                             DeoptReason(fb.feedbackOrigin,
