@@ -168,14 +168,15 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 // We can only speculate if we have a checkpoint
                                 // at the ldfun position, since we want to deopt
                                 // before forcing arguments.
-                                if (auto cp = checkpoint.at(ldfun)) {
-                                    if (kind == BUILTINSXP) {
-                                        ip = replaceCallWithCallBuiltin(
-                                            bb, ip, call, ldfun->hint(), true);
+                                if (false)
+                                    if (auto cp = checkpoint.at(ldfun)) {
+                                        if (kind == BUILTINSXP) {
+                                            ip = replaceCallWithCallBuiltin(
+                                                bb, ip, call, ldfun->hint(), true);
+                                        }
+                                        needsGuard[ldfun] = {ldfun->hint(), cp,
+                                                             ldfun->hintOrigin()};
                                     }
-                                    needsGuard[ldfun] = {ldfun->hint(), cp,
-                                                         ldfun->hintOrigin()};
-                                }
                             }
                         } else {
                             // Only speculate if we don't have a static guess
@@ -201,6 +202,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                         }
 
                                         auto cp = checkpoint.at(ldfun);
+                                        cp = nullptr;
 
                                         if (inBase || cp) {
                                             if (kind == BUILTINSXP) {
