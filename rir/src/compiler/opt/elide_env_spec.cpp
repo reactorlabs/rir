@@ -53,6 +53,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                 // Speculatively elide environments on instructions in which
                 // all operators are primitive values
                 auto cp = checkpoint.at(i);
+                cp = nullptr;
                 if (cp && envOnlyForObj(i) && i->nonObjectArgs()) {
                     bool successful = true;
                     i->eachArg([&](Value* arg) {

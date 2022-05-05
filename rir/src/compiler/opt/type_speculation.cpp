@@ -16,6 +16,8 @@ namespace pir {
 bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             AbstractLog& log, size_t) const {
 
+    return false;
+
     AvailableCheckpoints checkpoint(cls, code, log);
     DeadInstructions maybeUsedUnboxed(code, 1, Effects::Any(),
                                       DeadInstructions::IgnoreBoxedUses);
