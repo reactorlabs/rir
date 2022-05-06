@@ -315,7 +315,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (version != call->lastSeen) {
                         version->staticCallRefCount++;
                     }
-
+                    version->isClone = true;
                     call->lastSeen = nullptr;
                     if (version->isClone || version->staticCallRefCount > 1) {
 
