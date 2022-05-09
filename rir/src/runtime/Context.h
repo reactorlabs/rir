@@ -289,6 +289,20 @@ struct Context {
 
     TypeFlags getTypeFlags() const { return typeFlags; }
 
+
+    void curbContextWithMask(const Context & other) {
+        for (auto i = other.flags.begin(); i != other.flags.end(); ++i) {
+            if (flags.includes(*i)) {
+                flags.reset(*i);
+            }
+        }
+        for (auto i = other.typeFlags.begin(); i != other.typeFlags.end(); ++i) {
+            if (typeFlags.includes(*i)) {
+                typeFlags.reset(*i);
+            }
+        }
+    }
+
   private:
     Flags flags;
     TypeFlags typeFlags;

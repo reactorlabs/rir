@@ -755,7 +755,7 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
     for (int i = 0; i < Rf_length(cPool); i++) {
         SEXP obj = Pool::get(cpEntries[i]);
         // Dont serialize external code, we serialize the original AST
-        if (TYPEOF(obj) == CLOSXP) {
+        if (TYPEOF(obj) == CLOSXP && TYPEOF(BODY(obj)) != BCODESXP) {
             *serializerError = true;
             DebugMessages::printSerializerErrors("(*) constant pool contains CLOSXP, not supported.", 2);
         }

@@ -26,7 +26,7 @@
 
 #include "utils/DebugMessages.h"
 
-#define DEBUG_BI_INSN 1
+#define DEBUG_BI_INSN 0
 namespace rir {
 namespace pir {
 

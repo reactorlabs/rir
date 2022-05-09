@@ -56,7 +56,9 @@ namespace rir {
         static void tryUnlocking(SEXP currHastSym);
         static void tryUnlockingOpt(SEXP currHastSym, const unsigned long & con, const int & nargs);
 
+        static void applyMask(DispatchTable * vtab, SEXP hSym);
         static void tryLinking(DispatchTable * vtab, SEXP hSym);
+
 
         static void markStale(SEXP currHastSym, const unsigned long & con);
 

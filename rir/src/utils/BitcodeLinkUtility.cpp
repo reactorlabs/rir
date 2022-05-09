@@ -982,11 +982,42 @@ void BitcodeLinkUtil::markStale(SEXP currHastSym, const unsigned long & con) {
     }
 }
 
+void BitcodeLinkUtil::applyMask(DispatchTable * vtab, SEXP hSym) {
+    REnvHandler hastDepMap(HAST_DEPENDENCY_MAP);
+    if (hastDepMap.isEmpty()) return;
+
+    SEXP hastEnv = hastDepMap.get(hSym);
+    SEXP maskSym = Rf_install("mask");
+
+    if (hastEnv) {
+        REnvHandler hastVtabMap(HAST_VTAB_MAP);
+        REnvHandler hastEnvMap(hastEnv);
+        hastEnvMap.iterate([&] (SEXP offsetSym, SEXP offsetEnv) {
+            int reqOffset = std::stoi(CHAR(PRINTNAME(offsetSym)));
+            DispatchTable * requiredVtab = getVtableAtOffset(vtab,reqOffset);
+            REnvHandler offsetMap(offsetEnv);
+
+            offsetMap.iterate([&] (SEXP contextSym, SEXP cData) {
+                if (maskSym == contextSym) {
+                    // Add mask to dispatch table
+                    unsigned long* res = (unsigned long *) DATAPTR(cData);
+                    // std::cout << "found mask: " << Context(*res) << std::endl;
+                    requiredVtab->mask = Context(*res);
+                }
+            });
+        });
+
+        // remove the metadata after processing it
+        hastDepMap.remove(hSym);
+    }
+}
+
 void BitcodeLinkUtil::tryLinking(DispatchTable * vtab, SEXP hSym) {
     REnvHandler hastDepMap(HAST_DEPENDENCY_MAP);
     if (hastDepMap.isEmpty()) return;
 
     SEXP hastEnv = hastDepMap.get(hSym);
+    SEXP maskSym = Rf_install("mask");
 
     if (hastEnv) {
         #if PRINT_LINKING_STATUS == 1
@@ -1003,94 +1034,111 @@ void BitcodeLinkUtil::tryLinking(DispatchTable * vtab, SEXP hSym) {
             REnvHandler offsetMap(offsetEnv);
 
             offsetMap.iterate([&] (SEXP contextSym, SEXP cData) {
-                contextData c(cData);
-                SEXP rMap = c.getReqMapAsVector();
-                int rMapSize = Rf_length(rMap);
-
-                #if PRINT_LINKING_STATUS == 1
-                std::cout << "    context[" << CHAR(PRINTNAME(contextSym)) << "]" << std::endl;
-                #endif
-
-                if (rMapSize == 0) {
-                    #if PRINT_LINKING_STATUS == 1
-                    std::cout << "      (*) [Early linking]" << std::endl;
-                    #endif
-                    // early linking possible, no dependencies
-                    linkBitcode(cData, hSym, offsetSym, requiredVtab);
-                    // remove context entry from offsetEnv upon successful linking
-                    offsetMap.remove(contextSym);
+                if (maskSym == contextSym) {
+                    // Add mask to dispatch table
+                    unsigned long* res = (unsigned long *) DATAPTR(cData);
+                    // std::cout << "found mask: " << Context(*res) << std::endl;
+                    requiredVtab->mask = Context(*res);
                 } else {
-                    std::stringstream ss;
-                    ss << CHAR(PRINTNAME(hSym)) << "_" << CHAR(PRINTNAME(offsetSym)) << "_" << CHAR(PRINTNAME(contextSym));
-                    SEXP linkageMapSym = Rf_install(ss.str().c_str());
-                    int unsatisfiedDependencies = 0;
-                    bool allDepsSatisfied = true;
-                    #if PRINT_WORKLIST_ENTRIES == 1
-                    std::vector<SEXP> currWorklist;
+                    contextData c(cData);
+                    SEXP rMap = c.getReqMapAsVector();
+                    int rMapSize = Rf_length(rMap);
+
+                    #if PRINT_LINKING_STATUS == 1
+                    std::cout << "    context[" << CHAR(PRINTNAME(contextSym)) << "]" << std::endl;
                     #endif
 
-                    for (int i = 0; i < rMapSize; i++) {
+                    if (rMapSize == 0) {
+                        #if PRINT_LINKING_STATUS == 1
+                        std::cout << "      (*) [Early linking]" << std::endl;
+                        #endif
+                        // early linking possible, no dependencies
+                        linkBitcode(cData, hSym, offsetSym, requiredVtab);
+                        // remove context entry from offsetEnv upon successful linking
+                        offsetMap.remove(contextSym);
+                    } else {
+                        std::stringstream ss;
+                        ss << CHAR(PRINTNAME(hSym)) << "_" << CHAR(PRINTNAME(offsetSym)) << "_" << CHAR(PRINTNAME(contextSym));
+                        SEXP linkageMapSym = Rf_install(ss.str().c_str());
+                        int unsatisfiedDependencies = 0;
+                        bool allDepsSatisfied = true;
+                        #if PRINT_WORKLIST_ENTRIES == 1
+                        std::vector<SEXP> currWorklist;
+                        #endif
 
-                        SEXP ele = VECTOR_ELT(rMap, i);
+                        for (int i = 0; i < rMapSize; i++) {
 
-                        SEXP hastOfReq;
-                        unsigned long con;
-                        int numArgs;
+                            SEXP ele = VECTOR_ELT(rMap, i);
 
-                        bool optimisticCase = false;
-                        auto n = std::string(CHAR(PRINTNAME(ele)));
+                            SEXP hastOfReq;
+                            unsigned long con;
+                            int numArgs;
 
-                        auto firstDel = n.find('_');
-                        if (firstDel != std::string::npos) {
-                            // optimistic dispatch case
-                            auto secondDel = n.find('_', firstDel + 1);
-                            auto hast = n.substr(0, firstDel);
-                            auto context = n.substr(firstDel + 1, secondDel - firstDel - 1);
-                            auto nargs = n.substr(secondDel + 1);
+                            bool optimisticCase = false;
+                            auto n = std::string(CHAR(PRINTNAME(ele)));
 
-                            con = std::stoul(context);
-                            numArgs = std::stoi(nargs);
-                            hastOfReq = Rf_install(hast.c_str());
-                            optimisticCase = true;
-                        } else {
-                            hastOfReq = ele;
-                        }
+                            auto firstDel = n.find('_');
+                            if (firstDel != std::string::npos) {
+                                // optimistic dispatch case
+                                auto secondDel = n.find('_', firstDel + 1);
+                                auto hast = n.substr(0, firstDel);
+                                auto context = n.substr(firstDel + 1, secondDel - firstDel - 1);
+                                auto nargs = n.substr(secondDel + 1);
 
-                        // check if the dependency is already satisfied
-                        if (!optimisticCase) {
-                            // check in hast is satisfied already
-                            if (!hastVtabMap.get(hastOfReq)) {
-                                unsatisfiedDependencies++;
-                                #if PRINT_WORKLIST_ENTRIES == 1
-                                currWorklist.push_back(ele);
-                                #endif
-
-                                // hast is not satisfied yet, add to worklist
-                                addToWorklistOne(hastOfReq, linkageMapSym);
-                                allDepsSatisfied = false;
+                                con = std::stoul(context);
+                                numArgs = std::stoi(nargs);
+                                hastOfReq = Rf_install(hast.c_str());
+                                optimisticCase = true;
+                            } else {
+                                hastOfReq = ele;
                             }
 
-                        } else {
-                            // optimistic case
+                            // check if the dependency is already satisfied
+                            if (!optimisticCase) {
+                                // check in hast is satisfied already
+                                if (!hastVtabMap.get(hastOfReq)) {
+                                    unsatisfiedDependencies++;
+                                    #if PRINT_WORKLIST_ENTRIES == 1
+                                    currWorklist.push_back(ele);
+                                    #endif
 
-                            // check if optimistic site already exists
-                            if (SEXP vtabContainer = hastVtabMap.get(hastOfReq)) {
-                                if (!DispatchTable::check(vtabContainer)) {
-                                    Rf_error("linking error, corrupted vtable");
+                                    // hast is not satisfied yet, add to worklist
+                                    addToWorklistOne(hastOfReq, linkageMapSym);
+                                    allDepsSatisfied = false;
                                 }
 
-                                bool optimisticSiteExists = false;
-                                DispatchTable * requiredVtab = DispatchTable::unpack(vtabContainer);
-                                for (size_t i = 0; i < requiredVtab->size(); i++) {
-                                    auto entry = requiredVtab->get(i);
-                                    if (entry->context().toI() == con &&
-                                        entry->signature().numArguments >= (unsigned)numArgs) {
-                                            optimisticSiteExists = true;
-                                            break;
+                            } else {
+                                // optimistic case
+
+                                // check if optimistic site already exists
+                                if (SEXP vtabContainer = hastVtabMap.get(hastOfReq)) {
+                                    if (!DispatchTable::check(vtabContainer)) {
+                                        Rf_error("linking error, corrupted vtable");
                                     }
-                                }
 
-                                if (!optimisticSiteExists) {
+                                    bool optimisticSiteExists = false;
+                                    DispatchTable * requiredVtab = DispatchTable::unpack(vtabContainer);
+                                    for (size_t i = 0; i < requiredVtab->size(); i++) {
+                                        auto entry = requiredVtab->get(i);
+                                        if (entry->context().toI() == con &&
+                                            entry->signature().numArguments >= (unsigned)numArgs) {
+                                                optimisticSiteExists = true;
+                                                break;
+                                        }
+                                    }
+
+                                    if (!optimisticSiteExists) {
+                                        unsatisfiedDependencies++;
+                                        #if PRINT_WORKLIST_ENTRIES == 1
+                                        currWorklist.push_back(ele);
+                                        #endif
+
+                                        // hast is not satisfied yet, add to worklist
+                                        addToWorklistTwo(hastOfReq, con, numArgs, linkageMapSym);
+                                        allDepsSatisfied = false;
+                                    }
+
+                                } else {
                                     unsatisfiedDependencies++;
                                     #if PRINT_WORKLIST_ENTRIES == 1
                                     currWorklist.push_back(ele);
@@ -1099,60 +1147,50 @@ void BitcodeLinkUtil::tryLinking(DispatchTable * vtab, SEXP hSym) {
                                     // hast is not satisfied yet, add to worklist
                                     addToWorklistTwo(hastOfReq, con, numArgs, linkageMapSym);
                                     allDepsSatisfied = false;
+
                                 }
-
-                            } else {
-                                unsatisfiedDependencies++;
-                                #if PRINT_WORKLIST_ENTRIES == 1
-                                currWorklist.push_back(ele);
-                                #endif
-
-                                // hast is not satisfied yet, add to worklist
-                                addToWorklistTwo(hastOfReq, con, numArgs, linkageMapSym);
-                                allDepsSatisfied = false;
-
                             }
                         }
-                    }
-                    if (allDepsSatisfied) {
-                        #if PRINT_LINKING_STATUS == 1
-                        std::cout << "      (*) [Early linking, all dependencies already satisfied]" << std::endl;
-                        #endif
-                        // early linking possible, no dependencies
-                        linkBitcode(cData, hSym, offsetSym, requiredVtab);
-                        // remove context entry from offsetEnv upon successful linking
-                        offsetMap.remove(contextSym);
-                    } else {
-                        // update linkage map
-                        SEXP unlockMeta;
-                        PROTECT(unlockMeta = Rf_allocVector(VECSXP, 5));
-                        SEXP counter;
-                        PROTECT(counter = Rf_allocVector(RAWSXP, sizeof(int)));
-                        int * tmp = (int *) DATAPTR(counter);
-                        *tmp = unsatisfiedDependencies;
-                        SET_VECTOR_ELT(unlockMeta, 0, counter);
-                        UNPROTECT(1);
-                        SET_VECTOR_ELT(unlockMeta, 1, cData);
-                        SET_VECTOR_ELT(unlockMeta, 2, hSym);
-                        SET_VECTOR_ELT(unlockMeta, 3, offsetSym);
-                        SET_VECTOR_ELT(unlockMeta, 4, requiredVtab->container());
+                        if (allDepsSatisfied) {
+                            #if PRINT_LINKING_STATUS == 1
+                            std::cout << "      (*) [Early linking, all dependencies already satisfied]" << std::endl;
+                            #endif
+                            // early linking possible, no dependencies
+                            linkBitcode(cData, hSym, offsetSym, requiredVtab);
+                            // remove context entry from offsetEnv upon successful linking
+                            offsetMap.remove(contextSym);
+                        } else {
+                            // update linkage map
+                            SEXP unlockMeta;
+                            PROTECT(unlockMeta = Rf_allocVector(VECSXP, 5));
+                            SEXP counter;
+                            PROTECT(counter = Rf_allocVector(RAWSXP, sizeof(int)));
+                            int * tmp = (int *) DATAPTR(counter);
+                            *tmp = unsatisfiedDependencies;
+                            SET_VECTOR_ELT(unlockMeta, 0, counter);
+                            UNPROTECT(1);
+                            SET_VECTOR_ELT(unlockMeta, 1, cData);
+                            SET_VECTOR_ELT(unlockMeta, 2, hSym);
+                            SET_VECTOR_ELT(unlockMeta, 3, offsetSym);
+                            SET_VECTOR_ELT(unlockMeta, 4, requiredVtab->container());
 
-                        REnvHandler linkageMap(LINKAGE_MAP);
-                        linkageMap.set(linkageMapSym, unlockMeta);
+                            REnvHandler linkageMap(LINKAGE_MAP);
+                            linkageMap.set(linkageMapSym, unlockMeta);
 
-                        UNPROTECT(1);
-                        #if PRINT_LINKING_STATUS == 1
-                        std::cout << "      (*) [Not linked yet: " << CHAR(PRINTNAME(hSym)) << "_" << CHAR(PRINTNAME(offsetSym)) << "_" << c.getContext() << "]" << std::endl;
-                        std::cout << "      (*) (waiting for " << *tmp << " dependencies)" << std::endl;
-                        #endif
+                            UNPROTECT(1);
+                            #if PRINT_LINKING_STATUS == 1
+                            std::cout << "      (*) [Not linked yet: " << CHAR(PRINTNAME(hSym)) << "_" << CHAR(PRINTNAME(offsetSym)) << "_" << c.getContext() << "]" << std::endl;
+                            std::cout << "      (*) (waiting for " << *tmp << " dependencies)" << std::endl;
+                            #endif
 
-                        #if PRINT_WORKLIST_ENTRIES == 1
-                        std::cout << "      [";
-                        for (auto & ele : currWorklist) {
-                            std::cout << CHAR(PRINTNAME(ele)) << " ";
+                            #if PRINT_WORKLIST_ENTRIES == 1
+                            std::cout << "      [";
+                            for (auto & ele : currWorklist) {
+                                std::cout << CHAR(PRINTNAME(ele)) << " ";
+                            }
+                            std::cout << "]" << std::endl;
+                            #endif
                         }
-                        std::cout << "]" << std::endl;
-                        #endif
                     }
                 }
             });

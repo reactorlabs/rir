@@ -24,6 +24,7 @@
 #include "utils/BitcodeLinkUtility.h"
 
 #define DEBUG_TABLE_ENTRIES 0
+#define ONLY_APPLY_MASK 1
 #include <chrono>
 using namespace std::chrono;
 
@@ -146,8 +147,12 @@ class Compiler {
             BitcodeLinkUtil::insertClosObj(inClosure, hast);
             auto start = high_resolution_clock::now();
             // std::cout << "============= deserializer start =============" << std::endl;
+            #if ONLY_APPLY_MASK == 1
+            BitcodeLinkUtil::applyMask(vtable, hast);
+            #else
             BitcodeLinkUtil::tryLinking(vtable, hast);
             BitcodeLinkUtil::tryUnlocking(hast);
+            #endif
             // std::cout << "==============================================" << std::endl << std::endl;
 
             auto stop = high_resolution_clock::now();

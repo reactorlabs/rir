@@ -236,6 +236,8 @@ struct DispatchTable
     bool disableFurtherSpecialization = false;
     SEXP hast = nullptr;
 
+    Context mask = Context(0ul);
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)

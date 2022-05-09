@@ -48,7 +48,7 @@ std::chrono::time_point<std::chrono::high_resolution_clock> DebugCheckpoints::la
 #define PRINT_DEPENDENCY_MAP 0
 #define PRINT_DESERIALIZER_PROGRESS 0
 #define PRINT_DESERIALIZER_PROGRESS_OVERRIDE 0
-#define CREATE_DOT_GRAPH 1
+#define CREATE_DOT_GRAPH 0
 extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
@@ -413,13 +413,17 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     REnvHandler mainMap(sData.getContextMap());
     std::cout << "DOT_GRAPH: " << CHAR(PRINTNAME(hastSym)) << std::endl;
     std::ofstream outfile ("dependencies.DOT", std::ios_base::app);
-    std::stringstream rankData;
-    rankData << "{ rank=same; ";
+
+    SEXP maskSym = Rf_install("mask");
 
     mainMap.iterate([&] (SEXP offsetKey, SEXP offsetEnv) {
         // std::cout << "  " << CHAR(PRINTNAME(offsetKey)) << ":" << std::endl;
         REnvHandler offsetContextMap(offsetEnv);
         offsetContextMap.iterate([&] (SEXP contextKey, SEXP cData) {
+            if (contextKey == maskSym) {
+                std::cout << "skipping mask" << std::endl;
+                continue;
+            }
             // std::cout << "    " << CHAR(PRINTNAME(contextKey)) << std::endl;
             contextData c(cData);
 
@@ -447,14 +451,12 @@ SEXP deserializeFromFile(std::string metaDataPath) {
             }
 
 
-            rankData << "\"" << currSym.str() << "\", ";
 
             outfile << "\"" << currSym.str() << "\" -> \"" << CHAR(PRINTNAME(hastSym)) << "\"" << std::endl;
 
         });
     });
-    rankData << " }";
-    outfile << rankData.str() << std::endl;
+    outfile << std::endl;
     outfile.close();
     #endif
 
@@ -467,6 +469,222 @@ SEXP deserializeFromFile(std::string metaDataPath) {
 
     UNPROTECT(1);
     return R_FalseValue;
+}
+
+static void iterateOverMetadatasInDirectory(const char * folderPath, std::ofstream & jsonOutFile) {
+
+    bool prettyJson = true;
+
+    // Disable contextual compilation during deserialization as R_Unserialize
+    // will lead to a lot of unnecessary compilation otherwise
+    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+
+    if (skipPirCompilation == false) {
+        setenv("PIR_DISABLE_COMPILATION", "1", 1);
+    }
+
+    Protect prot;
+    DIR *dir;
+    struct dirent *ent;
+    int metaNo = 0;
+    if ((dir = opendir(folderPath)) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            std::string fName = ent->d_name;
+            if (fName.find(".meta") != std::string::npos) {
+                metaNo++;
+            }
+        }
+    }
+    int i = 0;
+    if ((dir = opendir(folderPath)) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            std::string fName = ent->d_name;
+            if (fName.find(".meta") != std::string::npos) {
+                i++;
+
+
+                jsonOutFile << "\"" << fName << "\" : {";
+                if (prettyJson) jsonOutFile << "\n";
+
+                std::stringstream metadataPath;
+                metadataPath << folderPath << "/" << fName;
+
+                FILE *reader;
+                reader = fopen(metadataPath.str().c_str(),"r");
+
+                // Initialize the deserializing stream
+                R_inpstream_st inputStream;
+                R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
+
+
+                SEXP serDataContainer;
+                PROTECT(serDataContainer = R_Unserialize(&inputStream));
+
+                // Get serialized metadata
+                serializerData sData(serDataContainer);
+
+                // sData.print();
+
+
+                sData.printToJson(jsonOutFile, prettyJson);
+
+                jsonOutFile << "}";
+                if (i != metaNo) {
+                    jsonOutFile << ",";
+                }
+                if (prettyJson) jsonOutFile << "\n";
+
+                UNPROTECT(1);
+
+            }
+        }
+    } else {
+        std::cout << "\"" << folderPath << "\" has no metas" << std::endl;
+    }
+
+    if (skipPirCompilation == false) {
+        unsetenv("PIR_DISABLE_COMPILATION");
+    }
+
+
+
+}
+
+REXPORT SEXP processBitcodeFolders(SEXP path) {
+    bool prettyJson = true;
+
+    if (Rf_isValidString(path)) {
+        for (int i = 0; i < LENGTH(path); i++) {
+            SEXP curr = VECTOR_ELT(path, i);
+            const char * currPath = CHAR(curr);
+            std::cout << "processing folder: " << i << " -> " << currPath << std::endl;
+
+            std::stringstream ss;
+            ss << currPath << "/" << "summary.json";
+
+            std::ofstream jsonOutFile;
+            jsonOutFile.open(ss.str().c_str());
+
+            jsonOutFile << "{";
+            if (prettyJson) jsonOutFile << "\n";
+
+            iterateOverMetadatasInDirectory(currPath, jsonOutFile);
+
+            jsonOutFile << "}";
+            if (prettyJson) jsonOutFile << "\n";
+            jsonOutFile.close();
+
+
+        }
+    } else {
+        std::cout << "invalid path" << std::endl;
+        return R_FalseValue;
+    }
+
+    return R_TrueValue;
+}
+
+REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path) {
+    // Disable contextual compilation during deserialization as R_Unserialize
+    // will lead to a lot of unnecessary compilation otherwise
+    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+
+    if (skipPirCompilation == false) {
+        setenv("PIR_DISABLE_COMPILATION", "1", 1);
+    }
+
+    if (Rf_isValidString(path)) {
+        for (int i = 0; i < LENGTH(path); i++) {
+            SEXP curr = VECTOR_ELT(path, i);
+            const char * currPath = CHAR(curr);
+
+            std::unordered_map<std::string, unsigned long> maskMap;
+            std::stringstream maskPath;
+            maskPath << currPath << "/maskData";
+            std::ifstream maskData(maskPath.str().c_str());
+            for(std::string line; getline(maskData, line);) {
+                auto firstDel = line.find(',');
+                auto secondDel = line.find(',', firstDel + 1);
+                auto hast = line.substr(0, firstDel);
+                auto offset = line.substr(firstDel + 1, secondDel - firstDel - 1);
+                auto key = hast + "_" + offset;
+                auto mask = std::stoull(line.substr(secondDel + 1));
+                maskMap[key] = mask;
+            }
+
+            if (maskMap.empty()) {
+                std::cout << "maskMap is empty!" << std::endl;
+                return R_NilValue;
+            }
+
+            Protect prot;
+            DIR *dir;
+            struct dirent *ent;
+
+            if ((dir = opendir(currPath)) != NULL) {
+                while ((ent = readdir(dir)) != NULL) {
+                    std::string fName = ent->d_name;
+                    if (fName.find(".meta") != std::string::npos) {
+                        std::stringstream metadataPath;
+                        metadataPath << currPath << "/" << fName;
+                        FILE *reader;
+                        reader = fopen(metadataPath.str().c_str(),"r");
+
+                        // Initialize the deserializing stream
+                        R_inpstream_st inputStream;
+                        R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
+
+                        SEXP serDataContainer;
+                        PROTECT(serDataContainer = R_Unserialize(&inputStream));
+
+                        fclose(reader);
+
+                        // Get serialized metadata
+                        serializerData sData(serDataContainer);
+                        SEXP hastSym = sData.getHastData();
+                        REnvHandler offsetMap(sData.getContextMap());
+                        offsetMap.iterate([&](SEXP offsetSym, SEXP contextMapContainer){
+                            std::stringstream ss;
+                            ss << CHAR(PRINTNAME(hastSym)) << "_" << CHAR(PRINTNAME(offsetSym));
+                            if (maskMap.find(ss.str()) != maskMap.end()) {
+                                std::cout << "adding mask" << std::endl;
+                                REnvHandler contextMap(contextMapContainer);
+
+                                SEXP store;
+                                PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned long)));
+                                unsigned long * tmp = (unsigned long *) DATAPTR(store);
+                                *tmp = maskMap[ss.str()];
+                                contextMap.set("mask", store);
+                                UNPROTECT(1);
+                            }
+
+                        });
+
+                        // sData.print();
+
+                        // 2. Write updated metadata
+                        R_outpstream_st outputStream;
+                        FILE *fptr;
+                        fptr = fopen(metadataPath.str().c_str(),"w");
+                        R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
+                        R_Serialize(sData.getContainer(), &outputStream);
+                        fclose(fptr);
+
+                        UNPROTECT(1);
+
+                    }
+                }
+            }
+
+        }
+    }
+
+    if (skipPirCompilation == false) {
+        unsetenv("PIR_DISABLE_COMPILATION");
+    }
+
+
+    return R_NilValue;
 }
 
 REXPORT SEXP loadBitcodes() {

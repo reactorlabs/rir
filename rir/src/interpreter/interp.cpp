@@ -993,6 +993,13 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
         Function* fun = dispatch(call, table);
         fun->registerInvocation();
 
+        if (table->mask.toI() != 0) {
+            // std::cout << "mask exists for vtable" << std::endl;
+            // std::cout << "before: " << call.givenContext << std::endl;
+            call.givenContext.curbContextWithMask(table->mask);
+            // std::cout << "after: " << call.givenContext << std::endl;
+        }
+
         bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
 
         if (!isDeoptimizing() && table->disableFurtherSpecialization == false && RecompileHeuristic(fun) && !skipPirCompilation) {

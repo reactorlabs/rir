@@ -3,6 +3,11 @@
 #include "R/r.h"
 #include "R/Protect.h"
 #include "ir/BC.h"
+#include "utils/UMap.h"
+
+#include <fstream>
+
+#define PRINT_EXTENDED_CHILDREN 0
 
 namespace rir {
 
@@ -217,6 +222,127 @@ namespace rir {
                 return rMap;
             }
 
+            void printToJson(std::ofstream & jsonOutFile, bool prettyJson = false) {
+
+                // Entry 0: Context
+                jsonOutFile << "\"context\" : \"" << getContext() << "\",";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 1: Function signature
+                rir::FunctionSignature fs = getFunctionSignature();
+                jsonOutFile << "\"function_signature\" : [";
+                    // fs.envCreation
+                    jsonOutFile << (int)fs.envCreation << ",";
+                    // fs.optimization
+                    jsonOutFile << (int)fs.optimization << ",";
+                    // fs.numArguments
+                    jsonOutFile << fs.numArguments << ",";
+                    // fs.hasDotsFormals
+                    jsonOutFile << fs.hasDotsFormals << ",";
+                    // fs.hasDefaultArgs
+                    jsonOutFile << fs.hasDefaultArgs << ",";
+                    // fs.dotsPosition
+                    jsonOutFile << fs.dotsPosition;
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 2: Function names
+                jsonOutFile << "\"function_names\" : [";
+                auto fNames = getFNames();
+                for (int i = 0; i < Rf_length(fNames); i++) {
+                    auto c = VECTOR_ELT(fNames, i);
+
+                    jsonOutFile << "\"" << CHAR(STRING_ELT(c, 0)) << "\"";
+                    if (i+1 != Rf_length(fNames)) jsonOutFile << ",";
+                }
+
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 3: Function Sources
+                jsonOutFile << "\"function_sources\" : [";
+                auto fSrc = getFSrc();
+                for (int i = 0; i < Rf_length(fSrc); i++) {
+                    auto c = VECTOR_ELT(fSrc, i);
+                    if (c != R_NilValue) {
+                        jsonOutFile << "[\"" << CHAR(PRINTNAME(VECTOR_ELT(c, 0))) << "\",\"" << *INTEGER(VECTOR_ELT(c, 1)) << "\"]";
+                    } else {
+                        jsonOutFile << "null";
+                    }
+                    if (i+1 != Rf_length(fSrc)) jsonOutFile << ",";
+                }
+
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 4: Function Arglist Order
+                jsonOutFile << "\"function_arglist_order\" : [";
+                auto fArg = getFArg();
+                for (int i = 0; i < Rf_length(fArg); i++) {
+                    auto c = VECTOR_ELT(fArg, i);
+                    jsonOutFile << "\"" << TYPEOF(c) << "\"";
+                    if (i+1 != Rf_length(fArg)) jsonOutFile << ",";
+                }
+
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 5: Constant Pool
+                jsonOutFile << "\"cpool\" : [";
+                auto cPool = getCPool();
+                for (int i = 0; i < Rf_length(cPool); i++) {
+                    auto c = VECTOR_ELT(cPool, i);
+                    jsonOutFile << "\"" << TYPEOF(c) << "\"";
+                    if (i+1 != Rf_length(cPool)) jsonOutFile << ",";
+                }
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 6: Source Pool
+                jsonOutFile << "\"cpool\" : [";
+                auto sPool = getSPool();
+                for (int i = 0; i < Rf_length(sPool); i++) {
+                    auto c = VECTOR_ELT(sPool, i);
+                    jsonOutFile << "\"" << TYPEOF(c) << "\"";
+                    if (i+1 != Rf_length(sPool)) jsonOutFile << ",";
+                }
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 7: Children Data
+                jsonOutFile << "\"children\" : [";
+                auto fChildren = getFChildren();
+                for (int i = 0; i < Rf_length(fChildren); i++) {
+                    auto cVector = VECTOR_ELT(fChildren, i);
+
+                    jsonOutFile << "[";
+                    for (int j = 0; j < Rf_length(cVector); j++) {
+                        auto d = VECTOR_ELT(cVector, j);
+
+                        jsonOutFile << Rf_asInteger(d);
+                        if (j+1 != Rf_length(cVector)) jsonOutFile << ",";
+
+                    }
+                    jsonOutFile << "]";
+                    if (i+1 != Rf_length(fChildren)) jsonOutFile << ",";
+                }
+                jsonOutFile << "],";
+                if (prettyJson) jsonOutFile << "\n";
+
+                // Entry 8: Requirement map
+                jsonOutFile << "\"requirements\" : [";
+                auto rData = getReqMapAsVector();
+                for (int i = 0; i < Rf_length(rData); i++) {
+                    SEXP ele = VECTOR_ELT(rData, i);
+                    jsonOutFile << "\"" << CHAR(PRINTNAME(ele)) << "\"";
+                    if (i+1 != Rf_length(rData)) jsonOutFile << ",";
+                }
+
+                jsonOutFile << "]";
+                if (prettyJson) jsonOutFile << "\n";
+
+            }
+
             void print() {
                 print(0);
             }
@@ -280,24 +406,39 @@ namespace rir {
                 std::cout << "]" << std::endl;
 
                 printSpace(space);
+                #if PRINT_EXTENDED_CHILDREN == 1
                 std::cout << "ENTRY(7)[children Data]" << std::endl;
+                #else
+                std::cout << "ENTRY(7)[children Data]: ";
+                #endif
                 auto fChildren = getFChildren();
                 for (int i = 0; i < Rf_length(fChildren); i++) {
                     auto cVector = VECTOR_ELT(fChildren, i);
 
-                    auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
-
+                    #if PRINT_EXTENDED_CHILDREN == 1
                     printSpace(space);
-
+                    auto handle = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, i), 0)));
                     std::cout << handle << " : [ ";
+                    #else
+                    std::cout << "(" << Rf_length(cVector) << ")" << "[ ";
+                    #endif
+
                     for (int j = 0; j < Rf_length(cVector); j++) {
                         auto d = VECTOR_ELT(cVector, j);
-                        auto handleC = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, Rf_asInteger(d)), 0)));
 
+                        #if PRINT_EXTENDED_CHILDREN == 1
+                        auto handleC = std::string(CHAR(STRING_ELT(VECTOR_ELT(fNames, Rf_asInteger(d)), 0)));
                         std::cout << handleC << " ";
+                        #else
+                        std::cout << Rf_asInteger(d) << " ";
+                        #endif
                     }
-                    std::cout << "] " << std::endl;
+                    std::cout << "] ";
                 }
+
+                #if PRINT_EXTENDED_CHILDREN == 0
+                std::cout<< std::endl;
+                #endif
 
                 auto rData = getReqMapAsVector();
                 printSpace(space);
@@ -365,6 +506,7 @@ namespace rir {
             }
 
             static void iterateOverOffsets(SEXP mainMap, const std::function< void(SEXP, SEXP) >& callback) {
+
                 SEXP offsetBindings = R_lsInternal(mainMap, (Rboolean) false);
                 for (int i = 0; i < Rf_length(offsetBindings); i++) {
                     SEXP offsetKeySym = Rf_install(CHAR(STRING_ELT(offsetBindings, i)));
@@ -374,12 +516,72 @@ namespace rir {
             }
 
             static void iterateOverContexts(SEXP offsetMap, const std::function< void(SEXP, SEXP) >& callback) {
+                SEXP maskSym = Rf_install("mask");
                 SEXP contextBindings = R_lsInternal(offsetMap, (Rboolean) false);
                 for (int i = 0; i < Rf_length(contextBindings); i++) {
                     SEXP contextKeySym = Rf_install(CHAR(STRING_ELT(contextBindings, i)));
+                    if (contextKeySym == maskSym) {
+                        continue;
+                    }
                     SEXP contextData = Rf_findVarInFrame(offsetMap, contextKeySym);
                     callback(contextKeySym, contextData);
                 }
+            }
+
+            void printToJson(std::ofstream & jsonOutFile, bool prettyJson = false) {
+                SEXP maskSym = Rf_install("mask");
+                jsonOutFile << "\"hast\": \"" << CHAR(PRINTNAME(getHastData())) << "\",";
+                if (prettyJson) jsonOutFile << "\n";
+
+                jsonOutFile << "\"name\": \"" << getNameData() << "\",";
+                if (prettyJson) jsonOutFile << "\n";
+
+                jsonOutFile << "\"offsetMap\": {";
+                if (prettyJson) jsonOutFile << "\n";
+
+                REnvHandler offsetMap(VECTOR_ELT(container, 2));
+                int i = 0;
+                offsetMap.iterate([&](SEXP offsetSymbol, SEXP cMap) {
+                    i++;
+
+                    jsonOutFile << "\"" << CHAR(PRINTNAME(offsetSymbol)) << "\" : {";
+                    if (prettyJson) jsonOutFile << "\n";
+
+                    REnvHandler contextMap(cMap);
+
+                    int j = 0;
+                    contextMap.iterate([&](SEXP conSym, SEXP cData) {
+                        if (conSym == maskSym) {
+                            return;
+                        }
+                        j++;
+
+                        jsonOutFile << "\"" << CHAR(PRINTNAME(conSym)) << "\" : {";
+                        if (prettyJson) jsonOutFile << "\n";
+
+                        contextData c(cData);
+                        c.printToJson(jsonOutFile, prettyJson);
+
+
+                        jsonOutFile << "}";
+                        if (j != contextMap.size()) {
+                            jsonOutFile << ",";
+                        }
+                        if (prettyJson) jsonOutFile << "\n";
+                    });
+
+                    jsonOutFile << "}";
+                    if (i != offsetMap.size()) {
+                        jsonOutFile << ",";
+                    }
+                    if (prettyJson) jsonOutFile << "\n";
+
+                });
+
+                jsonOutFile << "}";
+                if (prettyJson) jsonOutFile << "\n";
+
+
             }
 
             void print() {
@@ -396,8 +598,10 @@ namespace rir {
                 printSpace(space);
                 std::cout << "ENTRY(-2): " << getNameData() << std::endl;
 
+
                 SEXP mainMap = VECTOR_ELT(container, 2);
                 space += 2;
+
                 iterateOverOffsets(mainMap, [&] (SEXP offsetSymbol, SEXP offsetEnv) {
                     printSpace(space);
                     std::cout << "offset: " << CHAR(PRINTNAME(offsetSymbol)) << std::endl;

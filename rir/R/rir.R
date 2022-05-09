@@ -98,6 +98,13 @@ f.stopDebugMessages <- function() {
     invisible(.Call("stopDebugMessages"))
 }
 
+f.processBitcodeFolders <- function(path) {
+    invisible(.Call("processBitcodeFolders", path))
+}
+
+f.addMaskDataToBitcodeMetadata <- function(path) {
+    invisible(.Call("addMaskDataToBitcodeMetadata", path))
+}
 
 # returns TRUE if, when PIR compiled, satisfies the the given checks (e.g.
 # environment was elided). Max assumptions compiled (+ minimal) are used, if
