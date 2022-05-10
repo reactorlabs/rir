@@ -931,18 +931,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
-                f->staticCallRefCount++;
+
                 auto cl = insert(
-                    new StaticCall(insert.env, f->owner(), given, matchedArgs,
+                    new StaticCall(insert.env, f, given, matchedArgs,
                                    std::move(argOrderOrig), fs, ast,
                                    f->owner()->closureEnv() == Env::notClosed()
                                        ? guardedCallee
                                        : Tombstone::closure()));
 
-                cl->lastSeen = f;
-
                 cl->effects.set(Effect::DependsOnAssume);
-
                 push(cl);
 
                 auto innerc = MkCls::Cast(guardedCallee->followCastsAndForce());

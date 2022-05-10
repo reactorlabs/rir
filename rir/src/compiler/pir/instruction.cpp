@@ -1251,12 +1251,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
-StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args,
+StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
+                       Context givenContext, const std::vector<Value*>& args,
                        const ArglistOrder::CallArglistOrder& argOrderOrig,
                        Value* fs, unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
+      cls_(clsVersion->owner()), argOrderOrig(argOrderOrig),
+      givenContext(givenContext) {
+
+    auto cls = clsVersion->owner();
+
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
@@ -1272,21 +1276,28 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
                     PirType() | RType::prom | RType::missing | PirType::val());
         }
     }
-    assert(tryDispatch());
+
+    assert(tryDispatch() == clsVersion);
+
+    // Update version-refCount fields
+    clsVersion->staticCallRefCount++;
+    lastSeen = clsVersion;
 }
 
-// Instruction* StaticCall::clone() const {
-//     auto r = InstructionImplementation::clone();
+void StaticCall::updateVersionRefCount() {
+    lastSeen = nullptr;
+    auto target = tryDispatch();
+    if (target) {
+        lastSeen = target;
+        target->staticCallRefCount++;
+    }
+}
 
-//     auto sc = StaticCall::Cast(r);
-//     sc->lastSeen = nullptr;
-//     auto target = sc->tryDispatch();
-//     if (target) {
-//         sc->lastSeen = target;
-//         target->staticCallRefCount++;
-//     }
-//     return sc;
-// }
+Instruction* StaticCall::clone() const {
+    auto sc = StaticCall::Cast(InstructionImplementation::clone());
+    sc->updateVersionRefCount();
+    return sc;
+}
 
 PirType StaticCall::inferType(const GetType& getType) const {
     auto t = PirType::bottom();

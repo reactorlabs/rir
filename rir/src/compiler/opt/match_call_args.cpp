@@ -242,35 +242,27 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (auto c = call) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
-                        target->staticCallRefCount++;
-                        auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
 
-                        nc->lastSeen = target;
+                        auto nc = new StaticCall(
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
 
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = namedCall) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
-                        target->staticCallRefCount++;
-                        auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
 
-                        nc->lastSeen = target;
+                        auto nc = new StaticCall(
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
 
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = staticCall) {
                         assert(usemethodTarget);
                         auto cls = cmp.module->c(usemethodTarget);
-                        target->staticCallRefCount++;
-
                         auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx, cls);
-
-                        nc->lastSeen = target;
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
 
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else {
