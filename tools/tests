@@ -47,26 +47,26 @@ function run_test {
   if [[ "$ENABLE_VALGRIND" == "1" ]]; then
       VALGRIND="-d valgrind --debugger-args=--error-exitcode=13 --debugger-args=--suppressions=$ROOT_DIR/.valgrind_suppressions"
   fi
-  
+
   if test "$(uname)" = "Darwin"; then
       LIB="dyn.load('${RIR_BUILD}/librir.dylib')"
   else
       LIB="dyn.load('${RIR_BUILD}/librir.so')"
   fi
-  
+
   name=`basename $test`
-  
+
   function status {
     done=`wc -l < $STATUS`
     echo -ne "\e[0K\r[${done}/${NUM_TESTS}] ${name} "
   }
   status
-  
+
   TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
   echo "source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
-  
+
   LOG=$(mktemp /tmp/r-test.XXXXXX)
   if [[ "$R_LD_PRELOAD" != "" ]]; then
     export LD_PRELOAD=$R_LD_PRELOAD
