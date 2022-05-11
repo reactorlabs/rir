@@ -252,13 +252,7 @@ static void resetVersionsRefCountState(Module* m) {
         c->eachVersion([&](ClosureVersion* v) {
             auto check = [&](Instruction* i) {
                 if (auto call = StaticCall::Cast(i)) {
-
-                    call->lastSeen = nullptr;
-
-                    if (auto dispatchedVersion = call->tryDispatch()) {
-                        call->lastSeen = dispatchedVersion;
-                        dispatchedVersion->staticCallRefCount++;
-                    }
+                    call->updateVersionRefCount();
                 } else if (auto call = CallInstruction::CastCall(i)) {
                     if (auto cls = call->tryGetCls()) {
 

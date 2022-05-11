@@ -2283,6 +2283,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     size_t nCallArgs() const override { return nargs() - 3; }
 
     Instruction* clone() const override;
+    void updateVersionRefCount();
 
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
@@ -2335,9 +2336,6 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
         assert((res & minimal) == minimal);
         return res;
     }
-
-  private:
-    void updateVersionRefCount();
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
