@@ -2264,10 +2264,11 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     ArglistOrder::CallArglistOrder argOrderOrig;
 
   public:
-    StaticCall(Value * callerEnv, ClosureVersion * clsVersion,
-               Context givenContext, const std::vector<Value*>& args,
+    StaticCall(Value * callerEnv, Closure * cls, Context givenContext,
+               const std::vector<Value*>& args,
                const ArglistOrder::CallArglistOrder& argOrderOrig, Value* fs,
-               unsigned srcIdx, Value* runtimeClosure = Tombstone::closure());
+               unsigned srcIdx, const std::function<void(StaticCall*)>& after,
+               Value* runtimeClosure = Tombstone::closure());
 
     ClosureVersion* lastSeen = nullptr;
     Context givenContext;

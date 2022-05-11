@@ -1251,15 +1251,15 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
-StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
-                       Context givenContext, const std::vector<Value*>& args,
+StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
+                       const std::vector<Value*>& args,
                        const ArglistOrder::CallArglistOrder& argOrderOrig,
-                       Value* fs, unsigned srcIdx, Value* runtimeClosure)
-    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(clsVersion->owner()), argOrderOrig(argOrderOrig),
-      givenContext(givenContext) {
+                       Value* fs, unsigned srcIdx,
+                       const std::function<void(StaticCall*)>& after,
+                       Value* runtimeClosure)
 
-    auto cls = clsVersion->owner();
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
+      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
 
     assert(cls->nargs() >= args.size());
     assert(fs);
@@ -1277,11 +1277,13 @@ StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
         }
     }
 
-    assert(tryDispatch() == clsVersion);
+    after(this);
+    auto dispatched = tryDispatch();
+    assert(dispatched);
 
     // Update version-refCount fields
-    clsVersion->staticCallRefCount++;
-    lastSeen = clsVersion;
+    dispatched->staticCallRefCount++;
+    lastSeen = dispatched;
 }
 
 void StaticCall::updateVersionRefCount() {

@@ -932,14 +932,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
                                                     inPromise());
 
+                auto after = [](StaticCall* call) {
+                    call->effects.set(Effect::DependsOnAssume);
+                };
+
                 auto cl = insert(
-                    new StaticCall(insert.env, f, given, matchedArgs,
-                                   std::move(argOrderOrig), fs, ast,
+                    new StaticCall(insert.env, f->owner(), given, matchedArgs,
+                                   std::move(argOrderOrig), fs, ast, after,
                                    f->owner()->closureEnv() == Env::notClosed()
                                        ? guardedCallee
                                        : Tombstone::closure()));
 
-                cl->effects.set(Effect::DependsOnAssume);
                 push(cl);
 
                 auto innerc = MkCls::Cast(guardedCallee->followCastsAndForce());
