@@ -7,6 +7,7 @@
 #include "interpreter/instance.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 
