@@ -8,6 +8,7 @@ namespace rir {
 std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
 std::unordered_map<SEXP, size_t> Pool::contents;
+std::unordered_set<size_t> Pool::patchable;
 
 BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))
