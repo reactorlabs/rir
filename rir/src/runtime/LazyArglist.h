@@ -20,17 +20,16 @@ static constexpr size_t LAZY_ARGS_MAGIC = 0x1a27a000;
 /**
  * LazyArglist holds the information needed to recreate the
  * arguments list needed by gnu-r contexts whenever a function
- * is called, lazily. In RCNTXT the field that hold the list is
+ * is called, lazily. In RCNTXT the field that holds the list is
  * promargs.
  */
-
 struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
   public:
     LazyArglist() = delete;
     LazyArglist(const LazyArglist&) = delete;
     LazyArglist& operator=(const LazyArglist&) = delete;
 
-    size_t nargs() {
+    size_t promargsLength() {
         if (length == 0)
             return 0;
 
@@ -38,16 +37,21 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
         if (actualNargs != 0)
             return actualNargs;
 
-        for (size_t i = 0; i < length; ++i) {
-            SEXP arg = getArg(i);
-            if (TYPEOF(arg) == DOTSXP) {
-                while (arg != R_NilValue) {
-                    actualNargs++;
-                    arg = CDR(arg);
+        if (callId != ArglistOrder::NOT_REORDERED && reordering) {
+            auto a = ArglistOrder::unpack(reordering);
+            actualNargs = a->originalArglistLength(callId);
+        } else {
+            for (size_t i = 0; i < length; ++i) {
+                SEXP arg = getArg(i);
+                if (TYPEOF(arg) == DOTSXP) {
+                    while (arg != R_NilValue) {
+                        actualNargs++;
+                        arg = CDR(arg);
+                    }
+                    continue;
                 }
-                continue;
+                actualNargs++;
             }
-            actualNargs++;
         }
         return actualNargs;
     }
