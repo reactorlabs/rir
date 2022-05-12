@@ -9,6 +9,7 @@
 
 namespace rir {
 
+// TODO: Expose this from GNU R Defn.h to remove duplication
 #define MAX_CACHE_SIZE 255
 #define ACTIVE_BINDING_MASK (1 << 15)
 #define BINDING_LOCK_MASK (1 << 14)
