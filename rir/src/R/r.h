@@ -6,11 +6,11 @@
 #define R_NO_REMAP
 #define USE_RINTERNALS
 #include <R.h>
+#include <R_ext/Print.h>
 #include <Rinterface.h>
 #include <Rinternals.h>
-#include <R_ext/Print.h>
 
-// Use the function versions (some of them clash with LLVM)
+// Use the function versions (some of the names clash with LLVM)
 #undef isNull
 #undef isSymbol
 #undef isLogical
@@ -20,6 +20,15 @@
 #undef isEnvironment
 #undef isString
 #undef isObject
+inline bool Rf_isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+inline bool Rf_isSymbol(SEXP s) { return TYPEOF(s) == SYMSXP; }
+inline bool Rf_isLogical(SEXP s) { return TYPEOF(s) == LGLSXP; }
+inline bool Rf_isReal(SEXP s) { return TYPEOF(s) == REALSXP; }
+inline bool Rf_isComplex(SEXP s) { return TYPEOF(s) == CPLXSXP; }
+inline bool Rf_isExpression(SEXP s) { return TYPEOF(s) == EXPRSXP; }
+inline bool Rf_isEnvironment(SEXP s) { return TYPEOF(s) == ENVSXP; }
+inline bool Rf_isString(SEXP s) { return TYPEOF(s) == STRSXP; }
+inline bool Rf_isObject(SEXP s) { return OBJECT(s) != 0; }
 
 // Clash with LLVM
 #undef PI
@@ -42,16 +51,6 @@ extern FUNTAB R_FunTab[];
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
-
-Rboolean Rf_isNull(SEXP s);
-Rboolean Rf_isSymbol(SEXP s);
-Rboolean Rf_isLogical(SEXP s);
-Rboolean Rf_isReal(SEXP s);
-Rboolean Rf_isComplex(SEXP s);
-Rboolean Rf_isExpression(SEXP s);
-Rboolean Rf_isEnvironment(SEXP s);
-Rboolean Rf_isString(SEXP s);
-Rboolean Rf_isObject(SEXP s);
 }
 
 // Performance critical stuff copied from Rinlinedfun.h
