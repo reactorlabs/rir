@@ -330,7 +330,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     auto body = BODY(cls);
                     auto dt = DispatchTable::unpack(body);
                     if (dt->contains(c->context())) {
-                        auto other = dt->dispatch(c->context());
+                        // Dispatch also to versions with pending compilation
+                        // since we're not evaluating
+                        auto other = dt->dispatch(c->context(), false);
                         assert(other != dt->baseline());
                         assert(other->context() == c->context());
                         if (other->body()->isCompiled())

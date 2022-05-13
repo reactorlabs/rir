@@ -107,10 +107,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return lazyCompile();
     }
 
-    bool isCompiled() const {
-        return kind == Kind::Native && *lazyCodeHandle_ != '\0' &&
-               nativeCode_ != nullptr;
-    }
+    bool isCompiled() const { return kind == Kind::Native && nativeCode_; }
     // For Kind::Native there is an in-between state when the Code is already
     // placed in a Function but its code handle isn't yet filled by the
     // finalizer of PirJitLLVM. We need to prevent such instances from being

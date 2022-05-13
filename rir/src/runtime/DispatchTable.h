@@ -40,7 +40,7 @@ struct DispatchTable
         return f;
     }
 
-    Function* dispatch(Context a) const {
+    Function* dispatch(Context a, bool ignorePending = true) const {
         if (!a.smaller(userDefinedContext_)) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a
@@ -56,7 +56,7 @@ struct DispatchTable
 #endif
             auto e = get(i);
             if (a.smaller(e->context()) && !e->disabled() &&
-                !e->pendingCompilation())
+                (ignorePending || !e->pendingCompilation()))
                 return e;
         }
         return baseline();
