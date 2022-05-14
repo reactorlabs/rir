@@ -61,7 +61,7 @@ static bool oldDeoptChaos = false;
 
 static size_t compilerSuccesses = 0;
 static size_t bitcodeTotalLoadTime = 0;
-static int serializerSuccess = 0, serializerFailed = 0;
+static int serializerSuccess = 0, serializerFailed = 0, serializerTTCSkip = 0;
 static int blacklisted = 0, failed = 0;
 
 
@@ -326,8 +326,10 @@ hastAndIndex getHastAndIndex(unsigned src, bool constantPool) {
         SEXP indexS = VECTOR_ELT(r, 1);
         int index = std::stoi(CHAR(PRINTNAME(indexS)));
         hastAndIndex res = { hastS, index };
+        // std::cout << "fet_hast_entry[" << CHAR(PRINTNAME(srcSym)) << "]:" << "(" << CHAR(PRINTNAME(hastS)) << "," << index << ")" << std::endl;
         return res;
     } else {
+        // std::cout << "fet_hast_entry[" << CHAR(PRINTNAME(srcSym)) << "]: FAIL"<< std::endl;
         hastAndIndex res = { R_NilValue, 0 };
         return res;
     }
@@ -377,6 +379,13 @@ void hash_ast(SEXP ast, size_t & hast) {
 
 
 SEXP deserializeFromFile(std::string metaDataPath) {
+    // Disable contextual compilation during deserialization as R_Unserialize
+    // will lead to a lot of unnecessary compilation otherwise
+    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+
+    if (skipPirCompilation == false) {
+        setenv("PIR_DISABLE_COMPILATION", "1", 1);
+    }
     std::string prefix = "";
 
     auto lastSlash = metaDataPath.find_last_of("/");
@@ -465,6 +474,10 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     static SEXP prefSym = Rf_install("prefix");
     if (!hastDependencyMap.get(prefSym)) {
         hastDependencyMap.set(prefSym, Rf_mkString(prefix.c_str()));
+    }
+
+    if (skipPirCompilation == false) {
+        unsetenv("PIR_DISABLE_COMPILATION");
     }
 
     UNPROTECT(1);
@@ -599,6 +612,8 @@ REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path) {
             const char * currPath = CHAR(curr);
 
             std::unordered_map<std::string, unsigned long> maskMap;
+            std::unordered_map<std::string, std::vector<unsigned long>> conToRemoveMap;
+
             std::stringstream maskPath;
             maskPath << currPath << "/maskData";
             std::ifstream maskData(maskPath.str().c_str());
@@ -610,6 +625,18 @@ REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path) {
                 auto key = hast + "_" + offset;
                 auto mask = std::stoull(line.substr(secondDel + 1));
                 maskMap[key] = mask;
+
+                getline(maskData, line);
+                std::stringstream ss(line);
+                std::string word;
+                std::vector<unsigned long> ctrVec;
+                std::cout << "Contexts to remove: " << line << std::endl;
+                while (ss >> word) {
+                    auto con = std::stoull(word);
+                    ctrVec.push_back(con);
+                    std::cout << "  " << con << std::endl;
+                }
+                conToRemoveMap[key] = ctrVec;
             }
 
             if (maskMap.empty()) {
@@ -646,9 +673,16 @@ REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path) {
                         offsetMap.iterate([&](SEXP offsetSym, SEXP contextMapContainer){
                             std::stringstream ss;
                             ss << CHAR(PRINTNAME(hastSym)) << "_" << CHAR(PRINTNAME(offsetSym));
+                            REnvHandler contextMap(contextMapContainer);
+                            if (conToRemoveMap.find(ss.str()) != conToRemoveMap.end()) {
+                                for (auto & ele : conToRemoveMap[ss.str()]) {
+                                    contextMap.remove(std::to_string(ele));
+                                    std::cout << "removing context: " << ele << std::endl;
+                                }
+                            }
+
                             if (maskMap.find(ss.str()) != maskMap.end()) {
                                 std::cout << "adding mask" << std::endl;
-                                REnvHandler contextMap(contextMapContainer);
 
                                 SEXP store;
                                 PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned long)));
@@ -707,7 +741,7 @@ REXPORT SEXP loadBitcodes() {
         while ((ent = readdir (dir)) != NULL) {
             std::string fName = ent->d_name;
             if (fName.find(".meta") != std::string::npos) {
-                deserializeFromFile(ss.str() + fName);
+                deserializeFromFile(ss.str() + "/" + fName);
             }
         }
 
@@ -790,6 +824,7 @@ REXPORT SEXP compileStats() {
     std::cout << "Linking time             : " << Compiler::linkTime << "ms" << std::endl;
     std::cout << "Successful compilations: : " << compilerSuccesses << std::endl;
     std::cout << "Serializer Success       : " << serializerSuccess << std::endl;
+    std::cout << "Serializer TTC skip      : " << serializerTTCSkip << std::endl;
     std::cout << "Serializer Failed        : " << serializerFailed << std::endl;
     std::cout << "Blacklisted              : " << blacklisted << std::endl;
     std::cout << "Failed                   : " << failed << std::endl;
@@ -1075,6 +1110,7 @@ static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std:
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
+    // static int minTTC = getenv("TTC") ? std::stoi(getenv("TTC")) : 10;
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -1126,9 +1162,23 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 backend.cData = cDataContainer;
                 backend.serializerError = &serializerError;
 
+                // // Time to compile
+                // auto start = high_resolution_clock::now();
+
                 // Compile
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
+
+                // auto stop = high_resolution_clock::now();
+                // auto duration = duration_cast<milliseconds>(stop - start);
+
+                // bool TTCTooLow = false;
+
+
+
+                // if (duration.count() < minTTC) {
+                //     TTCTooLow = true;
+                // }
 
                 // Mark hast as stale in the runtime, loading the new bitcode will lead to duplicate LLVM symbols
                 if (hast != R_NilValue) {
@@ -1139,6 +1189,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 if (body == BODY(what)) {
                     done = fun;
                 }
+
+                // if (TTCTooLow) {
+                //     serializerTTCSkip++;
+                //     DebugMessages::printSerializerMessage("/> Serializer Skipper, TTC is too low", 0);
+                // } else
 
                 if (!serializerError) {
                     serializerSuccess++;
@@ -1191,7 +1246,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                                std::cerr << "Compilation failed\n";
                        },
                        {});
-
+    logger.title("Compiled " + name);
     delete m;
     UNPROTECT(1);
     return what;

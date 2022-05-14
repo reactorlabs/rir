@@ -591,9 +591,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                 return convertToExternalSymbol(ss.str());
             }
 
-        } else if (TYPEOF(BODY(co)) == BCODESXP) {
-            DebugMessages::printSerializerErrors("(W) Allowing BCODESXP to be added to serialized pool", 2);
-        } else {
+        }
+        // else if (TYPEOF(BODY(co)) == BCODESXP) {
+        //     DebugMessages::printSerializerErrors("(W) Allowing BCODESXP to be added to serialized pool", 2);
+        // }
+        else {
             if (serializerError != nullptr) {
                 *serializerError = true;
                 DebugMessages::printSerializerErrors("(*) CLOSXP's BODY is not EXTERNALSXP: " + std::to_string(TYPEOF(BODY(co))), 2);

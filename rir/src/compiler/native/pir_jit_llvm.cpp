@@ -390,9 +390,10 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
 
     // Apply pool patches
     for (auto & global : llModuleHolder.get()->getGlobalList()) {
-        auto pre = global.getName().str().substr(0,6) == "copool";
-        auto srp = global.getName().str().substr(0,6) == "srpool";
-        auto namc = global.getName().str().substr(0,6) == "named_";
+        auto globalName = global.getName().str();
+        auto pre = globalName.substr(0,6) == "copool";
+        auto srp = globalName.substr(0,6) == "srpool";
+        auto namc = globalName.substr(0,6) == "named_";
 
         if (namc) {
             // auto con = global.getInitializer();
@@ -405,7 +406,6 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
             // llvm::outs() << "replacement: " << *replacementValue << "\n";
 
             global.setInitializer(replacementValue);
-            global.setExternallyInitialized(false);
         }
 
         if (pre) {
@@ -459,7 +459,6 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
                     std::cout << global.getName().str() << " -> Unknown Type " << std::endl;
                 }
             }
-            global.setExternallyInitialized(false);
         }
 
         // All src pool references have a srpool prefix
@@ -471,7 +470,6 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
                 llvm::Constant* replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, sPoolPatch[val]));
                 global.setInitializer(replacementValue);
             }
-            global.setExternallyInitialized(false);
         }
     }
 
@@ -564,12 +562,14 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
         std::unique_ptr<llvm::Module> module = llvm::CloneModule(*M.get());
 
         for (auto & global : (*M.get()).getGlobalList()) {
-            auto pre = global.getName().str().substr(0,6) == "copool";
-            auto srp = global.getName().str().substr(0,6) == "srpool";
-            auto namc = global.getName().str().substr(0,6) == "named_";
+            auto globalName = global.getName().str();
+            auto pre = globalName.substr(0,6) == "copool";
+            auto srp = globalName.substr(0,6) == "srpool";
+            auto namc = globalName.substr(0,6) == "named_";
 
             if (namc || pre || srp) {
                 global.setExternallyInitialized(false);
+                global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
             }
         }
 
@@ -618,7 +618,13 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
         for (auto & global : module->getGlobalList()) {
             auto pre = global.getName().str().substr(0,6) == "copool";
             auto srp = global.getName().str().substr(0,6) == "srpool";
-            // All src pool references have a srpool prefix
+            auto namc = global.getName().str().substr(0,6) == "named_";
+
+            if (namc || pre || srp) {
+                global.setExternallyInitialized(false);
+                global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            }
+
             if (srp) {
                 auto con = global.getInitializer();
                 if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {

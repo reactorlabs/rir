@@ -20,6 +20,8 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include <iostream>
 
+#define DEBUG_FINAL_LLVM 0
+
 namespace rir {
 namespace pir {
 
@@ -46,7 +48,11 @@ operator()(llvm::orc::ThreadSafeModule TSM,
         verify();
 
 #endif
-
+        #if DEBUG_FINAL_LLVM == 1
+        llvm::outs() << "START ModulePrint \n";
+        llvm::outs() << M << "\n";
+        llvm::outs() << "END ModulePrint \n";
+        #endif
     });
     return std::move(TSM);
 }

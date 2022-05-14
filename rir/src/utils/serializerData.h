@@ -548,13 +548,14 @@ namespace rir {
                     if (prettyJson) jsonOutFile << "\n";
 
                     REnvHandler contextMap(cMap);
-
                     int j = 0;
+                    int numCon = contextMap.size();
+                    if (contextMap.get(maskSym)) --numCon;
                     contextMap.iterate([&](SEXP conSym, SEXP cData) {
+                        j++;
                         if (conSym == maskSym) {
                             return;
                         }
-                        j++;
 
                         jsonOutFile << "\"" << CHAR(PRINTNAME(conSym)) << "\" : {";
                         if (prettyJson) jsonOutFile << "\n";
@@ -564,14 +565,14 @@ namespace rir {
 
 
                         jsonOutFile << "}";
-                        if (j != contextMap.size()) {
+                        if (j < numCon) {
                             jsonOutFile << ",";
                         }
                         if (prettyJson) jsonOutFile << "\n";
                     });
 
                     jsonOutFile << "}";
-                    if (i != offsetMap.size()) {
+                    if (i < offsetMap.size()) {
                         jsonOutFile << ",";
                     }
                     if (prettyJson) jsonOutFile << "\n";

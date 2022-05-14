@@ -56,35 +56,43 @@ SEXP BitcodeLinkUtil::getHast(SEXP body, SEXP env) {
     return calcHast;
 }
 
-Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) {
-    REnvHandler vtabMap(HAST_VTAB_MAP);
 
-    SEXP res = vtabMap.get(hastSym);
+struct TraversalResult {
+    Code * code;
+    DispatchTable * vtable;
+    unsigned srcIdx;
+};
 
-    if (!res) {
-        Rf_error("getCodeObjectAtOffset failed!");
-    }
-
-    if (!DispatchTable::check(res)) {
-        Rf_error("getCodeObjectAtOffset vtable corrupted");
-    }
-
-    int index = 0;
-
-    Code * currCodePtr = nullptr;
-    DispatchTable * currVtab = DispatchTable::unpack(res);
-
+static inline TraversalResult getResultAtOffset(DispatchTable * vtab, const unsigned & requiredOffset) {
     bool done = false;
+    unsigned indexOffset = 0;
 
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
+    DispatchTable * currVtab = vtab;
+    Code * currCode = nullptr;
+    unsigned poolIdx = currVtab->baseline()->body()->src;
+
+    std::function<void(Code *, Function *)> iterateOverCodeObjs = [&] (Code * c, Function * funn) {
         if (done) return;
-        if (index == requiredOffset) {
-            currCodePtr = c;
+        if (indexOffset == requiredOffset) {
+            // required thing was a code obj or a dispatch table obj
+            poolIdx = c->src;
+            currCode = c;
             done = true;
             return;
         }
+        indexOffset++;
 
-        index++;
+        // Default args
+        if (funn) {
+            auto nargs = funn->nargs();
+            for (unsigned i = 0; i < nargs; i++) {
+                auto code = funn->defaultArg(i);
+                if (code != nullptr) {
+                    iterateOverCodeObjs(code, nullptr);
+                    if (done) return;
+                }
+            }
+        }
 
         Opcode* pc = c->code();
         std::vector<BC::FunIdx> promises;
@@ -97,24 +105,44 @@ Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) 
             // src code language objects
             unsigned s = c->getSrcIdxAt(pc, true);
             if (s != 0) {
-                if (index == requiredOffset) {
+                if (indexOffset == requiredOffset) {
+                    // required thing was src pool index
+                    poolIdx = s;
                     done = true;
                     return;
                 }
-                index++;
+                indexOffset++;
             }
 
             // call sites
             switch (bc.bc) {
                 case Opcode::call_:
                 case Opcode::named_call_:
-                    index++;
+                    if (indexOffset == requiredOffset) {
+                        // required thing was constant pool index
+                        poolIdx = bc.immediate.callFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
+                    indexOffset++;
                     break;
                 case Opcode::call_dots_:
-                    index++;
+                    if (indexOffset == requiredOffset) {
+                        // required thing was constant pool index
+                        poolIdx = bc.immediate.callFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
+                    indexOffset++;
                     break;
                 case Opcode::call_builtin_:
-                    index++;
+                    if (indexOffset == requiredOffset) {
+                        // required thing was constant pool index
+                        poolIdx = bc.immediate.callBuiltinFixedArgs.ast;
+                        done = true;
+                        return;
+                    }
+                    indexOffset++;
                     break;
                 default: {}
             }
@@ -124,7 +152,10 @@ Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) 
                 SEXP iConst = bc.immediateConst();
                 if (DispatchTable::check(iConst)) {
                     currVtab = DispatchTable::unpack(iConst);
-                    iterateOverCodeObjs(currVtab->baseline()->body());
+                    auto c = currVtab->baseline()->body();
+                    auto f = c->function();
+                    iterateOverCodeObjs(c, f);
+                    if (done) return;
                 }
             }
 
@@ -133,340 +164,77 @@ Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) 
 
         // Iterate over promises code objects recursively
         for (auto i : promises) {
-            if (done) return;
             auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
+            iterateOverCodeObjs(prom, nullptr);
+            if (done) return;
         }
     };
 
-    iterateOverCodeObjs(currVtab->baseline()->body());
+    Code * genesisCodeObj = currVtab->baseline()->body();
+    Function * genesisFunObj = genesisCodeObj->function();
 
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                iterateOverCodeObjs(code);
-            }
-        }
+    iterateOverCodeObjs(genesisCodeObj, genesisFunObj);
+
+    TraversalResult r;
+    r.code = currCode;
+    r.vtable = currVtab;
+    r.srcIdx = poolIdx;
+    return r;
+}
+
+Code * BitcodeLinkUtil::getCodeObjectAtOffset(SEXP hastSym, int requiredOffset) {
+    REnvHandler vtabMap(HAST_VTAB_MAP);
+    SEXP vtabContainer = vtabMap.get(hastSym);
+    if (!vtabContainer) {
+        Rf_error("getCodeObjectAtOffset failed!");
     }
-
-    if (currCodePtr == nullptr) {
-        std::cout << "lookup of hast: " << CHAR(PRINTNAME(hastSym)) << " at offset: " << requiredOffset << std::endl;
-        Rf_error("getCodeObjectAtOffset returned null");
+    if (!DispatchTable::check(vtabContainer)) {
+        Rf_error("getCodeObjectAtOffset vtable corrupted");
     }
+    auto vtab = DispatchTable::unpack(vtabContainer);
+    auto r = getResultAtOffset(vtab, requiredOffset);
 
-    return currCodePtr;
+    return r.code;
 }
 
 unsigned BitcodeLinkUtil::getSrcPoolIndexAtOffset(SEXP hastSym, int requiredOffset) {
     REnvHandler vtabMap(HAST_VTAB_MAP);
-
-    SEXP res = vtabMap.get(hastSym);
-
-    if (!res) {
+    SEXP vtabContainer = vtabMap.get(hastSym);
+    if (!vtabContainer) {
         Rf_error("getSrcPoolIndexAtOffset failed!");
     }
-
-    if (!DispatchTable::check(res)) {
+    if (!DispatchTable::check(vtabContainer)) {
         Rf_error("getSrcPoolIndexAtOffset vtable corrupted");
     }
+    auto vtab = DispatchTable::unpack(vtabContainer);
+    auto r = getResultAtOffset(vtab, requiredOffset);
 
-    int index = 0;
-
-    DispatchTable * currVtab = DispatchTable::unpack(res);
-    unsigned currentSrcPoolIndex = 0;
-    bool done = false;
-
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
-        if (done) return;
-        if (index == requiredOffset) {
-            currentSrcPoolIndex = c->src;
-            done = true;
-            return;
-        }
-
-        index++;
-
-        Opcode* pc = c->code();
-        std::vector<BC::FunIdx> promises;
-        Protect p;
-        while (pc < c->endCode()) {
-            if (done) return;
-            BC bc = BC::decode(pc, c);
-            bc.addMyPromArgsTo(promises);
-
-            // src code language objects
-            unsigned s = c->getSrcIdxAt(pc, true);
-            if (s != 0) {
-                if (index == requiredOffset) {
-                    currentSrcPoolIndex = s;
-                    done = true;
-                    return;
-                }
-                index++;
-            }
-
-            // call sites
-            switch (bc.bc) {
-                case Opcode::call_:
-                case Opcode::named_call_:
-                    if (index == requiredOffset) {
-                        currentSrcPoolIndex = bc.immediate.callFixedArgs.ast;
-                        done = true;
-                        return;
-                    }
-                    index++;
-                    break;
-                case Opcode::call_dots_:
-                    if (index == requiredOffset) {
-                        currentSrcPoolIndex = bc.immediate.callFixedArgs.ast;
-                        done = true;
-                        return;
-                    }
-                    index++;
-                    break;
-                case Opcode::call_builtin_:
-                    if (index == requiredOffset) {
-                        currentSrcPoolIndex = bc.immediate.callBuiltinFixedArgs.ast;
-                        done = true;
-                        return;
-                    }
-                    index++;
-                    break;
-                default: {}
-            }
-
-            // inner functions
-            if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
-                SEXP iConst = bc.immediateConst();
-                if (DispatchTable::check(iConst)) {
-                    currVtab = DispatchTable::unpack(iConst);
-                    iterateOverCodeObjs(currVtab->baseline()->body());
-                }
-            }
-
-            pc = BC::next(pc);
-        }
-
-        // Iterate over promises code objects recursively
-        for (auto i : promises) {
-            if (done) return;
-            auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
-        }
-    };
-
-    iterateOverCodeObjs(currVtab->baseline()->body());
-
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                iterateOverCodeObjs(code);
-            }
-        }
-    }
-
-    if (currentSrcPoolIndex == 0) {
-        std::cout << "lookup of hast: " << CHAR(PRINTNAME(hastSym)) << " at offset: " << requiredOffset << std::endl;
-        Rf_error("getSrcPoolIndexAtOffset returned 0");
-    }
-
-    return currentSrcPoolIndex;
+    return r.srcIdx;
 }
 
 SEXP BitcodeLinkUtil::getVtableContainerAtOffset(SEXP hastSym, int requiredOffset) {
     REnvHandler vtabMap(HAST_VTAB_MAP);
-
-    SEXP res = vtabMap.get(hastSym);
-
-    if (!res) {
-        Rf_error("getCodeSrcAtOffset failed!");
+    SEXP vtabContainer = vtabMap.get(hastSym);
+    if (!vtabContainer) {
+        Rf_error("getVtableContainerAtOffset failed!");
     }
-
-    if (!DispatchTable::check(res)) {
-        Rf_error("getCodeSrcAtOffset vtable corrupted");
+    if (!DispatchTable::check(vtabContainer)) {
+        Rf_error("getVtableContainerAtOffset vtable corrupted");
     }
-
-    int index = 0;
-
-    DispatchTable * currVtab = DispatchTable::unpack(res);
-    bool done = false;
-
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
-        if (done) return;
-        if (index == requiredOffset) {
-            done = true;
-            return;
-        }
-
-        index++;
-
-        Opcode* pc = c->code();
-        std::vector<BC::FunIdx> promises;
-        Protect p;
-        while (pc < c->endCode()) {
-            if (done) return;
-            BC bc = BC::decode(pc, c);
-            bc.addMyPromArgsTo(promises);
-
-            // src code language objects
-            unsigned s = c->getSrcIdxAt(pc, true);
-            if (s != 0) {
-                if (index == requiredOffset) {
-                    done = true;
-                    return;
-                }
-                index++;
-            }
-
-            // call sites
-            switch (bc.bc) {
-                case Opcode::call_:
-                case Opcode::named_call_:
-                    index++;
-                    break;
-                case Opcode::call_dots_:
-                    index++;
-                    break;
-                case Opcode::call_builtin_:
-                    index++;
-                    break;
-                default: {}
-            }
-
-            // inner functions
-            if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
-                SEXP iConst = bc.immediateConst();
-                if (DispatchTable::check(iConst)) {
-                    currVtab = DispatchTable::unpack(iConst);
-                    iterateOverCodeObjs(currVtab->baseline()->body());
-                }
-            }
-
-            pc = BC::next(pc);
-        }
-
-        // Iterate over promises code objects recursively
-        for (auto i : promises) {
-            if (done) return;
-            auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
-        }
-    };
-
-    iterateOverCodeObjs(currVtab->baseline()->body());
-
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                iterateOverCodeObjs(code);
-            }
-        }
-    }
-
-    return currVtab->container();
+    auto vtab = DispatchTable::unpack(vtabContainer);
+    auto r = getResultAtOffset(vtab, requiredOffset);
+    return r.vtable->container();
 }
 
 DispatchTable * BitcodeLinkUtil::getVtableAtOffset(DispatchTable * vtab, int requiredOffset) {
-    DispatchTable * currVtab = vtab;
-    bool done = false;
-    int index = 0;
-
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
-        if (done) return;
-        if (index == requiredOffset) {
-            done = true;
-            return;
-        }
-
-        index++;
-
-        Opcode* pc = c->code();
-        std::vector<BC::FunIdx> promises;
-        Protect p;
-        while (pc < c->endCode()) {
-            if (done) return;
-            BC bc = BC::decode(pc, c);
-            bc.addMyPromArgsTo(promises);
-
-            // src code language objects
-            unsigned s = c->getSrcIdxAt(pc, true);
-            if (s != 0) {
-                if (index == requiredOffset) {
-                    done = true;
-                    return;
-                }
-                index++;
-            }
-
-            // call sites
-            switch (bc.bc) {
-                case Opcode::call_:
-                case Opcode::named_call_:
-                    index++;
-                    break;
-                case Opcode::call_dots_:
-                    index++;
-                    break;
-                case Opcode::call_builtin_:
-                    index++;
-                    break;
-                default: {}
-            }
-
-            // inner functions
-            if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
-                SEXP iConst = bc.immediateConst();
-                if (DispatchTable::check(iConst)) {
-                    currVtab = DispatchTable::unpack(iConst);
-                    iterateOverCodeObjs(currVtab->baseline()->body());
-                }
-            }
-
-            pc = BC::next(pc);
-        }
-
-        // Iterate over promises code objects recursively
-        for (auto i : promises) {
-            if (done) return;
-            auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
-        }
-    };
-
-    iterateOverCodeObjs(currVtab->baseline()->body());
-
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                iterateOverCodeObjs(code);
-            }
-        }
-    }
-
-    return currVtab;
+    auto res = getResultAtOffset(vtab, requiredOffset);
+    return res.vtable;
 }
 
 void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast) {
     REnvHandler srcHastMap(SRC_HAST_MAP);
-
-    #if PRINT_HAST_SRC_ENTRIES == 1
-    std::cout << "populating sources for " << CHAR(PRINTNAME(parentHast)) << std::endl;
-    #endif
-
-    int index = 0;
     DispatchTable * currVtab = vtable;
+    unsigned indexOffset = 0;
 
     auto addSrcToMap = [&] (const unsigned & src, bool sourcePool = true) {
         // create a mapping for each src [representing code object to its hast and offset index]
@@ -476,22 +244,39 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
         } else {
             srcSym = Rf_install((std::to_string(src) + "_cp").c_str());
         }
-        SEXP indexSym = Rf_install(std::to_string(index).c_str());
+        SEXP indexSym = Rf_install(std::to_string(indexOffset).c_str());
 
-        SEXP resVec;
-        PROTECT(resVec = Rf_allocVector(VECSXP, 2));
-        SET_VECTOR_ELT(resVec, 0, parentHast);
-        SET_VECTOR_ELT(resVec, 1, indexSym);
-        srcHastMap.set(srcSym, resVec);
-        UNPROTECT(1);
+        if (!srcHastMap.get(srcSym)) {
+            SEXP resVec;
+            PROTECT(resVec = Rf_allocVector(VECSXP, 2));
+            SET_VECTOR_ELT(resVec, 0, parentHast);
+            SET_VECTOR_ELT(resVec, 1, indexSym);
+            srcHastMap.set(srcSym, resVec);
+            UNPROTECT(1);
+        }
+        // else {
+        //     std::cout << "More than one entry for the same src" << std::endl;
+        // }
+
     };
 
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
-        addSrcToMap(c->src);
+    std::function<void(Code *, Function *)> iterateOverCodeObjs = [&] (Code * c, Function * funn) {
         #if PRINT_HAST_SRC_ENTRIES == 1
-        std::cout << "  src: " << c->src << ", index: " << index << std::endl;
+        std::cout << "src_hast_entry[C] at indexOffset: " << indexOffset << "," << c->src << std::endl;
         #endif
-        index++;
+
+        addSrcToMap(c->src);
+        indexOffset++;
+        if (funn) {
+            auto nargs = funn->nargs();
+            for (unsigned i = 0; i < nargs; i++) {
+                auto code = funn->defaultArg(i);
+                if (code != nullptr) {
+                    iterateOverCodeObjs(code, nullptr);
+                }
+            }
+        }
+
         Opcode* pc = c->code();
         std::vector<BC::FunIdx> promises;
         Protect p;
@@ -504,34 +289,34 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
             if (s != 0) {
                 addSrcToMap(s);
                 #if PRINT_HAST_SRC_ENTRIES == 1
-                std::cout << "  [obj] src: " << s << ", index: " << index << std::endl;
+                std::cout << "src_hast_entry[source_pool] at indexOffset: " << indexOffset << "," << s << std::endl;
                 #endif
-                index++;
+                indexOffset++;
             }
 
             // call sites
             switch (bc.bc) {
                 case Opcode::call_:
                 case Opcode::named_call_:
-                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
                     #if PRINT_HAST_SRC_ENTRIES == 1
-                    std::cout << "  [callsite] src: " << bc.immediate.callFixedArgs.ast << "_cp, index: " << index << std::endl;
+                    std::cout << "src_hast_entry[constant_pool] at indexOffset: " << indexOffset << "," << bc.immediate.callFixedArgs.ast << std::endl;
                     #endif
-                    index++;
+                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
+                    indexOffset++;
                     break;
                 case Opcode::call_dots_:
-                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
                     #if PRINT_HAST_SRC_ENTRIES == 1
-                    std::cout << "  [callsite_dots] src: " << bc.immediate.callFixedArgs.ast << "_cp, index: " << index << std::endl;
+                    std::cout << "src_hast_entry[constant_pool] at indexOffset: " << indexOffset << "," << bc.immediate.callFixedArgs.ast << std::endl;
                     #endif
-                    index++;
+                    addSrcToMap(bc.immediate.callFixedArgs.ast, false);
+                    indexOffset++;
                     break;
                 case Opcode::call_builtin_:
-                    addSrcToMap(bc.immediate.callBuiltinFixedArgs.ast, false);
                     #if PRINT_HAST_SRC_ENTRIES == 1
-                    std::cout << "  [callsite_builtin] src: " << bc.immediate.callBuiltinFixedArgs.ast << "_cp, index: " << index << std::endl;
+                    std::cout << "src_hast_entry[constant_pool] at indexOffset: " << indexOffset << "," << bc.immediate.callBuiltinFixedArgs.ast << std::endl;
                     #endif
-                    index++;
+                    addSrcToMap(bc.immediate.callBuiltinFixedArgs.ast, false);
+                    indexOffset++;
                     break;
                 default: {}
             }
@@ -541,10 +326,9 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
                 SEXP iConst = bc.immediateConst();
                 if (DispatchTable::check(iConst)) {
                     currVtab = DispatchTable::unpack(iConst);
-                    #if PRINT_HAST_SRC_ENTRIES == 1
-                    std::cout << "Dispatch table [" << index << "] {" << currVtab->container() << "," << (uintptr_t)currVtab->container() << "}" << std::endl;
-                    #endif
-                    iterateOverCodeObjs(currVtab->baseline()->body());
+                    auto c = currVtab->baseline()->body();
+                    auto f = c->function();
+                    iterateOverCodeObjs(c, f);
                 }
             }
 
@@ -554,133 +338,17 @@ void BitcodeLinkUtil::populateHastSrcData(DispatchTable* vtable, SEXP parentHast
         // Iterate over promises code objects recursively
         for (auto i : promises) {
             auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
+            iterateOverCodeObjs(prom, nullptr);
         }
     };
-    #if PRINT_HAST_SRC_ENTRIES == 1
-    std::cout << "Dispatch table [" << index << "] {" << currVtab->container() << "," << (uintptr_t)currVtab->container() << "}" << std::endl;
-    #endif
-    iterateOverCodeObjs(currVtab->baseline()->body());
 
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        #if PRINT_HAST_SRC_ENTRIES == 1
-        std::cout << "Arguments [" << nargs << "]" << std::endl;
-        #endif
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                #if PRINT_HAST_SRC_ENTRIES == 1
-                std::cout << "  Arg[" << i << "]" << std::endl;
-                #endif
-                iterateOverCodeObjs(code);
-            }
-        }
-    } else {
-        #if PRINT_HAST_SRC_ENTRIES == 1
-        std::cout << "No Arguments" << std::endl;
-        #endif
-    }
+    Code * genesisCodeObj = currVtab->baseline()->body();
+    Function * genesisFunObj = currVtab->baseline()->body()->function();
+    iterateOverCodeObjs(genesisCodeObj, genesisFunObj);
 }
 
 void BitcodeLinkUtil::printSources(DispatchTable* vtable, SEXP parentHast) {
-    REnvHandler srcHastMap(SRC_HAST_MAP);
-
-    std::cout << "printing sources for " << CHAR(PRINTNAME(parentHast)) << std::endl;
-
-    int index = 0;
-    DispatchTable * currVtab = vtable;
-
-    auto addSrcToMap = [&] (const unsigned & src) {
-        // // create a mapping for each src [representing code object to its hast and offset index]
-        // SEXP srcSym = Rf_install(std::to_string(src).c_str());
-        // SEXP indexSym = Rf_install(std::to_string(index).c_str());
-
-        // SEXP resVec;
-        // PROTECT(resVec = Rf_allocVector(VECSXP, 2));
-        // SET_VECTOR_ELT(resVec, 0, parentHast);
-        // SET_VECTOR_ELT(resVec, 1, indexSym);
-        // srcHastMap.set(srcSym, resVec);
-        // UNPROTECT(1);
-    };
-
-    std::function<void(Code *)> iterateOverCodeObjs = [&] (Code * c) {
-        addSrcToMap(c->src);
-
-        std::cout << "  src: " << c->src << ", index: " << index << std::endl;
-
-        index++;
-        Opcode* pc = c->code();
-        std::vector<BC::FunIdx> promises;
-        Protect p;
-        while (pc < c->endCode()) {
-            BC bc = BC::decode(pc, c);
-            bc.addMyPromArgsTo(promises);
-
-            // src code language objects
-            unsigned s = c->getSrcIdxAt(pc, true);
-            if (s != 0) {
-                addSrcToMap(s);
-                std::cout << "  [obj] src: " << s << ", index: " << index << std::endl;
-                index++;
-            }
-
-            // call sites
-            switch (bc.bc) {
-                case Opcode::call_:
-                case Opcode::named_call_:
-                    std::cout << "  [callsite] src: " << bc.immediate.callFixedArgs.ast << ", index: " << index << std::endl;
-                    index++;
-                    break;
-                case Opcode::call_dots_:
-                    std::cout << "  [callsite_dots] src: " << bc.immediate.callFixedArgs.ast << ", index: " << index << std::endl;
-                    index++;
-                    break;
-                case Opcode::call_builtin_:
-                    std::cout << "  [callsite_builtin] src: " << bc.immediate.callBuiltinFixedArgs.ast << ", index: " << index << std::endl;
-                    index++;
-                    break;
-                default: {}
-            }
-
-            // inner functions
-            if (bc.bc == Opcode::push_ && TYPEOF(bc.immediateConst()) == EXTERNALSXP) {
-                SEXP iConst = bc.immediateConst();
-                if (DispatchTable::check(iConst)) {
-                    currVtab = DispatchTable::unpack(iConst);
-                    std::cout << "Dispatch table [" << index << "] {" << currVtab->container() << "," << (uintptr_t)currVtab->container() << "}" << std::endl;
-                    iterateOverCodeObjs(currVtab->baseline()->body());
-                }
-            }
-
-            pc = BC::next(pc);
-        }
-
-        // Iterate over promises code objects recursively
-        for (auto i : promises) {
-            auto prom = c->getPromise(i);
-            iterateOverCodeObjs(prom);
-        }
-    };
-
-    std::cout << "Dispatch table [" << index << "] {" << currVtab->container() << "," << (uintptr_t)currVtab->container() << "}" << std::endl;
-    iterateOverCodeObjs(currVtab->baseline()->body());
-
-    rir::Function* func = currVtab->baseline()->body()->function();
-    if (func) {
-        auto nargs = func->nargs();
-        std::cout << "Arguments [" << nargs << "]" << std::endl;
-        for (unsigned i = 0; i < nargs; i++) {
-            auto code = func->defaultArg(i);
-            if (code != nullptr) {
-                std::cout << "  Arg[" << i << "]" << std::endl;
-                iterateOverCodeObjs(code);
-            }
-        }
-    } else {
-        std::cout << "No Arguments" << std::endl;
-    }
+    // TODO
 }
 
 void BitcodeLinkUtil::insertVTable(DispatchTable* vtable, SEXP hastSym) {

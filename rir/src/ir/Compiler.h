@@ -24,7 +24,7 @@
 #include "utils/BitcodeLinkUtility.h"
 
 #define DEBUG_TABLE_ENTRIES 0
-#define ONLY_APPLY_MASK 1
+#define ONLY_APPLY_MASK 0
 #include <chrono>
 using namespace std::chrono;
 
@@ -140,6 +140,7 @@ class Compiler {
         if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
             std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;
+            BitcodeLinkUtil::printSources(vtable, hast);
             #endif
             vtable->hast = hast;
             BitcodeLinkUtil::insertVTable(vtable, hast);

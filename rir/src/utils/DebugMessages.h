@@ -6,6 +6,9 @@
 #include <functional>
 #include <cassert>
 #include <chrono>
+
+#include "runtime/Code.h"
+
 using namespace std::chrono;
 
 namespace rir {
@@ -109,7 +112,7 @@ namespace rir {
             auto stop = high_resolution_clock::now();
             auto duration = duration_cast<microseconds>(stop - lastCheckpointTime);
 
-            std::cout << "[" << checkpoint++ << "](" << (cA ? "B" : "") << ")" << code << " { " << duration.count() << "us }" << std::endl;
+            std::cout << "[" << checkpoint++ << "]: " << "interpreted_code" << " { " << duration.count() << "us }" << std::endl;
 
             lastCheckpointTime = lastInstructionTime = high_resolution_clock::now();
         }

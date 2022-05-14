@@ -112,6 +112,13 @@
     "cfenv": "cpp",
     "csignal": "cpp",
     "__functional_base_03": "cpp",
-    "__memory": "cpp"
-  }
+    "__memory": "cpp",
+    "__bits": "cpp",
+    "typeindex": "cpp",
+    "variant": "cpp",
+    "hash_map": "cpp"
+  },
+  "cSpell.words": [
+    "funn"
+  ]
 }
