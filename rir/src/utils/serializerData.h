@@ -217,6 +217,35 @@ namespace rir {
                 SET_VECTOR_ELT(container, 8, data);
             }
 
+            void removeEleFromReqMap(SEXP ele) {
+                auto rData = getReqMapAsVector();
+                int containsElement = -1;
+                std::string dep(CHAR(PRINTNAME(ele)));
+                for (int i = 0; i < Rf_length(rData); i++) {
+                    SEXP e = VECTOR_ELT(rData, i);
+                    std::string curr(CHAR(PRINTNAME(e)));
+                    if (curr.find(dep) != std::string::npos) {
+                        containsElement = i;
+                    }
+                }
+
+                if (containsElement != -1) {
+                    SEXP newVec;
+                    PROTECT(newVec = Rf_allocVector(VECSXP, Rf_length(rData) - 1));
+
+                    for (int i = 0; i < Rf_length(rData); i++) {
+                        SEXP e = VECTOR_ELT(rData, i);
+                        if (i != containsElement) {
+                            SET_VECTOR_ELT(newVec, i, e);
+                        }
+                    }
+
+                    SET_VECTOR_ELT(container, 8, newVec);
+                    UNPROTECT(1);
+
+                }
+            }
+
             SEXP getReqMapAsVector() {
                 SEXP rMap = VECTOR_ELT(container, 8);
                 return rMap;
@@ -490,6 +519,16 @@ namespace rir {
                     UNPROTECT(1);
                 }
                 SEXP offsetMap = Rf_findVarInFrame(mainMap, offsetSym);
+
+                if (offsetIndex == 0) {
+                    // Get rid of self dependencies, may happen in case of recursive functions
+                    std::stringstream ss;
+                    ss << CHAR(PRINTNAME(getHastData())) << "_" << context;
+                    contextData conDataHandler(cData);
+                    conDataHandler.removeEleFromReqMap(Rf_install(ss.str().c_str()));
+                }
+
+
                 Rf_defineVar(symSxp, cData, offsetMap);
             }
 

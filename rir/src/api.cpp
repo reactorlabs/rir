@@ -431,7 +431,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         offsetContextMap.iterate([&] (SEXP contextKey, SEXP cData) {
             if (contextKey == maskSym) {
                 std::cout << "skipping mask" << std::endl;
-                continue;
+                return;
             }
             // std::cout << "    " << CHAR(PRINTNAME(contextKey)) << std::endl;
             contextData c(cData);

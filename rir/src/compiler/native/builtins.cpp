@@ -515,7 +515,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
                          Immediate* names, unsigned long available) {
     #if DEBUG_BI_INSN == 1
     DebugCheckpoints::printInstruction("dotsCallImpl", [&] (){
-        // std::cout << "    dummy" << std::endl;
+        std::cout << "    ast: " << ast << std::endl;
+        std::cout << "    From pool: " << Pool::get(ast) << std::endl;
     });
     #endif
     auto ctx = globalContext();
@@ -542,6 +543,11 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(ctx);
     auto res = doCall(call, ctx);
     ostack_popn(ctx, call.passedArgs + pushed);
+    #if DEBUG_BI_INSN == 1
+    DebugCheckpoints::printInstruction("dotsCallImpl END", [&] (){
+        // std::cout << "    dummy" << std::endl;
+    });
+    #endif
     return res;
 }
 
