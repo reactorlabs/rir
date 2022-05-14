@@ -1,23 +1,20 @@
 #ifndef RJIT_RIR_BC_INC
 #define RJIT_RIR_BC_INC
 
+#include "R/r.h"
+#include "bc/BC_noarg_list.h"
+#include "common.h"
+#include "compiler/pir/type.h"
+#include "runtime/Context.h"
+#include "runtime/TypeFeedback.h"
+
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <memory>
-
-#include "../compiler/pir/type.h"
-#include "R/r.h"
-#include "common.h"
-
-#include <array>
 #include <vector>
-
-#include "runtime/Context.h"
-#include "runtime/TypeFeedback.h"
-
-#include "BC_noarg_list.h"
 
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;

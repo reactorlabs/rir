@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../R/RList.h"
-#include "../runtime/Function.h"
+#include "R/RList.h"
+#include "runtime/Function.h"
 
 #include <vector>
 

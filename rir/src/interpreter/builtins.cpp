@@ -1,9 +1,10 @@
-#include "builtins.h"
+#include "interpreter/builtins.h"
 #include "R/BuiltinIds.h"
 #include "R/Funtab.h"
 #include "compiler/util/safe_builtins_list.h"
-#include "interp.h"
+#include "interpreter/interp.h"
 #include "runtime/LazyArglist.h"
+
 #include <algorithm>
 #include <stdlib.h>
 
@@ -105,7 +106,7 @@ enum class IsVectorCheck {
 };
 
 static IsVectorCheck whichIsVectorCheck(SEXP str) {
-    if (!isString(str) || LENGTH(str) != 1)
+    if (!Rf_isString(str) || LENGTH(str) != 1)
         return IsVectorCheck::unsupported;
     auto stype = CHAR(STRING_ELT(str, 0));
     if (std::string("any") == stype) {
@@ -149,7 +150,7 @@ SEXP tryFastSpecialCall(CallContext& call) {
             if (TYPEOF(x) == PROMSXP)
                 x = evaluatePromise(x, nullptr, true);
 
-            if (isObject(x)) {
+            if (Rf_isObject(x)) {
                 ENSURE_NAMEDMAX(x);
                 SEXP ss = PROTECT(Rf_allocVector(STRSXP, 1));
                 SET_STRING_ELT(ss, 0, s);
@@ -188,7 +189,7 @@ SEXP tryFastSpecialCall(CallContext& call) {
 
         // Remove the first arg and create a new CallContext for the actual
         // call.
-        auto ast = LCONS(CADDR(call.ast), CDDDR(call.ast));
+        auto ast = Rf_lcons(CADDR(call.ast), CDDDR(call.ast));
         PROTECT(ast);
         Context innerCtxt;
         auto nargs = call.suppliedArgs - 2;
@@ -595,7 +596,7 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
             return nullptr;
         auto x = args[0];
         SEXP s;
-        if (Rf_isInteger(x) || isLogical(x)) {
+        if (Rf_isInteger(x) || Rf_isLogical(x)) {
             /* integer or logical ==> return integer,
                factor was covered by Math.factor. */
             R_xlen_t i, n = XLENGTH(x);
@@ -618,7 +619,7 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
             for (i = 0; i < n; i++)
                 pa[i] = fabs(px[i]);
             return s;
-        } else if (isComplex(x)) {
+        } else if (Rf_isComplex(x)) {
             const Rcomplex* px = COMPLEX_RO(x);
             R_xlen_t i, n = XLENGTH(x);
 
@@ -768,8 +769,8 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
     case blt("is.numeric"): {
         if (nargs != 1)
             return nullptr;
-        return Rf_isNumeric(args[0]) && !isLogical(args[0]) ? R_TrueValue
-                                                            : R_FalseValue;
+        return Rf_isNumeric(args[0]) && !Rf_isLogical(args[0]) ? R_TrueValue
+                                                               : R_FalseValue;
     }
 
     case blt("is.matrix"): {
@@ -853,16 +854,16 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
                 res = Rf_isVector(arg);
                 break;
             case IsVectorCheck::numeric:
-                res = (Rf_isNumeric(arg) && !isLogical(arg));
+                res = (Rf_isNumeric(arg) && !Rf_isLogical(arg));
                 break;
             case IsVectorCheck::integer:
                 res = Rf_isInteger(arg);
                 break;
             case IsVectorCheck::logical:
-                res = isLogical(arg);
+                res = Rf_isLogical(arg);
                 break;
             case IsVectorCheck::character:
-                res = isString(arg);
+                res = Rf_isString(arg);
                 break;
             case IsVectorCheck::unsupported:
                 return nullptr;

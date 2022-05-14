@@ -1,8 +1,7 @@
 #include "UUID.h"
 #include "R/Serialize.h"
+
 #include <sstream>
-#include <stdlib.h>
-#include <time.h>
 
 namespace rir {
 
@@ -29,4 +28,4 @@ std::string UUID::str() {
 
 bool UUID::operator==(const UUID& other) const { return uuid == other.uuid; }
 
-}; // namespace rir
+} // namespace rir

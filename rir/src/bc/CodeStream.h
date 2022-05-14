@@ -1,15 +1,14 @@
 #ifndef RIR_CODE_STREAM_H
 #define RIR_CODE_STREAM_H
 
+#include "bc/BC.h"
+#include "bc/CodeVerifier.h"
+#include "runtime/Code.h"
+#include "utils/FunctionWriter.h"
+
 #include <cstring>
 #include <map>
 #include <vector>
-
-#include "BC.h"
-#include "runtime/Code.h"
-
-#include "CodeVerifier.h"
-#include "utils/FunctionWriter.h"
 
 namespace rir {
 

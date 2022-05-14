@@ -23,7 +23,7 @@ class UUID {
     friend struct std::hash<UUID>;
 };
 
-}; // namespace rir
+} // namespace rir
 
 namespace std {
 template <>

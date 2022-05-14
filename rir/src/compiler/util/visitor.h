@@ -98,7 +98,7 @@ reverse_wrapper<T> reverse(T&& iterable) {
     return {iterable};
 }
 
-}; // namespace VisitorHelpers
+} // namespace VisitorHelpers
 
 enum class Order { Depth, Breadth, Random };
 

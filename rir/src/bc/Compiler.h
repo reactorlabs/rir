@@ -13,13 +13,10 @@
 #include <iostream>
 #include <unordered_map>
 
-typedef struct RCNTXT RCNTXT;
-extern "C" SEXP R_syscall(int n, RCNTXT* cptr);
-extern "C" SEXP R_sysfunction(int n, RCNTXT* cptr);
-
 namespace rir {
 
 class Compiler {
+  private:
     SEXP exp;
     SEXP formals;
     SEXP closureEnv;
@@ -38,61 +35,36 @@ class Compiler {
         preserve(env);
     }
 
+    SEXP finalize();
+
   public:
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
 
-    SEXP finalize();
-
     static SEXP compileExpression(SEXP ast) {
-#if 0
-        size_t count = 1;
-        static std::unordered_map<SEXP, size_t> counts;
-        if (counts.count(ast)) {
-            counts.at(ast) = count = 1 + counts.at(ast);
-        } else {
-            counts[ast] = 1;
-        }
-        if (count % 200 == 0) {
-            std::cout << "<<<<<<< Warning: expression compiled "
-                      << count << "x:\n";
-            Rf_PrintValue(ast);
-            std::cout << "== Call:\n";
-            Rf_PrintValue(R_syscall(0, R_GlobalContext));
-            std::cout << "== Function:\n";
-            Rf_PrintValue(R_sysfunction(0, R_GlobalContext));
-            std::cout << ">>>>>>>\n";
-        }
-#endif
-
-        // Rf_PrintValue(ast);
         Compiler c(ast);
-        auto res = c.finalize();
-
-        return res;
+        return c.finalize();
     }
 
-    // To compile a function which is not yet closed
+    // Compile a function which is not yet closed
     static SEXP compileFunction(SEXP ast, SEXP formals) {
+        Protect p;
+
         Compiler c(ast, formals, nullptr);
-        SEXP res = c.finalize();
-        PROTECT(res);
+        auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        DispatchTable* vtable = DispatchTable::create();
+        auto dt = DispatchTable::create();
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->baseline(Function::unpack(res));
+        dt->baseline(Function::unpack(res));
 
-        // Set the closure fields.
-        UNPROTECT(1);
-        return vtable->container();
+        return dt->container();
     }
 
     static void compileClosure(SEXP inClosure) {
-
         assert(TYPEOF(inClosure) == CLOSXP);
 
         Protect p;
@@ -105,21 +77,21 @@ class Compiler {
         }
 
         Compiler c(body, FORMALS(inClosure), CLOENV(inClosure));
-        SEXP compiledFun = p(c.finalize());
+        auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        DispatchTable* vtable = DispatchTable::create();
-        p(vtable->container());
+        auto dt = DispatchTable::create();
+        p(dt->container());
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->baseline(Function::unpack(compiledFun));
+        dt->baseline(Function::unpack(res));
         // Keep alive. TODO: why is this needed?
         if (origBC)
-            vtable->baseline()->body()->addExtraPoolEntry(origBC);
+            dt->baseline()->body()->addExtraPoolEntry(origBC);
 
         // Set the closure fields.
-        SET_BODY(inClosure, vtable->container());
+        SET_BODY(inClosure, dt->container());
     }
 };
 

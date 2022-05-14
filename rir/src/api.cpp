@@ -3,7 +3,6 @@
  */
 
 #include "api.h"
-#include "R/Funtab.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"

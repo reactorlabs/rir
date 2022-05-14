@@ -37,7 +37,7 @@ static R_INLINE MatrixDimension getMatrixDim(SEXP mat) {
     SEXP attr = ATTRIB(mat);
     /* look for the common case of 'dim' as the only attribute first */
     SEXP dim =
-        TAG(attr) == R_DimSymbol ? CAR(attr) : getAttrib(mat, R_DimSymbol);
+        TAG(attr) == R_DimSymbol ? CAR(attr) : Rf_getAttrib(mat, R_DimSymbol);
     if (TYPEOF(dim) == INTSXP && LENGTH(dim) == 2)
         return {INTEGER(dim)[0], INTEGER(dim)[1]};
     assert(false);
@@ -440,7 +440,7 @@ static SEXP unopEnvImpl(SEXP argument, SEXP env, Immediate srcIdx, Tag op) {
     SEXP arglist = CONS_NR(argument, R_NilValue);
     SEXP call = src_pool_at(srcIdx);
     PROTECT(arglist);
-    if (isObject(argument)) {
+    if (Rf_isObject(argument)) {
         if (auto e = LazyEnvironment::check(env)) {
             if (!e->materialized())
                 env = materialize(env);
@@ -519,7 +519,7 @@ static SEXP binopEnvImpl(SEXP lhs, SEXP rhs, SEXP env, Immediate srcIdx,
     MATERIALIZE_IF_OBJ2(arglist, lhs, rhs);
     SEXP call = src_pool_at(srcIdx);
     PROTECT(arglist);
-    if (isObject(lhs) || isObject(rhs)) {
+    if (Rf_isObject(lhs) || Rf_isObject(rhs)) {
         if (auto e = LazyEnvironment::check(env)) {
             if (!e->materialized())
                 env = materialize(env);
@@ -756,7 +756,8 @@ int isMissingImpl(SEXP symbol, SEXP environment) {
 }
 
 bool isFactorImpl(SEXP val) {
-    return TYPEOF(val) == INTSXP && isObject(val) && Rf_inherits(val, "factor");
+    return TYPEOF(val) == INTSXP && Rf_isObject(val) &&
+           Rf_inherits(val, "factor");
 }
 
 int asSwitchIdxImpl(SEXP val) {
@@ -787,7 +788,7 @@ int checkTrueFalseImpl(SEXP val) {
 
     if (cond == NA_LOGICAL) {
         const char* msg =
-            XLENGTH(val) ? (isLogical(val)
+            XLENGTH(val) ? (Rf_isLogical(val)
                                 ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                          : ("argument is of length zero");
@@ -1003,23 +1004,23 @@ static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
         case REALSXP:
             if (XLENGTH(vec) <= i)
                 break;
-            return ScalarReal(REAL_ELT(vec, i));
+            return Rf_ScalarReal(REAL_ELT(vec, i));
         case INTSXP:
             if (XLENGTH(vec) <= i)
                 break;
-            return ScalarInteger(INTEGER_ELT(vec, i));
+            return Rf_ScalarInteger(INTEGER_ELT(vec, i));
         case LGLSXP:
             if (XLENGTH(vec) <= i)
                 break;
-            return ScalarLogical(LOGICAL_ELT(vec, i));
+            return Rf_ScalarLogical(LOGICAL_ELT(vec, i));
         case CPLXSXP:
             if (XLENGTH(vec) <= i)
                 break;
-            return ScalarComplex(COMPLEX_ELT(vec, i));
+            return Rf_ScalarComplex(COMPLEX_ELT(vec, i));
         case RAWSXP:
             if (XLENGTH(vec) <= i)
                 break;
-            return ScalarRaw(RAW(vec)[i]);
+            return Rf_ScalarRaw(RAW(vec)[i]);
         case VECSXP:
             if (XLENGTH(vec) <= i)
                 break;
@@ -1028,7 +1029,7 @@ static SEXP tryFastVeceltInt(SEXP vec, R_xlen_t i, bool subset2) {
             if (subset2) {
                 return elt;
             } else {
-                SEXP t = allocVector(VECSXP, 1);
+                SEXP t = Rf_allocVector(VECSXP, 1);
                 SET_VECTOR_ELT(t, 0, elt);
                 return t;
             }
@@ -1060,7 +1061,7 @@ SEXP extract11Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
     if (res)
         return res;
 
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
         PROTECT(args);
@@ -1086,7 +1087,7 @@ SEXP extract21Impl(SEXP vector, SEXP index, SEXP env, Immediate srcIdx) {
 
     SEXP args = CONS_NR(vector, CONS_NR(index, R_NilValue));
     PROTECT(args);
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1108,9 +1109,9 @@ SEXP extract21iImpl(SEXP vector, int index, SEXP env, Immediate srcIdx) {
     if (res)
         return res;
 
-    SEXP args = CONS_NR(vector, CONS_NR(ScalarInteger(index), R_NilValue));
+    SEXP args = CONS_NR(vector, CONS_NR(Rf_ScalarInteger(index), R_NilValue));
     PROTECT(args);
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1132,9 +1133,9 @@ SEXP extract21rImpl(SEXP vector, double index, SEXP env, Immediate srcIdx) {
     if (res)
         return res;
 
-    SEXP args = CONS_NR(vector, CONS_NR(ScalarReal(index), R_NilValue));
+    SEXP args = CONS_NR(vector, CONS_NR(Rf_ScalarReal(index), R_NilValue));
     PROTECT(args);
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1154,7 +1155,7 @@ SEXP extract12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
     SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env);
         if (!res) {
@@ -1175,7 +1176,7 @@ SEXP extract13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3, SEXP env,
     SEXP args = CONS_NR(
         vector, CONS_NR(index1, CONS_NR(index2, CONS_NR(index3, R_NilValue))));
     PROTECT(args);
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::Bracket, env);
         if (!res) {
@@ -1195,7 +1196,7 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
     SEXP args = CONS_NR(vector, CONS_NR(index1, CONS_NR(index2, R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1213,7 +1214,7 @@ SEXP extract22Impl(SEXP vector, SEXP index1, SEXP index2, SEXP env,
 SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
                      Immediate srcIdx) {
 
-    if (!isObject(vector) && isMatrix(vector) && index1 != NA_INTEGER &&
+    if (!Rf_isObject(vector) && Rf_isMatrix(vector) && index1 != NA_INTEGER &&
         index2 != NA_INTEGER && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
         auto p2 = (R_xlen_t)(index2 - 1);
@@ -1228,11 +1229,11 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
     }
 
     SEXP args =
-        CONS_NR(vector, CONS_NR(ScalarInteger(index1),
-                                CONS_NR(ScalarInteger(index2), R_NilValue)));
+        CONS_NR(vector, CONS_NR(Rf_ScalarInteger(index1),
+                                CONS_NR(Rf_ScalarInteger(index2), R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1250,7 +1251,7 @@ SEXP extract22iiImpl(SEXP vector, int index1, int index2, SEXP env,
 SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
                      Immediate srcIdx) {
 
-    if (!isObject(vector) && isMatrix(vector) && index1 == index1 &&
+    if (!Rf_isObject(vector) && Rf_isMatrix(vector) && index1 == index1 &&
         index2 == index2 && index1 >= 1 && index2 >= 1) {
         auto p1 = (R_xlen_t)(index1 - 1);
         auto p2 = (R_xlen_t)(index2 - 1);
@@ -1265,11 +1266,11 @@ SEXP extract22rrImpl(SEXP vector, double index1, double index2, SEXP env,
     }
 
     SEXP args =
-        CONS_NR(vector, CONS_NR(ScalarReal(index1),
-                                CONS_NR(ScalarReal(index2), R_NilValue)));
+        CONS_NR(vector, CONS_NR(Rf_ScalarReal(index1),
+                                CONS_NR(Rf_ScalarReal(index2), R_NilValue)));
     PROTECT(args);
     SEXP res = nullptr;
-    if (isObject(vector)) {
+    if (Rf_isObject(vector)) {
         SEXP call = src_pool_at(srcIdx);
         res = dispatchApply(call, vector, args, symbol::DoubleBracket, env);
         if (!res) {
@@ -1367,7 +1368,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 #define CHECK_NON_OBJ(__i__)                                                   \
     case TypeAssumption::Arg##__i__##IsNotObj_: {                              \
         auto a = loadArg(__i__);                                               \
-        if (a == R_UnboundValue || a == R_MissingArg || isObject(a) ||         \
+        if (a == R_UnboundValue || a == R_MissingArg || Rf_isObject(a) ||      \
             TYPEOF(a) == CLOSXP || TYPEOF(a) == ENVSXP)                        \
             fail = true;                                                       \
         break;                                                                 \
@@ -1455,7 +1456,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     initClosureContext(ast, &cntxt, symbol::delayedEnv, env, lazyArgs.asSexp(),
                        callee);
-    R_Srcref = getAttrib(callee, symbol::srcref);
+    R_Srcref = Rf_getAttrib(callee, symbol::srcref);
 
     // TODO debug
 
@@ -1502,7 +1503,7 @@ SEXP subassign11Impl(SEXP vector, SEXP index, SEXP value, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
-    if (isObject(vector))
+    if (Rf_isObject(vector))
         res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
@@ -1529,7 +1530,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
         prot++;
     }
 
-    if (!isObject(vec) && !ALTREP(vec)) {
+    if (!Rf_isObject(vec) && !ALTREP(vec)) {
         R_xlen_t pos = -1;
         if (IS_SIMPLE_SCALAR(idx, INTSXP)) {
             if (*INTEGER(idx) >= 1 && *INTEGER(idx) != NA_INTEGER)
@@ -1581,7 +1582,7 @@ SEXP subassign21Impl(SEXP vec, SEXP idx, SEXP val, SEXP env, Immediate srcIdx) {
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -1601,7 +1602,7 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx == idx && !ALTREP(vec)) {
+    if (!Rf_isObject(vec) && idx == idx && !ALTREP(vec)) {
         auto pos = (R_xlen_t)(idx - 1);
 
         if (TYPEOF(vec) == REALSXP) {
@@ -1619,15 +1620,15 @@ SEXP subassign21rrImpl(SEXP vec, double idx, double val, SEXP env,
                 (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                SET_VECTOR_ELT(vec, pos, ScalarReal(val));
+                SET_VECTOR_ELT(vec, pos, Rf_ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto v = PROTECT(ScalarReal(val));
-    auto i = PROTECT(ScalarReal(idx));
+    auto v = PROTECT(Rf_ScalarReal(val));
+    auto i = PROTECT(Rf_ScalarReal(idx));
     auto res = subassign21Impl(vec, i, v, env, srcIdx);
     UNPROTECT(prot + 2);
     return res;
@@ -1641,7 +1642,7 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx != NA_INTEGER && idx >= 1 && !ALTREP(vec)) {
+    if (!Rf_isObject(vec) && idx != NA_INTEGER && idx >= 1 && !ALTREP(vec)) {
         auto pos = (idx - 1);
 
         if (TYPEOF(vec) == REALSXP) {
@@ -1659,15 +1660,15 @@ SEXP subassign21irImpl(SEXP vec, int idx, double val, SEXP env,
                 (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                SET_VECTOR_ELT(vec, pos, ScalarReal(val));
+                SET_VECTOR_ELT(vec, pos, Rf_ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto v = PROTECT(ScalarReal(val));
-    auto i = PROTECT(ScalarInteger(idx));
+    auto v = PROTECT(Rf_ScalarReal(val));
+    auto i = PROTECT(Rf_ScalarInteger(idx));
     auto res = subassign21Impl(vec, i, v, env, srcIdx);
     UNPROTECT(prot + 2);
     return res;
@@ -1681,7 +1682,7 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && idx == idx && !ALTREP(vec)) {
+    if (!Rf_isObject(vec) && idx == idx && !ALTREP(vec)) {
         auto pos = (R_xlen_t)(idx - 1);
 
         if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
@@ -1709,15 +1710,15 @@ SEXP subassign21riImpl(SEXP vec, double idx, int val, SEXP env,
                 (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
+                SET_VECTOR_ELT(vec, pos, Rf_ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto v = PROTECT(ScalarInteger(val));
-    auto i = PROTECT(ScalarReal(idx));
+    auto v = PROTECT(Rf_ScalarInteger(val));
+    auto i = PROTECT(Rf_ScalarReal(idx));
     auto res = subassign21Impl(vec, i, v, env, srcIdx);
     UNPROTECT(prot + 2);
     return res;
@@ -1730,7 +1731,7 @@ SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
         prot++;
     }
 
-    if (!isObject(vec) && idx != NA_INTEGER && !ALTREP(vec)) {
+    if (!Rf_isObject(vec) && idx != NA_INTEGER && !ALTREP(vec)) {
         auto pos = idx - 1;
 
         if (TYPEOF(vec) == INTSXP || TYPEOF(vec) == LGLSXP) {
@@ -1758,15 +1759,15 @@ SEXP subassign21iiImpl(SEXP vec, int idx, int val, SEXP env, Immediate srcIdx) {
                 (XLENGTH(vec) >= pos && XTRUELENGTH(vec) > pos)) {
                 if (XLENGTH(vec) == pos)
                     SETLENGTH(vec, pos + 1);
-                SET_VECTOR_ELT(vec, pos, ScalarInteger(val));
+                SET_VECTOR_ELT(vec, pos, Rf_ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto v = PROTECT(ScalarInteger(val));
-    auto i = PROTECT(ScalarInteger(idx));
+    auto v = PROTECT(Rf_ScalarInteger(val));
+    auto i = PROTECT(Rf_ScalarInteger(idx));
     auto res = subassign21Impl(vec, i, v, env, srcIdx);
     UNPROTECT(prot + 2);
     return res;
@@ -1786,7 +1787,7 @@ SEXP subassign12Impl(SEXP vector, SEXP index1, SEXP index2, SEXP value,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
-    if (isObject(vector))
+    if (Rf_isObject(vector))
         res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
@@ -1813,7 +1814,7 @@ SEXP subassign13Impl(SEXP vector, SEXP index1, SEXP index2, SEXP index3,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignBracket);
-    if (isObject(vector))
+    if (Rf_isObject(vector))
         res = dispatchApply(call, vector, args, symbol::AssignBracket, env);
     if (!res) {
         res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
@@ -1833,7 +1834,7 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec)) {
+    if (!Rf_isObject(vec) && Rf_isMatrix(vec)) {
         R_xlen_t pos1 = -1;
         R_xlen_t pos2 = -1;
         if (IS_SIMPLE_SCALAR(idx1, INTSXP)) {
@@ -1885,7 +1886,7 @@ SEXP subassign22Impl(SEXP vec, SEXP idx1, SEXP idx2, SEXP val, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -1905,7 +1906,7 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
+    if (!Rf_isObject(vec) && Rf_isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
         idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
@@ -1919,16 +1920,16 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
         }
         if (TYPEOF(vec) == VECSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarReal(val));
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, Rf_ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto i1 = PROTECT(ScalarReal(idx1));
-    auto i2 = PROTECT(ScalarReal(idx2));
-    auto v = PROTECT(ScalarReal(val));
+    auto i1 = PROTECT(Rf_ScalarReal(idx1));
+    auto i2 = PROTECT(Rf_ScalarReal(idx2));
+    auto v = PROTECT(Rf_ScalarReal(val));
     prot += 3;
     SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
     SET_TAG(CDDDR(args), symbol::value);
@@ -1938,7 +1939,7 @@ SEXP subassign22rrrImpl(SEXP vec, double idx1, double idx2, double val,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -1958,7 +1959,7 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
+    if (!Rf_isObject(vec) && Rf_isMatrix(vec) && idx1 != NA_INTEGER &&
         idx2 != NA_INTEGER && idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
@@ -1972,16 +1973,16 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
         }
         if (TYPEOF(vec) == VECSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarReal(val));
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, Rf_ScalarReal(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto i1 = PROTECT(ScalarInteger(idx1));
-    auto i2 = PROTECT(ScalarInteger(idx2));
-    auto v = PROTECT(ScalarReal(val));
+    auto i1 = PROTECT(Rf_ScalarInteger(idx1));
+    auto i2 = PROTECT(Rf_ScalarInteger(idx2));
+    auto v = PROTECT(Rf_ScalarReal(val));
     prot += 3;
     SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
     SET_TAG(CDDDR(args), symbol::value);
@@ -1991,7 +1992,7 @@ SEXP subassign22iirImpl(SEXP vec, int idx1, int idx2, double val, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -2011,7 +2012,7 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 != NA_INTEGER &&
+    if (!Rf_isObject(vec) && Rf_isMatrix(vec) && idx1 != NA_INTEGER &&
         idx2 != NA_INTEGER && idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
@@ -2032,16 +2033,16 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == VECSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarInteger(val));
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, Rf_ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto i1 = PROTECT(ScalarInteger(idx1));
-    auto i2 = PROTECT(ScalarInteger(idx2));
-    auto v = PROTECT(ScalarInteger(val));
+    auto i1 = PROTECT(Rf_ScalarInteger(idx1));
+    auto i2 = PROTECT(Rf_ScalarInteger(idx2));
+    auto v = PROTECT(Rf_ScalarInteger(val));
     prot += 3;
     SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
     SET_TAG(CDDDR(args), symbol::value);
@@ -2051,7 +2052,7 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -2071,7 +2072,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         prot++;
     }
 
-    if (!isObject(vec) && isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
+    if (!Rf_isObject(vec) && Rf_isMatrix(vec) && idx1 == idx1 && idx2 == idx2 &&
         idx1 >= 1 && idx2 >= 1) {
         R_xlen_t pos1 = idx1 - 1;
         R_xlen_t pos2 = idx2 - 1;
@@ -2093,16 +2094,16 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == VECSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, ScalarInteger(val));
+                SET_VECTOR_ELT(vec, n.row * pos2 + pos1, Rf_ScalarInteger(val));
                 UNPROTECT(prot);
                 return vec;
             }
         }
     }
 
-    auto i1 = PROTECT(ScalarReal(idx1));
-    auto i2 = PROTECT(ScalarReal(idx2));
-    auto v = PROTECT(ScalarInteger(val));
+    auto i1 = PROTECT(Rf_ScalarReal(idx1));
+    auto i2 = PROTECT(Rf_ScalarReal(idx2));
+    auto v = PROTECT(Rf_ScalarInteger(val));
     prot += 3;
     SEXP args = CONS_NR(vec, CONS_NR(i1, CONS_NR(i2, CONS_NR(v, R_NilValue))));
     SET_TAG(CDDDR(args), symbol::value);
@@ -2112,7 +2113,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
     RCNTXT assignContext;
     Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env), args,
                     symbol::AssignDoubleBracket);
-    if (isObject(vec))
+    if (Rf_isObject(vec))
         res = dispatchApply(call, vec, args, symbol::AssignDoubleBracket, env);
     if (!res) {
         res = do_subassign2_dflt(call, symbol::AssignDoubleBracket, args, env);
@@ -2124,7 +2125,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
 }
 
 SEXP toForSeqImpl(SEXP seq) {
-    if (!Rf_isVector(seq) && !Rf_isList(seq) && !isNull(seq)) {
+    if (!Rf_isVector(seq) && !Rf_isList(seq) && !Rf_isNull(seq)) {
         Rf_errorcall(R_NilValue, "invalid for() loop sequence");
     }
 
@@ -2133,9 +2134,9 @@ SEXP toForSeqImpl(SEXP seq) {
     // BC on it, we would. To prevent this we strip the object
     // flag here. What we should do instead, is use a non-dispatching
     // extract BC.
-    if (isObject(seq)) {
+    if (Rf_isObject(seq)) {
         if (isFactorImpl(seq))
-            seq = asCharacterFactor(seq);
+            seq = Rf_asCharacterFactor(seq);
         else
             seq = Rf_shallow_duplicate(seq);
         SET_OBJECT(seq, 0);

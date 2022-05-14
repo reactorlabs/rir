@@ -5,7 +5,6 @@
 #include "bc/BC_inc.h"
 #include "interp_incl.h"
 #include "runtime/Context.h"
-#include "runtime/Function.h"
 
 #include <assert.h>
 #include <functional>
@@ -91,13 +90,13 @@ inline size_t ostack_length() {
     return std::abs(R_BCNodeStackTop - R_BCNodeStackBase);
 }
 
-inline SEXP ostack_top() { return R_BCNodeStackTop[-1].u.sxpval; }
+inline SEXP ostack_at(int i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
 
-inline SEXP ostack_at(size_t i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
+inline SEXP ostack_top() { return ostack_at(0); }
 
 inline SEXP ostack_at_cell(const R_bcstack_t* cell) { return cell->u.sxpval; }
 
-inline void ostack_set(size_t i, SEXP v) {
+inline void ostack_set(int i, SEXP v) {
     R_BCNodeStackTop[-1 - i].u.sxpval = v;
     R_BCNodeStackTop[-1 - i].tag = 0;
 }
@@ -107,9 +106,7 @@ inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
     cell->tag = 0;
 }
 
-inline R_bcstack_t* ostack_cell_at(size_t i) {
-    return R_BCNodeStackTop - 1 - i;
-}
+inline R_bcstack_t* ostack_cell_at(int i) { return R_BCNodeStackTop - 1 - i; }
 
 inline bool ostack_empty() { return R_BCNodeStackTop == R_BCNodeStackBase; }
 
@@ -174,19 +171,10 @@ void context_init();
 
 inline size_t cp_pool_length() { return rl_length(&globalContext()->cp); }
 
-inline size_t src_pool_length() { return rl_length(&globalContext()->src); }
-
 inline size_t cp_pool_add(SEXP v) {
     InterpreterInstance* c = globalContext();
     size_t result = rl_length(&c->cp);
     rl_append(&c->cp, v, c->list, ResizeableList::CONTEXT_INDEX_CP);
-    return result;
-}
-
-inline size_t src_pool_add(SEXP v) {
-    InterpreterInstance* c = globalContext();
-    size_t result = rl_length(&c->src);
-    rl_append(&c->src, v, c->list, ResizeableList::CONTEXT_INDEX_SRC);
     return result;
 }
 
@@ -196,16 +184,25 @@ inline SEXP cp_pool_at(unsigned index) {
     return VECTOR_ELT(c->cp.list, index);
 }
 
-inline SEXP src_pool_at(unsigned index) {
-    InterpreterInstance* c = globalContext();
-    SLOWASSERT(c->src.capacity > index);
-    return VECTOR_ELT(c->src.list, index);
-}
-
 inline void cp_pool_set(unsigned index, SEXP e) {
     InterpreterInstance* c = globalContext();
     SLOWASSERT(c->cp.capacity > index);
     SET_VECTOR_ELT(c->cp.list, index, e);
+}
+
+inline size_t src_pool_length() { return rl_length(&globalContext()->src); }
+
+inline size_t src_pool_add(SEXP v) {
+    InterpreterInstance* c = globalContext();
+    size_t result = rl_length(&c->src);
+    rl_append(&c->src, v, c->list, ResizeableList::CONTEXT_INDEX_SRC);
+    return result;
+}
+
+inline SEXP src_pool_at(unsigned index) {
+    InterpreterInstance* c = globalContext();
+    SLOWASSERT(c->src.capacity > index);
+    return VECTOR_ELT(c->src.list, index);
 }
 
 } // namespace rir

@@ -39,6 +39,7 @@ struct Parameter {
 
     static bool ENABLE_OSR;
 };
+
 } // namespace pir
 } // namespace rir
 

@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "measuring.h"
+#include "utils/measuring.h"
 
 namespace rir {
 

@@ -1,9 +1,4 @@
 #include "common.h"
-#include "R/RList.h"
-#include "R/r.h"
-
-#include "runtime/LazyArglist.h"
-#include "runtime/LazyEnvironment.h"
 
 #include <cxxabi.h>
 #include <execinfo.h>
