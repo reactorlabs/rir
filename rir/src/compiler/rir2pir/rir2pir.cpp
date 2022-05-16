@@ -913,14 +913,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             {
                 size_t i = 0;
                 for (const auto& arg : matchedArgs) {
-                    if (arg == MissingArg::instance()) {
-                        given.remove(Assumption::NoExplicitlyMissingArgs);
-                        i++;
-                    } else {
-                        if (auto j = Instruction::Cast(arg))
-                            j->updateTypeAndEffects();
-                        arg->callArgTypeToContext(given, i++);
-                    }
+
+                    if (auto j = Instruction::Cast(arg))
+                        j->updateTypeAndEffects();
+                    arg->callArgTypeToContext(given, i);
+                    i++;
                 }
             }
 
