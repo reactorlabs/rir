@@ -87,18 +87,22 @@ inline void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
 }
 
 inline size_t ostack_length() {
-    return std::abs(R_BCNodeStackTop - R_BCNodeStackBase);
+    assert(R_BCNodeStackTop > R_BCNodeStackBase);
+    return R_BCNodeStackTop - R_BCNodeStackBase;
 }
 
-inline SEXP ostack_at(int i) { return R_BCNodeStackTop[-1 - i].u.sxpval; }
+inline R_bcstack_t* ostack_cell_at(int i) { return R_BCNodeStackTop - 1 - i; }
+
+inline SEXP ostack_at(int i) { return ostack_cell_at(i)->u.sxpval; }
 
 inline SEXP ostack_top() { return ostack_at(0); }
 
 inline SEXP ostack_at_cell(const R_bcstack_t* cell) { return cell->u.sxpval; }
 
 inline void ostack_set(int i, SEXP v) {
-    R_BCNodeStackTop[-1 - i].u.sxpval = v;
-    R_BCNodeStackTop[-1 - i].tag = 0;
+    auto cell = ostack_cell_at(i);
+    cell->u.sxpval = v;
+    cell->tag = 0;
 }
 
 inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
@@ -106,7 +110,6 @@ inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
     cell->tag = 0;
 }
 
-inline R_bcstack_t* ostack_cell_at(int i) { return R_BCNodeStackTop - 1 - i; }
 
 inline bool ostack_empty() { return R_BCNodeStackTop == R_BCNodeStackBase; }
 
