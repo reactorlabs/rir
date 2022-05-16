@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "loweringPatches.h"
+#define TRY_PATCH_DEOPTMETADATA 1
 
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);

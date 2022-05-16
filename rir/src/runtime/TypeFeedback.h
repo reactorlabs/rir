@@ -7,8 +7,6 @@
 #include <cstdint>
 #include <iostream>
 
-#include "loweringPatches.h"
-
 namespace rir {
 
 struct Code;

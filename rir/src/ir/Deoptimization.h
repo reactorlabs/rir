@@ -4,7 +4,7 @@
 #include <R/r.h>
 #include <iostream>
 
-#include "loweringPatches.h"
+#define TRY_PATCH_DEOPTMETADATA 1
 
 namespace rir {
 #pragma pack(push)

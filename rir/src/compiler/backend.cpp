@@ -31,6 +31,7 @@
 #include "utils/DebugMessages.h"
 #include "api.h"
 
+#define ADD_EXTRA_DEBUGGING_DATA 0
 namespace rir {
 namespace pir {
 
