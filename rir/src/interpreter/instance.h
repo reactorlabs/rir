@@ -87,7 +87,7 @@ inline void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
 }
 
 inline size_t ostack_length() {
-    assert(R_BCNodeStackTop > R_BCNodeStackBase);
+    assert(R_BCNodeStackTop >= R_BCNodeStackBase);
     return R_BCNodeStackTop - R_BCNodeStackBase;
 }
 
