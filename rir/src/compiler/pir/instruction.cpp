@@ -1251,12 +1251,15 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
-StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args,
+StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
+                       Context givenContext, const std::vector<Value*>& args,
                        const ArglistOrder::CallArglistOrder& argOrderOrig,
                        Value* fs, unsigned srcIdx, Value* runtimeClosure)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
+      cls_(clsVersion->owner()), argOrderOrig(argOrderOrig),
+      givenContext(givenContext) {
+
+    auto cls = clsVersion->owner();
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
@@ -1272,7 +1275,8 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
                     PirType() | RType::prom | RType::missing | PirType::val());
         }
     }
-    assert(tryDispatch());
+
+    assert(tryDispatch() == clsVersion);
 }
 
 PirType StaticCall::inferType(const GetType& getType) const {
