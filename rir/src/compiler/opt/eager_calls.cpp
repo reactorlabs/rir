@@ -15,6 +15,46 @@
 namespace rir {
 namespace pir {
 
+static ClosureVersion*
+cloneOrReplaceVersion(Closure* target, ClosureVersion* version,
+                      StaticCall* call, Context assumptions,
+                      const std::function<void(ClosureVersion*)>&
+                          updateVersionWithNewAssumptions) {
+    if (version != call->lastSeen) {
+        version->staticCallRefCount++;
+    }
+
+    ClosureVersion* newVersion;
+
+    call->lastSeen = nullptr;
+    if (version->isClone || version->staticCallRefCount > 1) {
+
+        newVersion = target->cloneWithAssumptions(
+            version, assumptions, [&](ClosureVersion* newCls) {
+                updateVersionWithNewAssumptions(newCls);
+            });
+
+        if (newVersion != version) {
+            newVersion->isClone = true;
+
+            call->lastSeen = newVersion;
+            version->staticCallRefCount--;
+        }
+
+    } else {
+
+        newVersion = target->replaceWithAssumptions(
+            version, assumptions, updateVersionWithNewAssumptions);
+
+        call->lastSeen = newVersion;
+        if (newVersion->staticCallRefCount == 0) {
+            newVersion->staticCallRefCount = 1;
+        }
+    }
+
+    return newVersion;
+}
+
 bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                        AbstractLog& log, size_t) const {
     AvailableCheckpoints checkpoint(cls, code, log);
@@ -287,8 +327,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
                 if (availableAssumptions.isImproving(version)) {
-                    auto newVersion = target->cloneWithAssumptions(
-                        version, availableAssumptions,
+
+
+                    auto updateVersionWithNewAssumptions =
                         [&](ClosureVersion* newCls) {
                             Visitor::run(newCls->entry, [&](Instruction* i) {
                                 if (auto f = Force::Cast(i)) {
@@ -308,7 +349,12 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     }
                                 }
                             });
-                        });
+                        };
+
+                    auto newVersion = cloneOrReplaceVersion(
+                        target, version, call, availableAssumptions,
+                        updateVersionWithNewAssumptions);
+
                     call->hint = newVersion;
                     assert(call->tryDispatch() == newVersion);
                     ip = next;

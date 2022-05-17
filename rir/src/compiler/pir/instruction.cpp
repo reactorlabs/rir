@@ -1255,6 +1255,7 @@ StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
                        Context givenContext, const std::vector<Value*>& args,
                        const ArglistOrder::CallArglistOrder& argOrderOrig,
                        Value* fs, unsigned srcIdx, Value* runtimeClosure)
+
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(clsVersion->owner()), argOrderOrig(argOrderOrig),
       givenContext(givenContext) {
@@ -1276,7 +1277,27 @@ StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
         }
     }
 
+    auto dispatched = tryDispatch();
     assert(tryDispatch() == clsVersion);
+
+    // Update version-refCount fields
+    dispatched->staticCallRefCount++;
+    lastSeen = dispatched;
+}
+
+void StaticCall::updateVersionRefCount() {
+    lastSeen = nullptr;
+    auto target = tryDispatch();
+    if (target) {
+        lastSeen = target;
+        target->staticCallRefCount++;
+    }
+}
+
+Instruction* StaticCall::clone() const {
+    auto sc = StaticCall::Cast(InstructionImplementation::clone());
+    sc->updateVersionRefCount();
+    return sc;
 }
 
 PirType StaticCall::inferType(const GetType& getType) const {

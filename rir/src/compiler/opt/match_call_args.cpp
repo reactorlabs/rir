@@ -239,9 +239,11 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 if (staticallyArgmatched && target) {
                     anyChange = true;
+
                     if (auto c = call) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
+
                         auto nc = new StaticCall(
                             c->env(), target, asmpt, matchedArgs, argOrderOrig,
                             c->frameStateOrTs(), c->srcIdx, cls);
@@ -249,6 +251,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     } else if (auto c = namedCall) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
+
                         auto nc = new StaticCall(
                             c->env(), target, asmpt, matchedArgs, argOrderOrig,
                             c->frameStateOrTs(), c->srcIdx, cls);

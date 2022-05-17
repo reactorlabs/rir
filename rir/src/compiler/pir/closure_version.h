@@ -42,11 +42,12 @@ class ClosureVersion : public Code {
     const bool root;
 
     rir::Function* optFunction;
+    size_t staticCallRefCount = 0;
 
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
-    const Context optimizationContext_;
+    Context optimizationContext_;
 
     std::string name_;
     std::string nameSuffix_;
@@ -59,9 +60,14 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+    bool isClone = false;
+
     ClosureVersion* clone(const Context& newContext);
 
     const Context& context() const { return optimizationContext_; }
+    void setContext(const Context& newContext) {
+        optimizationContext_ = newContext;
+    }
 
     Properties properties;
 
