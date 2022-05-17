@@ -239,35 +239,29 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                 if (staticallyArgmatched && target) {
                     anyChange = true;
-                    auto emptyAfterBlock = [](StaticCall* call) {};
+
                     if (auto c = call) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
 
                         auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx,
-                            emptyAfterBlock, cls);
-
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = namedCall) {
                         assert(!usemethodTarget);
                         auto cls = c->cls()->followCastsAndForce();
 
                         auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx,
-                            emptyAfterBlock, cls);
-
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else if (auto c = staticCall) {
                         assert(usemethodTarget);
                         auto cls = cmp.module->c(usemethodTarget);
                         auto nc = new StaticCall(
-                            c->env(), target->owner(), asmpt, matchedArgs,
-                            argOrderOrig, c->frameStateOrTs(), c->srcIdx,
-                            emptyAfterBlock, cls);
-
+                            c->env(), target, asmpt, matchedArgs, argOrderOrig,
+                            c->frameStateOrTs(), c->srcIdx, cls);
                         (*ip)->replaceUsesAndSwapWith(nc, ip);
                     } else {
                         assert(false);

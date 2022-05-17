@@ -9,7 +9,8 @@
                 "${workspaceFolder}/external/llvm-12.0.0.src/include/**"
             ],
             "defines": [
-                "ENABLE_SLOWASSERT"
+                "ENABLE_SLOWASSERT",
+                "R_NO_REMAP"
             ],
             "cStandard": "c11",
             "cppStandard": "c++14",

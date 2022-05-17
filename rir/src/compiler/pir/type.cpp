@@ -3,8 +3,6 @@
 #include "R/r.h"
 #include "runtime/LazyEnvironment.h"
 
-extern "C" Rboolean(Rf_isObject)(SEXP s);
-
 namespace rir {
 namespace pir {
 

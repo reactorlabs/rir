@@ -195,7 +195,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     // special)
                     auto origSrc = cp_pool_at(call->srcIdx);
                     auto newSrc =
-                        PROTECT(LCONS(CADDR(origSrc), CDDDR(origSrc)));
+                        PROTECT(Rf_lcons(CADDR(origSrc), CDDDR(origSrc)));
                     auto newSrcIdx = cp_pool_add(newSrc);
                     UNPROTECT(1);
 

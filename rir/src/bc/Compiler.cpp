@@ -1,22 +1,17 @@
-#include "Compiler.h"
-
-#include "BC.h"
-#include "CodeStream.h"
-
+#include "bc/Compiler.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-
-#include "../interpreter/cache.h"
-#include "../interpreter/interp.h"
-#include "../interpreter/safe_force.h"
+#include "bc/BC.h"
+#include "bc/CodeStream.h"
+#include "bc/CodeVerifier.h"
+#include "interpreter/cache.h"
+#include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
-#include "utils/Pool.h"
-
-#include "CodeVerifier.h"
-
+#include "interpreter/safe_force.h"
 #include "simple_instruction_list.h"
+#include "utils/Pool.h"
 
 #include <stack>
 
@@ -487,14 +482,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            SEXP fun = Compiler::compileFunction(args[1], args[0]);
-            Protect p(fun);
+            auto dt = Compiler::compileFunction(args[1], args[0]);
+            Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
-            DispatchTable::check(fun)->baseline()->flags.set(
+            DispatchTable::check(dt)->baseline()->flags.set(
                 Function::InnerFunction);
-            assert(TYPEOF(fun) == EXTERNALSXP);
-            cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
+            assert(TYPEOF(dt) == EXTERNALSXP);
+            cs << BC::push(args[0]) << BC::push(dt) << BC::push(args[2])
                << BC::close();
         }
         return true;
@@ -1603,7 +1598,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 return false;
             }
 
-            int i = ((sexprec_rjit*)internal)->u.i;
+            int i = getBuiltinNr(internal);
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
                 emitGuardForNamePrimitive(cs, symbol::Internal);
@@ -1680,11 +1675,11 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 cs << BC::brtrue(nextBranch) << BC::dup() << BC::stvar(isym);
 
                 // construct ast for FUN(X[[i]], ...)
-                SEXP tmp =
-                    PROTECT(LCONS(symbol::DoubleBracket,
-                                  LCONS(args[0], LCONS(isym, R_NilValue))));
-                SEXP call =
-                    LCONS(args[1], LCONS(tmp, LCONS(R_DotsSymbol, R_NilValue)));
+                SEXP tmp = PROTECT(
+                    Rf_lcons(symbol::DoubleBracket,
+                             Rf_lcons(args[0], Rf_lcons(isym, R_NilValue))));
+                SEXP call = Rf_lcons(
+                    args[1], Rf_lcons(tmp, Rf_lcons(R_DotsSymbol, R_NilValue)));
 
                 PROTECT(call);
                 compileCall(ctx, call, CAR(call), CDR(call), false);
@@ -1766,7 +1761,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
         default:
             auto eager = CAR(arg);
             res.assumptions.setEager(i);
-            if (!isObject(eager)) {
+            if (!Rf_isObject(eager)) {
                 res.assumptions.setNotObj(i);
                 if (IS_SIMPLE_SCALAR(eager, REALSXP))
                     res.assumptions.setSimpleReal(i);

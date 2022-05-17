@@ -1,15 +1,14 @@
 #include "BC.h"
-
-#include "utils/Pool.h"
-#include <iomanip>
-#include <iostream>
-
-#include "CodeStream.h"
 #include "R/Funtab.h"
 #include "R/Printing.h"
 #include "R/RList.h"
 #include "R/Serialize.h"
 #include "R/r.h"
+#include "bc/CodeStream.h"
+#include "utils/Pool.h"
+
+#include <iomanip>
+#include <iostream>
 
 namespace rir {
 
@@ -416,7 +415,7 @@ void BC::print(std::ostream& out) const {
             out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");
         for (int i = 0; i < prof.numTargets; ++i)
             out << callFeedbackExtra().targets[i] << "("
-                << type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";
+                << Rf_type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";
         out << "]";
         break;
     }
@@ -490,7 +489,7 @@ std::ostream& operator<<(std::ostream& out, BC::RirTypecheck t) {
     case BC::RirTypecheck::isEXPRSXP:
     case BC::RirTypecheck::isVECSXP:
     case BC::RirTypecheck::isLISTSXP:
-        out << type2char((int)t);
+        out << Rf_type2char((int)t);
         break;
     }
     return out;

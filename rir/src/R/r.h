@@ -3,39 +3,42 @@
 
 #include "common.h"
 
-#include <R.h>
-#include <Rinterface.h>
+#define R_NO_REMAP
 #define USE_RINTERNALS
+#include <R.h>
+#include <R_ext/Print.h>
+#include <Rinterface.h>
 #include <Rinternals.h>
 
-// r print statement
-#include <R_ext/Print.h>
-
-#undef error
-#undef TRUE
-#undef FALSE
-#undef length
-#undef eval
-#undef cons
-
+// Use the function versions (some of the names clash with LLVM)
 #undef isNull
-inline bool isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+#undef isSymbol
+#undef isLogical
+#undef isReal
 #undef isComplex
-inline bool isComplex(SEXP s) { return TYPEOF(s) == CPLXSXP; }
+#undef isExpression
+#undef isEnvironment
 #undef isString
-inline bool isString(SEXP s) { return TYPEOF(s) == STRSXP; }
-
 #undef isObject
-inline bool isObject(SEXP s) { return OBJECT(s) != 0; }
+inline bool Rf_isNull(SEXP s) { return TYPEOF(s) == NILSXP; }
+inline bool Rf_isSymbol(SEXP s) { return TYPEOF(s) == SYMSXP; }
+inline bool Rf_isLogical(SEXP s) { return TYPEOF(s) == LGLSXP; }
+inline bool Rf_isReal(SEXP s) { return TYPEOF(s) == REALSXP; }
+inline bool Rf_isComplex(SEXP s) { return TYPEOF(s) == CPLXSXP; }
+inline bool Rf_isExpression(SEXP s) { return TYPEOF(s) == EXPRSXP; }
+inline bool Rf_isEnvironment(SEXP s) { return TYPEOF(s) == ENVSXP; }
+inline bool Rf_isString(SEXP s) { return TYPEOF(s) == STRSXP; }
+inline bool Rf_isObject(SEXP s) { return OBJECT(s) != 0; }
 
-#undef isVector
-
+// Clash with LLVM
 #undef PI
 
+// Get rid of the macro version of this
+#undef R_CheckStack
+
+// Bypass PREXPR from GNU R which causes code objects to be converted to AST
 #undef PREXPR
 inline SEXP PREXPR(SEXP pr) {
-    // bypassing PREXPR from Gnur, which causes code objects to be converted to
-    // AST
     SLOWASSERT(TYPEOF(pr) == PROMSXP);
     auto res = pr->u.promsxp.expr;
     if (TYPEOF(res) == BCODESXP)
@@ -44,10 +47,11 @@ inline SEXP PREXPR(SEXP pr) {
 }
 
 extern "C" {
+extern FUNTAB R_FunTab[];
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
-};
+}
 
 // Performance critical stuff copied from Rinlinedfun.h
 
@@ -119,5 +123,3 @@ extern int R_PPStackTop;
     } while (0)
 
 #endif
-
-#undef R_CheckStack

@@ -50,3 +50,11 @@ test <- function() {
 test()
 for (i in 1:10)
   test()
+
+
+f <- function(a = 1, b = 2) nargs()
+test <- function() f(b = 1)
+
+test()
+for (i in 1:10)
+  stopifnot(test() == 1)

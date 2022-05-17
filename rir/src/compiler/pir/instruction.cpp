@@ -719,7 +719,7 @@ size_t CallSafeBuiltin::gvnBase() const {
 
 PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     PirType inferred = PirType::bottom();
-    std::string name = getBuiltinName(getBuiltinNr(builtinSexp));
+    std::string name = getBuiltinName(builtinSexp);
 
     static const std::unordered_set<std::string> bitwise = {
         "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
@@ -838,7 +838,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     if ("vector" == name) {
         if (auto con = Const::Cast(arg(0).val())) {
             if (TYPEOF(con->c()) == STRSXP && XLENGTH(con->c()) == 1) {
-                SEXPTYPE type = str2type(CHAR(STRING_ELT(con->c(), 0)));
+                SEXPTYPE type = Rf_str2type(CHAR(STRING_ELT(con->c(), 0)));
                 switch (type) {
                 case LGLSXP:
                     inferred = RType::logical;
@@ -1251,16 +1251,16 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
-StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
-                       const std::vector<Value*>& args,
+StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
+                       Context givenContext, const std::vector<Value*>& args,
                        const ArglistOrder::CallArglistOrder& argOrderOrig,
-                       Value* fs, unsigned srcIdx,
-                       const std::function<void(StaticCall*)>& after,
-                       Value* runtimeClosure)
+                       Value* fs, unsigned srcIdx, Value* runtimeClosure)
 
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), argOrderOrig(argOrderOrig), givenContext(givenContext) {
+      cls_(clsVersion->owner()), argOrderOrig(argOrderOrig),
+      givenContext(givenContext) {
 
+    auto cls = clsVersion->owner();
     assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
@@ -1277,9 +1277,8 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls, Context givenContext,
         }
     }
 
-    after(this);
     auto dispatched = tryDispatch();
-    assert(dispatched);
+    assert(tryDispatch() == clsVersion);
 
     // Update version-refCount fields
     dispatched->staticCallRefCount++;

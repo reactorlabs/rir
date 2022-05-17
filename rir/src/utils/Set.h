@@ -71,6 +71,7 @@ class SmallSet {
     const_iterator begin() const { return container.cbegin(); }
     const_iterator end() const { return container.cend(); }
 };
+
 } // namespace rir
 
 #endif

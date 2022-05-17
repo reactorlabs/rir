@@ -4,10 +4,12 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "instance.h"
+
 #include <type_traits>
 
 namespace rir {
 
+// TODO: Expose this from GNU R Defn.h to remove duplication
 #define MAX_CACHE_SIZE 255
 #define ACTIVE_BINDING_MASK (1 << 15)
 #define BINDING_LOCK_MASK (1 << 14)
@@ -53,11 +55,11 @@ inline SEXP staticBox(SEXP val) {
 }
 template <>
 inline SEXP staticBox(int val) {
-    return ScalarInteger(val);
+    return Rf_ScalarInteger(val);
 }
 template <>
 inline SEXP staticBox(double val) {
-    return ScalarReal(val);
+    return Rf_ScalarReal(val);
 }
 
 template <typename T>

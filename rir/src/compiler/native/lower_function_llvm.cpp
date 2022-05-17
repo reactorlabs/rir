@@ -15,7 +15,6 @@
 #include "interpreter/instance.h"
 #include "interpreter/profiler.h"
 #include "runtime/DispatchTable.h"
-#include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 
@@ -2678,7 +2677,7 @@ void LowerFunctionLLVM::compile() {
                             }
                             setVal(i, r);
                         } else {
-                            setVal(i, constant(ScalarInteger(1), orep));
+                            setVal(i, constant(Rf_ScalarInteger(1), orep));
                         }
                         break;
                     case blt("names"): {
@@ -3066,8 +3065,8 @@ void LowerFunctionLLVM::compile() {
                             if (auto con = Const::Cast(b->arg(0).val())) {
                                 if (TYPEOF(con->c()) == STRSXP &&
                                     XLENGTH(con->c()) == 1) {
-                                    SEXPTYPE type =
-                                        str2type(CHAR(STRING_ELT(con->c(), 0)));
+                                    SEXPTYPE type = Rf_str2type(
+                                        CHAR(STRING_ELT(con->c(), 0)));
                                     switch (type) {
                                     case LGLSXP:
                                     case INTSXP:

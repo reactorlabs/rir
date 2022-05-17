@@ -2,7 +2,6 @@
 #define RIR_TERMINAL_
 
 #include <iostream>
-#include <string>
 #include <unistd.h>
 
 struct ConsoleColor {
