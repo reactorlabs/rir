@@ -1311,7 +1311,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     return true;
-} // namespace pir
+}
 
 bool Rir2Pir::tryCompileContinuation(Builder& insert, Opcode* start,
                                      const std::vector<PirType>& initialStack) {
@@ -1585,13 +1585,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             // stvar
             {
                 auto n = pc;
-                for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
-                    ;
-                if (n < end) {
+                for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n)) {
                     auto nextbc = BC::decodeShallow(n);
-                    if (nextbc.bc == Opcode::stvar_)
+                    if (nextbc.bc == Opcode::stvar_ ||
+                        nextbc.bc == Opcode::stvar_cached_) {
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));
+                        break;
+                    }
                 }
             }
             inner << "@";
