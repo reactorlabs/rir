@@ -22,13 +22,7 @@ Const::Const(BC::PoolIdx idx, PirType type) : ValueImpl(type), idx(idx) {}
 
 SEXP Const::c() const { return Pool::get(idx); }
 
-void Const::printRef(std::ostream& out) const {
-    if (c() == R_UnboundValue) {
-        out << "unboundValue";
-        return;
-    }
-    out << Print::dumpSexp(Pool::get(idx), 40);
-}
+void Const::printRef(std::ostream& out) const { out << Print::dumpSexp(c()); }
 
 } // namespace pir
 } // namespace rir

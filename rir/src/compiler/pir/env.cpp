@@ -20,14 +20,7 @@ void Env::printRef(std::ostream& out) const {
     }
 
     assert(rho);
-    if (rho == R_GlobalEnv) {
-        out << "GlobalEnv";
-    } else if (rho == R_BaseNamespace) {
-        out << "BaseNamespace";
-    } else {
-        auto val = Print::dumpSexp(rho);
-        out << val.substr(0, val.length() - 1);
-    }
+    out << Print::dumpSexp(rho);
 }
 
 bool Env::isStaticEnv(Value* v) {
