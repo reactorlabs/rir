@@ -1,3 +1,6 @@
+serializing <- if (Sys.getenv("SERIALIZER_RUN",0) != "0") TRUE else FALSE;
+deserializing <- if (Sys.getenv("DESERIALIZER_RUN",0) != "0") TRUE else FALSE;
+warmupDiff <- if (Sys.getenv("WARMUPDIFF",0) != "0") TRUE else FALSE;
 
 verifyResult <- function(x, ...) {
     UseMethod("verifyResult", x)
@@ -19,16 +22,40 @@ doRuns <- function(name, iterations, benchmarkParameter) {
     total <- 0
     class(name) <- tolower(name)
     path <- paste("/opt/bitcodes/", gsub("/","_",name), sep ="")
-    dir.create(path)
-    Sys.setenv(PIR_SERIALIZE_PREFIX = path)
 
+    # Serializer run
+    if (serializing) {
+        dir.create(path)
+        Sys.setenv(PIR_SERIALIZE_PREFIX = path)
+    }
+
+    # Deserializer run
+    if (deserializing) {
+        Sys.setenv(PIR_DESERIALIZE_PREFIX = path)
+        f.loadBitcodes()
+    }
+
+    # Show warmup differently
+    if (warmupDiff) {
+        startTime =  Sys.time()
+        for (i in 1:5) {
+        if (serializing) f.startSerializer()
+        if (!innerBenchmarkLoop(name, benchmarkParameter)) {
+            stop ("Benchmark failed with incorrect result")
+        }
+        if (serializing) f.stopSerializer()
+        }
+        endTime <- Sys.time()
+        runTime = (as.numeric(endTime) - as.numeric(startTime)) * 1000000
+        cat("Warmup: ",runTime, "\n")
+    }
     for (i in 1:iterations) {
         startTime <- Sys.time()
-        f.startSerializer()
+        if (serializing) f.startSerializer()
         if (!innerBenchmarkLoop(name, benchmarkParameter)) {
             stop("Benchmark failed with incorrect result")
         }
-        f.stopSerializer()
+        if (serializing) f.stopSerializer()
         endTime <- Sys.time()
         runTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 
@@ -67,4 +94,3 @@ printUsage <- function() {
 }
 
 run(commandArgs(trailingOnly=TRUE))
-f.serializerCleanup()
