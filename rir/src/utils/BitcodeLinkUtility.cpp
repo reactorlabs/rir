@@ -22,6 +22,9 @@
 #include "compiler/compiler.h"
 #include "compiler/backend.h"
 
+#include <chrono>
+using namespace std::chrono;
+
 
 #define GROWTHRATE 5
 #define PRINT_LINKING_STATUS 0
@@ -372,7 +375,7 @@ void BitcodeLinkUtil::insertToBlacklist(SEXP hastSym) {
     }
 }
 
-bool BitcodeLinkUtil::readyForSerialization(DispatchTable* vtable, SEXP hastSym) {
+bool BitcodeLinkUtil::readyForSerialization(SEXP clos, DispatchTable* vtable, SEXP hastSym) {
     // if the hast already corresponds to other src address and is a different closureObj then
     // there was a collision and we cannot use the function and all functions that depend on it
     REnvHandler vtabMap(HAST_VTAB_MAP);
@@ -488,6 +491,7 @@ void BitcodeLinkUtil::addToWorklistOne(SEXP hastOfReq, SEXP unlockMeta) {
 }
 
 void BitcodeLinkUtil::linkBitcode(SEXP cData, SEXP hSym, SEXP offsetSymbol, DispatchTable * vtab) {
+    auto start = high_resolution_clock::now();
     contextData c(cData);
     // if this context was already added due to unexpected compilation at runtime, skip addition, this can result in duplicate LLVM symbols
     for (size_t i = 0; i < vtab->size(); i++) {
@@ -510,6 +514,10 @@ void BitcodeLinkUtil::linkBitcode(SEXP cData, SEXP hSym, SEXP offsetSymbol, Disp
     pir::Backend backend(m, logger, name);
     backend.deserializeAndPopulateBitcode(cData, hSym, offsetSymbol, vtab);
     delete m;
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    linkTime += duration.count();
+    logger.title("Deserialized " + name);
 }
 
 static inline void doLinking(SEXP unlockMeta, SEXP linkageSymbol) {
@@ -546,11 +554,20 @@ static inline void doLinking(SEXP unlockMeta, SEXP linkageSymbol) {
 
         // link the unlocked bitcode
         BitcodeLinkUtil::linkBitcode(cData, hSym, offsetSym, DispatchTable::unpack(vtabContainer));
+
+        // DispatchTable::unpack(vtabContainer)->disableFurtherSpecialization = false;
     } else {
         #if PRINT_LINKING_STATUS == 1
         std::cout << "  counting (" << *counter << "): " << CHAR(PRINTNAME(hSym)) << "_" << CHAR(PRINTNAME(offsetSym)) << "_" << c.getContext() << std::endl;
         #endif
+        // if (!DispatchTable::check(vtabContainer)) {
+        //     Rf_error("bitcode linking, dispatch table corrupted! (was still counting)");
+        // }
+        // DispatchTable::unpack(vtabContainer)->disableFurtherSpecialization = true;
     }
+    #if PRINT_LINKING_STATUS == 1
+    std::cout << "doLinking end" << std::endl;
+    #endif
 }
 
 static inline void doWorklistOpt(SEXP worklist, const int & nargs) {
@@ -583,6 +600,9 @@ static inline void doWorklistOpt(SEXP worklist, const int & nargs) {
         SET_VECTOR_ELT(worklist, i, R_NilValue);
 
     }
+    #if PRINT_LINKING_STATUS == 1
+    std::cout << "doWorklistOpt end" << std::endl;
+    #endif
 }
 
 static inline void doWorklist(SEXP worklist) {
@@ -603,6 +623,9 @@ static inline void doWorklist(SEXP worklist) {
         SET_VECTOR_ELT(worklist, i, R_NilValue);
 
     }
+    #if PRINT_LINKING_STATUS == 1
+    std::cout << "doWorklist end" << std::endl;
+    #endif
 }
 
 void BitcodeLinkUtil::tryUnlocking(SEXP currHastSym) {
@@ -616,6 +639,10 @@ void BitcodeLinkUtil::tryUnlocking(SEXP currHastSym) {
         // remove entry from the worklist
         hastUnlockMap.remove(currHastSym);
     }
+
+    #if PRINT_LINKING_STATUS == 1
+    std::cout << "tryUnlocking end" << std::endl;
+    #endif
 }
 
 void BitcodeLinkUtil::tryUnlockingOpt(SEXP currHastSym, const unsigned long & con, const int & nargs) {
@@ -869,4 +896,5 @@ void BitcodeLinkUtil::tryLinking(DispatchTable * vtab, SEXP hSym) {
     }
 }
 
+size_t BitcodeLinkUtil::linkTime = 0;
 }

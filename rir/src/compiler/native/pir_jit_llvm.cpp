@@ -33,6 +33,11 @@
 
 #include "ir/Compiler.h"
 #include "utils/DebugMessages.h"
+
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
+#include <system_error>
+
 #define PRINT_DESERIALIZER_PROGRESS 1
 #define PRINT_DESERIALIZED_MODULE_BEFORE_PATCH 0
 #define PRINT_DESERIALIZED_MODULE_AFTER_PATCH 0
@@ -556,136 +561,109 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
     std::unordered_map<int64_t, int64_t> cpAlreadySeen;
     std::unordered_map<int64_t, int64_t> spAlreadySeen;
 
-    // Releasing the module as soon as globals are patched and the bc is serialized
-    {
-        // We clone the module because we dont want to update constant pool references in the original module
-        std::unique_ptr<llvm::Module> module = llvm::CloneModule(*M.get());
+    // We clone the module because we dont want to update constant pool references in the original module
+    std::unique_ptr<llvm::Module> module = llvm::CloneModule(*M.get());
 
-        for (auto & global : (*M.get()).getGlobalList()) {
-            auto globalName = global.getName().str();
-            auto pre = globalName.substr(0,6) == "copool";
-            auto srp = globalName.substr(0,6) == "srpool";
-            auto namc = globalName.substr(0,6) == "named_";
+    for (auto & global : (*M.get()).getGlobalList()) {
+        auto globalName = global.getName().str();
+        auto pre = globalName.substr(0,6) == "copool";
+        auto srp = globalName.substr(0,6) == "srpool";
+        auto namc = globalName.substr(0,6) == "named_";
 
-            if (namc || pre || srp) {
-                global.setExternallyInitialized(false);
-                global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            }
+        if (namc || pre || srp) {
+            global.setExternallyInitialized(false);
+            global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
         }
+    }
 
 
-        std::vector<llvm::Function *> junkFunctionList;
+    std::vector<llvm::Function *> junkFunctionList;
 
-        // Remove junk functions, codn and clsn patches should not be needed on the deserializer ideally
-        for (auto & fun: module->getFunctionList()) {
-            if (fun.getName().str().substr(0,3) == "rsh") {
+    // Remove junk functions, codn and clsn patches should not be needed on the deserializer ideally
+    for (auto & fun: module->getFunctionList()) {
+        if (fun.getName().str().substr(0,3) == "rsh") {
+            junkFunctionList.push_back(&fun);
+        }
+        if (fun.getName().str().substr(0,2) == "f_") {
+            if (std::find(relevantNames.begin(), relevantNames.end(), fun.getName().str()) == relevantNames.end()) {
                 junkFunctionList.push_back(&fun);
             }
-            if (fun.getName().str().substr(0,2) == "f_") {
-                if (std::find(relevantNames.begin(), relevantNames.end(), fun.getName().str()) == relevantNames.end()) {
-                    junkFunctionList.push_back(&fun);
-                }
-            }
+        }
+    }
+
+    for (auto & fun : junkFunctionList) {
+        fun->eraseFromParent();
+    }
+
+    llvm::PassBuilder passBuilder;
+    llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
+    llvm::FunctionAnalysisManager functionAnalysisManager(false);
+    llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
+    llvm::ModuleAnalysisManager moduleAnalysisManager(false);
+
+    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+    passBuilder.registerLoopAnalyses(loopAnalysisManager);
+    // This is the important line:
+    passBuilder.crossRegisterProxies(
+        loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+
+    llvm::ModulePassManager modulePassManager =
+        passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
+    modulePassManager.run(*module, moduleAnalysisManager);
+
+    size_t srcPoolOffset = 0;
+
+    // Patch all CP and SRC pool entries
+    int patchValue = 0;
+    // Iterating over all globals
+    for (auto & global : module->getGlobalList()) {
+        auto pre = global.getName().str().substr(0,6) == "copool";
+        auto srp = global.getName().str().substr(0,6) == "srpool";
+        auto namc = global.getName().str().substr(0,6) == "named_";
+
+        if (namc || pre || srp) {
+            global.setExternallyInitialized(false);
+            global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
         }
 
-        for (auto & fun : junkFunctionList) {
-            fun->eraseFromParent();
-        }
+        if (srp) {
+            auto con = global.getInitializer();
+            if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
+                // Simple constant ints
+                auto val = v->getSExtValue();
+                // contains replacement value, relative to serialized pool
+                llvm::Constant* replacementValue;
 
-        llvm::PassBuilder passBuilder;
-        llvm::LoopAnalysisManager loopAnalysisManager(false); // true is just to output debug info
-        llvm::FunctionAnalysisManager functionAnalysisManager(false);
-        llvm::CGSCCAnalysisManager cGSCCAnalysisManager(false);
-        llvm::ModuleAnalysisManager moduleAnalysisManager(false);
-
-        passBuilder.registerModuleAnalyses(moduleAnalysisManager);
-        passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
-        passBuilder.registerFunctionAnalyses(functionAnalysisManager);
-        passBuilder.registerLoopAnalyses(loopAnalysisManager);
-        // This is the important line:
-        passBuilder.crossRegisterProxies(
-            loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
-
-        llvm::ModulePassManager modulePassManager =
-            passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
-        modulePassManager.run(*module, moduleAnalysisManager);
-
-        size_t srcPoolOffset = 0;
-
-        // Patch all CP and SRC pool entries
-        int patchValue = 0;
-        // Iterating over all globals
-        for (auto & global : module->getGlobalList()) {
-            auto pre = global.getName().str().substr(0,6) == "copool";
-            auto srp = global.getName().str().substr(0,6) == "srpool";
-            auto namc = global.getName().str().substr(0,6) == "named_";
-
-            if (namc || pre || srp) {
-                global.setExternallyInitialized(false);
-                global.setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            }
-
-            if (srp) {
-                auto con = global.getInitializer();
-                if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
-                    // Simple constant ints
-                    auto val = v->getSExtValue();
-                    // contains replacement value, relative to serialized pool
-                    llvm::Constant* replacementValue;
-
-                    if (spAlreadySeen.find(val) == spAlreadySeen.end()) {
-                        // If not seen, we add it to the serialization pool
-                        spEntries.push_back(val);
-                        // update seen map
-                        spAlreadySeen[val] = srcPoolOffset;
-                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, srcPoolOffset++));
-                    } else {
-                        // If already seen, just use the previously patched value
-                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, spAlreadySeen[val]));
-                    }
-
-                    global.setInitializer(replacementValue);
+                if (spAlreadySeen.find(val) == spAlreadySeen.end()) {
+                    // If not seen, we add it to the serialization pool
+                    spEntries.push_back(val);
+                    // update seen map
+                    spAlreadySeen[val] = srcPoolOffset;
+                    replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, srcPoolOffset++));
+                } else {
+                    // If already seen, just use the previously patched value
+                    replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, spAlreadySeen[val]));
                 }
+
+                global.setInitializer(replacementValue);
             }
-            // All constant pool references have a copool prefix
-            if (pre) {
-                llvm::raw_os_ostream ost(std::cout);
-                auto con = global.getInitializer();
-                if (auto * v = llvm::dyn_cast<llvm::ConstantDataArray>(con)) {
-                    // Constant data array
-                    std::vector<llvm::Constant*> patchedIndices;
+        }
+        // All constant pool references have a copool prefix
+        if (pre) {
+            llvm::raw_os_ostream ost(std::cout);
+            auto con = global.getInitializer();
+            if (auto * v = llvm::dyn_cast<llvm::ConstantDataArray>(con)) {
+                // Constant data array
+                std::vector<llvm::Constant*> patchedIndices;
 
-                    auto arrSize = v->getNumElements();
+                auto arrSize = v->getNumElements();
 
-                    for (unsigned int i = 0; i < arrSize; i++) {
+                for (unsigned int i = 0; i < arrSize; i++) {
 
-                        // cp Index that we are referring to
-                        auto val = v->getElementAsAPInt(i).getSExtValue();
-
-                        // contains replacement value, relative to serialized pool
-                        llvm::Constant* replacementValue;
-
-                        if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
-                            // If not seen, we add it to the serialization pool
-                            cpEntries.push_back(val);
-                            // update seen map
-                            cpAlreadySeen[val] = patchValue;
-                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
-                        } else {
-                            // If already seen, just use the previously patched value
-                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
-                        }
-                        patchedIndices.push_back(replacementValue);
-
-                    }
-
-                    auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
-                    auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
-
-                    global.setInitializer(newInit);
-                } else if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
-                    // Simple constant ints
-                    auto val = v->getSExtValue();
+                    // cp Index that we are referring to
+                    auto val = v->getElementAsAPInt(i).getSExtValue();
 
                     // contains replacement value, relative to serialized pool
                     llvm::Constant* replacementValue;
@@ -700,56 +678,88 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
                         // If already seen, just use the previously patched value
                         replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
                     }
+                    patchedIndices.push_back(replacementValue);
 
-                    global.setInitializer(replacementValue);
-                } else if (auto * v = llvm::dyn_cast<llvm::ConstantAggregateZero>(con)) {
-                    // Constant data array
-                    std::vector<llvm::Constant*> patchedIndices;
-
-                    auto arrSize = v->getNumElements();
-
-                    for (unsigned int i = 0; i < arrSize; i++) {
-
-                        // cp Index that we are referring to
-                        auto val = 0;
-
-                        // contains replacement value, relative to serialized pool
-                        llvm::Constant* replacementValue;
-
-                        if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
-                            // If not seen, we add it to the serialization pool
-                            cpEntries.push_back(val);
-                            // update seen map
-                            cpAlreadySeen[val] = patchValue;
-                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
-                        } else {
-                            // If already seen, just use the previously patched value
-                            replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
-                        }
-                        patchedIndices.push_back(replacementValue);
-
-                    }
-
-                    auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
-                    auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
-
-                    global.setInitializer(newInit);
                 }
+
+                auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
+                auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
+
+                global.setInitializer(newInit);
+            } else if (auto * v = llvm::dyn_cast<llvm::ConstantInt>(con)) {
+                // Simple constant ints
+                auto val = v->getSExtValue();
+
+                // contains replacement value, relative to serialized pool
+                llvm::Constant* replacementValue;
+
+                if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
+                    // If not seen, we add it to the serialization pool
+                    cpEntries.push_back(val);
+                    // update seen map
+                    cpAlreadySeen[val] = patchValue;
+                    replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
+                } else {
+                    // If already seen, just use the previously patched value
+                    replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
+                }
+
+                global.setInitializer(replacementValue);
+            } else if (auto * v = llvm::dyn_cast<llvm::ConstantAggregateZero>(con)) {
+                // Constant data array
+                std::vector<llvm::Constant*> patchedIndices;
+
+                auto arrSize = v->getNumElements();
+
+                for (unsigned int i = 0; i < arrSize; i++) {
+
+                    // cp Index that we are referring to
+                    auto val = 0;
+
+                    // contains replacement value, relative to serialized pool
+                    llvm::Constant* replacementValue;
+
+                    if (cpAlreadySeen.find(val) == cpAlreadySeen.end()) {
+                        // If not seen, we add it to the serialization pool
+                        cpEntries.push_back(val);
+                        // update seen map
+                        cpAlreadySeen[val] = patchValue;
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, patchValue++));
+                    } else {
+                        // If already seen, just use the previously patched value
+                        replacementValue = llvm::ConstantInt::get(rir::pir::PirJitLLVM::getContext(), llvm::APInt(32, cpAlreadySeen[val]));
+                    }
+                    patchedIndices.push_back(replacementValue);
+
+                }
+
+                auto ty = llvm::ArrayType::get(rir::pir::t::Int, patchedIndices.size());
+                auto newInit = llvm::ConstantArray::get(ty, patchedIndices);
+
+                global.setInitializer(newInit);
             }
         }
-
-        // SERIALIZE THE LLVM MODULE
-        std::ofstream bitcodeFile;
-
-        std::stringstream bcPath;
-        bcPath << prefix << "/" << "temp.bc";
-
-        bitcodeFile.open(bcPath.str().c_str());
-        llvm::raw_os_ostream ooo(bitcodeFile);
-        WriteBitcodeToFile(*module,ooo);
-
-        module.reset();
     }
+
+    // SERIALIZE THE LLVM MODULE
+    std::stringstream bcPathSS;
+    bcPathSS << prefix << "/" << "temp.bc";
+
+    std::string ss = bcPathSS.str();
+    llvm::StringRef bcPathRef(ss);
+
+    std::error_code errC;
+    llvm::raw_fd_ostream opStr(bcPathRef, errC);
+
+    WriteBitcodeToFile(*module,opStr);
+
+    if (errC) {
+        std::cout << "Writing bitcode to file: " << ss << std::endl;
+        Rf_error("Error writing bitcode to file!");
+    }
+
+
+    module.reset();
 
     // Creating a vector containing all pool references
     contextData conData(cData);

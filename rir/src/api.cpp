@@ -59,6 +59,7 @@ static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
 static bool oldDeoptChaos = false;
 
+static size_t timeInPirCompiler = 0;
 static size_t compilerSuccesses = 0;
 static size_t bitcodeTotalLoadTime = 0;
 static int serializerSuccess = 0, serializerFailed = 0, serializerTTCSkip = 0;
@@ -404,6 +405,8 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     SEXP serDataContainer;
     PROTECT(serDataContainer = R_Unserialize(&inputStream));
 
+    fclose(reader);
+
     // Get serialized metadata
     serializerData sData(serDataContainer);
     SEXP hastSym = sData.getHastData();
@@ -484,243 +487,6 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     return R_FalseValue;
 }
 
-static void iterateOverMetadatasInDirectory(const char * folderPath, std::ofstream & jsonOutFile) {
-
-    bool prettyJson = true;
-
-    // Disable contextual compilation during deserialization as R_Unserialize
-    // will lead to a lot of unnecessary compilation otherwise
-    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
-
-    if (skipPirCompilation == false) {
-        setenv("PIR_DISABLE_COMPILATION", "1", 1);
-    }
-
-    Protect prot;
-    DIR *dir;
-    struct dirent *ent;
-    int metaNo = 0;
-    if ((dir = opendir(folderPath)) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            std::string fName = ent->d_name;
-            if (fName.find(".meta") != std::string::npos) {
-                metaNo++;
-            }
-        }
-    }
-    int i = 0;
-    if ((dir = opendir(folderPath)) != NULL) {
-        while ((ent = readdir(dir)) != NULL) {
-            std::string fName = ent->d_name;
-            if (fName.find(".meta") != std::string::npos) {
-                i++;
-
-
-                jsonOutFile << "\"" << fName << "\" : {";
-                if (prettyJson) jsonOutFile << "\n";
-
-                std::stringstream metadataPath;
-                metadataPath << folderPath << "/" << fName;
-
-                FILE *reader;
-                reader = fopen(metadataPath.str().c_str(),"r");
-
-                // Initialize the deserializing stream
-                R_inpstream_st inputStream;
-                R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
-
-
-                SEXP serDataContainer;
-                PROTECT(serDataContainer = R_Unserialize(&inputStream));
-
-                // Get serialized metadata
-                serializerData sData(serDataContainer);
-
-                // sData.print();
-
-
-                sData.printToJson(jsonOutFile, prettyJson);
-
-                jsonOutFile << "}";
-                if (i != metaNo) {
-                    jsonOutFile << ",";
-                }
-                if (prettyJson) jsonOutFile << "\n";
-
-                UNPROTECT(1);
-
-            }
-        }
-    } else {
-        std::cout << "\"" << folderPath << "\" has no metas" << std::endl;
-    }
-
-    if (skipPirCompilation == false) {
-        unsetenv("PIR_DISABLE_COMPILATION");
-    }
-
-
-
-}
-
-REXPORT SEXP processBitcodeFolders(SEXP path) {
-    bool prettyJson = true;
-
-    if (Rf_isValidString(path)) {
-        for (int i = 0; i < LENGTH(path); i++) {
-            SEXP curr = VECTOR_ELT(path, i);
-            const char * currPath = CHAR(curr);
-            std::cout << "processing folder: " << i << " -> " << currPath << std::endl;
-
-            std::stringstream ss;
-            ss << currPath << "/" << "summary.json";
-
-            std::ofstream jsonOutFile;
-            jsonOutFile.open(ss.str().c_str());
-
-            jsonOutFile << "{";
-            if (prettyJson) jsonOutFile << "\n";
-
-            iterateOverMetadatasInDirectory(currPath, jsonOutFile);
-
-            jsonOutFile << "}";
-            if (prettyJson) jsonOutFile << "\n";
-            jsonOutFile.close();
-
-
-        }
-    } else {
-        std::cout << "invalid path" << std::endl;
-        return R_FalseValue;
-    }
-
-    return R_TrueValue;
-}
-
-REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path) {
-    // Disable contextual compilation during deserialization as R_Unserialize
-    // will lead to a lot of unnecessary compilation otherwise
-    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
-
-    if (skipPirCompilation == false) {
-        setenv("PIR_DISABLE_COMPILATION", "1", 1);
-    }
-
-    if (Rf_isValidString(path)) {
-        for (int i = 0; i < LENGTH(path); i++) {
-            SEXP curr = VECTOR_ELT(path, i);
-            const char * currPath = CHAR(curr);
-
-            std::unordered_map<std::string, unsigned long> maskMap;
-            std::unordered_map<std::string, std::vector<unsigned long>> conToRemoveMap;
-
-            std::stringstream maskPath;
-            maskPath << currPath << "/maskData";
-            std::ifstream maskData(maskPath.str().c_str());
-            for(std::string line; getline(maskData, line);) {
-                auto firstDel = line.find(',');
-                auto secondDel = line.find(',', firstDel + 1);
-                auto hast = line.substr(0, firstDel);
-                auto offset = line.substr(firstDel + 1, secondDel - firstDel - 1);
-                auto key = hast + "_" + offset;
-                auto mask = std::stoull(line.substr(secondDel + 1));
-                maskMap[key] = mask;
-
-                getline(maskData, line);
-                std::stringstream ss(line);
-                std::string word;
-                std::vector<unsigned long> ctrVec;
-                std::cout << "Contexts to remove: " << line << std::endl;
-                while (ss >> word) {
-                    auto con = std::stoull(word);
-                    ctrVec.push_back(con);
-                    std::cout << "  " << con << std::endl;
-                }
-                conToRemoveMap[key] = ctrVec;
-            }
-
-            if (maskMap.empty()) {
-                std::cout << "maskMap is empty!" << std::endl;
-                return R_NilValue;
-            }
-
-            Protect prot;
-            DIR *dir;
-            struct dirent *ent;
-
-            if ((dir = opendir(currPath)) != NULL) {
-                while ((ent = readdir(dir)) != NULL) {
-                    std::string fName = ent->d_name;
-                    if (fName.find(".meta") != std::string::npos) {
-                        std::stringstream metadataPath;
-                        metadataPath << currPath << "/" << fName;
-                        FILE *reader;
-                        reader = fopen(metadataPath.str().c_str(),"r");
-
-                        // Initialize the deserializing stream
-                        R_inpstream_st inputStream;
-                        R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
-
-                        SEXP serDataContainer;
-                        PROTECT(serDataContainer = R_Unserialize(&inputStream));
-
-                        fclose(reader);
-
-                        // Get serialized metadata
-                        serializerData sData(serDataContainer);
-                        SEXP hastSym = sData.getHastData();
-                        REnvHandler offsetMap(sData.getContextMap());
-                        offsetMap.iterate([&](SEXP offsetSym, SEXP contextMapContainer){
-                            std::stringstream ss;
-                            ss << CHAR(PRINTNAME(hastSym)) << "_" << CHAR(PRINTNAME(offsetSym));
-                            REnvHandler contextMap(contextMapContainer);
-                            if (conToRemoveMap.find(ss.str()) != conToRemoveMap.end()) {
-                                for (auto & ele : conToRemoveMap[ss.str()]) {
-                                    contextMap.remove(std::to_string(ele));
-                                    std::cout << "removing context: " << ele << std::endl;
-                                }
-                            }
-
-                            if (maskMap.find(ss.str()) != maskMap.end()) {
-                                std::cout << "adding mask" << std::endl;
-
-                                SEXP store;
-                                PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned long)));
-                                unsigned long * tmp = (unsigned long *) DATAPTR(store);
-                                *tmp = maskMap[ss.str()];
-                                contextMap.set("mask", store);
-                                UNPROTECT(1);
-                            }
-
-                        });
-
-                        // sData.print();
-
-                        // 2. Write updated metadata
-                        R_outpstream_st outputStream;
-                        FILE *fptr;
-                        fptr = fopen(metadataPath.str().c_str(),"w");
-                        R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
-                        R_Serialize(sData.getContainer(), &outputStream);
-                        fclose(fptr);
-
-                        UNPROTECT(1);
-
-                    }
-                }
-            }
-
-        }
-    }
-
-    if (skipPirCompilation == false) {
-        unsetenv("PIR_DISABLE_COMPILATION");
-    }
-
-
-    return R_NilValue;
-}
-
 REXPORT SEXP loadBitcodes() {
     Protect prot;
     DIR *dir;
@@ -764,9 +530,6 @@ REXPORT SEXP loadBitcodes() {
             });
         });
         #endif
-    } else {
-        /* could not open directory */
-        perror ("");
     }
     #if CREATE_DOT_GRAPH == 1
     std::ofstream outfile1 ("dependencies.DOT", std::ios_base::app);
@@ -777,8 +540,9 @@ REXPORT SEXP loadBitcodes() {
 }
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
-    static bool initializeBitcodes = false;
-    if (!initializeBitcodes) {
+    static bool initializeBitcodes = true;
+    static bool earlyLoadBitcodes = getenv("EARLY_BITCODES") ? true : false;
+    if (!initializeBitcodes && earlyLoadBitcodes) {
         auto start = high_resolution_clock::now();
         loadBitcodes();
         auto stop = high_resolution_clock::now();
@@ -821,11 +585,12 @@ REXPORT SEXP compileStats() {
     std::cout << "Unused bitcodes          : " << unused << std::endl;
     std::cout << "Unlinked bitcodes        : " << unlinked << std::endl;
     std::cout << "Bitcode Load Time        : " << bitcodeTotalLoadTime << "ms" << std::endl;
-    std::cout << "Linking time             : " << Compiler::linkTime << "ms" << std::endl;
+    std::cout << "Linking time             : " << BitcodeLinkUtil::linkTime << "ms" << std::endl;
     std::cout << "Successful compilations: : " << compilerSuccesses << std::endl;
     std::cout << "Serializer Success       : " << serializerSuccess << std::endl;
     std::cout << "Serializer TTC skip      : " << serializerTTCSkip << std::endl;
     std::cout << "Serializer Failed        : " << serializerFailed << std::endl;
+    std::cout << "Time in PIR Compiler     : " << timeInPirCompiler << "ms" << std::endl;
     std::cout << "Blacklisted              : " << blacklisted << std::endl;
     std::cout << "Failed                   : " << failed << std::endl;
     return Rf_ScalarInteger(compilerSuccesses);
@@ -1060,6 +825,7 @@ static bool fileExists(std::string fName) {
 }
 
 static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std::string & name, contextData & cData) {
+    DebugMessages::printSerializerMessage("(*) serializeClosure start", 1);
     auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
     std::stringstream fN;
     fN << prefix << "/" << "m_" << CHAR(PRINTNAME(hast)) << ".meta";
@@ -1110,7 +876,7 @@ static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std:
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug) {
-    // static int minTTC = getenv("TTC") ? std::stoi(getenv("TTC")) : 10;
+    auto startCompileTimeCounter = high_resolution_clock::now();
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -1148,37 +914,26 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             if (serializeLL && hast != R_NilValue) {
                 DebugMessages::printSerializerMessage("> Serializer Started", 0);
 
-                bool serializerError = false;
+                // Disable further compilations due to the recomipile heuristic, weird eval problems can happen
+                // when serializing/deserializing otherwise
+                bool oldVal = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+                setenv("PIR_DISABLE_COMPILATION", "1", 1);
+
 
                 // Context data container
                 SEXP cDataContainer;
                 PROTECT(cDataContainer = Rf_allocVector(VECSXP, 9));
-                Pool::insert(cDataContainer);
-                UNPROTECT(1);
                 contextData cData(cDataContainer);
                 cData.addContext(c->context().toI());
 
                 // Add the metadata collectors to the backend
+                bool serializerError = false;
                 backend.cData = cDataContainer;
                 backend.serializerError = &serializerError;
 
-                // // Time to compile
-                // auto start = high_resolution_clock::now();
-
                 // Compile
                 auto fun = backend.getOrCompile(c);
-                Protect p(fun->container());
-
-                // auto stop = high_resolution_clock::now();
-                // auto duration = duration_cast<milliseconds>(stop - start);
-
-                // bool TTCTooLow = false;
-
-
-
-                // if (duration.count() < minTTC) {
-                //     TTCTooLow = true;
-                // }
+                PROTECT(fun->container());
 
                 // Mark hast as stale in the runtime, loading the new bitcode will lead to duplicate LLVM symbols
                 if (hast != R_NilValue) {
@@ -1190,11 +945,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     done = fun;
                 }
 
-                // if (TTCTooLow) {
-                //     serializerTTCSkip++;
-                //     DebugMessages::printSerializerMessage("/> Serializer Skipper, TTC is too low", 0);
-                // } else
-
+                // Serialize metadata and rename bitcode files if everything was fine, otherwise do nothing
+                //   as the temporary bitcode files, temp.bc will be overridden in the future anyway.
                 if (!serializerError) {
                     serializerSuccess++;
                     serializeClosure(hast, data.index, c->name(), cData);
@@ -1205,6 +957,13 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 }
                 backend.cData = nullptr;
                 backend.serializerError = nullptr;
+
+                // Restore compilations to existing state
+                if (!oldVal) {
+                    unsetenv("PIR_DISABLE_COMPILATION");
+                }
+
+                UNPROTECT(2);
             } else {
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
@@ -1249,6 +1008,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     logger.title("Compiled " + name);
     delete m;
     UNPROTECT(1);
+    auto stopCompileTimeCounter = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stopCompileTimeCounter - startCompileTimeCounter);
+    timeInPirCompiler += duration.count();
     return what;
 }
 
@@ -1343,7 +1105,6 @@ REXPORT SEXP serializerCleanup() {
 
     } else {
         /* could not open directory */
-        perror ("");
         return R_FalseValue;
     }
 

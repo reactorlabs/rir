@@ -137,7 +137,7 @@ class Compiler {
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
-        if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(vtable, hast)) {
+        if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(inClosure, vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
             std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;
             BitcodeLinkUtil::printSources(vtable, hast);
@@ -146,19 +146,12 @@ class Compiler {
             BitcodeLinkUtil::insertVTable(vtable, hast);
             BitcodeLinkUtil::populateHastSrcData(vtable, hast);
             BitcodeLinkUtil::insertClosObj(inClosure, hast);
-            auto start = high_resolution_clock::now();
-            // std::cout << "============= deserializer start =============" << std::endl;
             #if ONLY_APPLY_MASK == 1
             BitcodeLinkUtil::applyMask(vtable, hast);
             #else
             BitcodeLinkUtil::tryLinking(vtable, hast);
             BitcodeLinkUtil::tryUnlocking(hast);
             #endif
-            // std::cout << "==============================================" << std::endl << std::endl;
-
-            auto stop = high_resolution_clock::now();
-            auto duration = duration_cast<milliseconds>(stop - start);
-            linkTime += duration.count();
         } else {
             #if DEBUG_TABLE_ENTRIES == 1
             std::cout << "(BLACK) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;

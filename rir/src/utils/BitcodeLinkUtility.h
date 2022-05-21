@@ -30,7 +30,7 @@ namespace rir {
 
     class BitcodeLinkUtil {
     public:
-
+        static size_t linkTime;
         static SEXP getHast(SEXP body, SEXP env);
 
         static void populateHastSrcData(DispatchTable* vtable, SEXP hastSym);
@@ -41,7 +41,7 @@ namespace rir {
 
         static void insertToBlacklist(SEXP hastSym);
 
-        static bool readyForSerialization(DispatchTable* vtable, SEXP hastSym);
+        static bool readyForSerialization(SEXP clos, DispatchTable* vtable, SEXP hastSym);
 
         static SEXP getOptUnlockMap();
 

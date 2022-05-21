@@ -233,10 +233,11 @@ namespace rir {
                     SEXP newVec;
                     PROTECT(newVec = Rf_allocVector(VECSXP, Rf_length(rData) - 1));
 
+                    int newVecIdx = 0;
                     for (int i = 0; i < Rf_length(rData); i++) {
                         SEXP e = VECTOR_ELT(rData, i);
                         if (i != containsElement) {
-                            SET_VECTOR_ELT(newVec, i, e);
+                            SET_VECTOR_ELT(newVec, newVecIdx++, e);
                         }
                     }
 

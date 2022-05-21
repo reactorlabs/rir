@@ -40,8 +40,8 @@ class Pool {
     static void patch(BC::PoolIdx idx, SEXP e) {
         SET_NAMED(e, 2);
         cp_pool_set(globalContext(), idx, e);
-        if (!contents.count(e))
-            contents[e] = idx;
+        // if (!contents.count(e))
+        //     contents[e] = idx;
     }
 
     static BC::PoolIdx getNum(double n);

@@ -41,8 +41,6 @@ hastAndIndex getHastAndIndex(unsigned src, bool constantPool = false);
 REXPORT SEXP startSerializer();
 REXPORT SEXP stopSerializer();
 REXPORT SEXP loadBitcodes();
-REXPORT SEXP processBitcodeFolders(SEXP path);
-REXPORT SEXP addMaskDataToBitcodeMetadata(SEXP path);
 REXPORT SEXP compileStats();
 REXPORT SEXP startDebugMessages();
 REXPORT SEXP stopDebugMessages();
