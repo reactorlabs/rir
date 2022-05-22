@@ -4,7 +4,7 @@ stages:
   # - Run tests
   - Deploy
   - Cleanup
-  - PrepareBitcodes
+  # - PrepareBitcodes
   - BenchmarkPeak
   - BenchmarkWarmup
   - Report
@@ -14,7 +14,10 @@ cache:
   - apt-cache/
 
 variables:
-  REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
+  REBENCH_OPTIONS_PBC: "-df $CI_PROJECT_DIR/benchmarksPeakBC.data -R"
+  REBENCH_OPTIONS_P: "-df $CI_PROJECT_DIR/benchmarksPeak.data -R"
+  REBENCH_OPTIONS_WBC: "-df $CI_PROJECT_DIR/benchmarksWarmupkBC.data -R"
+  REBENCH_OPTIONS_W: "-df $CI_PROJECT_DIR/benchmarksWarmup.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
 
 rir_container:
@@ -113,34 +116,42 @@ report_results:
   script:
     - ruby tools/report_ci_results.rb
 
-prepare_bitcodes:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: PrepareBitcodes
-  variables:
-    GIT_STRATEGY: none
-  script:
-    - cp /opt/rir/harnesses/AWFharness.r /opt/rbenchmarking/Benchmarks/areWeFast/harness.r
-    - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
-    - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
-    - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
-    - mkdir /opt/bitcodes
-    - SERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-    - ls /opt
-    - ls /opt/bitcodes/bytecodes
-  retry: 1
+# prepare_bitcodes:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   stage: PrepareBitcodes
+#   variables:
+#     GIT_STRATEGY: none
+#   script:
+#     - cp /opt/rir/harnesses/AWFharness.r /opt/rbenchmarking/Benchmarks/areWeFast/harness.r
+#     - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
+#     - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
+#     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
+#     - mkdir /opt/bitcodes
+#     - SERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
+#     - ls /opt
+#     - ls /opt/bitcodes/bytecodes
+#     - echo "serializer run done"
+#   retry: 1
 
 benchmark_peak:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: BenchmarkPeak
-  needs:
-    - prepare_bitcodes
+  # needs:
+  #   - prepare_bitcodes
   variables:
     GIT_STRATEGY: none
   script:
+    - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
     - echo "With bitcodes"
-    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_PBC"
     - echo "Without bitcodes"
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_P"
+    - echo "benchmark peak done"
+  artifacts:
+    paths:
+    - benchmarksPeakBC.data
+    - benchmarksPeak.data
+    expire_in: 24 month
   retry: 1
 
 benchmark_warmup:
@@ -153,7 +164,13 @@ benchmark_warmup:
   script:
     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
     - echo "With bitcodes"
-    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_WBC"
     - echo "Without bitcodes"
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_W"
+    - echo "benchmark warmup done"
+  artifacts:
+    paths:
+    - benchmarksWarmupkBC.data
+    - benchmarksWarmup.data
+    expire_in: 24 month
   retry: 1
