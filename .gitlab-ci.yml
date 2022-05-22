@@ -1,14 +1,12 @@
 stages:
   - Build container
   - Build benchmark container
-  - Run tests
+  # - Run tests
   - Deploy
   - Cleanup
-  - Benchmark
-  - BenchmarkPeakNormal
-  - BenchmarkPeakBc
-  - BenchmarkWarmupNormal
-  - BenchmarkWarmupBc
+  - PrepareBitcodes
+  - BenchmarkPeak
+  - BenchmarkWarmup
   - Report
 
 cache:
@@ -60,18 +58,18 @@ benchmark_container:
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   retry: 1
 
-# Test the benchmarks container before deploying
-test_benchmarks:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  variables:
-    GIT_STRATEGY: none
-  stage: Run tests
-  needs:
-    - benchmark_container
-  script:
-    - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
-    - PIR_DEOPT_CHAOS=100000 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
-    - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
+# # Test the benchmarks container before deploying
+# test_benchmarks:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   variables:
+#     GIT_STRATEGY: none
+#   stage: Run tests
+#   needs:
+#     - benchmark_container
+#   script:
+#     - "sed -i 's/warmup: 5/warmup: 0/' /opt/rbenchmarking/rebench.conf"
+#     - PIR_DEOPT_CHAOS=100000 PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 2"
+#     - PATH=~/.local/bin:$PATH /opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release/ /opt/rir/external/custom-r "e:PIR-LLVM -R -r --iterations 3"
 
 deploy:
   stage: Deploy
@@ -115,15 +113,11 @@ report_results:
   script:
     - ruby tools/report_ci_results.rb
 
-benchmark_llvm:
+prepare_bitcodes:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: Benchmark
-  needs:
-    - test_benchmarks
+  stage: PrepareBitcodes
   variables:
     GIT_STRATEGY: none
-  tags:
-    - benchmarks
   script:
     - cp /opt/rir/harnesses/AWFharness.r /opt/rbenchmarking/Benchmarks/areWeFast/harness.r
     - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
@@ -133,82 +127,33 @@ benchmark_llvm:
     - SERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - ls /opt
     - ls /opt/bitcodes/bytecodes
-    - DEBIAN_FRONTEND=noninteractive apt-get -o dir::cache::archives=apt-cache install -y -qq zip
-    - zip -r $CI_PROJECT_DIR/bitcodes.zip /opt/bitcodes
-    - ls /opt
-    - ls /opt/bitcodes/bytecodes
-  artifacts:
-    paths:
-    - bitcodes.zip
-    - benchmarks.data
-    expire_in: 24 month
   retry: 1
 
-benchmark_peak_normal:
+benchmark_peak:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkPeakNormal
+  stage: BenchmarkPeak
   needs:
-    - benchmark_llvm
+    - prepare_bitcodes
   variables:
     GIT_STRATEGY: none
-  tags:
-    - benchmarks
   script:
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-  retry: 1
-
-benchmark_peak_bc:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkPeakBc
-  needs:
-    - benchmark_peak_normal
-  variables:
-    GIT_STRATEGY: none
-  tags:
-    - benchmarks
-  script:
+    - echo "With bitcodes"
     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
+    - echo "Without bitcodes"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   retry: 1
 
-benchmark_warmup_normal:
+benchmark_warmup:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkWarmupNormal
+  stage: BenchmarkWarmup
   needs:
-    - benchmark_peak_bc
+    - benchmark_peak
   variables:
     GIT_STRATEGY: none
-  tags:
-    - benchmarks
   script:
     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
-  retry: 1
-
-benchmark_warmup_bc:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkWarmupBc
-  needs:
-    - benchmark_warmup_normal
-  variables:
-    GIT_STRATEGY: none
-  tags:
-    - benchmarks
-  script:
+    - echo "With bitcodes"
     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-  artifacts:
-    paths:
-    - benchmarks.data
-    expire_in: 24 month
+    - echo "Without bitcodes"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
   retry: 1
