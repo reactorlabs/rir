@@ -15,10 +15,8 @@ cache:
   - apt-cache/
 
 variables:
-  REBENCH_OPTIONS_PBC: "-df $CI_PROJECT_DIR/benchmarksPeakBC.data -R"
-  REBENCH_OPTIONS_P: "-df $CI_PROJECT_DIR/benchmarksPeak.data -R"
-  REBENCH_OPTIONS_WBC: "-df $CI_PROJECT_DIR/benchmarksWarmupkBC.data -R"
-  REBENCH_OPTIONS_W: "-df $CI_PROJECT_DIR/benchmarksWarmup.data -R"
+  REBENCH_OPTIONS_BC: "-df $CI_PROJECT_DIR/benchmarksBC.data -R"
+  REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
   REBENCH_RUN: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks /opt/rir/build/release"
 
 rir_container:
@@ -127,18 +125,17 @@ bitcode_test:
     - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
     - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
-    - mkdir /opt/bitcodes
-    - cd /opt/rbenchmarking/Benchmarks/areWeFast/
-    - echo "-> Serializing bitcodes"
-    - DES_DBG=2 SERIALIZER_RUN=1 /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > out
-    - cat out
+    - cp /opt/rir/harnesses/sim_rebench.conf /opt/rbenchmarking/rebench.conf
+    - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
     - ls /opt/bitcodes
-    - echo "-> Running with bitcodes"
-    - PIR_DEBUG=ShowWarnings DESERIALIZER_RUN=1 /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > outBc
-    - echo "-> Running without bitcodes"
-    - PIR_DEBUG=ShowWarnings /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > outRsh
-    - cat outBc
-    - cat outRsh
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
+    - echo "Run Done"
+  artifacts:
+    paths:
+    - benchmarksBC.data
+    - benchmarks.data
+    expire_in: 24 month
   retry: 1
 
 # prepare_bitcodes:
