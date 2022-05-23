@@ -130,13 +130,13 @@ bitcode_test:
     - mkdir /opt/bitcodes
     - cd /opt/rbenchmarking/Benchmarks/areWeFast/
     - echo "-> Serializing bitcodes"
-    - DES_DBG=2 SERIALIZER_RUN=1 /opt/rir/build/release/bin/Rscript harness.r convolution_v 10 1000 > out
+    - DES_DBG=2 SERIALIZER_RUN=1 /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > out
     - cat out
     - ls /opt/bitcodes
     - echo "-> Running with bitcodes"
-    - PIR_DEBUG=ShowWarnings DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC" > outBc
+    - PIR_DEBUG=ShowWarnings DESERIALIZER_RUN=1 /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > outBc
     - echo "-> Running without bitcodes"
-    - PIR_DEBUG=ShowWarnings $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC" > outRsh
+    - PIR_DEBUG=ShowWarnings /opt/rir/build/release/bin/Rscript harness.r Mandelbrot 10 500 > outRsh
     - cat outBc
     - cat outRsh
   retry: 1
