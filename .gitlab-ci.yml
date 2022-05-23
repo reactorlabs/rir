@@ -6,7 +6,7 @@ stages:
   - Cleanup
   # - PrepareBitcodes
   - BenchmarkPeak
-  - BenchmarkWarmup
+  # - BenchmarkWarmup
   - Report
 
 cache:
@@ -142,35 +142,45 @@ benchmark_peak:
     GIT_STRATEGY: none
   script:
     - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
+    - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
     - echo "With bitcodes"
-    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_PBC"
-    - echo "Without bitcodes"
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_P"
-    - echo "benchmark peak done"
+    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_PBC"
+    # - rm -rf /opt/bitcodes
+    # - echo "Without bitcodes"
+    # - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_P"
+    # - echo "benchmark peak done"
+    # - echo "benchmark warmups"
+    # - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
+    # - echo "With bitcodes"
+    # - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_WBC"
+    # - echo "Without bitcodes"
+    # - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_W"
+    # - echo "benchmark warmup done"
+
   artifacts:
     paths:
     - benchmarksPeakBC.data
-    - benchmarksPeak.data
+    # - benchmarksPeak.data
     expire_in: 24 month
   retry: 1
 
-benchmark_warmup:
-  image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
-  stage: BenchmarkWarmup
-  needs:
-    - benchmark_peak
-  variables:
-    GIT_STRATEGY: none
-  script:
-    - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
-    - echo "With bitcodes"
-    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_WBC"
-    - echo "Without bitcodes"
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_W"
-    - echo "benchmark warmup done"
-  artifacts:
-    paths:
-    - benchmarksWarmupkBC.data
-    - benchmarksWarmup.data
-    expire_in: 24 month
-  retry: 1
+# benchmark_warmup:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   stage: BenchmarkWarmup
+#   needs:
+#     - benchmark_peak
+#   variables:
+#     GIT_STRATEGY: none
+#   script:
+#     - cp /opt/rir/harnesses/rebench.conf /opt/rbenchmarking/rebench.conf
+#     - echo "With bitcodes"
+#     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_WBC"
+#     - echo "Without bitcodes"
+#     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_W"
+#     - echo "benchmark warmup done"
+#   artifacts:
+#     paths:
+#     - benchmarksWarmupkBC.data
+#     - benchmarksWarmup.data
+#     expire_in: 24 month
+#   retry: 1
