@@ -205,7 +205,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     CodeSEXP locals[NUM_PTRS];
     CodeSEXP defaultArg_[];
 };
+
 #pragma pack(pop)
+
 } // namespace rir
 
 #endif

@@ -60,7 +60,7 @@ class ContextStack : public StaticAnalysis<ContextStackState> {
         }
 
         return AbstractResult::None;
-    };
+    }
 };
 
 } // namespace pir

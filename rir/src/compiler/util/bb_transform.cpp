@@ -265,7 +265,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
         new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
     position = bb->insert(position + 1, assume);
     position++;
-};
+}
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
                                Checkpoint* cp, const FeedbackOrigin& origin,

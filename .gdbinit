@@ -48,7 +48,7 @@ set print pretty on
 set print array off
 set print array-indexes on
 
-define dumpsxp 
+define dumpsxp
     printf "\n\n>> SEXP %p\n", $arg0
 
     if $arg0==0
@@ -72,7 +72,7 @@ define dumpsxp
         print_char PRINTNAME($arg0)
     end
 
-    # LISTSXP 
+    # LISTSXP
     if $sexptype==2
         printf "(%s,%s)\n", Rf_type2char(TYPEOF(CDR($arg0))), Rf_type2char(TYPEOF(CAR($arg0)))
 #        printf "(  ,%s)\n", type2char(TYPEOF(CDR($arg0)))
@@ -87,8 +87,8 @@ define dumpsxp
     # Promises contain pointers to value, expr and env
     # tmp = eval(tmp, rho);
     if $sexptype==5
-        printf "Promise under evaluation: %d\n", PRSEEN($arg0)  
-        printf "Expression: "  
+        printf "Promise under evaluation: %d\n", PRSEEN($arg0)
+        printf "Expression: "
         dumpsxp ($arg0)->u.promsxp.expr 0
         # Expression: (CAR(chain))->u.promsxp.expr
     end
@@ -121,7 +121,7 @@ define dumpsxp
     # LGLSXP
     if $sexptype==10
         set $lgl=*LOGICAL($arg0)
-        if $lgl > 0 
+        if $lgl > 0
             printf "TRUE\n"
         end
         if $lgl == 0
@@ -145,7 +145,7 @@ define dumpsxp
         print_veclen $arg0
         set $i=LENGTH($arg0)
         set $count=0
-        while ($count < $i) 
+        while ($count < $i)
             printf "Element #%d:\n", $count
             dumpsxp STRING_ELT($arg0,$count) 0
             set $count = $count + 1
@@ -165,13 +165,13 @@ define print_veclen
     printf "Vector length=%d\n", LENGTH($arg0)
 end
 
-define print_char 
+define print_char
         # this may be a bit dodgy, as I am not using the aligned union
-        printf "\"%s\"\n", (const char*)((VECTOR_SEXPREC *) ($arg0)+1) 
+        printf "\"%s\"\n", (const char*)((VECTOR_SEXPREC *) ($arg0)+1)
 end
 
 define print_double
-        printf "%g\n", (double*)((VECTOR_SEXPREC *) ($arg0)+1) 
+        printf "%g\n", (double*)((VECTOR_SEXPREC *) ($arg0)+1)
 end
 
 
@@ -179,4 +179,35 @@ define ds
   dumpsxp $arg0 1
 end
 
-source .pirpp.py
+# source .pirpp.py
+
+
+# multiple commands
+python
+from __future__ import print_function
+import gdb
+
+
+class Cmds(gdb.Command):
+  """run multiple commands separated by ';'"""
+  def __init__(self):
+    gdb.Command.__init__(
+      self,
+      "cmds",
+      gdb.COMMAND_DATA,
+      gdb.COMPLETE_SYMBOL,
+      True,
+    )
+
+  def invoke(self, arg, from_tty):
+    for fragment in arg.split(';'):
+      # from_tty is passed in from invoke.
+      # These commands should be considered interactive if the command
+      # that invoked them is interactive.
+      # to_string is false. We just want to write the output of the commands, not capture it.
+      gdb.execute(fragment, from_tty=from_tty, to_string=False)
+      print()
+
+
+Cmds()
+end

@@ -33,7 +33,7 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
             return AbstractResult::Updated;
         }
         return AbstractResult::None;
-    };
+    }
 
     bool envStillValid(Instruction* i) { return currentEnv(i) == i->env(); }
 

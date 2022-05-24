@@ -85,7 +85,7 @@ class StaticAnalysis {
     // Compute BB entry
     virtual AbstractResult applyEntry(AbstractState&, BB*) const {
         return AbstractResult::None;
-    };
+    }
 
 #ifdef PIR_ANALYSIS_USE_LOOKUP_CACHE
     constexpr static size_t MAX_CACHE_SIZE =

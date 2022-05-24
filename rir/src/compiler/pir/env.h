@@ -61,7 +61,8 @@ class Env : public Value {
 
     virtual ~Env() {}
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

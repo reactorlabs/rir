@@ -488,7 +488,7 @@ class Instruction : public Value {
                 e.reset(Effect::Error);
                 e.reset(Effect::Warn);
             }
-        };
+        }
         return e;
     }
 
@@ -503,7 +503,7 @@ class Instruction : public Value {
                 e.reset(Effect::Error);
                 e.reset(Effect::Warn);
             }
-        };
+        }
         return e;
     }
 
@@ -978,7 +978,7 @@ class VLIE(FrameState, Effects() | Effect::ReadsEnv) {
     }
 
     void printArgs(std::ostream& out, bool tty) const override;
-    void printEnv(std::ostream& out, bool tty) const override final{};
+    void printEnv(std::ostream& out, bool tty) const override final {}
 };
 
 class FLIE(LdFun, 2, Effects::Any()) {
@@ -1321,7 +1321,7 @@ class FLIE(Force, 3, Effects::Any()) {
     Value* input() const { return arg(0).val(); }
 
     Value* frameStateOrTs() const override final { return arg<1>().val(); }
-    void updateFrameState(Value* fs) override final { arg<1>().val() = fs; };
+    void updateFrameState(Value* fs) override final { arg<1>().val() = fs; }
 
     std::string name() const override {
         std::stringstream ss;
@@ -2306,7 +2306,7 @@ class VLIE(StaticCall, Effects::Any()), public CallInstruction {
     Effects inferEffects(const GetType& getType) const override final;
 
     Value* frameStateOrTs() const override final { return arg(0).val(); }
-    void updateFrameState(Value * fs) override final { arg(0).val() = fs; };
+    void updateFrameState(Value * fs) override final { arg(0).val() = fs; }
 
     Value* runtimeClosure() const { return arg(1).val(); }
 
@@ -2340,7 +2340,7 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() const override { return nargs() - 1; };
+    size_t nCallArgs() const override { return nargs() - 1; }
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(R_NilValue, arg(i).val());
@@ -2381,7 +2381,7 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() const override { return nargs(); };
+    size_t nCallArgs() const override { return nargs(); }
 
     void eachNamedCallArg(const NamedArgumentValueIterator& it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
@@ -2479,7 +2479,7 @@ class VLIE(MkEnv, Effect::LeaksArg) {
     Value* lexicalEnv() const { return env(); }
 
     void printArgs(std::ostream& out, bool tty) const override;
-    void printEnv(std::ostream& out, bool tty) const override final{};
+    void printEnv(std::ostream& out, bool tty) const override final {}
     std::string name() const override { return stub ? "(MkEnv)" : "MkEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
@@ -2749,6 +2749,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
 #undef VLI
 #undef FLIE
 #undef VLIE
+
 } // namespace pir
 } // namespace rir
 

@@ -292,5 +292,6 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     });
     return anyChange;
 }
+
 } // namespace pir
 } // namespace rir

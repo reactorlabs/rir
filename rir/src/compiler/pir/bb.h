@@ -173,14 +173,14 @@ class BB {
                 if (next[i])
                     ok = ok && apply(next[i]);
             return ok;
-        };
+        }
         bool any(const std::function<bool(BB*)>& apply) const {
             bool ok = false;
             for (int i = 0; i < 2 && !ok; ++i)
                 if (next[i])
                     ok = ok || apply(next[i]);
             return ok;
-        };
+        }
 
         const Successors map(const std::function<BB*(BB*)>& m) const {
             auto res = *this;
@@ -188,7 +188,7 @@ class BB {
                 if (res.next[i])
                     res.next[i] = m(res.next[i]);
             return res;
-        };
+        }
 
         BBs::const_iterator begin() const { return next.cbegin(); }
         BBs::const_iterator end() const {

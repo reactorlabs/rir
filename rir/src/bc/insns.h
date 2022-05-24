@@ -84,7 +84,7 @@ DEF_INSTR(stvar_super_, 1, 1, 0)
  * call_:: Call instruction. Takes n arguments on the stack
  *         on top of the callee; these arguments can be
  *         values, promises (even preseeded w/ a value), or R_MissingValue for
- *         exlicitly missing arguments.
+ *         explicitly missing arguments.
  */
 DEF_INSTR(call_, 4, -1, 1)
 
@@ -264,13 +264,6 @@ DEF_INSTR(colon_cast_lhs_, 0, 1, 1)
  * colon_cast_rhs_ :: Converts rhs of colon for simple for loop
  */
 DEF_INSTR(colon_cast_rhs_, 0, 2, 2)
-
-/**
- * asast_:: pop a promise off the object stack, push its AST on object stack
-
- TODO: we do not use now, might not work... why?
- */
-DEF_INSTR(asast_, 0, 1, 1)
 
 /**
  * is_:: immediate type tag (SEXPTYPE), push T/F

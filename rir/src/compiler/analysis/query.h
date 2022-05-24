@@ -25,6 +25,7 @@ class Query {
     static PirType returnType(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
 };
+
 } // namespace pir
 } // namespace rir
 

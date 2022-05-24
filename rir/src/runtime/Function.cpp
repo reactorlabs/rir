@@ -10,7 +10,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
     void* payload = DATAPTR(store);
-    Function* fun = new (payload) Function(functionSize, NULL, {}, sig, as);
+    Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
@@ -45,8 +45,8 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     body()->serialize(refTable, out);
     for (unsigned i = 0; i < numArgs_; i++) {
         Code* arg = defaultArg(i);
-        OutInteger(out, (int)(arg != NULL));
-        if (arg != NULL)
+        OutInteger(out, (int)(arg != nullptr));
+        if (arg)
             defaultArg(i)->serialize(refTable, out);
     }
     OutInteger(out, flags.to_i());

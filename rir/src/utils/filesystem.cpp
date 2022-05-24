@@ -36,7 +36,7 @@ std::string createTmpDirectory(const std::string& pattern) {
         p[i++] = c;
     p[i] = 0;
     auto dir = mkdtemp(p);
-    if (dir == NULL)
+    if (dir == nullptr)
         perror("mkdtemp failed: ");
     std::string res = dir;
     delete[] p;

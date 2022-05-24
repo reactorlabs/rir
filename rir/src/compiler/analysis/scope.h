@@ -91,7 +91,7 @@ class ScopeAnalysisState {
         return envs.known(v) && !envs.at(v).leaked();
     }
 
-    bool noReflection() const { return !mayUseReflection; };
+    bool noReflection() const { return !mayUseReflection; }
 
     void print(std::ostream& out, bool tty) const {
         envs.print(out, tty);
@@ -244,6 +244,7 @@ class ScopeAnalysis
     void tryMaterializeEnv(const ScopeAnalysisState& state, Value* env,
                            const MaybeMaterialized&);
 };
+
 } // namespace pir
 } // namespace rir
 

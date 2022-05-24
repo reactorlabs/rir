@@ -33,7 +33,7 @@ class LastVisibilityUpdate {
             out << " ";
         }
         out << "\n";
-    };
+    }
 };
 
 class VisibilityAnalysis : public StaticAnalysis<LastVisibilityUpdate> {

@@ -63,7 +63,7 @@ struct State {
     State(State&&) = default;
     State(const State&) = delete;
     State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
-        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack){};
+        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack) {}
 
     void operator=(const State&) = delete;
     State& operator=(State&&) = default;
@@ -260,7 +260,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         auto fs = inlining() ? (Value*)Tombstone::framestate()
                              : insert.registerFrameState(srcCode, nextPos,
-
                                                          stack, inPromise());
         push(insert(new Force(v, env, fs)));
         break;
@@ -436,7 +435,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         auto feedback = bc.immediate.callFeedback;
 
-        // If this call was never executed. Might as well compile an
+        // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
             insert.function->optFunction->invocationCount() > 1 &&
@@ -1304,7 +1303,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         assert(false);
 
     // Unsupported opcodes:
-    case Opcode::asast_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
@@ -1313,7 +1311,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     return true;
-} // namespace pir
+}
 
 bool Rir2Pir::tryCompileContinuation(Builder& insert, Opcode* start,
                                      const std::vector<PirType>& initialStack) {
@@ -1587,13 +1585,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             // stvar
             {
                 auto n = pc;
-                for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
-                    ;
-                if (n < end) {
+                for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n)) {
                     auto nextbc = BC::decodeShallow(n);
-                    if (nextbc.bc == Opcode::stvar_)
+                    if (nextbc.bc == Opcode::stvar_ ||
+                        nextbc.bc == Opcode::stvar_cached_) {
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));
+                        break;
+                    }
                 }
             }
             inner << "@";
@@ -1707,24 +1706,26 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         // The return is only added for the early opt passes to update the
         // result value. Now we need to remove it again, because we don't know
         // if it is needed (e.g. when we compile an inline promise it is not).
-        if (insert.getCurrentBB())
+        if (insert.getCurrentBB()) {
             insert(new Return(res));
+        }
 
         log.forPass(0, "rir2pir").compilationEarlyPir();
 
-        static EarlyConstantfold ecf;
-        static ScopeResolution sr;
         // EarlyConstantfold is used to expand specials such as forceAndCall
         // which can be expressed in PIR.
         {
+            static EarlyConstantfold ecf;
             auto passLog = log.forPass(1, "earlyCF");
             ecf.apply(compiler, cls, cls, log, 0);
             passLog.pirOptimizations(&ecf);
         }
+
         // This early pass of scope resolution helps to find local call targets
         // and thus leads to better assumptions in the delayed compilation
         // below.
         {
+            static ScopeResolution sr;
             auto passLog = log.forPass(2, "earlySR");
             sr.apply(compiler, cls, cls, log, 0);
             passLog.pirOptimizations(&sr);
