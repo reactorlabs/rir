@@ -84,7 +84,7 @@ class DeadStoreAnalysis {
         EnvLeakAnalysis(ClosureVersion* cls, Code* code,
                         const EnvSet& initialState, Value* promEnv,
                         AbstractLog& log)
-            : StaticAnalysis("envLeak", cls, code, initialState, NULL, log),
+            : StaticAnalysis("envLeak", cls, code, initialState, nullptr, log),
               promEnv(promEnv) {}
 
         EnvSet leakedWhile(Instruction* i) const { return after(i); }
@@ -345,7 +345,7 @@ class DeadStoreAnalysis {
       protected:
         AbstractResult apply(ObservedStores& state,
                              Instruction* i) const override {
-            return apply(state, i, NULL);
+            return apply(state, i, nullptr);
         }
 
         Value* resolveEnv(Value* env) const {
@@ -500,9 +500,7 @@ class DeadStoreAnalysis {
         : leak(cls, code, nullptr, log),
           observed(cls, code, nullptr, leak, log) {}
 
-    bool isDead(StVar* st) const {
-        return !observed.isObserved(st);
-    };
+    bool isDead(StVar* st) const { return !observed.isObserved(st); };
 
     bool escapedEnv(Deopt* d) const {
         auto fs = d->frameState();

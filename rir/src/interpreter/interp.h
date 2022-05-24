@@ -31,7 +31,7 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* op);
 
 inline RCNTXT* getFunctionContext(size_t pos = 0,
                                   RCNTXT* cptr = (RCNTXT*)R_GlobalContext) {
-    while (cptr->nextcontext != NULL) {
+    while (cptr->nextcontext) {
         if (cptr->callflag & CTXT_FUNCTION) {
             if (pos == 0)
                 return cptr;
@@ -45,7 +45,7 @@ inline RCNTXT* getFunctionContext(size_t pos = 0,
 
 inline RCNTXT* findFunctionContextFor(SEXP e) {
     auto cptr = (RCNTXT*)R_GlobalContext;
-    while (cptr->nextcontext != NULL) {
+    while (cptr->nextcontext) {
         if (cptr->callflag & CTXT_FUNCTION) {
             if (cptr->cloenv == e)
                 return cptr;

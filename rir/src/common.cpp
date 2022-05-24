@@ -20,7 +20,7 @@ void printCBacktrace() {
     char** messages = backtrace_symbols(array, size);
 
     /* skip first stack frame (points here) */
-    for (int i = 1; i < size && messages != NULL; ++i) {
+    for (int i = 1; i < size && messages != nullptr; ++i) {
         // The entries of the backtrace contain the mangled C++ symbols in
         // parens. This part extracts the name and demangles it.
         std::string msg = messages[i];

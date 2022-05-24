@@ -106,8 +106,6 @@ inline void ostack_set_cell(R_bcstack_t* cell, SEXP v) {
 
 inline void ostack_set(int i, SEXP v) { ostack_set_cell(ostack_cell_at(i), v); }
 
-inline bool ostack_empty() { return R_BCNodeStackTop == R_BCNodeStackBase; }
-
 inline void ostack_popn(size_t n) { R_BCNodeStackTop -= n; }
 
 inline SEXP ostack_pop() { return (--R_BCNodeStackTop)->u.sxpval; }
@@ -123,46 +121,6 @@ inline void ostack_ensureSize(unsigned minFree) {
         assert(false);
     }
 }
-
-class Locals final {
-    // NOTE: must not own any resources, because the destructor is not called
-    //       if there is a longjmp from the evalRirCode call
-  private:
-    R_bcstack_t* base;
-    unsigned localsCount;
-    bool existingLocals;
-
-  public:
-    explicit Locals(R_bcstack_t* base, unsigned count, bool existingLocals)
-        : base(base), localsCount(count), existingLocals(existingLocals) {
-        if (!existingLocals)
-            R_BCNodeStackTop += localsCount;
-    }
-
-    ~Locals() {
-        if (!existingLocals)
-            R_BCNodeStackTop -= localsCount;
-    }
-
-    SEXP load(unsigned offset) {
-        SLOWASSERT(offset < localsCount &&
-                   "Attempt to load invalid local variable.");
-        return (base + offset)->u.sxpval;
-    }
-
-    void store(unsigned offset, SEXP val) {
-        SLOWASSERT(offset < localsCount &&
-                   "Attempt to store invalid local variable.");
-        (base + offset)->u.sxpval = val;
-        SLOWASSERT((base + offset)->tag == 0);
-    }
-
-    Locals(Locals const&) = delete;
-    Locals(Locals&&) = delete;
-    Locals& operator=(Locals const&) = delete;
-    Locals& operator=(Locals&&) = delete;
-    static void* operator new(size_t) = delete;
-};
 
 void context_init();
 

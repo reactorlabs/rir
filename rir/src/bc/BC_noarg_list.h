@@ -12,7 +12,6 @@
     V(NESTED, ret, ret)                                                        \
     V(NESTED, pop, pop)                                                        \
     V(NESTED, force, force)                                                    \
-    V(NESTED, asast, asast)                                                    \
     V(NESTED, set_vec_elt, set_vec_elt)                                        \
     V(NESTED, subassign1_1, subassign1_1)                                      \
     V(NESTED, subassign2_1, subassign2_1)                                      \

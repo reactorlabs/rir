@@ -481,6 +481,7 @@ class TheVerifier {
         });
     }
 };
+
 } // namespace
 
 namespace rir {
@@ -490,5 +491,6 @@ void Verify::apply(ClosureVersion* f, const std::string& msg, bool slow) {
     TheVerifier v(f, msg, slow);
     v();
 }
+
 } // namespace pir
 } // namespace rir
