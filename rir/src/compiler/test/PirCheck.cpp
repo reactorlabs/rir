@@ -53,7 +53,7 @@ static bool testNoLoad(ClosureVersion* f) {
     return Visitor::check(f->entry, [&](Instruction* i) {
         return !LdVar::Cast(i) && !LdFun::Cast(i);
     });
-};
+}
 
 static bool testNoStore(ClosureVersion* f) {
     return Visitor::check(f->entry, [&](Instruction* i) {
@@ -119,7 +119,7 @@ static bool testReturns42L(ClosureVersion* f) {
     if (ld == nullptr || TYPEOF(ld->c()) != INTSXP || *INTEGER(ld->c()) != 42)
         return false;
     return true;
-};
+}
 
 static bool testNoColon(ClosureVersion* f) {
     return Visitor::check(f->entry,

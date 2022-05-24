@@ -1130,7 +1130,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
     }
     default:
         Rf_error("attempt to apply non-function");
-    };
+    }
 
     // not reached
     assert(false);

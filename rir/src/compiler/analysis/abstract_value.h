@@ -254,7 +254,7 @@ struct AbstractREnvironment {
                 res.max(entry.second.merge(
                     AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
-        };
+        }
         for (auto& e : other.reachableEnvs) {
             if (!reachableEnvs.count(e)) {
                 reachableEnvs.insert(e);
@@ -455,7 +455,7 @@ class AbstractUnique {
         else
             out << "?";
         out << "\n";
-    };
+    }
 };
 
 template <typename T>

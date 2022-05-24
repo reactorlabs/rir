@@ -92,14 +92,14 @@ void NativeAllocator::compute() {
     DominatorTreeVisitor<>(dom).run(code->entry, [&](BB* bb) {
         auto findFreeSlot = [&](Instruction* i) {
             Slot slot = unassignedSlot;
-            for (;;) {
+            while (true) {
                 ++slot;
                 if (slotIsAvailable(slot, i)) {
                     allocation[i] = slot;
                     reverseAlloc[slot].insert(i);
                     break;
                 }
-            };
+            }
         };
 
         size_t pos = 0;

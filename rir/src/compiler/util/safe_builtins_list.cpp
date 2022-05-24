@@ -89,7 +89,7 @@ bool SafeBuiltinsList::always(int builtin) {
     case blt("seq_len"):
         return true;
     default: {}
-    };
+    }
     return false;
 }
 bool SafeBuiltinsList::always(SEXP builtin) {
@@ -104,7 +104,7 @@ bool SafeBuiltinsList::returnsObj(int builtin) {
     case blt("as.vector"):
         return true;
     default: {}
-    };
+    }
 
     return false;
 }
@@ -325,7 +325,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
     case blt("anyNA"):
         return true;
     default: {}
-    };
+    }
 
     return false;
 }
@@ -385,7 +385,7 @@ bool SafeBuiltinsList::idempotent(int builtin) {
     case blt("rep_len"):
         return true;
     default: {}
-    };
+    }
 
     return false;
 }
@@ -670,7 +670,7 @@ bool SafeBuiltinsList::forInline(int builtin) {
 #undef V
         return false;
     default: {}
-    };
+    }
     return true;
 }
 

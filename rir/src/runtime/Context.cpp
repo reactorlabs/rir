@@ -32,7 +32,7 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
         break;
     }
     return out;
-};
+}
 
 std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
     switch (a) {
@@ -63,7 +63,7 @@ std::ostream& operator<<(std::ostream& out, TypeAssumption a) {
         TYPE_ASSUMPTIONS(NonRefl, "NonRefl");
     }
     return out;
-};
+}
 
 std::ostream& operator<<(std::ostream& out, const Context& a) {
     if (a.empty()) {

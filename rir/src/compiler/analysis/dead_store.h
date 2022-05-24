@@ -500,7 +500,7 @@ class DeadStoreAnalysis {
         : leak(cls, code, nullptr, log),
           observed(cls, code, nullptr, leak, log) {}
 
-    bool isDead(StVar* st) const { return !observed.isObserved(st); };
+    bool isDead(StVar* st) const { return !observed.isObserved(st); }
 
     bool escapedEnv(Deopt* d) const {
         auto fs = d->frameState();
@@ -515,12 +515,13 @@ class DeadStoreAnalysis {
 
     bool onlyObservedByDeopt(StVar* st) const {
         return observed.isObservedOnlyByDeopt(st);
-    };
+    }
 
     std::unordered_set<Instruction*> deoptInstructionsFor(StVar* st) const {
         return observed.observedByDeoptInstructions(st);
-    };
+    }
 };
+
 } // namespace pir
 } // namespace rir
 

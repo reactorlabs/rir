@@ -47,6 +47,7 @@ class RList {
         return len;
     }
 };
-}
+
+} // namespace rir
 
 #endif

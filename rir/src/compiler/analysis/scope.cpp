@@ -606,7 +606,7 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         if (maybeInitiallyMissing && maybeSkippesStarg)
             return;
         theEnv[name] = {val, isInitiallyMissing};
-    };
+    }
 
     action(theEnv);
 }

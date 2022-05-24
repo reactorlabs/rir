@@ -320,7 +320,7 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
 
     for (auto e : toErase)
         e.first->erase(e.second);
-};
+}
 
 void Compiler::optimizeClosureVersion(ClosureVersion* v) {
     bool alreadyOptimizing = !currentlyOptimizing.empty();

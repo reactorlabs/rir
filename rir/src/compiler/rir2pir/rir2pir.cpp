@@ -63,7 +63,7 @@ struct State {
     State(State&&) = default;
     State(const State&) = delete;
     State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
-        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack){};
+        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack) {}
 
     void operator=(const State&) = delete;
     State& operator=(State&&) = default;

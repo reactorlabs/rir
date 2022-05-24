@@ -54,7 +54,7 @@ constexpr Effects Instruction::errorWarnVisible;
 static bool printInstructionId() {
     return DebugOptions::DefaultDebugOptions.flags.contains(
         DebugFlag::PrintInstructionIds);
-};
+}
 
 std::string Instruction::getRef() const {
     std::stringstream ss;
@@ -68,7 +68,7 @@ void Instruction::printRef(std::ostream& out) const {
         out << "e" << id();
     else
         out << "%" << id();
-};
+}
 
 bool Instruction::mayObserveContext(MkEnv* e) const {
     if (!hasEnv())
@@ -89,7 +89,7 @@ bool Instruction::mayObserveContext(MkEnv* e) const {
         e = MkEnv::Cast(e->lexicalEnv());
     }
     return false;
-};
+}
 
 void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
@@ -254,7 +254,7 @@ bool Instruction::nonObjectArgs() {
             answer = false;
     });
     return answer;
-};
+}
 
 void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
     auto bbIter = input.begin();

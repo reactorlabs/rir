@@ -226,6 +226,7 @@ struct DispatchTable
     size_t size_ = 0;
     Context userDefinedContext_;
 };
+
 #pragma pack(pop)
 } // namespace rir
 

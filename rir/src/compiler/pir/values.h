@@ -14,7 +14,7 @@ template <typename Base, Tag TAG>
 class ValueImpl : public Value {
   public:
     explicit ValueImpl(PirType type) : Value(type, TAG) {}
-    virtual ~ValueImpl(){};
+    virtual ~ValueImpl() {}
 
     static const Base* Cast(const Instruction* i) {
         assert(false && "Non-sensical down-cast from instruction to value");

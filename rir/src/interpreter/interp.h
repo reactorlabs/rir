@@ -118,7 +118,7 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
     auto f = vt->dispatch(call.givenContext);
     assert(f);
     return f;
-};
+}
 
 void inferCurrentContext(CallContext& call, size_t formalNargs);
 SEXP getTrivialPromValue(SEXP sym, SEXP env);

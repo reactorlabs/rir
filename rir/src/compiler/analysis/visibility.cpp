@@ -37,7 +37,7 @@ AbstractResult VisibilityAnalysis::apply(LastVisibilityUpdate& vis,
         }
     }
     return res;
-};
+}
 
 } // namespace rir
 } // namespace pir

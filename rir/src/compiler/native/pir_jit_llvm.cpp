@@ -585,7 +585,7 @@ void PirJitLLVM::initializeLLVM() {
                 return Error::success();
 
             return JD.define(absoluteSymbols(std::move(NewSymbols)));
-        };
+        }
     };
 
     builtinsDL.addGenerator(std::make_unique<ExtSymbolGenerator>());

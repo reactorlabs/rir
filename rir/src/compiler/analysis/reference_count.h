@@ -360,7 +360,7 @@ class StaticReferenceCount
                 }
             });
             break;
-        };
+        }
 
         // Executing an instruction un-taints its result value.
         if (!Phi::Cast(i)) {

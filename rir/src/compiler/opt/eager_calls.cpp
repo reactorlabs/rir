@@ -263,7 +263,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 VECTOR_RW_INSTRUCTIONS(V)
 #undef V
             default: {}
-            };
+            }
 
             // Look for static calls, where we statically know that all (or
             // some) arguments are eager. In this case we will compile an

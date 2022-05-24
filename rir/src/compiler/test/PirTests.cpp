@@ -29,7 +29,7 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
 
         // Compile expression to rir
         SEXP rirexp =
-            p(Compiler::compileFunction(VECTOR_ELT(e, 0), R_NilValue));
+            p(rir::Compiler::compileFunction(VECTOR_ELT(e, 0), R_NilValue));
 
         // Evaluate expression under the fresh environment `env`
         Rf_eval(rirexp, env);
@@ -66,12 +66,12 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            cmp.compileClosure(fun, "test_function",
-                               pir::Compiler::defaultContext, true,
-                               [&](pir::ClosureVersion* cls) {
-                                   results[CHAR(PRINTNAME(f.tag()))] = cls;
-                               },
-                               []() { assert(false); }, {});
+            cmp.compileClosure(
+                fun, "test_function", pir::Compiler::defaultContext, true,
+                [&](pir::ClosureVersion* cls) {
+                    results[CHAR(PRINTNAME(f.tag()))] = cls;
+                },
+                []() { assert(false); }, {});
         }
     }
 
@@ -113,7 +113,7 @@ bool test42(const std::string& input) {
     CHECK(TYPEOF(ld->c()) == INTSXP);
     CHECK(INTEGER(ld->c())[0] == 42);
     return true;
-};
+}
 
 bool hasLoadVar(const std::string& input) {
     pir::Module m;
@@ -122,7 +122,7 @@ bool hasLoadVar(const std::string& input) {
     bool noLdVar = Visitor::check(
         f->entry, [&](Instruction* i) { return !LdVar::Cast(i); });
     return !noLdVar;
-};
+}
 
 class NullBuffer : public std::ostream, std::streambuf {
   public:
@@ -217,8 +217,9 @@ bool testDeadStore() {
         // Both updates to "y" are observable. The first by foo, the second by
         // anything that happens after exit.
         pir::Module m;
-        auto res =
-            compile("", "f <- function(x) {leak(); y <- 1; foo(); y <- 2; foo(); y}", &m);
+        auto res = compile(
+            "", "f <- function(x) {leak(); y <- 1; foo(); y <- 2; foo(); y}",
+            &m);
         auto f = res["f"];
         CHECK(hasAssign(f) == 2);
     }
@@ -1074,6 +1075,7 @@ static Test tests[] = {
          }),
     Test("Test dead store analysis", &testDeadStore),
     Test("Test type rules", &testTypeRules)};
+
 } // namespace
 
 namespace rir {
@@ -1090,4 +1092,5 @@ void PirTests::run() {
     }
     pir::Parameter::MAX_INPUT_SIZE = oldconfig;
 }
+
 } // namespace rir

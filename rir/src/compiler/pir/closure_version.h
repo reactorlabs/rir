@@ -28,7 +28,7 @@ class ClosureVersion : public Code {
     };
 
     struct Properties : public EnumSet<Property> {
-        Properties() : EnumSet<Property>(){};
+        Properties() : EnumSet<Property>() {}
         explicit Properties(const EnumSet<Property>& other)
             : EnumSet<Property>(other) {}
         explicit Properties(const Property& other) : EnumSet<Property>(other) {}
