@@ -38,6 +38,9 @@
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
 
+#include <thread>
+#include <chrono>
+
 #define PRINT_DESERIALIZER_PROGRESS 1
 #define PRINT_DESERIALIZED_MODULE_BEFORE_PATCH 0
 #define PRINT_DESERIALIZED_MODULE_AFTER_PATCH 0
@@ -552,7 +555,7 @@ void PirJitLLVM::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offse
     }
 }
 
-void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames) {
+void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames, const std::string & mainFunName) {
     auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
 
     std::vector<int64_t> cpEntries;
@@ -743,23 +746,48 @@ void PirJitLLVM::serializeModule(rir::Code * code, SEXP cData, std::vector<std::
 
     // SERIALIZE THE LLVM MODULE
     std::stringstream bcPathSS;
-    bcPathSS << prefix << "/" << "temp.bc";
+    bcPathSS << prefix << "/" << mainFunName << ".bc";
 
     std::string ss = bcPathSS.str();
     llvm::StringRef bcPathRef(ss);
 
-    std::error_code errC;
-    llvm::raw_fd_ostream opStr(bcPathRef, errC);
+    unsigned MAX_RETRY = 3;
+    bool success = false;
+    unsigned tryCount = 0;
+    while(tryCount <= MAX_RETRY) {
 
-    WriteBitcodeToFile(*module,opStr);
+        std::error_code errC;
+        llvm::raw_fd_ostream opStr(bcPathRef, errC);
 
-    if (errC) {
-        std::cout << "Writing bitcode to file: " << ss << std::endl;
-        Rf_error("Error writing bitcode to file!");
+        if (opStr.has_error()) {
+            tryCount++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+
+        WriteBitcodeToFile(*module,opStr);
+
+        if (opStr.has_error()) {
+            tryCount++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            continue;
+        }
+
+        opStr.close();
+        success = true;
+        break;
+
+    }
+    module.reset();
+    if (!success) {
+        DebugMessages::printSerializerMessage("(E) Writing bitcode failed, I/O related error", 1);
+        *serializerError = true;
+        return;
     }
 
-
-    module.reset();
+    if (tryCount > 0) {
+        std::cout << "Retry for LLVM writing succeeded!" << std::endl;
+    }
 
     // Creating a vector containing all pool references
     contextData conData(cData);

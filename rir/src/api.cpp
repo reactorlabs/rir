@@ -398,6 +398,11 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     FILE *reader;
     reader = fopen(metaDataPath.c_str(),"r");
 
+    if (!reader) {
+        DebugMessages::printDeserializerErrors("Unable to open meta for deserialization" + metaDataPath, 0);
+        return R_NilValue;
+    }
+
     // Initialize the deserializing stream
     R_inpstream_st inputStream;
     R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
@@ -530,6 +535,8 @@ REXPORT SEXP loadBitcodes() {
             });
         });
         #endif
+    } else {
+        DebugMessages::printDeserializerErrors("unable to open bitcodes directory", 0);
     }
     #if CREATE_DOT_GRAPH == 1
     std::ofstream outfile1 ("dependencies.DOT", std::ios_base::app);
@@ -824,7 +831,7 @@ static bool fileExists(std::string fName) {
     return f.good();
 }
 
-static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std::string & name, contextData & cData) {
+static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std::string & name, contextData & cData, bool & serializerError) {
     DebugMessages::printSerializerMessage("(*) serializeClosure start", 1);
     auto prefix = getenv("PIR_SERIALIZE_PREFIX") ? getenv("PIR_SERIALIZE_PREFIX") : "bitcodes";
     std::stringstream fN;
@@ -840,6 +847,12 @@ static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std:
     if (fileExists(fName)) {
         FILE *reader;
         reader = fopen(fName.c_str(),"r");
+
+        if (!reader) {
+            serializerError = true;
+            DebugMessages::printSerializerMessage("(*) serializeClosure failed, unable to open existing metadata", 1);
+            return;
+        }
 
         // Initialize the deserializing stream
         R_inpstream_st inputStream;
@@ -860,16 +873,23 @@ static void serializeClosure(SEXP hast, const unsigned & indexOffset, const std:
     R_outpstream_st outputStream;
     FILE *fptr;
     fptr = fopen(fName.c_str(),"w");
+    if (!fptr) {
+        serializerError = true;
+        DebugMessages::printSerializerMessage("(*) serializeClosure failed, unable to write metadata", 1);
+        return;
+    }
     R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
     R_Serialize(sData.getContainer(), &outputStream);
     fclose(fptr);
     DebugMessages::printSerializerMessage("(*) Metadata written: " + fName, 1);
 
+    SEXP mainFunName = VECTOR_ELT(cData.getFNames(), 0);
+
     // rename temp files
     std::stringstream bcFName;
     std::stringstream bcOldName;
     bcFName << prefix << "/" << CHAR(PRINTNAME(hast)) << "_" << indexOffset << "_" << cData.getContext() << ".bc";
-    bcOldName << prefix << "/" << "temp.bc";
+    bcOldName << prefix << "/" << CHAR(STRING_ELT(mainFunName, 0)) << ".bc";
     std::rename(bcOldName.str().c_str(), bcFName.str().c_str());
     DebugMessages::printSerializerMessage("(*) Bitcode written: " + bcFName.str(), 1);
 }
@@ -949,8 +969,12 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 //   as the temporary bitcode files, temp.bc will be overridden in the future anyway.
                 if (!serializerError) {
                     serializerSuccess++;
-                    serializeClosure(hast, data.index, c->name(), cData);
-                    DebugMessages::printSerializerMessage("/> Serializer Success", 0);
+                    serializeClosure(hast, data.index, c->name(), cData, serializerError);
+                    if (!serializerError) {
+                        DebugMessages::printSerializerMessage("/> Serializer Success", 0);
+                    } else {
+                        DebugMessages::printSerializerMessage("/> Serializer Error, I/O related failure", 0);
+                    }
                 } else {
                     serializerFailed++;
                     DebugMessages::printSerializerMessage("/> Serializer Error", 0);
@@ -1047,6 +1071,11 @@ REXPORT SEXP serializerCleanup() {
 
                 FILE *reader;
                 reader = fopen(metaPath.str().c_str(),"r");
+
+                if (!reader) {
+                    DebugMessages::printSerializerMessage("(*) serializer cleanup failed", 1);
+                    continue;
+                }
 
                 // Initialize the deserializing stream
                 R_inpstream_st inputStream;

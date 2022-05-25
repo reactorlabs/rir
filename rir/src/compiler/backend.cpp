@@ -555,14 +555,13 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             if (*serializerError == true) {
                 DebugMessages::printSerializerMessage("(E) Failed processing promise map.", 1);
             } else {
+                std::string mainName = getProcessedName(mainFunCodeObj);
                 // ENTRY 5: cPool, ENTRY 6: sPool
-                jit.serializeModule(done[mainFunCodeObj], cData, relevantNames);
+                jit.serializeModule(done[mainFunCodeObj], cData, relevantNames, mainName);
 
                 if (*serializerError == true) {
-                    DebugMessages::printSerializerMessage("(E) Serializing module failed, pools may have unsupported type of values.", 1);
+                    DebugMessages::printSerializerMessage("(E) Serializing module failed, pools may have unsupported type of values or I/O related error", 1);
                 } else {
-                    std::string mainName = getProcessedName(mainFunCodeObj);
-
                     // Move the main code handle to the 0th index
                     if (relevantNames.at(0).compare(mainName) != 0) {
                         int mainNameIndex = 0;
