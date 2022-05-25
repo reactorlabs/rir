@@ -382,11 +382,9 @@ void hash_ast(SEXP ast, size_t & hast) {
 SEXP deserializeFromFile(std::string metaDataPath) {
     // Disable contextual compilation during deserialization as R_Unserialize
     // will lead to a lot of unnecessary compilation otherwise
-    bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
+    bool oldVal = BitcodeLinkUtil::contextualCompilationSkip;
+    BitcodeLinkUtil::contextualCompilationSkip = true;
 
-    if (skipPirCompilation == false) {
-        setenv("PIR_DISABLE_COMPILATION", "1", 1);
-    }
     std::string prefix = "";
 
     auto lastSlash = metaDataPath.find_last_of("/");
@@ -484,9 +482,7 @@ SEXP deserializeFromFile(std::string metaDataPath) {
         hastDependencyMap.set(prefSym, Rf_mkString(prefix.c_str()));
     }
 
-    if (skipPirCompilation == false) {
-        unsetenv("PIR_DISABLE_COMPILATION");
-    }
+    BitcodeLinkUtil::contextualCompilationSkip = oldVal;
 
     UNPROTECT(1);
     return R_FalseValue;
@@ -936,9 +932,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
                 // Disable further compilations due to the recomipile heuristic, weird eval problems can happen
                 // when serializing/deserializing otherwise
-                bool oldVal = getenv("PIR_DISABLE_COMPILATION") ? true : false;
-                setenv("PIR_DISABLE_COMPILATION", "1", 1);
-
+                bool oldVal = BitcodeLinkUtil::contextualCompilationSkip;
+                BitcodeLinkUtil::contextualCompilationSkip = true;
 
                 // Context data container
                 SEXP cDataContainer;
@@ -983,9 +978,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 backend.serializerError = nullptr;
 
                 // Restore compilations to existing state
-                if (!oldVal) {
-                    unsetenv("PIR_DISABLE_COMPILATION");
-                }
+                BitcodeLinkUtil::contextualCompilationSkip = oldVal;
 
                 UNPROTECT(2);
             } else {

@@ -369,7 +369,7 @@ void BitcodeLinkUtil::insertToBlacklist(SEXP hastSym) {
     if (!blacklistMap.get(hastSym)) {
         blacklistMap.set(hastSym, R_TrueValue);
         #if DEBUG_BLACKLIST == 1
-        std::cout << "(R) Blacklisting: " << hast << " (" << hastSym << ")" << std::endl;
+        std::cout << "(R) Blacklisting: " << CHAR(PRINTNAME(hastSym)) << std::endl;
         #endif
         serializerCleanup();
     }
@@ -897,4 +897,5 @@ void BitcodeLinkUtil::tryLinking(DispatchTable * vtab, SEXP hSym) {
 }
 
 size_t BitcodeLinkUtil::linkTime = 0;
+bool BitcodeLinkUtil::contextualCompilationSkip = getenv("SKIP_CONTEXTUAL_COMPILATION") ? true : false;
 }

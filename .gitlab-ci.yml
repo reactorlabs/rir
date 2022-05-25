@@ -131,6 +131,8 @@ bitcode_test:
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
     - echo "Run Done"
+  tags:
+    - benchmarks
   artifacts:
     paths:
     - benchmarksBC.data

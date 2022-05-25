@@ -233,7 +233,7 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
-    bool disableFurtherSpecialization = false;
+    // bool disableFurtherSpecialization = false;
     SEXP hast = nullptr;
 
     Context mask = Context(0ul);

@@ -1000,9 +1000,9 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
             // std::cout << "after: " << call.givenContext << std::endl;
         }
 
-        bool skipPirCompilation = getenv("PIR_DISABLE_COMPILATION") ? true : false;
-
-        if (!isDeoptimizing() && table->disableFurtherSpecialization == false && RecompileHeuristic(fun) && !skipPirCompilation) {
+        if (BitcodeLinkUtil::contextualCompilationSkip == false && !isDeoptimizing()
+            // && table->disableFurtherSpecialization == false
+            && RecompileHeuristic(fun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of

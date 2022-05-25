@@ -30,6 +30,7 @@ namespace rir {
 
     class BitcodeLinkUtil {
     public:
+        static bool contextualCompilationSkip;
         static size_t linkTime;
         static SEXP getHast(SEXP body, SEXP env);
 
