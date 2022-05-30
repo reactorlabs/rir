@@ -87,7 +87,7 @@ inline bool ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
 
     auto targetDisabled = table->dispatchConsideringDisabled(context);
     if (targetDisabled != table->baseline())
-        return targetDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+        return targetDisabled->deoptCount() >= 5;
 
     return false;
 }
