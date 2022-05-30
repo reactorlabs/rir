@@ -82,10 +82,23 @@ inline bool RecompileHeuristic(Function* fun) {
     return false;
 }
 
+inline bool ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
+                                                 const Context& context) {
+
+    auto targetDisabled = table->dispatchConsideringDisabled(context);
+    if (targetDisabled != table->baseline())
+        return targetDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+
+    return false;
+}
+
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
-            (context.smaller(fun->context()) &&
+
+    return (fun->flags.contains(Function::MarkOpt) ||
+            (!fun->isOptimized() &&
+             !ShouldAbandonRecompilationOfBaseline(table, context)) ||
+            (fun->isOptimized() && context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
             fun->flags.contains(Function::Reoptimize));
 }
