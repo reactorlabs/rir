@@ -62,8 +62,8 @@ struct DispatchTable
         return baseline();
     }
 
-    Function* dispatchConsideringDisabled(Context a,
-                                          bool ignorePending = true) const {
+    std::pair<Function*, Function*>
+    dispatchConsideringDisabled(Context a, bool ignorePending = true) const {
         if (!a.smaller(userDefinedContext_)) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a
@@ -72,6 +72,8 @@ struct DispatchTable
             Rf_error("Provided context does not satisfy user defined context");
         }
 
+        Function* r2 = nullptr;
+
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
@@ -79,10 +81,17 @@ struct DispatchTable
 #endif
             auto e = get(i);
             if (a.smaller(e->context()) &&
-                (ignorePending || !e->pendingCompilation()))
-                return e;
+                (ignorePending || !e->pendingCompilation())) {
+
+                r2 = e;
+                if (!e->disabled())
+                    return std::pair<Function*, Function*>(e, r2);
+            }
         }
-        return baseline();
+
+        if (r2 == nullptr)
+            r2 = baseline();
+        return std::pair<Function*, Function*>(baseline(), r2);
     }
 
     void baseline(Function* f) {

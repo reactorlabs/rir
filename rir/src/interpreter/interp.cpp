@@ -980,7 +980,12 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto table = DispatchTable::unpack(body);
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs());
-        Function* fun = dispatch(call, table);
+        // Function* fun = dispatch(call, table);
+        auto dispatchResult =
+            table->dispatchConsideringDisabled(call.givenContext);
+        auto fun = dispatchResult.first;
+        assert(fun);
+
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun)) {
@@ -992,7 +997,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
             // this as an explicit assumption.
 
             fun->clearDisabledAssumptions(given);
-            if (RecompileCondition(table, fun, given)) {
+            if (RecompileCondition(table, fun, dispatchResult.second, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
                     if (call.caller &&
                         call.caller->function()->invocationCount() > 0 &&
