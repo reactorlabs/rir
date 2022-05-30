@@ -141,20 +141,10 @@ class PirJitLLVM {
     // serializer
     std::set<SEXP> * reqMapForCompilation = nullptr;
     bool* serializerError = nullptr;
-    bool debugStatements = false;
     void serializeModule(rir::Code * code, SEXP cData, std::vector<std::string> & relevantNames, const std::string & mainFunName);
     void updateFunctionNameInModule(std::string, std::string);
     void patchFixupHandle(const std::string & newName, Code * code);
     void printModule();
-    void enableDebugStatements();
-    void disableDebugStatements();
-    // void deserializeAndAddModule(
-    //   SEXP cPool, SEXP sPool,
-    //   SEXP fNames, SEXP fSrc,
-    //   SEXP fArg, SEXP fChildren,
-    //   SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
-    //   rir::FunctionSignature fs,
-    //   std::string bcPath);
     void deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offsetSym, DispatchTable * vtab);
 };
 

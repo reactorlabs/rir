@@ -130,7 +130,6 @@ class LowerFunctionLLVM {
     void addDebugMsg(const char *m, int space, llvm::Value *debugVal, int tag);
     std::set<SEXP>* reqMap = nullptr;
     bool* serializerError = nullptr;
-    bool debugStatements = false;
     bool isHastInvalid(SEXP hast);
     bool isHastBlacklisted(SEXP hast);
     SEXP getVtableContainer(SEXP hast, int offset);

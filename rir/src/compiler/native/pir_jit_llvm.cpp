@@ -839,14 +839,6 @@ void PirJitLLVM::printModule() {
     ro << *M;
 }
 
-void PirJitLLVM::enableDebugStatements() {
-    debugStatements = true;
-}
-
-void PirJitLLVM::disableDebugStatements() {
-    debugStatements = false;
-}
-
 void PirJitLLVM::compile(
     rir::Code* target, ClosureVersion* closure, Code* code,
     const PromMap& promMap, const NeedsRefcountAdjustment& refcount,
@@ -942,7 +934,6 @@ void PirJitLLVM::compile(
         DI->LexicalBlocks.push_back(SP);
     }
 
-    funCompiler.debugStatements = debugStatements;
     funCompiler.serializerError = serializerError;
     funCompiler.reqMap = reqMapForCompilation;
 
@@ -1020,9 +1011,7 @@ static SEXP getClosContainer(SEXP hastSym) {
 // }
 
 void PirJitLLVM::initializeLLVM() {
-    #if ENABLE_SPE_PATCHES == 1
     static int opaqueTrue = 1;
-    #endif
     if (initialized)
         return;
 
@@ -1132,34 +1121,20 @@ void PirJitLLVM::initializeLLVM() {
                 auto ept = n.substr(0, 4) == "ept_";
                 auto efn = n.substr(0, 4) == "efn_";
 
-                #if ENABLE_SPE_PATCHES == 1
                 auto spe = n.substr(0, 4) == "spe_"; // Special symbols
-                #endif
 
-                #if ENABLE_DCS_PATCHES == 1
                 auto dcs = n.substr(0, 4) == "dcs_"; // Constant SEXPs from runtime
-                #endif
 
-                #if ENABLE_SYM_PATCHES == 1
                 auto sym = n.substr(0, 4) == "sym_"; // Symbols
-                #endif
 
-                #if ENABLE_GCB_PATCHES == 1
                 auto gcb = n.substr(0, 4) == "gcb_"; // BUILTINSXP
-                #endif
 
-                #if ENABLE_SPE1_PATCHES == 1
                 auto spe1 = n.substr(0, 5) == "spe1_"; // SPECIALSXP
-                #endif
 
-                #if ENABLE_BUILTINCALL_PATCHES == 1
                 auto gcode = n.substr(0, 4) == "cod_"; // callable pointer to builtin
-                #endif
 
-                #if ENABLE_DEOPT_PATCHES == 1
                 auto code = n.substr(0, 5) == "code_"; // code objs for DeoptReason
                 auto codn = n.substr(0, 5) == "codn_"; // should be ideally ignored, but we can skip patching in the deserializer
-                #endif
 
                 auto vtab = n.substr(0, 5) == "vtab_"; // Hast to dispatch table
                 auto clos = n.substr(0, 5) == "clos_"; // Hast to container closure
@@ -1177,7 +1152,6 @@ void PirJitLLVM::initializeLLVM() {
                             (efn ? JITSymbolFlags::Callable
                                  : JITSymbolFlags::None));
                 }
-                #if ENABLE_SPE_PATCHES == 1
                 else if (spe) {
                     auto constantName = n.substr(4);
                     uintptr_t addr = 0;
@@ -1196,8 +1170,6 @@ void PirJitLLVM::initializeLLVM() {
                         static_cast<JITTargetAddress>(addr),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
-                #endif
-                #if ENABLE_DCS_PATCHES == 1
                 else if (dcs) {
                     auto id = std::stoi(n.substr(4));
                     SEXP ptr = R_NilValue;
@@ -1247,8 +1219,6 @@ void PirJitLLVM::initializeLLVM() {
                             reinterpret_cast<uintptr_t>(ptr)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
-                #endif
-                #if ENABLE_SYM_PATCHES == 1
                 else if (sym) {
                     auto constantName = n.substr(4);
                     SEXP con = Rf_install(constantName.c_str());
@@ -1257,8 +1227,6 @@ void PirJitLLVM::initializeLLVM() {
                             reinterpret_cast<uintptr_t>(con)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
-                #endif
-                #if ENABLE_GCB_PATCHES == 1
                 else if (gcb) {
                     auto id = std::stoi(n.substr(4));
                     SEXP ptr;
@@ -1273,8 +1241,6 @@ void PirJitLLVM::initializeLLVM() {
                             reinterpret_cast<uintptr_t>(ptr)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
-                #endif
-                #if ENABLE_SPE1_PATCHES == 1
                 else if (spe1) {
                     auto firstDel = n.find('_');
                     auto secondDel = n.find('_', firstDel + 1);
@@ -1288,8 +1254,6 @@ void PirJitLLVM::initializeLLVM() {
                             reinterpret_cast<uintptr_t>(spe1)),
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
                 }
-                #endif
-                #if ENABLE_BUILTINCALL_PATCHES == 1
                 else if (gcode) {
                     auto id = std::stoi(n.substr(4));
                     SEXP ptr;
@@ -1305,8 +1269,6 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }
-                #endif
-                #if ENABLE_DEOPT_PATCHES == 1
                 else if (code || codn) {
                     auto firstDel = n.find('_');
                     auto secondDel = n.find('_', firstDel + 1);
@@ -1322,7 +1284,6 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported | (JITSymbolFlags::None));
 
                 }
-                #endif
                 else if (vtab) {
                     auto firstDel = n.find('_');
                     auto secondDel = n.find('_', firstDel + 1);

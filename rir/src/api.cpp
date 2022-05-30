@@ -32,6 +32,8 @@
 #include "utils/DebugMessages.h"
 #include "dirent.h"
 
+#include "utils/SerializerFlags.h"
+
 using namespace std::chrono;
 using namespace rir;
 
@@ -543,7 +545,7 @@ REXPORT SEXP loadBitcodes() {
 }
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
-    static bool initializeBitcodes = true;
+    static bool initializeBitcodes = false;
     static bool earlyLoadBitcodes = getenv("EARLY_BITCODES") ? true : false;
     if (!initializeBitcodes && earlyLoadBitcodes) {
         auto start = high_resolution_clock::now();
@@ -800,15 +802,14 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-bool serializeLL = getenv("PIR_SERIALIZE_ALL") ? true : false;
 
 REXPORT SEXP startSerializer() {
-    serializeLL = true;
+    SerializerFlags::serializerEnabled = true;
     return R_NilValue;
 }
 
 REXPORT SEXP stopSerializer() {
-    serializeLL = false;
+    SerializerFlags::serializerEnabled = false;
     return R_NilValue;
 }
 
@@ -918,69 +919,73 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
         rir::Function* done = nullptr;
         auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-            auto data = getHastAndIndex(c->rirSrc()->src);
-            SEXP hast = data.hast;
-            if (serializeLL) {
+
+            if (SerializerFlags::serializerEnabled) {
                 backend.cData = nullptr;
                 backend.serializerError = nullptr;
-            }
-            if (serializeLL && hast == R_NilValue) {
-                DebugMessages::printSerializerMessage("*> Serializer Skipped, parent hast is null.", 0);
-            }
-            if (serializeLL && hast != R_NilValue) {
-                DebugMessages::printSerializerMessage("> Serializer Started", 0);
 
-                // Disable further compilations due to the recomipile heuristic, weird eval problems can happen
-                // when serializing/deserializing otherwise
-                bool oldVal = BitcodeLinkUtil::contextualCompilationSkip;
-                BitcodeLinkUtil::contextualCompilationSkip = true;
+                auto data = getHastAndIndex(c->rirSrc()->src);
+                SEXP hast = data.hast;
 
-                // Context data container
-                SEXP cDataContainer;
-                PROTECT(cDataContainer = Rf_allocVector(VECSXP, 9));
-                contextData cData(cDataContainer);
-                cData.addContext(c->context().toI());
-
-                // Add the metadata collectors to the backend
-                bool serializerError = false;
-                backend.cData = cDataContainer;
-                backend.serializerError = &serializerError;
-
-                // Compile
-                auto fun = backend.getOrCompile(c);
-                PROTECT(fun->container());
-
-                // Mark hast as stale in the runtime, loading the new bitcode will lead to duplicate LLVM symbols
                 if (hast != R_NilValue) {
-                    BitcodeLinkUtil::markStale(hast, cData.getContext());
-                }
+                    DebugMessages::printSerializerMessage("> Serializer Started", 0);
+                    // Disable further compilations due to the recomipile heuristic, weird eval problems can happen
+                    // when serializing/deserializing otherwise
+                    bool oldVal = BitcodeLinkUtil::contextualCompilationSkip;
+                    BitcodeLinkUtil::contextualCompilationSkip = true;
 
-                DispatchTable::unpack(body)->insert(fun);
-                if (body == BODY(what)) {
-                    done = fun;
-                }
+                    // Context data container
+                    SEXP cDataContainer;
+                    PROTECT(cDataContainer = Rf_allocVector(VECSXP, 9));
+                    contextData cData(cDataContainer);
+                    cData.addContext(c->context().toI());
 
-                // Serialize metadata and rename bitcode files if everything was fine, otherwise do nothing
-                //   as the temporary bitcode files, temp.bc will be overridden in the future anyway.
-                if (!serializerError) {
-                    serializerSuccess++;
-                    serializeClosure(hast, data.index, c->name(), cData, serializerError);
-                    if (!serializerError) {
-                        DebugMessages::printSerializerMessage("/> Serializer Success", 0);
-                    } else {
-                        DebugMessages::printSerializerMessage("/> Serializer Error, I/O related failure", 0);
+                    // Add the metadata collectors to the backend
+                    bool serializerError = false;
+                    backend.cData = cDataContainer;
+                    backend.serializerError = &serializerError;
+
+                    // Compile
+                    auto fun = backend.getOrCompile(c);
+                    PROTECT(fun->container());
+
+                    // Mark hast as stale in the runtime, loading the new bitcode will lead to duplicate LLVM symbols
+                    if (hast != R_NilValue) {
+                        BitcodeLinkUtil::markStale(hast, cData.getContext());
                     }
+                    DispatchTable::unpack(body)->insert(fun);
+                    if (body == BODY(what)) {
+                        done = fun;
+                    }
+
+                    if (!serializerError) {
+                        serializerSuccess++;
+                        serializeClosure(hast, data.index, c->name(), cData, serializerError);
+                        if (!serializerError) {
+                            DebugMessages::printSerializerMessage("/> Serializer Success", 0);
+                        } else {
+                            DebugMessages::printSerializerMessage("/> Serializer Error, I/O related failure", 0);
+                        }
+                    } else {
+                        serializerFailed++;
+                        DebugMessages::printSerializerMessage("/> Serializer Error", 0);
+                    }
+                    backend.cData = nullptr;
+                    backend.serializerError = nullptr;
+
+                    // Restore compilations to existing state
+                    BitcodeLinkUtil::contextualCompilationSkip = oldVal;
+
+                    UNPROTECT(2);
                 } else {
-                    serializerFailed++;
-                    DebugMessages::printSerializerMessage("/> Serializer Error", 0);
+                    // hast in null, cannot serialize
+                    DebugMessages::printSerializerMessage("*> Serializer Skipped, parent hast is null.", 0);
+                    auto fun = backend.getOrCompile(c);
+                    Protect p(fun->container());
+                    DispatchTable::unpack(body)->insert(fun);
+                    if (body == BODY(what))
+                        done = fun;
                 }
-                backend.cData = nullptr;
-                backend.serializerError = nullptr;
-
-                // Restore compilations to existing state
-                BitcodeLinkUtil::contextualCompilationSkip = oldVal;
-
-                UNPROTECT(2);
             } else {
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());

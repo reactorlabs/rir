@@ -39,6 +39,8 @@
 #include "loweringPatches.h"
 #include "api.h"
 #include "utils/DebugMessages.h"
+#include "utils/SerializerFlags.h"
+
 #define DISABLE_OPTIMISTIC_DISPATCH 0
 #define USE_BINDINGS_CACHE 1
 
@@ -49,10 +51,6 @@ using namespace llvm;
 
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
-
-#if DEBUG_LOCATIONS == 1
-static int location = 0;
-#endif
 
 static_assert(sizeof(unsigned long) == sizeof(uint64_t),
               "sizeof(unsigned long) and sizeof(uint64_t) should match");
@@ -129,20 +127,25 @@ llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
                                             llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
-    #if PATCH_GLOBAL_CONSTANT_NAMES == 1
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_GLOBAL_CONSTANT_NAMES == 1
 
-    static int num = 0;
-    std::stringstream name;
-    name << "copool_" << num++;
-    auto res = new llvm::GlobalVariable(getModule(), ty, true,
-                                    llvm::GlobalValue::PrivateLinkage, init, name.str());
-    res->setExternallyInitialized(true);
-    return res;
+        static int num = 0;
+        std::stringstream name;
+        name << "copool_" << num++;
+        auto res = new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init, name.str());
+        res->setExternallyInitialized(true);
+        return res;
 
-    #else
-    return new llvm::GlobalVariable(getModule(), ty, true,
-                                    llvm::GlobalValue::PrivateLinkage, init);
-    #endif
+        #else
+        return new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init);
+        #endif
+    } else {
+        return new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init);
+    }
 }
 
 llvm::FunctionCallee
@@ -191,21 +194,25 @@ llvm::Value* LowerFunctionLLVM::globalSrcConst(llvm::Constant* init,
                                             llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_GLOBAL_CONSTANT_NAMES == 1
 
-    #if PATCH_GLOBAL_CONSTANT_NAMES == 1
+        static int num = 0;
+        std::stringstream name;
+        name << "srpool_" << num++;
+        auto res = new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init, name.str());
+        res->setExternallyInitialized(true);
+        return res;
 
-    static int num = 0;
-    std::stringstream name;
-    name << "srpool_" << num++;
-    auto res = new llvm::GlobalVariable(getModule(), ty, true,
-                                    llvm::GlobalValue::PrivateLinkage, init, name.str());
-    res->setExternallyInitialized(true);
-    return res;
-
-    #else
-    return new llvm::GlobalVariable(getModule(), ty, true,
-                                    llvm::GlobalValue::PrivateLinkage, init);
-    #endif
+        #else
+        return new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init);
+        #endif
+    } else {
+        return new llvm::GlobalVariable(getModule(), ty, true,
+                                        llvm::GlobalValue::PrivateLinkage, init);
+    }
 }
 
 llvm::FunctionCallee
@@ -238,11 +245,15 @@ void LowerFunctionLLVM::addDebugMsg(const char *m, int space, llvm::Value *debug
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
-    #if PATCH_SET_VISIBLE == 1
-    builder.CreateStore(c(i), convertToExternalSymbol("spe_Visible", t::Int));
-    #else
-    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
-    #endif
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_SET_VISIBLE == 1
+        builder.CreateStore(c(i), convertToExternalSymbol("spe_Visible", t::Int));
+        #else
+        builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
+        #endif
+    } else {
+        builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
+    }
 }
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
@@ -304,16 +315,20 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     if (p)
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
 
-
-    #if PATCH_MSG == 1
-    auto msgGlobalVar =
-        builder.CreateGlobalString(msg);
-    call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-         {builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
-    #else
-    call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-         {convertToPointer((void*)msg, t::i8, true)});
-    #endif
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_MSG == 1
+        auto msgGlobalVar =
+            builder.CreateGlobalString(msg);
+        call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+            {builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
+        #else
+        call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+            {convertToPointer((void*)msg, t::i8, true)});
+        #endif
+    } else {
+        call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
+            {convertToPointer((void*)msg, t::i8, true)});
+    }
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
@@ -377,251 +392,292 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         }
     }
 
-    #if PATCH_100_102 == 1
-    if (co == R_GlobalEnv) {
-        return convertToExternalSymbol("dcs_100");
-    }
-    if (co == R_BaseEnv) {
-        return convertToExternalSymbol("dcs_101");
-    }
-    if (co == R_BaseNamespace) {
-        return convertToExternalSymbol("dcs_102");
-    }
-    #else
-    static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
-                                               R_BaseNamespace};
-    if (eternal.count(co))
-        return convertToPointer(co);
-    #endif
-
-    #if PATCH_103_109 == 1
-    if (co == R_TrueValue) {
-        return convertToExternalSymbol("dcs_103", true);
-    }
-    if (co == R_NilValue) {
-        return convertToExternalSymbol("dcs_104", true);
-    }
-    if (co == R_FalseValue) {
-        return convertToExternalSymbol("dcs_105", true);
-    }
-    if (co == R_UnboundValue) {
-        return convertToExternalSymbol("dcs_106", true);
-    }
-    if (co == R_MissingArg) {
-        return convertToExternalSymbol("dcs_107", true);
-    }
-    if (co == R_LogicalNAValue) {
-        return convertToExternalSymbol("dcs_108", true);
-    }
-    if (co == R_EmptyEnv) {
-        return convertToExternalSymbol("dcs_109", true);
-    }
-    #else
-    static std::unordered_set<SEXP> eternalConst = {
-        R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
-        R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
-    if (eternalConst.count(co))
-        return convertToPointer(co, true);
-    #endif
-
-    #if PATCH_110_111 == 1
-    if (co == R_RestartToken) {
-        return convertToExternalSymbol("dcs_110");
-    }
-
-    if (co == R_DimSymbol) {
-        return convertToExternalSymbol("dcs_111");
-    }
-
-    if (co == R_DotsSymbol) {
-        return convertToExternalSymbol("dcs_112");
-    }
-    #endif
-
-    #if PATCH_SYMSXP == 1
-    if (TYPEOF(co) == SYMSXP) {
-
-        if (strlen(CHAR(PRINTNAME(co))) == 0) {
-            std::cout << "serializer: unnamed symbols not handled (" << CHAR(PRINTNAME(co)) << ")" << std::endl;
-            if (serializerError) {
-                *serializerError = true;
-            }
-            return convertToPointer(co);
-        } else {
-            std::stringstream ss;
-            ss << "sym_";
-            ss << CHAR(PRINTNAME(co));
-            return convertToExternalSymbol(ss.str());
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_100_102 == 1
+        if (co == R_GlobalEnv) {
+            return convertToExternalSymbol("dcs_100");
         }
-    }
-    #else
-    if (TYPEOF(co) == SYMSXP)
-        return convertToPointer(co);
-    #endif
-
-    #if PATCH_BUILTINSXP == 1
-    if (TYPEOF(co) == BUILTINSXP) {
-        std::stringstream ss;
-        ss << "gcb_";
-        ss << getBuiltinNr(co);
-        return convertToExternalSymbol(ss.str(), true);
-    }
-    #else
-    if (TYPEOF(co) == BUILTINSXP) {
-        return convertToPointer(co, true);
-    }
-    #endif
-
-    if (TYPEOF(co) == SPECIALSXP) {
-        #if PATCH_SPECIALSXP == 1
-        auto sym = Rf_install(R_FunTab[co->u.primsxp.offset].name);
-        auto spe1 = Rf_findFun(sym,R_GlobalEnv);
-
-        if (spe1 == co) {
-            std::stringstream ss;
-            ss << "spe1_";
-            ss << co->u.primsxp.offset;
-            return convertToExternalSymbol(ss.str(), true);
+        if (co == R_BaseEnv) {
+            return convertToExternalSymbol("dcs_101");
         }
-        else {
-            if (serializerError != nullptr) {
-                *serializerError = true;
-
-                DebugMessages::printSerializerErrors("(*) PATCH_SPECIALSXP failed, non-function type, offset: " + std::to_string(co->u.primsxp.offset) + ", kind: " + std::to_string(R_FunTab[co->u.primsxp.offset].gram.kind), 2);
-
-            }
-            return convertToPointer(co, true);
+        if (co == R_BaseNamespace) {
+            return convertToExternalSymbol("dcs_102");
         }
         #else
-        return convertToPointer(co, true);
+        static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
+                                                R_BaseNamespace};
+        if (eternal.count(co))
+            return convertToPointer(co);
+        #endif
+    } else {
+        static std::unordered_set<SEXP> eternal = {R_GlobalEnv, R_BaseEnv,
+                                                R_BaseNamespace};
+        if (eternal.count(co))
+            return convertToPointer(co);
+    }
+
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_103_109 == 1
+        if (co == R_TrueValue) {
+            return convertToExternalSymbol("dcs_103", true);
+        }
+        if (co == R_NilValue) {
+            return convertToExternalSymbol("dcs_104", true);
+        }
+        if (co == R_FalseValue) {
+            return convertToExternalSymbol("dcs_105", true);
+        }
+        if (co == R_UnboundValue) {
+            return convertToExternalSymbol("dcs_106", true);
+        }
+        if (co == R_MissingArg) {
+            return convertToExternalSymbol("dcs_107", true);
+        }
+        if (co == R_LogicalNAValue) {
+            return convertToExternalSymbol("dcs_108", true);
+        }
+        if (co == R_EmptyEnv) {
+            return convertToExternalSymbol("dcs_109", true);
+        }
+        #else
+        static std::unordered_set<SEXP> eternalConst = {
+            R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
+            R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
+        if (eternalConst.count(co))
+            return convertToPointer(co, true);
+        #endif
+    } else {
+        static std::unordered_set<SEXP> eternalConst = {
+            R_TrueValue,  R_NilValue,       R_FalseValue, R_UnboundValue,
+            R_MissingArg, R_LogicalNAValue, R_EmptyEnv};
+        if (eternalConst.count(co))
+            return convertToPointer(co, true);
+    }
+
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_110_111 == 1
+        if (co == R_RestartToken) {
+            return convertToExternalSymbol("dcs_110");
+        }
+
+        if (co == R_DimSymbol) {
+            return convertToExternalSymbol("dcs_111");
+        }
+
+        if (co == R_DotsSymbol) {
+            return convertToExternalSymbol("dcs_112");
+        }
         #endif
     }
 
-    #if PATCH_CP_ENTRIES == 1
-    // handle common cases for comparisons
-    if (TYPEOF(co) == EXTERNALSXP) {
-        SEXP curr = co;
-        if (DispatchTable::check(curr)) {
-            DispatchTable * vtable = DispatchTable::unpack(curr);
-            auto data = getHastAndIndex(vtable->baseline()->body()->src);
-            SEXP hast = data.hast;
-            int index = data.index;
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_SYMSXP == 1
+        if (TYPEOF(co) == SYMSXP) {
 
-            SEXP vtabContainer = R_NilValue;
-            if (!isHastInvalid(hast)) {
-                vtabContainer = getVtableContainer(hast, index);
-            }
-
-            // If the hast is blacklisted, patch will not work
-            if (!reqMap || (vtabContainer != curr) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
+            if (strlen(CHAR(PRINTNAME(co))) == 0) {
+                std::cout << "serializer: unnamed symbols not handled (" << CHAR(PRINTNAME(co)) << ")" << std::endl;
+                if (serializerError) {
                     *serializerError = true;
-                    if (vtabContainer != curr) {
-
-                        DebugMessages::printSerializerErrors("(*) CPPP patch failed, VTAB container not equal", 2);
-                        if (vtabContainer == R_NilValue) {
-                            DebugMessages::printSerializerErrors("R_NilValue for container", 3);
-                        } else {
-                            DebugMessages::printSerializerErrors("hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)curr), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)vtabContainer), 3);
-                        }
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                    }
                 }
+                return convertToPointer(co);
             } else {
-                Pool::insert(vtable->container());
-                // patch case
                 std::stringstream ss;
-                ss << "vtab_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                reqMap->insert(hast);
+                ss << "sym_";
+                ss << CHAR(PRINTNAME(co));
                 return convertToExternalSymbol(ss.str());
             }
-
-        } else {
-            if (serializerError != nullptr) {
-                *serializerError = true;
-                DebugMessages::printSerializerErrors("(*) EXTERNALSXP not in BC", 2);
-            }
         }
-    } else if (TYPEOF(co) == CLOSXP) {
-        if (TYPEOF(BODY(co)) == EXTERNALSXP) {
-            SEXP curr = BODY(co);
-            DispatchTable * vtable = DispatchTable::unpack(curr);
-            auto data = getHastAndIndex(vtable->baseline()->body()->src);
-            SEXP hast = data.hast;
+        #else
+        if (TYPEOF(co) == SYMSXP)
+            return convertToPointer(co);
+        #endif
+    } else {
+        if (TYPEOF(co) == SYMSXP)
+            return convertToPointer(co);
+    }
 
-            SEXP resolvedContainer = R_NilValue;
-            if (!isHastInvalid(hast)) {
-                resolvedContainer = getClosContainer(hast);
-            }
-            // If the hast is blacklisted, patch will not work
-            if (!reqMap || (resolvedContainer != co) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
-                    *serializerError = true;
-                    if ((resolvedContainer != co)) {
-                        DebugMessages::printSerializerErrors("(*) CPPP invalid container for CLOSXP", 2);
-                        if (data.index != 0) {
-                            DebugMessages::printSerializerErrors("CPPP: index is non zero, inner closures closed at runtime are not yet supported.", 3);
-                        }
-                        if (resolvedContainer == R_NilValue) {
-                            DebugMessages::printSerializerErrors("CPPP: resolved container is R_NilValue", 3);
-                        } else {
-                            DebugMessages::printSerializerErrors("Lookup: " + std::string(CHAR(PRINTNAME(hast))) + " at " + std::to_string(data.index) + " -- src: " + std::to_string(vtable->baseline()->body()->src) , 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)co), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)resolvedContainer), 3);
-                        }
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                    }
-                }
-            } else {
-                Pool::insert(co);
-                // patch case
-                std::stringstream ss;
-                ss << "clos_" << CHAR(PRINTNAME(hast));
-                reqMap->insert(hast);
-                return convertToExternalSymbol(ss.str());
-            }
-
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_BUILTINSXP == 1
+        if (TYPEOF(co) == BUILTINSXP) {
+            std::stringstream ss;
+            ss << "gcb_";
+            ss << getBuiltinNr(co);
+            return convertToExternalSymbol(ss.str(), true);
         }
-        // else if (TYPEOF(BODY(co)) == BCODESXP) {
-        //     DebugMessages::printSerializerErrors("(W) Allowing BCODESXP to be added to serialized pool", 2);
-        // }
-        else {
-            if (serializerError != nullptr) {
-                *serializerError = true;
-                DebugMessages::printSerializerErrors("(*) CLOSXP's BODY is not EXTERNALSXP: " + std::to_string(TYPEOF(BODY(co))), 2);
-                if (DebugMessages::serializerDebugLevel() == 2) {
-                    printAST(0, co);
-                }
-            }
+        #else
+        if (TYPEOF(co) == BUILTINSXP) {
+            return convertToPointer(co, true);
+        }
+        #endif
+    } else {
+        if (TYPEOF(co) == BUILTINSXP) {
+            return convertToPointer(co, true);
         }
     }
-    auto cpIndex = Pool::insert(co);
-    auto iVal = globalConst(c(cpIndex), t::i32);
-    auto iLoad = builder.CreateLoad(iVal);
 
-    llvm::Value* pos = builder.CreateLoad(constantpool);
-    pos = builder.CreateBitCast(dataPtr(pos, false),
-                                PointerType::get(t::SEXP, 0));
-    pos = builder.CreateGEP(pos, iLoad);
-    #else
-    auto i = Pool::insert(co);
-    llvm::Value* pos = builder.CreateLoad(constantpool);
-    pos = builder.CreateBitCast(dataPtr(pos, false),
-                                PointerType::get(t::SEXP, 0));
-    pos = builder.CreateGEP(pos, c(i));
-    #endif
+    if (TYPEOF(co) == SPECIALSXP) {
+        if (reqMap && serializerError && *serializerError == false) {
+            #if PATCH_SPECIALSXP == 1
+            auto sym = Rf_install(R_FunTab[co->u.primsxp.offset].name);
+            auto spe1 = Rf_findFun(sym,R_GlobalEnv);
 
-    return builder.CreateLoad(pos);
+            if (spe1 == co) {
+                std::stringstream ss;
+                ss << "spe1_";
+                ss << co->u.primsxp.offset;
+                return convertToExternalSymbol(ss.str(), true);
+            }
+            else {
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+
+                    DebugMessages::printSerializerErrors("(*) PATCH_SPECIALSXP failed, non-function type, offset: " + std::to_string(co->u.primsxp.offset) + ", kind: " + std::to_string(R_FunTab[co->u.primsxp.offset].gram.kind), 2);
+
+                }
+                return convertToPointer(co, true);
+            }
+            #else
+            return convertToPointer(co, true);
+            #endif
+        } else {
+            return convertToPointer(co, true);
+        }
+    }
+
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_CP_ENTRIES == 1
+        // handle common cases for comparisons
+        if (TYPEOF(co) == EXTERNALSXP) {
+            SEXP curr = co;
+            if (DispatchTable::check(curr)) {
+                DispatchTable * vtable = DispatchTable::unpack(curr);
+                auto data = getHastAndIndex(vtable->baseline()->body()->src);
+                SEXP hast = data.hast;
+                int index = data.index;
+
+                SEXP vtabContainer = R_NilValue;
+                if (!isHastInvalid(hast)) {
+                    vtabContainer = getVtableContainer(hast, index);
+                }
+
+                // If the hast is blacklisted, patch will not work
+                if (!reqMap || (vtabContainer != curr) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if (vtabContainer != curr) {
+
+                            DebugMessages::printSerializerErrors("(*) CPPP patch failed, VTAB container not equal", 2);
+                            if (vtabContainer == R_NilValue) {
+                                DebugMessages::printSerializerErrors("R_NilValue for container", 3);
+                            } else {
+                                DebugMessages::printSerializerErrors("hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)curr), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)vtabContainer), 3);
+                            }
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                        }
+                    }
+                } else {
+                    Pool::insert(vtable->container());
+                    // patch case
+                    std::stringstream ss;
+                    ss << "vtab_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                    reqMap->insert(hast);
+                    return convertToExternalSymbol(ss.str());
+                }
+
+            } else {
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+                    DebugMessages::printSerializerErrors("(*) EXTERNALSXP not in BC", 2);
+                }
+            }
+        } else if (TYPEOF(co) == CLOSXP) {
+            if (TYPEOF(BODY(co)) == EXTERNALSXP) {
+                SEXP curr = BODY(co);
+                DispatchTable * vtable = DispatchTable::unpack(curr);
+                auto data = getHastAndIndex(vtable->baseline()->body()->src);
+                SEXP hast = data.hast;
+
+                SEXP resolvedContainer = R_NilValue;
+                if (!isHastInvalid(hast)) {
+                    resolvedContainer = getClosContainer(hast);
+                }
+                // If the hast is blacklisted, patch will not work
+                if (!reqMap || (resolvedContainer != co) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if ((resolvedContainer != co)) {
+                            DebugMessages::printSerializerErrors("(*) CPPP invalid container for CLOSXP", 2);
+                            if (data.index != 0) {
+                                DebugMessages::printSerializerErrors("CPPP: index is non zero, inner closures closed at runtime are not yet supported.", 3);
+                            }
+                            if (resolvedContainer == R_NilValue) {
+                                DebugMessages::printSerializerErrors("CPPP: resolved container is R_NilValue", 3);
+                            } else {
+                                DebugMessages::printSerializerErrors("Lookup: " + std::string(CHAR(PRINTNAME(hast))) + " at " + std::to_string(data.index) + " -- src: " + std::to_string(vtable->baseline()->body()->src) , 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string((uintptr_t)co), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string((uintptr_t)resolvedContainer), 3);
+                            }
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                        }
+                    }
+                } else {
+                    Pool::insert(co);
+                    // patch case
+                    std::stringstream ss;
+                    ss << "clos_" << CHAR(PRINTNAME(hast));
+                    reqMap->insert(hast);
+                    return convertToExternalSymbol(ss.str());
+                }
+
+            }
+            // else if (TYPEOF(BODY(co)) == BCODESXP) {
+            //     DebugMessages::printSerializerErrors("(W) Allowing BCODESXP to be added to serialized pool", 2);
+            // }
+            else {
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+                    DebugMessages::printSerializerErrors("(*) CLOSXP's BODY is not EXTERNALSXP: " + std::to_string(TYPEOF(BODY(co))), 2);
+                    if (DebugMessages::serializerDebugLevel() == 2) {
+                        printAST(0, co);
+                    }
+                }
+            }
+        }
+        auto cpIndex = Pool::insert(co);
+        auto iVal = globalConst(c(cpIndex), t::i32);
+        auto iLoad = builder.CreateLoad(iVal);
+
+        llvm::Value* pos = builder.CreateLoad(constantpool);
+        pos = builder.CreateBitCast(dataPtr(pos, false),
+                                    PointerType::get(t::SEXP, 0));
+        pos = builder.CreateGEP(pos, iLoad);
+        return builder.CreateLoad(pos);
+        #else
+        auto i = Pool::insert(co);
+        llvm::Value* pos = builder.CreateLoad(constantpool);
+        pos = builder.CreateBitCast(dataPtr(pos, false),
+                                    PointerType::get(t::SEXP, 0));
+        pos = builder.CreateGEP(pos, c(i));
+        return builder.CreateLoad(pos);
+        #endif
+    } else {
+        auto i = Pool::insert(co);
+        llvm::Value* pos = builder.CreateLoad(constantpool);
+        pos = builder.CreateBitCast(dataPtr(pos, false),
+                                    PointerType::get(t::SEXP, 0));
+        pos = builder.CreateGEP(pos, c(i));
+        return builder.CreateLoad(pos);
+    }
 }
 
 llvm::Value* LowerFunctionLLVM::nodestackPtr() {
@@ -682,65 +738,76 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                                              llvm::Value* env) {
     if (supportsFastBuiltinCall(builtin, args.size())) {
         return withCallFrame(args, [&]() -> llvm::Value* {
-            #if CALL_SITE_PATCH == 1
-            auto data = getHastAndIndex(srcIdx, true); // constant pool lookup
-            SEXP hast = data.hast;
-            int index = data.index;
+            if (reqMap && serializerError && *serializerError == false) {
+                #if CALL_SITE_PATCH == 1
+                auto data = getHastAndIndex(srcIdx, true); // constant pool lookup
+                SEXP hast = data.hast;
+                int index = data.index;
 
-            int resolvedIndex = 0;
+                int resolvedIndex = 0;
 
-            if (!isHastInvalid(hast)) {
-                resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-            }
-            if (!reqMap || (resolvedIndex != srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
-                    *serializerError = true;
-                    if (resolvedIndex != srcIdx) {
-                        DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[callRBuiltin] resolved source is invalid", 2);
-                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(srcIdx), 3);
-                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                        // printAST(0,Pool::get(srcIdx));
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                    }
+                if (!isHastInvalid(hast)) {
+                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                 }
+                if (!reqMap || (resolvedIndex != srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if (resolvedIndex != srcIdx) {
+                            DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[callRBuiltin] resolved source is invalid", 2);
+                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(srcIdx), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                            // printAST(0,Pool::get(srcIdx));
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                        }
+                    }
 
+                    return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
+                            {
+                                paramCode(),
+                                c(srcIdx),
+                                constant(builtin, t::SEXP),
+                                env,
+                                c(args.size()),
+                            });
+
+                } else {
+                    // patch case
+                    std::stringstream ss;
+                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                    return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
+                            {
+                                paramCode(),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                                constant(builtin, t::SEXP),
+                                env,
+                                c(args.size()),
+                            });
+                }
+                #else
                 return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
-                        {
-                            paramCode(),
-                            c(srcIdx),
-                            constant(builtin, t::SEXP),
-                            env,
-                            c(args.size()),
-                        });
-
+                            {
+                                paramCode(),
+                                c(srcIdx),
+                                constant(builtin, t::SEXP),
+                                env,
+                                c(args.size()),
+                            });
+                #endif
             } else {
-                // patch case
-                std::stringstream ss;
-                ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                 return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
-                        {
-                            paramCode(),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
-                            constant(builtin, t::SEXP),
-                            env,
-                            c(args.size()),
-                        });
+                            {
+                                paramCode(),
+                                c(srcIdx),
+                                constant(builtin, t::SEXP),
+                                env,
+                                c(args.size()),
+                            });
             }
-            #else
-            return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
-                        {
-                            paramCode(),
-                            c(srcIdx),
-                            constant(builtin, t::SEXP),
-                            env,
-                            c(args.size()),
-                        });
-            #endif
         });
     }
 
@@ -842,41 +909,77 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     } else if (val->asRValue()) {
         res = constant(val->asRValue(), needed);
     } else if (val == OpaqueTrue::instance()) {
-        #if PATCH_OPAQUE_TRUE == 1
-        // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToExternalSymbol("spe_opaqueTrue", t::Int, true));
-        #else
-        static int one = 1;
-        // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
-        #endif
+        if (reqMap && serializerError && *serializerError == false) {
+            #if PATCH_OPAQUE_TRUE == 1
+            // Something that is always true, but llvm does not know about
+            res = builder.CreateLoad(convertToExternalSymbol("spe_opaqueTrue", t::Int, true));
+            #else
+            static int one = 1;
+            // Something that is always true, but llvm does not know about
+            res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
+            #endif
+        } else {
+            static int one = 1;
+            // Something that is always true, but llvm does not know about
+            res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
+        }
     } else if (auto ld = Const::Cast(val)) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
-        #if TRY_PATCH_DEOPTREASON == 1
-        auto data = getHastAndIndex(((DeoptReasonWrapper*)val)->reason.srcCode()->src);
-        SEXP hast = data.hast;
-        int index = data.index;
+        if (reqMap && serializerError && *serializerError == false) {
+            #if TRY_PATCH_DEOPTREASON == 1
+            auto data = getHastAndIndex(((DeoptReasonWrapper*)val)->reason.srcCode()->src);
+            SEXP hast = data.hast;
+            int index = data.index;
 
-        rir::Code * resolvedCode = nullptr;
+            rir::Code * resolvedCode = nullptr;
 
-        if (!isHastInvalid(hast)) {
-            resolvedCode = getCodeContainer(hast, index);
-        }
-
-        // If the hast is blacklisted, patch will not work
-        if (!reqMap || (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-            if (serializerError != nullptr) {
-                *serializerError = true;
-                if (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) {
-                    DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTREASON resolved code is invalid", 2);
-                }
-                if (isHastInvalid(hast)) {
-                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                } else if (isHastBlacklisted(hast)) {
-                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                }
+            if (!isHastInvalid(hast)) {
+                resolvedCode = getCodeContainer(hast, index);
             }
+
+            // If the hast is blacklisted, patch will not work
+            if (!reqMap || (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                if (serializerError != nullptr) {
+                    *serializerError = true;
+                    if (((DeoptReasonWrapper*)val)->reason.srcCode() != resolvedCode) {
+                        DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTREASON resolved code is invalid", 2);
+                    }
+                    if (isHastInvalid(hast)) {
+                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                    } else if (isHastBlacklisted(hast)) {
+                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                    }
+                }
+                auto dr = (DeoptReasonWrapper*)val;
+                auto srcAddr = (Constant*)builder.CreateIntToPtr(
+                    llvm::ConstantInt::get(
+                        PirJitLLVM::getContext(),
+                        llvm::APInt(64,
+                                    reinterpret_cast<uint64_t>(dr->reason.srcCode()),
+                                    false)),
+                    t::voidPtr);
+
+                auto drs = llvm::ConstantStruct::get(
+                    t::DeoptReason, {c(dr->reason.reason, 32),
+                                c(dr->reason.origin.offset(), 32), srcAddr});
+                res = globalConst(drs);
+            } else {
+                std::stringstream ss;
+
+                auto dr = (DeoptReasonWrapper*)val;
+
+                ss << "code_" << CHAR(PRINTNAME(hast)) << "_" << data.index;
+                reqMap->insert(hast);
+
+                auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
+
+                auto drs = llvm::ConstantStruct::get(
+                    t::DeoptReason, {c(dr->reason.reason, 32),
+                                c(dr->reason.origin.offset(), 32), srcAddr});
+                res = globalConst(drs);
+            }
+            #else
             auto dr = (DeoptReasonWrapper*)val;
             auto srcAddr = (Constant*)builder.CreateIntToPtr(
                 llvm::ConstantInt::get(
@@ -888,38 +991,24 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
 
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                            c(dr->reason.origin.offset(), 32), srcAddr});
+                                c(dr->reason.origin.offset(), 32), srcAddr});
             res = globalConst(drs);
+            #endif
         } else {
-            std::stringstream ss;
-
             auto dr = (DeoptReasonWrapper*)val;
-
-            ss << "code_" << CHAR(PRINTNAME(hast)) << "_" << data.index;
-            reqMap->insert(hast);
-
-            auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
+            auto srcAddr = (Constant*)builder.CreateIntToPtr(
+                llvm::ConstantInt::get(
+                    PirJitLLVM::getContext(),
+                    llvm::APInt(64,
+                                reinterpret_cast<uint64_t>(dr->reason.srcCode()),
+                                false)),
+                t::voidPtr);
 
             auto drs = llvm::ConstantStruct::get(
                 t::DeoptReason, {c(dr->reason.reason, 32),
-                            c(dr->reason.origin.offset(), 32), srcAddr});
+                                c(dr->reason.origin.offset(), 32), srcAddr});
             res = globalConst(drs);
         }
-        #else
-        auto dr = (DeoptReasonWrapper*)val;
-        auto srcAddr = (Constant*)builder.CreateIntToPtr(
-            llvm::ConstantInt::get(
-                PirJitLLVM::getContext(),
-                llvm::APInt(64,
-                            reinterpret_cast<uint64_t>(dr->reason.srcCode()),
-                            false)),
-            t::voidPtr);
-
-        auto drs = llvm::ConstantStruct::get(
-            t::DeoptReason, {c(dr->reason.reason, 32),
-                            c(dr->reason.origin.offset(), 32), srcAddr});
-        res = globalConst(drs);
-        #endif
     } else {
         val->printRef(std::cerr);
         if (auto i = Instruction::Cast(val))
@@ -1161,14 +1250,20 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     // Handle incoming longjumps
     {
         builder.SetInsertPoint(didLongjmp);
-        #if PATCH_RETURNED_VALUE == 1
-        auto speSym = convertToExternalSymbol("spe_returnedValue", t::i64);
-        llvm::Value* returned = builder.CreateLoad(
-            builder.CreateIntToPtr(speSym, t::SEXP_ptr));
-        #else
-        llvm::Value* returned = builder.CreateLoad(
-            builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
-        #endif
+        llvm::Value* returned;
+        if (reqMap && serializerError && *serializerError == false) {
+            #if PATCH_RETURNED_VALUE == 1
+            auto speSym = convertToExternalSymbol("spe_returnedValue", t::i64);
+             returned = builder.CreateLoad(
+                builder.CreateIntToPtr(speSym, t::SEXP_ptr));
+            #else
+            returned = builder.CreateLoad(
+                builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
+            #endif
+        } else {
+            returned = builder.CreateLoad(
+                builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
+        }
         auto restart =
             builder.CreateICmpEQ(returned, constant(R_RestartToken, t::SEXP));
 
@@ -2061,47 +2156,52 @@ void LowerFunctionLLVM::compileRelop(
         llvm::Value* res;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            #if PATCH_SRCIDX_ENTRY == 1
-            auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-            SEXP hast = data.hast;
-            int index = data.index;
+            if (reqMap && serializerError && *serializerError == false) {
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                SEXP hast = data.hast;
+                int index = data.index;
 
-            unsigned resolvedIndex = 0;
+                unsigned resolvedIndex = 0;
 
-            if (!isHastInvalid(hast)) {
-                resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-            }
-            if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
-                    *serializerError = true;
-                    if (resolvedIndex != i->srcIdx) {
-                        DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[binopEnv] resolved source is invalid", 2);
-                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                        // printAST(0,Pool::get(srcIdx));
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                    }
+                if (!isHastInvalid(hast)) {
+                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                 }
+                if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if (resolvedIndex != i->srcIdx) {
+                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[binopEnv] resolved source is invalid", 2);
+                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                            // printAST(0,Pool::get(srcIdx));
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                        }
+                    }
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
+                } else {
+                    std::stringstream ss;
+                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                        {a, b, e,
+                        builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                        c((int)kind)});
+                }
+                #else
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
+                #endif
             } else {
-                std::stringstream ss;
-                ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e,
-                       builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
-                       c((int)kind)});
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
             }
-            #else
-            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
-            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((int)kind)});
@@ -2167,48 +2267,53 @@ void LowerFunctionLLVM::compileBinop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            #if PATCH_SRCIDX_ENTRY == 1
-            auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-            SEXP hast = data.hast;
-            int index = data.index;
+            if (reqMap && serializerError && *serializerError == false) {
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                SEXP hast = data.hast;
+                int index = data.index;
 
-            unsigned resolvedIndex = 0;
+                unsigned resolvedIndex = 0;
 
-            if (!isHastInvalid(hast)) {
-                resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-            }
-            if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
-                    *serializerError = true;
-                    if (resolvedIndex != i->srcIdx) {
-                        DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[compileBinop] resolved source is invalid", 2);
-                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                        // printAST(0,Pool::get(srcIdx));
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                    }
+                if (!isHastInvalid(hast)) {
+                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                 }
+                if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if (resolvedIndex != i->srcIdx) {
+                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[compileBinop] resolved source is invalid", 2);
+                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                            // printAST(0,Pool::get(srcIdx));
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                        }
+                    }
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
+                } else {
+                    std::stringstream ss;
+                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                        {a, b, e,
+                        builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                        c((int)kind)});
+                }
+                #else
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
+                #endif
             } else {
-                std::stringstream ss;
-                ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e,
-                       builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
-                       c((int)kind)});
+                        {a, b, e, c(i->srcIdx), c((int)kind)});
             }
-            #else
-            res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((int)kind)});
-            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((int)kind)});
@@ -2284,47 +2389,52 @@ void LowerFunctionLLVM::compileUnop(
         llvm::Value* res = nullptr;
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
-            #if PATCH_SRCIDX_ENTRY == 1
-            auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-            SEXP hast = data.hast;
-            int index = data.index;
+            if (reqMap && serializerError && *serializerError == false) {
+                #if PATCH_SRCIDX_ENTRY == 1
+                auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                SEXP hast = data.hast;
+                int index = data.index;
 
-            unsigned resolvedIndex = 0;
+                unsigned resolvedIndex = 0;
 
-            if (!isHastInvalid(hast)) {
-                resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-            }
-            if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                if (serializerError != nullptr) {
-                    *serializerError = true;
-                    if (resolvedIndex != i->srcIdx) {
-                        DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[unopEnv] resolved source is invalid", 2);
-                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                        // printAST(0,Pool::get(srcIdx));
-                    }
-                    if (isHastInvalid(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                    } else if (isHastBlacklisted(hast)) {
-                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                    }
+                if (!isHastInvalid(hast)) {
+                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                 }
+                if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                    if (serializerError != nullptr) {
+                        *serializerError = true;
+                        if (resolvedIndex != i->srcIdx) {
+                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[unopEnv] resolved source is invalid", 2);
+                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                            // printAST(0,Pool::get(srcIdx));
+                        }
+                        if (isHastInvalid(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                        } else if (isHastBlacklisted(hast)) {
+                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                        }
+                    }
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
+                        {a, e, c(i->srcIdx), c((int)kind)});
+                } else {
+                    std::stringstream ss;
+                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                    res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
+                        {a, e,
+                        builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                        c((int)kind)});
+                }
+                #else
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e, c(i->srcIdx), c((int)kind)});
+                        {a, e, c(i->srcIdx), c((int)kind)});
+                #endif
             } else {
-                std::stringstream ss;
-                ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                 res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e,
-                       builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
-                       c((int)kind)});
+                        {a, e, c(i->srcIdx), c((int)kind)});
             }
-            #else
-            res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e, c(i->srcIdx), c((int)kind)});
-            #endif
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
                        {a, c((int)kind)});
@@ -2455,97 +2565,118 @@ bool LowerFunctionLLVM::compileDotcall(
     if (calli->isReordered())
         callId = pushArgReordering(calli->getArgOrderOrig());
 
-    #if CALL_SITE_PATCH == 1
-    auto data = getHastAndIndex(i->srcIdx, true); // constant pool lookup
-    SEXP hast = data.hast;
-    int index = data.index;
+    if (reqMap && serializerError && *serializerError == false) {
+        #if CALL_SITE_PATCH == 1
+        auto data = getHastAndIndex(i->srcIdx, true); // constant pool lookup
+        SEXP hast = data.hast;
+        int index = data.index;
 
-    unsigned resolvedIndex = 0;
+        unsigned resolvedIndex = 0;
 
-    if (!isHastInvalid(hast)) {
-        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-    }
-    if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-        if (serializerError != nullptr) {
-            *serializerError = true;
-            if (resolvedIndex != i->srcIdx) {
-                DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[namedCall] resolved source is invalid", 2);
-                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                // printAST(0,Pool::get(srcIdx));
-            }
-            if (isHastInvalid(hast)) {
-                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-            } else if (isHastBlacklisted(hast)) {
-                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-            }
+        if (!isHastInvalid(hast)) {
+            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
         }
+        if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+            if (serializerError != nullptr) {
+                *serializerError = true;
+                if (resolvedIndex != i->srcIdx) {
+                    DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[namedCall] resolved source is invalid", 2);
+                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                    // printAST(0,Pool::get(srcIdx));
+                }
+                if (isHastInvalid(hast)) {
+                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                } else if (isHastBlacklisted(hast)) {
+                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                }
+            }
 
+            setVal(i, withCallFrame(
+                    args,
+                    [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                c(i->srcIdx),
+                                callee(),
+                                i->hasEnv() ? loadSxp(i->env())
+                                            : constant(R_BaseEnv, t::SEXP),
+                                c(calli->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    },
+                    /* dotCall pops arguments : */ false));
+
+
+
+        } else {
+            // patch case
+            std::stringstream ss;
+            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+            setVal(i, withCallFrame(
+                    args,
+                    [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                                callee(),
+                                i->hasEnv() ? loadSxp(i->env())
+                                            : constant(R_BaseEnv, t::SEXP),
+                                c(calli->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    },
+                    /* dotCall pops arguments : */ false));
+        }
+        #else
         setVal(i, withCallFrame(
-                  args,
-                  [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
-                          {
-                              c(callId),
-                              paramCode(),
-                              c(i->srcIdx),
-                              callee(),
-                              i->hasEnv() ? loadSxp(i->env())
-                                          : constant(R_BaseEnv, t::SEXP),
-                              c(calli->nCallArgs()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
-                              c(asmpt.toI()),
-                          });
-                  },
-                  /* dotCall pops arguments : */ false));
-
-
-
+                    args,
+                    [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                c(i->srcIdx),
+                                callee(),
+                                i->hasEnv() ? loadSxp(i->env())
+                                            : constant(R_BaseEnv, t::SEXP),
+                                c(calli->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    },
+                    /* dotCall pops arguments : */ false));
+        #endif
     } else {
-        // patch case
-        std::stringstream ss;
-        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
         setVal(i, withCallFrame(
-                  args,
-                  [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
-                          {
-                              c(callId),
-                              paramCode(),
-                              builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
-                              callee(),
-                              i->hasEnv() ? loadSxp(i->env())
-                                          : constant(R_BaseEnv, t::SEXP),
-                              c(calli->nCallArgs()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
-                              c(asmpt.toI()),
-                          });
-                  },
-                  /* dotCall pops arguments : */ false));
+                    args,
+                    [&]() -> llvm::Value* {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
+                            {
+                                c(callId),
+                                paramCode(),
+                                c(i->srcIdx),
+                                callee(),
+                                i->hasEnv() ? loadSxp(i->env())
+                                            : constant(R_BaseEnv, t::SEXP),
+                                c(calli->nCallArgs()),
+                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                c(asmpt.toI()),
+                            });
+                    },
+                    /* dotCall pops arguments : */ false));
     }
-    #else
-    setVal(i, withCallFrame(
-                  args,
-                  [&]() -> llvm::Value* {
-                      return call(
-                          NativeBuiltins::get(NativeBuiltins::Id::dotsCall),
-                          {
-                              c(callId),
-                              paramCode(),
-                              c(i->srcIdx),
-                              callee(),
-                              i->hasEnv() ? loadSxp(i->env())
-                                          : constant(R_BaseEnv, t::SEXP),
-                              c(calli->nCallArgs()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
-                              c(asmpt.toI()),
-                          });
-                  },
-                  /* dotCall pops arguments : */ false));
-    #endif
     return true;
 }
 
@@ -2771,11 +2902,15 @@ void LowerFunctionLLVM::compile() {
         }
     }
 
-    #if PATCH_NODE_STACK_TOP == 1
-    nodestackPtrAddr = convertToExternalSymbol("spe_BCNodeStackTop", t::stackCellPtr);
-    #else
-    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
-    #endif
+    if (reqMap && serializerError && *serializerError == false) {
+        #if PATCH_NODE_STACK_TOP == 1
+        nodestackPtrAddr = convertToExternalSymbol("spe_BCNodeStackTop", t::stackCellPtr);
+        #else
+        nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
+        #endif
+    } else {
+        nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
+    }
     basepointer = nodestackPtr();
 
     size_t additionalStackSlots = 0;
@@ -2844,14 +2979,17 @@ void LowerFunctionLLVM::compile() {
             }
         };
 
-        #if PATCH_CONSTANT_POOL_PTR == 1
-        auto speSym = namedGlobalConst("named_constantPool", c(globalContext()), t::i64);
-        auto iLoad = builder.CreateLoad(speSym);
-        constantpool = builder.CreateIntToPtr(iLoad, t::SEXP_ptr);
-        #else
-        constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
-        #endif
-
+        if (reqMap && serializerError && *serializerError == false) {
+            #if PATCH_CONSTANT_POOL_PTR == 1
+            auto speSym = namedGlobalConst("named_constantPool", c(globalContext()), t::i64);
+            auto iLoad = builder.CreateLoad(speSym);
+            constantpool = builder.CreateIntToPtr(iLoad, t::SEXP_ptr);
+            #else
+            constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
+            #endif
+        } else {
+            constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
+        }
         constantpool = builder.CreateGEP(constantpool, c(1));
 
         Visitor::run(code->entry, [&](BB* bb) {
@@ -4010,62 +4148,72 @@ void LowerFunctionLLVM::compile() {
                 if (b->isReordered())
                     callId = pushArgReordering(b->getArgOrderOrig());
 
-                #if CALL_SITE_PATCH == 1
-                auto data = getHastAndIndex(b->srcIdx, true); // constant pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if CALL_SITE_PATCH == 1
+                    auto data = getHastAndIndex(b->srcIdx, true); // constant pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != b->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != b->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[call] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(b->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
-                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(
-                            NativeBuiltins::get(NativeBuiltins::Id::call),
-                            {c(callId), paramCode(), c(b->srcIdx),
-                            loadSxp(b->cls()), loadSxp(b->env()),
-                            c(b->nCallArgs()), c(asmpt.toI())});
-                       }));
-                } else {
-                    // patch case
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(
-                            NativeBuiltins::get(NativeBuiltins::Id::call),
-                            {c(callId), paramCode(),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(b->srcIdx),
-                            loadSxp(b->cls()), loadSxp(b->env()),
-                            c(b->nCallArgs()), c(asmpt.toI())});
-                       }));
+                    if (!reqMap || (resolvedIndex != b->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != b->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[call] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(b->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                            }
+                        }
+                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(), c(b->srcIdx),
+                                loadSxp(b->cls()), loadSxp(b->env()),
+                                c(b->nCallArgs()), c(asmpt.toI())});
+                        }));
+                    } else {
+                        // patch case
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(b->srcIdx),
+                                loadSxp(b->cls()), loadSxp(b->env()),
+                                c(b->nCallArgs()), c(asmpt.toI())});
+                        }));
 
+                    }
+                    #else
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(), c(b->srcIdx),
+                                loadSxp(b->cls()), loadSxp(b->env()),
+                                c(b->nCallArgs()), c(asmpt.toI())});
+                        }));
+                    #endif
+                } else {
+                    setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                            return call(
+                                NativeBuiltins::get(NativeBuiltins::Id::call),
+                                {c(callId), paramCode(), c(b->srcIdx),
+                                loadSxp(b->cls()), loadSxp(b->env()),
+                                c(b->nCallArgs()), c(asmpt.toI())});
+                        }));
                 }
-                #else
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(
-                            NativeBuiltins::get(NativeBuiltins::Id::call),
-                            {c(callId), paramCode(), c(b->srcIdx),
-                            loadSxp(b->cls()), loadSxp(b->env()),
-                            c(b->nCallArgs()), c(asmpt.toI())});
-                       }));
-                #endif
                 break;
             }
 
@@ -4089,33 +4237,72 @@ void LowerFunctionLLVM::compile() {
                 if (b->isReordered())
                     callId = pushArgReordering(b->getArgOrderOrig());
 
-                #if CALL_SITE_PATCH == 1
-                auto data = getHastAndIndex(b->srcIdx, true); // constant pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if CALL_SITE_PATCH == 1
+                    auto data = getHastAndIndex(b->srcIdx, true); // constant pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != b->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != b->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[namedCall] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(b->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
+                    if (!reqMap || (resolvedIndex != b->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != b->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[namedCall] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(b->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                            }
+                        }
 
+                        setVal(
+                            i, withCallFrame(args, [&]() -> llvm::Value* {
+                                return call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::namedCall),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        c(b->srcIdx),
+                                        loadSxp(b->cls()),
+                                        loadSxp(b->env()),
+                                        c(b->nCallArgs()),
+                                        builder.CreateBitCast(namesStore, t::IntPtr),
+                                        c(asmpt.toI()),
+                                    });
+                            }));
+
+                    } else {
+                        // patch case
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+
+                        setVal(
+                            i, withCallFrame(args, [&]() -> llvm::Value* {
+                                return call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::namedCall),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(b->srcIdx),
+                                        loadSxp(b->cls()),
+                                        loadSxp(b->env()),
+                                        c(b->nCallArgs()),
+                                        builder.CreateBitCast(namesStore, t::IntPtr),
+                                        c(asmpt.toI()),
+                                    });
+                            }));
+                    }
+                    #else
                     setVal(
                         i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4131,12 +4318,8 @@ void LowerFunctionLLVM::compile() {
                                     c(asmpt.toI()),
                                 });
                         }));
-
+                    #endif
                 } else {
-                    // patch case
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-
                     setVal(
                         i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4144,7 +4327,7 @@ void LowerFunctionLLVM::compile() {
                                 {
                                     c(callId),
                                     paramCode(),
-                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(b->srcIdx),
+                                    c(b->srcIdx),
                                     loadSxp(b->cls()),
                                     loadSxp(b->env()),
                                     c(b->nCallArgs()),
@@ -4153,23 +4336,6 @@ void LowerFunctionLLVM::compile() {
                                 });
                         }));
                 }
-                #else
-                setVal(
-                    i, withCallFrame(args, [&]() -> llvm::Value* {
-                        return call(
-                            NativeBuiltins::get(NativeBuiltins::Id::namedCall),
-                            {
-                                c(callId),
-                                paramCode(),
-                                c(b->srcIdx),
-                                loadSxp(b->cls()),
-                                loadSxp(b->env()),
-                                c(b->nCallArgs()),
-                                builder.CreateBitCast(namesStore, t::IntPtr),
-                                c(asmpt.toI()),
-                            });
-                    }));
-                #endif
                 break;
             }
 
@@ -4189,33 +4355,61 @@ void LowerFunctionLLVM::compile() {
                     callId = pushArgReordering(calli->getArgOrderOrig());
 
                 if (!target->owner()->hasOriginClosure()) {
-                    #if CALL_SITE_PATCH == 1
-                    auto data = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if CALL_SITE_PATCH == 1
+                        auto data = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != calli->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != calli->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall !hasOriginClosure] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(calli->srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != calli->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != calli->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall !hasOriginClosure] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(calli->srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                                }
+                            }
 
+                            setVal(
+                                i, withCallFrame(args, [&]() -> llvm::Value* {
+                                    return call(
+                                        NativeBuiltins::get(NativeBuiltins::Id::call),
+                                        {c(callId), paramCode(), c(calli->srcIdx),
+                                        loadSxp(calli->runtimeClosure()),
+                                        loadSxp(calli->env()), c(calli->nCallArgs()),
+                                        c(asmpt.toI())});
+                                }));
+                        } else {
+                            // patch case
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+
+                            setVal(
+                                i, withCallFrame(args, [&]() -> llvm::Value* {
+                                    return call(
+                                        NativeBuiltins::get(NativeBuiltins::Id::call),
+                                        {c(callId), paramCode(),
+                                        builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(calli->srcIdx),
+                                        loadSxp(calli->runtimeClosure()),
+                                        loadSxp(calli->env()), c(calli->nCallArgs()),
+                                        c(asmpt.toI())});
+                                }));
+
+                        }
+                        #else
                         setVal(
                             i, withCallFrame(args, [&]() -> llvm::Value* {
                                 return call(
@@ -4225,34 +4419,18 @@ void LowerFunctionLLVM::compile() {
                                     loadSxp(calli->env()), c(calli->nCallArgs()),
                                     c(asmpt.toI())});
                             }));
+                        #endif
                     } else {
-                        // patch case
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-
                         setVal(
                             i, withCallFrame(args, [&]() -> llvm::Value* {
                                 return call(
                                     NativeBuiltins::get(NativeBuiltins::Id::call),
-                                    {c(callId), paramCode(),
-                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(calli->srcIdx),
+                                    {c(callId), paramCode(), c(calli->srcIdx),
                                     loadSxp(calli->runtimeClosure()),
                                     loadSxp(calli->env()), c(calli->nCallArgs()),
                                     c(asmpt.toI())});
                             }));
-
                     }
-                    #else
-                    setVal(
-                        i, withCallFrame(args, [&]() -> llvm::Value* {
-                            return call(
-                                NativeBuiltins::get(NativeBuiltins::Id::call),
-                                {c(callId), paramCode(), c(calli->srcIdx),
-                                 loadSxp(calli->runtimeClosure()),
-                                 loadSxp(calli->env()), c(calli->nCallArgs()),
-                                 c(asmpt.toI())});
-                        }));
-                    #endif
                     break;
                 }
 
@@ -4269,46 +4447,121 @@ void LowerFunctionLLVM::compile() {
                         }
                     }
                     if (nativeTarget) {
-                        #if TRY_PATCH_OPT_DISPATCH == 1
-                        auto data1 = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
-                        SEXP hast1 = data1.hast;
-                        int index1 = data1.index;
+                        if (reqMap && serializerError && *serializerError == false) {
+                            #if TRY_PATCH_OPT_DISPATCH == 1
+                            auto data1 = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
+                            SEXP hast1 = data1.hast;
+                            int index1 = data1.index;
 
-                        unsigned resolvedIndex1 = 0;
+                            unsigned resolvedIndex1 = 0;
 
-                        if (!isHastInvalid(hast1)) {
-                            resolvedIndex1 = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast1, index1);
-                        }
-
-
-                        SEXP hast = getHastAndIndex(dt->baseline()->body()->src).hast;
-
-                        SEXP resolvedContainer = R_NilValue;
-                        if (!isHastInvalid(hast)) {
-                            resolvedContainer = getClosContainer(hast);
-                        }
-
-                        // If the hast is blacklisted, patch will not work
-                        if (!reqMap || (resolvedIndex1 != calli->srcIdx) || (resolvedContainer != callee) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                            if (serializerError != nullptr) {
-                                *serializerError = true;
-                                if (resolvedIndex1 != calli->srcIdx) {
-                                    DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall optimistic] resolved source is invalid", 2);
-                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast1))) + ", index: " + std::to_string(index1), 3);
-                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
-                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex1), 3);
-                                }
-                                if (resolvedContainer != callee) {
-                                    DebugMessages::printSerializerErrors("(*) TRY_PATCH_OPT_DISPATCH resolved code is invalid", 2);
-                                }
-                                if (isHastInvalid(hast)) {
-                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                                } else if (isHastBlacklisted(hast)) {
-                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                                }
+                            if (!isHastInvalid(hast1)) {
+                                resolvedIndex1 = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast1, index1);
                             }
+
+
+                            SEXP hast = getHastAndIndex(dt->baseline()->body()->src).hast;
+
+                            SEXP resolvedContainer = R_NilValue;
+                            if (!isHastInvalid(hast)) {
+                                resolvedContainer = getClosContainer(hast);
+                            }
+
+                            // If the hast is blacklisted, patch will not work
+                            if (!reqMap || (resolvedIndex1 != calli->srcIdx) || (resolvedContainer != callee) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                                if (serializerError != nullptr) {
+                                    *serializerError = true;
+                                    if (resolvedIndex1 != calli->srcIdx) {
+                                        DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall optimistic] resolved source is invalid", 2);
+                                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast1))) + ", index: " + std::to_string(index1), 3);
+                                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
+                                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex1), 3);
+                                    }
+                                    if (resolvedContainer != callee) {
+                                        DebugMessages::printSerializerErrors("(*) TRY_PATCH_OPT_DISPATCH resolved code is invalid", 2);
+                                    }
+                                    if (isHastInvalid(hast)) {
+                                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                    } else if (isHastBlacklisted(hast)) {
+                                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                                    }
+                                }
+                                assert(
+                                asmpt.includes(Assumption::StaticallyArgmatched));
+                                auto idx = Pool::makeSpace();
+                                NativeBuiltins::targetCaches.push_back(idx);
+                                Pool::patch(idx, nativeTarget->container());
+                                auto missAsmptStore =
+                                    Rf_allocVector(RAWSXP, sizeof(Context));
+                                auto missAsmptIdx = Pool::insert(missAsmptStore);
+                                new (DATAPTR(missAsmptStore))
+                                    Context(nativeTarget->context() - asmpt);
+                                assert(asmpt.smaller(nativeTarget->context()));
+                                auto res = withCallFrame(args, [&]() {
+                                    return call(
+                                        NativeBuiltins::get(
+                                            NativeBuiltins::Id::nativeCallTrampoline),
+                                        {
+                                            c(callId),
+                                            paramCode(),
+                                            constant(callee, t::SEXP),
+                                            c(idx),
+                                            c(calli->srcIdx),
+                                            loadSxp(calli->env()),
+                                            c(args.size()),
+                                            c(asmpt.toI()),
+                                            c(missAsmptIdx),
+                                        });
+                                });
+                                setVal(i, res);
+                            } else {
+                                assert(
+                                    asmpt.includes(Assumption::StaticallyArgmatched));
+
+
+                                Pool::insert(nativeTarget->container());
+
+                                // patch case
+                                std::stringstream ssAST;
+                                ssAST << "pluu_" << CHAR(PRINTNAME(hast1)) << "_" << index1;
+
+                                Pool::insert(calli->cls()->rirClosure());
+                                // patch case
+                                std::stringstream ss1, ss2, ss3;
+                                ss1 << "clos_" << CHAR(PRINTNAME(hast));
+                                ss2 << "optd_" << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
+                                ss3 << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
+
+                                reqMap->insert(Rf_install(ss3.str().c_str()));
+
+                                auto missAsmptStore =
+                                    Rf_allocVector(RAWSXP, sizeof(Context));
+                                auto missAsmptIdx = Pool::insert(missAsmptStore);
+                                new (DATAPTR(missAsmptStore))
+                                    Context(nativeTarget->context() - asmpt);
+
+                                assert(asmpt.smaller(nativeTarget->context()));
+                                auto res = withCallFrame(args, [&]() {
+                                    return call(
+                                        NativeBuiltins::get(
+                                            NativeBuiltins::Id::nativeCallTrampoline),
+                                        {
+                                            c(callId),
+                                            paramCode(),
+                                            convertToExternalSymbol(ss1.str()), // constant(callee, t::SEXP),
+                                            builder.CreateLoad(convertToExternalSymbol(ss2.str(), t::Int)), // c(idx),
+                                            builder.CreateLoad(convertToExternalSymbol(ssAST.str(), t::Int)), // c(calli->srcIdx),
+                                            loadSxp(calli->env()),
+                                            c(args.size()),
+                                            c(asmpt.toI()),
+                                            builder.CreateLoad(globalConst(c(missAsmptIdx), t::i32)), // c(missAsmptIdx),
+                                        });
+                                });
+                                setVal(i, res);
+                            }
+                            #else
                             assert(
-                            asmpt.includes(Assumption::StaticallyArgmatched));
+                                asmpt.includes(Assumption::StaticallyArgmatched));
                             auto idx = Pool::makeSpace();
                             NativeBuiltins::targetCaches.push_back(idx);
                             Pool::patch(idx, nativeTarget->container());
@@ -4335,32 +4588,18 @@ void LowerFunctionLLVM::compile() {
                                     });
                             });
                             setVal(i, res);
+                            #endif
                         } else {
                             assert(
                                 asmpt.includes(Assumption::StaticallyArgmatched));
-
-
-                            Pool::insert(nativeTarget->container());
-
-                            // patch case
-                            std::stringstream ssAST;
-                            ssAST << "pluu_" << CHAR(PRINTNAME(hast1)) << "_" << index1;
-
-                            Pool::insert(calli->cls()->rirClosure());
-                            // patch case
-                            std::stringstream ss1, ss2, ss3;
-                            ss1 << "clos_" << CHAR(PRINTNAME(hast));
-                            ss2 << "optd_" << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
-                            ss3 << CHAR(PRINTNAME(hast)) << "_" << nativeTarget->context().toI() << "_" << args.size();
-
-                            reqMap->insert(Rf_install(ss3.str().c_str()));
-
+                            auto idx = Pool::makeSpace();
+                            NativeBuiltins::targetCaches.push_back(idx);
+                            Pool::patch(idx, nativeTarget->container());
                             auto missAsmptStore =
                                 Rf_allocVector(RAWSXP, sizeof(Context));
                             auto missAsmptIdx = Pool::insert(missAsmptStore);
                             new (DATAPTR(missAsmptStore))
                                 Context(nativeTarget->context() - asmpt);
-
                             assert(asmpt.smaller(nativeTarget->context()));
                             auto res = withCallFrame(args, [&]() {
                                 return call(
@@ -4369,93 +4608,105 @@ void LowerFunctionLLVM::compile() {
                                     {
                                         c(callId),
                                         paramCode(),
-                                        convertToExternalSymbol(ss1.str()), // constant(callee, t::SEXP),
-                                        builder.CreateLoad(convertToExternalSymbol(ss2.str(), t::Int)), // c(idx),
-                                        builder.CreateLoad(convertToExternalSymbol(ssAST.str(), t::Int)), // c(calli->srcIdx),
+                                        constant(callee, t::SEXP),
+                                        c(idx),
+                                        c(calli->srcIdx),
                                         loadSxp(calli->env()),
                                         c(args.size()),
                                         c(asmpt.toI()),
-                                        builder.CreateLoad(globalConst(c(missAsmptIdx), t::i32)), // c(missAsmptIdx),
+                                        c(missAsmptIdx),
                                     });
                             });
                             setVal(i, res);
                         }
-                        #else
-                        assert(
-                            asmpt.includes(Assumption::StaticallyArgmatched));
-                        auto idx = Pool::makeSpace();
-                        NativeBuiltins::targetCaches.push_back(idx);
-                        Pool::patch(idx, nativeTarget->container());
-                        auto missAsmptStore =
-                            Rf_allocVector(RAWSXP, sizeof(Context));
-                        auto missAsmptIdx = Pool::insert(missAsmptStore);
-                        new (DATAPTR(missAsmptStore))
-                            Context(nativeTarget->context() - asmpt);
-                        assert(asmpt.smaller(nativeTarget->context()));
-                        auto res = withCallFrame(args, [&]() {
-                            return call(
-                                NativeBuiltins::get(
-                                    NativeBuiltins::Id::nativeCallTrampoline),
-                                {
-                                    c(callId),
-                                    paramCode(),
-                                    constant(callee, t::SEXP),
-                                    c(idx),
-                                    c(calli->srcIdx),
-                                    loadSxp(calli->env()),
-                                    c(args.size()),
-                                    c(asmpt.toI()),
-                                    c(missAsmptIdx),
-                                });
-                        });
-                        setVal(i, res);
-                        #endif
                         break;
 
                     }
                 }
                 #endif
 
-                #if TRY_PATCH_STATIC_CALL3 == 1
-                auto data1 = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
-                SEXP hast1 = data1.hast;
-                int index1 = data1.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if TRY_PATCH_STATIC_CALL3 == 1
+                    auto data1 = getHastAndIndex(calli->srcIdx, true); // constant pool lookup
+                    SEXP hast1 = data1.hast;
+                    int index1 = data1.index;
 
-                unsigned resolvedIndex1 = 0;
+                    unsigned resolvedIndex1 = 0;
 
-                if (!isHastInvalid(hast1)) {
-                    resolvedIndex1 = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast1, index1);
-                }
-
-                SEXP body = BODY(calli->cls()->rirClosure());
-
-                auto vtable = DispatchTable::unpack(body);
-                SEXP hast = getHastAndIndex(vtable->baseline()->body()->src).hast;
-
-                SEXP resolvedContainer = R_NilValue;
-                if (!isHastInvalid(hast)) {
-                    resolvedContainer = getClosContainer(hast);
-                }
-
-                // If the hast is blacklisted, patch will not work
-                if (!reqMap || (resolvedIndex1 != calli->srcIdx) || (resolvedContainer != calli->cls()->rirClosure()) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex1 != calli->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall3] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast1))) + ", index: " + std::to_string(index1), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex1), 3);
-                        }
-                        if ((resolvedContainer != calli->cls()->rirClosure())) {
-                            DebugMessages::printSerializerErrors("(*) STATIC CALL invalid container for CLOSXP", 2);
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                        }
+                    if (!isHastInvalid(hast1)) {
+                        resolvedIndex1 = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast1, index1);
                     }
+
+                    SEXP body = BODY(calli->cls()->rirClosure());
+
+                    auto vtable = DispatchTable::unpack(body);
+                    SEXP hast = getHastAndIndex(vtable->baseline()->body()->src).hast;
+
+                    SEXP resolvedContainer = R_NilValue;
+                    if (!isHastInvalid(hast)) {
+                        resolvedContainer = getClosContainer(hast);
+                    }
+
+                    // If the hast is blacklisted, patch will not work
+                    if (!reqMap || (resolvedIndex1 != calli->srcIdx) || (resolvedContainer != calli->cls()->rirClosure()) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex1 != calli->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) CALL_SITE_PATCH[staticCall3] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast1))) + ", index: " + std::to_string(index1), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(calli->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex1), 3);
+                            }
+                            if ((resolvedContainer != calli->cls()->rirClosure())) {
+                                DebugMessages::printSerializerErrors("(*) STATIC CALL invalid container for CLOSXP", 2);
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                            }
+                        }
+                        assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                                return call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::call),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        c(calli->srcIdx),
+                                        builder.CreateIntToPtr(
+                                            c(calli->cls()->rirClosure()), t::SEXP),
+                                        loadSxp(calli->env()),
+                                        c(calli->nCallArgs()),
+                                        c(asmpt.toI()),
+                                    });
+                            }));
+                    } else {
+                        // patch case
+                        std::stringstream ssAST;
+                        ssAST << "pluu_" << CHAR(PRINTNAME(hast1)) << "_" << index1;
+
+                        // patch case
+                        std::stringstream ss;
+                        ss << "clos_" << CHAR(PRINTNAME(hast));
+                        reqMap->insert(hast);
+                        assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                        setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                                return call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::call),
+                                    {
+                                        c(callId),
+                                        paramCode(),
+                                        builder.CreateLoad(convertToExternalSymbol(ssAST.str(), t::Int)), // c(calli->srcIdx),
+                                        convertToExternalSymbol(ss.str()),
+                                        loadSxp(calli->env()),
+                                        c(calli->nCallArgs()),
+                                        c(asmpt.toI()),
+                                    });
+                            }));
+                    }
+
+                    #else
                     assert(asmpt.includes(Assumption::StaticallyArgmatched));
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4471,15 +4722,8 @@ void LowerFunctionLLVM::compile() {
                                     c(asmpt.toI()),
                                 });
                         }));
+                    #endif
                 } else {
-                    // patch case
-                    std::stringstream ssAST;
-                    ssAST << "pluu_" << CHAR(PRINTNAME(hast1)) << "_" << index1;
-
-                    // patch case
-                    std::stringstream ss;
-                    ss << "clos_" << CHAR(PRINTNAME(hast));
-                    reqMap->insert(hast);
                     assert(asmpt.includes(Assumption::StaticallyArgmatched));
                     setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
@@ -4487,32 +4731,15 @@ void LowerFunctionLLVM::compile() {
                                 {
                                     c(callId),
                                     paramCode(),
-                                    builder.CreateLoad(convertToExternalSymbol(ssAST.str(), t::Int)), // c(calli->srcIdx),
-                                    convertToExternalSymbol(ss.str()),
+                                    c(calli->srcIdx),
+                                    builder.CreateIntToPtr(
+                                        c(calli->cls()->rirClosure()), t::SEXP),
                                     loadSxp(calli->env()),
                                     c(calli->nCallArgs()),
                                     c(asmpt.toI()),
                                 });
                         }));
                 }
-
-                #else
-                assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::get(NativeBuiltins::Id::call),
-                               {
-                                   c(callId),
-                                   paramCode(),
-                                   c(calli->srcIdx),
-                                   builder.CreateIntToPtr(
-                                       c(calli->cls()->rirClosure()), t::SEXP),
-                                   loadSxp(calli->env()),
-                                   c(calli->nCallArgs()),
-                                   c(asmpt.toI()),
-                               });
-                       }));
-                #endif
                 break;
             }
 
@@ -4585,36 +4812,134 @@ void LowerFunctionLLVM::compile() {
                 // TODO, this is copied from pir2rir... rather ugly
                 DeoptMetadata* m = nullptr;
                 auto deopt = Deopt::Cast(i);
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if TRY_PATCH_DEOPTMETADATA == 1
+                    bool patchPossible = true;
 
-                #if TRY_PATCH_DEOPTMETADATA == 1
-                bool patchPossible = true;
+                    std::vector<FrameState*> frames;
 
-                std::vector<FrameState*> frames;
-
-                auto fs = deopt->frameState();
-                while (fs) {
-                    frames.push_back(fs);
-                    fs = fs->next();
-                }
-
-                for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
-                    auto fs = *f;
-                    auto srcData = getHastAndIndex(fs->code->src);
-                    SEXP hast = srcData.hast;
-                    int index = srcData.index;
-
-                    rir::Code * c = nullptr;
-                    if (!isHastInvalid(hast)) {
-                        c = getCodeContainer(hast, index);
+                    auto fs = deopt->frameState();
+                    while (fs) {
+                        frames.push_back(fs);
+                        fs = fs->next();
                     }
 
-                    if ((c != fs->code) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        patchPossible = false;
+                    for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                        auto fs = *f;
+                        auto srcData = getHastAndIndex(fs->code->src);
+                        SEXP hast = srcData.hast;
+                        int index = srcData.index;
+
+                        rir::Code * c = nullptr;
+                        if (!isHastInvalid(hast)) {
+                            c = getCodeContainer(hast, index);
+                        }
+
+                        if ((c != fs->code) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            patchPossible = false;
+                            break;
+                        }
+                    }
+
+                    if (reqMap && patchPossible) {
+                        std::vector<Value*> args;
+                        {
+                            std::vector<FrameState*> frames;
+
+                            auto fs = deopt->frameState();
+                            while (fs) {
+                                frames.push_back(fs);
+                                fs = fs->next();
+                            }
+
+                            size_t nframes = frames.size();
+                            SEXP store =
+                                Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
+                                                        nframes * sizeof(FrameInfo));
+                            m = new (DATAPTR(store)) DeoptMetadata;
+                            m->numFrames = nframes;
+
+                            int frameNr = nframes - 1;
+
+                            for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                                auto fs = *f;
+                                for (size_t pos = 0; pos < fs->stackSize; pos++)
+                                    args.push_back(fs->arg(pos).val());
+                                args.push_back(fs->env());
+
+                                uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code;
+
+
+                                auto srcData = getHastAndIndex(fs->code->src);
+                                SEXP hast = srcData.hast;
+                                int index = srcData.index;
+
+                                reqMap->insert(hast);
+
+                                m->frames[frameNr--] = {offset, CHAR(PRINTNAME(hast)), index, fs->stackSize,
+                                                        fs->inPromise};
+
+                            }
+                            Pool::insert(store);
+                            withCallFrame(args, [&]() {
+                                return call(NativeBuiltins::get(NativeBuiltins::Id::deoptPool),
+                                            {paramCode(), paramClosure(),
+                                            constant(store, Rep::SEXP), paramArgs(),
+                                            c(deopt->escapedEnv, 1),
+                                            load(deopt->deoptReason()),
+                                            loadSxp(deopt->deoptTrigger())});
+                                            });
+                        }
+                        builder.CreateUnreachable();
+                        break;
+                    } else {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTMETADATA failed", 2);
+                        }
+                        std::vector<Value*> args;
+                        {
+                            std::vector<FrameState*> frames;
+
+                            auto fs = deopt->frameState();
+                            while (fs) {
+                                frames.push_back(fs);
+                                fs = fs->next();
+                            }
+
+                            size_t nframes = frames.size();
+                            SEXP store =
+                                Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
+                                                        nframes * sizeof(FrameInfo));
+                            m = new (DATAPTR(store)) DeoptMetadata;
+                            m->numFrames = nframes;
+
+                            int frameNr = nframes - 1;
+                            for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
+                                auto fs = *f;
+                                for (size_t pos = 0; pos < fs->stackSize; pos++)
+                                    args.push_back(fs->arg(pos).val());
+                                args.push_back(fs->env());
+                                m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
+                                                        fs->inPromise};
+                            }
+
+                            target->addExtraPoolEntry(store);
+                        }
+
+                        withCallFrame(args, [&]() {
+                            return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
+                                        {paramCode(), paramClosure(),
+                                        convertToPointer(m, t::i8, true), paramArgs(),
+                                        c(deopt->escapedEnv, 1),
+                                        load(deopt->deoptReason()),
+                                        loadSxp(deopt->deoptTrigger())});
+                        });
+                        builder.CreateUnreachable();
                         break;
                     }
-                }
 
-                if (reqMap && patchPossible) {
+                    #else
                     std::vector<Value*> args;
                     {
                         std::vector<FrameState*> frames;
@@ -4633,43 +4958,30 @@ void LowerFunctionLLVM::compile() {
                         m->numFrames = nframes;
 
                         int frameNr = nframes - 1;
-
                         for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
                             auto fs = *f;
                             for (size_t pos = 0; pos < fs->stackSize; pos++)
                                 args.push_back(fs->arg(pos).val());
                             args.push_back(fs->env());
-
-                            uintptr_t offset = (uintptr_t)fs->pc - (uintptr_t)fs->code;
-
-
-                            auto srcData = getHastAndIndex(fs->code->src);
-                            SEXP hast = srcData.hast;
-                            int index = srcData.index;
-
-                            reqMap->insert(hast);
-
-                            m->frames[frameNr--] = {offset, CHAR(PRINTNAME(hast)), index, fs->stackSize,
+                            m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
                                                     fs->inPromise};
-
                         }
-                        Pool::insert(store);
-                        withCallFrame(args, [&]() {
-                            return call(NativeBuiltins::get(NativeBuiltins::Id::deoptPool),
-                                        {paramCode(), paramClosure(),
-                                        constant(store, Rep::SEXP), paramArgs(),
-                                        c(deopt->escapedEnv, 1),
-                                        load(deopt->deoptReason()),
-                                        loadSxp(deopt->deoptTrigger())});
-                                        });
+
+                        target->addExtraPoolEntry(store);
                     }
+
+                    withCallFrame(args, [&]() {
+                        return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
+                                    {paramCode(), paramClosure(),
+                                    convertToPointer(m, t::i8, true), paramArgs(),
+                                    c(deopt->escapedEnv, 1),
+                                    load(deopt->deoptReason()),
+                                    loadSxp(deopt->deoptTrigger())});
+                    });
                     builder.CreateUnreachable();
                     break;
+                    #endif
                 } else {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        DebugMessages::printSerializerErrors("(*) TRY_PATCH_DEOPTMETADATA failed", 2);
-                    }
                     std::vector<Value*> args;
                     {
                         std::vector<FrameState*> frames;
@@ -4711,49 +5023,6 @@ void LowerFunctionLLVM::compile() {
                     builder.CreateUnreachable();
                     break;
                 }
-
-                #else
-                std::vector<Value*> args;
-                {
-                    std::vector<FrameState*> frames;
-
-                    auto fs = deopt->frameState();
-                    while (fs) {
-                        frames.push_back(fs);
-                        fs = fs->next();
-                    }
-
-                    size_t nframes = frames.size();
-                    SEXP store =
-                        Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
-                                                   nframes * sizeof(FrameInfo));
-                    m = new (DATAPTR(store)) DeoptMetadata;
-                    m->numFrames = nframes;
-
-                    int frameNr = nframes - 1;
-                    for (auto f = frames.rbegin(); f != frames.rend(); ++f) {
-                        auto fs = *f;
-                        for (size_t pos = 0; pos < fs->stackSize; pos++)
-                            args.push_back(fs->arg(pos).val());
-                        args.push_back(fs->env());
-                        m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
-                                                fs->inPromise};
-                    }
-
-                    target->addExtraPoolEntry(store);
-                }
-
-                withCallFrame(args, [&]() {
-                    return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
-                                {paramCode(), paramClosure(),
-                                 convertToPointer(m, t::i8, true), paramArgs(),
-                                 c(deopt->escapedEnv, 1),
-                                 load(deopt->deoptReason()),
-                                 loadSxp(deopt->deoptTrigger())});
-                });
-                builder.CreateUnreachable();
-                break;
-                #endif
             }
 
             case Tag::MkEnv: {
@@ -4951,51 +5220,57 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* res = nullptr;
                     if (i->hasEnv()) {
-                        #if PATCH_SRCIDX_ENTRY == 1
-                        auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-                        SEXP hast = data.hast;
-                        int index = data.index;
+                        if (reqMap && serializerError && *serializerError == false) {
+                            #if PATCH_SRCIDX_ENTRY == 1
+                            auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                            SEXP hast = data.hast;
+                            int index = data.index;
 
-                        unsigned resolvedIndex = 0;
+                            unsigned resolvedIndex = 0;
 
-                        if (!isHastInvalid(hast)) {
-                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                        }
-                        if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                            if (serializerError != nullptr) {
-                                *serializerError = true;
-                                if (resolvedIndex != i->srcIdx) {
-                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[notEnv] resolved source is invalid", 2);
-                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                    // printAST(0,Pool::get(srcIdx));
-                                }
-                                if (isHastInvalid(hast)) {
-                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                                } else if (isHastBlacklisted(hast)) {
-                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                                }
+                            if (!isHastInvalid(hast)) {
+                                resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                             }
+                            if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                                if (serializerError != nullptr) {
+                                    *serializerError = true;
+                                    if (resolvedIndex != i->srcIdx) {
+                                        DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[notEnv] resolved source is invalid", 2);
+                                        DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                        DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                                        DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                        // printAST(0,Pool::get(srcIdx));
+                                    }
+                                    if (isHastInvalid(hast)) {
+                                        DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                    } else if (isHastBlacklisted(hast)) {
+                                        DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                    }
+                                }
+                                res = call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::notEnv),
+                                    {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
+                            } else {
+                                std::stringstream ss;
+                                ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                                // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                                res = call(
+                                    NativeBuiltins::get(NativeBuiltins::Id::notEnv),
+                                    {argumentNative, loadSxp(i->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                                    });
+                            }
+                            #else
                             res = call(
                                 NativeBuiltins::get(NativeBuiltins::Id::notEnv),
                                 {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
+                            #endif
                         } else {
-                            std::stringstream ss;
-                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                             res = call(
                                 NativeBuiltins::get(NativeBuiltins::Id::notEnv),
-                                {argumentNative, loadSxp(i->env()),
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
-                                });
+                                {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
                         }
-                        #else
-                        res = call(
-                            NativeBuiltins::get(NativeBuiltins::Id::notEnv),
-                            {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
-                        #endif
                     } else {
                         res =
                             call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
@@ -5341,52 +5616,59 @@ void LowerFunctionLLVM::compile() {
                 llvm::Value* res;
                 if (i->hasEnv()) {
                     auto e = loadSxp(i->env());
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != i->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Colon] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != i->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Colon] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                                    {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                                    c((int)BinopKind::COLON)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            res =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
+                                    {loadSxp(a), loadSxp(b), e,
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                                    c((int)BinopKind::COLON)});
+                        }
+                        #else
                         res =
                             call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                                 {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
                                 c((int)BinopKind::COLON)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         res =
                             call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                                {loadSxp(a), loadSxp(b), e,
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(i->srcIdx),
+                                {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
                                 c((int)BinopKind::COLON)});
                     }
-                    #else
-                    res =
-                        call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                             {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
-                              c((int)BinopKind::COLON)});
-                    #endif
                 } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
                                {load(a), load(b)});
@@ -6124,33 +6406,64 @@ void LowerFunctionLLVM::compile() {
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
                 auto idx = loadSxp(extract->idx());
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != extract->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract11] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
+                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != extract->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract11] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                            }
+                        }
+                        auto res0 =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
+                                {vector, idx, env, c(extract->srcIdx)});
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+
+                        setVal(i, res());
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        auto res0 =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
+                                {vector, idx, env,
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(extract->srcIdx),
+                                });
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+
+                        setVal(i, res());
+                    }
+                    #else
                     auto res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
                             {vector, idx, env, c(extract->srcIdx)});
@@ -6162,15 +6475,11 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     setVal(i, res());
+                    #endif
                 } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                     auto res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
-                            {vector, idx, env,
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(extract->srcIdx),
-                            });
+                            {vector, idx, env, c(extract->srcIdx)});
                     res.addInput(convert(res0, i->type));
                     if (fastcase) {
                         builder.CreateBr(done);
@@ -6180,19 +6489,6 @@ void LowerFunctionLLVM::compile() {
 
                     setVal(i, res());
                 }
-                #else
-                auto res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
-                         {vector, idx, env, c(extract->srcIdx)});
-                res.addInput(convert(res0, i->type));
-                if (fastcase) {
-                    builder.CreateBr(done);
-
-                    builder.SetInsertPoint(done);
-                }
-
-                setVal(i, res());
-                #endif
 
                 break;
             }
@@ -6269,53 +6565,80 @@ void LowerFunctionLLVM::compile() {
                 auto vector = loadSxp(extract->vec());
                 auto idx1 = loadSxp(extract->idx1());
                 auto idx2 = loadSxp(extract->idx2());
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != extract->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract12] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
-                    auto res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
-                         {vector, idx1, idx2, loadSxp(extract->env()),
-                          c(extract->srcIdx)});
-                    res.addInput(convert(res0, i->type));
-                    if (fastcase) {
-                        builder.CreateBr(done);
+                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != extract->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract12] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
 
-                        builder.SetInsertPoint(done);
-                    }
-                    setVal(i, res());
-                } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
-                    auto res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                            }
+                        }
+                        auto res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
                             {vector, idx1, idx2, loadSxp(extract->env()),
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx),
-                            });
+                            c(extract->srcIdx)});
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+                        setVal(i, res());
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        auto res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                                {vector, idx1, idx2, loadSxp(extract->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx),
+                                });
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+                        setVal(i, res());
+                    }
+                    #else
+                    auto res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                            {vector, idx1, idx2, loadSxp(extract->env()),
+                            c(extract->srcIdx)});
+                    res.addInput(convert(res0, i->type));
+                    if (fastcase) {
+                        builder.CreateBr(done);
+
+                        builder.SetInsertPoint(done);
+                    }
+                    setVal(i, res());
+                    #endif
+                } else {
+                    auto res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
+                            {vector, idx1, idx2, loadSxp(extract->env()),
+                            c(extract->srcIdx)});
                     res.addInput(convert(res0, i->type));
                     if (fastcase) {
                         builder.CreateBr(done);
@@ -6324,19 +6647,6 @@ void LowerFunctionLLVM::compile() {
                     }
                     setVal(i, res());
                 }
-                #else
-                auto res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
-                         {vector, idx1, idx2, loadSxp(extract->env()),
-                          c(extract->srcIdx)});
-                res.addInput(convert(res0, i->type));
-                if (fastcase) {
-                    builder.CreateBr(done);
-
-                    builder.SetInsertPoint(done);
-                }
-                setVal(i, res());
-                #endif
                 break;
             }
 
@@ -6394,101 +6704,114 @@ void LowerFunctionLLVM::compile() {
                             NativeBuiltins::get(NativeBuiltins::Id::extract21r);
                     }
                     auto vector = loadSxp(extract->vec());
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != extract->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Extract2_1D] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != extract->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Extract2_1D] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 = call(getter,
+                                    {vector, load(extract->idx()),
+                                    loadSxp(extract->env()), c(extract->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 = call(getter,
+                                    {vector, load(extract->idx()),
+                                    loadSxp(extract->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx),
+                                    });
+                        }
+                        #else
                         res0 = call(getter,
-                                {vector, load(extract->idx()),
-                                 loadSxp(extract->env()), c(extract->srcIdx)});
+                                    {vector, load(extract->idx()),
+                                    loadSxp(extract->env()), c(extract->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 = call(getter,
-                                {vector, load(extract->idx()),
-                                 loadSxp(extract->env()),
-                                 builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx),
-                                 });
+                                    {vector, load(extract->idx()),
+                                    loadSxp(extract->env()), c(extract->srcIdx)});
                     }
-                    #else
-                    res0 = call(getter,
-                                {vector, load(extract->idx()),
-                                 loadSxp(extract->env()), c(extract->srcIdx)});
-                    #endif
                 } else {
                     auto vector = loadSxp(extract->vec());
                     auto idx = loadSxp(extract->idx());
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != extract->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract21] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != extract->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract21] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
+                                    {vector, idx, loadSxp(extract->env()),
+                                    c(extract->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
+                                    {vector, idx, loadSxp(extract->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
+                                    });
+                        }
+                        #else
                         res0 =
                             call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
                                 {vector, idx, loadSxp(extract->env()),
                                 c(extract->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 =
                             call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
                                 {vector, idx, loadSxp(extract->env()),
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
-                                });
+                                c(extract->srcIdx)});
                     }
-                    #else
-                    res0 =
-                        call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
-                             {vector, idx, loadSxp(extract->env()),
-                              c(extract->srcIdx)});
-                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -6514,54 +6837,61 @@ void LowerFunctionLLVM::compile() {
                 if (extract->hasEnv())
                     env = loadSxp(extract->env());
 
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != extract->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract13] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
+                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != extract->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract13] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                            }
+                        }
+                        auto res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
+                            {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                        setVal(i, res);
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        auto res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
+                            {vector, idx1, idx2, idx3, env,
+                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
+                            });
+                        setVal(i, res);
+                    }
+                    #else
                     auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
-                         {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
+                            {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
                     setVal(i, res);
+                    #endif
                 } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                     auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
-                         {vector, idx1, idx2, idx3, env,
-                         builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
-                         });
+                        call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
+                            {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
                     setVal(i, res);
                 }
-                #else
-                auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
-                         {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
-                setVal(i, res);
-                #endif
 
                 break;
             }
@@ -6639,105 +6969,119 @@ void LowerFunctionLLVM::compile() {
                     }
 
                     auto vector = loadSxp(extract->vec());
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != extract->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Extract2_2D] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != extract->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Extract2_2D] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 = call(getter,
+                                    {vector, load(extract->idx1()),
+                                    load(extract->idx2()), loadSxp(extract->env()),
+                                    c(extract->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 = call(getter,
+                                    {vector, load(extract->idx1()),
+                                    load(extract->idx2()), loadSxp(extract->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) //c(extract->srcIdx)
+                                    });
+                        }
+                        #else
                         res0 = call(getter,
-                                {vector, load(extract->idx1()),
-                                 load(extract->idx2()), loadSxp(extract->env()),
-                                 c(extract->srcIdx)});
+                                    {vector, load(extract->idx1()),
+                                    load(extract->idx2()), loadSxp(extract->env()),
+                                    c(extract->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 = call(getter,
-                                {vector, load(extract->idx1()),
-                                 load(extract->idx2()), loadSxp(extract->env()),
-                                 builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) //c(extract->srcIdx)
-                                 });
+                                    {vector, load(extract->idx1()),
+                                    load(extract->idx2()), loadSxp(extract->env()),
+                                    c(extract->srcIdx)});
                     }
-                    #else
-                    res0 = call(getter,
-                                {vector, load(extract->idx1()),
-                                 load(extract->idx2()), loadSxp(extract->env()),
-                                 c(extract->srcIdx)});
-                    #endif
                 } else {
 
                     auto vector = loadSxp(extract->vec());
                     auto idx1 = loadSxp(extract->idx1());
                     auto idx2 = loadSxp(extract->idx2());
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(extract->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != extract->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract22] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != extract->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != extract->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[extract22] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(extract->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
+                                    {vector, idx1, idx2, loadSxp(extract->env()),
+                                    c(extract->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 =
+                                call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
+                                    {vector, idx1, idx2, loadSxp(extract->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
+                                    });
+                        }
+                        #else
                         res0 =
                             call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
                                 {vector, idx1, idx2, loadSxp(extract->env()),
                                 c(extract->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 =
                             call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
                                 {vector, idx1, idx2, loadSxp(extract->env()),
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(extract->srcIdx)
-                                });
+                                c(extract->srcIdx)});
                     }
-                    #else
-                    res0 =
-                        call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
-                             {vector, idx1, idx2, loadSxp(extract->env()),
-                              c(extract->srcIdx)});
-                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -6760,57 +7104,65 @@ void LowerFunctionLLVM::compile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != subAssign->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign13] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
+                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != subAssign->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign13] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                            }
+                        }
+                        auto res =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
+                                {vector, idx1, idx2, idx3, val,
+                                loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                        setVal(i, res);
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        auto res =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
+                                {vector, idx1, idx2, idx3, val,
+                                loadSxp(subAssign->env()),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx),
+                                });
+                        setVal(i, res);
+                    }
+                    #else
                     auto res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
                             {vector, idx1, idx2, idx3, val,
                             loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                     setVal(i, res);
+                    #endif
                 } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                     auto res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
                             {vector, idx1, idx2, idx3, val,
-                            loadSxp(subAssign->env()),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx),
-                            });
+                            loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                     setVal(i, res);
                 }
-                #else
-                auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
-                         {vector, idx1, idx2, idx3, val,
-                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
-                setVal(i, res);
-                #endif
                 break;
             }
 
@@ -6823,58 +7175,67 @@ void LowerFunctionLLVM::compile() {
 
                 // We should implement the fast cases (known and primitive
                 // types) speculatively here
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                unsigned resolvedIndex = 0;
+                    unsigned resolvedIndex = 0;
 
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != subAssign->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign12] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
-                    auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
-                         {vector, idx1, idx2, val, loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
-                    setVal(i, res);
-                    break;
-                } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != subAssign->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign12] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+                            }
+                        }
+                        auto res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
+                            {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                            c(subAssign->srcIdx)});
+                        setVal(i, res);
+                        break;
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        auto res =
+                            call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
+                                {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
+                                });
+                        setVal(i, res);
+                        break;
+                    }
+                    #else
                     auto res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
                             {vector, idx1, idx2, val, loadSxp(subAssign->env()),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
-                            });
+                            c(subAssign->srcIdx)});
+                    setVal(i, res);
+                    break;
+                    #endif
+                } else {
+                    auto res =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
+                            {vector, idx1, idx2, val, loadSxp(subAssign->env()),
+                            c(subAssign->srcIdx)});
                     setVal(i, res);
                     break;
                 }
-                #else
-                auto res =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
-                         {vector, idx1, idx2, val, loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
-                setVal(i, res);
-                break;
-                #endif
             }
 
             case Tag::Subassign2_2D: {
@@ -6973,108 +7334,124 @@ void LowerFunctionLLVM::compile() {
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign22rrr);
                     }
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != subAssign->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Subassign2_2D] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != subAssign->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Subassign2_2D] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            assign = call(
+                                setter,
+                                {loadSxp(subAssign->vec()), load(subAssign->idx1()),
+                                load(subAssign->idx2()), load(subAssign->val()),
+                                loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            assign = call(
+                                setter,
+                                {loadSxp(subAssign->vec()), load(subAssign->idx1()),
+                                load(subAssign->idx2()), load(subAssign->val()),
+                                loadSxp(subAssign->env()),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
+                                });
+                        }
+                        #else
                         assign = call(
                             setter,
                             {loadSxp(subAssign->vec()), load(subAssign->idx1()),
                             load(subAssign->idx2()), load(subAssign->val()),
                             loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         assign = call(
                             setter,
                             {loadSxp(subAssign->vec()), load(subAssign->idx1()),
                             load(subAssign->idx2()), load(subAssign->val()),
-                            loadSxp(subAssign->env()),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
-                            });
+                            loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                     }
-                    #else
-                    assign = call(
-                        setter,
-                        {loadSxp(subAssign->vec()), load(subAssign->idx1()),
-                         load(subAssign->idx2()), load(subAssign->val()),
-                         loadSxp(subAssign->env()), c(subAssign->srcIdx)});
-                    #endif
                 } else {
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != subAssign->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign22] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != subAssign->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign22] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            assign = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::subassign22),
+                                {loadSxp(subAssign->vec()), idx1, idx2,
+                                loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                                c(subAssign->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            assign = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::subassign22),
+                                {loadSxp(subAssign->vec()), idx1, idx2,
+                                loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
+                                });
+                        }
+                        #else
                         assign = call(
                             NativeBuiltins::get(NativeBuiltins::Id::subassign22),
                             {loadSxp(subAssign->vec()), idx1, idx2,
                             loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                             c(subAssign->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         assign = call(
                             NativeBuiltins::get(NativeBuiltins::Id::subassign22),
                             {loadSxp(subAssign->vec()), idx1, idx2,
                             loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
-                            });
+                            c(subAssign->srcIdx)});
                     }
-                    #else
-                    assign = call(
-                        NativeBuiltins::get(NativeBuiltins::Id::subassign22),
-                        {loadSxp(subAssign->vec()), idx1, idx2,
-                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                         c(subAssign->srcIdx)});
-                    #endif
                 }
 
                 res.addInput(assign);
@@ -7157,39 +7534,70 @@ void LowerFunctionLLVM::compile() {
 
                     builder.SetInsertPoint(fallback);
                 }
+                if (reqMap && serializerError && *serializerError == false) {
+                    #if PATCH_SRCIDX_ENTRY == 1
+                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                    SEXP hast = data.hast;
+                    int index = data.index;
 
-                #if PATCH_SRCIDX_ENTRY == 1
-                auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                SEXP hast = data.hast;
-                int index = data.index;
+                    unsigned resolvedIndex = 0;
 
-                unsigned resolvedIndex = 0;
-
-                if (!isHastInvalid(hast)) {
-                    resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                }
-                if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                    if (serializerError != nullptr) {
-                        *serializerError = true;
-                        if (resolvedIndex != subAssign->srcIdx) {
-                            DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign11] resolved source is invalid", 2);
-                            DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                            DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                            DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                            // printAST(0,Pool::get(srcIdx));
-                        }
-                        if (isHastInvalid(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                        } else if (isHastBlacklisted(hast)) {
-                            DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                        }
+                    if (!isHastInvalid(hast)) {
+                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                     }
+                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                        if (serializerError != nullptr) {
+                            *serializerError = true;
+                            if (resolvedIndex != subAssign->srcIdx) {
+                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign11] resolved source is invalid", 2);
+                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                // printAST(0,Pool::get(srcIdx));
+                            }
+                            if (isHastInvalid(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                            } else if (isHastBlacklisted(hast)) {
+                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                            }
+                        }
+                        llvm::Value* res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
+                            {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                            loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                            c(subAssign->srcIdx)});
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+                        setVal(i, res());
+                    } else {
+                        std::stringstream ss;
+                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                        llvm::Value* res0 =
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
+                            {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                            loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
+                            });
+                        res.addInput(convert(res0, i->type));
+                        if (fastcase) {
+                            builder.CreateBr(done);
+
+                            builder.SetInsertPoint(done);
+                        }
+                        setVal(i, res());
+                    }
+                    #else
                     llvm::Value* res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
-                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
-                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
+                            {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                            loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                            c(subAssign->srcIdx)});
                     res.addInput(convert(res0, i->type));
                     if (fastcase) {
                         builder.CreateBr(done);
@@ -7197,16 +7605,13 @@ void LowerFunctionLLVM::compile() {
                         builder.SetInsertPoint(done);
                     }
                     setVal(i, res());
+                    #endif
                 } else {
-                    std::stringstream ss;
-                    ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                     llvm::Value* res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
-                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
-                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                          builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
-                          });
+                        call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
+                            {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                            loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                            c(subAssign->srcIdx)});
                     res.addInput(convert(res0, i->type));
                     if (fastcase) {
                         builder.CreateBr(done);
@@ -7215,20 +7620,6 @@ void LowerFunctionLLVM::compile() {
                     }
                     setVal(i, res());
                 }
-                #else
-                llvm::Value* res0 =
-                    call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
-                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
-                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
-                res.addInput(convert(res0, i->type));
-                if (fastcase) {
-                    builder.CreateBr(done);
-
-                    builder.SetInsertPoint(done);
-                }
-                setVal(i, res());
-                #endif
 
                 break;
             }
@@ -7329,107 +7720,123 @@ void LowerFunctionLLVM::compile() {
                         setter = NativeBuiltins::get(
                             NativeBuiltins::Id::subassign21rr);
                     }
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != subAssign->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Subassign1_2D] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != subAssign->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[Subassign1_2D] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 =
+                                call(setter,
+                                    {loadSxp(subAssign->vec()), load(subAssign->idx()),
+                                    load(subAssign->val()), loadSxp(subAssign->env()),
+                                    c(subAssign->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 =
+                                call(setter,
+                                    {loadSxp(subAssign->vec()), load(subAssign->idx()),
+                                    load(subAssign->val()), loadSxp(subAssign->env()),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
+                                    });
+                        }
+                        #else
                         res0 =
                             call(setter,
                                 {loadSxp(subAssign->vec()), load(subAssign->idx()),
                                 load(subAssign->val()), loadSxp(subAssign->env()),
                                 c(subAssign->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 =
                             call(setter,
                                 {loadSxp(subAssign->vec()), load(subAssign->idx()),
                                 load(subAssign->val()), loadSxp(subAssign->env()),
-                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(subAssign->srcIdx)
-                                });
+                                c(subAssign->srcIdx)});
                     }
-                    #else
-                    res0 =
-                        call(setter,
-                             {loadSxp(subAssign->vec()), load(subAssign->idx()),
-                              load(subAssign->val()), loadSxp(subAssign->env()),
-                              c(subAssign->srcIdx)});
-                    #endif
                 } else {
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(subAssign->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != subAssign->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign21] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != subAssign->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != subAssign->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[subassign21] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(subAssign->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            res0 = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::subassign21),
+                                {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                                loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                                c(subAssign->srcIdx)});
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            res0 = call(
+                                NativeBuiltins::get(NativeBuiltins::Id::subassign21),
+                                {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
+                                loadSxp(subAssign->val()), loadSxp(subAssign->env()),
+                                builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(subAssign->srcIdx),
+                                });
+                        }
+                        #else
                         res0 = call(
                             NativeBuiltins::get(NativeBuiltins::Id::subassign21),
                             {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                             loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                             c(subAssign->srcIdx)});
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         res0 = call(
                             NativeBuiltins::get(NativeBuiltins::Id::subassign21),
                             {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                             loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                            builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(subAssign->srcIdx),
-                            });
+                            c(subAssign->srcIdx)});
                     }
-                    #else
-                    res0 = call(
-                        NativeBuiltins::get(NativeBuiltins::Id::subassign21),
-                        {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
-                         loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                         c(subAssign->srcIdx)});
-                    #endif
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -7691,51 +8098,57 @@ void LowerFunctionLLVM::compile() {
                 auto a = i->arg(0).val();
                 auto b = i->arg(1).val();
                 if (Rep::Of(a) == Rep::SEXP || Rep::Of(b) == Rep::SEXP) {
-                    #if PATCH_SRCIDX_ENTRY == 1
-                    auto data = getHastAndIndex(i->srcIdx); // source pool lookup
-                    SEXP hast = data.hast;
-                    int index = data.index;
+                    if (reqMap && serializerError && *serializerError == false) {
+                        #if PATCH_SRCIDX_ENTRY == 1
+                        auto data = getHastAndIndex(i->srcIdx); // source pool lookup
+                        SEXP hast = data.hast;
+                        int index = data.index;
 
-                    unsigned resolvedIndex = 0;
+                        unsigned resolvedIndex = 0;
 
-                    if (!isHastInvalid(hast)) {
-                        resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
-                    }
-                    if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
-                        if (serializerError != nullptr) {
-                            *serializerError = true;
-                            if (resolvedIndex != i->srcIdx) {
-                                DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[colonInputEffects] resolved source is invalid", 2);
-                                DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
-                                DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
-                                DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
-                                // printAST(0,Pool::get(srcIdx));
-                            }
-                            if (isHastInvalid(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
-                            } else if (isHastBlacklisted(hast)) {
-                                DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
-
-                            }
+                        if (!isHastInvalid(hast)) {
+                            resolvedIndex = BitcodeLinkUtil::getSrcPoolIndexAtOffset(hast, index);
                         }
+                        if (!reqMap || (resolvedIndex != i->srcIdx) || isHastInvalid(hast) || isHastBlacklisted(hast)) {
+                            if (serializerError != nullptr) {
+                                *serializerError = true;
+                                if (resolvedIndex != i->srcIdx) {
+                                    DebugMessages::printSerializerErrors("(*) PATCH_SRCIDX_ENTRY[colonInputEffects] resolved source is invalid", 2);
+                                    DebugMessages::printSerializerErrors("Lookup hast: " + std::string(CHAR(PRINTNAME(hast))) + ", index: " + std::to_string(index), 3);
+                                    DebugMessages::printSerializerErrors("Expected: " + std::to_string(i->srcIdx), 3);
+                                    DebugMessages::printSerializerErrors("Got: " + std::to_string(resolvedIndex), 3);
+                                    // printAST(0,Pool::get(srcIdx));
+                                }
+                                if (isHastInvalid(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is invalid", 2);
+                                } else if (isHastBlacklisted(hast)) {
+                                    DebugMessages::printSerializerErrors("(*) Hast is blacklisted", 2);
+
+                                }
+                            }
+                            setVal(i, call(NativeBuiltins::get(
+                                        NativeBuiltins::Id::colonInputEffects),
+                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                        } else {
+                            std::stringstream ss;
+                            ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
+                            // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
+                            setVal(i, call(NativeBuiltins::get(
+                                        NativeBuiltins::Id::colonInputEffects),
+                                    {loadSxp(a), loadSxp(b),
+                                    builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(srcIdx)
+                                    }));
+                        }
+                        #else
                         setVal(i, call(NativeBuiltins::get(
-                                       NativeBuiltins::Id::colonInputEffects),
-                                   {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                                        NativeBuiltins::Id::colonInputEffects),
+                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                        #endif
                     } else {
-                        std::stringstream ss;
-                        ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                        // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
                         setVal(i, call(NativeBuiltins::get(
-                                       NativeBuiltins::Id::colonInputEffects),
-                                   {loadSxp(a), loadSxp(b),
-                                   builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)) // c(srcIdx)
-                                   }));
+                                        NativeBuiltins::Id::colonInputEffects),
+                                    {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
                     }
-                    #else
-                    setVal(i, call(NativeBuiltins::get(
-                                       NativeBuiltins::Id::colonInputEffects),
-                                   {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
-                    #endif
                     break;
                 }
 
@@ -7978,17 +8391,23 @@ void LowerFunctionLLVM::compile() {
                         } else {
                             msg = defaultMsg;
                         }
-                        #if PATCH_MSG == 1
-                        auto msgGlobalVar =
-                            builder.CreateGlobalString(msg);
-                        call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {loadSxp(i), c((unsigned long)i->type.serialize()),
-                              builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
-                        #else
-                        call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
-                             {loadSxp(i), c((unsigned long)i->type.serialize()),
-                              convertToPointer(msg, t::i8, true)});
-                        #endif
+                        if (reqMap && serializerError && *serializerError == false) {
+                            #if PATCH_MSG == 1
+                            auto msgGlobalVar =
+                                builder.CreateGlobalString(msg);
+                            call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
+                                {loadSxp(i), c((unsigned long)i->type.serialize()),
+                                builder.CreateInBoundsGEP(msgGlobalVar, {c(0), c(0)})});
+                            #else
+                            call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
+                                {loadSxp(i), c((unsigned long)i->type.serialize()),
+                                convertToPointer(msg, t::i8, true)});
+                            #endif
+                        } else {
+                            call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
+                                {loadSxp(i), c((unsigned long)i->type.serialize()),
+                                convertToPointer(msg, t::i8, true)});
+                        }
                     }
                 }
 #ifdef ENABLE_SLOWASSERT

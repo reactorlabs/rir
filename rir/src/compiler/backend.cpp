@@ -31,7 +31,8 @@
 #include "utils/DebugMessages.h"
 #include "api.h"
 
-#define ADD_EXTRA_DEBUGGING_DATA 0
+#include "utils/SerializerFlags.h"
+
 namespace rir {
 namespace pir {
 
@@ -402,14 +403,15 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
         Measuring::startTimer("backend.cpp: pir2llvm");
     }
 
+
     std::set<SEXP> rMap;
-    if (cData != nullptr) {
-        #if ADD_EXTRA_DEBUGGING_DATA == 1
-        jit.enableDebugStatements();
-        #endif
-        jit.reqMapForCompilation = &rMap;
+    if (SerializerFlags::serializerEnabled && cData) {
+        if (cData != nullptr) {
+            jit.reqMapForCompilation = &rMap;
+        }
+        jit.serializerError = serializerError;
     }
-    jit.serializerError = serializerError;
+
 
     std::unordered_map<Code*, rir::Code*> done;
     std::function<rir::Code*(Code*)> compile = [&](Code* c) {
@@ -439,7 +441,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
     };
     auto body = compile(cls);
 
-    if (cData) {
+    if (SerializerFlags::serializerEnabled && cData) {
         // Find the head code object
         Code * mainFunCodeObj = findFunCodeObj(promMap);
         SEXP hast = getHastAndIndex(done[mainFunCodeObj]->src).hast;
@@ -451,9 +453,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             *serializerError = true;
             DebugMessages::printSerializerMessage("(E) Backend, src hast may be blacklisted.", 1);
         } else {
-            #if ADD_EXTRA_DEBUGGING_DATA == 1
-            jit.disableDebugStatements();
-            #endif
 
             std::random_device rd;
             std::mt19937 gen(rd());
@@ -462,7 +461,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
             while (true) {
                 std::stringstream ss;
                 ss << "f_";
-                ss << dis(gen); // random 5 digit number
+                ss << dis(gen); // random 6 digit number
                 ss << std::hex << std::uppercase << CHAR(PRINTNAME(hast)); // random 5 digit number
                 ss << "_";
                 ss << std::hex << std::uppercase << cls->context().toI();
@@ -502,7 +501,6 @@ rir::Function* Backend::doCompile(ClosureVersion* cls,
                         *serializerError = true;
                         DebugMessages::printSerializerErrors("backend, src hast is R_NilValue for src: " + std::to_string(c->rirSrc()->src) + ", index: " + std::to_string(data.index), 3);
                     }
-
 
                     srcDataMap[name] = c->rirSrc()->src;
 
@@ -688,22 +686,6 @@ Backend::LastDestructor::LastDestructor() {
 void Backend::deserializeAndPopulateBitcode(SEXP cData, SEXP hast, SEXP offsetSym, DispatchTable * vtab) {
     jit.deserializeAndPopulateBitcode(cData, hast, offsetSym, vtab);
 }
-
-// void Backend::deserialize(
-//     SEXP cPool, SEXP sPool,
-//     SEXP fNames, SEXP fSrc,
-//     SEXP fArg, SEXP fChildren,
-//     SEXP hast, Context context, SEXP rMap, SEXP offsetSym,
-//     rir::FunctionSignature fs, // for function signature
-//     std::string bcPath) {
-//     jit.deserializeAndAddModule(
-//         cPool, sPool,
-//         fNames, fSrc,
-//         fArg, fChildren,
-//         hast, context, rMap, offsetSym,
-//         fs,
-//         bcPath);
-// }
 
 rir::Function* Backend::getOrCompile(ClosureVersion* cls) {
     auto res = done.find(cls);
