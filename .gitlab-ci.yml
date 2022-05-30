@@ -128,7 +128,7 @@ bitcode_test:
     - cp /opt/rir/harnesses/sim_rebench.conf /opt/rbenchmarking/rebench.conf
     - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
     # - ls /opt/bitcodes
-    - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+    - NORMAL_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
     - echo "Run Done"
   tags:

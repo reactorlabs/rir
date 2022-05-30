@@ -137,6 +137,10 @@ class Compiler {
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
 
+        static bool normalRun = getenv("NORMAL_RUN") ? true : false;
+
+        if (normalRun) return;
+
         if (hast != R_NilValue && BitcodeLinkUtil::readyForSerialization(inClosure, vtable, hast)) {
             #if DEBUG_TABLE_ENTRIES == 1
             std::cout << "(R) Hast: " << CHAR(PRINTNAME(hast)) << " (Adding table, closure and populating src Map): " << (uintptr_t)inClosure << std::endl;
