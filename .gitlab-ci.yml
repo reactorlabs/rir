@@ -146,7 +146,7 @@ rmarkdown_test:
   variables:
     GIT_STRATEGY: none
   script:
-    - apt install libssl-dev libxml2-dev pandoc
+    - apt install -y -qq libssl-dev libxml2-dev pandoc
     - cd /opt/rir/harnesses/
     - mkdir /opt/bitcodes
     - echo "-> Installing packages"
