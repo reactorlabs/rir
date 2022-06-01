@@ -146,17 +146,17 @@ rmarkdown_test:
   variables:
     GIT_STRATEGY: none
   script:
-    - apt install -y -qq libssl-dev libxml2-dev pandoc
+    - apt install -y -qq libssl-dev libxml2-dev pandoc time
     - cd /opt/rir/harnesses/
     - mkdir /opt/bitcodes
     - echo "-> Installing packages"
-    - SKIP_CONTEXTUAL_COMPILATION=1 /opt/rir/build/release/bin/Rscript installDeps.R
+    - SKIP_CONTEXTUAL_COMPILATION=1 /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript installDeps.R
     - echo "-> Serializing bitcodes"
-    - PIR_SERIALIZE_ALL=1 PIR_SERIALIZE_PREFIX="/opt/bitcodes" /opt/rir/build/release/bin/Rscript runner.R
+    - PIR_SERIALIZE_ALL=1 PIR_SERIALIZE_PREFIX="/opt/bitcodes" /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
     - echo "-> Running with bitcodes (JIT CC)"
-    - EARLY_BITCODES=1 PIR_DESERIALIZE_PREFIX="/opt/bitcodes" /opt/rir/build/release/bin/Rscript runner.R
+    - EARLY_BITCODES=1 PIR_DESERIALIZE_PREFIX="/opt/bitcodes" /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
     - echo "-> Running without bitcodes (JIT CC)"
-    - NORMAL_RUN=1 /opt/rir/build/release/bin/Rscript runner.R
+    - NORMAL_RUN=1 /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
     - echo "Run Done"
   tags:
     - benchmarks

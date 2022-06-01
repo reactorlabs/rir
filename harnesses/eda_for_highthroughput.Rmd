@@ -1,6 +1,6 @@
 ---
 layout: page
-title: (source: https://github.com/genomicsclass) Basic EDA for high-throughput data
+title: source https://github.com/genomicsclass Basic EDA for high-throughput data
 ---
 
 ```{r options, echo=FALSE}
