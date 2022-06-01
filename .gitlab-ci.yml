@@ -157,6 +157,8 @@ rmarkdown_test:
     - EARLY_BITCODES=1 PIR_DESERIALIZE_PREFIX="/opt/bitcodes" /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
     - echo "-> Running without bitcodes (JIT CC)"
     - NORMAL_RUN=1 /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
+    - echo "-> Running with bitcodes (NO JIT CC)"
+    - SKIP_CONTEXTUAL_COMPILATION=1 EARLY_BITCODES=1 PIR_DESERIALIZE_PREFIX="/opt/bitcodes" /usr/bin/time -a -f '%C,%E,%M' /opt/rir/build/release/bin/Rscript runner.R
     - echo "Run Done"
   tags:
     - benchmarks
