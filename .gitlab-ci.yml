@@ -115,29 +115,51 @@ report_results:
   script:
     - ruby tools/report_ci_results.rb
 
-bitcode_test:
+# bitcode_test:
+#   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
+#   stage: BitcodeTest
+#   variables:
+#     GIT_STRATEGY: none
+#   script:
+#     - cp /opt/rir/harnesses/AWFharness.r /opt/rbenchmarking/Benchmarks/areWeFast/harness.r
+#     - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
+#     - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
+#     - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
+#     - cp /opt/rir/harnesses/sim_rebench.conf /opt/rbenchmarking/rebench.conf
+#     - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
+#     # - ls /opt/bitcodes
+#     - NORMAL_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
+#     - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
+#     - echo "Run Done"
+#   tags:
+#     - benchmarks
+#   artifacts:
+#     paths:
+#     - benchmarksBC.data
+#     - benchmarks.data
+#     expire_in: 24 month
+#   retry: 1
+
+rmarkdown_test:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
   stage: BitcodeTest
   variables:
     GIT_STRATEGY: none
   script:
-    - cp /opt/rir/harnesses/AWFharness.r /opt/rbenchmarking/Benchmarks/areWeFast/harness.r
-    - cp /opt/rir/harnesses/RTharness.r /opt/rbenchmarking/Benchmarks/RealThing/harness.r
-    - cp /opt/rir/harnesses/Sharness.r /opt/rbenchmarking/Benchmarks/simple/harness.r
-    - cp /opt/rir/harnesses/SOharness.r /opt/rbenchmarking/Benchmarks/shootout/harness.r
-    - cp /opt/rir/harnesses/sim_rebench.conf /opt/rbenchmarking/rebench.conf
-    - cp -r /opt/rir/harnesses/bitcodes /opt/bitcodes
-    # - ls /opt/bitcodes
-    - NORMAL_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
-    - DESERIALIZER_RUN=1 $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS_BC"
+    - apt install libssl-dev libxml2-dev pandoc
+    - cd /opt/rir/harnesses/
+    - mkdir /opt/bitcodes
+    - echo "-> Installing packages"
+    - SKIP_CONTEXTUAL_COMPILATION=1 /opt/rir/build/release/bin/Rscript installDeps.R
+    - echo "-> Serializing bitcodes"
+    - PIR_SERIALIZE_ALL=1 PIR_SERIALIZE_PREFIX="/opt/bitcodes" /opt/rir/build/release/bin/Rscript runner.R
+    - echo "-> Running with bitcodes (JIT CC)"
+    - EARLY_BITCODES=1 PIR_DESERIALIZE_PREFIX="/opt/bitcodes" /opt/rir/build/release/bin/Rscript runner.R
+    - echo "-> Running without bitcodes (JIT CC)"
+    - NORMAL_RUN=1 /opt/rir/build/release/bin/Rscript runner.R
     - echo "Run Done"
   tags:
     - benchmarks
-  artifacts:
-    paths:
-    - benchmarksBC.data
-    - benchmarks.data
-    expire_in: 24 month
   retry: 1
 
 # prepare_bitcodes:
