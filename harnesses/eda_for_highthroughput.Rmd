@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Basic EDA for high-throughput data
+title: (source: https://github.com/genomicsclass) Basic EDA for high-throughput data
 ---
 
 ```{r options, echo=FALSE}
@@ -8,7 +8,7 @@ library(knitr)
 opts_chunk$set(fig.path=paste0("figure/", sub("(.*).Rmd","\\1",basename(knitr:::knit_concord$get('infile'))), "-"))
 ```
 
-## Basic Exploratory Data Analysis 
+## Basic Exploratory Data Analysis
 
 An under-appreciated advantage of working with high-throughput data is that problems with the data are sometimes more easily exposed than with low-throughput data. The fact that we have thousands of measurements permits us to see problems that are not apparent when only a few measurements are available. A powerful way to detect these problems is with exploratory data analysis (EDA). Here we review some of the plots that allow us to detect quality problems.
 
@@ -19,8 +19,7 @@ Here we will use the results obtained from applying t-test to data from a gene e
 
 ```{r,message=FALSE}
 library(genefilter)
-library(GSE5859Subset)
-data(GSE5859Subset)
+load(file='GSE5859Subset.rda')
 g <- factor(sampleInfo$group)
 results <- rowttests(geneExpression,g)
 pvals <- results$p.value
@@ -46,7 +45,7 @@ Many features with very small p-values, but small effect sizes as we see here, a
 
 #### p-value Histograms
 
-Another plot we can create to get an overall idea of the results is to make histograms of p-values. When we generate completely null data the histogram follows a uniform distribution. With our original dataset we see a higher frequency of smaller p-values. 
+Another plot we can create to get an overall idea of the results is to make histograms of p-values. When we generate completely null data the histogram follows a uniform distribution. With our original dataset we see a higher frequency of smaller p-values.
 
 ```{r pval-hist, fig.cap="P-value histogram. We show a simulated case in which all null hypotheses are true (left) and p-values from the gene expression described above.",fig.width=10.5,fig.height=5.25}
 library(rafalib)
@@ -55,7 +54,7 @@ hist(nullpvals,ylim=c(0,1400))
 hist(pvals,ylim=c(0,1400))
 ```
 
-When we expect most hypotheses to be null and don't see a uniform p-value distribution, it might be indicative of unexpected properties, such as correlated samples. 
+When we expect most hypotheses to be null and don't see a uniform p-value distribution, it might be indicative of unexpected properties, such as correlated samples.
 
 If we permute the outcomes and calculate p-values then, if the samples are independent, we should see a uniform distribution. With these data we do not:
 
@@ -73,8 +72,7 @@ With high-throughput data, we have thousands of measurements for each experiment
 
 ```{r,message=FALSE}
 library(Biobase)
-library(GSE5859) 
-data(GSE5859) 
+load(file='GSE5859.rda')
 ge <- exprs(e) ##ge for gene expression
 ge[,49] <- ge[,49]/log2(exp(1)) ##imitate error
 ```
@@ -98,7 +96,7 @@ We refer to this figure as a _kaboxplot_ because Karl Broman was the first we sa
 
 We can also plot all the histograms. Because we have so much data, we create histograms using small bins, then smooth the heights of the bars and then plot _smooth histograms_. We re-calibrate the height of these smooth curves so that if a bar is made with base of size "unit" and height given by the curve at $x_0$, the area approximates the number of points in region of size "unit" centered at $x_0$:
 
-```{r shist, fig.cap="Smooth histograms for each sample."} 
+```{r shist, fig.cap="Smooth histograms for each sample."}
 mypar(1,1)
 shist(ge,unit=0.5)
 ```
@@ -124,4 +122,3 @@ sd(y-x)
 becomes immediate. The scatterplot shows very strong correlation, which is not necessarily informative here.
 
 We will later introduce dendograms, heatmaps, and multi-dimensional scaling plots.
-

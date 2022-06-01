@@ -17,11 +17,13 @@ print("installing devtools")
 install.packages("devtools")
 
 print("installing genefilter")
-BiocManager::install("genefilter") 
+BiocManager::install("genefilter")
 # Biobase is a dependency of genefilter, so it should install automatically
 # BiocManager::install("Biobase")
 
-print("installing GSE5859Subset")
-devtools::install_github("genomicsclass/GSE5859Subset")
-print("installing GSE5859")
-devtools::install_github("genomicsclass/GSE5859")
+# Replaced with the files themselves, install_github is failing on the ci because of some Github
+#   related issue, was easier to just include the required data file directly
+# print("installing GSE5859Subset")
+# devtools::install_github("genomicsclass/GSE5859Subset")
+# print("installing GSE5859")
+# devtools::install_github("genomicsclass/GSE5859")
