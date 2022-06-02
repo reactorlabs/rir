@@ -519,6 +519,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     f.monomorphic = first;
                 if (stableEnv)
                     f.stableEnv = true;
+
+                f.stableEnv = false;
             }
         }
         break;
