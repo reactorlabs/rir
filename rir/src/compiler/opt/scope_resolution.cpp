@@ -478,10 +478,9 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     if (mk->context) {
                                         auto diff =
                                             contexts.before(deoptEnv)
-                                                .context() -
-                                            contexts.before(mk).context();
-                                        deoptEnv->context =
-                                            mk->context + diff;
+                                                .numContexts() -
+                                            contexts.before(mk).numContexts();
+                                        deoptEnv->context = mk->context + diff;
                                     } else {
                                         deoptEnv->context = 0;
                                     }

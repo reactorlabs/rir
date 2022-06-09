@@ -1,11 +1,11 @@
 #ifndef BB_TRANSFORM_H
 #define BB_TRANSFORM_H
 
-#include "../pir/bb.h"
-#include "../pir/pir.h"
-#include "../pir/values.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/compiler.h"
+#include "compiler/pir/bb.h"
+#include "compiler/pir/pir.h"
+#include "compiler/pir/values.h"
 #include "compiler/rir2pir/rir2pir.h"
 #include "runtime/TypeFeedback.h"
 

@@ -145,7 +145,8 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 while (b->isEmpty())
                     b = *b->predecessors().begin();
 
-                if (cs.after(b->last()).context() > cs.before(i).context()) {
+                if (cs.after(b->last()).numContexts() >
+                    cs.before(i).numContexts()) {
                     ip = next;
                     continue;
                 }

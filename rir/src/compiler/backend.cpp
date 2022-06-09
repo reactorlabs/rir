@@ -58,7 +58,7 @@ static void approximateNeedsLdVarForUpdate(
                     }
                 }
                 if (auto mk = MkEnv::Cast(ld->env()))
-                    if (mk->stub && mk->arg(mk->indexOf(ld->varName)).val() !=
+                    if (mk->stub && mk->argNamed(ld->varName).val() !=
                                         UnboundValue::instance())
                         return;
 

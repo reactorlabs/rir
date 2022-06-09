@@ -2432,7 +2432,7 @@ class VLIE(MkEnv, Effect::LeaksArg) {
         MutableLocalVarIt;
 
     inline void eachLocalVar(MutableLocalVarIt it) {
-        for (size_t i = 0; i < envSlot(); ++i) {
+        for (size_t i = 0; i < nLocals(); ++i) {
             bool m = missing[i];
             it(varName[i], arg(i), m);
             missing[i] = m;
@@ -2440,13 +2440,16 @@ class VLIE(MkEnv, Effect::LeaksArg) {
     }
 
     inline void eachLocalVar(LocalVarIt it) const {
-        for (size_t i = 0; i < envSlot(); ++i)
+        for (size_t i = 0; i < nLocals(); ++i) {
             it(varName[i], arg(i).val(), missing[i]);
+        }
     }
 
     inline void eachLocalVarRev(LocalVarIt it) const {
-        for (long i = envSlot() - 1; i >= 0; --i)
-            it(varName[i], arg(i).val(), missing[i]);
+        for (size_t i = 0; i < nLocals(); ++i) {
+            size_t ri = nLocals() - i - 1;
+            it(varName[ri], arg(ri).val(), missing[ri]);
+        }
     }
 
     MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args,
@@ -2482,7 +2485,7 @@ class VLIE(MkEnv, Effect::LeaksArg) {
     void printEnv(std::ostream& out, bool tty) const override final {}
     std::string name() const override { return stub ? "(MkEnv)" : "MkEnv"; }
 
-    size_t nLocals() { return nargs() - 1; }
+    size_t nLocals() const { return nargs() - 1; }
 
     int minReferenceCount() const override { return MAX_REFCOUNT; }
 
@@ -2643,12 +2646,12 @@ class VLI(Phi, Effects::None()) {
     const std::vector<BB*>& inputs() { return input; }
     void removeInputs(const std::unordered_set<BB*>& del);
 
-    typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
+    typedef std::function<void(BB*, Value*)> PhiArgumentIterator;
     void eachArg(const PhiArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
     }
-    typedef std::function<void(BB* bb, InstrArg&)> MutablePhiArgumentIterator;
+    typedef std::function<void(BB*, InstrArg&)> MutablePhiArgumentIterator;
     void eachArg(const MutablePhiArgumentIterator& it) {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i));

@@ -125,7 +125,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
                 continue;
             }
 
-            // This is the first cp of the inlinee, lets replace it with the
+            // This is the first CP of the inlinee, let's replace it with the
             // outer CP
             if (pos->isCheckpoint()) {
                 auto cp = Checkpoint::Cast(pos->last());
@@ -205,7 +205,7 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
     auto d = Deopt::Cast(deoptBlock_->last());
     if (d->deoptReason() == DeoptReasonWrapper::unknown()) {
         auto newDr = new Phi(NativeType::deoptReason);
-        auto newDt = new Phi();
+        auto newDt = new Phi;
         deoptBlock_->insert(deoptBlock_->begin(), newDr);
         deoptBlock_->insert(deoptBlock_->begin(), newDt);
         d->setDeoptReason(newDr, newDt);

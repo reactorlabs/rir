@@ -156,6 +156,7 @@ class Tombstone : public Value {
   private:
     explicit Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
+
 } // namespace pir
 } // namespace rir
 
