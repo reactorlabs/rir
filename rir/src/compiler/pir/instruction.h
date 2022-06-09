@@ -154,6 +154,7 @@ struct CallFeedback {
     SEXP monomorphic = nullptr;
     SEXPTYPE type = NILSXP;
     bool stableEnv = false;
+    bool stableEnvHint = false;
 };
 
 class DominanceGraph;

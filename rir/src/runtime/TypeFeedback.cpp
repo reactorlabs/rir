@@ -13,10 +13,20 @@ void ObservedCallees::record(Code* caller, SEXP callee) {
     if (taken < CounterOverflow)
         taken++;
     if (numTargets < MaxTargets) {
+
+        if (TYPEOF(callee) != CLOSXP && TYPEOF(callee) != BUILTINSXP &&
+            TYPEOF(callee) != SPECIALSXP) {
+
+            // Rf_PrintValue(callee);
+            // assert(false && "aa");
+            return;
+        }
+
         int i = 0;
         for (; i < numTargets; ++i)
             if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
+
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;

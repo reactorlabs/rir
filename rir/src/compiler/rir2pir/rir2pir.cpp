@@ -462,9 +462,33 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             f.taken = feedback.taken;
             f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
             if (feedback.numTargets == 1) {
-                f.monomorphic = feedback.getTarget(srcCode, 0);
+
+                // if (auto ld = LdFun::Cast(i)) {
+                //     // if ( ld->varName == Rf_install("f")) {
+                //     //     int a=3;
+                //     //     //assert(false && "f!");
+
+                //     // }
+
+                // }
+
+                auto target = feedback.getTarget(srcCode, 0);
+
+                if (TYPEOF(target) == CLOSXP) {
+                    if (!isValidClosureSEXP(target)) {
+
+                        rir::Compiler::compileClosure(target);
+                        assert(isValidClosureSEXP(target));
+                        f.stableEnv = false;
+                    }
+                } else {
+                    f.stableEnv = true;
+                }
+                f.stableEnvHint = true;
+                // f.stableEnv =true;
+                f.monomorphic = target;
                 f.type = TYPEOF(f.monomorphic);
-                f.stableEnv = true;
+
             } else if (feedback.numTargets > 1) {
                 SEXP first = nullptr;
                 bool stableType = true;
@@ -604,8 +628,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (ldfun) {
             if (ti.monomorphic) {
                 ldfun->hint(ti.monomorphic, ti.feedbackOrigin);
-                if (ti.stableEnv)
+                if (ti.stableEnvHint) {
                     ldfun->hintHasStableEnv = true;
+
+                    if (TYPEOF(ti.monomorphic) == CLOSXP) {
+
+                        if (!isValidClosureSEXP(ti.monomorphic)) {
+
+                            rir::Compiler::compileClosure(ti.monomorphic);
+                            assert(isValidClosureSEXP(ti.monomorphic));
+                        }
+                    }
+                }
             } else {
                 ldfun->hint(symbol::ambiguousCallTarget, {});
             }
