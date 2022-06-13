@@ -172,7 +172,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
     return found;
 }
 
-BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
+BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
                              BB::Instrs::iterator position, Assume* assume,
                              bool condition, BB* deoptBlock_,
                              const std::string& debugMessage) {

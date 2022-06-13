@@ -184,31 +184,31 @@ static void lower(Module* module, Code* code) {
                                              Tombstone::framestate(), 0));
                     next = it + 2;
                 }
-            } else if (auto expect = Assume::Cast(*it)) {
-                if (expect->triviallyHolds()) {
+            } else if (auto assume = Assume::Cast(*it)) {
+                if (assume->triviallyHolds()) {
                     next = bb->remove(it);
                 } else {
-                    auto expectation = expect->assumeTrue;
+                    auto expectation = assume->assumeTrue;
                     std::string debugMessage;
                     if (Parameter::DEBUG_DEOPTS) {
                         debugMessage = "DEOPT, assumption ";
                         {
                             std::stringstream dump;
                             if (auto i =
-                                    Instruction::Cast(expect->condition())) {
+                                    Instruction::Cast(assume->condition())) {
                                 dump << "\n";
                                 i->printRecursive(dump, 4);
                                 dump << "\n";
                             } else {
-                                expect->condition()->printRef(dump);
+                                assume->condition()->printRef(dump);
                             }
                             debugMessage += dump.str();
                         }
                         debugMessage += " failed\n";
                     }
-                    BBTransform::lowerExpect(
-                        module, code, bb, it, expect, expectation,
-                        expect->checkpoint()->bb()->falseBranch(),
+                    BBTransform::lowerAssume(
+                        module, code, bb, it, assume, expectation,
+                        assume->checkpoint()->deoptBranch(),
                         debugMessage);
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust

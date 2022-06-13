@@ -28,7 +28,7 @@ class BBTransform {
                      Code* target);
     static Value* forInline(BB* inlinee, BB* cont, Value* context,
                             Checkpoint* entryCp);
-    static BB* lowerExpect(Module* m, Code* closure, BB* src,
+    static BB* lowerAssume(Module* m, Code* closure, BB* src,
                            BB::Instrs::iterator position, Assume* assume,
                            bool condition, BB* deoptBlock,
                            const std::string& debugMesage);
