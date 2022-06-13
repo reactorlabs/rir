@@ -30,8 +30,8 @@ class BBTransform {
                             Checkpoint* entryCp);
     static BB* lowerAssume(Module* m, Code* closure, BB* src,
                            BB::Instrs::iterator position, Assume* assume,
-                           bool condition, BB* deoptBlock,
-                           const std::string& debugMesage);
+                           size_t nDropContexts, bool condition,
+                           BB* deoptBlock_, const std::string& debugMesage);
     static void insertAssume(Instruction* condition, bool assumePositive,
                              Checkpoint* cp, const FeedbackOrigin& origin,
                              DeoptReason::Reason reason, BB* bb,

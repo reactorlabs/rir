@@ -1,5 +1,6 @@
 #include "backend.h"
 #include "R/BuiltinIds.h"
+#include "analysis/context_stack.h"
 #include "analysis/dead.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
@@ -106,10 +107,27 @@ static void approximateNeedsLdVarForUpdate(
     });
 }
 
-static void lower(Module* module, Code* code) {
+static void lower(Module* module, ClosureVersion* cls, Code* code,
+                  AbstractLog& log) {
     DeadInstructions representAsReal(
         code, 1, Effects::Any(),
         DeadInstructions::IgnoreUsesThatDontObserveIntVsReal);
+
+    // If we take a deopt that's in between a PushContext/PopContext pair but
+    // whose Checkpoint is not, we have to remove the extra context(s). We emit
+    // DropContext instructions for this while lowering the Assume to a branch.
+    ContextStack cs(cls, code, log);
+    std::unordered_map<Assume*, size_t> nDropContexts;
+    Visitor::run(code->entry, [&](Instruction* i) {
+        if (auto a = Assume::Cast(i)) {
+            auto beforeA = cs.before(a).numContexts();
+            auto beforeCp = cs.before(a->checkpoint()).numContexts();
+
+            assert(nDropContexts.count(a) == 0);
+            assert(beforeCp <= beforeA);
+            nDropContexts[a] = beforeA - beforeCp;
+        }
+    });
 
     Visitor::runPostChange(code->entry, [&](BB* bb) {
         auto it = bb->begin();
@@ -207,8 +225,8 @@ static void lower(Module* module, Code* code) {
                         debugMessage += " failed\n";
                     }
                     BBTransform::lowerAssume(
-                        module, code, bb, it, assume, expectation,
-                        assume->checkpoint()->deoptBranch(),
+                        module, code, bb, it, assume, nDropContexts.at(assume),
+                        expectation, assume->checkpoint()->deoptBranch(),
                         debugMessage);
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
@@ -324,7 +342,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     std::function<void(Code*)> lowerAndScanForPromises = [&](Code* c) {
         if (promMap.count(c))
             return;
-        lower(module, c);
+        lower(module, cls, c, log);
         toCSSA(module, c);
         log.CSSA(c);
 #ifdef FULLVERIFIER

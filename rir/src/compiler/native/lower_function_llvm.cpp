@@ -2352,6 +2352,27 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::DropContext: {
+                auto globalContextPtrAddr =
+                    convertToPointer(&R_GlobalContext, t::RCNTXT_ptr);
+                auto globalContextPtr =
+                    builder.CreateLoad(globalContextPtrAddr);
+                auto callflagAddr =
+                    builder.CreateGEP(globalContextPtr, {c(0), c(1)});
+                auto callflag = builder.CreateLoad(callflagAddr);
+                insn_assert(
+                    builder.CreateICmpNE(
+                        builder.CreateAnd(callflag, c(CTXT_FUNCTION)), c(0)),
+                    "Expected R_GlobalContext to be a closure context");
+                // R_GlobalContext = R_GlobalContext->nextcontext
+                auto nextcontextAddr =
+                    builder.CreateGEP(globalContextPtr, {c(0), c(0)});
+                auto nextcontext = builder.CreateLoad(nextcontextAddr);
+                builder.CreateStore(nextcontext, globalContextPtrAddr);
+                inPushContext--;
+                break;
+            }
+
             case Tag::CastType: {
                 auto in = i->arg(0).val();
                 if (!variables_.count(i))

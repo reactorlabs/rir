@@ -174,8 +174,8 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
 
 BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
                              BB::Instrs::iterator position, Assume* assume,
-                             bool condition, BB* deoptBlock_,
-                             const std::string& debugMessage) {
+                             size_t nDropContexts, bool condition,
+                             BB* deoptBlock_, const std::string& debugMessage) {
 
     auto split =
         BBTransform::split(code->nextBBId++, srcBlock, position + 1, code);
@@ -195,6 +195,10 @@ BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
         deoptBlock->append(ldmsg2);
         deoptBlock->append(new Call(Env::global(), ldprint, {ldmsg2},
                                     Tombstone::framestate(), 0));
+    }
+
+    while (nDropContexts--) {
+        deoptBlock->append(new DropContext());
     }
 
     auto deoptReason = m->deoptReasonValue(assume->reason);

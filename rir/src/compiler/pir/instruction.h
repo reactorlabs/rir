@@ -2562,6 +2562,11 @@ class FLI(PopContext, 2, Effect::ChangesContexts) {
     Value* result() const { return arg<0>().val(); }
 };
 
+class FLI(DropContext, 0, Effect::ChangesContexts) {
+  public:
+    DropContext() : FixedLenInstruction(PirType::voyd()) {}
+};
+
 class FLIE(LdDots, 1, Effect::ReadsEnv) {
   public:
     std::vector<SEXP> names;
