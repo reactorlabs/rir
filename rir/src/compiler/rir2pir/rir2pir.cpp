@@ -811,7 +811,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 break;
             }
 
-            // Specialcase for calling usemethod, the first argument is eager.
+            // Specialcase for calling UseMethod, the first argument is eager.
             // This helps determine the object type of the caller.
             {
                 auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
