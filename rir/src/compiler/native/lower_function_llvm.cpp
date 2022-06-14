@@ -3583,15 +3583,37 @@ void LowerFunctionLLVM::compile() {
                     target->addExtraPoolEntry(store);
                 }
 
-                withCallFrame(args, [&]() {
-                    return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
-                                {paramCode(), paramClosure(),
-                                 convertToPointer(m, t::i8, true), paramArgs(),
-                                 c(deopt->escapedEnv, 1),
-                                 load(deopt->deoptReason()),
-                                 loadSxp(deopt->deoptTrigger())});
-                });
-                builder.CreateUnreachable();
+                // Deopt only returns if the outermost frame is a promise.
+                // In that case, the result is the returned value and we simply
+                // return it from here.
+                if (code->isPromise()) {
+                    auto res = withCallFrame(
+                        args,
+                        [&]() {
+                            return call(NativeBuiltins::get(
+                                            NativeBuiltins::Id::deoptProm),
+                                        {paramCode(),
+                                         convertToPointer(m, t::i8, true),
+                                         paramArgs(), c(deopt->escapedEnv, 1),
+                                         load(deopt->deoptReason()),
+                                         loadSxp(deopt->deoptTrigger())});
+                        },
+                        false);
+                    exitBlocks.push_back(builder.GetInsertBlock());
+                    builder.CreateRet(res);
+                } else {
+                    withCallFrame(args, [&]() {
+                        return call(
+                            NativeBuiltins::get(NativeBuiltins::Id::deopt),
+                            {paramCode(), paramClosure(),
+                             convertToPointer(m, t::i8, true), paramArgs(),
+                             c(deopt->escapedEnv, 1),
+                             load(deopt->deoptReason()),
+                             loadSxp(deopt->deoptTrigger())});
+                    });
+                    insn_assert(builder.getFalse(), "unreachable after deopt");
+                    builder.CreateUnreachable();
+                }
                 break;
             }
 

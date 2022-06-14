@@ -828,8 +828,8 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
-               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+SEXP deopt(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+           bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
@@ -854,8 +854,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     auto le = LazyEnvironment::check(env);
     if (deoptless && m->numFrames == 1 && cls != deoptlessRecursion &&
         ((le && !le->materialized()) ||
-         (!le && (!leakedEnv || !deoptlessNoLeakedEnvs)))) {
-        assert(m->frames[0].inPromise == false);
+         (!le && (!leakedEnv || !deoptlessNoLeakedEnvs))) &&
+        /* TODO: support deoptless when outermost frame is a promise */
+        !m->frames[0].inPromise) {
 
         size_t envSize = le ? le->nargs : Rf_length(FRAME(env));
         if (envSize <= DeoptContext::MAX_ENV &&
@@ -932,8 +933,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
                                originalCntxt->cloenv, res);
-                assert(false);
-                return;
+                assert(false && "unreachable after deoptless");
+                return nullptr;
             }
         }
     }
@@ -945,13 +946,35 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             if (f->body() == c)
                 Pool::patch(idx, deoptSentinelContainer);
 
-    CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
-                     /* nargs */ -1, src_pool_at(c->src), args,
-                     (Immediate*)nullptr, env, R_NilValue, Context());
+    if (cls) {
+        CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
+                         /* nargs */ -1, src_pool_at(c->src), args,
+                         (Immediate*)nullptr, env, R_NilValue, Context());
 
-    deoptFramesWithContext(&call, m, R_NilValue, m->numFrames - 1, stackHeight,
-                           (RCNTXT*)R_GlobalContext);
-    assert(false);
+        // Deopt in a function longjumps to its context
+        deoptFramesWithContext(&call, m, R_NilValue, m->numFrames - 1,
+                               stackHeight, (RCNTXT*)R_GlobalContext);
+        assert(false && "unreachable after deopt");
+        return nullptr;
+    } else {
+        // Deopt in a promise has nowhere to longjump, so it leaves the result
+        // on the TOS and returns here, this is immediately returned as the
+        // result of the promise
+        deoptFramesWithContext(nullptr, m, R_NilValue, m->numFrames - 1,
+                               stackHeight, (RCNTXT*)R_GlobalContext);
+        return ostack_pop();
+    }
+}
+
+void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
+    deopt(c, cls, m, args, leakedEnv, deoptReason, deoptTrigger);
+}
+
+SEXP deoptPromImpl(rir::Code* c, DeoptMetadata* m, R_bcstack_t* args,
+                   bool leakedEnv, DeoptReason* deoptReason,
+                   SEXP deoptTrigger) {
+    return deopt(c, nullptr, m, args, leakedEnv, deoptReason, deoptTrigger);
 }
 
 void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
@@ -2436,6 +2459,14 @@ void NativeBuiltins::initializeBuiltins() {
                                                 t::DeoptReasonPtr, t::SEXP},
                                                false),
                        {llvm::Attribute::NoReturn}};
+    get_(Id::deoptProm) = {
+        "deoptProm",
+        (void*)&deoptPromImpl,
+        llvm::FunctionType::get(t::SEXP,
+                                {t::voidPtr, t::voidPtr, t::stackCellPtr, t::i1,
+                                 t::DeoptReasonPtr, t::SEXP},
+                                false),
+        {}};
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,
                             t::void_voidPtr,

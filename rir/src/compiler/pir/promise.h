@@ -22,6 +22,8 @@ class Promise : public Code {
 
     void printName(std::ostream& out) const override;
 
+    bool isPromise() const override final { return true; }
+
   private:
     rir::Code* rirSrc_;
     const unsigned srcPoolIdx_;

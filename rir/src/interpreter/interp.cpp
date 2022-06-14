@@ -1655,22 +1655,30 @@ void deoptFramesWithContext(const CallContext* callCtxt,
     SEXP res = trampoline();
     assert(ostack_length() == frameBaseSize);
 
-    if (!outermostFrame) {
-        if (!inPromise)
-            endClosureContext(cntxt, res);
-    } else {
-        // Deopt in promise is only possible if the promise is not the outermost
-        // frame. The reason is that the promise does not have a context
-        // associated and we can therefore not jump out of deoptimized promise
-        // evaluation. Therefore promises should only occur in inner frames
-        // during deoptimization.
-        assert(!inPromise);
+    if (outermostFrame) {
         endDeoptimizing();
-        assert(findFunctionContextFor(deoptEnv) == cntxt);
-        // long-jump out of all the inlined contexts
-        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
-        assert(false);
+
+        if (!inPromise) {
+            assert(findFunctionContextFor(deoptEnv) == cntxt);
+            // long-jump out of all the inlined contexts
+            Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
+            assert(false && "unreachable");
+        } else {
+            // Deopt in a promise that is the outermost frame:
+            // The promise does not have a context associated and we can
+            // therefore not jump out of deoptimized promise evaluation. In this
+            // case we leave the result on the top of the stack and the native
+            // backend knows that if the deopt returns, it should pop the result
+            // from the stack and return it as the promise's result.
+
+            // assert(false);
+        }
     }
+
+    assert(!outermostFrame || inPromise);
+
+    if (!inPromise)
+        endClosureContext(cntxt, res);
 
     ostack_push(res);
 }
