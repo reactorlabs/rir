@@ -198,6 +198,10 @@ f.stopSerializer <- function() {
     invisible(.Call("stopSerializer"))
 }
 
+f.applyMask <- function(path) {
+    invisible(.Call("applyMask", path))
+}
+
 # breakpoint during evaluation
 # insert a call to `.int3()` in R code and get a breakpoint when it is evaluated
 # note: the actual body of this function is replaced by an "int3_" bytecode

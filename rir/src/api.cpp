@@ -490,6 +490,155 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     return R_FalseValue;
 }
 
+REXPORT SEXP applyMask(SEXP path) {
+    SEXP maskSym = Rf_install("mask");
+    bool oldVal = BitcodeLinkUtil::contextualCompilationSkip;
+    BitcodeLinkUtil::contextualCompilationSkip = true;
+
+    if (TYPEOF(path) == STRSXP) {
+        unsigned totalFunctionsProcessed = 0;
+        unsigned totalMaskedFunctions = 0;
+        unsigned totalBitcodes = 0;
+        unsigned totalRemovedBitcodes = 0;
+
+        std::cout << "Applying mask: " << CHAR(STRING_ELT(path, 0)) << std::endl;
+        std::stringstream ss;
+        ss << CHAR(STRING_ELT(path, 0)) << "/maskData";
+
+        std::ifstream maskData(ss.str());
+        std::string line;
+        std::unordered_map<std::string, unsigned long> maskMap;
+        std::unordered_map<std::string, std::vector<unsigned long>> depMap;
+        std::vector<std::string> toRemoveBC;
+        while (getline(maskData, line)) {
+            std::istringstream strstr(line);
+            std::string word;
+            unsigned i = 0;
+            std::string currKey;
+            while (strstr >> word) {
+                switch(i) {
+                    case 0:
+                        currKey = word;
+                        break;
+                    case 1:
+                        if (std::stoul(word) > 0) {
+                            maskMap[currKey] = std::stoul(word);
+                        }
+                        break;
+                    default:
+                        depMap[currKey].push_back(std::stoul(word));
+                }
+                i++;
+            }
+        }
+
+        maskData.close();
+
+        DIR *dir;
+        struct dirent *ent;
+        if ((dir = opendir(CHAR(STRING_ELT(path, 0)))) != NULL) {
+            while ((ent = readdir (dir)) != NULL) {
+                std::string fName = ent->d_name;
+                if (fName.find(".meta") != std::string::npos) {
+                    std::stringstream ssPath;
+                    ssPath << CHAR(STRING_ELT(path, 0)) << "/" << fName;
+                    FILE *reader = fopen(ssPath.str().c_str(),"r");
+                    if (!reader) {
+                        std::cout << "Unable to open metadata file: " << fName << std::endl;
+                    }
+
+                    // Initialize the deserializing stream
+                    R_inpstream_st inputStream;
+                    R_InitFileInPStream(&inputStream, reader, R_pstream_binary_format, NULL, R_NilValue);
+
+                    SEXP serDataContainer;
+                    PROTECT(serDataContainer = R_Unserialize(&inputStream));
+
+                    fclose(reader);
+
+                    // Get serialized metadata
+                    serializerData sData(serDataContainer);
+
+
+                    serializerData::iterateOverOffsets(sData.getContextMap(), [&] (SEXP offsetSymbol, SEXP offsetEnv) {
+                        // Every hast_offset pair is considered a function, 0 offset represents the outer function, other offsets represent
+                        //  inner functions.
+                        totalFunctionsProcessed++;
+
+                        std::stringstream key;
+                        key << CHAR(PRINTNAME(sData.getHastData())) << "_" << CHAR(PRINTNAME(offsetSymbol));
+
+                        std::string functionKey(key.str());
+                        REnvHandler contextMap(offsetEnv);
+
+                        if (maskMap.find(functionKey) != maskMap.end()) {
+                            // Masked function
+                            totalMaskedFunctions++;
+
+                            SEXP store;
+                            PROTECT(store = Rf_allocVector(RAWSXP, sizeof(unsigned long)));
+                            unsigned long * tmp = (unsigned long *) DATAPTR(store);
+                            *tmp = maskMap[functionKey];
+                            contextMap.set(maskSym, store);
+                            UNPROTECT(1);
+                        }
+
+                        // Total bitcodes that exist
+                        totalBitcodes += contextMap.size();
+                        if (contextMap.get(maskSym)) {
+                            totalBitcodes--;
+                        }
+
+                        for (auto & ele : depMap[functionKey]) {
+                            // This bitcode is deprecated and can be saftely deleted
+                            totalRemovedBitcodes++;
+
+                            SEXP toRemove = Rf_install(std::to_string(ele).c_str());
+                            contextMap.remove(toRemove);
+
+                            std::stringstream toRemovePath;
+                            toRemovePath << CHAR(STRING_ELT(path, 0)) << "/" << functionKey << "_" << ele << ".bc";
+                            toRemoveBC.push_back(toRemovePath.str());
+                        }
+
+                    });
+
+                    R_outpstream_st outputStream;
+                    FILE *fptr = fopen(ssPath.str().c_str(),"w");
+                    if (!fptr) {
+                        std::cout << "Unable to update metadata: " << fName << std::endl;
+                    }
+                    R_InitFileOutPStream(&outputStream,fptr,R_pstream_binary_format, 0, NULL, R_NilValue);
+                    R_Serialize(sData.getContainer(), &outputStream);
+                    fclose(fptr);
+                    UNPROTECT(1);
+                }
+            }
+            closedir (dir);
+        }
+
+        for (auto & ele : toRemoveBC) {
+            int result = remove(ele.c_str());
+            if (result != 0) {
+                std::cout << "Warning: Failed to remove " << ele << std::endl;
+            }
+        }
+
+        std::cout << "=== stats ===" << std::endl;
+        std::cout << "FunctionsProcessed: " << totalFunctionsProcessed << std::endl;
+        std::cout << "FunctionsMasked   : " << totalMaskedFunctions    << std::endl;
+        std::cout << "TotalBitcodes     : " << totalBitcodes           << std::endl;
+        std::cout << "RemovedBitcodes   : " << totalRemovedBitcodes    << std::endl;
+    } else {
+        std::cout << "Invalid path to bitcodes!" << std::endl;
+    }
+
+    BitcodeLinkUtil::contextualCompilationSkip = oldVal;
+
+    return R_NilValue;
+
+}
+
 REXPORT SEXP loadBitcodes() {
     Protect prot;
     DIR *dir;

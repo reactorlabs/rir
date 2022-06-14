@@ -582,11 +582,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                         }
                     }
                 } else {
+                    reqMap->insert(hast);
                     Pool::insert(vtable->container());
                     // patch case
                     std::stringstream ss;
                     ss << "vtab_" << CHAR(PRINTNAME(hast)) << "_" << index;
-                    reqMap->insert(hast);
                     return convertToExternalSymbol(ss.str());
                 }
 
@@ -631,11 +631,11 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
                         }
                     }
                 } else {
+                    reqMap->insert(hast);
                     Pool::insert(co);
                     // patch case
                     std::stringstream ss;
                     ss << "clos_" << CHAR(PRINTNAME(hast));
-                    reqMap->insert(hast);
                     return convertToExternalSymbol(ss.str());
                 }
 
@@ -776,6 +776,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
                             });
 
                 } else {
+                    reqMap->insert(hast);
                     // patch case
                     std::stringstream ss;
                     ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
@@ -965,12 +966,12 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                                 c(dr->reason.origin.offset(), 32), srcAddr});
                 res = globalConst(drs);
             } else {
+                reqMap->insert(hast);
                 std::stringstream ss;
 
                 auto dr = (DeoptReasonWrapper*)val;
 
                 ss << "code_" << CHAR(PRINTNAME(hast)) << "_" << data.index;
-                reqMap->insert(hast);
 
                 auto srcAddr = (Constant *) convertToExternalSymbol(ss.str(), t::i8);
 
@@ -2187,6 +2188,7 @@ void LowerFunctionLLVM::compileRelop(
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                         {a, b, e, c(i->srcIdx), c((int)kind)});
                 } else {
+                    reqMap->insert(hast);
                     std::stringstream ss;
                     ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
@@ -2298,6 +2300,7 @@ void LowerFunctionLLVM::compileBinop(
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
                         {a, b, e, c(i->srcIdx), c((int)kind)});
                 } else {
+                    reqMap->insert(hast);
                     std::stringstream ss;
                     ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                     // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -2420,6 +2423,7 @@ void LowerFunctionLLVM::compileUnop(
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
                         {a, e, c(i->srcIdx), c((int)kind)});
                 } else {
+                    reqMap->insert(hast);
                     std::stringstream ss;
                     ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
@@ -2615,6 +2619,7 @@ bool LowerFunctionLLVM::compileDotcall(
 
 
         } else {
+            reqMap->insert(hast);
             // patch case
             std::stringstream ss;
             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
@@ -4183,6 +4188,7 @@ void LowerFunctionLLVM::compile() {
                                 c(b->nCallArgs()), c(asmpt.toI())});
                         }));
                     } else {
+                        reqMap->insert(hast);
                         // patch case
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
@@ -4282,6 +4288,7 @@ void LowerFunctionLLVM::compile() {
                             }));
 
                     } else {
+                        reqMap->insert(hast);
                         // patch case
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
@@ -4393,6 +4400,7 @@ void LowerFunctionLLVM::compile() {
                                         c(asmpt.toI())});
                                 }));
                         } else {
+                            reqMap->insert(hast);
                             // patch case
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
@@ -4515,6 +4523,8 @@ void LowerFunctionLLVM::compile() {
                                 });
                                 setVal(i, res);
                             } else {
+                                reqMap->insert(hast1);
+
                                 assert(
                                     asmpt.includes(Assumption::StaticallyArgmatched));
 
@@ -4682,6 +4692,8 @@ void LowerFunctionLLVM::compile() {
                                     });
                             }));
                     } else {
+                        reqMap->insert(hast1);
+                        reqMap->insert(hast);
                         // patch case
                         std::stringstream ssAST;
                         ssAST << "pluu_" << CHAR(PRINTNAME(hast1)) << "_" << index1;
@@ -4689,7 +4701,6 @@ void LowerFunctionLLVM::compile() {
                         // patch case
                         std::stringstream ss;
                         ss << "clos_" << CHAR(PRINTNAME(hast));
-                        reqMap->insert(hast);
                         assert(asmpt.includes(Assumption::StaticallyArgmatched));
                         setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                                 return call(
@@ -5252,6 +5263,7 @@ void LowerFunctionLLVM::compile() {
                                     NativeBuiltins::get(NativeBuiltins::Id::notEnv),
                                     {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
                             } else {
+                                reqMap->insert(hast);
                                 std::stringstream ss;
                                 ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                                 // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -5649,6 +5661,7 @@ void LowerFunctionLLVM::compile() {
                                     {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
                                     c((int)BinopKind::COLON)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             res =
@@ -6446,6 +6459,7 @@ void LowerFunctionLLVM::compile() {
 
                         setVal(i, res());
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -6605,6 +6619,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         setVal(i, res());
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -6736,6 +6751,7 @@ void LowerFunctionLLVM::compile() {
                                     {vector, load(extract->idx()),
                                     loadSxp(extract->env()), c(extract->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -6791,6 +6807,7 @@ void LowerFunctionLLVM::compile() {
                                     {vector, idx, loadSxp(extract->env()),
                                     c(extract->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -6870,6 +6887,7 @@ void LowerFunctionLLVM::compile() {
                             {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
                         setVal(i, res);
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7002,6 +7020,7 @@ void LowerFunctionLLVM::compile() {
                                     load(extract->idx2()), loadSxp(extract->env()),
                                     c(extract->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7061,6 +7080,7 @@ void LowerFunctionLLVM::compile() {
                                     {vector, idx1, idx2, loadSxp(extract->env()),
                                     c(extract->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7138,6 +7158,7 @@ void LowerFunctionLLVM::compile() {
                                 loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                         setVal(i, res);
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7209,6 +7230,7 @@ void LowerFunctionLLVM::compile() {
                         setVal(i, res);
                         break;
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7368,6 +7390,7 @@ void LowerFunctionLLVM::compile() {
                                 load(subAssign->idx2()), load(subAssign->val()),
                                 loadSxp(subAssign->env()), c(subAssign->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7428,6 +7451,7 @@ void LowerFunctionLLVM::compile() {
                                 loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                                 c(subAssign->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7575,6 +7599,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         setVal(i, res());
                     } else {
+                        reqMap->insert(hast);
                         std::stringstream ss;
                         ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                         // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7754,6 +7779,7 @@ void LowerFunctionLLVM::compile() {
                                     load(subAssign->val()), loadSxp(subAssign->env()),
                                     c(subAssign->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -7813,6 +7839,7 @@ void LowerFunctionLLVM::compile() {
                                 loadSxp(subAssign->val()), loadSxp(subAssign->env()),
                                 c(subAssign->srcIdx)});
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),
@@ -8130,6 +8157,7 @@ void LowerFunctionLLVM::compile() {
                                         NativeBuiltins::Id::colonInputEffects),
                                     {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
                         } else {
+                            reqMap->insert(hast);
                             std::stringstream ss;
                             ss << "pluu_" << CHAR(PRINTNAME(hast)) << "_" << index;
                             // builder.CreateLoad(convertToExternalSymbol(ss.str(), t::Int)), // c(srcIdx),

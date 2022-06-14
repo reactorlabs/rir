@@ -990,15 +990,15 @@ SEXP doCall(CallContext& call, InterpreterInstance* ctx, bool popArgs) {
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs(),
                             ctx);
-        Function* fun = dispatch(call, table);
-        fun->registerInvocation();
-
         if (table->mask.toI() != 0) {
             // std::cout << "mask exists for vtable" << std::endl;
             // std::cout << "before: " << call.givenContext << std::endl;
             call.givenContext.curbContextWithMask(table->mask);
             // std::cout << "after: " << call.givenContext << std::endl;
         }
+        Function* fun = dispatch(call, table);
+        fun->registerInvocation();
+
 
         if (BitcodeLinkUtil::contextualCompilationSkip == false && !isDeoptimizing()
             // && table->disableFurtherSpecialization == false
