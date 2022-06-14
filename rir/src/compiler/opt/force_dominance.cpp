@@ -192,7 +192,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
-                    } else if (toInline.count(f)) {
+                    } else if (toInline.count(f) &&
+                               // Can't inline a promise with Assumes if the
+                               // dominating Force doesn't have a Framestate
+                               (f->frameState() ||
+                                Visitor::check(mkarg->prom()->entry,
+                                               [](Instruction* i) {
+                                                   return !Assume::Cast(i);
+                                               }))) {
                         anyChange = true;
                         Promise* prom = mkarg->prom();
                         BB* split =
