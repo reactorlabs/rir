@@ -90,7 +90,13 @@ static bool testNoPromise(ClosureVersion* f) {
 
 static bool testNoExternalCalls(ClosureVersion* f) {
     return Visitor::check(f->entry, [&](Instruction* i) {
-        return !CallInstruction::CastCall(i) || CallSafeBuiltin::Cast(i);
+        auto res = !CallInstruction::CastCall(i) || CallSafeBuiltin::Cast(i);
+        if (!res && f->owner()) {
+            i->print(std::cout, true);
+            std::cerr << i;
+            // assert(false);
+        }
+        return res;
     });
 }
 

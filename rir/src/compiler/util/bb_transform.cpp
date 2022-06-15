@@ -336,6 +336,9 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
                        : (stableEnv ? compiler.module->c(fb.monomorphic)
                                     : compiler.module->c(BODY(fb.monomorphic)));
 
+    // if (expected == nullptr || expected == Nil::instance() )
+    //     assert(false && "pir nil");
+
     auto t = new Identical(calleeForGuard, expected, PirType::any());
     pos = bb->insert(pos, t) + 1;
 
