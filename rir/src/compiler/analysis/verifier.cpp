@@ -35,7 +35,7 @@ class TheVerifier {
     std::unordered_set<BB*> seenPreds;
 
     void operator()() {
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, false); });
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb); });
         Visitor::run(f->entry, [&](BB* bb) { seenPreds.erase(bb); });
         if (!seenPreds.empty()) {
             std::cerr << "The following preds are not reachable from entry: ";
@@ -98,7 +98,7 @@ class TheVerifier {
         return doms.at(c);
     }
 
-    void verify(BB* bb, bool inPromise) {
+    void verify(BB* bb) {
         if (bb->id >= bb->owner->nextBBId) {
             std::cout << "BB" << bb->id << " id is bigger than max ("
                       << bb->owner->nextBBId << ")\n";
@@ -121,7 +121,7 @@ class TheVerifier {
         }
 
         for (auto i : *bb) {
-            verify(i, bb, inPromise);
+            verify(i, bb);
         }
         /* This check verifies that our graph is in edge-split format.
             Currently we do not rely on this property, however we should
@@ -196,10 +196,10 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb, true); });
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb); });
     }
 
-    void verify(Instruction* i, BB* bb, bool inPromise) {
+    void verify(Instruction* i, BB* bb) {
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
@@ -269,19 +269,6 @@ class TheVerifier {
             });
         }
 
-        if (i->frameState()) {
-            if (!inPromise) {
-                auto fs = i->frameState();
-                while (fs->next())
-                    fs = fs->next();
-                if (fs->inPromise) {
-                    std::cerr << "Error: instruction '";
-                    i->print(std::cerr);
-                    std::cerr << "' outermost fs inPromis in body code\n";
-                    ok = false;
-                }
-            }
-        }
         if (auto assume = Assume::Cast(i)) {
             if (IsType::Cast(assume->arg(0).val())) {
                 if (!assume->reason.pc()) {

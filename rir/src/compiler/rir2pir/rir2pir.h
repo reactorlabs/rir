@@ -24,7 +24,7 @@ class Rir2Pir {
                                 const std::vector<PirType>& initialStack)
         __attribute__((warn_unused_result));
 
-    Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager)
+    Value* tryCreateArg(rir::Code* prom, Builder& insert)
         __attribute__((warn_unused_result));
 
     typedef std::unordered_map<Value*, Checkpoint*> CallTargetCheckpoints;

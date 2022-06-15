@@ -1670,8 +1670,6 @@ void deoptFramesWithContext(const CallContext* callCtxt,
             // case we leave the result on the top of the stack and the native
             // backend knows that if the deopt returns, it should pop the result
             // from the stack and return it as the promise's result.
-
-            // assert(false);
         }
     }
 
