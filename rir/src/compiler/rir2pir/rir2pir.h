@@ -92,6 +92,10 @@ class PromiseRir2Pir : public Rir2Pir {
         : Rir2Pir(cmp, cls, log, name, outerFeedback), inlining_(inlining) {}
 
   private:
+    // This is used for disabling speculation while inlining a promise in
+    // rir2pir (eg, eager eval for builtins). The problem is that the inlined
+    // promise doesn't have a location in rir bytecode, and so deopts would have
+    // nowhere to jump...
     bool inlining_;
     bool inlining() const override final { return inlining_; }
     bool inPromise() const override final { return true; }

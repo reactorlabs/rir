@@ -2363,9 +2363,6 @@ class VLIE(CallBuiltin, Effects::Any()), public CallInstruction {
     Value* callerEnv() { return env(); }
 
     VisibilityFlag visibilityFlag() const override;
-    Value* frameStateOrTs() const override final {
-        return Tombstone::framestate();
-    }
 
   private:
     CallBuiltin(Value * callerEnv, SEXP builtin,
@@ -2406,9 +2403,6 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
         const override final;
 
     VisibilityFlag visibilityFlag() const override;
-    Value* frameStateOrTs() const override final {
-        return Tombstone::framestate();
-    }
 
     size_t gvnBase() const override;
 };
@@ -2668,9 +2662,9 @@ class VLI(Phi, Effects::None()) {
 // Instructions targeted specially for speculative optimization
 
 /*
- *  Must be the last instruction of a BB with two childs. One should
+ *  Must be the last instruction of a BB with two children. One should
  *  contain a deopt. Checkpoint takes either branch at random
- *  to ensure the optimizer consider deopt and non-deopt cases.
+ *  to ensure the optimizer considers both deopt and non-deopt cases.
  */
 class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
                                               Effects::NoneI(), HasEnvSlot::No,
@@ -2686,7 +2680,7 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
 
 /*
  * Replaces the current execution context with the one described by the
- * referenced framestate and jump to the deoptimized version of the
+ * referenced framestate and jumps to the deoptimized version of the
  * code at the point the framestate stores
  */
 
@@ -2698,9 +2692,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
     explicit Deopt(FrameState* frameState);
 
     Value* frameStateOrTs() const override final { return arg<0>().val(); }
-    FrameState* frameState() const {
-        return FrameState::Cast(frameStateOrTs());
-    }
+    void updateFrameState(Value* fs) override final { arg<0>().val() = fs; }
 
     bool hasDeoptReason() const;
 
