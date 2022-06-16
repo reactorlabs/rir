@@ -41,28 +41,10 @@ struct DispatchTable
     }
 
     Function* dispatch(Context a, bool ignorePending = true) const {
-        if (!a.smaller(userDefinedContext_)) {
-#ifdef DEBUG_DISPATCH
-            std::cout << "DISPATCH trying: " << a
-                      << " vs annotation: " << userDefinedContext_ << "\n";
-#endif
-            Rf_error("Provided context does not satisfy user defined context");
-        }
-
-        for (size_t i = 1; i < size(); ++i) {
-#ifdef DEBUG_DISPATCH
-            std::cout << "DISPATCH trying: " << a << " vs " << get(i)->context()
-                      << "\n";
-#endif
-            auto e = get(i);
-            if (a.smaller(e->context()) && !e->disabled() &&
-                (ignorePending || !e->pendingCompilation()))
-                return e;
-        }
-        return baseline();
+        return dispatchConsideringDisabled(a, ignorePending).first;
     }
 
-    std::pair<Function*, Function*>
+    inline std::pair<Function*, Function*>
     dispatchConsideringDisabled(Context a, bool ignorePending = true) const {
         if (!a.smaller(userDefinedContext_)) {
 #ifdef DEBUG_DISPATCH

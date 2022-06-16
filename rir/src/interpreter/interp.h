@@ -82,12 +82,14 @@ inline bool RecompileHeuristic(Function* fun) {
     return false;
 }
 
-inline bool ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
-                                                 Function* targetDisabled,
-                                                 const Context& context) {
+inline bool
+ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
+                                     Function* funConsideringDisabled,
+                                     const Context& context) {
 
-    if (targetDisabled != table->baseline())
-        return targetDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+    if (funConsideringDisabled != table->baseline())
+        return funConsideringDisabled->deoptCount() >=
+               pir::Parameter::DEOPT_ABANDON;
 
     return false;
 }

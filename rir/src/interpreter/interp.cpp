@@ -980,11 +980,11 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto table = DispatchTable::unpack(body);
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs());
-        // Function* fun = dispatch(call, table);
         auto dispatchResult =
             table->dispatchConsideringDisabled(call.givenContext);
         auto fun = dispatchResult.first;
-        assert(fun);
+        auto disabledFun =
+            dispatchResult.second; // correct deopt count is stored here
 
         fun->registerInvocation();
 
@@ -997,7 +997,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
             // this as an explicit assumption.
 
             fun->clearDisabledAssumptions(given);
-            if (RecompileCondition(table, fun, dispatchResult.second, given)) {
+            if (RecompileCondition(table, fun, disabledFun, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
                     if (call.caller &&
                         call.caller->function()->invocationCount() > 0 &&
