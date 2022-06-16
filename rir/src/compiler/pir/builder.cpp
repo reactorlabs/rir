@@ -123,8 +123,7 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
             e++;
             i++;
         }
-        auto mkenv = new MkEnv(closureEnv, names, args.data());
-        mkenv->missing = miss;
+        auto mkenv = new MkEnv(closureEnv, names, args.data(), miss);
 
         auto rirCode = cnt->owner()->rirFunction()->body();
         mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);

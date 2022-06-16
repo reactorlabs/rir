@@ -1,11 +1,11 @@
 #ifndef BB_TRANSFORM_H
 #define BB_TRANSFORM_H
 
-#include "../pir/bb.h"
-#include "../pir/pir.h"
-#include "../pir/values.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/compiler.h"
+#include "compiler/pir/bb.h"
+#include "compiler/pir/pir.h"
+#include "compiler/pir/values.h"
 #include "compiler/rir2pir/rir2pir.h"
 #include "runtime/TypeFeedback.h"
 
@@ -28,10 +28,10 @@ class BBTransform {
                      Code* target);
     static Value* forInline(BB* inlinee, BB* cont, Value* context,
                             Checkpoint* entryCp);
-    static BB* lowerExpect(Module* m, Code* closure, BB* src,
+    static BB* lowerAssume(Module* m, Code* closure, BB* src,
                            BB::Instrs::iterator position, Assume* assume,
-                           bool condition, BB* deoptBlock,
-                           const std::string& debugMesage);
+                           size_t nDropContexts, bool condition,
+                           BB* deoptBlock_, const std::string& debugMesage);
     static void insertAssume(Instruction* condition, bool assumePositive,
                              Checkpoint* cp, const FeedbackOrigin& origin,
                              DeoptReason::Reason reason, BB* bb,

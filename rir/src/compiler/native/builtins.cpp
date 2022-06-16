@@ -2163,8 +2163,7 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
 }
 
 static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
-    cntxt->returnValue = result;
-    Rf_endcontext(cntxt);
+    endClosureContext(cntxt, result);
 }
 
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }

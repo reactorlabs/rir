@@ -1691,7 +1691,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
     } else {
         BB* merge = insert.createBB();
         insert.enterBB(merge);
-        Phi* phi = insert(new Phi());
+        auto phi = insert(new Phi);
         for (auto r : results) {
             r.first->setNext(merge);
             phi->addInput(r.first, r.second);
