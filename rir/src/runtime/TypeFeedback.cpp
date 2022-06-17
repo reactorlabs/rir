@@ -12,45 +12,14 @@ namespace rir {
 void ObservedCallees::record(Code* caller, SEXP callee) {
     if (taken < CounterOverflow)
         taken++;
-
-    // We collapse closures pointing to the same dispatch table on the same
-    // slot. That should only happen on the first slot (0). If the first slot is
-    // not matched it is pointless to try matching on further slots, since the
-    // body is already not stable (hence not monomorphic).
-    // Further elements are saved only to check for type stability
-
     if (numTargets < MaxTargets) {
-
         int i = 0;
-
-        // fastcase
-        if (numTargets == 1) {
-            auto storedCallee = caller->getExtraPoolEntry(targets[0]);
-            if (storedCallee == callee)
-                return;
-
-            if (TYPEOF(storedCallee) == CLOSXP && TYPEOF(callee) == CLOSXP &&
-                BODY(storedCallee) == BODY(callee)) {
-                if (CLOENV(storedCallee) != CLOENV(callee))
-                    stableEnv = false;
-                return;
-            }
-            stableEnv = false;
-            i++; // skip first element in the for loop below
-        }
-
-        for (; i < numTargets; ++i) {
-            auto storedCallee = caller->getExtraPoolEntry(targets[i]);
-            if (storedCallee == callee)
+        for (; i < numTargets; ++i)
+            if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
-        }
-
-        // not found, will add
         if (i == numTargets) {
-            if (numTargets == 0)
-                stableEnv = true;
-
-            targets[numTargets++] = caller->addExtraPoolEntry(callee);
+            auto idx = caller->addExtraPoolEntry(callee);
+            targets[numTargets++] = idx;
         }
     }
 }
