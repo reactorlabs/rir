@@ -9,9 +9,13 @@
 
 namespace rir {
 
-void ObservedCallees::record(Code* caller, SEXP callee) {
+void ObservedCallees::record(Code* caller, SEXP callee, bool invalidate) {
     if (taken < CounterOverflow)
         taken++;
+
+    if (invalidate)
+        invalid = true;
+
     if (numTargets < MaxTargets) {
         int i = 0;
         for (; i < numTargets; ++i)
@@ -95,7 +99,7 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedCallees* feedback = (ObservedCallees*)(pc() + 1);
-        feedback->record(srcCode(), val);
+        feedback->record(srcCode(), val, true);
         assert(feedback->taken > 0);
         break;
     }

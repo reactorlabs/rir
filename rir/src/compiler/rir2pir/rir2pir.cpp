@@ -462,13 +462,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             f.taken = feedback.taken;
             f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
             if (feedback.numTargets == 1) {
-                f.monomorphic = feedback.getTarget(srcCode, 0);
-                f.type = TYPEOF(f.monomorphic);
+                auto target = feedback.getTarget(srcCode, 0);
+                f.monomorphic = !feedback.invalid ? target : nullptr;
+                f.type = TYPEOF(target);
                 f.stableEnv = true;
             } else if (feedback.numTargets > 1) {
                 SEXP first = nullptr;
                 bool stableType = true;
-                bool stableBody = true;
+                bool stableBody = !feedback.invalid;
                 bool stableEnv = true;
                 for (size_t i = 0; i < feedback.numTargets; ++i) {
                     SEXP b = feedback.getTarget(srcCode, i);
