@@ -497,6 +497,8 @@ stopifnot(pir.check(emptyFor, OneAdd, AnAddIsNotNAOrNaN, warmup=function(f) {f(1
 arg <- 1000
 stopifnot(pir.check(emptyFor, OneAdd, AnAddIsNotNAOrNaN, warmup=function(f) {f(arg)}))
 
+
+
 f <- function() g(1,2)
 g <- function(a,b) h(a,b,1)
 h <- function(a,b,c) {
@@ -504,6 +506,9 @@ h <- function(a,b,c) {
   forceAndCall(3, x, a,b,c)
 }
 stopifnot(pir.check(f, NoExternalCalls, warmup=function(f) {f();f()}))
+
+
+
 
 f <- function() g(1,2)
 g <- function(a,b) h(a,b,1)
