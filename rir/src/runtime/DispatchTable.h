@@ -40,12 +40,12 @@ struct DispatchTable
         return f;
     }
 
-    Function* dispatch(Context a, bool ignorePending = true) const {
-        return dispatchConsideringDisabled(a, ignorePending).first;
+    inline Function* dispatch(Context a, bool ignorePending = true) const {
+        return dispatchConsideringDisabled(a, nullptr, ignorePending);
     }
 
-    inline std::pair<Function*, Function*>
-    dispatchConsideringDisabled(Context a, bool ignorePending = true) const {
+    Function* dispatchConsideringDisabled(Context a, Function** disabledFunc,
+                                          bool ignorePending = true) const {
         if (!a.smaller(userDefinedContext_)) {
 #ifdef DEBUG_DISPATCH
             std::cout << "DISPATCH trying: " << a
@@ -55,6 +55,7 @@ struct DispatchTable
         }
 
         Function* r2 = nullptr;
+        auto outputDisabledFunc = (disabledFunc != nullptr);
 
         for (size_t i = 1; i < size(); ++i) {
 #ifdef DEBUG_DISPATCH
@@ -66,14 +67,20 @@ struct DispatchTable
                 (ignorePending || !e->pendingCompilation())) {
 
                 r2 = e;
-                if (!e->disabled())
-                    return std::pair<Function*, Function*>(e, r2);
+                if (!e->disabled()) {
+                    if (outputDisabledFunc)
+                        *disabledFunc = r2;
+                    return e;
+                }
             }
         }
 
-        if (r2 == nullptr)
-            r2 = baseline();
-        return std::pair<Function*, Function*>(baseline(), r2);
+        auto b = baseline();
+
+        if (outputDisabledFunc)
+            *disabledFunc = (!r2 ? b : r2);
+
+        return b;
     }
 
     void baseline(Function* f) {

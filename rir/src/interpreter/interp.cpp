@@ -980,11 +980,9 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto table = DispatchTable::unpack(body);
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs());
-        auto dispatchResult =
-            table->dispatchConsideringDisabled(call.givenContext);
-        auto fun = dispatchResult.first;
-        auto disabledFun =
-            dispatchResult.second; // correct deopt count is stored here
+        Function* disabledFun;
+        auto fun =
+            table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
         fun->registerInvocation();
 
