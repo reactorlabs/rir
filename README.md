@@ -1,6 +1,6 @@
 # Ř
 
-## Giving it a spin
+## Giving it a spin 
 
 The easiest way to try Ř is using our pre-built docker container
 
