@@ -13,8 +13,6 @@ void ObservedCallees::record(Code* caller, SEXP callee, bool invalidate) {
     if (taken < CounterOverflow)
         taken++;
 
-    if (invalidate)
-        invalid = true;
 
     if (numTargets < MaxTargets) {
         int i = 0;
@@ -25,6 +23,9 @@ void ObservedCallees::record(Code* caller, SEXP callee, bool invalidate) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
         }
+    } else {
+        if (invalidate)
+            invalid = true;
     }
 }
 
