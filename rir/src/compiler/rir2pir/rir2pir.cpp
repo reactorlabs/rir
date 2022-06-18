@@ -463,41 +463,42 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (feedback.numTargets == 1) {
                 f.monomorphic = feedback.getTarget(srcCode, 0);
                 f.type = TYPEOF(f.monomorphic);
-                f.stableEnv = feedback.stableEnv;
-            } else if (feedback.numTargets >= 2) {
-
+                f.stableEnv = true;
+            } else if (feedback.numTargets > 1) {
                 SEXP first = nullptr;
                 bool stableType = true;
-                bool stableBody = false;
-                bool stableEnv = feedback.stableEnv;
-
+                bool stableBody = true;
+                bool stableEnv = true;
                 for (size_t i = 0; i < feedback.numTargets; ++i) {
                     SEXP b = feedback.getTarget(srcCode, i);
-
                     if (!first) {
                         first = b;
                     } else {
                         if (TYPEOF(b) != TYPEOF(first))
-                            stableType = false;
+                            stableType = stableBody = stableEnv = false;
+                        else if (TYPEOF(b) == CLOSXP) {
+                            if (BODY(first) != BODY(b))
+                                stableBody = false;
+                            if (CLOENV(first) != CLOENV(b))
+                                stableEnv = false;
+                        } else {
+                            stableBody = stableEnv = false;
+                        }
                     }
                 }
 
                 if (auto c = cls->isContinuation()) {
-
                     if (auto d = c->continuationContext->asDeoptContext()) {
                         if (d->reason().reason == DeoptReason::CallTarget) {
                             if (d->reason().pc() == pos) {
                                 auto deoptCallTarget = d->callTargetTrigger();
-
                                 for (size_t i = 0; i < feedback.numTargets;
                                      ++i) {
                                     SEXP b = feedback.getTarget(srcCode, i);
-                                    if (b != deoptCallTarget) {
+                                    if (b != deoptCallTarget)
                                         deoptedCallTargets.insert(b);
-                                    }
                                 }
-
-                                if (feedback.numTargets <= 2) {
+                                if (feedback.numTargets == 2) {
                                     first = deoptCallTarget;
                                     stableBody = stableEnv = stableType = true;
                                     if (TYPEOF(deoptCallTarget) == CLOSXP &&

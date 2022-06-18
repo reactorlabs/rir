@@ -14,11 +14,8 @@ struct Code;
 #pragma pack(push)
 #pragma pack(1)
 
-
 struct ObservedCallees {
-
-    static constexpr unsigned StableEnvBits = 1;
-    static constexpr unsigned CounterBits = 30 - StableEnvBits;
+    static constexpr unsigned CounterBits = 30;
     static constexpr unsigned CounterOverflow = (1 << CounterBits) - 1;
     static constexpr unsigned TargetBits = 2;
     static constexpr unsigned MaxTargets = (1 << TargetBits) - 1;
@@ -30,16 +27,12 @@ struct ObservedCallees {
     // Effectively this means we have seen MaxTargets or more.
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
-    uint32_t stableEnv : StableEnvBits;
 
     void record(Code* caller, SEXP callee);
     SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;
-
-    static_assert(MaxTargets > 1, "At least 2 slots are required");
 };
-
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
