@@ -986,7 +986,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
 
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(fun)) {
+        if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of
@@ -995,7 +995,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
             // this as an explicit assumption.
 
             fun->clearDisabledAssumptions(given);
-            if (RecompileCondition(table, fun, disabledFun, given)) {
+            if (RecompileCondition(table, fun, given)) {
                 if (given.includes(pir::Compiler::minimalContext)) {
                     if (call.caller &&
                         call.caller->function()->invocationCount() > 0 &&

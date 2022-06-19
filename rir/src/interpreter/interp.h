@@ -55,14 +55,20 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(Function* fun) {
+inline bool RecompileHeuristic(Function* fun,
+                               Function* funConsideringDisabled = nullptr) {
+
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt))
         return true;
     if (flags.contains(Function::NotOptimizable))
         return false;
 
-    auto abandon = fun->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+    if (!funConsideringDisabled)
+        funConsideringDisabled = fun;
+
+    auto abandon =
+        funConsideringDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
     if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
@@ -82,25 +88,34 @@ inline bool RecompileHeuristic(Function* fun) {
     return false;
 }
 
-inline bool
-ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
-                                     Function* funConsideringDisabled,
-                                     const Context& context) {
+// inline bool
+// ShouldAbandonRecompilationOfBaseline(DispatchTable* table,
+//                                      Function* funConsideringDisabled,
+//                                      const Context& context) {
 
-    if (funConsideringDisabled != table->baseline())
-        return funConsideringDisabled->deoptCount() >=
-               pir::Parameter::DEOPT_ABANDON;
+//     if (funConsideringDisabled != table->baseline())
+//         return funConsideringDisabled->deoptCount() >=
+//                pir::Parameter::DEOPT_ABANDON;
 
-    return false;
-}
+//     return false;
+// }
+
+// inline bool RecompileCondition(DispatchTable* table, Function* fun,
+//                                Function* funDisabled, const Context& context)
+//                                {
+
+//     return (fun->flags.contains(Function::MarkOpt) ||
+//             (!fun->isOptimized() && !ShouldAbandonRecompilationOfBaseline(
+//                                         table, funDisabled, context)) ||
+//             (fun->isOptimized() && context.smaller(fun->context()) &&
+//              context.isImproving(fun) > table->size()) ||
+//             fun->flags.contains(Function::Reoptimize));
+// }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
-                               Function* funDisabled, const Context& context) {
-
-    return (fun->flags.contains(Function::MarkOpt) ||
-            (!fun->isOptimized() && !ShouldAbandonRecompilationOfBaseline(
-                                        table, funDisabled, context)) ||
-            (fun->isOptimized() && context.smaller(fun->context()) &&
+                               const Context& context) {
+    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
+            (context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
             fun->flags.contains(Function::Reoptimize));
 }
