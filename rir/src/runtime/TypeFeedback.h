@@ -29,7 +29,7 @@ struct ObservedCallees {
     uint32_t taken : CounterBits;
     uint32_t invalid : 1;
 
-    void record(Code* caller, SEXP callee, bool invalidate = false);
+    void record(Code* caller, SEXP callee, bool invalidateWhenFull = false);
     SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;

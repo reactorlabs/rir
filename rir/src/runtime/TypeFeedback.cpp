@@ -9,7 +9,8 @@
 
 namespace rir {
 
-void ObservedCallees::record(Code* caller, SEXP callee, bool invalidate) {
+void ObservedCallees::record(Code* caller, SEXP callee,
+                             bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
 
@@ -24,7 +25,7 @@ void ObservedCallees::record(Code* caller, SEXP callee, bool invalidate) {
             targets[numTargets++] = idx;
         }
     } else {
-        if (invalidate)
+        if (invalidateWhenFull)
             invalid = true;
     }
 }
