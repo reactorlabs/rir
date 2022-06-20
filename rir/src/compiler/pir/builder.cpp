@@ -64,7 +64,7 @@ FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
     auto sp = new FrameState(env, srcCode, pos, stack, inPromise);
     add(sp);
     return sp;
-};
+}
 
 Checkpoint* Builder::emitCheckpoint(FrameState* fs) {
     auto cp = new Checkpoint();
@@ -78,7 +78,7 @@ Checkpoint* Builder::emitCheckpoint(FrameState* fs) {
 
     enterBB(cont);
     return cp;
-};
+}
 
 Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
                                     const RirStack& stack, bool inPromise) {
@@ -94,7 +94,7 @@ Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
 
     enterBB(cont);
     return cp;
-};
+}
 
 Builder::Builder(Continuation* cnt, Value* closureEnv)
     : function(cnt), code(cnt), env(nullptr) {
@@ -123,8 +123,7 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
             e++;
             i++;
         }
-        auto mkenv = new MkEnv(closureEnv, names, args.data());
-        mkenv->missing = miss;
+        auto mkenv = new MkEnv(closureEnv, names, args.data(), miss);
 
         auto rirCode = cnt->owner()->rirFunction()->body();
         mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
@@ -191,5 +190,6 @@ Builder::Builder(ClosureVersion* fun, Promise* prom)
     add(ldenv);
     this->env = ldenv;
 }
+
 } // namespace pir
 } // namespace rir

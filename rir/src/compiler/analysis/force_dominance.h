@@ -446,7 +446,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             if (!IsEnvStub::Cast(i) && !MkEnv::Cast(i) &&
                 !PushContext::Cast(i) && !FrameState::Cast(i) &&
                 !Deopt::Cast(i)) {
-                // In case there is an environment access we loose track of
+                // In case there is an environment access we lose track of
                 // which proms are escaped to where.
                 for (auto& e : state.escaped) {
                     if (!state.isForced(e.first) &&

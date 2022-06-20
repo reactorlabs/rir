@@ -1,6 +1,7 @@
 #ifndef PIR_ABSTRACT_VALUE_H
 #define PIR_ABSTRACT_VALUE_H
 
+#include "../pir/env.h"
 #include "../pir/pir.h"
 #include "../pir/singleton_values.h"
 #include "abstract_result.h"
@@ -36,8 +37,9 @@ struct ValOrig {
     }
     bool operator!=(const ValOrig& other) const { return !(*this == other); }
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 namespace std {
 template <>
@@ -48,7 +50,7 @@ struct hash<rir::pir::ValOrig> {
                hash<rir::pir::Instruction*>()(v.origin);
     }
 };
-}
+} // namespace std
 
 namespace rir {
 namespace pir {
@@ -196,7 +198,7 @@ struct AbstractREnvironment {
         tainted = true;
         for (auto& e : entries) {
             e.second.taint();
-        };
+        }
     }
 
     void set(SEXP n, Value* v, Instruction* origin, unsigned recursionLevel) {
@@ -234,17 +236,18 @@ struct AbstractREnvironment {
 
         for (const auto& entry : other.entries) {
             auto name = entry.first;
-            entries.contains(name,
-                             [&](AbstractPirValue& val) {
-                                 res.max(val.merge(entry.second));
-                             },
-                             [&]() {
-                                 AbstractPirValue copy = entry.second;
-                                 res.max(copy.merge(AbstractPirValue(
-                                     UnboundValue::instance(), nullptr, 0)));
-                                 entries.insert(name, copy);
-                                 res.update();
-                             });
+            entries.contains(
+                name,
+                [&](AbstractPirValue& val) {
+                    res.max(val.merge(entry.second));
+                },
+                [&]() {
+                    AbstractPirValue copy = entry.second;
+                    res.max(copy.merge(AbstractPirValue(
+                        UnboundValue::instance(), nullptr, 0)));
+                    entries.insert(name, copy);
+                    res.update();
+                });
         }
         for (auto& entry : entries) {
             auto name = entry.first;
@@ -252,7 +255,7 @@ struct AbstractREnvironment {
                 res.max(entry.second.merge(
                     AbstractPirValue(UnboundValue::instance(), nullptr, 0)));
             }
-        };
+        }
         for (auto& e : other.reachableEnvs) {
             if (!reachableEnvs.count(e)) {
                 reachableEnvs.insert(e);
@@ -345,16 +348,17 @@ class AbstractREnvironmentHierarchy {
         AbstractResult res;
 
         for (const auto& e : other.envs)
-            envs.contains(e.first,
-                          [&](AbstractREnvironment& env) {
-                              res.max(env.merge(e.second));
-                          },
-                          [&]() {
-                              // Env only known on one branch -> merge with
-                              // empty environment.
-                              auto& n = envs.insert(e.first, e.second)->second;
-                              res.max(n.merge(AbstractREnvironment()));
-                          });
+            envs.contains(
+                e.first,
+                [&](AbstractREnvironment& env) {
+                    res.max(env.merge(e.second));
+                },
+                [&]() {
+                    // Env only known on one branch -> merge with
+                    // empty environment.
+                    auto& n = envs.insert(e.first, e.second)->second;
+                    res.max(n.merge(AbstractREnvironment()));
+                });
 
         for (auto& entry : other.aliases) {
             if (!aliases.count(entry.first)) {
@@ -410,7 +414,8 @@ class AbstractREnvironmentHierarchy {
     AbstractResult taintLeaked() {
         AbstractResult res;
         for (auto& e : envs) {
-            if (e.second.leaked()) {
+            // Globalenv is always implicitly leaked
+            if (e.second.leaked() || e.first == Env::global()) {
                 e.second.taint();
                 res.taint();
             }
@@ -452,7 +457,7 @@ class AbstractUnique {
         else
             out << "?";
         out << "\n";
-    };
+    }
 };
 
 template <typename T>
@@ -484,7 +489,8 @@ struct IntersectionSet {
         out << "\n";
     }
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

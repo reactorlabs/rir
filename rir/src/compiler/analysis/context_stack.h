@@ -15,7 +15,7 @@ struct ContextStackState {
             if (auto mk = MkEnv::Cast((*i)->env()))
                 it(mk);
     }
-    size_t context() const { return contextStack.size(); }
+    size_t numContexts() const { return contextStack.size(); }
     AbstractResult merge(const ContextStackState& other) {
         assert(contextStack.size() == other.contextStack.size() &&
                "stack imbalance");
@@ -60,7 +60,7 @@ class ContextStack : public StaticAnalysis<ContextStackState> {
         }
 
         return AbstractResult::None;
-    };
+    }
 };
 
 } // namespace pir

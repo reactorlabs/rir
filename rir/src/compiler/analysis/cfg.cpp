@@ -490,7 +490,7 @@ void DominanceGraph::dominatorTreeNext(
         if (immediatelyDominates(bb, b))
             apply(b);
     });
-};
+}
 
 const DominanceFrontier::BBList& DominanceFrontier::at(BB* bb) const {
     return frontier[bb->id];

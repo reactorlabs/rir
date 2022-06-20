@@ -125,7 +125,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
                 continue;
             }
 
-            // This is the first cp of the inlinee, lets replace it with the
+            // This is the first CP of the inlinee, let's replace it with the
             // outer CP
             if (pos->isCheckpoint()) {
                 auto cp = Checkpoint::Cast(pos->last());
@@ -172,10 +172,10 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice, Value* context,
     return found;
 }
 
-BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
+BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
                              BB::Instrs::iterator position, Assume* assume,
-                             bool condition, BB* deoptBlock_,
-                             const std::string& debugMessage) {
+                             size_t nDropContexts, bool condition,
+                             BB* deoptBlock_, const std::string& debugMessage) {
 
     auto split =
         BBTransform::split(code->nextBBId++, srcBlock, position + 1, code);
@@ -197,6 +197,10 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
                                     Tombstone::framestate(), 0));
     }
 
+    while (nDropContexts--) {
+        deoptBlock->append(new DropContext());
+    }
+
     auto deoptReason = m->deoptReasonValue(assume->reason);
     auto deoptTrigger = assume->valueUnderTest();
     if (!deoptTrigger)
@@ -205,7 +209,7 @@ BB* BBTransform::lowerExpect(Module* m, Code* code, BB* srcBlock,
     auto d = Deopt::Cast(deoptBlock_->last());
     if (d->deoptReason() == DeoptReasonWrapper::unknown()) {
         auto newDr = new Phi(NativeType::deoptReason);
-        auto newDt = new Phi();
+        auto newDt = new Phi;
         deoptBlock_->insert(deoptBlock_->begin(), newDr);
         deoptBlock_->insert(deoptBlock_->begin(), newDt);
         d->setDeoptReason(newDr, newDt);
@@ -265,7 +269,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
         new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
     position = bb->insert(position + 1, assume);
     position++;
-};
+}
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
                                Checkpoint* cp, const FeedbackOrigin& origin,

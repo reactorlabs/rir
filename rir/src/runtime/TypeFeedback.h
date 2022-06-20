@@ -121,7 +121,7 @@ struct ObservedValues {
         } else {
             out << "<?>";
         }
-    };
+    }
 
     inline void record(SEXP e) {
 

@@ -103,6 +103,7 @@
     V(MaterializeEnv)                                                          \
     V(PushContext)                                                             \
     V(PopContext)                                                              \
+    V(DropContext)                                                             \
     V(LdFunctionEnv)                                                           \
     V(Inc)                                                                     \
     V(Is)                                                                      \

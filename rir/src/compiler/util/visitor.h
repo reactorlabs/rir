@@ -54,7 +54,7 @@ struct IDMarker {
     std::vector<bool> done;
 
   public:
-    explicit IDMarker(size_t sz) : done(sz, false){};
+    explicit IDMarker(size_t sz) : done(sz, false) {}
 
     void set(BB* bb) {
         if (bb->id >= done.size()) {
