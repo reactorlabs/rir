@@ -980,10 +980,13 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto table = DispatchTable::unpack(body);
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs());
-        Function* fun = dispatch(call, table);
+        Function* disabledFun;
+        auto fun =
+            table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
+
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(fun)) {
+        if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of

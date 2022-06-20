@@ -113,7 +113,9 @@
     "csignal": "cpp",
     "__functional_base_03": "cpp",
     "__memory": "cpp",
-    "variant": "cpp",
-    "typeindex": "cpp"
+    "__bits": "cpp",
+    "typeindex": "cpp",
+    "variant": "cpp"
+
   }
 }

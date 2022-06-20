@@ -55,14 +55,21 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(Function* fun) {
+inline bool RecompileHeuristic(Function* fun,
+                               Function* funMaybeDisabled = nullptr) {
+
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt))
         return true;
     if (flags.contains(Function::NotOptimizable))
         return false;
 
-    auto abandon = fun->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+    if (!funMaybeDisabled)
+        funMaybeDisabled = fun;
+
+    auto abandon =
+        funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
     if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
