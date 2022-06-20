@@ -64,7 +64,7 @@ static bool oldDeoptChaos = false;
 static size_t timeInPirCompiler = 0;
 static size_t compilerSuccesses = 0;
 static size_t bitcodeTotalLoadTime = 0;
-static int serializerSuccess = 0, serializerFailed = 0, serializerTTCSkip = 0;
+static int serializerSuccess = 0, serializerFailed = 0;
 static int blacklisted = 0, failed = 0;
 
 
@@ -417,6 +417,17 @@ SEXP deserializeFromFile(std::string metaDataPath) {
     SEXP hastSym = sData.getHastData();
     SEXP cData = sData.getContextMap();
 
+    // Number of bitcodes
+    static SEXP maskSym = Rf_install("mask");
+    REnvHandler mainMap(cData);
+    mainMap.iterate([&] (SEXP offsetKey, SEXP offsetEnv) {
+        REnvHandler offsetContextMap(offsetEnv);
+        offsetContextMap.iterate([&] (SEXP contextKey, SEXP cData) {
+            if (contextKey == maskSym) return;
+            SerializerFlags::loadedFunctions++;
+        });
+    });
+
     // Add to hast dependency map
     REnvHandler hastDependencyMap(HAST_DEPENDENCY_MAP);
     hastDependencyMap.set(hastSym, cData);
@@ -722,8 +733,17 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     }
 }
 
-REXPORT SEXP compileStats() {
+REXPORT SEXP startCapturingStats() {
+    SerializerFlags::captureCompileStats = true;
+    return R_NilValue;
+}
 
+REXPORT SEXP stopCapturingStats() {
+    SerializerFlags::captureCompileStats = false;
+    return R_NilValue;
+}
+
+REXPORT SEXP compileStats() {
     REnvHandler hastDepMap(HAST_DEPENDENCY_MAP);
     size_t unused = 0;
     hastDepMap.iterate([&] (SEXP key, SEXP val) {
@@ -736,17 +756,19 @@ REXPORT SEXP compileStats() {
         unlinked++;
     });
     std::cout << "==== RUN STATS ====" << std::endl;
+    std::cout << "Total bitcodes           : " << SerializerFlags::loadedFunctions << std::endl;
     std::cout << "Unused bitcodes          : " << unused << std::endl;
     std::cout << "Unlinked bitcodes        : " << unlinked << std::endl;
-    std::cout << "Bitcode Load Time        : " << bitcodeTotalLoadTime << "ms" << std::endl;
-    std::cout << "Linking time             : " << BitcodeLinkUtil::linkTime << "ms" << std::endl;
+    std::cout << "Metadata Load Time       : " << bitcodeTotalLoadTime << "ms" << std::endl;
+    std::cout << "Bitcode load/link time   : " << BitcodeLinkUtil::linkTime << "ms" << std::endl;
+
+    // These are calculated only for selected regions
     std::cout << "Successful compilations: : " << compilerSuccesses << std::endl;
     std::cout << "Serializer Success       : " << serializerSuccess << std::endl;
-    std::cout << "Serializer TTC skip      : " << serializerTTCSkip << std::endl;
     std::cout << "Serializer Failed        : " << serializerFailed << std::endl;
     std::cout << "Time in PIR Compiler     : " << timeInPirCompiler << "ms" << std::endl;
-    std::cout << "Blacklisted              : " << blacklisted << std::endl;
-    std::cout << "Failed                   : " << failed << std::endl;
+    // std::cout << "Blacklisted              : " << blacklisted << std::endl;
+    // std::cout << "Failed                   : " << failed << std::endl;
     return Rf_ScalarInteger(compilerSuccesses);
 }
 
@@ -1108,15 +1130,15 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     }
 
                     if (!serializerError) {
-                        serializerSuccess++;
                         serializeClosure(hast, data.index, c->name(), cData, serializerError);
                         if (!serializerError) {
+                            if (SerializerFlags::captureCompileStats) serializerSuccess++;
                             DebugMessages::printSerializerMessage("/> Serializer Success", 0);
                         } else {
                             DebugMessages::printSerializerMessage("/> Serializer Error, I/O related failure", 0);
                         }
                     } else {
-                        serializerFailed++;
+                        if (SerializerFlags::captureCompileStats) serializerFailed++;
                         DebugMessages::printSerializerMessage("/> Serializer Error", 0);
                     }
                     backend.cData = nullptr;
@@ -1168,7 +1190,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             apply(BODY(what), c);
         // Eagerly compile the main function
         done->body()->nativeCode();
-        compilerSuccesses++;
+
+        if (SerializerFlags::captureCompileStats) compilerSuccesses++;
     };
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
@@ -1181,7 +1204,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     UNPROTECT(1);
     auto stopCompileTimeCounter = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stopCompileTimeCounter - startCompileTimeCounter);
-    timeInPirCompiler += duration.count();
+    if (SerializerFlags::captureCompileStats) timeInPirCompiler += duration.count();
     return what;
 }
 

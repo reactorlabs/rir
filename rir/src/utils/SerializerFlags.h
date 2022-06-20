@@ -8,6 +8,8 @@ namespace rir {
     public:
         static bool serializerEnabled;
         static bool bitcodeDebuggingData;
+        static bool captureCompileStats;
+        static unsigned loadedFunctions;
     };
 }
 

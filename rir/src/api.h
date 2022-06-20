@@ -44,5 +44,7 @@ REXPORT SEXP loadBitcodes();
 REXPORT SEXP compileStats();
 REXPORT SEXP startDebugMessages();
 REXPORT SEXP stopDebugMessages();
+REXPORT SEXP startCapturingStats();
+REXPORT SEXP stopCapturingStats();
 REXPORT SEXP applyMask(SEXP path);
 #endif // API_H_

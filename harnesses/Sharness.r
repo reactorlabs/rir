@@ -39,11 +39,13 @@ doRuns <- function(name, iterations, benchmarkParameter) {
     if (warmupDiff) {
         startTime =  Sys.time()
         for (i in 1:5) {
+        f.startCapturingStats()
         if (serializing) f.startSerializer()
         if (!innerBenchmarkLoop(name, benchmarkParameter)) {
             stop ("Benchmark failed with incorrect result")
         }
         if (serializing) f.stopSerializer()
+        f.stopCapturingStats()
         }
         endTime <- Sys.time()
         runTime = (as.numeric(endTime) - as.numeric(startTime)) * 1000000
@@ -51,11 +53,13 @@ doRuns <- function(name, iterations, benchmarkParameter) {
     }
     for (i in 1:iterations) {
         startTime <- Sys.time()
+        f.startCapturingStats()
         if (serializing) f.startSerializer()
         if (!innerBenchmarkLoop(name, benchmarkParameter)) {
             stop("Benchmark failed with incorrect result")
         }
         if (serializing) f.stopSerializer()
+        f.stopCapturingStats()
         endTime <- Sys.time()
         runTime <- (as.numeric(endTime) - as.numeric(startTime)) * 1000000
 
@@ -94,3 +98,4 @@ printUsage <- function() {
 }
 
 run(commandArgs(trailingOnly=TRUE))
+f.compileStats()

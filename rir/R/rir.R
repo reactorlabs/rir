@@ -202,6 +202,14 @@ f.applyMask <- function(path) {
     invisible(.Call("applyMask", path))
 }
 
+f.startCapturingStats <- function() {
+    invisible(.Call("startCapturingStats"))
+}
+
+f.stopCapturingStats <- function() {
+    invisible(.Call("stopCapturingStats"))
+}
+
 # breakpoint during evaluation
 # insert a call to `.int3()` in R code and get a breakpoint when it is evaluated
 # note: the actual body of this function is replaced by an "int3_" bytecode
