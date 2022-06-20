@@ -130,7 +130,7 @@ void RuntimeProfiler::initProfiler() {
     sa.sa_flags = 0; // SA_SIGINFO;
 
     // Setup signal handler
-    if (sigaction(SIGUSR1, &sa, NULL) < 0) {
+    if (sigaction(SIGUSR1, &sa, nullptr) < 0) {
         fprintf(stderr, "Error setting up signal handler\n");
         perror("sigaction");
         exit(EXIT_FAILURE);

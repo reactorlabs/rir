@@ -20,12 +20,13 @@ enum class Tag : uint8_t {
     COMPILER_INSTRUCTIONS(V)
 #undef V
 #define V(I) I,
-        COMPILER_VALUES(V)
+    COMPILER_VALUES(V)
 #undef V
 };
 
 const char* tagToStr(Tag t);
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

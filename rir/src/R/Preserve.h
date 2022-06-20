@@ -26,6 +26,7 @@ class Preserve {
   private:
     std::vector<SEXP> p;
 };
-}
+
+} // namespace rir
 
 #endif

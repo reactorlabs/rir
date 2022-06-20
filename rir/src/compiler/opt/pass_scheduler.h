@@ -68,7 +68,8 @@ class PassScheduler {
 
     void nextPhase(const std::string& name, unsigned budget = 0);
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

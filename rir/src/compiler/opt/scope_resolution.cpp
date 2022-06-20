@@ -87,7 +87,7 @@ static bool noReflection(ClosureVersion* cls, Code* code, Value* callEnv,
 
         return !i->effects.includes(Effect::Reflection);
     });
-};
+}
 
 } // namespace
 
@@ -196,7 +196,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         });
                         if (candidateInp == inps)
                             return candidate;
-                    };
+                    }
                 }
             }
             return nullptr;
@@ -207,7 +207,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             for (auto& p : phi.second) {
                 if (p.aValue)
                     p.aValue = getReplacedValue(p.aValue);
-            };
+            }
 
             if (auto p = findExistingPhi(phi.first, phi.second))
                 thePhis[phi.first] = p;
@@ -229,7 +229,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     phi->addInput(p.inputBlock, p.aValue);
                 else
                     phi->addInput(p.inputBlock, thePhis.at(p.otherPhi));
-            };
+            }
 
             pos->insert(pos->begin(), phi);
             // If the insert changed the current bb, we need to keep the
@@ -478,10 +478,9 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     if (mk->context) {
                                         auto diff =
                                             contexts.before(deoptEnv)
-                                                .context() -
-                                            contexts.before(mk).context();
-                                        deoptEnv->context =
-                                            mk->context + diff;
+                                                .numContexts() -
+                                            contexts.before(mk).numContexts();
+                                        deoptEnv->context = mk->context + diff;
                                     } else {
                                         deoptEnv->context = 0;
                                     }

@@ -420,7 +420,7 @@ SEXP newRealFromIntImpl(int i) {
 
 #define OPERATION_FALLBACK(op)                                                 \
     do {                                                                       \
-        static SEXP prim = NULL;                                               \
+        static SEXP prim = nullptr;                                            \
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
@@ -684,7 +684,7 @@ static SEXP binopImpl(SEXP lhs, SEXP rhs, Tag kind) {
             }
         }
 
-        if (res != NULL) {
+        if (res) {
             R_Visible = (Rboolean) true;
         } else {
             OPERATION_FALLBACK(":");
@@ -2163,8 +2163,7 @@ void initClosureContextImpl(ArglistOrder::CallId callId, rir::Code* c, SEXP ast,
 }
 
 static void endClosureContextImpl(RCNTXT* cntxt, SEXP result) {
-    cntxt->returnValue = result;
-    Rf_endcontext(cntxt);
+    endClosureContext(cntxt, result);
 }
 
 int ncolsImpl(SEXP v) { return getMatrixDim(v).col; }

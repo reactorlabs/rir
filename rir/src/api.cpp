@@ -491,7 +491,7 @@ REXPORT SEXP rirSerialize(SEXP data, SEXP fileSexp) {
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "w");
-    if (file == NULL)
+    if (!file)
         Rf_error("couldn't open file at path");
     R_SaveToFile(data, file, 0);
     fclose(file);
@@ -506,7 +506,7 @@ REXPORT SEXP rirDeserialize(SEXP fileSexp) {
     if (TYPEOF(fileSexp) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(fileSexp)), "r");
-    if (file == NULL)
+    if (!file)
         Rf_error("couldn't open file at path");
     SEXP res = R_LoadFromFile(file, 0);
     fclose(file);

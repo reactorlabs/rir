@@ -28,6 +28,7 @@ class InsertCast {
         : code(s), env(e), log(log) {}
     void operator()();
 };
+
 } // namespace pir
 } // namespace rir
 

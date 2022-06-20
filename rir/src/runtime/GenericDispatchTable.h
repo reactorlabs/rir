@@ -112,11 +112,11 @@ struct GenericDispatchTable
     Key& key(size_t i) {
         assert(i <= size() && i < capacity());
         return keys.at(i);
-    };
+    }
     const Key& key(size_t i) const {
         assert(i < size());
         return keys.at(i);
-    };
+    }
 };
 
 } // namespace rir

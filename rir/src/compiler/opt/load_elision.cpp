@@ -14,7 +14,7 @@ namespace pir {
 
 struct ALoad {
   private:
-    ALoad() : origin(NULL), type(), env(NULL), name(NULL) {}
+    ALoad() : origin(nullptr), type(), env(nullptr), name(nullptr) {}
 
   public:
     static ALoad empty() { return ALoad(); }

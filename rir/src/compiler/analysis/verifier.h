@@ -13,6 +13,7 @@ class Verify {
     static void apply(ClosureVersion*, const std::string& msg,
                       bool slow = false);
 };
+
 } // namespace pir
 } // namespace rir
 

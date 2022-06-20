@@ -847,6 +847,7 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
 
     return out;
 }
+
 } // namespace pir
 } // namespace rir
 

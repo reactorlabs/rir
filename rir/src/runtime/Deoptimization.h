@@ -29,6 +29,7 @@ struct DeoptMetadata {
 };
 
 #pragma pack(pop)
+
 } // namespace rir
 
 #endif

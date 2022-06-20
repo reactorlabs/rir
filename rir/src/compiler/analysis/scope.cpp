@@ -13,12 +13,12 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
     if (!instr)
         return notFound();
 
-    // Inter procedural args handling
+    // Inter-procedural args handling
     if (auto ld = LdArg::Cast(instr))
         if (ld->pos < args.size())
             return lookup(args[ld->pos], action, notFound);
 
-    // If the this is an call instruction or force we might have some result
+    // If the this is a call instruction or force we might have some result
     // value from the inter-procedural analysis.
     // Since the "returnValues" and the "cache" are indexed by SSA variables,
     // they are always valid, even if "state" does not correspond with the
@@ -606,7 +606,7 @@ void ScopeAnalysis::tryMaterializeEnv(const ScopeAnalysisState& state,
         if (maybeInitiallyMissing && maybeSkippesStarg)
             return;
         theEnv[name] = {val, isInitiallyMissing};
-    };
+    }
 
     action(theEnv);
 }

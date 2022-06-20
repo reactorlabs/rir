@@ -103,7 +103,7 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
                    "Exit with missing pop context");
         }
         return AbstractResult::None;
-    };
+    }
 
     PushContext* canRemove(PopContext* i) const {
         auto res = before(i);
