@@ -412,7 +412,11 @@ void BC::print(std::ostream& out) const {
         if (prof.numTargets == ObservedCallees::MaxTargets)
             out << "*>, ";
         else
-            out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");
+            out << prof.numTargets << ">, ";
+
+        out << (prof.invalid ? "invalid" : "valid");
+        out << (prof.numTargets ? ", " : " ");
+
         for (int i = 0; i < prof.numTargets; ++i)
             out << callFeedbackExtra().targets[i] << "("
                 << Rf_type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";

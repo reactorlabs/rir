@@ -9,9 +9,12 @@
 
 namespace rir {
 
-void ObservedCallees::record(Code* caller, SEXP callee) {
+void ObservedCallees::record(Code* caller, SEXP callee,
+                             bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
+
+
     if (numTargets < MaxTargets) {
         int i = 0;
         for (; i < numTargets; ++i)
@@ -21,6 +24,9 @@ void ObservedCallees::record(Code* caller, SEXP callee) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
         }
+    } else {
+        if (invalidateWhenFull)
+            invalid = true;
     }
 }
 
@@ -95,7 +101,7 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedCallees* feedback = (ObservedCallees*)(pc() + 1);
-        feedback->record(srcCode(), val);
+        feedback->record(srcCode(), val, true);
         assert(feedback->taken > 0);
         break;
     }
