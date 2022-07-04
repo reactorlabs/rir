@@ -461,15 +461,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             f.taken = feedback.taken;
             f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
             if (feedback.numTargets == 1) {
-                auto target = feedback.getTarget(srcCode, 0);
-                f.monomorphic = !feedback.invalid ? target : nullptr;
-                f.type = TYPEOF(target);
+                assert(!feedback.invalid &&
+                       "feedback can't be invalid if numTargets is 1");
+                f.monomorphic = feedback.getTarget(srcCode, 0);
+                f.type = TYPEOF(f.monomorphic);
                 f.stableEnv = true;
             } else if (feedback.numTargets > 1) {
                 SEXP first = nullptr;
-                bool stableType = true;
+                bool stableType = !feedback.invalid;
                 bool stableBody = !feedback.invalid;
-                bool stableEnv = true;
+                bool stableEnv = !feedback.invalid;
                 for (size_t i = 0; i < feedback.numTargets; ++i) {
                     SEXP b = feedback.getTarget(srcCode, i);
                     if (!first) {
@@ -500,6 +501,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                         deoptedCallTargets.insert(b);
                                 }
                                 if (feedback.numTargets == 2) {
+                                    assert(!feedback.invalid &&
+                                           "Feedback should not be invalid");
                                     first = deoptCallTarget;
                                     stableBody = stableEnv = stableType = true;
                                     if (TYPEOF(deoptCallTarget) == CLOSXP &&
