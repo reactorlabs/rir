@@ -815,8 +815,12 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
         "is.atomic",   "is.recursive", "is.call",
         "is.language", "is.function",  "all",
         "any"};
+
     if (tests.count(name)) {
-        if (!getType(callArg(0).val()).maybeObj())
+        static const std::unordered_set<std::string> maybeDispatch = {"all",
+                                                                      "any"};
+
+        if (!maybeDispatch.count(name) || !getType(callArg(0).val()).maybeObj())
             inferred = PirType(RType::logical).simpleScalar().notNAOrNaN();
     }
 
