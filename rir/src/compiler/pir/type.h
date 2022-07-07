@@ -518,7 +518,7 @@ struct PirType {
 
     inline constexpr PirType orFastVecelt() const {
         assert(isRType());
-        return orAttribsOrObj().orAttribsOrObj().fastVecelt();
+        return orAttribsOrObj().fastVecelt();
     }
 
     inline constexpr PirType fastVecelt() const {
