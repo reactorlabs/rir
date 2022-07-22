@@ -192,6 +192,9 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
+                        // TODO: is this ok wrt missing?? - glm.r with eager
+                        // promise
+
                     } else if (toInline.count(f)) {
                         anyChange = true;
                         Promise* prom = mkarg->prom();
