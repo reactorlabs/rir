@@ -1389,7 +1389,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopNext());
             return true;
         }
     }
@@ -1404,7 +1404,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopBreak());
             return true;
         }
     }
@@ -2026,7 +2026,8 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
 Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
-    ctx.cs() << BC::ret();
+    if (!ctx.cs().isNextPosUnreachable())
+        ctx.cs() << BC::ret();
     return ctx.pop();
 }
 
@@ -2080,7 +2081,8 @@ SEXP Compiler::finalize() {
     scanNames(exp);
 
     compileExpr(ctx, exp);
-    ctx.cs() << BC::ret();
+    if (!ctx.cs().isNextPosUnreachable())
+        ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     function.finalize(body, signature, Context());
 
