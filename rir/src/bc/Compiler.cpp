@@ -1055,26 +1055,31 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             return false;
 
         emitGuardForNamePrimitive(cs, fun);
-        BC::Label trueBranch = cs.mkLabel();
-        BC::Label nextBranch = cs.mkLabel();
+        BC::Label falseBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
-        cs << BC::asbool() << BC::brtrue(trueBranch);
+        cs << BC::asbool() << BC::brfalse(falseBranch);
 
-        if (args.length() < 3) {
-            if (!voidContext) {
-                cs << BC::push(R_NilValue);
-                cs << BC::invisible();
-            }
-        } else {
-            compileExpr(ctx, args[2], voidContext);
-        }
-        cs << BC::br(nextBranch);
-
-        cs << trueBranch;
         compileExpr(ctx, args[1], voidContext);
 
-        cs << nextBranch;
+        if (args.length() == 2 && voidContext) {
+            // No else branch needed
+            cs << falseBranch;
+        } else {
+            BC::Label nextBranch = cs.mkLabel();
+            cs << BC::br(nextBranch) << falseBranch;
+
+            if (args.length() == 3) {
+                // There's an else branch in the code
+                compileExpr(ctx, args[2], voidContext);
+            } else if (!voidContext) {
+                // No else branch in the code but still need the NULL
+                cs << BC::push(R_NilValue) << BC::invisible();
+            }
+
+            cs << nextBranch;
+        }
+
         return true;
     }
 
