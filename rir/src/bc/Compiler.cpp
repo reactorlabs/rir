@@ -1097,6 +1097,21 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         return true;
     }
 
+    if (fun == symbol::Invisible && args.length() < 2) {
+        emitGuardForNamePrimitive(cs, fun);
+
+        if (args.length() == 0) {
+            cs << BC::push(R_NilValue);
+        } else {
+            ctx.setInliningPromise(true);
+            compileExpr(ctx, args[0]);
+            ctx.setInliningPromise(false);
+        }
+
+        cs << BC::invisible();
+        return true;
+    }
+
     if (fun == symbol::Return && args.length() < 2) {
         emitGuardForNamePrimitive(cs, fun);
 
