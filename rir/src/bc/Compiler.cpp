@@ -116,7 +116,6 @@ class CompilerContext {
     };
 
     class PromiseContext : public CodeContext {
-
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : CodeContext(ast, fun, p) {}
@@ -1759,7 +1758,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     }
 
     // Constant arguments do not need to be promise wrapped
-    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS)
+    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS) {
         switch (TYPEOF(CAR(arg))) {
         case LANGSXP:
         case SYMSXP:
@@ -1777,6 +1776,7 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
             cs << BC::push(eager);
             return;
         }
+    }
 
     Code* prom;
     if (arg_type == ArgType::EAGER_PROMISE) {
@@ -1788,12 +1788,14 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
         prom = compilePromiseNoRir(ctx, CAR(arg));
     } else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         // The value we want to wrap in the argument's promise is
-        // already on TOS, no nead to compile the expression.
+        // already on TOS, no need to compile the expression.
         // Wrap it in a promise without rir code.
         prom = compilePromiseNoRir(ctx, CAR(arg));
-    } else { // ArgType::PROMISE
+    } else if (arg_type == ArgType::PROMISE) {
         // Compile the expression as a promise.
         prom = compilePromise(ctx, CAR(arg));
+    } else {
+        assert(false);
     }
 
     size_t idx = cs.addPromise(prom);
