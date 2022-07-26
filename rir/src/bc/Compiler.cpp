@@ -76,6 +76,7 @@ class CompilerContext {
         std::stack<LoopContext> loops;
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
+        bool inliningPromise = false;
 
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), parent(p) {}
@@ -143,6 +144,9 @@ class CompilerContext {
     ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
+
+    bool inliningPromise() const { return code.top()->inliningPromise; }
+    void setInliningPromise(bool val) { code.top()->inliningPromise = val; }
 
     LoopContext& loop() { return code.top()->loops.top(); }
 
@@ -1097,7 +1101,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (ctx.inLoop() || ctx.isInPromise())
+        if (ctx.inLoop() || ctx.isInPromise() || ctx.inliningPromise())
             cs << BC::return_();
         else
             cs << BC::ret();
@@ -1748,7 +1752,9 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     }
 
     if (arg_type == ArgType::RAW_VALUE) {
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         return;
     }
 
@@ -1776,7 +1782,9 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     if (arg_type == ArgType::EAGER_PROMISE) {
         // Compile the expression to evaluate it eagerly, and
         // wrap the return value in a promise without rir code
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         prom = compilePromiseNoRir(ctx, CAR(arg));
     } else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         // The value we want to wrap in the argument's promise is
