@@ -88,10 +88,14 @@ void DeoptReason::record(SEXP val) const {
                 feedback->stateBeforeLastForce < ObservedValues::promise)
                 feedback->stateBeforeLastForce = ObservedValues::promise;
             else if (feedback->stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
+                     ObservedValues::evaluatedPromise) {
+                assert(PRVALUE(val) != R_UnboundValue &&
+                       "not evaluated promise");
                 feedback->stateBeforeLastForce =
                     ObservedValues::evaluatedPromise;
+            }
         }
+
         break;
     }
     case DeoptReason::DeadCall:
