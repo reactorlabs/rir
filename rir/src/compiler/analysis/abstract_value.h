@@ -1,7 +1,6 @@
 #ifndef PIR_ABSTRACT_VALUE_H
 #define PIR_ABSTRACT_VALUE_H
 
-#include "../pir/env.h"
 #include "../pir/pir.h"
 #include "../pir/singleton_values.h"
 #include "abstract_result.h"
@@ -414,8 +413,7 @@ class AbstractREnvironmentHierarchy {
     AbstractResult taintLeaked() {
         AbstractResult res;
         for (auto& e : envs) {
-            // Globalenv is always implicitly leaked
-            if (e.second.leaked() || e.first == Env::global()) {
+            if (e.second.leaked()) {
                 e.second.taint();
                 res.taint();
             }
