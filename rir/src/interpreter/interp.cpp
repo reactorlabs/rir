@@ -987,7 +987,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         fun->registerInvocation();
 
         if (!isDeoptimizing() &&
-            fun->invocationCount_ < pir::Parameter::PIR_WARMUP) {
+            table->baseline()->invocationCount_ < pir::Parameter::PIR_WARMUP) {
             fun = table->baseline();
         } else {
 
