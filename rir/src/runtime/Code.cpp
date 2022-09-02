@@ -64,6 +64,72 @@ rir::Function* Code::function() const {
     return rir::Function::unpack(f);
 }
 
+void Code::clearTypefeedback() {
+
+    Opcode* current = this->code();
+    while (current != this->endCode()) {
+
+        switch (*current) {
+
+        case Opcode::record_type_: {
+            ObservedValues* feedback =
+                (ObservedValues*)((uint8_t*)current + sizeof(Opcode));
+            // feedback->print(std::cerr);
+            memset((void*)feedback, 0, sizeof(ObservedValues));
+            break;
+        }
+
+        case Opcode::record_call_: {
+            ObservedCallees* feedback =
+                (ObservedCallees*)((uint8_t*)current + sizeof(Opcode));
+            // feedback->print(std::cerr);
+            memset((void*)feedback, 0, sizeof(ObservedCallees));
+            break;
+        }
+
+        case Opcode::record_test_: {
+            ObservedTest* feedback =
+                (ObservedTest*)((uint8_t*)current + sizeof(Opcode));
+            // feedback->print(std::cerr);
+            memset((void*)feedback, 0, sizeof(ObservedTest));
+            break;
+        }
+
+        default: {
+        }
+        }
+
+        current = BC::next(current);
+    }
+
+    // ****
+    auto pc = code();
+    std::vector<BC::FunIdx> promises;
+
+    while (pc < endCode()) {
+
+        BC bc = BC::decode(pc, this);
+        bc.addMyPromArgsTo(promises);
+
+        pc = BC::next(pc);
+    }
+
+    for (auto i : promises) {
+        auto prom = this->getPromise(i);
+        prom->clearTypefeedback();
+    }
+    //***
+
+    // auto extraPool = getEntry(0);
+    // auto len = LENGTH(extraPool);
+    // std::cerr <<"\n\n\n\n Len : " << len << "\n\n";
+
+    // for (int i = 0; i < len; i++) {
+    //     auto prom = this->getPromise(i);
+    //     prom->clearTypefeedback();
+    // }
+}
+
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     if (srcLength == 0) {
         assert(allowMissing);

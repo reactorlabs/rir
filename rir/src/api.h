@@ -29,4 +29,6 @@ REXPORT SEXP rirDeserialize(SEXP file);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+REXPORT SEXP rirClearTypeFeedback(SEXP f);
+
 #endif // API_H_

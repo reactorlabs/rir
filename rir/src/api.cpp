@@ -602,6 +602,14 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
+REXPORT SEXP rirClearTypeFeedback(SEXP f) {
+    auto tbl = DispatchTable::unpack(BODY(f));
+
+    tbl->baseline()->body()->clearTypefeedback();
+
+    return R_NilValue;
+}
+
 bool startup() {
     initializeRuntime();
     return true;

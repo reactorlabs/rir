@@ -88,6 +88,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     NativeCode lazyCompile();
 
   public:
+    void clearTypefeedback();
+
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");
         assert(kind == Kind::Native);

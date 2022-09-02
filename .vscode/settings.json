@@ -115,7 +115,8 @@
     "__memory": "cpp",
     "__bits": "cpp",
     "typeindex": "cpp",
-    "variant": "cpp"
-
+    "variant": "cpp",
+    "version": "cpp",
+    "__availability": "cpp"
   }
 }

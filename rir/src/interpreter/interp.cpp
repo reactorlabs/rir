@@ -986,30 +986,44 @@ SEXP doCall(CallContext& call, bool popArgs) {
 
         fun->registerInvocation();
 
-        if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
-            Context given = call.givenContext;
-            // addDynamicAssumptionForOneTarget compares arguments with the
-            // signature of the current dispatch target. There the number of
-            // arguments might be off. But we want to force compiling a new
-            // version exactly for this number of arguments, thus we need to add
-            // this as an explicit assumption.
+        if (!isDeoptimizing() &&
+            fun->invocationCount_ < pir::Parameter::PIR_WARMUP) {
+            fun = table->baseline();
+        } else {
 
-            fun->clearDisabledAssumptions(given);
-            if (RecompileCondition(table, fun, given)) {
-                if (given.includes(pir::Compiler::minimalContext)) {
-                    if (call.caller &&
-                        call.caller->function()->invocationCount() > 0 &&
-                        !call.caller->isCompiled() &&
-                        !call.caller->function()->disabled() &&
-                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize < 20) {
-                        call.triggerOsr = true;
+            if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
+                Context given = call.givenContext;
+                // addDynamicAssumptionForOneTarget compares arguments with the
+                // signature of the current dispatch target. There the number of
+                // arguments might be off. But we want to force compiling a new
+                // version exactly for this number of arguments, thus we need to
+                // add this as an explicit assumption.
+
+                fun->clearDisabledAssumptions(given);
+                if (RecompileCondition(table, fun, given)) {
+                    if (given.includes(pir::Compiler::minimalContext)) {
+                        if (call.caller &&
+                            call.caller->function()->invocationCount() > 0 &&
+                            !call.caller->isCompiled() &&
+                            !call.caller->function()->disabled() &&
+                            call.caller->size() <
+                                pir::Parameter::MAX_INPUT_SIZE &&
+                            fun->body()->codeSize < 20) {
+                            call.triggerOsr = true;
+                        }
+                        DoRecompile(fun, call.ast, call.callee, given);
+
+                        // ***
+                        table->baseline()->body()->clearTypefeedback();
+                        table->baseline()->invocationCount_ = 0;
+                        // **
+
+                        fun = dispatch(call, table);
                     }
-                    DoRecompile(fun, call.ast, call.callee, given);
-                    fun = dispatch(call, table);
                 }
             }
         }
+
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
 

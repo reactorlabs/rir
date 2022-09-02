@@ -186,10 +186,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return deadCallReached_;
     }
 
+    unsigned invocationCount_ = 0;
+
   private:
     unsigned numArgs_;
-
-    unsigned invocationCount_ = 0;
 
     unsigned deoptCount_ = 0;
     unsigned deadCallReached_ = 0;
