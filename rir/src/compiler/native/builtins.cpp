@@ -833,7 +833,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     auto dt = DispatchTable::unpack(BODY(cls));
     dt->baseline()->body()->clearTypefeedback();
-    // dt->baseline()->invocationCount_ = 0;
+    dt->baseline()->invocationCount_ = 0;
     deoptReason->record(deoptTrigger);
 
     assert(m->numFrames >= 1);
