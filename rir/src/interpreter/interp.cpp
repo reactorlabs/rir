@@ -1020,15 +1020,15 @@ SEXP doCall(CallContext& call, bool popArgs) {
                     fun = dispatch(call, table);
                 }
             }
-            }
-            //}
+        }
+        //}
 
-            bool needsEnv = fun->signature().envCreation ==
-                            FunctionSignature::Environment::CallerProvided;
+        bool needsEnv = fun->signature().envCreation ==
+                        FunctionSignature::Environment::CallerProvided;
 
-            if (fun->flags.contains(Function::DepromiseArgs)) {
-                // Force arguments and depromise
-                call.depromiseArgs();
+        if (fun->flags.contains(Function::DepromiseArgs)) {
+            // Force arguments and depromise
+            call.depromiseArgs();
         }
 
         LazyArglistOnStack lazyPromargs(
