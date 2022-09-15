@@ -89,6 +89,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
   public:
     void clearTypefeedback();
+    void clearTypefeedbackSlot(Opcode* slot);
 
     void lazyCodeHandle(const std::string& h) {
         assert(h != "");

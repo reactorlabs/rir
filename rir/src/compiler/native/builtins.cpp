@@ -832,7 +832,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
 
     auto dt = DispatchTable::unpack(BODY(cls));
-    dt->baseline()->body()->clearTypefeedback();
+    if (deoptReason->pc())
+        dt->baseline()->body()->clearTypefeedbackSlot(deoptReason->pc());
+
     dt->baseline()->invocationCount_ = 0;
     deoptReason->record(deoptTrigger);
 
