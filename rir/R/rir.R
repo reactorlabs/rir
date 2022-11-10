@@ -216,3 +216,7 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+rir.viz <- function(address, others = NULL) {
+    .Call("initRirViz", address, others)
+}

@@ -22,6 +22,9 @@
 #include <memory>
 #include <string>
 
+#include "utils/RshViz.h"
+
+
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
@@ -600,6 +603,12 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[0] = n1;
     INTEGER(res)[1] = n2;
     return res;
+}
+
+REXPORT SEXP initRirViz(SEXP addr, SEXP others) {
+    assert(TYPEOF(addr) == STRSXP);
+    RshViz::init(CHAR(STRING_ELT(addr, 0)));
+    return R_NilValue;
 }
 
 bool startup() {

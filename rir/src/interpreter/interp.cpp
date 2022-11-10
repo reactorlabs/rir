@@ -16,12 +16,18 @@
 #include "safe_force.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
+#include "utils/RshViz.h"
 
 #include <assert.h>
 #include <deque>
 #include <libintl.h>
 #include <set>
 #include <unordered_set>
+
+#include <ctime>
+#include <cstdlib>
+#include <chrono>
+#include <thread>
 
 extern "C" {
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
@@ -1914,6 +1920,59 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                  Opcode* initialPC, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
+
+    if (RshViz::getConnectionStatus()) {
+
+        // Send syn request, send current basic status
+        RshViz::doRequestSyn("[current_code_obj, is_native_code, PC]");
+
+        // If the frontend requests for something like code object, stack data, etc send that
+        RshViz::eventCallback = [&] (sio::event & event) {
+
+            std::string requestId = event.get_message().get()->get_string();
+            std::cout << "[app <--> viz DATA-SEND] : " << requestId << std::endl;
+
+            std::string someData;
+
+            if (requestId == "code") {
+                std::stringstream ss;
+                ss << "[\"" << requestId << "\", \"codeObject\"";
+                someData = ss.str();
+            } else if (requestId == "stack"){
+                std::stringstream ss;
+                ss << "[\"" << requestId << "\", \"stackData\"";
+                someData = ss.str();
+            } else {
+                std::stringstream ss;
+                ss << "[\"" << requestId << "\", null";
+                someData = ss.str();
+            }
+
+            // Serve the event and wait until the viz responds
+            RshViz::_eventLock.lock();
+            // If event is code, then send code... etc
+
+            // // ------------- Simulate random delay ----------------------------------------------------------
+            // using namespace std::this_thread; // sleep_for, sleep_until
+            // using namespace std::chrono; // nanoseconds, system_clock, seconds
+
+            // auto randomTime = ((rand() % 10) + 1) * 100;
+            // std::cout << "randomTime serve time: " << randomTime << "ms" << std::endl;
+            // sleep_for(milliseconds(randomTime));
+            // // -----------------------------------------------------------------------------------------------
+
+            RshViz::current_socket->emit(RshViz::APP_TO_VIZ_DATA, someData, [&] (const sio::message::list & l) {
+                RshViz::_eventWait.wait(RshViz::_eventLock);
+            });
+            RshViz::_eventLock.unlock();
+        };
+
+        // Wait for syn to be completed
+        // if done, then continue
+        RshViz::waitForSynDone();
+    }
+
+
 
     checkUserInterrupt();
     auto native = c->nativeCode();

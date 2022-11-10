@@ -130,19 +130,19 @@ add_custom_target(setup-build-dir
 
 if(${MACOS_USE_GCC_9})
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh --macos_gcc9
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur-no-internet.sh --macos_gcc9
         COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh --macos_gcc9
     )
 else()
     add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
+        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur-no-internet.sh
         COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
     )
 endif()
 
 add_custom_target(default-gnur
     DEPENDS dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur-no-internet.sh custom-r
 )
 
 add_custom_target(setup
@@ -170,6 +170,7 @@ add_dependencies(${PROJECT_NAME} setup-build-dir)
 # dummy target so that IDEs show the tools folder in solution explorers
 add_custom_target(tools SOURCES ${BIN})
 
+
 if (DEFINED LLVM_PACKAGE_VERSION)
   llvm_map_components_to_libnames(LLVM_LIBS ${LLVM_COMPONENTS_USED})
   target_link_libraries(${PROJECT_NAME} ${LLVM_LIBS})
@@ -182,3 +183,7 @@ if(APPLE)
     # https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
     target_link_libraries(${PROJECT_NAME} -lintl)
 endif(APPLE)
+
+# socker io libraries
+target_link_libraries(${PROJECT_NAME} sioclient)
+target_link_libraries(${PROJECT_NAME} pthread)

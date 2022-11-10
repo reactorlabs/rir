@@ -1,5 +1,13 @@
 # Ř
 
+## Building viz deps
+```
+git clone --recurse-submodules https://github.com/socketio/socket.io-client-cpp.git sock
+cd sock
+cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON ./
+make install
+```
+
 ## Giving it a spin
 
 The easiest way to try Ř is using our pre-built docker container
@@ -92,7 +100,7 @@ Please make sure that you do not by accident commit an updated submodule referen
 If you need to debug issues in the LLVM backend then it might be useful to build it from source.
 This way, you will have debug symbols available.
 To build LLVM from source, set the `BUILD_LLVM_FROM_SRC` environment variable before `ninja setup`, as shown below.
-However, be aware that compiling LLVM takes a long time and it also increases the linking times. 
+However, be aware that compiling LLVM takes a long time and it also increases the linking times.
 
     export BUILD_LLVM_FROM_SRC=1
     ninja setup
@@ -116,14 +124,14 @@ R with Ř patches is a submodule under external/custom-r. This is how you edit:
     # creating commits.
     git checkout R-3.5.1-rir-patch
     git pull origin R-3.5.1-rir-patch
-    # edit some stuff ... 
+    # edit some stuff ...
     git commit
     git push origin R-3.5.1-rir-patch
     cd ../..
-    # now the updated submodule needs to be commited to rir 
+    # now the updated submodule needs to be commited to rir
     git commit external/custom-r -m "bump R module version"
     git push my-rir-remote my-rir-feature-branch
-    # Now you can create a PR with the R changes & potential Ř 
+    # Now you can create a PR with the R changes & potential Ř
     # changes in my-feature-branch
 
 If you want to test your R changes on ci, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
@@ -156,6 +164,6 @@ If you want to test your R changes on ci, before pushing to the main branch on t
 Fetch updated R:
 
     git submodule update
-    cd external/custom-r && make -j4 
+    cd external/custom-r && make -j4
 
 Or use `ninja setup`

@@ -29,4 +29,7 @@ REXPORT SEXP rirDeserialize(SEXP file);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+// viz api
+REXPORT SEXP initRirViz(SEXP addr, SEXP flags);
+
 #endif // API_H_
