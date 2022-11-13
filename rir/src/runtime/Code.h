@@ -220,6 +220,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     static Code* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
+
+    void disassembleStream(std::stringstream&);
+
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;

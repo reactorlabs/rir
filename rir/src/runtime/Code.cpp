@@ -182,6 +182,116 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
+void Code::disassembleStream(std::stringstream& ss) {
+    switch (kind) {
+    case Kind::Bytecode: {
+        Opcode* pc = code();
+        // size_t label = 0;
+        // std::map<Opcode*, size_t> targets;
+        // targets[pc] = label++;
+        // while (pc < endCode()) {
+        //     if (BC::decodeShallow(pc).isJmp()) {
+        //         auto t = BC::jmpTarget(pc);
+        //         if (!targets.count(t))
+        //             targets[t] = label++;
+        //     }
+        //     pc = BC::next(pc);
+        // }
+        // // sort labels ascending
+        // label = 0;
+        // for (auto& t : targets)
+        //     t.second = label++;
+
+        // auto formatLabel = [&](size_t label) { out << label; };
+
+        pc = code();
+        // std::vector<BC::FunIdx> promises;
+
+        while (pc < endCode()) {
+
+            // if (targets.count(pc)) {
+            //     formatLabel(targets[pc]);
+            //     out << ":\n";
+            // }
+
+            BC bc = BC::decode(pc, this);
+            // bc.addMyPromArgsTo(promises);
+
+            auto currentOffset = ((uintptr_t)pc - (uintptr_t)code());
+
+            ss << "\"" << currentOffset << "\": \"";
+
+            // const size_t OFFSET_WIDTH = 7;
+            // out << std::right << std::setw(OFFSET_WIDTH)
+                // << ((uintptr_t)pc - (uintptr_t)code()) << std::left;
+
+            // unsigned s = getSrcIdxAt(pc, true);
+            // if (s != 0)
+            //     out << "   ; " << Print::dumpSexp(src_pool_at(s)) << "\n"
+            //         << std::setw(OFFSET_WIDTH) << "";
+
+            // Print call ast
+            // switch (bc.bc) {
+            // case Opcode::call_:
+            // case Opcode::named_call_:
+            //     out << "   ; "
+            //         << Print::dumpSexp(
+            //                Pool::get(bc.immediate.callFixedArgs.ast))
+            //         << "\n"
+            //         << std::setw(OFFSET_WIDTH) << "";
+            //     break;
+            // default: {
+            // }
+            // }
+
+            // if (bc.isJmp()) {
+            //     out << "   ";
+            //     bc.printOpcode(out);
+            //     formatLabel(targets[BC::jmpTarget(pc)]);
+            //     out << "\n";
+            // } else {
+                bc.print(ss);
+            // }
+
+            ss << "\"\n";
+
+            pc = BC::next(pc);
+        }
+
+        // for (auto i : promises) {
+        //     auto c = getPromise(i);
+        //     out << "\n[Prom (index " << prefix << i << ")]\n";
+        //     std::stringstream ss;
+        //     ss << prefix << i << ".";
+        //     c->disassemble(out, ss.str());
+        // }
+        break;
+    }
+    case Kind::Native: {
+        if (nativeCode_) {
+            ss << "\"0\" : \"nativeCode\"";
+        } else {
+            ss << "\"0\" : \"nativeCode[pending]\"";
+        }
+        break;
+    }
+    default:
+        assert(false);
+    }
+
+    // if (auto a = arglistOrder()) {
+    //     out << "arglistOrder:\n";
+    //     for (size_t i = 0; i < a->nCalls; i++) {
+    //         out << "  id " << i << ": ";
+    //         for (size_t j = 0; j < a->originalArglistLength(i); j++) {
+    //             out << ArglistOrder::decodeArg(a->index(i, j))
+    //                 << (ArglistOrder::isArgNamed(a->index(i, j)) ? "n " : " ");
+    //         }
+    //         out << "\n";
+    //     }
+    // }
+}
+
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     if (auto map = pirTypeFeedback()) {
         map->forEachSlot(
