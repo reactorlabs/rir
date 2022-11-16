@@ -253,7 +253,7 @@ void Code::disassembleStream(std::stringstream& ss) {
                 bc.print(ss);
             // }
 
-            ss << "\"\n";
+            ss << "\",\n";
 
             pc = BC::next(pc);
         }
