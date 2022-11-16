@@ -66,12 +66,18 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+std::unordered_map<SEXP, unsigned> vtabMap;
+
 static bool checkExternalAttrib(SEXP astNode) {
-    SEXP attributes = ATTRIB(astNode);
-    if (TYPEOF(attributes) == NILSXP) {
-        return false;
+    if (TYPEOF(astNode) == LANGSXP || TYPEOF(astNode) == BCODESXP) {
+        SEXP attributes = ATTRIB(astNode);
+        if (TYPEOF(attributes) == NILSXP) {
+            return false;
+        } else {
+            return DispatchTable::check(CAR(attributes));
+        }
     } else {
-        return DispatchTable::check(CAR(attributes));
+        return vtabMap.count(astNode) > 0;
     }
 }
 
@@ -83,6 +89,7 @@ static void addExternalCodeAttrib(SEXP astNode, SEXP externalCode) {
         SET_ATTRIB(astNode, attributes);
     }
 }
+
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
@@ -98,8 +105,13 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         // For a given AST node, only one dispatch table should exist
         // Fixes an issue where generics can create short lived duplicates
         if (checkExternalAttrib(oldBody)) {
-            BODY(what) = CAR(ATTRIB(oldBody));
-            return what;
+            if (TYPEOF(oldBody) == LANGSXP || TYPEOF(oldBody) == BCODESXP) {
+                BODY(what) = CAR(ATTRIB(oldBody));
+                return what;
+            } else {
+                BODY(what) = Pool::get(vtabMap[oldBody]);
+                return what;
+            }
         }
 
         // Change the input closure inplace
@@ -110,6 +122,8 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
             // See pir_regression2.R
             if (TYPEOF(oldBody) == LANGSXP || TYPEOF(oldBody) == BCODESXP) {
                 addExternalCodeAttrib(oldBody, BODY(what));
+            } else {
+                vtabMap[oldBody] = Pool::insert(BODY(what));
             }
         }
         return what;
