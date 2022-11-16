@@ -37,3 +37,8 @@ benchmarks/
 external/*
 !external/custom-r
 .history
+
+RealThing
+bcPRO
+bitcodes
+build*

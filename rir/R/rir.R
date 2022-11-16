@@ -1,5 +1,9 @@
 # the following functions are intended for the API
 
+r.printASTToSink <- function(what, where) {
+    invisible(.Call("printASTToSink", what, where))
+}
+
 rir.markFunction <- function(what, which,
                              Reopt=NA,
                              ForceInline=NA,
