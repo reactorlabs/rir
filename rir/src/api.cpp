@@ -92,7 +92,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
             return what;
 
         // These are usually just identity functions that return one of the supplied arguments
-        if (TYPEOF(body) == SYMSXP) return what;
+        // if (TYPEOF(body) == SYMSXP) return what;
 
         SEXP oldBody = body;
 
@@ -106,7 +106,10 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         // Change the input closure inplace
         Compiler::compileClosure(what);
 
-        addExternalCodeAttrib(oldBody, BODY(what));
+        // Adding attributes to symbols causes gc issues
+        if (TYPEOF(body) != SYMSXP) {
+            addExternalCodeAttrib(oldBody, BODY(what));
+        }
         return what;
     } else {
         if (TYPEOF(what) == BCODESXP) {
