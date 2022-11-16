@@ -8,6 +8,7 @@
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
 #include <llvm/Support/Errno.h>
+#include "runtime/GenericDispatchTable.h"
 
 #include <iomanip>
 #include <sstream>
@@ -151,6 +152,26 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     UNPROTECT(3);
 
     return code;
+}
+
+
+typedef GenericDispatchTable<rir::pir::ContinuationContext, rir::Function, 5> OSRDispatchTable;
+
+bool Code::containsOSRDispatchTable() {
+    return (osrDispatchTableIdx != -1);
+}
+
+void Code::insertOSRFunction(rir::Function * f, rir::pir::ContinuationContext ctx) {
+    if(!containsOSRDispatchTable()) {
+        osrDispatchTableIdx = addExtraPoolEntry(OSRDispatchTable::create()->container());
+    }
+    OSRDispatchTable * vtab = OSRDispatchTable::unpack(getExtraPoolEntry(osrDispatchTableIdx));
+    vtab->insert(ctx, f);
+}
+
+rir::Function * Code::dispatchOSR(const rir::pir::ContinuationContext & ctx) {
+    OSRDispatchTable * vtab = OSRDispatchTable::unpack(getExtraPoolEntry(osrDispatchTableIdx));
+    return vtab->dispatch(ctx).second;
 }
 
 void Code::serialize(SEXP refTable, R_outpstream_t out) const {

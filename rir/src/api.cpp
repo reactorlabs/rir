@@ -66,15 +66,47 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+static bool checkExternalAttrib(SEXP astNode) {
+    SEXP attributes = ATTRIB(astNode);
+    if (TYPEOF(attributes) == NILSXP) {
+        return false;
+    } else {
+        assert(DispatchTable::check(CAR(attributes)));
+        return true;
+    }
+}
+
+static void addExternalCodeAttrib(SEXP astNode, SEXP externalCode) {
+    Protect protecc;
+    SEXP attributes = ATTRIB(astNode);
+    if (TYPEOF(attributes) == NILSXP) {
+        protecc(attributes = Rf_list1(externalCode));
+        SET_ATTRIB(astNode, attributes);
+    }
+}
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
+        // These are usually just identity functions that return one of the supplied arguments
+        if (TYPEOF(body) == SYMSXP) return what;
+
+        SEXP oldBody = body;
+
+        // For a given AST node, only one dispatch table should exist
+        // Fixes an issue where generics can create short lived duplicates
+        if (checkExternalAttrib(oldBody)) {
+            BODY(what) = CAR(ATTRIB(oldBody));
+            return what;
+        }
+
         // Change the input closure inplace
         Compiler::compileClosure(what);
 
+        addExternalCodeAttrib(oldBody, BODY(what));
         return what;
     } else {
         if (TYPEOF(what) == BCODESXP) {

@@ -87,6 +87,92 @@ struct ContinuationContext {
     virtual const DeoptContext* asDeoptContext() const { return nullptr; }
 
     friend struct std::hash<ContinuationContext>;
+
+    // a smaller b  ==>  b can be called when a is the current context
+    bool smaller(const ContinuationContext& other) const {
+        if (pc() != other.pc() || envSize() != other.envSize() ||
+            stackSize() != other.stackSize() ||
+            leakedEnv_ != other.leakedEnv_)
+            return false;
+
+
+        {
+            auto here = envBegin();
+            auto there = other.envBegin();
+            while (here != envEnd()) {
+                if (std::get<SEXP>(*here) != std::get<SEXP>(*there) ||
+                    std::get<bool>(*here) != std::get<bool>(*there))
+                    return false;
+                if (!std::get<PirType>(*here).isA(std::get<PirType>(*there)))
+                    return false;
+                here++;
+                there++;
+            }
+        }
+        {
+            auto here = stackBegin();
+            auto there = other.stackBegin();
+            while (here != stackEnd()) {
+                if (!here->isA(*there))
+                    return false;
+                here++;
+                there++;
+            }
+        }
+        return true;
+    }
+
+    bool operator<(const ContinuationContext& other) const {
+        if (*this == other)
+            return false;
+        if (smaller(other))
+            return true;
+        if (other.smaller(*this))
+            return false;
+
+        // Linearize to complete order
+        if (pc() < other.pc() || stackSize_ < other.stackSize_ ||
+            envSize_ < other.envSize_ || leakedEnv_ < other.leakedEnv_)
+            return true;
+        if (pc() > other.pc() || stackSize_ > other.stackSize_ ||
+            envSize_ > other.envSize_ || leakedEnv_ > other.leakedEnv_)
+            return false;
+
+        {
+            auto here = envBegin();
+            auto there = other.envBegin();
+            while (here != envEnd()) {
+                auto an = std::get<SEXP>(*here);
+                auto bn = std::get<SEXP>(*there);
+                auto am = std::get<bool>(*here);
+                auto bm = std::get<bool>(*there);
+                auto a = std::get<PirType>(*here).hash();
+                auto b = std::get<PirType>(*there).hash();
+                if (an < bn || am < bm || a < b)
+                    return true;
+                if (bn < an || bm < am || b < a)
+                    return false;
+                here++;
+                there++;
+            }
+        }
+        {
+            auto here = stackBegin();
+            auto there = other.stackBegin();
+            while (here != stackEnd()) {
+                auto a = here->hash();
+                auto b = there->hash();
+                if (a < b)
+                    return true;
+                if (b < a)
+                    return false;
+                here++;
+                there++;
+            }
+        }
+
+        return false;
+    }
 };
 
 } // namespace pir

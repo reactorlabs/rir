@@ -13,6 +13,8 @@
 
 #include <asm/msr.h>
 
+#include "compiler/pir/continuation_context.h"
+
 namespace rir {
 
 typedef SEXP FunctionSEXP;
@@ -146,6 +148,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned srcLength; /// number of sources attached
 
     unsigned extraPoolSize; /// Number of elements in the per code constant pool
+
+    // OSR dispatch table
+    int osrDispatchTableIdx = -1;
+
+    bool containsOSRDispatchTable();
+    void insertOSRFunction(rir::Function *, rir::pir::ContinuationContext);
+    rir::Function * dispatchOSR(const rir::pir::ContinuationContext & ctx);
 
     uint8_t data[]; /// the instructions
 

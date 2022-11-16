@@ -38,6 +38,7 @@ struct Parameter {
     static bool ENABLE_PIR2RIR;
 
     static bool ENABLE_OSR;
+    static bool ENABLE_OSR_REUSE;
 };
 
 } // namespace pir

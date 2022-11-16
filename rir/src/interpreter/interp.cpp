@@ -1879,6 +1879,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
     return result;
 }
 
+bool pir::Parameter::ENABLE_OSR_REUSE =
+    !getenv("ENABLE_OSR_REUSE") || *getenv("ENABLE_OSR_REUSE") != '0';
+
 bool pir::Parameter::ENABLE_OSR =
     !getenv("PIR_OSR") || *getenv("PIR_OSR") != '0';
 static size_t osrLimit =
@@ -1898,6 +1901,8 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
             if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
                 PROTECT(fun->container());
+                if (pir::Parameter::ENABLE_OSR_REUSE)
+                    c->insertOSRFunction(fun, ctx);
                 dt->baseline()->flags.set(Function::Flag::MarkOpt);
                 auto code = fun->body();
                 auto nc = code->nativeCode();
@@ -2353,6 +2358,22 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
+            if (c->containsOSRDispatchTable()) {
+                long size = R_BCNodeStackTop - basePtr;
+                auto l = Rf_length(FRAME(env));
+                if (size <= (long)pir::ContinuationContext::MAX_STACK &&
+                    l <= (long)pir::ContinuationContext::MAX_ENV) {
+                        pir::ContinuationContext ctx(pc, env, true, basePtr, size);
+                        if (rir::Function * fun = c->dispatchOSR(ctx)) {
+                            // std::cout << "reusing OSR" << std::endl;
+                            auto code = fun->body();
+                            auto nc = code->nativeCode();
+                            auto res = nc(code, basePtr, env, callCtxt->callee);
+                            ostack_popn(size);
+                            return res;
+                        }
+                    }
+            }
             if (call.triggerOsr) {
                 if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
@@ -2387,6 +2408,22 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
+            if (c->containsOSRDispatchTable()) {
+                long size = R_BCNodeStackTop - basePtr;
+                auto l = Rf_length(FRAME(env));
+                if (size <= (long)pir::ContinuationContext::MAX_STACK &&
+                    l <= (long)pir::ContinuationContext::MAX_ENV) {
+                        pir::ContinuationContext ctx(pc, env, true, basePtr, size);
+                        if (rir::Function * fun = c->dispatchOSR(ctx)) {
+                            // std::cout << "reusing OSR" << std::endl;
+                            auto code = fun->body();
+                            auto nc = code->nativeCode();
+                            auto res = nc(code, basePtr, env, callCtxt->callee);
+                            ostack_popn(size);
+                            return res;
+                        }
+                    }
+            }
             if (call.triggerOsr) {
                 if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
@@ -2440,6 +2477,22 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - oldn == ostack_length());
             SLOWASSERT(ttt == R_PPStackTop);
 
+            if (c->containsOSRDispatchTable()) {
+                long size = R_BCNodeStackTop - basePtr;
+                auto l = Rf_length(FRAME(env));
+                if (size <= (long)pir::ContinuationContext::MAX_STACK &&
+                    l <= (long)pir::ContinuationContext::MAX_ENV) {
+                        pir::ContinuationContext ctx(pc, env, true, basePtr, size);
+                        if (rir::Function * fun = c->dispatchOSR(ctx)) {
+                            // std::cout << "reusing OSR" << std::endl;
+                            auto code = fun->body();
+                            auto nc = code->nativeCode();
+                            auto res = nc(code, basePtr, env, callCtxt->callee);
+                            ostack_popn(size);
+                            return res;
+                        }
+                    }
+            }
             if (call.triggerOsr) {
                 if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
@@ -3195,6 +3248,23 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
+
+            if (c->containsOSRDispatchTable()) {
+                long size = R_BCNodeStackTop - basePtr;
+                auto l = Rf_length(FRAME(env));
+                if (size <= (long)pir::ContinuationContext::MAX_STACK &&
+                    l <= (long)pir::ContinuationContext::MAX_ENV) {
+                        pir::ContinuationContext ctx(pc, env, true, basePtr, size);
+                        if (rir::Function * fun = c->dispatchOSR(ctx)) {
+                            // std::cout << "reusing OSR" << std::endl;
+                            auto code = fun->body();
+                            auto nc = code->nativeCode();
+                            auto res = nc(code, basePtr, env, callCtxt->callee);
+                            ostack_popn(size);
+                            return res;
+                        }
+                    }
+            }
             // TODO: why does osr-in deserialized code break?
             if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
                 static size_t loopCounter = 0;
