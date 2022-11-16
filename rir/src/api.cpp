@@ -71,8 +71,7 @@ static bool checkExternalAttrib(SEXP astNode) {
     if (TYPEOF(attributes) == NILSXP) {
         return false;
     } else {
-        assert(DispatchTable::check(CAR(attributes)));
-        return true;
+        return DispatchTable::check(CAR(attributes));
     }
 }
 
@@ -106,9 +105,12 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         // Change the input closure inplace
         Compiler::compileClosure(what);
 
-        // Adding attributes to symbols causes gc issues
-        if (TYPEOF(body) != SYMSXP) {
-            addExternalCodeAttrib(oldBody, BODY(what));
+        if (pir::Parameter::PREVENT_DUPLICATE_VTABS) {
+            // Adding attributes to things like symbols might cause problems
+            // See pir_regression2.R
+            if (TYPEOF(oldBody) == LANGSXP || TYPEOF(oldBody) == BCODESXP) {
+                addExternalCodeAttrib(oldBody, BODY(what));
+            }
         }
         return what;
     } else {

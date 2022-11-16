@@ -1882,6 +1882,9 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
 bool pir::Parameter::ENABLE_OSR_REUSE =
     !getenv("ENABLE_OSR_REUSE") || *getenv("ENABLE_OSR_REUSE") != '0';
 
+bool pir::Parameter::PREVENT_DUPLICATE_VTABS =
+    !getenv("PREVENT_DUPLICATE_VTABS") || *getenv("PREVENT_DUPLICATE_VTABS") != '0';
+
 bool pir::Parameter::ENABLE_OSR =
     !getenv("PIR_OSR") || *getenv("PIR_OSR") != '0';
 static size_t osrLimit =

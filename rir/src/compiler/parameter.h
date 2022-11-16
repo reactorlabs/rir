@@ -39,6 +39,8 @@ struct Parameter {
 
     static bool ENABLE_OSR;
     static bool ENABLE_OSR_REUSE;
+
+    static bool PREVENT_DUPLICATE_VTABS;
 };
 
 } // namespace pir
