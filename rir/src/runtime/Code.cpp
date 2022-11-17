@@ -11,6 +11,8 @@
 
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
+#include <cctype>
 
 namespace rir {
 
@@ -250,12 +252,18 @@ void Code::disassembleStream(std::stringstream& ss) {
             //     formatLabel(targets[BC::jmpTarget(pc)]);
             //     out << "\n";
             // } else {
-                bc.print(ss);
+            std::stringstream insn;
+                bc.print(insn);
             // }
+            std::string bcData = insn.str();
 
-            ss << "\",\n";
+            bcData.erase(std::remove_if(bcData.begin(), bcData.end(), [](unsigned char c){ return std::isspace(c); }), bcData.end());
 
+            ss << bcData << "\"";
             pc = BC::next(pc);
+            if (pc < endCode()) {
+                ss << ",";
+            }
         }
 
         // for (auto i : promises) {

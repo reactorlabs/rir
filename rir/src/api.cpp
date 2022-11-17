@@ -69,34 +69,6 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
-static void setSinkToFile(SEXP where) {
-    SEXP call, s;
-    Protect protecc;
-    // Set sink to temp file
-    static SEXP sinkFunSymbol = Rf_install("sink");
-    static SEXP sinkFunClos = Rf_findFun(sinkFunSymbol, R_GlobalEnv);
-    assert(TYPEOF(sinkFunClos) == CLOSXP);
-    call = protecc(Rf_allocVector(LANGSXP, 2)); // 2 = # of args + 1
-    SETCAR(call, sinkFunClos);
-
-    s = CDR(call);
-    SETCAR(s, protecc(where));
-
-    Rf_eval(call, R_GlobalEnv);
-}
-
-static void restoreSink() {
-    SEXP call;
-    Protect protecc;
-    // Set sink to temp file
-    static SEXP sinkFunSymbol = Rf_install("closeAllConnections");
-    static SEXP sinkFunClos = Rf_findFun(sinkFunSymbol, R_GlobalEnv);
-    assert(TYPEOF(sinkFunClos) == CLOSXP);
-    call = protecc(Rf_allocVector(LANGSXP, 1)); // 1 = # of args + 1
-    SETCAR(call, sinkFunClos);
-
-    Rf_eval(call, R_GlobalEnv);
-}
 //
 //
 // printASTToSink(what, PROTECT(Rf_mkString("tmp.txt")))
@@ -105,9 +77,13 @@ static void restoreSink() {
 //
 
 REXPORT SEXP printASTToSink(SEXP what, SEXP where) {
-    setSinkToFile(where);
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wunused-result"
+    assert(TYPEOF(where) == STRSXP);
+    freopen(CHAR(STRING_ELT(where, 0)), "w", stdout);
     Rf_PrintValue(what);
-    restoreSink();
+    freopen("/dev/tty", "w", stdout);
+    #pragma GCC diagnostic pop
     return R_NilValue;
 }
 
