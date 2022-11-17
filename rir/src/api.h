@@ -31,5 +31,6 @@ REXPORT SEXP rirCreateSimpleIntContext();
 
 // viz api
 REXPORT SEXP initRirViz(SEXP addr, SEXP flags);
+REXPORT SEXP printASTToSink(SEXP what, SEXP where);
 
 #endif // API_H_

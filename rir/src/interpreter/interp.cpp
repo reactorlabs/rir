@@ -17,6 +17,7 @@
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include "utils/RshViz.h"
+#include "api.h"
 
 #include <assert.h>
 #include <deque>
@@ -1940,6 +1941,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             std::stringstream synPacket;
             synPacket << "[";
             if (!c->nativeCode()) {
+                SEXP currAst = src_pool_at(c->src);
+                SEXP where = PROTECT(Rf_mkString("/home/aayush/rir_viz/build/testOut.txt"));
+                printASTToSink(currAst,where);
+                UNPROTECT(1);
                 synPacket << c << ",";
                 synPacket << "BC" << ",";
                 auto currentOffset = ((uintptr_t)pc - (uintptr_t)c->code());
