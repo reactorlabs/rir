@@ -1943,16 +1943,14 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         if (RshViz::getConnectionStatus()) {
             std::stringstream synPacket;
             synPacket << "[";
+            synPacket << "\"" << c << "\",";
             if (!c->nativeCode()) {
-                synPacket << c << ",";
-                synPacket << "BC" << ",";
+                synPacket << "\"BC\"" << ",";
                 auto currentOffset = ((uintptr_t)pc - (uintptr_t)c->code());
-
-                synPacket << currentOffset << "";
+                synPacket << "\"" << currentOffset << "\"";
             } else {
-                synPacket << c << ",";
-                synPacket << "NATIVE" << ",";
-                synPacket << "0" << "";
+                synPacket << "\"NATIVE\"" << ",";
+                synPacket << "null";
             }
             synPacket << "]";
 
@@ -1966,20 +1964,20 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 std::cout << "[app <--> viz DATA-SEND] : " << requestId << std::endl;
 
                 std::string someData;
+                std::stringstream ss;
 
+                ss << "{\"" << requestId << "\": ";
                 if (requestId == "code") {
-                    std::stringstream ss;
+
                     ss << "{\n";
                     c->disassembleStream(ss);
                     ss << "}\n";
 
                     someData = ss.str();
                 } else if (requestId == "stack"){
-                    std::stringstream ss;
                     ss << "[\"" << requestId << "\", \"stackData\"";
                     someData = ss.str();
                 } else if (requestId == "sourcecode") {
-                    std::stringstream ss;
                     std::string line;
                     ss << "[";
                     SEXP currAst = src_pool_at(c->src);
@@ -1998,10 +1996,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                     ss << "\"\"]";
                     someData = ss.str();
                 } else {
-                    std::stringstream ss;
                     ss << "[\"" << requestId << "\", null]";
-                    someData = ss.str();
                 }
+                ss << "}";
+                someData = ss.str();
 
                 // Serve the event and wait until the viz responds
                 RshViz::_eventLock.lock();
@@ -2028,7 +2026,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
     };
 
-    pauseForViz();
+    if (c->nativeCode()) {
+        pauseForViz();
+    }
+
 
 
     checkUserInterrupt();
