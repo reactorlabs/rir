@@ -44,8 +44,8 @@ static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
 
-// #define PRINT_INTERP
-// #define PRINT_STACK_SIZE 10
+#define PRINT_INTERP
+#define PRINT_STACK_SIZE 10
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c) {
 #ifdef PRINT_STACK_SIZE
@@ -57,40 +57,43 @@ static void printInterp(Opcode* pc, Code* c) {
 
     // Print stack
     printingStackSize = true;
-    std::cout << "#; Stack:\n";
+    std::ofstream File;
+    File.open("/home/aayush/stack.txt");
+    File << "#; Stack:\n";
     for (int i = 0;; i++) {
         auto typ = ostack_cell_at(i)->tag;
         SEXP sexp = ostack_at(i);
         if (sexp == nullptr || ostack_length() - i == 0)
             break;
         else if (i == PRINT_STACK_SIZE) {
-            std::cout << "    ...\n";
+            File << "    ...\n";
             break;
         }
         if (typ == 0) {
-            std::cout << "    >>> " << Print::dumpSexp(sexp) << " <<<\n";
+            File << "    >>> " << Print::dumpSexp(sexp) << " <<<\n";
         } else if (typ == INTSXP || typ == LGLSXP) {
-            std::cout << "    int/lgl >>> " << ostack_cell_at(i)->u.ival
+            File << "    int/lgl >>> " << ostack_cell_at(i)->u.ival
                       << " <<<\n";
         } else if (typ == REALSXP) {
-            std::cout << "    real >>> " << ostack_cell_at(i)->u.dval
+            File << "    real >>> " << ostack_cell_at(i)->u.dval
                       << " <<<\n";
         } else if (typ == INTSEQSXP) {
-            std::cout << "    intseq >>> " << Print::dumpSexp(sexp) << " <<<\n";
+            File << "    intseq >>> " << Print::dumpSexp(sexp) << " <<<\n";
         }
     }
+    File.close();
     printingStackSize = false;
 #endif
     // Print source
-    unsigned sidx = c->getSrcIdxAt(pc, true);
-    if (sidx != 0) {
-        SEXP src = src_pool_at(sidx);
-        std::cout << "#; " << Print::dumpSexp(src) << "\n";
-    }
-    // Print bc
-    BC bc = BC::decode(pc, c);
-    std::cout << "#";
-    bc.print(std::cout);
+    // unsigned sidx = c->getSrcIdxAt(pc, true);
+    // if (sidx != 0) {
+    //     SEXP src = src_pool_at(sidx);
+    //     std::cout << "#; " << Print::dumpSexp(src) << "\n";
+    // }
+    // // Print bc
+    // BC bc = BC::decode(pc, c);
+    // std::cout << "#";
+    // bc.print(std::cout);
 }
 
 static void printLastop() { std::cout << "> lastop\n"; }
@@ -117,7 +120,7 @@ static SEXP getSrcForCall(Code* c, Opcode* pc) {
 #ifdef PRINT_INTERP
 #define NEXT()                                                                 \
     (__extension__({                                                           \
-        printInterp(pc, c);                                                    \
+        printInterp(pc, c);pauseForViz();                                                    \
         goto* opAddr[static_cast<uint8_t>(advanceOpcode())];                   \
     }))
 #define LASTOP                                                                 \
@@ -1975,17 +1978,29 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
                     someData = ss.str();
                 } else if (requestId == "stack"){
-                    ss << "[\"" << requestId << "\", \"stackData\"";
+                    // ss << "[\"" << requestId << "\", \"stackData\"";
+                    // someData = ss.str();
+                    std::string line;
+                    ss << "[";
+                    std::ifstream stkFile("/home/aayush/stack.txt");
+                    if (stkFile.is_open()) {
+                        while (std::getline(stkFile,line)) {
+                            ss << "\"" << line << "\"," << '\n';
+                        }
+                        stkFile.close();
+                    }
+
+                    ss << "\"\"]";
                     someData = ss.str();
                 } else if (requestId == "sourcecode") {
                     std::string line;
                     ss << "[";
                     SEXP currAst = src_pool_at(c->src);
 
-                    SEXP where = PROTECT(Rf_mkString("/tmp/viz_tmp.txt"));
+                    SEXP where = PROTECT(Rf_mkString("/home/aayush/viz_tmp.txt"));
                     printASTToSink(currAst,where);
                     UNPROTECT(1);
-                    std::ifstream tmpFile("/tmp/viz_tmp.txt");
+                    std::ifstream tmpFile("/home/aayush/viz_tmp.txt");
                     if (tmpFile.is_open()) {
                         while (std::getline(tmpFile,line)) {
                             ss << "\"" << line << "\"," << '\n';
