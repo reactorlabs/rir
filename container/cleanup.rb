@@ -18,14 +18,14 @@ REPOS = {
       # oopsla 20
       'bc1933dde2673bf830f4505bb2483cd1fdd282ab',
     ]},
-  '12325205': {# rir experiments
-    repos: [
-      562769,  # scope_resolution
-      576865,  # envs_created
-    ],
-    keep: [
-      'dba88e9bc417325a29c91acb088df7fe8109ca39-e427e03931114e0715513bfafcd59a267812dcb1',
-    ]},
+  # '12325205': {# rir experiments
+  #   repos: [
+  #     562769,  # scope_resolution
+  #     576865,  # envs_created
+  #   ],
+  #   keep: [
+  #     'dba88e9bc417325a29c91acb088df7fe8109ca39-e427e03931114e0715513bfafcd59a267812dcb1',
+  #   ]},
 }
 
 TOKEN = ARGF.read.chomp
