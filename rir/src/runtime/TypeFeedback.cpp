@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "runtime/Code.h"
 #include "runtime/Function.h"
+#include "utils/measuring.h"
 
 #include <cassert>
 
@@ -69,16 +70,29 @@ void DeoptReason::record(SEXP val) const {
     srcCode()->function()->registerDeoptReason(reason);
 
     switch (reason) {
-    case DeoptReason::Unknown:
+    case DeoptReason::Unknown: {
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: Unknown" << std::endl;
+        #endif
         break;
+    }
     case DeoptReason::DeadBranchReached: {
         assert(*pc() == Opcode::record_test_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: DeadBranchReached" << std::endl;
+        #endif
         ObservedTest* feedback = (ObservedTest*)(pc() + 1);
         feedback->seen = ObservedTest::Both;
         break;
     }
     case DeoptReason::Typecheck: {
         assert(*pc() == Opcode::record_type_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: Typecheck" << std::endl;
+        #endif
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedValues* feedback = (ObservedValues*)(pc() + 1);
@@ -94,10 +108,19 @@ void DeoptReason::record(SEXP val) const {
         }
         break;
     }
-    case DeoptReason::DeadCall:
+    case DeoptReason::DeadCall: {
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: DeadCall" << std::endl;
+        #endif
+    }
     case DeoptReason::ForceAndCall:
     case DeoptReason::CallTarget: {
         assert(*pc() == Opcode::record_call_);
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: CallTarget" << std::endl;
+        #endif
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedCallees* feedback = (ObservedCallees*)(pc() + 1);
@@ -106,6 +129,10 @@ void DeoptReason::record(SEXP val) const {
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
+        #if LOGG > 2
+        std::ofstream & logg =  Measuring::getLogStream();
+        logg << "Deopt: EnvStubMaterialized" << std::endl;
+        #endif
         break;
     }
     }

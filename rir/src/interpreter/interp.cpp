@@ -867,6 +867,52 @@ class SlowcaseCounter {
 };
 #endif
 
+#if LOGG > 0
+class Timer {
+private:
+    std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::_V2::steady_clock::duration> tick, tock;
+    std::chrono::duration<double, std::milli> runtime;
+    size_t fun_id;
+public:
+    void start(const CallContext& call, int hast) {
+		tick = std::chrono::steady_clock::now();
+		std::ofstream & logg = Measuring::getLogStream();
+		SEXP const lhs = CAR(call.ast);
+		static const SEXP double_colons = Rf_install("::");
+		static const SEXP triple_colons = Rf_install(":::");
+		fun_id = reinterpret_cast<size_t>(BODY(call.callee));
+        logg << "=,\"" << fun_id << "\"," << hast << ",";
+        // Function Header
+        if (TYPEOF(lhs) == SYMSXP) {
+			// case 1: function call of the form f(x,y,z)
+			logg << "\"" << CHAR(PRINTNAME(lhs)) << "\"";
+		} else if (TYPEOF(lhs) == LANGSXP && ((CAR(lhs) == double_colons) || (CAR(lhs) == triple_colons))) {
+			// case 2: function call of the form pkg::f(x,y,z) or pkg:::f(x,y,z)
+			SEXP const fun1 = CAR(lhs);
+			SEXP const pkg = CADR(lhs);
+			SEXP const fun2 = CADDR(lhs);
+			assert(TYPEOF(pkg) == SYMSXP && TYPEOF(fun2) == SYMSXP);
+			logg << "\"" << CHAR(PRINTNAME(pkg)) << CHAR(PRINTNAME(fun1)) << CHAR(PRINTNAME(fun2)) << "\"";
+		} else {
+			logg << "\"AN_" << fun_id << "\"";
+        }
+        logg << "\n";
+    }
+
+    void end(const Context & context) {
+		std::ofstream & logg = Measuring::getLogStream();
+        tock = std::chrono::steady_clock::now();
+        runtime = tock - tick;
+		logg << "!," << "\"" << context << "\"," << context.toI() << "," << runtime.count() << "," << fun_id << "\n";
+    }
+private:
+    void* operator new(size_t);
+    void* operator new[](size_t);
+    void operator delete(void*);
+    void operator delete[](void*);
+};
+#endif
+
 SEXP doCall(CallContext& call, bool popArgs) {
     assert(call.callee);
 
@@ -991,6 +1037,11 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(DispatchTable::check(body));
 
         auto table = DispatchTable::unpack(body);
+
+        #if LOGG > 0
+        Timer t;
+        t.start(call,table->hast);
+        #endif
 
         inferCurrentContext(call, table->baseline()->signature().formalNargs());
         Function* disabledFun;
@@ -1141,7 +1192,14 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(call.passedArgs - call.suppliedArgs);
+
+        #if LOGG > 0
+        t.end(fun->context());
+        #endif
+
         fun->registerEndInvocation();
+
+
         return result;
     }
     default:

@@ -5,6 +5,7 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 #include "utils/random.h"
+#define BLACKLIST_SIZE 15
 
 namespace rir {
 
@@ -235,6 +236,24 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
+    int hast;
+
+    void blacklistContext(unsigned long con) {
+        if (blacklistIndex_ < BLACKLIST_SIZE) {
+            contextBlacklist_[blacklistIndex_++] = con;
+        }
+    }
+
+    bool isBlacklisted(const Context & c) {
+        unsigned long con = c.toI();
+        for(int i = 0; i < blacklistIndex_; i++){
+            if(contextBlacklist_[i] == con) {
+                return true;
+            }
+        }
+        return false;
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
@@ -242,10 +261,14 @@ struct DispatchTable
               // GC area starts at the end of the DispatchTable
               sizeof(DispatchTable),
               // GC area is just the pointers in the entry array
-              cap) {}
+              cap), hast(0) {
+                  for(int i = 0; i< BLACKLIST_SIZE; i++) { contextBlacklist_[i]=0; }
+              }
 
     size_t size_ = 0;
     Context userDefinedContext_;
+    int blacklistIndex_ = 0;
+    unsigned long contextBlacklist_[BLACKLIST_SIZE];
 };
 
 #pragma pack(pop)

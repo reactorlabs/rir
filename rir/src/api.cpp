@@ -324,8 +324,20 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::Log logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
+    #if LOGG > 1
+    std::ofstream & logg =  Measuring::getLogStream();
+    auto cmp_start = std::chrono::steady_clock::now();
+    #endif
     auto compile = [&](pir::ClosureVersion* c) {
+        #if LOGG > 1
+        auto cmp_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> cmp_time = cmp_end - cmp_start;
+        logg << "@,true," << cmp_time.count() <<",";
+        #endif
         logger.flushAll();
+        #if LOGG > 1
+        auto opt_start = std::chrono::steady_clock::now();
+        #endif
         cmp.optimizeModule();
 
         if (dryRun)
@@ -371,10 +383,22 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         }
         // Eagerly compile the main function
         done->body()->nativeCode();
+        #if LOGG > 1
+        auto opt_end = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> opt_time = opt_end - opt_start;
+        int bb_count = 0;
+        rir::pir::BreadthFirstVisitor::run(c->entry, [&](pir::BB* bb) {bb_count++;});
+        logg << opt_time.count() <<"," << bb_count <<"," << c->promises().size() << "," << reinterpret_cast<size_t>(BODY(what)) <<"\n";
+        #endif
     };
 
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
+                            #if LOGG > 1
+                            auto cmp_end = std::chrono::steady_clock::now();
+                            std::chrono::duration<double, std::milli> fail_time = cmp_end - cmp_start;
+                            logg << "@,false," << fail_time.count() <<"\n";
+                            #endif
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
                        },
