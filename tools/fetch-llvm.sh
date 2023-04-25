@@ -35,6 +35,9 @@ if [ ! -d $LLVM_DIR ]; then
         if [ "$V" == "20.10" ]; then
           V="20.04"
         fi
+        if [ "$V" == "22.04" ]; then
+          V="20.04"
+        fi
         if [ "$BUILD_LLVM_FROM_SRC" == "1" ]; then
           V=""
         fi
