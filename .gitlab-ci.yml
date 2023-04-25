@@ -476,9 +476,6 @@ update_containers:
       alias: docker
   before_script:
     - docker info
-  only:
-    refs:
-      - schedules
   script:
     - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
     - docker pull docker.io/library/docker:19.03.0-dind
