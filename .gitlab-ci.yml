@@ -472,7 +472,7 @@ update_containers:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_TLS_CERTDIR: ""
   services:
-    - name: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:dind
+    - name: docker:dind
       alias: docker
   before_script:
     - docker info
