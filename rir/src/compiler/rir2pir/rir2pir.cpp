@@ -163,8 +163,7 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     return insert.emitCheckpoint(srcCode, pos, stack, inPromise());
 }
 
-Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
-                             bool eager) {
+Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert) {
     Promise* prom = insert.function->createProm(promiseCode);
     {
         Builder promiseBuilder(insert.function, prom);
@@ -175,17 +174,12 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
     }
 
     Value* eagerVal = UnboundValue::instance();
-    if (eager || Query::pureExceptDeopt(prom)) {
+    if (Query::pureExceptDeopt(prom)) {
         eagerVal = tryInlinePromise(promiseCode, insert);
         if (!eagerVal) {
             log.warn("Failed to inline a promise");
             return nullptr;
         }
-    }
-
-    if (eager) {
-        assert(eagerVal != UnboundValue::instance());
-        return eagerVal;
     }
 
     return insert(new MkArg(prom, eagerVal, insert.env));
@@ -437,7 +431,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // If this call was never executed we might as well compile an
         // unconditional deopt.
-        if (!inPromise() && !inlining() && feedback.taken == 0 &&
+        if (!inlining() && feedback.taken == 0 &&
             insert.function->optFunction->invocationCount() > 1 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
@@ -673,8 +667,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // Insert a guard if we want to speculate
         if (!staticMonomorphicBuiltin &&
             (monomorphicBuiltin || monomorphicClosure || monomorphicSpecial)) {
-            // Can't speculate in promises
-            if (inPromise()) {
+            // Can't speculate while inlining
+            if (inlining()) {
                 monomorphicBuiltin = monomorphicClosure = monomorphicSpecial =
                     false;
             } else {
@@ -687,12 +681,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto bb = cp->nextBB();
                     auto dummyPos = bb->begin();
 
-                    Value* expection = nullptr;
+                    Value* expectation = nullptr;
                     if (ldfun && localFuns.count(ldfun->varName)) {
                         auto mk = localFuns.at(ldfun->varName);
                         if (mk && mk->originalBody->container() ==
                                       BODY(ti.monomorphic)) {
-                            expection = mk;
+                            expectation = mk;
                             // Even though we statically know the env, we must
                             // compile an Env::unclosed() closure here, since we
                             // cannot pass the pir env from the host function to
@@ -705,37 +699,46 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     guardedCallee = BBTransform::insertCalleeGuard(
                         compiler, ti,
                         DeoptReason(ti.feedbackOrigin, DeoptReason::CallTarget),
-                        callee, stableEnv || expection, expection, cp, bb,
+                        callee, stableEnv || expectation, expectation, cp, bb,
                         dummyPos);
                 }
             }
         }
 
         auto eagerEval = [&](Value*& arg, size_t i, bool promiseWrapped) {
-            if (auto mk = MkArg::Cast(arg)) {
-                if (mk->isEager()) {
-                    arg = mk->eagerArg();
-                } else {
-                    auto original = arg;
-                    arg = tryCreateArg(mk->prom()->rirSrc(), insert, true);
-                    if (promiseWrapped)
-                        arg = insert(new MkArg(mk->prom(), arg, mk->env()));
-                    if (!arg) {
-                        log.warn("Failed to compile a promise");
-                        return false;
-                    }
-                    if (i != (size_t)-1 && at(nargs - 1 - i) == original) {
-                        // Inlined argument evaluation might have side effects.
-                        // Let's have a checkpoint here. This checkpoint needs
-                        // to capture the so far evaluated promises.
-                        stack.at(nargs - 1 - i) =
-                            promiseWrapped
-                                ? arg
-                                : insert(new MkArg(mk->prom(), arg, mk->env()));
-                        addCheckpoint(srcCode, pos, stack, insert);
-                    }
-                }
+            if (!MkArg::Cast(arg)) {
+                return true;
             }
+
+            auto mk = MkArg::Cast(arg);
+            if (mk->isEager()) {
+                arg = mk->eagerArg();
+                return true;
+            }
+
+            assert(!inlining());
+            auto original = arg;
+            arg = tryInlinePromise(mk->prom()->rirSrc(), insert);
+            if (!arg) {
+                log.warn("Failed to inline a promise");
+                return false;
+            }
+
+            if (promiseWrapped) {
+                arg = insert(new MkArg(mk->prom(), arg, mk->env()));
+            }
+
+            if (i != (size_t)-1 && at(nargs - 1 - i) == original) {
+                // Inlined argument evaluation might have side effects.
+                // Let's have a checkpoint here. This checkpoint needs
+                // to capture the so far evaluated promises.
+                stack.at(nargs - 1 - i) =
+                    promiseWrapped
+                        ? arg
+                        : insert(new MkArg(mk->prom(), arg, mk->env()));
+                addCheckpoint(srcCode, pos, stack, insert);
+            }
+
             return true;
         };
 
@@ -815,7 +818,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 break;
             }
 
-            // Specialcase for calling usemethod, the first argument is eager.
+            // Specialcase for calling UseMethod, the first argument is eager.
             // This helps determine the object type of the caller.
             {
                 auto dt = DispatchTable::unpack(BODY(ti.monomorphic));
@@ -1457,7 +1460,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             auto asBool = insert(
                 new Identical(branchCondition, branchReason, PirType::val()));
 
-            if (!inPromise()) {
+            if (!inlining()) {
                 if (auto c = Instruction::Cast(branchCondition)) {
                     auto likely = c->typeFeedback().value;
                     if (likely == True::instance() ||

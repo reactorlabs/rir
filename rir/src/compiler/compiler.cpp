@@ -155,7 +155,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         auto arg = closure->formals().defaultArgs()[idx];
         assert(rir::Code::check(arg) && "Default arg not compiled");
         auto code = rir::Code::unpack(arg);
-        auto res = rir2pir.tryCreateArg(code, builder, false);
+        auto res = rir2pir.tryCreateArg(code, builder);
         if (!res) {
             failedToCompileDefaultArgs = true;
             return;

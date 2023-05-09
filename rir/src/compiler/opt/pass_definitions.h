@@ -71,7 +71,6 @@ PASS(DelayEnv, false, false)
  * passes will do the smart parts.
  */
 PASS(Inline, false, false)
-// PASS(Inline, true, false)
 
 /*
  * Goes through every operation that for the general case needs an environment
@@ -145,7 +144,6 @@ PASS(LoadElision, false, false)
 PASS(TypeInference, true, false)
 
 PASS(TypeSpeculation, false, false)
-// PASS(TypeSpeculation, true, false)
 
 PASS(PromiseSplitter, false, false)
 

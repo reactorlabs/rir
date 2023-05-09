@@ -34,6 +34,8 @@ class Code {
     virtual rir::Code* rirSrc() const = 0;
     virtual void printName(std::ostream&) const = 0;
 
+    virtual bool isPromise() const { return false; }
+
     friend std::ostream& operator<<(std::ostream& out, const Code& e) {
         e.printName(out);
         return out;
