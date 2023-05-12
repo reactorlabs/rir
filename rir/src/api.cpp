@@ -14,6 +14,7 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "recording.h"
 #include "utils/measuring.h"
 
 #include <cassert>
@@ -309,6 +310,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
         if (dryRun)
             return;
+
+        recording::record_compile(what, name);
 
         rir::Function* done = nullptr;
         {

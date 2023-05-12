@@ -37,3 +37,5 @@ benchmarks/
 external/*
 !external/custom-r
 .history
+compile_commands.json
+.cache/clangd/index
