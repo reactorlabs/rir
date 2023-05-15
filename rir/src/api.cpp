@@ -311,8 +311,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         if (dryRun)
             return;
 
-        recording::record_compile(what, name);
-
         rir::Function* done = nullptr;
         {
             // Single Backend instance, gets destroyed at the end of this block
@@ -361,6 +359,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                                std::cerr << "Compilation failed\n";
                        },
                        {});
+
+    recording::record_compile(what, name, m);
 
     delete m;
     UNPROTECT(1);

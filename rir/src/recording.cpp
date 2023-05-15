@@ -1,5 +1,7 @@
 #include "recording.h"
-#include <recording.h>
+#include "compiler/pir/module.h"
+#include "compiler/pir/pir.h"
+#include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -36,18 +38,24 @@ std::string deparse_r_code(SEXP s) {
     return res.str();
 }
 
-void record_compile(SEXP cls, const std::string& name) {
+void record_compile(SEXP cls, const std::string& name, pir::Module* module) {
     auto address = sexp_address(cls);
     auto r = recordings_.insert({address, FunRecorder{}});
     auto& v = r.first->second;
+
     if (r.second) {
         v.name = name;
         v.r_code = deparse_r_code(cls);
     }
-    v.events.push_back(CompilationEvent{});
 
-    Rprintf("Recording %s %s\n%s\n", v.name.c_str(), address.c_str(),
-            v.r_code.c_str());
+    CompilationEvent event;
+
+    module->eachPirClosureVersion(
+        [&](pir::ClosureVersion* c) { event.add_pir_closure_version(c); });
+
+    v.events.push_back(std::make_shared<CompilationEvent>(event));
+
+    std::cerr << "Compilation " << address << std::endl << v;
 }
 
 void record_deopt(SEXP cls) {
@@ -57,10 +65,38 @@ void record_deopt(SEXP cls) {
         return;
     }
 
-    auto v = r->second;
-    v.events.push_back(DeoptEvent{});
-    Rprintf("Deopt from %s %s\n", v.name.c_str(), address.c_str());
+    auto& v = r->second;
+    DeoptEvent event;
+
+    v.events.push_back(std::make_shared<DeoptEvent>(event));
+
+    std::cerr << "Deopt " << address << std::endl;
 }
 
+void CompilationEvent::add_pir_closure_version(
+    const pir::ClosureVersion* version) {
+    std::ostringstream code;
+    version->print(code, false);
+    versions[{version->name(), version->context().toI()}] = code.str();
+}
+
+void CompilationEvent::print(std::ostream& out) const {
+    out << "Compilation" << std::endl;
+    for (auto& e : versions) {
+        out << "fun: " << e.first.first << " : " << e.first.second << std::endl;
+        out << e.second << std::endl;
+        out << "----" << std::endl;
+    }
+}
+
+std::ostream& operator<<(std::ostream& out, const FunRecorder& fr) {
+    out << "Recording of: " << fr.name << std::endl;
+    out << fr.r_code << std::endl;
+    out << "Log:" << std::endl;
+    for (const auto& e : fr.events) {
+        out << *e << std::endl;
+    }
+    return out;
+}
 } // namespace recording
 } // namespace rir
