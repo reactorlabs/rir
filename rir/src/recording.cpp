@@ -16,7 +16,7 @@ namespace recording {
 
 static std::unordered_map<std::string, FunRecorder> recordings_;
 
-std::string sexp_address(SEXP s) {
+std::string sexp_address(const SEXP s) {
     char* caddress;
     if (asprintf(&caddress, "%p", (void*)s) == -1) {
         Rf_error("Getting address of SEXP failed");
@@ -25,7 +25,7 @@ std::string sexp_address(SEXP s) {
     return caddress;
 }
 
-std::string deparse_r_code(SEXP s) {
+std::string deparse_r_code(const SEXP s) {
     // TODO: are the opts = 0 OK?
     auto r_str = Rf_deparse1(s, FALSE, 0);
     std::ostringstream res;
@@ -38,7 +38,8 @@ std::string deparse_r_code(SEXP s) {
     return res.str();
 }
 
-void record_compile(SEXP cls, const std::string& name, pir::Module* module) {
+void record_compile(const SEXP cls, const std::string& name,
+                    pir::Module* module) {
     auto address = sexp_address(cls);
     auto r = recordings_.insert({address, FunRecorder{}});
     auto& v = r.first->second;
@@ -53,12 +54,12 @@ void record_compile(SEXP cls, const std::string& name, pir::Module* module) {
     module->eachPirClosureVersion(
         [&](pir::ClosureVersion* c) { event.add_pir_closure_version(c); });
 
-    v.events.push_back(std::make_shared<CompilationEvent>(event));
+    v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
 
     std::cerr << "Compilation " << address << std::endl << v;
 }
 
-void record_deopt(SEXP cls) {
+void record_deopt(const SEXP cls) {
     auto address = sexp_address(cls);
     auto r = recordings_.find(address);
     if (r == recordings_.end()) {
@@ -68,7 +69,7 @@ void record_deopt(SEXP cls) {
     auto& v = r->second;
     DeoptEvent event;
 
-    v.events.push_back(std::make_shared<DeoptEvent>(event));
+    v.events.push_back(std::make_unique<DeoptEvent>(std::move(event)));
 
     std::cerr << "Deopt " << address << std::endl;
 }
@@ -96,6 +97,11 @@ std::ostream& operator<<(std::ostream& out, const FunRecorder& fr) {
     for (const auto& e : fr.events) {
         out << *e << std::endl;
     }
+    return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const Event& e) {
+    e.print(out);
     return out;
 }
 } // namespace recording

@@ -17,10 +17,7 @@ namespace recording {
 
 class Event {
   public:
-    friend std::ostream& operator<<(std::ostream& out, const Event& e) {
-        e.print(out);
-        return out;
-    }
+    friend std::ostream& operator<<(std::ostream& out, const Event& e);
 
   protected:
     virtual void print(std::ostream&) const = 0;
@@ -54,13 +51,14 @@ class DeoptEvent : public Event {
 struct FunRecorder {
     std::string name;
     std::string r_code;
-    std::vector<std::shared_ptr<Event>> events;
+    std::vector<std::unique_ptr<Event>> events;
 
     friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
-void record_compile(SEXP cls, const std::string& name, pir::Module* module);
-void record_deopt(SEXP cls);
+void record_compile(const SEXP cls, const std::string& name,
+                    pir::Module* module);
+void record_deopt(const SEXP cls);
 
 } // namespace recording
 
