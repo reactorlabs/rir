@@ -18,6 +18,10 @@ namespace recording {
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
+    static std::unique_ptr<Event> read_any(char* file);
+    virtual void write(FILE* file) const = 0;
+    virtual void read(char* file) = 0;
+    virtual void replay(SEXP cls, char* cls_name) const = 0;
 
   protected:
     virtual void print(std::ostream&) const = 0;
@@ -38,12 +42,22 @@ class CompilationEvent : public Event {
 
   public:
     void add_pir_closure_version(const pir::ClosureVersion* version);
+    void write(FILE* file) const override;
+    void read(char* file) override;
+    void replay(SEXP cls, char* cls_name) const override;
+
+    Context assumptions;
 
   protected:
     void print(std::ostream& out) const;
 };
 
 class DeoptEvent : public Event {
+  public:
+    void write(FILE* file) const override;
+    void read(char* file) override;
+    void replay(SEXP cls, char* cls_name) const override;
+
   protected:
     void print(std::ostream& out) const {}
 };
@@ -56,9 +70,12 @@ struct FunRecorder {
     friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
-void record_compile(const SEXP cls, const std::string& name,
-                    pir::Module* module);
+void record_compile(SEXP const cls, const std::string& name,
+                    pir::Module* module, const Context& assumptions);
 void record_deopt(const SEXP cls);
+
+size_t saveTo(FILE* file);
+size_t replayFrom(FILE* file);
 
 } // namespace recording
 

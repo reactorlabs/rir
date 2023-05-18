@@ -216,3 +216,11 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+recordings.save <- function(filename) {
+    .Call("recordingSave", filename)
+}
+
+recordings.replay <- function(filename) {
+    .Call("recordingReplay", filename)
+}

@@ -360,7 +360,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        },
                        {});
 
-    recording::record_compile(what, name, m);
+    recording::record_compile(what, name, m, assumptions);
 
     delete m;
     UNPROTECT(1);
@@ -603,6 +603,28 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[0] = n1;
     INTEGER(res)[1] = n2;
     return res;
+}
+
+REXPORT SEXP recordingSave(SEXP filename) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "w");
+    if (!file)
+        Rf_error("couldn't open file at path");
+    auto saved_count = recording::saveTo(file);
+    fclose(file);
+    return Rf_ScalarInteger((int)saved_count);
+}
+
+REXPORT SEXP recordingReplay(SEXP filename) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
+    if (!file)
+        Rf_error("couldn't open file at path");
+    auto replayed_count = recording::replayFrom(file);
+    fclose(file);
+    return Rf_ScalarInteger((int)replayed_count);
 }
 
 bool startup() {

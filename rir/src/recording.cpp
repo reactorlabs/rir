@@ -1,4 +1,6 @@
 #include "recording.h"
+#include "Rinternals.h"
+#include "api.h"
 #include "compiler/pir/module.h"
 #include "compiler/pir/pir.h"
 #include <memory>
@@ -38,8 +40,8 @@ std::string deparse_r_code(const SEXP s) {
     return res.str();
 }
 
-void record_compile(const SEXP cls, const std::string& name,
-                    pir::Module* module) {
+void record_compile(SEXP const cls, const std::string& name,
+                    pir::Module* module, const Context& assumptions) {
     auto address = sexp_address(cls);
     auto r = recordings_.insert({address, FunRecorder{}});
     auto& v = r.first->second;
@@ -50,6 +52,7 @@ void record_compile(const SEXP cls, const std::string& name,
     }
 
     CompilationEvent event;
+    event.assumptions = assumptions;
 
     module->eachPirClosureVersion(
         [&](pir::ClosureVersion* c) { event.add_pir_closure_version(c); });
@@ -74,11 +77,43 @@ void record_deopt(const SEXP cls) {
     std::cerr << "Deopt " << address << std::endl;
 }
 
+std::unique_ptr<Event> Event::read_any(char* line) {
+    char* first_comma = strchr(line, ',');
+    *first_comma = 0;
+
+    char* event_name = line;
+    std::unique_ptr<Event> event;
+    if (strcmp(event_name, "compile") == 0) {
+        event = std::make_unique<CompilationEvent>();
+    } else if (strcmp(event_name, "deopt") == 0) {
+        event = std::make_unique<DeoptEvent>();
+    } else {
+        std::abort();
+    }
+
+    event->read(first_comma + 1);
+    return event;
+}
+
 void CompilationEvent::add_pir_closure_version(
     const pir::ClosureVersion* version) {
     std::ostringstream code;
     version->print(code, false);
     versions[{version->name(), version->context().toI()}] = code.str();
+}
+
+void CompilationEvent::write(FILE* file) const {
+    fprintf(file, "compile,%ld", this->assumptions.toI());
+}
+
+void CompilationEvent::read(char* args) {
+    this->assumptions = Context(atoll(args));
+}
+
+void CompilationEvent::replay(SEXP cls, char* cls_name) const {
+    rirCompile(cls, R_GlobalEnv);
+    pirCompile(cls, this->assumptions, cls_name,
+               pir::DebugOptions::DefaultDebugOptions);
 }
 
 void CompilationEvent::print(std::ostream& out) const {
@@ -88,6 +123,14 @@ void CompilationEvent::print(std::ostream& out) const {
         out << e.second << std::endl;
         out << "----" << std::endl;
     }
+}
+
+void DeoptEvent::write(FILE* file) const { fprintf(file, "deopt,"); }
+
+void DeoptEvent::read(char* file) {}
+
+void DeoptEvent::replay(SEXP cls, char* cls_name) const {
+    // TODO
 }
 
 std::ostream& operator<<(std::ostream& out, const FunRecorder& fr) {
@@ -104,5 +147,38 @@ std::ostream& operator<<(std::ostream& out, const Event& e) {
     e.print(out);
     return out;
 }
+
+size_t saveTo(FILE* file) {
+    for (auto& kv : recordings_) {
+        for (auto& ev : kv.second.events) {
+            fprintf(file, "%s,", kv.second.name.c_str());
+            ev->write(file);
+            fprintf(file, "\n");
+        }
+    }
+
+    return recordings_.size();
+}
+
+size_t replayFrom(FILE* file) {
+    char* line = nullptr;
+    size_t len;
+    unsigned total_events = 0;
+    while (getline(&line, &len, file) != -1) {
+        char* first_comma = strchr(line, ',');
+        *first_comma = 0;
+        auto symbol = Rf_install(line);
+        auto event = Event::read_any(first_comma + 1);
+        auto cls = PROTECT(Rf_findFun(symbol, R_GlobalEnv));
+        assert(cls);
+        event->replay(cls, line);
+        free(line);
+        line = nullptr;
+        UNPROTECT(1);
+        total_events++;
+    }
+    return total_events;
+}
+
 } // namespace recording
 } // namespace rir
