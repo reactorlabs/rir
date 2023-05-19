@@ -49,8 +49,11 @@ void record_closure_speculative_context(const Code* code,
     while (pc < end) {
         switch (*pc) {
             // TODO: nested functions
-            // TODO: promises
-        case Opcode::close_: {
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_: {
+            Immediate id = BC::readImmediate(&pc);
+            auto promise = code->getPromise(id);
+            record_closure_speculative_context(promise, ctx);
             break;
         }
         case Opcode::record_call_: {
