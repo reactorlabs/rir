@@ -298,6 +298,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     PROTECT(what);
 
+    recording::record_compile(what, name);
+
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -359,8 +361,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                                std::cerr << "Compilation failed\n";
                        },
                        {});
-
-    recording::record_compile(what, name, m);
 
     delete m;
     UNPROTECT(1);

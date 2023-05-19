@@ -3,6 +3,7 @@
 
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/pir.h"
+#include "runtime/TypeFeedback.h"
 #include <R/r.h>
 #include <iterator>
 #include <memory>
@@ -15,6 +16,28 @@ namespace rir {
 
 namespace recording {
 
+enum class SpeculativeContextType { Callees, Test, Values };
+struct SpeculativeContext {
+    SpeculativeContextType type;
+    union Value {
+        ObservedCallees callees;
+        ObservedTest test;
+        ObservedValues values;
+    } value;
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const SpeculativeContext& e);
+
+    SpeculativeContext(ObservedCallees callees)
+        : type{SpeculativeContextType::Callees}, value{.callees = callees} {}
+
+    SpeculativeContext(ObservedTest test)
+        : type{SpeculativeContextType::Test}, value{.test = test} {}
+
+    SpeculativeContext(ObservedValues values)
+        : type{SpeculativeContextType::Values}, value{.values = values} {}
+};
+
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
@@ -24,23 +47,22 @@ class Event {
 };
 
 class CompilationEvent : public Event {
-
-    struct pair_hash {
-        template <class T1, class T2>
-        std::size_t operator()(const std::pair<T1, T2>& pair) const {
-            return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
-        }
-    };
-
-    std::unordered_map<std::pair<std::string, unsigned long>, std::string,
-                       pair_hash>
-        versions;
-
   public:
-    void add_pir_closure_version(const pir::ClosureVersion* version);
+    void add_speculative_context(std::vector<SpeculativeContext>&& ctx) {
+        speculative_contexts.emplace_back(ctx);
+    }
 
   protected:
     void print(std::ostream& out) const;
+
+  private:
+    unsigned long dispatch_context;
+
+    // Recordings of the speculative context, i.e. the type feedback from RIR
+    // byte code It is indexed by closures and by each of the recording
+    // instruction in the order it is visited in the code. The first element is
+    // the function itself.
+    std::vector<std::vector<SpeculativeContext>> speculative_contexts;
 };
 
 class DeoptEvent : public Event {
@@ -56,8 +78,7 @@ struct FunRecorder {
     friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
-void record_compile(const SEXP cls, const std::string& name,
-                    pir::Module* module);
+void record_compile(const SEXP cls, const std::string& name);
 void record_deopt(const SEXP cls);
 
 } // namespace recording

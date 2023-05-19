@@ -1,11 +1,15 @@
 #include "recording.h"
 #include "compiler/pir/module.h"
 #include "compiler/pir/pir.h"
+#include "runtime/DispatchTable.h"
+#include "runtime/Function.h"
 #include <memory>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 extern "C" {
 SEXP Rf_deparse1(SEXP, Rboolean, int);
@@ -38,21 +42,64 @@ std::string deparse_r_code(const SEXP s) {
     return res.str();
 }
 
-void record_compile(const SEXP cls, const std::string& name,
-                    pir::Module* module) {
+void record_closure_speculative_context(const Code* code,
+                                        std::vector<SpeculativeContext>& ctx) {
+    auto end = code->endCode();
+    auto pc = code->code();
+    while (pc < end) {
+        switch (*pc) {
+            // TODO: nested functions
+            // TODO: promises
+        case Opcode::close_: {
+            break;
+        }
+        case Opcode::record_call_: {
+            ObservedCallees* feedback = (ObservedCallees*)pc;
+            ctx.push_back(*feedback);
+            pc += sizeof(ObservedCallees);
+            break;
+        }
+        case Opcode::record_test_: {
+            ObservedTest* feedback = (ObservedTest*)pc;
+            ctx.push_back(*feedback);
+            pc += sizeof(ObservedTest);
+            break;
+        }
+        case Opcode::record_type_: {
+            ObservedValues* feedback = (ObservedValues*)pc;
+            ctx.push_back(*feedback);
+            pc += sizeof(ObservedValues);
+            break;
+        }
+        default: {
+            pc = BC::next(pc);
+            break;
+        }
+        }
+    }
+}
+
+void record_compile(const SEXP cls, const std::string& name) {
     auto address = sexp_address(cls);
     auto r = recordings_.insert({address, FunRecorder{}});
     auto& v = r.first->second;
 
     if (r.second) {
         v.name = name;
+        // TODO: serialize the CLOSXP instead
         v.r_code = deparse_r_code(cls);
     }
 
     CompilationEvent event;
 
-    module->eachPirClosureVersion(
-        [&](pir::ClosureVersion* c) { event.add_pir_closure_version(c); });
+    auto dt = DispatchTable::unpack(BODY(cls));
+    auto fun = dt->baseline();
+    auto code = fun->body();
+    std::vector<SpeculativeContext> sc;
+
+    record_closure_speculative_context(code, sc);
+
+    event.add_speculative_context(std::move(sc));
 
     v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
 
@@ -74,19 +121,13 @@ void record_deopt(const SEXP cls) {
     std::cerr << "Deopt " << address << std::endl;
 }
 
-void CompilationEvent::add_pir_closure_version(
-    const pir::ClosureVersion* version) {
-    std::ostringstream code;
-    version->print(code, false);
-    versions[{version->name(), version->context().toI()}] = code.str();
-}
-
 void CompilationEvent::print(std::ostream& out) const {
     out << "Compilation" << std::endl;
-    for (auto& e : versions) {
-        out << "fun: " << e.first.first << " : " << e.first.second << std::endl;
-        out << e.second << std::endl;
-        out << "----" << std::endl;
+    out << "context: " << dispatch_context << std::endl;
+    for (auto& fun : speculative_contexts) {
+        for (auto& ctx : fun) {
+            out << "speculative contexts: " << ctx << std::endl;
+        }
     }
 }
 
@@ -102,6 +143,21 @@ std::ostream& operator<<(std::ostream& out, const FunRecorder& fr) {
 
 std::ostream& operator<<(std::ostream& out, const Event& e) {
     e.print(out);
+    return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const SpeculativeContext& ctx) {
+    switch (ctx.type) {
+    case SpeculativeContextType::Callees:
+        out << "callees";
+        break;
+    case SpeculativeContextType::Test:
+        out << "Tests";
+        break;
+    case SpeculativeContextType::Values:
+        out << "values";
+        break;
+    }
     return out;
 }
 } // namespace recording
