@@ -991,7 +991,11 @@ void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
 
 void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
+#ifdef __ARM_ARCH
+    __builtin_debugtrap();
+#else
     asm("int3");
+#endif
 }
 
 void printValueImpl(SEXP v) { Rf_PrintValue(v); }

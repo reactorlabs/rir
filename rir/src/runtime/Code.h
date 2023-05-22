@@ -11,7 +11,9 @@
 #include <ostream>
 #include <time.h>
 
+#ifndef __ARM_ARCH
 #include <asm/msr.h>
+#endif
 
 namespace rir {
 

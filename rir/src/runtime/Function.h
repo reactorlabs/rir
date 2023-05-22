@@ -80,9 +80,15 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     static inline unsigned long rdtsc() {
+#ifdef __ARM_ARCH
+        uint64_t val;
+        asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+        return val;
+#else
         unsigned low, high;
         asm volatile("rdtsc" : "=a"(low), "=d"(high));
         return ((low) | ((uint64_t)(high) << 32));
+#endif
     }
     static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
 
