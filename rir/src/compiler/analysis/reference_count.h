@@ -5,6 +5,7 @@
 #include "dead.h"
 #include "generic_static_analysis.h"
 #include "utils/Map.h"
+#include <map>
 
 namespace rir {
 namespace pir {

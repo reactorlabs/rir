@@ -180,5 +180,9 @@ if(APPLE)
     target_link_libraries(${PROJECT_NAME} R)
     # to resolve build error from
     # https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
-    target_link_libraries(${PROJECT_NAME} -lintl)
+    # target_link_libraries(${PROJECT_NAME} -lintl)
+    include_directories(${LLVM_DIR}/include)
+    # Note: May need to update the version here
+    include_directories(/opt/homebrew/Cellar/gettext/0.21.1/include)
+    target_link_libraries(${PROJECT_NAME} /opt/homebrew/Cellar/gettext/0.21.1/lib/libintl.dylib)
 endif(APPLE)
