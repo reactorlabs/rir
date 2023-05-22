@@ -4,7 +4,7 @@
 #include "api.h"
 #include "compiler/pir/module.h"
 #include "compiler/pir/pir.h"
-#include "serializer.h"
+#include "recording_serialization.h"
 #include <memory>
 #include <sstream>
 #include <string>

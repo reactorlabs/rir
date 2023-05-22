@@ -1,4 +1,4 @@
-#include "serializer.h"
+#include "recording_serialization.h"
 
 namespace rir {
 namespace recording {
