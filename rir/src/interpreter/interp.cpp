@@ -3907,7 +3907,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(ret_) { goto eval_done; }
 
         INSTRUCTION(int3_) {
+#ifdef __ARM_ARCH
+            __builtin_debugtrap();
+#else
             asm("int3");
+#endif
             NEXT();
         }
 
