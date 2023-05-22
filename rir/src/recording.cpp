@@ -36,6 +36,15 @@ static bool hook_ran_ = false;
 static bool recording_ = std::getenv("RSH_REC") != NULL;
 static const char* recording_output_ = get_env("RSH_REC", "recordings.rds");
 
+// TODO: convert this to an R API so it could be called from
+// reg.finalizer(
+//  e=loadNamespace("base"),
+//  onexit=TRUE,
+//  f=function(x) {
+//    rir.save_recordings("/tmp/X")
+//  }
+// )
+// which itself could be run from R_PROFILE script
 static void exit_hook() {
     if (hook_ran_) {
         return;
@@ -97,6 +106,71 @@ std::string deparse_r_code(const SEXP s) {
     }
 
     return res.str();
+}
+
+void replay_closure_speculative_context(
+    SEXP, std::vector<SpeculativeContext>::iterator&);
+void replay_closure_speculative_context(
+    const Code*, std::vector<SpeculativeContext>::iterator&);
+
+void replay_closure_speculative_context(
+    SEXP cls, std::vector<SpeculativeContext>::iterator& ctx) {
+    auto dt = DispatchTable::unpack(BODY(cls));
+    auto fun = dt->baseline();
+    auto code = fun->body();
+    replay_closure_speculative_context(code, ctx);
+}
+
+void replay_closure_speculative_context(
+    const Code* code, std::vector<SpeculativeContext>::iterator& ctx) {
+    auto end = code->endCode();
+    auto pc = code->code();
+    Opcode* prev = NULL;
+    Opcode* pprev = NULL;
+
+    while (pc < end) {
+        switch (*pc) {
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_: {
+            Immediate id = BC::readImmediate(&pc);
+            auto promise = code->getPromise(id);
+            replay_closure_speculative_context(promise, ctx);
+            break;
+        }
+        case Opcode::close_: {
+            // prev is the push_ of srcref
+            // pprev is the push_ of body
+            auto cp_idx = BC::readImmediate(&pprev);
+            SEXP cls = Pool::get(cp_idx);
+            replay_closure_speculative_context(cls, ctx);
+            break;
+        }
+        case Opcode::record_call_: {
+            ObservedCallees* feedback = (ObservedCallees*)pc;
+            *feedback = (*ctx++).value.callees;
+            pc += sizeof(ObservedCallees);
+            break;
+        }
+        case Opcode::record_test_: {
+            ObservedTest* feedback = (ObservedTest*)pc;
+            *feedback = (*ctx++).value.test;
+            pc += sizeof(ObservedTest);
+            break;
+        }
+        case Opcode::record_type_: {
+            ObservedValues* feedback = (ObservedValues*)pc;
+            *feedback = (*ctx++).value.values;
+            pc += sizeof(ObservedValues);
+            break;
+        }
+        default: {
+            pc = BC::next(pc);
+            break;
+        }
+        }
+        pprev = prev;
+        prev = pc;
+    }
 }
 
 void record_closure_speculative_context(SEXP, std::vector<SpeculativeContext>&);
@@ -213,6 +287,22 @@ void record_deopt(const SEXP cls) {
     v.events.push_back(std::make_unique<DeoptEvent>(std::move(event)));
 
     std::cerr << "Deopt " << address << std::endl;
+}
+
+// TODO: create an R API for this
+REXPORT SEXP replay(SEXP recording, SEXP rho) {
+    PROTECT(recording);
+
+    // TODO: deserialize the function
+    // TODO bind it into rho
+    // TODO: rir compile it
+    // TODO: for each compilation entry
+    // - replay the speculative context
+    // - pirCompile it with the dispatch context
+
+    UNPROTECT(1);
+
+    return R_NilValue;
 }
 
 void CompilationEvent::print(std::ostream& out) const {
