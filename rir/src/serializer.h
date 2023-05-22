@@ -7,15 +7,14 @@
 #include <memory>
 #include <vector>
 
-namespace serializer {
+namespace rir {
+namespace recording {
+namespace serialization {
 
 extern SEXP shared_class_name_event_compile;
 extern SEXP shared_class_name_event_deopt;
 
 void init_shared_class_names();
-
-// template <typename V>
-// SEXP to_sexp(const std::unordered_map<std::string, V>& obj);
 
 SEXP to_sexp(
     const std::unordered_map<std::string, rir::recording::FunRecorder>& obj);
@@ -39,6 +38,8 @@ SEXP to_sexp(const rir::recording::FunRecorder& obj);
 
 rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp);
 
-} // namespace serializer
+} // namespace serialization
+} // namespace recording
+} // namespace rir
 
 #endif

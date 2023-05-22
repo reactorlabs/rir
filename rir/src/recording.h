@@ -19,7 +19,7 @@ class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
     virtual SEXP to_sexp() const = 0;
-    virtual void init_from_sexp(SEXP file) = 0;
+    virtual void init_from_sexp(SEXP sexp) = 0;
 
   protected:
     virtual void print(std::ostream&) const = 0;
@@ -41,7 +41,7 @@ class CompilationEvent : public Event {
   public:
     void add_pir_closure_version(const pir::ClosureVersion* version);
     SEXP to_sexp() const override;
-    void init_from_sexp(SEXP file) override;
+    void init_from_sexp(SEXP sexp) override;
 
   protected:
     void print(std::ostream& out) const;

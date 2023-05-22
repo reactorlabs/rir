@@ -1,6 +1,8 @@
 #include "serializer.h"
 
-namespace serializer {
+namespace rir {
+namespace recording {
+namespace serialization {
 
 SEXP shared_class_name_event_compile = nullptr;
 SEXP shared_class_name_event_deopt = nullptr;
@@ -100,7 +102,7 @@ rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_length(sexp) == 3);
 
     rir::recording::FunRecorder recorder;
-    recorder.name = serializer::string_from_sexp(VECTOR_ELT(sexp, 0));
+    recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
 
     auto events_sexp = VECTOR_ELT(sexp, 2);
     for (auto i = 0; i < Rf_length(events_sexp); i++) {
@@ -111,4 +113,6 @@ rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp) {
     return recorder;
 }
 
-} // namespace serializer
+} // namespace serialization
+} // namespace recording
+} // namespace rir
