@@ -3,6 +3,7 @@
 
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/pir.h"
+#include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 #include <R/r.h>
 #include <iterator>
@@ -41,6 +42,7 @@ struct SpeculativeContext {
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
+    virtual SEXP to_sexp() const = 0;
 
   protected:
     virtual void print(std::ostream&) const = 0;
@@ -48,9 +50,11 @@ class Event {
 
 class CompilationEvent : public Event {
   public:
-    void add_speculative_context(std::vector<SpeculativeContext>&& ctx) {
-        speculative_contexts.emplace_back(ctx);
-    }
+    CompilationEvent(unsigned long dispatch_context,
+                     std::vector<SpeculativeContext>&& speculative_contexts)
+        : dispatch_context(dispatch_context),
+          speculative_contexts(speculative_contexts) {}
+    SEXP to_sexp() const;
 
   protected:
     void print(std::ostream& out) const;
@@ -58,27 +62,28 @@ class CompilationEvent : public Event {
   private:
     unsigned long dispatch_context;
 
-    // Recordings of the speculative context, i.e. the type feedback from RIR
-    // byte code It is indexed by closures and by each of the recording
-    // instruction in the order it is visited in the code. The first element is
-    // the function itself.
-    std::vector<std::vector<SpeculativeContext>> speculative_contexts;
+    std::vector<SpeculativeContext> speculative_contexts;
 };
 
 class DeoptEvent : public Event {
+  public:
+    SEXP to_sexp() const;
+
   protected:
     void print(std::ostream& out) const {}
 };
 
 struct FunRecorder {
     std::string name;
-    std::string r_code;
+    /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
+    SEXP closure;
     std::vector<std::unique_ptr<Event>> events;
 
     friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
-void record_compile(const SEXP cls, const std::string& name);
+void record_compile(const SEXP cls, const std::string& name,
+                    const Context& assumptions);
 void record_deopt(const SEXP cls);
 
 } // namespace recording
