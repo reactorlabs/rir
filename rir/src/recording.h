@@ -18,9 +18,8 @@ namespace recording {
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
-    static std::unique_ptr<Event> read_any(char* file);
     virtual SEXP to_sexp() const = 0;
-    virtual void read(char* file) = 0;
+    virtual void init_from_sexp(SEXP file) = 0;
 
   protected:
     virtual void print(std::ostream&) const = 0;
@@ -42,7 +41,7 @@ class CompilationEvent : public Event {
   public:
     void add_pir_closure_version(const pir::ClosureVersion* version);
     SEXP to_sexp() const override;
-    void read(char* file) override;
+    void init_from_sexp(SEXP file) override;
 
   protected:
     void print(std::ostream& out) const;
@@ -51,7 +50,7 @@ class CompilationEvent : public Event {
 class DeoptEvent : public Event {
   public:
     SEXP to_sexp() const override;
-    void read(char* file) override;
+    void init_from_sexp(SEXP file) override;
 
   protected:
     void print(std::ostream& out) const {}
@@ -66,7 +65,7 @@ struct FunRecorder {
 };
 
 void record_compile(SEXP const cls, const std::string& name,
-                    pir::Module* module, const Context& assumptions);
+                    pir::Module* module);
 void record_deopt(const SEXP cls);
 
 size_t saveTo(FILE* file);

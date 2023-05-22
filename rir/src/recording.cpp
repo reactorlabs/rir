@@ -78,24 +78,6 @@ void record_deopt(const SEXP cls) {
     std::cerr << "Deopt " << address << std::endl;
 }
 
-std::unique_ptr<Event> Event::read_any(char* line) {
-    char* first_comma = strchr(line, ',');
-    *first_comma = 0;
-
-    char* event_name = line;
-    std::unique_ptr<Event> event;
-    if (strcmp(event_name, "compile") == 0) {
-        event = std::make_unique<CompilationEvent>();
-    } else if (strcmp(event_name, "deopt") == 0) {
-        event = std::make_unique<DeoptEvent>();
-    } else {
-        std::abort();
-    }
-
-    event->read(first_comma + 1);
-    return event;
-}
-
 void CompilationEvent::add_pir_closure_version(
     const pir::ClosureVersion* version) {
     std::ostringstream code;
@@ -126,7 +108,24 @@ SEXP CompilationEvent::to_sexp() const {
     return sexp;
 }
 
-void CompilationEvent::read(char* args) {}
+void CompilationEvent::init_from_sexp(SEXP sexp) {
+    assert(Rf_length(sexp) == 1);
+    auto versions_sexp = VECTOR_ELT(sexp, 0);
+
+    for (auto i = 0; i < Rf_length(versions_sexp); i++) {
+        auto version_sexp = VECTOR_ELT(versions_sexp, i);
+        assert(Rf_length(version_sexp) == 3);
+        auto name_sexp = VECTOR_ELT(version_sexp, 0);
+        auto context_sexp = VECTOR_ELT(version_sexp, 1);
+        auto code_sexp = VECTOR_ELT(version_sexp, 2);
+
+        std::string name = serializer::string_from_sexp(name_sexp);
+        unsigned long context = serializer::uint64_t_from_sexp(context_sexp);
+        std::string code = serializer::string_from_sexp(code_sexp);
+
+        this->versions.insert({{name, context}, code});
+    }
+}
 
 void CompilationEvent::print(std::ostream& out) const {
     out << "Compilation" << std::endl;
@@ -144,7 +143,7 @@ SEXP DeoptEvent::to_sexp() const {
     return sexp;
 }
 
-void DeoptEvent::read(char* file) {}
+void DeoptEvent::init_from_sexp(SEXP sexp) { assert(Rf_length(sexp) == 0); }
 
 std::ostream& operator<<(std::ostream& out, const FunRecorder& fr) {
     out << "Recording of: " << fr.name << std::endl;
@@ -171,8 +170,23 @@ size_t saveTo(FILE* file) {
 
 size_t replayFrom(FILE* file) {
     SEXP sexp = R_LoadFromFile(file, 3);
-    // TODO
-    return 0;
+    assert(Rf_isVector(sexp));
+    SEXP names = Rf_getAttrib(sexp, R_NamesSymbol);
+    assert(Rf_isVector(names));
+
+    decltype(recordings_) new_recordings;
+
+    for (auto i = 0; i < Rf_length(sexp); i++) {
+        auto recorder_name_sexp = STRING_ELT(names, i);
+        auto recorder_sexp = VECTOR_ELT(sexp, i);
+        FunRecorder recorder =
+            serializer::fun_recorder_from_sexp(recorder_sexp);
+        std::string recorder_name =
+            serializer::string_from_sexp(recorder_name_sexp);
+        new_recordings.insert({std::move(recorder_name), std::move(recorder)});
+    }
+
+    return new_recordings.size();
 }
 
 } // namespace recording

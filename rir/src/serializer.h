@@ -25,11 +25,19 @@ SEXP to_sexp(const std::vector<std::unique_ptr<T>>& obj);
 
 SEXP to_sexp(const std::string&);
 
+std::string string_from_sexp(SEXP sexp);
+
 SEXP to_sexp(uint64_t i);
+
+uint64_t uint64_t_from_sexp(SEXP sexp);
 
 SEXP to_sexp(const rir::recording::Event& obj);
 
+std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp);
+
 SEXP to_sexp(const rir::recording::FunRecorder& obj);
+
+rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp);
 
 } // namespace serializer
 
