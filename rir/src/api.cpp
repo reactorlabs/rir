@@ -360,7 +360,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        },
                        {});
 
-    recording::record_compile(what, name, m, assumptions);
+    recording::record_compile(what, name, m);
 
     delete m;
     UNPROTECT(1);

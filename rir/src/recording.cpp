@@ -43,7 +43,7 @@ std::string deparse_r_code(const SEXP s) {
 }
 
 void record_compile(SEXP const cls, const std::string& name,
-                    pir::Module* module, const Context& assumptions) {
+                    pir::Module* module) {
     auto address = sexp_address(cls);
     auto r = recordings_.insert({address, FunRecorder{}});
     auto& v = r.first->second;
