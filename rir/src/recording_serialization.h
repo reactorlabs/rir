@@ -13,6 +13,9 @@ namespace serialization {
 
 extern SEXP shared_class_name_event_compile;
 extern SEXP shared_class_name_event_deopt;
+extern SEXP shared_class_name_ctx_callees;
+extern SEXP shared_class_name_ctx_test;
+extern SEXP shared_class_name_ctx_values;
 
 void init_shared_class_names();
 
@@ -33,6 +36,10 @@ uint64_t uint64_t_from_sexp(SEXP sexp);
 SEXP to_sexp(const rir::recording::Event& obj);
 
 std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp);
+
+SEXP to_sexp(const rir::recording::SpeculativeContext&);
+
+rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp);
 
 SEXP to_sexp(const rir::recording::FunRecorder& obj);
 

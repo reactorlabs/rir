@@ -3,6 +3,8 @@
 
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/pir.h"
+#include "runtime/Context.h"
+#include "runtime/TypeFeedback.h"
 #include <R/r.h>
 #include <iterator>
 #include <memory>
@@ -15,6 +17,28 @@ namespace rir {
 
 namespace recording {
 
+enum class SpeculativeContextType { Callees, Test, Values };
+struct SpeculativeContext {
+    SpeculativeContextType type;
+    union Value {
+        ObservedCallees callees;
+        ObservedTest test;
+        ObservedValues values;
+    } value;
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const SpeculativeContext& e);
+
+    SpeculativeContext(ObservedCallees callees)
+        : type{SpeculativeContextType::Callees}, value{.callees = callees} {}
+
+    SpeculativeContext(ObservedTest test)
+        : type{SpeculativeContextType::Test}, value{.test = test} {}
+
+    SpeculativeContext(ObservedValues values)
+        : type{SpeculativeContextType::Values}, value{.values = values} {}
+};
+
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
@@ -26,25 +50,21 @@ class Event {
 };
 
 class CompilationEvent : public Event {
-
-    struct pair_hash {
-        template <class T1, class T2>
-        std::size_t operator()(const std::pair<T1, T2>& pair) const {
-            return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
-        }
-    };
-
-    std::unordered_map<std::pair<std::string, unsigned long>, std::string,
-                       pair_hash>
-        versions;
-
   public:
-    void add_pir_closure_version(const pir::ClosureVersion* version);
+    CompilationEvent(unsigned long dispatch_context,
+                     std::vector<SpeculativeContext>&& speculative_contexts)
+        : dispatch_context(dispatch_context),
+          speculative_contexts(speculative_contexts) {}
     SEXP to_sexp() const override;
     void init_from_sexp(SEXP sexp) override;
 
   protected:
     void print(std::ostream& out) const;
+
+  private:
+    unsigned long dispatch_context;
+
+    std::vector<SpeculativeContext> speculative_contexts;
 };
 
 class DeoptEvent : public Event {
@@ -58,14 +78,15 @@ class DeoptEvent : public Event {
 
 struct FunRecorder {
     std::string name;
-    std::string r_code;
+    /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
+    SEXP closure;
     std::vector<std::unique_ptr<Event>> events;
 
     friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
-void record_compile(SEXP const cls, const std::string& name,
-                    pir::Module* module);
+void record_compile(const SEXP cls, const std::string& name,
+                    const Context& assumptions);
 void record_deopt(const SEXP cls);
 
 size_t saveTo(FILE* file);
