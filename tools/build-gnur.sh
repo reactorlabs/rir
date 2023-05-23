@@ -65,7 +65,7 @@ function build_r {
         echo "-> configure $NAME"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
-            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=$SND" LDFLAGS="-L/opt/homebrew/lib" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --with-x=no || cat config.log
+            CFLAGS="-O2 -g -DSWITCH_TO_NAMED=$SND -I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib" ./configure --enable-R-shlib --with-internal-tzcode --with-ICU=no --with-x=no --with-aqua=no || cat config.log
         else
             CFLAGS="-O2 -g -DSWITCH_TO_NAMED=$SND" ./configure
         fi
@@ -101,7 +101,8 @@ function build_r {
 
     echo "-> building $NAME"
     if [ $USING_OSX -eq 1 ]; then
-      MACOSX_DEPLOYMENT_TARGET=12.0 C_INCLUDE_PATH=/opt/homebrew/include make -j8
+      # We need `C_INCLUDE_PATH` here AND we need to include `/opt/homebrew/bin` in `./configure`
+      C_INCLUDE_PATH=/opt/homebrew/include make -j8
     else
       make -j8
     fi
