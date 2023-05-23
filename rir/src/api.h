@@ -30,6 +30,6 @@ REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
 REXPORT SEXP recordingSave(SEXP filename);
-REXPORT SEXP recordingReplay(SEXP filename);
+REXPORT SEXP recordingReplay(SEXP filename, SEXP rho);
 
 #endif // API_H_

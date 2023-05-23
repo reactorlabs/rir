@@ -616,13 +616,13 @@ REXPORT SEXP recordingSave(SEXP filename) {
     return Rf_ScalarInteger((int)saved_count);
 }
 
-REXPORT SEXP recordingReplay(SEXP filename) {
+REXPORT SEXP recordingReplay(SEXP filename, SEXP rho) {
     if (TYPEOF(filename) != STRSXP)
         Rf_error("must provide a string path");
     FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
     if (!file)
         Rf_error("couldn't open file at path");
-    auto replayed_count = recording::replayFrom(file);
+    auto replayed_count = recording::replayFrom(file, rho);
     fclose(file);
     return Rf_ScalarInteger((int)replayed_count);
 }

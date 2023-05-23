@@ -221,6 +221,18 @@ recordings.save <- function(filename) {
     .Call("recordingSave", filename)
 }
 
-recordings.replay <- function(filename) {
-    .Call("recordingReplay", filename)
+recordings.replay <- function(filename, env=parent.frame()) {
+    .Call("recordingReplay", filename, env)
+}
+
+recordings.start <- function() {
+    .Call("start_recording")
+}
+
+recordings.stop <- function() {
+    .Call("stop_recording")
+}
+
+recordings.is_recording <- function() {
+    .Call("is_recording")
 }

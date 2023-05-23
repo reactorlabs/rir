@@ -1,6 +1,7 @@
 #ifndef RECORDING_H
 #define RECORDING_H
 
+#include "api.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Context.h"
@@ -26,9 +27,6 @@ struct SpeculativeContext {
         ObservedValues values;
     } value;
 
-    friend std::ostream& operator<<(std::ostream& out,
-                                    const SpeculativeContext& e);
-
     SpeculativeContext(ObservedCallees callees)
         : type{SpeculativeContextType::Callees}, value{.callees = callees} {}
 
@@ -44,9 +42,7 @@ class Event {
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
     virtual SEXP to_sexp() const = 0;
     virtual void init_from_sexp(SEXP sexp) = 0;
-
-  protected:
-    virtual void print(std::ostream&) const = 0;
+    virtual void replay(SEXP closure) const = 0;
 };
 
 class CompilationEvent : public Event {
@@ -57,9 +53,7 @@ class CompilationEvent : public Event {
           speculative_contexts(speculative_contexts) {}
     SEXP to_sexp() const override;
     void init_from_sexp(SEXP sexp) override;
-
-  protected:
-    void print(std::ostream& out) const;
+    void replay(SEXP closure) const override;
 
   private:
     unsigned long dispatch_context;
@@ -71,9 +65,7 @@ class DeoptEvent : public Event {
   public:
     SEXP to_sexp() const override;
     void init_from_sexp(SEXP file) override;
-
-  protected:
-    void print(std::ostream& out) const {}
+    void replay(SEXP closure) const override;
 };
 
 struct FunRecorder {
@@ -81,8 +73,6 @@ struct FunRecorder {
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
     SEXP closure;
     std::vector<std::unique_ptr<Event>> events;
-
-    friend std::ostream& operator<<(std::ostream& out, const FunRecorder& fr);
 };
 
 void record_compile(const SEXP cls, const std::string& name,
@@ -90,10 +80,15 @@ void record_compile(const SEXP cls, const std::string& name,
 void record_deopt(const SEXP cls);
 
 size_t saveTo(FILE* file);
-size_t replayFrom(FILE* file);
+size_t replayFrom(FILE* file, SEXP rho);
 
 } // namespace recording
 
 } // namespace rir
+
+// R API
+REXPORT SEXP start_recording();
+REXPORT SEXP stop_recording();
+REXPORT SEXP is_recording();
 
 #endif
