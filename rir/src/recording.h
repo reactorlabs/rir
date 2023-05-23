@@ -91,6 +91,7 @@ void record_deopt(const SEXP cls);
 
 size_t saveTo(FILE* file);
 size_t replayFrom(FILE* file);
+REXPORT SEXP replay(SEXP recording, SEXP rho);
 
 } // namespace recording
 

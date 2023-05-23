@@ -37,18 +37,9 @@ const char* get_env(const char* name, const char* default_value) {
 static std::unordered_map<std::string, FunRecorder> recordings_;
 static bool hook_registered_ = false;
 static bool hook_ran_ = false;
-static bool recording_ = std::getenv("RSH_REC") != NULL;
+static bool recording_ = std::getenv("RSH_REC") != nullptr;
 static const char* recording_output_ = get_env("RSH_REC", "recordings.rds");
 
-// TODO: convert this to an R API so it could be called from
-// reg.finalizer(
-//  e=loadNamespace("base"),
-//  onexit=TRUE,
-//  f=function(x) {
-//    rir.save_recordings("/tmp/X")
-//  }
-// )
-// which itself could be run from R_PROFILE script
 static void exit_hook() {
     if (hook_ran_) {
         return;
@@ -264,22 +255,6 @@ void record_deopt(SEXP const cls) {
     std::cerr << "Deopt " << address << std::endl;
 }
 
-// TODO: create an R API for this
-REXPORT SEXP replay(SEXP recording, SEXP rho) {
-    PROTECT(recording);
-
-    // TODO: deserialize the function
-    // TODO bind it into rho
-    // TODO: rir compile it
-    // TODO: for each compilation entry
-    // - replay the speculative context
-    // - pirCompile it with the dispatch context
-
-    UNPROTECT(1);
-
-    return R_NilValue;
-}
-
 SEXP CompilationEvent::to_sexp() const {
     const char* fields[] = {"dispatch_context", "speculative_contexts", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
@@ -369,16 +344,23 @@ size_t saveTo(FILE* file) {
 }
 
 size_t replayFrom(FILE* file) {
-    SEXP sexp = R_LoadFromFile(file, 3);
-    assert(Rf_isVector(sexp));
-    SEXP names = Rf_getAttrib(sexp, R_NamesSymbol);
+    replay(R_LoadFromFile(file, 3), R_GlobalEnv);
+    return 0;
+}
+
+REXPORT SEXP replay(SEXP recording, SEXP rho) {
+    PROTECT(recording);
+    assert(Rf_isVector(recording));
+    SEXP names = Rf_getAttrib(recording, R_NamesSymbol);
     assert(Rf_isVector(names));
 
+    // TODO: The temporary map may not be necessary, we can probably replay the
+    //       events on the go, from within the for loop.
     decltype(recordings_) new_recordings;
 
-    for (auto i = 0; i < Rf_length(sexp); i++) {
+    for (auto i = 0; i < Rf_length(recording); i++) {
         auto recorder_name_sexp = STRING_ELT(names, i);
-        auto recorder_sexp = VECTOR_ELT(sexp, i);
+        auto recorder_sexp = VECTOR_ELT(recording, i);
         FunRecorder recorder =
             serialization::fun_recorder_from_sexp(recorder_sexp);
         std::string recorder_name =
@@ -386,7 +368,15 @@ size_t replayFrom(FILE* file) {
         new_recordings.insert({std::move(recorder_name), std::move(recorder)});
     }
 
-    return new_recordings.size();
+    // TODO: deserialize the function
+    // TODO bind it into rho
+    // TODO: rir compile it
+    // TODO: for each compilation entry
+    //       - replay the speculative context
+    //       - pirCompile it with the dispatch context
+
+    UNPROTECT(1);
+    return R_NilValue;
 }
 
 } // namespace recording
