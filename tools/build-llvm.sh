@@ -11,25 +11,25 @@ fi
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 . "${SCRIPTPATH}/script_include.sh"
 
-if [ -d "${SRC_DIR}/external/llvm-8.0.0" ]; then
-    echo "${SRC_DIR}/external/llvm-8.0.0 already exists. Remove it to install a debug version of llvm."
+if [ -d "${SRC_DIR}/external/llvm-12" ]; then
+    echo "${SRC_DIR}/external/llvm-12 already exists. Remove it to install a debug version of llvm."
     exit 1
 fi
 
 cd "${SRC_DIR}/external"
 
-if [ ! -f llvm-8.0.0.src.tar.xz ]; then
-    wget http://releases.llvm.org/8.0.0/llvm-8.0.0.src.tar.xz
+if [ ! -f llvm-12.0.1.src.tar.xz ]; then
+    wget http://releases.llvm.org/12.0.1/llvm-12.0.1.src.tar.xz
 fi
-if [ ! -d "llvm-8.0.0.src" ]; then
-    tar xf llvm-8.0.0.src.tar.xz
-    mkdir llvm-8.0.0
-    cd llvm-8.0.0.src
+if [ ! -d "llvm-12.0.1.src" ]; then
+    tar xf llvm-12.0.1.src.tar.xz
+    mkdir llvm-12
+    cd llvm-12.0.1.src
     mkdir build
     cd build
     cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
     ninja
 else
-    cd llvm-8.0.0.src/build
+    cd llvm-12.0.1.src/build
 fi
-cmake -DCMAKE_INSTALL_PREFIX=../../llvm-8.0.0 -P cmake_install.cmake
+cmake -DCMAKE_INSTALL_PREFIX=../../llvm-12 -P cmake_install.cmake
