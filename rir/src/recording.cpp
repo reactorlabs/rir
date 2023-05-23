@@ -28,15 +28,6 @@ namespace recording {
 static std::unordered_map<std::string, FunRecorder> recordings_;
 static bool recording_ = false;
 
-// TODO: convert this to an R API so it could be called from
-// reg.finalizer(
-//  e=loadNamespace("base"),
-//  onexit=TRUE,
-//  f=function(x) {
-//    rir.save_recordings("/tmp/X")
-//  }
-// )
-
 std::string sexp_address(const SEXP s) {
     char* caddress;
     if (asprintf(&caddress, "%p", (void*)s) == -1) {
@@ -52,8 +43,7 @@ void replay_closure_speculative_context(
     const Code*, std::vector<SpeculativeContext>::const_iterator&);
 
 void replay_closure_speculative_context(
-    SEXP cls, std::vector<SpeculativeContext>::const_iterator& ctx) {
-    auto dt = DispatchTable::unpack(BODY(cls));
+    DispatchTable* dt, std::vector<SpeculativeContext>::const_iterator& ctx) {
     auto fun = dt->baseline();
     auto code = fun->body();
     replay_closure_speculative_context(code, ctx);
@@ -61,54 +51,51 @@ void replay_closure_speculative_context(
 
 void replay_closure_speculative_context(
     const Code* code, std::vector<SpeculativeContext>::const_iterator& ctx) {
-    auto end = code->endCode();
-    auto pc = code->code();
+
+    Opcode* end = code->endCode();
+    Opcode* pc = code->code();
     Opcode* prev = NULL;
     Opcode* pprev = NULL;
 
     while (pc < end) {
+        auto bc = BC::decode(pc, code);
         // TODO: assert ctx != ctx->end
-        switch (*pc) {
+        switch (bc.bc) {
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_: {
-            Immediate id = BC::readImmediate(&pc);
-            auto promise = code->getPromise(id);
+            auto promise = code->getPromise(bc.immediate.fun);
             replay_closure_speculative_context(promise, ctx);
             break;
         }
         case Opcode::close_: {
             // prev is the push_ of srcref
             // pprev is the push_ of body
-            auto cp_idx = BC::readImmediate(&pprev);
-            SEXP cls = Pool::get(cp_idx);
-            replay_closure_speculative_context(cls, ctx);
+            auto body = BC::decodeShallow(pprev).immediateConst();
+            auto dt = DispatchTable::unpack(body);
+            replay_closure_speculative_context(dt, ctx);
             break;
         }
         case Opcode::record_call_: {
-            ObservedCallees* feedback = (ObservedCallees*)pc;
+            ObservedCallees* feedback = (ObservedCallees*)(pc + 1);
             *feedback = (*ctx++).value.callees;
-            pc += sizeof(ObservedCallees);
             break;
         }
         case Opcode::record_test_: {
-            ObservedTest* feedback = (ObservedTest*)pc;
+            ObservedTest* feedback = (ObservedTest*)(pc + 1);
             *feedback = (*ctx++).value.test;
-            pc += sizeof(ObservedTest);
             break;
         }
         case Opcode::record_type_: {
-            ObservedValues* feedback = (ObservedValues*)pc;
+            ObservedValues* feedback = (ObservedValues*)(pc + 1);
             *feedback = (*ctx++).value.values;
-            pc += sizeof(ObservedValues);
             break;
         }
         default: {
-            pc = BC::next(pc);
-            break;
         }
         }
         pprev = prev;
         prev = pc;
+        pc = bc.next(pc);
     }
 }
 
@@ -116,9 +103,8 @@ void record_closure_speculative_context(SEXP, std::vector<SpeculativeContext>&);
 void record_closure_speculative_context(const Code*,
                                         std::vector<SpeculativeContext>&);
 
-void record_closure_speculative_context(SEXP cls,
+void record_closure_speculative_context(DispatchTable* dt,
                                         std::vector<SpeculativeContext>& ctx) {
-    auto dt = DispatchTable::unpack(BODY(cls));
     auto fun = dt->baseline();
     auto code = fun->body();
     record_closure_speculative_context(code, ctx);
@@ -126,53 +112,46 @@ void record_closure_speculative_context(SEXP cls,
 
 void record_closure_speculative_context(const Code* code,
                                         std::vector<SpeculativeContext>& ctx) {
-    auto end = code->endCode();
-    auto pc = code->code();
+    Opcode* end = code->endCode();
+    Opcode* pc = code->code();
     Opcode* prev = NULL;
     Opcode* pprev = NULL;
 
     while (pc < end) {
-        switch (*pc) {
+        auto bc = BC::decode(pc, code);
+        switch (bc.bc) {
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_: {
-            Immediate id = BC::readImmediate(&pc);
-            auto promise = code->getPromise(id);
+            auto promise = code->getPromise(bc.immediate.fun);
             record_closure_speculative_context(promise, ctx);
             break;
         }
         case Opcode::close_: {
             // prev is the push_ of srcref
             // pprev is the push_ of body
-            auto cp_idx = BC::readImmediate(&pprev);
-            SEXP cls = Pool::get(cp_idx);
-            record_closure_speculative_context(cls, ctx);
+            auto body = BC::decodeShallow(pprev).immediateConst();
+            auto dt = DispatchTable::unpack(body);
+            record_closure_speculative_context(dt, ctx);
             break;
         }
         case Opcode::record_call_: {
-            ObservedCallees* feedback = (ObservedCallees*)pc;
-            ctx.push_back(*feedback);
-            pc += sizeof(ObservedCallees);
+            ctx.push_back(bc.immediate.callFeedback);
             break;
         }
         case Opcode::record_test_: {
-            ObservedTest* feedback = (ObservedTest*)pc;
-            ctx.push_back(*feedback);
-            pc += sizeof(ObservedTest);
+            ctx.push_back(bc.immediate.testFeedback);
             break;
         }
         case Opcode::record_type_: {
-            ObservedValues* feedback = (ObservedValues*)pc;
-            ctx.push_back(*feedback);
-            pc += sizeof(ObservedValues);
+            ctx.push_back(bc.immediate.typeFeedback);
             break;
         }
         default: {
-            pc = BC::next(pc);
-            break;
         }
         }
         pprev = prev;
         prev = pc;
+        pc = bc.next(pc);
     }
 }
 
@@ -194,7 +173,8 @@ void record_compile(SEXP const cls, const std::string& name,
     }
 
     std::vector<SpeculativeContext> sc;
-    record_closure_speculative_context(cls, sc);
+    auto dt = DispatchTable::unpack(BODY(cls));
+    record_closure_speculative_context(dt, sc);
 
     unsigned long dispatch_context = assumptions.toI();
     auto event = CompilationEvent(dispatch_context, std::move(sc));
@@ -313,7 +293,8 @@ REXPORT SEXP replay(SEXP recording, SEXP rho) {
 
 void CompilationEvent::replay(SEXP closure) const {
     auto i = speculative_contexts.begin();
-    replay_closure_speculative_context(closure, i);
+    auto dt = DispatchTable::unpack(BODY(closure));
+    replay_closure_speculative_context(dt, i);
     // TODO: pirCompile
 }
 
