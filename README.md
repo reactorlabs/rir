@@ -159,3 +159,34 @@ Fetch updated R:
     cd external/custom-r && make -j4 
 
 Or use `ninja setup`
+
+## Record & Replay
+
+There is an R-level API for record & replay the JIT compilation.
+
+To record all function compilation, run the script as follows:
+
+```sh
+PIR_WARMUP=2 R_PROFILE=recording.R ./bin/R -f test.R
+```
+
+where `recording.R` contains:
+
+```r
+reg.finalizer(
+  e = loadNamespace("base"),
+  onexit = TRUE,
+  f = function(x) {
+    recordings.stop()
+    recordings.save("/tmp/recordings.rds")
+  }
+)
+
+recordings.start()
+```
+
+Replay:
+
+```sh
+./bin/R -e 'recordings.replay("/tmp/recordings.rds"); rir.disassemble(f)'
+```
