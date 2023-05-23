@@ -102,10 +102,7 @@ void NativeAllocator::compute() {
             }
         };
 
-        size_t pos = 0;
         for (auto i : *bb) {
-            ++pos;
-
             if (!needsASlot(i))
                 continue;
 
