@@ -556,6 +556,7 @@ void PirJitLLVM::initializeLLVM() {
     // name. symbols starting with "ept_" are external pointers, the ones
     // starting with "efn_" are external function pointers. these must exist in
     // the host process.
+    // NEW: On macOS ARM the symbols start with _ept_ and _epn_
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
@@ -565,11 +566,12 @@ void PirJitLLVM::initializeLLVM() {
             for (auto s : LookupSet) {
                 auto& Name = s.first;
                 auto n = (*Name).str();
-                auto ept = n.substr(0, 4) == "ept_";
-                auto efn = n.substr(0, 4) == "efn_";
+                auto ept = n.substr(0, 4) == "ept_" || n.substr(0, 5) == "_ept_";
+                auto efn = n.substr(0, 4) == "efn_" || n.substr(0, 5) == "_efn_";
 
                 if (ept || efn) {
-                    auto addrStr = n.substr(4);
+                    auto isUnderscoreVariant = n.substr(0, 1) == "_";
+                    auto addrStr = n.substr(isUnderscoreVariant ? 5 : 4);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
