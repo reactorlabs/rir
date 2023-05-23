@@ -270,16 +270,23 @@ size_t saveTo(FILE* file) {
 }
 
 size_t replayFrom(FILE* file, SEXP rho) {
-    SEXP sexp = R_LoadFromFile(file, 3);
-    assert(Rf_isVector(sexp));
-    SEXP names = Rf_getAttrib(sexp, R_NamesSymbol);
+    replay(R_LoadFromFile(file, 3), rho);
+    return 0;
+}
+
+REXPORT SEXP replay(SEXP recording, SEXP rho) {
+    PROTECT(recording);
+    assert(Rf_isVector(recording));
+    SEXP names = Rf_getAttrib(recording, R_NamesSymbol);
     assert(Rf_isVector(names));
 
+    // TODO: The temporary map may not be necessary, we can probably replay the
+    //       events on the go, from within the for loop.
     decltype(recordings_) new_recordings;
 
-    for (auto i = 0; i < Rf_length(sexp); i++) {
+    for (auto i = 0; i < Rf_length(recording); i++) {
         auto recorder_name_sexp = STRING_ELT(names, i);
-        auto recorder_sexp = VECTOR_ELT(sexp, i);
+        auto recorder_sexp = VECTOR_ELT(recording, i);
         FunRecorder recorder =
             serialization::fun_recorder_from_sexp(recorder_sexp);
 
@@ -300,7 +307,8 @@ size_t replayFrom(FILE* file, SEXP rho) {
         new_recordings.insert({std::move(recorder_name), std::move(recorder)});
     }
 
-    return new_recordings.size();
+    UNPROTECT(1);
+    return R_NilValue;
 }
 
 void CompilationEvent::replay(SEXP closure) const {
