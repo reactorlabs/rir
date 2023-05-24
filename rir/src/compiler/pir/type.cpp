@@ -143,17 +143,21 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
     flags_.reset(TypeFlags::lazy);
 
     if (TYPEOF(e) == PROMSXP) {
+        flags_.set(TypeFlags::promiseWrapped);
         if (PRVALUE(e) != R_UnboundValue) {
             e = PRVALUE(e);
-            flags_.set(TypeFlags::promiseWrapped);
-            if (e != R_MissingArg)
-                flags_.set(TypeFlags::notWrappedMissing);
+            if (e == R_MissingArg)
+                t_.r.set(RType::missing);
+        } else {
+            flags_.set(TypeFlags::lazy);
+            t_.r.set(RType::missing);
         }
     }
 
-    if (e == R_MissingArg)
+    if (e == R_MissingArg) {
         t_.r.set(RType::missing);
-    else if (e == R_UnboundValue)
+        flags_.set(TypeFlags::maybeMissing);
+    } else if (e == R_UnboundValue)
         t_.r.set(RType::unbound);
     else
         merge(TYPEOF(e));
@@ -208,8 +212,7 @@ bool PirType::isInstance(SEXP val) const {
             assert(!Rf_isObject(val));
             if (maybePromiseWrapped() && !maybeLazy()) {
                 auto v = PRVALUE(val);
-                if (flags_.contains(TypeFlags::notWrappedMissing) &&
-                    v == R_MissingArg)
+                if (!t_.r.contains(RType::missing) && v == R_MissingArg)
                     return false;
                 return v != R_UnboundValue && forced().isInstance(v);
             }

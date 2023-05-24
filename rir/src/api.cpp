@@ -11,6 +11,7 @@
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/closure.h"
+#include "compiler/pir/type.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
@@ -600,6 +601,25 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[0] = n1;
     INTEGER(res)[1] = n2;
     return res;
+}
+
+REXPORT SEXP playground() {
+
+    // auto type =
+    // rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped().notWrappedMissing();
+    // auto type =
+    // rir::pir::PirType::intReal().orPromiseWrapped().orMaybeMissing(); auto
+    // type = rir::pir::PirType::theMissingValue().orFullyPromiseWrapped();
+    auto type =
+        rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped();
+
+    // type = type.orPromiseWrapped();
+
+    std::cerr << type;
+
+    std::cerr << "\n\n\n";
+
+    return R_NilValue;
 }
 
 bool startup() {

@@ -4376,7 +4376,8 @@ void LowerFunctionLLVM::compile() {
                     };
                     if (t->typeTest.notPromiseWrapped()
                             .orNAOrNaN()
-                            .orWrappedMissing() == PirType::simpleScalarInt()) {
+                            .notMissing() ==
+                        PirType::simpleScalarInt().notMissing()) {
                         a = depromiseIfNeeded();
                         auto res = isSimpleScalar(a, INTSXP);
                         if (!t->typeTest.maybeNAOrNaN())
@@ -4391,8 +4392,8 @@ void LowerFunctionLLVM::compile() {
                         break;
                     } else if (t->typeTest.notPromiseWrapped()
                                    .orNAOrNaN()
-                                   .orWrappedMissing() ==
-                               PirType::simpleScalarLogical()) {
+                                   .notMissing() ==
+                               PirType::simpleScalarLogical().notMissing()) {
                         a = depromiseIfNeeded();
                         auto res = isSimpleScalar(a, LGLSXP);
                         if (!t->typeTest.maybeNAOrNaN()) {
@@ -4408,8 +4409,8 @@ void LowerFunctionLLVM::compile() {
                         break;
                     } else if (t->typeTest.notPromiseWrapped()
                                    .orNAOrNaN()
-                                   .orWrappedMissing() ==
-                               PirType::simpleScalarReal()) {
+                                   .notMissing() ==
+                               PirType::simpleScalarReal().notMissing()) {
                         a = depromiseIfNeeded();
                         auto res = isSimpleScalar(a, REALSXP);
                         if (!t->typeTest.maybeNAOrNaN())
