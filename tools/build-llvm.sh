@@ -19,7 +19,7 @@ fi
 cd "${SRC_DIR}/external"
 
 if [ ! -f llvm-12.0.0.src.tar.xz ]; then
-    wget http://releases.llvm.org/12.0.0/llvm-12.0.0.src.tar.xz
+    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/llvm-12.0.0.src.tar.xz
 fi
 if [ ! -d "llvm-12.0.0.src" ]; then
     tar xf llvm-12.0.0.src.tar.xz
