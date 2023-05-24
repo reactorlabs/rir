@@ -18,18 +18,18 @@ fi
 
 cd "${SRC_DIR}/external"
 
-if [ ! -f llvm-12.0.1.src.tar.xz ]; then
-    wget http://releases.llvm.org/12.0.1/llvm-12.0.1.src.tar.xz
+if [ ! -f llvm-12.0.0.src.tar.xz ]; then
+    wget http://releases.llvm.org/12.0.0/llvm-12.0.0.src.tar.xz
 fi
-if [ ! -d "llvm-12.0.1.src" ]; then
-    tar xf llvm-12.0.1.src.tar.xz
+if [ ! -d "llvm-12.0.0.src" ]; then
+    tar xf llvm-12.0.0.src.tar.xz
     mkdir llvm-12
-    cd llvm-12.0.1.src
+    cd llvm-12.0.0.src
     mkdir build
     cd build
     cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
     ninja
 else
-    cd llvm-12.0.1.src/build
+    cd llvm-12.0.0.src/build
 fi
 cmake -DCMAKE_INSTALL_PREFIX=../../llvm-12 -P cmake_install.cmake
