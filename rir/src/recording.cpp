@@ -275,8 +275,7 @@ REXPORT SEXP replay(SEXP recording, SEXP rho) {
         closure = rirCompile(closure, rho);
 
         for (auto& event : recorder.events) {
-            std::cerr << "event" << std::endl;
-            event->replay(closure);
+            event->replay(closure, recorder.name);
         }
 
         Rf_defineVar(name, closure, rho);
@@ -291,14 +290,15 @@ REXPORT SEXP replay(SEXP recording, SEXP rho) {
     return R_NilValue;
 }
 
-void CompilationEvent::replay(SEXP closure) const {
+void CompilationEvent::replay(SEXP closure, std::string& closure_name) const {
     auto i = speculative_contexts.begin();
     auto dt = DispatchTable::unpack(BODY(closure));
     replay_closure_speculative_context(dt, i);
-    // TODO: pirCompile
+    pirCompile(closure, Context(this->dispatch_context), closure_name,
+               pir::DebugOptions::DefaultDebugOptions);
 }
 
-void DeoptEvent::replay(SEXP closure) const {
+void DeoptEvent::replay(SEXP closure, std::string& closure_name) const {
     // TODO: replay deopt
 }
 
