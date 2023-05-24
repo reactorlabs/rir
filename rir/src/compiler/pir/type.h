@@ -149,8 +149,8 @@ struct PirType {
         return FlagSet() | TypeFlags::lazy | TypeFlags::promiseWrapped |
                TypeFlags::maybeObject | TypeFlags::maybeNotFastVecelt |
                TypeFlags::maybeAttrib | TypeFlags::maybeNotScalar |
-               TypeFlags::maybeNAOrNaN | TypeFlags::rtype |
-               TypeFlags::maybeMissing;
+               TypeFlags::maybeNAOrNaN | TypeFlags::rtype;
+        //| TypeFlags::maybeMissing;
     }
     static constexpr FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype;

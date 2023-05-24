@@ -886,12 +886,7 @@ bool testTypeRules() {
     t = t.mergeWithConversion(a);
     t = t.mergeWithConversion(b);
     assert(t == a);
-    std::cerr << "\n"
-              << "t: " << t << "\n"
-              << "a: " << a << "\n";
     t = t & PirType::num().notMissing();
-    std::cerr << "\n"
-              << "t: " << t << "\n";
     assert(t == a);
     t = PirType::any() & t;
     assert(t == a);
@@ -917,10 +912,10 @@ static Test tests[] = {
          }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
-    // Test("test_assign",
-    //      []() {
-    //          return test42("{y<-42L; t<-FALSE; if (t) x<-y else x<-y; x}");
-    //      }),
+    Test("test_assign",
+         []() {
+             return test42("{y<-42L; t<-FALSE; if (t) x<-y else x<-y; x}");
+         }),
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
