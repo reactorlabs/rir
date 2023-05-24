@@ -11,6 +11,10 @@ fi
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 . "${SCRIPTPATH}/script_include.sh"
 
+if [[ $(uname -m) == "arm64" ]]; then
+    echo "there is no LLVM 12 distribution for ARM64, so we will try to build instead"
+    exec "${SCRIPTPATH}/build-llvm.sh"
+fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1
