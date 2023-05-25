@@ -65,7 +65,7 @@ class Event {
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
     virtual SEXP to_sexp() const = 0;
     virtual void init_from_sexp(SEXP sexp) = 0;
-    virtual void replay(SEXP closure) const = 0;
+    virtual void replay(SEXP closure, std::string& closure_name) const = 0;
 };
 
 class CompilationEvent : public Event {
@@ -76,7 +76,7 @@ class CompilationEvent : public Event {
           speculative_contexts(speculative_contexts) {}
     SEXP to_sexp() const override;
     void init_from_sexp(SEXP sexp) override;
-    void replay(SEXP closure) const override;
+    void replay(SEXP closure, std::string& closure_name) const override;
 
   private:
     unsigned long dispatch_context;
@@ -88,7 +88,7 @@ class DeoptEvent : public Event {
   public:
     SEXP to_sexp() const override;
     void init_from_sexp(SEXP file) override;
-    void replay(SEXP closure) const override;
+    void replay(SEXP closure, std::string& closure_name) const override;
 };
 
 struct FunRecorder {
