@@ -218,21 +218,21 @@ rir.annotateDepromised <- function(closure) {
 }
 
 recordings.save <- function(filename) {
-    .Call("recordingSave", filename)
+    .Call("saveRecording", filename)
 }
 
 recordings.replay <- function(filename, env=parent.frame()) {
-    .Call("recordingReplay", filename, env)
+    .Call("replayRecordingFromFile", filename, env)
 }
 
 recordings.start <- function() {
-    .Call("start_recording")
+    .Call("startRecording")
 }
 
 recordings.stop <- function() {
-    .Call("stop_recording")
+    .Call("stopRecording")
 }
 
-recordings.is_recording <- function() {
-    .Call("is_recording")
+recordings.enabled <- function() {
+    .Call("isRecording")
 }

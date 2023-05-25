@@ -17,8 +17,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-namespace rir {
 
+namespace rir {
 namespace recording {
 
 class Replay;
@@ -125,9 +125,9 @@ SEXP setClassName(SEXP s, const char* className);
 std::string sexpAddress(const SEXP s);
 
 // C++ API
-void record_compile(const SEXP cls, const std::string& name,
-                    const Context& assumptions);
-void record_deopt(const SEXP cls);
+void recordCompile(const SEXP cls, const std::string& name,
+                   const Context& assumptions);
+void recordDeopt(const SEXP cls);
 
 size_t saveTo(FILE* file);
 size_t replayFrom(FILE* file, SEXP rho);
@@ -137,11 +137,12 @@ size_t replayFrom(FILE* file, SEXP rho);
 } // namespace rir
 
 // R API
-REXPORT SEXP start_recording();
-REXPORT SEXP stop_recording();
-REXPORT SEXP is_recording();
-REXPORT SEXP recordingSave(SEXP filename);
-REXPORT SEXP recordingReplay(SEXP filename, SEXP rho);
-REXPORT SEXP replay(SEXP recordings, SEXP rho);
+
+REXPORT SEXP startRecording();
+REXPORT SEXP stopRecording();
+REXPORT SEXP isRecording();
+REXPORT SEXP replayRecording(SEXP recordings, SEXP rho);
+REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho);
+REXPORT SEXP saveRecording(SEXP filename);
 
 #endif

@@ -27,8 +27,8 @@
 namespace rir {
 namespace recording {
 
+// TODO: encapsulate into a Recording class
 static std::unordered_map<std::string, Idx> recordings_index_;
-// TODO: encapsulate
 static std::vector<FunRecorder> fun_recordings_;
 static bool is_recording_ = false;
 
@@ -186,8 +186,8 @@ Idx initOrGetRecording(const SEXP cls, std::string name) {
     return r.first->second;
 }
 
-void record_compile(SEXP const cls, const std::string& name,
-                    const Context& assumptions) {
+void recordCompile(SEXP const cls, const std::string& name,
+                   const Context& assumptions) {
     if (!is_recording_) {
         return;
     }
@@ -206,7 +206,7 @@ void record_compile(SEXP const cls, const std::string& name,
     std::cout << "A";
 }
 
-void record_deopt(SEXP const cls) {
+void recordDeopt(SEXP const cls) {
     if (!is_recording_) {
         return;
     }
@@ -267,7 +267,7 @@ size_t saveTo(FILE* file) {
 }
 
 size_t replayFrom(FILE* file, SEXP rho) {
-    replay(R_LoadFromFile(file, 3), rho);
+    replayRecording(R_LoadFromFile(file, 3), rho);
     return 0;
 }
 
@@ -338,43 +338,28 @@ std::string sexpAddress(const SEXP s) {
 } // namespace recording
 } // namespace rir
 
-// TODO: rename
-REXPORT SEXP start_recording() {
+REXPORT SEXP startRecording() {
     rir::recording::is_recording_ = true;
     return R_NilValue;
 }
 
-REXPORT SEXP stop_recording() {
+REXPORT SEXP stopRecording() {
     rir::recording::is_recording_ = false;
     return R_NilValue;
 }
 
-REXPORT SEXP is_recording() {
+REXPORT SEXP isRecording() {
     return Rf_ScalarLogical(rir::recording::is_recording_);
 }
 
-REXPORT SEXP replay(SEXP recordings, SEXP rho) {
+REXPORT SEXP replayRecording(SEXP recordings, SEXP rho) {
     rir::recording::Replay replay(recordings, rho);
     replay.replay();
 
     return R_NilValue;
 }
 
-REXPORT SEXP recordingSave(SEXP filename) {
-    if (TYPEOF(filename) != STRSXP)
-        Rf_error("must provide a string path");
-
-    FILE* file = fopen(CHAR(Rf_asChar(filename)), "w");
-    if (!file)
-        Rf_error("couldn't open file at path");
-
-    auto saved_count = rir::recording::saveTo(file);
-    fclose(file);
-
-    return Rf_ScalarInteger((int)saved_count);
-}
-
-REXPORT SEXP recordingReplay(SEXP filename, SEXP rho) {
+REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho) {
     if (TYPEOF(filename) != STRSXP)
         Rf_error("must provide a string path");
 
@@ -386,4 +371,18 @@ REXPORT SEXP recordingReplay(SEXP filename, SEXP rho) {
     fclose(file);
 
     return Rf_ScalarInteger((int)replayed_count);
+}
+
+REXPORT SEXP saveRecording(SEXP filename) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "w");
+    if (!file)
+        Rf_error("couldn't open file at path");
+
+    auto saved_count = rir::recording::saveTo(file);
+    fclose(file);
+
+    return Rf_ScalarInteger((int)saved_count);
 }

@@ -298,7 +298,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     PROTECT(what);
 
-    recording::record_compile(what, name, assumptions);
+    recording::recordCompile(what, name, assumptions);
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
