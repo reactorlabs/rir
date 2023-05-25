@@ -605,28 +605,6 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP recordingSave(SEXP filename) {
-    if (TYPEOF(filename) != STRSXP)
-        Rf_error("must provide a string path");
-    FILE* file = fopen(CHAR(Rf_asChar(filename)), "w");
-    if (!file)
-        Rf_error("couldn't open file at path");
-    auto saved_count = recording::saveTo(file);
-    fclose(file);
-    return Rf_ScalarInteger((int)saved_count);
-}
-
-REXPORT SEXP recordingReplay(SEXP filename, SEXP rho) {
-    if (TYPEOF(filename) != STRSXP)
-        Rf_error("must provide a string path");
-    FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
-    if (!file)
-        Rf_error("couldn't open file at path");
-    auto replayed_count = recording::replayFrom(file, rho);
-    fclose(file);
-    return Rf_ScalarInteger((int)replayed_count);
-}
-
 bool startup() {
     initializeRuntime();
     return true;

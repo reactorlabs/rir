@@ -7,23 +7,21 @@
 #include <memory>
 #include <vector>
 
+#define R_CLASS_COMPILE_EVENT "event_compile"
+#define R_CLASS_DEOPT_EVENT "event_deopt"
+#define R_CLASS_CTX_CALLEES "ctx_callees"
+#define R_CLASS_CTX_TEST "ctx_test"
+#define R_CLASS_CTX_VALUES "ctx_values"
+
 namespace rir {
 namespace recording {
 namespace serialization {
-
-extern SEXP shared_class_name_event_compile;
-extern SEXP shared_class_name_event_deopt;
-extern SEXP shared_class_name_ctx_callees;
-extern SEXP shared_class_name_ctx_test;
-extern SEXP shared_class_name_ctx_values;
-
-void init_shared_class_names();
 
 SEXP to_sexp(
     const std::unordered_map<std::string, rir::recording::FunRecorder>& obj);
 
 template <typename T>
-SEXP to_sexp(const std::vector<std::unique_ptr<T>>& obj);
+SEXP to_sexp(const std::unique_ptr<T>& ptr);
 
 SEXP to_sexp(const std::string&);
 
@@ -44,6 +42,16 @@ rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp);
 SEXP to_sexp(const rir::recording::FunRecorder& obj);
 
 rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp);
+
+template <typename T>
+SEXP to_sexp(const std::vector<T>& obj) {
+    auto vec = PROTECT(Rf_allocVector(VECSXP, obj.size()));
+    for (unsigned long i = 0; i < obj.size(); i++) {
+        SET_VECTOR_ELT(vec, i, to_sexp(obj[i]));
+    }
+    UNPROTECT(1);
+    return vec;
+}
 
 } // namespace serialization
 } // namespace recording

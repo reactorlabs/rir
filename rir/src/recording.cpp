@@ -9,7 +9,9 @@
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -25,32 +27,21 @@
 namespace rir {
 namespace recording {
 
-static std::unordered_map<std::string, FunRecorder> recordings_;
-static bool recording_ = false;
+static std::unordered_map<std::string, Idx> recordings_index_;
+// TODO: encapsulate
+static std::vector<FunRecorder> fun_recordings_;
+static bool is_recording_ = false;
 
-std::string sexp_address(const SEXP s) {
-    char* caddress;
-    if (asprintf(&caddress, "%p", (void*)s) == -1) {
-        Rf_error("Getting address of SEXP failed");
-    }
-
-    return caddress;
-}
-
-void replay_closure_speculative_context(
-    SEXP, std::vector<SpeculativeContext>::const_iterator&);
-void replay_closure_speculative_context(
-    const Code*, std::vector<SpeculativeContext>::const_iterator&);
-
-void replay_closure_speculative_context(
+void Replay::replaySpeculativeContext(
     DispatchTable* dt, std::vector<SpeculativeContext>::const_iterator& ctx) {
+
     auto fun = dt->baseline();
     auto code = fun->body();
-    replay_closure_speculative_context(code, ctx);
+    this->replaySpeculativeContext(code, ctx);
 }
 
-void replay_closure_speculative_context(
-    const Code* code, std::vector<SpeculativeContext>::const_iterator& ctx) {
+void Replay::replaySpeculativeContext(
+    Code* code, std::vector<SpeculativeContext>::const_iterator& ctx) {
 
     Opcode* end = code->endCode();
     Opcode* pc = code->code();
@@ -64,7 +55,7 @@ void replay_closure_speculative_context(
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_: {
             auto promise = code->getPromise(bc.immediate.fun);
-            replay_closure_speculative_context(promise, ctx);
+            this->replaySpeculativeContext(promise, ctx);
             break;
         }
         case Opcode::close_: {
@@ -72,12 +63,22 @@ void replay_closure_speculative_context(
             // pprev is the push_ of body
             auto body = BC::decodeShallow(pprev).immediateConst();
             auto dt = DispatchTable::unpack(body);
-            replay_closure_speculative_context(dt, ctx);
+            this->replaySpeculativeContext(dt, ctx);
             break;
         }
         case Opcode::record_call_: {
             ObservedCallees* feedback = (ObservedCallees*)(pc + 1);
-            *feedback = (*ctx++).value.callees;
+            auto callees_idx = (*ctx++).value.callees;
+
+            for (auto callee_idx : callees_idx) {
+                if (callee_idx == NO_INDEX) {
+                    continue;
+                }
+
+                SEXP callee = replayClosure(callee_idx);
+                feedback->record(code, callee);
+            }
+
             break;
         }
         case Opcode::record_test_: {
@@ -99,6 +100,7 @@ void replay_closure_speculative_context(
     }
 }
 
+Idx initOrGetRecording(const SEXP cls, std::string name = "");
 void record_closure_speculative_context(SEXP, std::vector<SpeculativeContext>&);
 void record_closure_speculative_context(const Code*,
                                         std::vector<SpeculativeContext>&);
@@ -135,7 +137,21 @@ void record_closure_speculative_context(const Code* code,
             break;
         }
         case Opcode::record_call_: {
-            ctx.push_back(bc.immediate.callFeedback);
+            auto observed = bc.immediate.callFeedback;
+            decltype(SpeculativeContext::value.callees) callees;
+
+            for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
+                Idx idx;
+                if (i < observed.numTargets) {
+                    auto target = observed.getTarget(code, i);
+                    idx = initOrGetRecording(target);
+                } else {
+                    idx = NO_INDEX;
+                }
+                callees[i] = idx;
+            }
+
+            ctx.push_back(std::move(callees));
             break;
         }
         case Opcode::record_test_: {
@@ -155,54 +171,56 @@ void record_closure_speculative_context(const Code* code,
     }
 }
 
-void record_compile(SEXP const cls, const std::string& name,
-                    const Context& assumptions) {
-    if (!recording_) {
-        return;
-    }
-
-    auto address = sexp_address(cls);
-    auto r = recordings_.insert({address, FunRecorder{}});
-    auto& v = r.first->second;
-
+Idx initOrGetRecording(const SEXP cls, std::string name) {
+    auto address = sexpAddress(cls);
+    auto r = recordings_index_.insert({address, fun_recordings_.size()});
     if (r.second) {
         // we are seeing it for the first time
+        fun_recordings_.push_back(FunRecorder{});
+        auto& v = fun_recordings_.back();
         v.name = name;
         v.closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
     }
 
+    return r.first->second;
+}
+
+void record_compile(SEXP const cls, const std::string& name,
+                    const Context& assumptions) {
+    if (!is_recording_) {
+        return;
+    }
+
+    initOrGetRecording(cls, name);
+
     std::vector<SpeculativeContext> sc;
     auto dt = DispatchTable::unpack(BODY(cls));
     record_closure_speculative_context(dt, sc);
 
-    unsigned long dispatch_context = assumptions.toI();
+    auto dispatch_context = assumptions.toI();
     auto event = CompilationEvent(dispatch_context, std::move(sc));
 
-    v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
+    auto& rec = fun_recordings_[initOrGetRecording(cls, name)];
+    rec.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
+    std::cout << "A";
 }
 
 void record_deopt(SEXP const cls) {
-    if (!recording_) {
+    if (!is_recording_) {
         return;
     }
 
-    auto address = sexp_address(cls);
-    auto r = recordings_.find(address);
-    if (r == recordings_.end()) {
-        return;
-    }
-
-    auto& v = r->second;
     DeoptEvent event;
 
-    v.events.push_back(std::make_unique<DeoptEvent>(std::move(event)));
+    FunRecorder& rec = fun_recordings_[initOrGetRecording(cls, "")];
+    rec.events.push_back(std::make_unique<DeoptEvent>(std::move(event)));
 }
 
 SEXP CompilationEvent::to_sexp() const {
     const char* fields[] = {"dispatch_context", "speculative_contexts", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    SET_CLASS(sexp, serialization::shared_class_name_event_compile);
+    setClassName(sexp, R_CLASS_COMPILE_EVENT);
     SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->dispatch_context));
     auto speculative_contexts_sexp =
         Rf_allocVector(VECSXP, (int)this->speculative_contexts.size());
@@ -234,7 +252,7 @@ void CompilationEvent::init_from_sexp(SEXP sexp) {
 
 SEXP DeoptEvent::to_sexp() const {
     auto sexp = PROTECT(Rf_allocVector(VECSXP, 0));
-    SET_CLASS(sexp, serialization::shared_class_name_event_deopt);
+    setClassName(sexp, R_CLASS_DEOPT_EVENT);
     UNPROTECT(1);
     return sexp;
 }
@@ -242,11 +260,10 @@ SEXP DeoptEvent::to_sexp() const {
 void DeoptEvent::init_from_sexp(SEXP sexp) { assert(Rf_length(sexp) == 0); }
 
 size_t saveTo(FILE* file) {
-    auto sexp = serialization::to_sexp(recordings_);
-    PROTECT(sexp);
+    auto sexp = PROTECT(serialization::to_sexp(fun_recordings_));
     R_SaveToFile(sexp, file, 3);
     UNPROTECT(1);
-    return recordings_.size();
+    return fun_recordings_.size();
 }
 
 size_t replayFrom(FILE* file, SEXP rho) {
@@ -254,67 +271,119 @@ size_t replayFrom(FILE* file, SEXP rho) {
     return 0;
 }
 
-REXPORT SEXP replay(SEXP recording, SEXP rho) {
-    PROTECT(recording);
-    assert(Rf_isVector(recording));
-    SEXP names = Rf_getAttrib(recording, R_NamesSymbol);
-    assert(Rf_isVector(names));
+SEXP Replay::replayClosure(Idx idx) {
+    SEXP closure = closures_.at(idx);
+    if (closure != R_NilValue) {
+        return closure;
+    }
 
-    // TODO: The temporary map may not be necessary, we can probably replay the
-    //       events on the go, from within the for loop.
-    decltype(recordings_) new_recordings;
+    SEXP rawRecording = VECTOR_ELT(recordings_, idx);
+    FunRecorder recording = serialization::fun_recorder_from_sexp(rawRecording);
 
-    for (auto i = 0; i < Rf_length(recording); i++) {
-        auto recorder_name_sexp = STRING_ELT(names, i);
-        auto recorder_sexp = VECTOR_ELT(recording, i);
-        FunRecorder recorder =
-            serialization::fun_recorder_from_sexp(recorder_sexp);
+    SEXP name = R_NilValue;
+    if (!recording.name.empty()) {
+        name = Rf_install(recording.name.c_str());
+    }
 
-        SEXP name = Rf_install(recorder.name.c_str());
-        SEXP closure = PROTECT(R_unserialize(recorder.closure, R_NilValue));
-        closure = rirCompile(closure, rho);
+    closure = PROTECT(R_unserialize(recording.closure, R_NilValue));
+    closure = rirCompile(closure, rho_);
+    closures_[idx] = closure;
 
-        for (auto& event : recorder.events) {
-            std::cerr << "event" << std::endl;
-            event->replay(closure);
-        }
+    for (auto& event : recording.events) {
+        event->replay(*this, closure);
+    }
 
-        Rf_defineVar(name, closure, rho);
-        UNPROTECT(1);
-
-        std::string recorder_name =
-            serialization::string_from_sexp(recorder_name_sexp);
-        new_recordings.insert({std::move(recorder_name), std::move(recorder)});
+    if (name != R_NilValue) {
+        Rf_defineVar(name, closure, rho_);
     }
 
     UNPROTECT(1);
-    return R_NilValue;
+
+    return closure;
 }
 
-void CompilationEvent::replay(SEXP closure) const {
-    auto i = speculative_contexts.begin();
+void Replay::replay() {
+    for (auto i = 0; i < Rf_length(recordings_); i++) {
+        replayClosure(i);
+    }
+}
+
+void CompilationEvent::replay(Replay& replay, SEXP closure) const {
+    auto ctx = speculative_contexts.begin();
     auto dt = DispatchTable::unpack(BODY(closure));
-    replay_closure_speculative_context(dt, i);
+    replay.replaySpeculativeContext(dt, ctx);
+
     // TODO: pirCompile
 }
 
-void DeoptEvent::replay(SEXP closure) const {
+void DeoptEvent::replay(Replay& replay, SEXP closure) const {
     // TODO: replay deopt
+}
+
+SEXP setClassName(SEXP s, const char* className) {
+    SEXP t = Rf_mkString(className);
+    Rf_setAttrib(s, R_ClassSymbol, t);
+    return s;
+}
+
+std::string sexpAddress(const SEXP s) {
+    char* caddress;
+    if (asprintf(&caddress, "%p", (void*)s) == -1) {
+        Rf_error("Getting address of SEXP failed");
+    }
+
+    return caddress;
 }
 
 } // namespace recording
 } // namespace rir
 
+// TODO: rename
 REXPORT SEXP start_recording() {
-    rir::recording::recording_ = true;
+    rir::recording::is_recording_ = true;
     return R_NilValue;
 }
 
 REXPORT SEXP stop_recording() {
-    rir::recording::recording_ = false;
+    rir::recording::is_recording_ = false;
     return R_NilValue;
 }
 
 REXPORT SEXP is_recording() {
-    return Rf_ScalarLogical(rir::recording::recording_);
+    return Rf_ScalarLogical(rir::recording::is_recording_);
+}
+
+REXPORT SEXP replay(SEXP recordings, SEXP rho) {
+    rir::recording::Replay replay(recordings, rho);
+    replay.replay();
+
+    return R_NilValue;
+}
+
+REXPORT SEXP recordingSave(SEXP filename) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "w");
+    if (!file)
+        Rf_error("couldn't open file at path");
+
+    auto saved_count = rir::recording::saveTo(file);
+    fclose(file);
+
+    return Rf_ScalarInteger((int)saved_count);
+}
+
+REXPORT SEXP recordingReplay(SEXP filename, SEXP rho) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
+    if (!file)
+        Rf_error("couldn't open file at path");
+
+    auto replayed_count = rir::recording::replayFrom(file, rho);
+    fclose(file);
+
+    return Rf_ScalarInteger((int)replayed_count);
 }
