@@ -25,6 +25,36 @@
 namespace rir {
 namespace recording {
 
+PreservedSEXP& PreservedSEXP::operator=(const PreservedSEXP& other) {
+    if (this != &other) {
+        release();
+        sexp = other.sexp;
+        preserve();
+    }
+    return *this;
+}
+
+PreservedSEXP& PreservedSEXP::operator=(SEXP const& sexp_) {
+    if (this->sexp != sexp_) {
+        release();
+        this->sexp = sexp_;
+        preserve();
+    }
+    return *this;
+}
+
+void PreservedSEXP::preserve() const {
+    if (this->sexp)
+        R_PreserveObject(this->sexp);
+}
+
+void PreservedSEXP::release() {
+    if (this->sexp) {
+        R_ReleaseObject(this->sexp);
+        this->sexp = nullptr;
+    }
+}
+
 static std::unordered_map<std::string, FunRecorder> recordings_;
 static bool recording_ = false;
 
@@ -168,8 +198,8 @@ void record_compile(SEXP const cls, const std::string& name,
     if (r.second) {
         // we are seeing it for the first time
         v.name = name;
-        v.closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+        v.closure =
+            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue);
     }
 
     std::vector<SpeculativeContext> sc;
@@ -271,7 +301,8 @@ REXPORT SEXP replay(SEXP recording, SEXP rho) {
             serialization::fun_recorder_from_sexp(recorder_sexp);
 
         SEXP name = Rf_install(recorder.name.c_str());
-        SEXP closure = PROTECT(R_unserialize(recorder.closure, R_NilValue));
+        SEXP closure =
+            PROTECT(R_unserialize(recorder.closure.get(), R_NilValue));
         closure = rirCompile(closure, rho);
 
         for (auto& event : recorder.events) {

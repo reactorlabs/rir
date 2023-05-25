@@ -150,7 +150,7 @@ SEXP to_sexp(const rir::recording::FunRecorder& obj) {
     const char* fields[] = {"name", "closure", "events", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
     SET_VECTOR_ELT(vec, 0, Rf_mkString(obj.name.c_str()));
-    SET_VECTOR_ELT(vec, 1, obj.closure);
+    SET_VECTOR_ELT(vec, 1, obj.closure.get());
     SET_VECTOR_ELT(vec, 2, to_sexp(obj.events));
     UNPROTECT(1);
     return vec;
@@ -165,7 +165,7 @@ rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp) {
     recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
 
     recorder.closure = VECTOR_ELT(sexp, 1);
-    assert(TYPEOF(recorder.closure) == RAWSXP);
+    assert(TYPEOF(recorder.closure.get()) == RAWSXP);
 
     auto events_sexp = VECTOR_ELT(sexp, 2);
     for (auto i = 0; i < Rf_length(events_sexp); i++) {

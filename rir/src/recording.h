@@ -18,6 +18,29 @@ namespace rir {
 
 namespace recording {
 
+/**
+ * A SEXP reference that's protected from garbage collection and will be
+ * unprotected on destruction
+ */
+struct PreservedSEXP {
+  public:
+    inline PreservedSEXP() : sexp(nullptr) {}
+    inline explicit PreservedSEXP(SEXP sexp) : sexp(sexp) { preserve(); }
+    inline PreservedSEXP(const PreservedSEXP& other) : sexp(other.sexp) {
+        preserve();
+    }
+    PreservedSEXP& operator=(const PreservedSEXP& other);
+    PreservedSEXP& operator=(const SEXP& sexp);
+    inline ~PreservedSEXP() { release(); }
+    inline SEXP get() const { return sexp; }
+    explicit operator SEXP() const { return sexp; }
+
+  private:
+    SEXP sexp;
+    void preserve() const;
+    void release();
+};
+
 enum class SpeculativeContextType { Callees, Test, Values };
 struct SpeculativeContext {
     SpeculativeContextType type;
@@ -71,7 +94,7 @@ class DeoptEvent : public Event {
 struct FunRecorder {
     std::string name;
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
-    SEXP closure;
+    PreservedSEXP closure;
     std::vector<std::unique_ptr<Event>> events;
 };
 
