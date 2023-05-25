@@ -28,7 +28,6 @@ namespace rir {
 namespace recording {
 
 // global state
-
 // a flag indicating whether the recording is active or not
 static bool is_recording_ = false;
 // the main recorder
@@ -166,7 +165,7 @@ SEXP Replay::replayClosure(Idx idx) {
     closures_[idx] = closure;
 
     for (auto& event : recording.events) {
-        event->replay(*this, closure);
+        event->replay(*this, closure, recording.name);
     }
 
     if (name != R_NilValue) {
@@ -256,7 +255,8 @@ void Replay::replaySpeculativeContext(
     }
 }
 
-void CompilationEvent::replay(Replay& replay, SEXP closure) const {
+void CompilationEvent::replay(Replay& replay, SEXP closure,
+                              std::string& closure_name) const {
     auto ctx = speculative_contexts.begin();
     auto dt = DispatchTable::unpack(BODY(closure));
     replay.replaySpeculativeContext(dt, ctx);
@@ -297,7 +297,8 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-void DeoptEvent::replay(Replay& replay, SEXP closure) const {
+void DeoptEvent::replay(Replay& replay, SEXP closure,
+                        std::string& closure_name) const {
     // TODO: replay deopt
 }
 
