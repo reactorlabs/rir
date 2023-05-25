@@ -18,7 +18,7 @@ namespace recording {
 namespace serialization {
 
 SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecorder>& obj);
+    const std::unordered_map<std::string, rir::recording::FunRecording>& obj);
 
 template <typename T>
 SEXP to_sexp(const std::unique_ptr<T>& ptr);
@@ -39,9 +39,9 @@ SEXP to_sexp(const rir::recording::SpeculativeContext&);
 
 rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp);
 
-SEXP to_sexp(const rir::recording::FunRecorder& obj);
+SEXP to_sexp(const rir::recording::FunRecording& obj);
 
-rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp);
+rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp);
 
 template <typename T>
 SEXP to_sexp(const std::vector<T>& obj) {

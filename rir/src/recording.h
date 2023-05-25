@@ -9,6 +9,7 @@
 #include "runtime/TypeFeedback.h"
 #include <R/r.h>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <memory>
@@ -22,13 +23,16 @@ namespace rir {
 namespace recording {
 
 class Replay;
+class Record;
 
 typedef std::uint32_t Idx;
 #define NO_INDEX ((Idx)-1)
 
 enum class SpeculativeContextType { Callees, Test, Values };
+
 struct SpeculativeContext {
     SpeculativeContextType type;
+
     union Value {
         std::array<Idx, rir::ObservedCallees::MaxTargets> callees;
         ObservedTest test;
@@ -48,8 +52,8 @@ struct SpeculativeContext {
 class Event {
   public:
     friend std::ostream& operator<<(std::ostream& out, const Event& e);
-    virtual SEXP to_sexp() const = 0;
-    virtual void init_from_sexp(SEXP sexp) = 0;
+    virtual SEXP toSEXP() const = 0;
+    virtual void fromSEXP(SEXP sexp) = 0;
     virtual void replay(Replay& replay, SEXP closure) const = 0;
 };
 
@@ -59,8 +63,8 @@ class CompilationEvent : public Event {
                      std::vector<SpeculativeContext>&& speculative_contexts)
         : dispatch_context(dispatch_context),
           speculative_contexts(speculative_contexts) {}
-    SEXP to_sexp() const override;
-    void init_from_sexp(SEXP sexp) override;
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
     void replay(Replay& replay, SEXP closure) const override;
 
   private:
@@ -71,12 +75,13 @@ class CompilationEvent : public Event {
 
 class DeoptEvent : public Event {
   public:
-    SEXP to_sexp() const override;
-    void init_from_sexp(SEXP file) override;
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure) const override;
 };
 
-struct FunRecorder {
+struct FunRecording {
+    /* possibly empty name of the closure */
     std::string name;
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
     SEXP closure;
@@ -98,26 +103,27 @@ class Replay {
     void replaySpeculativeContext(
         Code* code, std::vector<SpeculativeContext>::const_iterator& ctx);
 
-    Replay(SEXP recordings, SEXP rho) : recordings_(recordings), rho_(rho) {
-        PROTECT(recordings_);
-        PROTECT(rho_);
+    Replay(SEXP recordings, SEXP rho);
 
-        assert(Rf_isVector(recordings_));
-        assert(Rf_isEnvironment(rho_));
+    ~Replay();
 
-        auto n = Rf_length(recordings_);
-        closures_.reserve(n);
-        for (auto i = 0; i < n; i++) {
-            closures_.push_back(R_NilValue);
-        }
-    }
+    size_t replay();
+};
 
-    ~Replay() {
-        UNPROTECT_PTR(recordings_);
-        UNPROTECT_PTR(rho_);
-    }
+class Record {
+    std::unordered_map<std::string, Idx> recordings_index_;
+    std::vector<FunRecording> fun_recordings_;
 
-    void replay();
+  public:
+    std::pair<Idx, FunRecording&> initOrGetRecording(const SEXP cls,
+                                                     std::string name = "");
+    void recordSpeculativeContext(DispatchTable* dt,
+                                  std::vector<SpeculativeContext>& ctx);
+
+    void recordSpeculativeContext(const Code* code,
+                                  std::vector<SpeculativeContext>& ctx);
+
+    size_t saveToFile(FILE* file);
 };
 
 // utilities
@@ -128,9 +134,6 @@ std::string sexpAddress(const SEXP s);
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordDeopt(const SEXP cls);
-
-size_t saveTo(FILE* file);
-size_t replayFrom(FILE* file, SEXP rho);
 
 } // namespace recording
 

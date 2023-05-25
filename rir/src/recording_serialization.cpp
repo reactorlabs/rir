@@ -6,8 +6,10 @@ namespace rir {
 namespace recording {
 namespace serialization {
 
+// TODO: fix the names
+
 SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecorder>& obj) {
+    const std::unordered_map<std::string, rir::recording::FunRecording>& obj) {
     std::unique_ptr<const char*[]> keys(new const char*[obj.size() + 1]);
     auto ki = 0;
     for (auto& kv : obj) {
@@ -64,7 +66,7 @@ uint64_t uint64_t_from_sexp(SEXP sexp) {
     return std::stoul(CHAR(STRING_ELT(sexp, 0)));
 }
 
-SEXP to_sexp(const rir::recording::Event& obj) { return obj.to_sexp(); }
+SEXP to_sexp(const rir::recording::Event& obj) { return obj.toSEXP(); }
 
 std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
@@ -80,7 +82,7 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         Rf_error("can't deserialize event of unknown class");
     }
 
-    event->init_from_sexp(sexp);
+    event->fromSEXP(sexp);
     return event;
 }
 
@@ -128,7 +130,7 @@ rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp) {
     return ctx;
 }
 
-SEXP to_sexp(const rir::recording::FunRecorder& obj) {
+SEXP to_sexp(const rir::recording::FunRecording& obj) {
     const char* fields[] = {"name", "closure", "events", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
     SET_VECTOR_ELT(vec, 0, Rf_mkString(obj.name.c_str()));
@@ -138,11 +140,11 @@ SEXP to_sexp(const rir::recording::FunRecorder& obj) {
     return vec;
 }
 
-rir::recording::FunRecorder fun_recorder_from_sexp(SEXP sexp) {
+rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
     assert(Rf_length(sexp) == 3);
 
-    rir::recording::FunRecorder recorder;
+    rir::recording::FunRecording recorder;
     recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
 
     recorder.closure = VECTOR_ELT(sexp, 1);
