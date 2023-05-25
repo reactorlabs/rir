@@ -555,10 +555,9 @@ struct PirType {
         if (maybePromiseWrapped())
             return *this;
 
-        // auto newFlags = flags_;
-        // newFlags.set(TypeFlags::promiseWrapped);
-
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+
+        // return orFullyPromiseWrapped();
     }
 
     inline constexpr PirType orFullyPromiseWrapped() const {
