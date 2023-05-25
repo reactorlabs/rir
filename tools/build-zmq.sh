@@ -17,12 +17,17 @@ if [ -d "${EXTERNAL_DIR}/zeromq" ] && [ -n "${FORCE}" ]; then
 fi
 
 if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
-    echo "-> building zeromq..."
-    # https://github.com/... is the path to the zeromq source release
+    echo "-> building libzmq..."
+    # https://github.com/... is the path to the libzmq source release
     wget -qO- https://github.com/zeromq/libzmq/releases/download/v4.3.4/zeromq-4.3.4.tar.gz | tar -xz -C "${EXTERNAL_DIR}"
     cd "${EXTERNAL_DIR}/zeromq-4.3.4"
     # --disable-Werror must be passed because of https://github.com/zeromq/libzmq/issues/4391, which is still open :(
     ./configure --prefix="${EXTERNAL_DIR}/zeromq" --enable-debug --disable-Werror && make -j "$(ncores)" && make install
+    echo "-> building cppzmq"
+      # https://github.com/... is the path to the cppzmq source release
+    wget -qO- https://github.com/zeromq/cppzmq/archive/refs/tags/v4.9.0.tar.gz | tar -xz -C "${EXTERNAL_DIR}"
+    cd "${EXTERNAL_DIR}/cppzmq-4.9.0"
+    cmake -GNinja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${EXTERNAL_DIR}/zeromq" -B build && cmake --build build --target install
 else
     echo "-> zeromq already built, run with FORCE=1 to force rebuild. Skipping..."
 fi
