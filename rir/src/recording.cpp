@@ -1,5 +1,6 @@
 #include "recording.h"
 #include "R/Serialize.h"
+#include "R/r.h"
 #include "Rdefines.h"
 #include "Rinternals.h"
 #include "api.h"
@@ -113,6 +114,9 @@ std::pair<Idx, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         v->name = name;
         v->closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+        R_PreserveObject(v->closure);
+        UNPROTECT(1);
+        // TODO: who should clear this? saveToFile?
     } else {
         v = &fun_recordings_[r.first->second];
     }
@@ -169,7 +173,9 @@ SEXP Replay::replayClosure(Idx idx) {
     }
 
     if (name != R_NilValue) {
+        // FIXME: this is not correct, we need to keep the environment
         Rf_defineVar(name, closure, rho_);
+        std::cerr << "Replayed: " << recording.name << std::endl;
     }
 
     UNPROTECT(1);
