@@ -8,6 +8,7 @@ set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
 set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-12)
+set(ZEROMQ_DIR ${CMAKE_SOURCE_DIR}/external/zeromq)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
@@ -22,15 +23,8 @@ endif ()
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# use GCC 9 on macOS. Otherwise we use clang
-if(APPLE)
-    option(MACOS_USE_GCC_9 "Use GCC 9 on macOS." FALSE)
-endif(APPLE)
-
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_C_COMPILER /usr/local/bin/gcc-9 CACHE PATH "" FORCE)
-    set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
-endif()
+include_directories(${ZEROMQ_DIR}/include)
+link_directories(${ZEROMQ_DIR}/lib)
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
@@ -39,12 +33,7 @@ set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_RELEASESLOWASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
-# with macOS GCC 9 we need to explicitly use libc++, since llvm does. See https://libcxx.llvm.org/docs/UsingLibcxx.html#using-libc-with-gcc
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_CXX_FLAGS_LIBCXX "-nostdinc++ -nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s.1 -lgcc")
-else()
-    set(CMAKE_CXX_FLAGS_LIBCXX "")
-endif()
+set(CMAKE_CXX_FLAGS_LIBCXX "")
 set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} ${CMAKE_CXX_FLAGS_LIBCXX} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=3 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough -Wno-deprecated-declarations")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DSWITCH_TO_NAMED=1")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
@@ -118,36 +107,20 @@ endif(${NO_LOCAL_CONFIG})
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
-# again we need to explicitly use libc++
-if(${MACOS_USE_GCC_9})
-    include_directories(/Library/Developer/CommandLineTools/usr/include/c++/v1)
-endif(${MACOS_USE_GCC_9})
 message(STATUS "Using R from ${R_HOME}")
 
 add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
 
-if(${MACOS_USE_GCC_9})
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh --macos_gcc9
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh --macos_gcc9
-    )
-else()
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
-    )
-endif()
-
-add_custom_target(default-gnur
-    DEPENDS dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
+add_custom_target(dependencies
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-zmq.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
 )
 
 add_custom_target(setup
     DEPENDS dependencies
-    DEPENDS default-gnur
 )
 
 add_custom_target(tests
