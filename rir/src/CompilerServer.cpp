@@ -36,9 +36,11 @@ void CompilerServer::tryRun() {
 
     // Won't return
     for (;;) {
+        std::cerr << "Waiting for next request..." << std::endl;
         // Receive the request
         zmq::mutable_buffer requestData;
         socket.recv(requestData, zmq::recv_flags::none);
+        std::cerr << "Got request (" << requestData.size() << "bytes)" << std::endl;
 
         // Deserialize the request
         // Request data format =
@@ -93,7 +95,8 @@ void CompilerServer::tryRun() {
 
         // Send the response
         // TODO: Again, actually send something in a response data format
-        socket.send(zmq::buffer("hello"), zmq::send_flags::none);
+        auto responseSize = *socket.send(zmq::buffer("hello"), zmq::send_flags::none);
+        std::cerr << "Sent response (" << responseSize << "bytes)" << std::endl;
     }
 }
 
