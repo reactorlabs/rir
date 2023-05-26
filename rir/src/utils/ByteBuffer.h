@@ -168,7 +168,7 @@ namespace bb {
 
         template<typename T> T read(uint32_t index) const {
             if (index + sizeof(T) <= buf.size())
-                return *((T*) &buf[index]);
+                return *(reinterpret_cast<T*>((uint8_t*)&buf[index]));
             return 0;
         }
 
@@ -177,7 +177,7 @@ namespace bb {
 
             if (size() < (wpos + s))
                 buf.resize(wpos + s);
-            memcpy(&buf[wpos], (uint8_t*) &data, s);
+            memcpy(&buf[wpos], reinterpret_cast<uint8_t*>(&data), s);
             //printf("writing %c to %i\n", (uint8_t)data, wpos);
 
             wpos += s;
@@ -188,7 +188,7 @@ namespace bb {
                 buf.resize(size() + (index + sizeof(data)));
             }
 
-            memcpy(&buf[index], (uint8_t*) &data, sizeof(data));
+            memcpy(&buf[index], reinterpret_cast<uint8_t*>(&data), sizeof(data));
             wpos = index + sizeof(data);
         }
     };
