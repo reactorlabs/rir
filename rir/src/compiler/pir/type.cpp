@@ -37,8 +37,8 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::env);
         break;
     case PROMSXP:
-        flags_.set(TypeFlags::lazy);
         flags_.set(TypeFlags::promiseWrapped);
+        flags_.set(TypeFlags::lazy);
         t_.r = PirType::any().t_.r;
         break;
     case EXPRSXP:
@@ -138,6 +138,12 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
 }
 
 PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
+
+    if (e == R_MissingArg) {
+        *this = theMissingValue();
+        return;
+    }
+
     // these are set by merge below
     flags_.reset(TypeFlags::promiseWrapped);
     flags_.reset(TypeFlags::lazy);
@@ -150,14 +156,10 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
                 t_.r.set(RType::missing);
         } else {
             flags_.set(TypeFlags::lazy);
-            t_.r.set(RType::missing);
         }
     }
 
-    if (e == R_MissingArg) {
-        t_.r.set(RType::missing);
-        flags_.set(TypeFlags::maybeMissing);
-    } else if (e == R_UnboundValue)
+    if (e == R_UnboundValue)
         t_.r.set(RType::unbound);
     else
         merge(TYPEOF(e));
@@ -212,9 +214,10 @@ bool PirType::isInstance(SEXP val) const {
             assert(!Rf_isObject(val));
             if (maybePromiseWrapped() && !maybeLazy()) {
                 auto v = PRVALUE(val);
-                if (!t_.r.contains(RType::missing) && v == R_MissingArg)
-                    return false;
-                return v != R_UnboundValue && forced().isInstance(v);
+                // if (!t_.r.contains(RType::missing) && v == R_MissingArg)
+                //     return false;
+                return v != R_UnboundValue &&
+                       notMissing().forced().isInstance(v);
             }
             return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
         }

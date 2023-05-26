@@ -550,14 +550,24 @@ struct PirType {
     }
 
     inline constexpr PirType orPromiseWrapped() const {
-        // assert(isRType());
+        assert(isRType());
 
-        // if (maybePromiseWrapped())
-        //     return *this;
+        if (maybePromiseWrapped())
+            return *this;
 
-        // return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+        // auto newType = t_.r;
+        // auto newFlags = flags_;
 
-        return orFullyPromiseWrapped();
+        // if (t_.r.includes(RType::missing)) {
+        //     newType.reset(RType::missing);
+        //     newFlags.set(TypeFlags::maybeMissing);
+        // }
+
+        // newFlags.set(TypeFlags::promiseWrapped);
+        // return PirType(newType, newFlags);
+
+        return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+        // return orFullyPromiseWrapped();
     }
 
     inline constexpr PirType orFullyPromiseWrapped() const {
@@ -725,7 +735,7 @@ struct PirType {
     }
 
     constexpr bool isVoid() const {
-        return isRType() ? t_.r.empty() : t_.n.empty();
+        return isRType() ? t_.r.empty() && !maybeMissing() : t_.n.empty();
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
@@ -760,10 +770,14 @@ struct PirType {
             (!maybeNotFastVecelt() && o.maybeNotFastVecelt()) ||
             (!maybeHasAttrs() && o.maybeHasAttrs()) ||
             (!maybeNAOrNaN() && o.maybeNAOrNaN()) ||
-            (isScalar() && !o.isScalar())) {
+            (isScalar() && !o.isScalar()) ||
+            (!maybeMissing() && o.maybeMissing())) {
             return false;
         }
-        return t_.r.includes(o.t_.r);
+        // before we had: t_.r.includes(o.t_.r)
+        // but, we want this case to be accepted: int~ | missing <isSuper> int |
+        // missing
+        return notMissing().t_.r.includes(o.notMissing().t_.r);
     }
 
     // Is val an instance of this type?
