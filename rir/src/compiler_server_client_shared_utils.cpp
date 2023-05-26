@@ -16,7 +16,7 @@ std::string printClosureVersionForCompilerServerComparison(pir::ClosureVersion* 
 
 __attribute__((unused)) NORET void zeromq_error(const char* func) {
     printCBacktrace();
-    std::cerr << "zeromq error in" << func << ": " << zmq_strerror(zmq_errno()) << std::endl;
+    std::cerr << "zeromq error in " << func << ": " << zmq_strerror(zmq_errno()) << std::endl;
     std::abort();
 }
 

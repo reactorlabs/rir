@@ -97,7 +97,6 @@ class ClosureLog : public AbstractLog {
         log.finalPIR();
         log.flush();
     }
-    void checkDiscrepancy(const std::string& localPir, const std::string& remotePir);
 
     void CSSA(Code*);
     void LLVMBitcode(const LLVMBitcodePrint&);

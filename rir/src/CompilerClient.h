@@ -35,7 +35,7 @@ class CompilerClient {
       public:
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
-        void compare(pir::Log& log, pir::ClosureVersion* version);
+        void compare(pir::ClosureVersion* version);
     };
 
     /// Initializes if PIR_CLIENT_ADDR is set

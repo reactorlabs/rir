@@ -353,7 +353,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         // Eagerly compile the main function
         done->body()->nativeCode();
         // Compare compiled version with remote for discrepancies
-        compilerServerHandle.compare(logger, c);
+        compilerServerHandle.compare(c);
     };
 
     cmp.compileClosure(what, name, assumptions, true, compile,
