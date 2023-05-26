@@ -25,8 +25,7 @@ namespace recording {
 class Replay;
 class Record;
 
-typedef std::uint32_t Idx;
-#define NO_INDEX ((Idx)-1)
+#define NO_INDEX ((size_t)-1)
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
@@ -34,7 +33,7 @@ struct SpeculativeContext {
     SpeculativeContextType type;
 
     union Value {
-        std::array<Idx, rir::ObservedCallees::MaxTargets> callees;
+        std::array<size_t, rir::ObservedCallees::MaxTargets> callees;
         ObservedTest test;
         ObservedValues values;
     } value;
@@ -96,15 +95,17 @@ class Replay {
     SEXP rho_;
     std::vector<SEXP> closures_;
 
-    SEXP replayClosure(Idx idx);
+    SEXP replayClosure(size_t idx);
 
   public:
     void replaySpeculativeContext(
         DispatchTable* dt,
-        std::vector<SpeculativeContext>::const_iterator& ctx);
+        std::vector<SpeculativeContext>::const_iterator& ctxStart,
+        std::vector<SpeculativeContext>::const_iterator& ctxEnd);
 
     void replaySpeculativeContext(
-        Code* code, std::vector<SpeculativeContext>::const_iterator& ctx);
+        Code* code, std::vector<SpeculativeContext>::const_iterator& ctxStart,
+        std::vector<SpeculativeContext>::const_iterator& ctxEnd);
 
     Replay(SEXP recordings, SEXP rho);
 
@@ -114,12 +115,12 @@ class Replay {
 };
 
 class Record {
-    std::unordered_map<std::string, Idx> recordings_index_;
+    std::unordered_map<std::string, size_t> recordings_index_;
     std::vector<FunRecording> fun_recordings_;
 
   public:
-    std::pair<Idx, FunRecording&> initOrGetRecording(const SEXP cls,
-                                                     std::string name = "");
+    std::pair<size_t, FunRecording&> initOrGetRecording(const SEXP cls,
+                                                        std::string name = "");
     void recordSpeculativeContext(DispatchTable* dt,
                                   std::vector<SpeculativeContext>& ctx);
 

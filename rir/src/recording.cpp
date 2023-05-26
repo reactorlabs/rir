@@ -70,7 +70,7 @@ void Record::recordSpeculativeContext(const Code* code,
             decltype(SpeculativeContext::value.callees) callees;
 
             for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
-                Idx idx;
+                size_t idx;
                 if (i < observed.numTargets) {
                     auto target = observed.getTarget(code, i);
                     auto rec = initOrGetRecording(target);
@@ -101,8 +101,8 @@ void Record::recordSpeculativeContext(const Code* code,
     }
 }
 
-std::pair<Idx, FunRecording&> Record::initOrGetRecording(const SEXP cls,
-                                                         std::string name) {
+std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
+                                                            std::string name) {
     auto address = sexpAddress(cls);
     auto r = recordings_index_.insert({address, fun_recordings_.size()});
     FunRecording* v;
@@ -149,7 +149,7 @@ Replay::~Replay() {
     UNPROTECT_PTR(rho_);
 }
 
-SEXP Replay::replayClosure(Idx idx) {
+SEXP Replay::replayClosure(size_t idx) {
     SEXP closure = closures_.at(idx);
     if (closure != R_NilValue) {
         return closure;
@@ -194,15 +194,18 @@ size_t Replay::replay() {
 }
 
 void Replay::replaySpeculativeContext(
-    DispatchTable* dt, std::vector<SpeculativeContext>::const_iterator& ctx) {
+    DispatchTable* dt,
+    std::vector<SpeculativeContext>::const_iterator& ctxStart,
+    std::vector<SpeculativeContext>::const_iterator& ctxEnd) {
 
     auto fun = dt->baseline();
     auto code = fun->body();
-    this->replaySpeculativeContext(code, ctx);
+    this->replaySpeculativeContext(code, ctxStart, ctxEnd);
 }
 
 void Replay::replaySpeculativeContext(
-    Code* code, std::vector<SpeculativeContext>::const_iterator& ctx) {
+    Code* code, std::vector<SpeculativeContext>::const_iterator& ctxStart,
+    std::vector<SpeculativeContext>::const_iterator& ctxEnd) {
 
     Opcode* end = code->endCode();
     Opcode* pc = code->code();
@@ -211,12 +214,12 @@ void Replay::replaySpeculativeContext(
 
     while (pc < end) {
         auto bc = BC::decode(pc, code);
-        // TODO: assert ctx != ctx->end
+
         switch (bc.bc) {
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_: {
             auto promise = code->getPromise(bc.immediate.fun);
-            this->replaySpeculativeContext(promise, ctx);
+            this->replaySpeculativeContext(promise, ctxStart, ctxEnd);
             break;
         }
         case Opcode::close_: {
@@ -224,12 +227,14 @@ void Replay::replaySpeculativeContext(
             // pprev is the push_ of body
             auto body = BC::decodeShallow(pprev).immediateConst();
             auto dt = DispatchTable::unpack(body);
-            this->replaySpeculativeContext(dt, ctx);
+            this->replaySpeculativeContext(dt, ctxStart, ctxEnd);
             break;
         }
         case Opcode::record_call_: {
+            assert(ctxStart != ctxEnd);
+
             ObservedCallees* feedback = (ObservedCallees*)(pc + 1);
-            auto callees_idx = (*ctx++).value.callees;
+            auto callees_idx = (*ctxStart++).value.callees;
 
             for (auto callee_idx : callees_idx) {
                 if (callee_idx == NO_INDEX) {
@@ -243,13 +248,17 @@ void Replay::replaySpeculativeContext(
             break;
         }
         case Opcode::record_test_: {
+            assert(ctxStart != ctxEnd);
+
             ObservedTest* feedback = (ObservedTest*)(pc + 1);
-            *feedback = (*ctx++).value.test;
+            *feedback = (*ctxStart++).value.test;
             break;
         }
         case Opcode::record_type_: {
+            assert(ctxStart != ctxEnd);
+
             ObservedValues* feedback = (ObservedValues*)(pc + 1);
-            *feedback = (*ctx++).value.values;
+            *feedback = (*ctxStart++).value.values;
             break;
         }
         default: {
@@ -263,9 +272,10 @@ void Replay::replaySpeculativeContext(
 
 void CompilationEvent::replay(Replay& replay, SEXP closure,
                               std::string& closure_name) const {
-    auto ctx = speculative_contexts.begin();
+    auto start = speculative_contexts.begin();
+    auto end = speculative_contexts.end();
     auto dt = DispatchTable::unpack(BODY(closure));
-    replay.replaySpeculativeContext(dt, ctx);
+    replay.replaySpeculativeContext(dt, start, end);
 
     // TODO: pirCompile
 }
