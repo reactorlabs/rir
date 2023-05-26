@@ -242,18 +242,18 @@ static pir::DebugOptions::DebugFlags getInitialDebugFlags() {
     return flags;
 }
 
-static std::regex getInitialDebugPassFilter() {
+static std::string getInitialDebugPassFilter() {
     auto filter = getenv("PIR_DEBUG_PASS_FILTER");
     if (filter)
-        return std::regex(filter);
-    return std::regex(".*");
+        return {filter};
+    return {".*"};
 }
 
-static std::regex getInitialDebugFunctionFilter() {
+static std::string getInitialDebugFunctionFilter() {
     auto filter = getenv("PIR_DEBUG_FUNCTION_FILTER");
     if (filter)
-        return std::regex(filter);
-    return std::regex(".*");
+        return {filter};
+    return {".*"};
 }
 
 static pir::DebugStyle getInitialDebugStyle() {
@@ -273,8 +273,8 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
-pir::DebugOptions pir::DebugOptions::DefaultDebugOptions = {
-    getInitialDebugFlags(), getInitialDebugPassFilter(),
+pir::DebugOptions pir::DebugOptions::DefaultDebugOptions =
+    {getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
 REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {

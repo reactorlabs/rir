@@ -54,9 +54,7 @@ ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
                          // pir::DebugFlag::PrintIntoStdout |
                          // pir::DebugFlag::PrintEarlyPir |
                          // pir::DebugFlag::PrintOptimizationPasses |
-                         pir::DebugFlag::PrintFinalPir,
-                     std::regex(".*"), std::regex(".*"),
-                     pir::DebugStyle::Standard});
+                         pir::DebugFlag::PrintFinalPir});
     pir::Compiler cmp(m, logger);
 
     // Compile every function in the environment
