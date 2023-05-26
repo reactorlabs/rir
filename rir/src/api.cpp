@@ -3,6 +3,7 @@
  */
 
 #include "api.h"
+#include "CompilerClient.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"
@@ -295,6 +296,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         Rf_error("Cannot optimize compiled expression, only closure");
     }
 
+    auto compilerServerHandle = CompilerClient::pirCompile(what, assumptions, name, debug);
+
     PROTECT(what);
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
@@ -350,6 +353,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         }
         // Eagerly compile the main function
         done->body()->nativeCode();
+        // Compare compiled version with remote for discrepancies
+        compilerServerHandle.compare(logger, c);
     };
 
     cmp.compileClosure(what, name, assumptions, true, compile,
