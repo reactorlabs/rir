@@ -2,6 +2,7 @@
 #include "interp.h"
 #include "profiler.h"
 
+#include "CompilerClient.h"
 #include <iomanip>
 
 namespace rir {
@@ -31,6 +32,7 @@ void initializeRuntime() {
                          rirDecompile, rirPrint, deserializeRir, serializeRir,
                          materialize);
     RuntimeProfiler::initProfiler();
+    CompilerClient::tryInit();
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }
