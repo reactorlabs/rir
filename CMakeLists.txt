@@ -24,7 +24,7 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 include_directories(${ZEROMQ_DIR}/include)
-link_directories(${ZEROMQ_DIR}/lib)
+link_libraries(${ZEROMQ_DIR}/lib/libzmq.a)
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
