@@ -13,7 +13,7 @@ EXTERNAL_DIR="${SRC_DIR}/external"
 
 if [ -d "${EXTERNAL_DIR}/zeromq" ] && [ -n "${FORCE}" ]; then
     echo "-> removing old zeromq build..."
-    rm -rf "${EXTERNAL_DIR}/zeromq*"
+    rm -rf "${EXTERNAL_DIR}/zeromq" "${EXTERNAL_DIR}/zeromq-4.3.4" "${EXTERNAL_DIR}/cppzmq-4.9.0"
 fi
 
 if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
