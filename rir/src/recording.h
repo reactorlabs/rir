@@ -77,10 +77,17 @@ class CompilationEvent : public Event {
 
 class DeoptEvent : public Event {
   public:
+    DeoptEvent(DeoptReason deoptReason, SEXP deoptTrigger, size_t dtIndex);
+    ~DeoptEvent();
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure,
                 std::string& closure_name) const override;
+
+  protected:
+    DeoptReason deoptReason;
+    SEXP deoptTrigger;
+    size_t dtIndex;
 };
 
 struct FunRecording {
@@ -145,7 +152,8 @@ SEXP getEnvironment(const std::string& name);
 // C++ API
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
-void recordDeopt(const SEXP cls);
+void recordDeopt(const SEXP cls, rir::Code* code, DeoptReason reason,
+                 SEXP trigger);
 
 } // namespace recording
 

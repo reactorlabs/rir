@@ -39,6 +39,10 @@ SEXP to_sexp(const rir::recording::SpeculativeContext&);
 
 rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp);
 
+SEXP to_sexp(const DeoptReason& obj);
+
+DeoptReason deopt_reason_from_sexp(SEXP sexp);
+
 SEXP to_sexp(const rir::recording::FunRecording& obj);
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp);

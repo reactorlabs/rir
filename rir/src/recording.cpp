@@ -324,19 +324,62 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     }
 }
 
+DeoptEvent::DeoptEvent(DeoptReason deoptReason, SEXP deoptTrigger,
+                       size_t dtIndex)
+    : deoptReason(deoptReason), deoptTrigger(deoptTrigger), dtIndex(dtIndex) {
+    if (this->deoptTrigger)
+        R_PreserveObject(deoptTrigger);
+}
+
+DeoptEvent::~DeoptEvent() {
+    if (this->deoptTrigger)
+        R_ReleaseObject(this->deoptTrigger);
+}
+
 void DeoptEvent::replay(Replay& replay, SEXP closure,
                         std::string& closure_name) const {
-    // TODO: replay deopt
+    // A deopt normally occurs _while executing_ a function, and partly consists
+    // in converting the native stack frame into an interpreted stack frame,
+    // while keeping note of the broken invariants that led to the function
+    // being deoptimized in the first place. To replay a deoptimization, we only
+    // have to store the broken invariants. Nothing else.
+
+    auto dt = DispatchTable::unpack(BODY(closure));
+    auto body = dt->get(this->dtIndex)->body();
+
+    // Copy and set current closure's code
+    DeoptReason reason = this->deoptReason;
+    reason.origin.srcCode(body);
+    auto bc = BC::decode(reason.origin.pc(), reason.srcCode());
+    bc.print(std::cout);
+    reason.record(this->deoptTrigger);
 }
 
 SEXP DeoptEvent::toSEXP() const {
-    auto sexp = PROTECT(Rf_allocVector(VECSXP, 0));
+    const char* fields[] = {"reason", "trigger", "dt_index", ""};
+    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
+
+    SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->deoptReason));
+    SET_VECTOR_ELT(sexp, 1, this->deoptTrigger);
+    SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->dtIndex));
     UNPROTECT(1);
     return sexp;
 }
 
-void DeoptEvent::fromSEXP(SEXP sexp) { assert(Rf_length(sexp) == 0); }
+void DeoptEvent::fromSEXP(SEXP sexp) {
+    assert(Rf_isVector(sexp));
+    assert(Rf_length(sexp) == 3);
+
+    this->deoptReason =
+        serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 0));
+
+    auto trigger = VECTOR_ELT(sexp, 1);
+    R_PreserveObject(trigger);
+    this->deoptTrigger = trigger;
+
+    this->dtIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 2));
+}
 
 void recordCompile(SEXP const cls, const std::string& name,
                    const Context& assumptions) {
@@ -359,12 +402,29 @@ void recordCompile(SEXP const cls, const std::string& name,
     std::cout << "A";
 }
 
-void recordDeopt(SEXP const cls) {
+void recordDeopt(const SEXP cls, rir::Code* code, DeoptReason reason,
+                 SEXP trigger) {
     if (!is_recording_) {
         return;
     }
 
-    DeoptEvent event;
+    auto dt = DispatchTable::unpack(BODY(cls));
+    int dtIndex = -1;
+    // Reverse order because we're more likely to find our Code near the end of
+    // the dt
+    for (int i = (int)dt->size(); i-- > 0;) {
+        auto body = dt->get(i)->body();
+        if (code == body) {
+            dtIndex = i;
+            break;
+        }
+    }
+
+    if (dtIndex == -1) {
+        Rf_error("didn't see closure in dt");
+    }
+
+    DeoptEvent event(reason, trigger, 0);
 
     auto rec = recorder_.initOrGetRecording(cls);
     auto& v = rec.second;

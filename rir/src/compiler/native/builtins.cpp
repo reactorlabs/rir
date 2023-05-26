@@ -833,7 +833,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
-    recording::recordDeopt(cls);
+    recording::recordDeopt(cls, c, *deoptReason, deoptTrigger);
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;

@@ -112,11 +112,11 @@ struct ObservedValues {
                     << ((stateBeforeLastForce ==
                          ObservedValues::StateBeforeLastForce::value)
                             ? "value"
-                            : (stateBeforeLastForce ==
-                               ObservedValues::StateBeforeLastForce::
-                                   evaluatedPromise)
-                                  ? "evaluatedPromise"
-                                  : "promise");
+                        : (stateBeforeLastForce ==
+                           ObservedValues::StateBeforeLastForce::
+                               evaluatedPromise)
+                            ? "evaluatedPromise"
+                            : "promise");
             }
         } else {
             out << "<?>";
@@ -162,7 +162,8 @@ struct FeedbackOrigin {
     Code* srcCode_ = nullptr;
 
   public:
-    FeedbackOrigin() {}
+    FeedbackOrigin() = default;
+    FeedbackOrigin(uint32_t offset) : offset_(offset), srcCode_(nullptr) {}
     FeedbackOrigin(rir::Code* src, Opcode* pc);
 
     Opcode* pc() const {
