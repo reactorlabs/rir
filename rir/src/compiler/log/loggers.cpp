@@ -183,6 +183,17 @@ void PassLog::pirOptimizations(const Pass* pass) {
     }
 }
 
+void ClosureLog::checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
+    if (localPir == remotePir) {
+        return;
+    }
+    auto log = forPass(1002, "discrepancy");
+    log.warn("Discrepancy between local and remote PIR");
+    // TODO: Actually log diff
+    log.out() << "Local PIR:\n" << localPir << "\n\n";
+    log.out() << "Remote PIR:\n" << remotePir << "\n\n";
+}
+
 void ClosureLog::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
