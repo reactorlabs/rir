@@ -3,6 +3,7 @@
 #include "profiler.h"
 
 #include "CompilerClient.h"
+#include "CompilerServer.h"
 #include <iomanip>
 
 namespace rir {
@@ -33,6 +34,7 @@ void initializeRuntime() {
                          materialize);
     RuntimeProfiler::initProfiler();
     CompilerClient::tryInit();
+    CompilerServer::tryRun();
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }
