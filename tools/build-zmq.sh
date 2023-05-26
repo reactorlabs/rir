@@ -36,8 +36,8 @@ if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
         sed -i.bak "s/$1/$2/g" "${EXTERNAL_DIR}/zeromq/include/zmq.hpp" "${EXTERNAL_DIR}/zeromq/include/zmq_addon.hpp"
         rm "${EXTERNAL_DIR}/zeromq/include/zmq.hpp.bak" "${EXTERNAL_DIR}/zeromq/include/zmq_addon.hpp.bak"
     }
-    sub "throw error_t();" "rir::zeromq_error();"
-    sub "throw std::exception();" "rir::zeromq_error();"
+    sub "throw error_t();" "rir::zeromq_error(__func__);"
+    sub "throw std::exception();" "rir::zeromq_error(__func__);"
 else
     echo "-> zeromq already built, run with FORCE=1 to force rebuild. Skipping..."
 fi
