@@ -24,7 +24,14 @@ include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 include_directories(${ZEROMQ_DIR}/include)
-link_libraries(${ZEROMQ_DIR}/lib/libzmq.a)
+# Won't work on Linux if we try to link statically:
+#     /usr/bin/ld: ../external/zeromq/lib/libzmq.a(libzmq_la-zmq.o): relocation R_X86_64_PC32 against symbol
+#     `_ZSt7nothrow@@GLIBCXX_3.4' can not be used when making a shared object; recompile with -fPIC
+if (${APPLE})
+    link_libraries(${ZEROMQ_DIR}/lib/libzmq.dylib)
+else ()
+    link_libraries(${ZEROMQ_DIR}/lib/libzmq.so)
+endif ()
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
