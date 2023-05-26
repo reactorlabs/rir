@@ -131,26 +131,28 @@ rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp) {
 }
 
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
-    const char* fields[] = {"name", "closure", "events", ""};
+    const char* fields[] = {"name", "env", "closure", "events", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
     SET_VECTOR_ELT(vec, 0, Rf_mkString(obj.name.c_str()));
-    SET_VECTOR_ELT(vec, 1, obj.closure);
-    SET_VECTOR_ELT(vec, 2, to_sexp(obj.events));
+    SET_VECTOR_ELT(vec, 1, Rf_mkString(obj.env.c_str()));
+    SET_VECTOR_ELT(vec, 2, obj.closure);
+    SET_VECTOR_ELT(vec, 3, to_sexp(obj.events));
     UNPROTECT(1);
     return vec;
 }
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 3);
+    assert(Rf_length(sexp) == 4);
 
     rir::recording::FunRecording recorder;
-    recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
 
-    recorder.closure = VECTOR_ELT(sexp, 1);
+    recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
+    recorder.env = serialization::string_from_sexp(VECTOR_ELT(sexp, 1));
+    recorder.closure = VECTOR_ELT(sexp, 2);
     assert(TYPEOF(recorder.closure) == RAWSXP);
 
-    auto events_sexp = VECTOR_ELT(sexp, 2);
+    auto events_sexp = VECTOR_ELT(sexp, 3);
     for (auto i = 0; i < Rf_length(events_sexp); i++) {
         auto event_sexp = VECTOR_ELT(events_sexp, i);
         recorder.events.push_back(event_from_sexp(event_sexp));

@@ -26,6 +26,7 @@ class Replay;
 class Record;
 
 #define NO_INDEX ((size_t)-1)
+#define GLOBAL_ENV_NAME ".GlobalEnv"
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
@@ -85,8 +86,12 @@ class DeoptEvent : public Event {
 struct FunRecording {
     /* possibly empty name of the closure */
     std::string name;
-    /* the CLOSXP serialized into RAWSXP using the R_SerializeValue*/
+    /* possibly empty name of the environment in which the name was bound to the
+     * closure */
+    std::string env;
+    /* the CLOSXP serialized into RAWSXP using the R_SerializeValue */
     SEXP closure;
+
     std::vector<std::unique_ptr<Event>> events;
 };
 
@@ -133,6 +138,9 @@ class Record {
 // utilities
 SEXP setClassName(SEXP s, const char* className);
 std::string sexpAddress(const SEXP s);
+bool stringStartsWith(const std::string& s, const std::string& prefix);
+std::string getEnvironmentName(SEXP env);
+SEXP getEnvironment(const std::string& name);
 
 // C++ API
 void recordCompile(const SEXP cls, const std::string& name,

@@ -112,6 +112,7 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         fun_recordings_.push_back(FunRecording{});
         v = &fun_recordings_.back();
         v->name = name;
+        v->env = getEnvironmentName(CLOENV(cls));
         v->closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
         R_PreserveObject(v->closure);
@@ -172,10 +173,20 @@ SEXP Replay::replayClosure(size_t idx) {
         event->replay(*this, closure, recording.name);
     }
 
+    std::cerr << "Replayed: " << recording.name << " from " << recording.env
+              << std::endl;
+
     if (name != R_NilValue) {
-        // FIXME: this is not correct, we need to keep the environment
-        Rf_defineVar(name, closure, rho_);
-        std::cerr << "Replayed: " << recording.name << std::endl;
+        SEXP env = getEnvironment(recording.env);
+
+        if (env == R_GlobalEnv) {
+            Rf_defineVar(name, closure, rho_);
+        } else if (env != R_UnboundValue) {
+            SEXP existing_closure = Rf_findFun(name, env);
+            if (existing_closure != R_UnboundValue) {
+                BODY(existing_closure) = BODY(closure);
+            }
+        }
     }
 
     UNPROTECT(1);
@@ -374,6 +385,55 @@ std::string sexpAddress(const SEXP s) {
 
     return caddress;
 }
+
+std::string getEnvironmentName(SEXP env) {
+    if (env == R_GlobalEnv) {
+        return GLOBAL_ENV_NAME;
+    } else if (R_IsPackageEnv(env) == TRUE) {
+        // cf. builtin.c:432 do_envirName
+        return CHAR(STRING_ELT(R_PackageEnvName(env), 0));
+    } else if (R_IsNamespaceEnv(env) == TRUE) {
+        // cf. builtin.c:434 do_envirName
+        return CHAR(STRING_ELT(R_NamespaceEnvSpec(env), 0));
+    } else {
+        return "";
+    }
+}
+
+bool stringStartsWith(const std::string& s, const std::string& prefix) {
+    return s.substr(0, prefix.length()) == prefix;
+}
+
+SEXP getEnvironment(const std::string& name) {
+    if (name.empty()) {
+        return R_UnboundValue;
+    }
+
+    // try global
+    if (name == GLOBAL_ENV_NAME) {
+        return R_GlobalEnv;
+    }
+
+    SEXP env_sxp_name = PROTECT(Rf_mkString(name.c_str()));
+
+    // try package environment
+    if (stringStartsWith(name, "package:")) {
+        SEXP env = R_FindPackageEnv(env_sxp_name);
+        UNPROTECT(1);
+        if (env != R_GlobalEnv) {
+            return env;
+        } else {
+            return R_UnboundValue;
+        }
+    }
+
+    // try a namespace
+    SEXP env = R_FindNamespace(env_sxp_name);
+
+    UNPROTECT(1);
+    return env;
+}
+
 } // namespace recording
 } // namespace rir
 
