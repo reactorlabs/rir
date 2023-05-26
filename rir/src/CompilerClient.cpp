@@ -7,7 +7,6 @@
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
 #include <array>
-#include <zmq.h>
 #include <zmq.hpp>
 
 namespace rir {
@@ -20,7 +19,6 @@ using namespace ctpl;
 // increase.
 static int NUM_THREADS;
 thread_pool* threads;
-thread_pool* compareThreads;
 
 static bool didInit = false;
 static zmq::context_t* context;
@@ -53,9 +51,6 @@ void CompilerClient::tryInit() {
 
     // initialize the thread pool
     threads = new thread_pool(NUM_THREADS);
-    // initialize another thread pool for handles to wait for and compare their
-    // results
-    compareThreads = new thread_pool(NUM_THREADS);
     // initialize the zmq context
     context = new zmq::context_t(
         // We have our own thread pool, but zeromq also uses background threads.
@@ -75,7 +70,7 @@ void CompilerClient::tryInit() {
 }
 
 CompilerClient::Handle CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    return {threads->push([&](int index) {
+    return {threads->push([=](int index) {
         auto socket = sockets[index];
 
         // Serialize the request
@@ -87,12 +82,15 @@ CompilerClient::Handle CompilerClient::pirCompile(SEXP what, const Context& assu
         // + assumptions
         // + sizeof(name)
         // + name
-        // + sizeof(debug)
-        // + debug.flags (4 bytes)
+        // + sizeof(debug.flags) (always 4)
+        // + debug.flags
+        // + sizeof(debug.passFilterString)
         // + debug.passFilterString
+        // + sizeof(debug.functionFilterString)
         // + debug.functionFilterString
-        // + debug.style (sizeof(DebugStyle) bytes)
-        const size_t messageSize =
+        // + sizeof(debug.style) (always 4)
+        // + debug.style
+        const size_t requestSize =
             sizeof(PIR_COMPILE_MAGIC) +
             sizeof(size_t) +
             sizeof(uint64_t) +
@@ -102,46 +100,67 @@ CompilerClient::Handle CompilerClient::pirCompile(SEXP what, const Context& assu
             name.size() +
             sizeof(size_t) +
             sizeof(debug.flags) +
+            sizeof(size_t) +
             debug.passFilterString.size() +
+            sizeof(size_t) +
             debug.functionFilterString.size() +
+            sizeof(size_t) +
             sizeof(debug.style);
-        ByteBuffer messageData(messageSize);
-        messageData.putLong(PIR_COMPILE_MAGIC);
-        messageData.putLong(sizeof(SEXP));
-        messageData.putBytes((uint8_t*)&what, sizeof(SEXP));
-        messageData.putLong(sizeof(Context));
-        messageData.putBytes((uint8_t*)&assumptions, sizeof(Context));
-        messageData.putLong(name.size());
-        messageData.putBytes((uint8_t*)name.c_str(), name.size());
-        messageData.putLong(sizeof(debug.flags) + debug.passFilterString.size() + debug.functionFilterString.size() + sizeof(debug.style));
-        messageData.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
-        messageData.putBytes((uint8_t*)debug.passFilterString.c_str(), debug.passFilterString.size());
-        messageData.putBytes((uint8_t*)debug.functionFilterString.c_str(), debug.functionFilterString.size());
-        messageData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
-        assert(messageData.bytesRemaining() == 0);
-        zmq::const_buffer message = zmq::buffer(messageData.data(), messageSize);
+        ByteBuffer requestData(requestSize);
+        requestData.putLong(PIR_COMPILE_MAGIC);
+        requestData.putLong(sizeof(SEXP));
+        requestData.putBytes((uint8_t*)&what, sizeof(SEXP));
+        requestData.putLong(sizeof(Context));
+        requestData.putBytes((uint8_t*)&assumptions, sizeof(Context));
+        requestData.putLong(name.size());
+        requestData.putBytes((uint8_t*)name.c_str(), name.size());
+        requestData.putLong(sizeof(debug.flags));
+        requestData.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
+        requestData.putLong(debug.passFilterString.size());
+        requestData.putBytes((uint8_t*)debug.passFilterString.c_str(), debug.passFilterString.size());
+        requestData.putLong(debug.functionFilterString.size());
+        requestData.putBytes((uint8_t*)debug.functionFilterString.c_str(), debug.functionFilterString.size());
+        requestData.putLong(sizeof(debug.style));
+        requestData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+        zmq::message_t request(requestData.data(), requestSize);
 
         // Send the request
-        auto reqSize = socket->send(message, zmq::send_flags::none);
-        // has_value() == false iff request didn't send correctly
-        assert(reqSize.has_value() && *reqSize == messageSize);
+        auto requestSize2 = *socket->send(std::move(request), zmq::send_flags::none);
+        assert(requestSize2 == requestSize);
         // Wait for the response
         zmq::message_t response;
-        auto respSize = socket->recv(response, zmq::recv_flags::none);
-        // has_value() == false iff response didn't receive correctly
-        assert(respSize.has_value());
-        // TODO: Deserialize final PIR and closure version from response
-        return CompilerClient::ResponseData{nullptr, ""};
+        auto responseSize = *socket->recv(response, zmq::recv_flags::none);
+        assert(responseSize == response.size());
+        // TODO: Actually deserialize final PIR and closure version from
+        //     response (this just receives a dummy message to verify request
+        //     and response are transmitted and paired correctly)
+        assert(responseSize == sizeof(SEXP));
+        SEXP responseWhat = *(SEXP*)response.data();
+        assert(responseWhat == what && "PIR compiler server response doesn't match request");
+        return CompilerClient::ResponseData{nullptr, std::string("hello ") + std::to_string((uint64_t)what)};
     })};
 }
 
-void CompilerClient::Handle::compare(pir::Log& log, pir::ClosureVersion* version) {
-    auto versionLog = log.get(version);
+static void checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
+    // Don't need to log if there is no discrepancy.
+    if (localPir == remotePir) {
+        return;
+    }
+    // TODO: Actually log diff
+    std::cerr << "Discrepancy between local and remote PIR\n";
+    std::cerr << "Local PIR:\n" << localPir << "\n\n";
+    std::cerr << "Remote PIR:\n" << remotePir << "\n\n";
+}
+
+
+void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
     auto localPir = printClosureVersionForCompilerServerComparison(version);
-    compareThreads->push([&](int index) {
+    // Tried using a second thread-pool here but it causes "mutex lock failed:
+    // Invalid argument" for `response` (and `shared_future` doesn't fix it)
+    std::async(std::launch::async, [=]() {
         response.wait();
         auto resp = response.get();
-        versionLog.checkDiscrepancy(localPir, resp.finalPir);
+        checkDiscrepancy(localPir, resp.finalPir);
     });
 }
 

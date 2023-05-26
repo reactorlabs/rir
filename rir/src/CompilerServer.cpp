@@ -38,9 +38,9 @@ void CompilerServer::tryRun() {
     for (;;) {
         std::cerr << "Waiting for next request..." << std::endl;
         // Receive the request
-        zmq::mutable_buffer requestData;
+        zmq::message_t requestData;
         socket.recv(requestData, zmq::recv_flags::none);
-        std::cerr << "Got request (" << requestData.size() << "bytes)" << std::endl;
+        std::cerr << "Got request (" << requestData.size() << " bytes)" << std::endl;
 
         // Deserialize the request
         // Request data format =
@@ -51,11 +51,14 @@ void CompilerServer::tryRun() {
         // + assumptions
         // + sizeof(name)
         // + name
-        // + sizeof(debug)
-        // + debug.flags (4 bytes)
+        // + sizeof(debug.flags) (always 4)
+        // + debug.flags
+        // + sizeof(debug.passFilterString)
         // + debug.passFilterString
+        // + sizeof(debug.functionFilterString)
         // + debug.functionFilterString
-        // + debug.style (sizeof(DebugStyle) bytes)
+        // + sizeof(debug.style) (always 4)
+        // + debug.style
         ByteBuffer requestBuffer((uint8_t*)requestData.data(), requestData.size());
         assert(requestBuffer.getLong() == PIR_COMPILE_MAGIC && "Invalid request magic");
         auto whatSize = requestBuffer.getLong();
@@ -95,8 +98,11 @@ void CompilerServer::tryRun() {
 
         // Send the response
         // TODO: Again, actually send something in a response data format
-        auto responseSize = *socket.send(zmq::buffer("hello"), zmq::send_flags::none);
-        std::cerr << "Sent response (" << responseSize << "bytes)" << std::endl;
+        //     (this just sends a dummy message to verify request and response
+        //     are transmitted and are paired correctly)
+        zmq::message_t response(&what, sizeof(what));
+        auto responseSize = *socket.send(std::move(response), zmq::send_flags::none);
+        std::cerr << "Sent response (" << responseSize << " bytes)" << std::endl;
     }
 }
 
