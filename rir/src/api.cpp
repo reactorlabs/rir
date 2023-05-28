@@ -610,8 +610,12 @@ REXPORT SEXP playground() {
     // auto type =
     // rir::pir::PirType::intReal().orPromiseWrapped().orMaybeMissing(); auto
     // type = rir::pir::PirType::theMissingValue().orFullyPromiseWrapped();
-    auto type =
-        rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped();
+    // auto type =
+    //     rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped();
+
+    SEXP res = Rf_mkPROMISE(R_NilValue, R_EmptyEnv);
+    SET_PRVALUE(res, R_MissingArg);
+    auto type = rir::pir::PirType(res);
 
     // type = type.orPromiseWrapped();
 
