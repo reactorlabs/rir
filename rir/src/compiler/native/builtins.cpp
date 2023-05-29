@@ -2255,19 +2255,19 @@ bool deoptChaosTriggerImpl(bool deoptTrue) {
 
 void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
     assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
-    // pir::PirType typ(type);
-    // if (!typ.isInstance(val)) {
-    //     std::cerr << "type assert failed\n";
-    //     std::cerr << "got " << pir::PirType(val) << " but expected a " << typ
-    //               << ":\n";
-    //     Rf_PrintValue(val);
-    //     std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
-    //               << (PRVALUE(val) == R_MissingArg) << "\n";
-    //     if (msg)
-    //         std::cout << msg;
+    pir::PirType typ(type);
+    if (!typ.isInstance(val)) {
+        std::cerr << "type assert failed\n";
+        std::cerr << "got " << pir::PirType(val) << " but expected a " << typ
+                  << ":\n";
+        Rf_PrintValue(val);
+        std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
+                  << (PRVALUE(val) == R_MissingArg) << "\n";
+        if (msg)
+            std::cout << msg;
 
-    //     assert(false);
-    // }
+        assert(false);
+    }
 }
 
 NativeBuiltin NativeBuiltins::store[];

@@ -161,7 +161,8 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
 
     if (e == R_UnboundValue)
         t_.r.set(RType::unbound);
-    else
+
+    if (e != R_UnboundValue && e != R_MissingArg)
         merge(TYPEOF(e));
 
     if (TYPEOF(e) == PROMSXP)
