@@ -459,16 +459,8 @@ REXPORT SEXP replayRecording(SEXP recordings, SEXP rho) {
 }
 
 REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho) {
-    if (TYPEOF(filename) != STRSXP)
-        Rf_error("must provide a string path");
-
-    FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
-    if (!file)
-        Rf_error("couldn't open file at path");
-
-    auto res = replayRecording(R_LoadFromFile(file, 3), rho);
-
-    fclose(file);
+    auto rec = loadRecording(filename);
+    auto res = replayRecording(rec, rho);
 
     return res;
 }
@@ -485,4 +477,19 @@ REXPORT SEXP saveRecording(SEXP filename) {
     fclose(file);
 
     return Rf_ScalarInteger((int)saved_count);
+}
+
+REXPORT SEXP loadRecording(SEXP filename) {
+    if (TYPEOF(filename) != STRSXP)
+        Rf_error("must provide a string path");
+
+    FILE* file = fopen(CHAR(Rf_asChar(filename)), "r");
+    if (!file)
+        Rf_error("couldn't open file at path");
+
+    auto res = R_LoadFromFile(file, 3);
+
+    fclose(file);
+
+    return res;
 }

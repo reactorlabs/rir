@@ -221,6 +221,10 @@ recordings.save <- function(filename) {
     .Call("saveRecording", filename)
 }
 
+recordings.load <- function(filename) {
+    .Call("loadRecording", filename)
+}
+
 recordings.replay <- function(filename, env=parent.frame()) {
     .Call("replayRecordingFromFile", filename, env)
 }

@@ -159,5 +159,6 @@ REXPORT SEXP isRecording();
 REXPORT SEXP replayRecording(SEXP recordings, SEXP rho);
 REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho);
 REXPORT SEXP saveRecording(SEXP filename);
+REXPORT SEXP loadRecording(SEXP filename);
 
 #endif
