@@ -24,7 +24,7 @@ struct DispatchTable
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
-        assert(i < capacity());
+        assert(i < size());
         return Function::unpack(getEntry(i));
     }
 
