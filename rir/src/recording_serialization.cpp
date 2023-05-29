@@ -77,7 +77,9 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>(
             0, std::vector<SpeculativeContext>{});
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
-        event = std::make_unique<rir::recording::DeoptEvent>();
+        // dummy init, overwritten later
+        event = std::make_unique<rir::recording::DeoptEvent>(
+            DeoptReason::unknown(), nullptr, 0);
     } else {
         Rf_error("can't deserialize event of unknown class");
     }
@@ -128,6 +130,33 @@ rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp) {
     assert(LENGTH(sexp) == field_len);
     memcpy(&ctx.value, RAW(sexp), field_len);
     return ctx;
+}
+
+SEXP to_sexp(const DeoptReason& obj) {
+    const char* fields[] = {"reason", "origin", ""};
+    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
+    SET_VECTOR_ELT(sexp, 0, Rf_ScalarInteger((int)obj.reason));
+    SET_VECTOR_ELT(sexp, 1, to_sexp((uint64_t)obj.origin.offset()));
+    UNPROTECT(1);
+    return sexp;
+}
+
+DeoptReason deopt_reason_from_sexp(SEXP sexp) {
+    assert(Rf_isVector(sexp));
+    assert(Rf_length(sexp) == 2);
+
+    auto reason_sexp = VECTOR_ELT(sexp, 0);
+    assert(Rf_isInteger(reason_sexp) && Rf_length(reason_sexp) == 1);
+    auto reason = (DeoptReason::Reason)Rf_asInteger(reason_sexp);
+    assert(reason <= DeoptReason::DeadBranchReached);
+
+    auto offset_sexp = VECTOR_ELT(sexp, 1);
+    auto offset = (uint32_t)uint64_t_from_sexp(offset_sexp);
+
+    DeoptReason deoptReason = DeoptReason::unknown();
+    deoptReason.origin = {offset};
+    deoptReason.reason = reason;
+    return deoptReason;
 }
 
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
