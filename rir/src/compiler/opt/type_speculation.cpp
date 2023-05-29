@@ -59,7 +59,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             speculateOn = arg;
                             guardPos = checkpoint.at(arg);
                             typecheckPos = arg->bb();
-                            feedback.type = feedback.type.orPromiseWrapped();
+                            feedback.type =
+                                feedback.type.orFullyPromiseWrapped();
                         }
                         break;
                     case Force::ArgumentKind::promise:

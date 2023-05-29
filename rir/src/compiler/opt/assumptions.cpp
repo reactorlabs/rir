@@ -401,9 +401,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto inp = f->arg(0).val();
                     auto expected = tt->typeTest;
                     if (f->observed != Force::ArgumentKind::value) {
-                        expected = expected.orPromiseWrapped();
-                        if (!tt->typeTest.maybeMissing())
-                            expected = expected.notWrappedMissing();
+                        expected = expected.orFullyPromiseWrapped();
+                        // expected = expected.orPromiseWrapped();
+                        // if (!tt->typeTest.maybeMissing())
+                        //     expected = expected.notWrappedMissing();
                     }
                     assert(!expected.maybeLazy());
                     auto newTT = new IsType(expected, tt->arg<0>().val());
