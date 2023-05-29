@@ -508,12 +508,12 @@ struct PirType {
     //     ~FlagSet(TypeFlags::notWrappedMissing));
     // }
 
-    PirType constexpr notWrappedMissing() const {
-        assert(isRType());
-        assert(maybePromiseWrapped());
-        return notT(RType::missing);
-        // return PirType(t_.r, flags_ | TypeFlags::notWrappedMissing);
-    }
+    // PirType constexpr notWrappedMissing() const {
+    //     assert(isRType());
+    //     assert(maybePromiseWrapped());
+    //     return notT(RType::missing);
+    //     // return PirType(t_.r, flags_ | TypeFlags::notWrappedMissing);
+    // }
 
     inline constexpr PirType notNAOrNaN() const {
         assert(isRType());
