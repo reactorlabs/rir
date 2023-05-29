@@ -122,7 +122,7 @@ add_custom_target(setup-build-dir
 
 add_custom_target(dependencies
     COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-zmq.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-zeromq.sh
     COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
 )
 
