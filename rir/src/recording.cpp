@@ -117,7 +117,6 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
         R_PreserveObject(v->closure);
         UNPROTECT(1);
-        // TODO: who should clear this? saveToFile?
     } else {
         v = &fun_recordings_[r.first->second];
     }
@@ -125,19 +124,18 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
     return {r.first->second, *v};
 }
 
-size_t Record::saveToFile(FILE* file) {
-    auto sexp = PROTECT(serialization::to_sexp(fun_recordings_));
-    R_SaveToFile(sexp, file, 3);
-    UNPROTECT(1);
-    return fun_recordings_.size();
+Record::~Record() {
+    for (auto& v : fun_recordings_) {
+        R_ReleaseObject(v.closure);
+    }
 }
 
-Replay::Replay(SEXP recordings, SEXP rho) : recordings_(recordings), rho_(rho) {
+SEXP Record::save() { return serialization::to_sexp(fun_recordings_); }
+
+Replay::Replay(SEXP recordings) : recordings_(recordings) {
     PROTECT(recordings_);
-    PROTECT(rho_);
 
     assert(Rf_isVector(recordings_));
-    assert(Rf_isEnvironment(rho_));
 
     auto n = Rf_length(recordings_);
     closures_.reserve(n);
@@ -145,10 +143,7 @@ Replay::Replay(SEXP recordings, SEXP rho) : recordings_(recordings), rho_(rho) {
         closures_.push_back(R_NilValue);
     }
 }
-Replay::~Replay() {
-    UNPROTECT_PTR(recordings_);
-    UNPROTECT_PTR(rho_);
-}
+Replay::~Replay() { UNPROTECT_PTR(recordings_); }
 
 SEXP Replay::replayClosure(size_t idx) {
     SEXP closure = closures_.at(idx);
@@ -166,7 +161,8 @@ SEXP Replay::replayClosure(size_t idx) {
     }
 
     closure = PROTECT(R_unserialize(recording.closure, R_NilValue));
-    closure = rirCompile(closure, rho_);
+    // TODO: the env parameter is likely not correct
+    closure = rirCompile(closure, R_GlobalEnv);
     closures_[idx] = closure;
 
     for (auto& event : recording.events) {
@@ -180,7 +176,7 @@ SEXP Replay::replayClosure(size_t idx) {
         SEXP env = getEnvironment(recording.env);
 
         if (env == R_GlobalEnv) {
-            Rf_defineVar(name, closure, rho_);
+            Rf_defineVar(name, closure, R_GlobalEnv);
         } else if (env != R_UnboundValue) {
             SEXP existing_closure = Rf_findFun(name, env);
             if (existing_closure != R_UnboundValue) {
@@ -399,7 +395,6 @@ void recordCompile(SEXP const cls, const std::string& name,
     auto rec = recorder_.initOrGetRecording(cls, name);
     auto& v = rec.second;
     v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
-    std::cout << "A";
 }
 
 void recordDeopt(const SEXP cls, DeoptReason reason, SEXP trigger) {
@@ -419,7 +414,6 @@ void recordDeopt(const SEXP cls, DeoptReason reason, SEXP trigger) {
         }
     }
 
-    Rprintf("dtIndex=%d\n", dtIndex);
     if (dtIndex == -1) {
         Rf_error("didn't see closure in dt");
     }
@@ -497,35 +491,40 @@ SEXP getEnvironment(const std::string& name) {
 } // namespace recording
 } // namespace rir
 
-REXPORT SEXP startRecording() {
+REXPORT SEXP startRecordings() {
     rir::recording::is_recording_ = true;
     return R_NilValue;
 }
 
-REXPORT SEXP stopRecording() {
+REXPORT SEXP stopRecordings() {
     rir::recording::is_recording_ = false;
     return R_NilValue;
 }
 
-REXPORT SEXP isRecording() {
+REXPORT SEXP resetRecordings() {
+    rir::recording::recorder_.reset();
+    return R_NilValue;
+}
+
+REXPORT SEXP isRecordings() {
     return Rf_ScalarLogical(rir::recording::is_recording_);
 }
 
-REXPORT SEXP replayRecording(SEXP recordings, SEXP rho) {
-    rir::recording::Replay replay(recordings, rho);
+REXPORT SEXP replayRecordings(SEXP recordings) {
+    rir::recording::Replay replay(recordings);
     auto res = replay.replay();
 
     return Rf_ScalarInteger(res);
 }
 
-REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho) {
-    auto rec = loadRecording(filename);
-    auto res = replayRecording(rec, rho);
+REXPORT SEXP replayRecordingsFromFile(SEXP filename) {
+    auto recordings = loadRecordings(filename);
+    auto res = replayRecordings(recordings);
 
     return res;
 }
 
-REXPORT SEXP saveRecording(SEXP filename) {
+REXPORT SEXP saveRecordings(SEXP filename) {
     if (TYPEOF(filename) != STRSXP)
         Rf_error("must provide a string path");
 
@@ -533,13 +532,16 @@ REXPORT SEXP saveRecording(SEXP filename) {
     if (!file)
         Rf_error("couldn't open file at path");
 
-    auto saved_count = rir::recording::recorder_.saveToFile(file);
+    auto recordings = PROTECT(getRecordings());
+    auto size = Rf_length(recordings);
+    R_SaveToFile(recordings, file, 3);
     fclose(file);
+    UNPROTECT(1);
 
-    return Rf_ScalarInteger((int)saved_count);
+    return Rf_ScalarInteger(size);
 }
 
-REXPORT SEXP loadRecording(SEXP filename) {
+REXPORT SEXP loadRecordings(SEXP filename) {
     if (TYPEOF(filename) != STRSXP)
         Rf_error("must provide a string path");
 
@@ -553,3 +555,5 @@ REXPORT SEXP loadRecording(SEXP filename) {
 
     return res;
 }
+
+REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }

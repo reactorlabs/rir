@@ -218,25 +218,37 @@ rir.annotateDepromised <- function(closure) {
 }
 
 recordings.save <- function(filename) {
-    .Call("saveRecording", filename)
+    .Call("saveRecordings", filename)
 }
 
 recordings.load <- function(filename) {
-    .Call("loadRecording", filename)
+    .Call("loadRecordings", filename)
 }
 
-recordings.replay <- function(filename, env=parent.frame()) {
-    .Call("replayRecordingFromFile", filename, env)
+recordings.replay <- function(from) {
+    if (is.list(from)) {
+        .Call("replayRecordings", from)
+    } else {
+        .Call("replayRecordingsFromFile", from)
+    }
 }
 
 recordings.start <- function() {
-    .Call("startRecording")
+    .Call("startRecordings")
 }
 
 recordings.stop <- function() {
-    .Call("stopRecording")
+    .Call("stopRecordings")
+}
+
+recordings.reset <- function() {
+    .Call("resetRecordings")
 }
 
 recordings.enabled <- function() {
-    .Call("isRecording")
+    .Call("isRecordings")
+}
+
+recordings.get <- function() {
+    .Call("getRecordings")
 }

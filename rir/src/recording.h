@@ -104,7 +104,6 @@ struct FunRecording {
 
 class Replay {
     SEXP recordings_;
-    SEXP rho_;
     std::vector<SEXP> closures_;
 
     SEXP replayClosure(size_t idx);
@@ -119,7 +118,7 @@ class Replay {
         Code* code, std::vector<SpeculativeContext>::const_iterator& ctxStart,
         std::vector<SpeculativeContext>::const_iterator& ctxEnd);
 
-    Replay(SEXP recordings, SEXP rho);
+    Replay(SEXP recordings);
 
     ~Replay();
 
@@ -131,15 +130,22 @@ class Record {
     std::vector<FunRecording> fun_recordings_;
 
   public:
+    ~Record();
+
     std::pair<size_t, FunRecording&> initOrGetRecording(const SEXP cls,
                                                         std::string name = "");
+
     void recordSpeculativeContext(DispatchTable* dt,
                                   std::vector<SpeculativeContext>& ctx);
 
     void recordSpeculativeContext(const Code* code,
                                   std::vector<SpeculativeContext>& ctx);
 
-    size_t saveToFile(FILE* file);
+    SEXP save();
+    void reset() {
+        recordings_index_.clear();
+        fun_recordings_.clear();
+    }
 };
 
 // utilities
@@ -159,13 +165,14 @@ void recordDeopt(const SEXP cls, DeoptReason reason, SEXP trigger);
 } // namespace rir
 
 // R API
-
-REXPORT SEXP startRecording();
-REXPORT SEXP stopRecording();
-REXPORT SEXP isRecording();
-REXPORT SEXP replayRecording(SEXP recordings, SEXP rho);
-REXPORT SEXP replayRecordingFromFile(SEXP filename, SEXP rho);
-REXPORT SEXP saveRecording(SEXP filename);
-REXPORT SEXP loadRecording(SEXP filename);
+REXPORT SEXP startRecordings();
+REXPORT SEXP stopRecordings();
+REXPORT SEXP resetRecordings();
+REXPORT SEXP isRecordings();
+REXPORT SEXP replayRecordings(SEXP recordings);
+REXPORT SEXP replayRecordingsFromFile(SEXP filename);
+REXPORT SEXP saveRecordings(SEXP filename);
+REXPORT SEXP loadRecordings(SEXP filename);
+REXPORT SEXP getRecordings();
 
 #endif
