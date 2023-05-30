@@ -571,13 +571,15 @@ struct PirType {
     }
 
     inline constexpr PirType orFullyPromiseWrapped() const {
-        assert(isRType());
+        return orPromiseWrapped();
 
-        if (maybePromiseWrapped())
-            return *this;
+        // assert(isRType());
 
-        return PirType(t_.r, (flags_ | TypeFlags::promiseWrapped) &
-                                 ~(FlagSet() | TypeFlags::maybeMissing));
+        // if (maybePromiseWrapped())
+        //     return *this;
+
+        // return PirType(t_.r, (flags_ | TypeFlags::promiseWrapped) &
+        //                          ~(FlagSet() | TypeFlags::maybeMissing));
     }
 
     inline constexpr PirType orLazy() const {
