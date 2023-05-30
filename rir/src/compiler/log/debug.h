@@ -78,7 +78,7 @@ struct DebugOptions {
 
     explicit DebugOptions(int flags)
         : DebugOptions(DebugFlags(flags)) {}
-    DebugOptions(DebugFlags flags)
+    explicit DebugOptions(DebugFlags flags)
         : DebugOptions(flags, ".*", ".*",
                        DebugStyle::Standard) {}
     DebugOptions(const DebugFlags& flags, const std::string& passFilter,
