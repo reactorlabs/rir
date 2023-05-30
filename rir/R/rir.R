@@ -234,15 +234,15 @@ recordings.replay <- function(from) {
 }
 
 recordings.start <- function() {
-    .Call("startRecordings")
+    invisible(.Call("startRecordings"))
 }
 
 recordings.stop <- function() {
-    .Call("stopRecordings")
+    invisible(.Call("stopRecordings"))
 }
 
 recordings.reset <- function() {
-    .Call("resetRecordings")
+    invisible(.Call("resetRecordings"))
 }
 
 recordings.enabled <- function() {
@@ -251,4 +251,11 @@ recordings.enabled <- function() {
 
 recordings.get <- function() {
     .Call("getRecordings")
+}
+
+recordings.eval <- function(expr, env=parent.frame()) {
+    recordings.start()
+    eval(expr, env)
+    recordings.stop()
+    recordings.get()
 }
