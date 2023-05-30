@@ -346,7 +346,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     // std::cerr  << "\n";
                                     // mk->print(std::cerr, true);
                                     // std::cerr << "\n";
-                                    type = inType.orFullyPromiseWrapped();
+                                    type = inType.orFullyPromiseWrapped(true);
 
                                     // std::cerr << "new type: " << type <<
                                     // "\n";
