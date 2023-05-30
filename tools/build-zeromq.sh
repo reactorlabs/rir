@@ -27,7 +27,7 @@ if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
       # https://github.com/... is the path to the cppzmq source release
     wget -qO- https://github.com/zeromq/cppzmq/archive/refs/tags/v4.9.0.tar.gz | tar -xz -C "${EXTERNAL_DIR}"
     cd "${EXTERNAL_DIR}/cppzmq-4.9.0"
-    if [ "${USE_NINJA}" -eq 0 ] then
+    if [ "${USE_NINJA}" -eq 0 ]; then
       GNINJA="-GNinja"
     else
       GNINJA=""
