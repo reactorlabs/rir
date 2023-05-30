@@ -21,6 +21,7 @@ Modified 2015 by Ashley Davis (SgtCoDFish)
 #include "ByteBuffer.h"
 
 #ifdef BB_USE_NS
+// cppcheck-suppress syntaxError
 namespace bb {
 #endif
 
@@ -325,7 +326,7 @@ namespace bb {
 
 // Utility Functions
 #ifdef BB_UTILITY
-    void ByteBuffer::setName(std::string n) {
+    void ByteBuffer::setName(const std::string& n) {
         name = n;
     }
 
@@ -383,7 +384,8 @@ namespace bb {
     }
 
 #ifdef BB_USE_NS
-}
+// cppcheck-suppress syntaxError
+} // namespace bb
 #endif
 
 #endif
