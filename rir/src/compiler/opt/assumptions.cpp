@@ -401,7 +401,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto inp = f->arg(0).val();
                     auto expected = tt->typeTest;
                     if (f->observed != Force::ArgumentKind::value) {
-                        expected = expected.orFullyPromiseWrapped(false);
+                        expected = expected.orFullyPromiseWrapped();
                         // expected = expected.orPromiseWrapped();
                         // if (!tt->typeTest.maybeMissing())
                         //     expected = expected.notWrappedMissing();
