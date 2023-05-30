@@ -21,7 +21,9 @@ void CompilerServer::tryRun() {
         std::cerr << "PIR_SERVER_ADDR=" << serverAddr
                   << ", CompilerServer initializing..." << std::endl;
     } else {
+#ifdef FORCE_LOG_COMPILER_SERVER
         std::cerr << "PIR_SERVER_ADDR not set, CompilerServer won't initialize" << std::endl;
+#endif
         return;
     }
 
