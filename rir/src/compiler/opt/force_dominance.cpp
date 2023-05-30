@@ -321,7 +321,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                         pos++;
                         CastType* upcast = new CastType(
                             fixedMkArg, CastType::Upcast, RType::prom,
-                            promRes->type.orFullyPromiseWrapped());
+                            promRes->type.orFullyPromiseWrapped(true));
                         pos = split->insert(pos, upcast);
                         pos++;
 
