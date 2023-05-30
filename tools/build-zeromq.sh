@@ -28,9 +28,9 @@ if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
     wget -qO- https://github.com/zeromq/cppzmq/archive/refs/tags/v4.9.0.tar.gz | tar -xz -C "${EXTERNAL_DIR}"
     cd "${EXTERNAL_DIR}/cppzmq-4.9.0"
     if [ "${USE_NINJA}" -eq 0 ]; then
-      GNINJA="-GNinja"
-    else
       GNINJA=""
+    else
+      GNINJA="-GNinja"
     fi
     # TODO: Switch to release if CMake is in a release configuration
     cmake "${GNINJA}" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${EXTERNAL_DIR}/zeromq" -B build && cmake --build build --target install
