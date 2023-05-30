@@ -31,7 +31,9 @@ void CompilerClient::tryInit() {
         std::cerr << "PIR_CLIENT_ADDR=" << serverAddrStr
                   << ", CompilerClient initializing..." << std::endl;
     } else {
+#ifdef FORCE_LOG_COMPILER_SERVER
         std::cerr << "PIR_CLIENT_ADDR not set, CompilerClient won't initialize" << std::endl;
+#endif
         return;
     }
 
