@@ -26,7 +26,7 @@ class AbstractLog {
     const DebugOptions options;
     const ClosureVersion* version;
 
-    AbstractLog(DebugOptions options, const ClosureVersion* version,
+    AbstractLog(const DebugOptions& options, const ClosureVersion* version,
                 std::shared_ptr<LogStream> out)
         : _out(out), options(options), version(version) {}
 

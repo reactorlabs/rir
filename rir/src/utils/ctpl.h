@@ -132,6 +132,7 @@ class Queue {
         std::unique_ptr<std::function<void(int id)>> func(_f); // at return, delete the function even if an exception occurred
         std::function<void(int)> f;
         if (_f)
+            // cppcheck-suppress deallocuse
             f = *_f;
         return f;
     }
