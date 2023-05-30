@@ -43,6 +43,7 @@ Modified 2015 by Ashley Davis (SgtCoDFish)
 #endif
 
 #ifdef BB_USE_NS
+// cppcheck-suppress syntaxError
 namespace bb {
 #endif
 
@@ -142,7 +143,7 @@ namespace bb {
 
         // Utility Functions
 #ifdef BB_UTILITY
-        void setName(std::string n);
+        void setName(const std::string& n);
         std::string getName();
         void printInfo();
         void printAH();
@@ -168,6 +169,7 @@ namespace bb {
 
         template<typename T> T read(uint32_t index) const {
             if (index + sizeof(T) <= buf.size())
+                // cppcheck-suppress invalidPointerCast
                 return *(reinterpret_cast<T*>((uint8_t*)&buf[index]));
             return 0;
         }
@@ -194,7 +196,8 @@ namespace bb {
     };
 
 #ifdef BB_USE_NS
-}
+// cppcheck-suppress syntaxError
+} // namespace bb
 #endif
 
 #endif

@@ -30,7 +30,7 @@ class CompilerClient {
     class Handle {
         friend class CompilerClient;
         std::future<ResponseData> response;
-        Handle(std::future<ResponseData> response)
+        explicit Handle(std::future<ResponseData> response)
             : response(std::move(response)) {}
       public:
         /// When we get response PIR, compares it with given locally-compiled
@@ -42,9 +42,9 @@ class CompilerClient {
     static void tryInit();
     /// Asynchronously sends the closure to the compile server and returns a
     /// handle to use the result.
-    static Handle pirCompile(SEXP what, const Context& assumptions,
-                             const std::string& name,
-                             const pir::DebugOptions& debug);
+    static Handle* pirCompile(SEXP what, const Context& assumptions,
+                              const std::string& name,
+                              const pir::DebugOptions& debug);
 };
 
 } // namespace rir

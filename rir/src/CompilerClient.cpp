@@ -69,8 +69,11 @@ void CompilerClient::tryInit() {
     }
 }
 
-CompilerClient::Handle CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    return {threads->push([=](int index) {
+CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
+    if (!didInit) {
+      return nullptr;
+    }
+    return new CompilerClient::Handle(threads->push([=](int index) {
         auto socket = sockets[index];
 
         // Serialize the request
@@ -138,7 +141,7 @@ CompilerClient::Handle CompilerClient::pirCompile(SEXP what, const Context& assu
         SEXP responseWhat = *(SEXP*)response.data();
         assert(responseWhat == what && "PIR compiler server response doesn't match request");
         return CompilerClient::ResponseData{nullptr, std::string("hello ") + std::to_string((uint64_t)what)};
-    })};
+    }));
 }
 
 static void checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
