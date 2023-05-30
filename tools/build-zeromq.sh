@@ -27,7 +27,13 @@ if [ ! -d "${EXTERNAL_DIR}/zeromq" ]; then
       # https://github.com/... is the path to the cppzmq source release
     wget -qO- https://github.com/zeromq/cppzmq/archive/refs/tags/v4.9.0.tar.gz | tar -xz -C "${EXTERNAL_DIR}"
     cd "${EXTERNAL_DIR}/cppzmq-4.9.0"
-    cmake -GNinja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${EXTERNAL_DIR}/zeromq" -B build && cmake --build build --target install
+    if [ "${USE_NINJA}" -eq 0 ] then
+      GNINJA="-GNinja"
+    else
+      GNINJA=""
+    fi
+    # TODO: Switch to release if CMake is in a release configuration
+    cmake "${GNINJA}" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="${EXTERNAL_DIR}/zeromq" -B build && cmake --build build --target install
     # We don't enable exceptions. cppzmq throws exceptions. There isn't really a good alternative API.
     # What do we do? Replace all `throw ...` with `zeromq_error()`. Right now this aborts; in the future, if we actually
     # want to handle exceptions, we can use longjmp (poor man's exception)
