@@ -249,7 +249,7 @@ struct PirType {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::special | RType::builtin |
                        RType::prom | RType::code | RType::env | RType::unbound |
-                       RType::ast | RType::dots | RType::other)
+                       RType::ast | RType::dots | RType::other | RType::missing)
             .orMaybeMissing()
             .orNAOrNaN()
             .orAttribsOrObj();
@@ -425,7 +425,10 @@ struct PirType {
     ensureMissingInvariant(RTypeSet& r, PirType::FlagSet& flags) const {
 
         if (!flags.includes(TypeFlags::lazy) &&
-            !flags.includes(TypeFlags::promiseWrapped)) {
+            !flags.includes(TypeFlags::promiseWrapped) &&
+            !r.includes(RType::prom)
+
+        ) {
             if (r.includes(RType::missing) ||
                 flags.includes(TypeFlags::maybeMissing)) {
                 flags.set(TypeFlags::maybeMissing);
@@ -492,8 +495,15 @@ struct PirType {
     PirType constexpr notMissing() const {
         assert(isRType());
 
+        // if (t_.r.includes(RType::prom)) {
+        //     std::cerr << "\n" ;
+        //     //std::cerr << *this;
+        //     std::cerr << "\n";
+        //     assert(false);
+        // }
+
         auto newType = t_.r;
-        if (!maybePromiseWrapped()) {
+        if (!maybePromiseWrapped() && !t_.r.includes(RType::prom)) {
             newType.reset(RType::missing);
         }
 

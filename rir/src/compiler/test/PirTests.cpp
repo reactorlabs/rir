@@ -858,6 +858,8 @@ bool testTypeRules() {
                 .isA(PirType::val().noAttribsOrObject()));
     assert(r.extractType(PirType::any()).isA(PirType::val()));
     assert(!r.extractType(PirType::bottom()).isScalar());
+    assert(!PirType::val().notMissing().maybeMissing());
+    assert(PirType::val().isSuper(PirType::theMissingValue()));
     assert(!r.extractType(PirType::bottom()).maybeMissing());
     assert(!r.extractType(PirType::bottom()).isA(RType::vec));
     assert(r.orObject().extractType(PirType::simpleScalarInt()).maybeMissing());

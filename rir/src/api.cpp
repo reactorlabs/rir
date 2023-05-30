@@ -613,11 +613,13 @@ REXPORT SEXP playground() {
     // auto type =
     //     rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped();
 
-    SEXP res = Rf_mkPROMISE(R_NilValue, R_EmptyEnv);
-    SET_PRVALUE(res, R_MissingArg);
-    auto type = rir::pir::PirType(res);
+    // SEXP res = Rf_mkPROMISE(R_NilValue, R_EmptyEnv);
+    // SET_PRVALUE(res, R_MissingArg);
+    // auto type = rir::pir::PirType(res);
 
     // type = type.orPromiseWrapped();
+
+    auto type = rir::pir::PirType::any().notMissing().forced().maybeMissing();
 
     std::cerr << type;
 
