@@ -30,6 +30,15 @@ class Record;
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
+class CodeIndex {
+    bool promise_;
+    size_t index_;
+
+  public:
+    CodeIndex(bool promise, size_t index) : promise_(promise), index_(index) {}
+    Code* locate(Function* fun);
+};
+
 struct SpeculativeContext {
     SpeculativeContextType type;
 
@@ -77,17 +86,21 @@ class CompilationEvent : public Event {
 
 class DeoptEvent : public Event {
   public:
-    DeoptEvent(DeoptReason deoptReason, SEXP deoptTrigger, size_t dtIndex);
+    DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
+               int reasonCodeIdx, uint32_t reasonCodeOff, SEXP trigger);
     ~DeoptEvent();
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure,
                 std::string& closure_name) const override;
 
-  protected:
-    DeoptReason deoptReason;
-    SEXP deoptTrigger;
-    size_t dtIndex;
+  private:
+    size_t functionIdx_;
+    DeoptReason::Reason reason_;
+    /* negative indicates promise index, positive function index */
+    int reasonCodeIdx_;
+    uint32_t reasonCodeOff_;
+    SEXP trigger_;
 };
 
 struct FunRecording {
@@ -141,6 +154,7 @@ class Record {
     void recordSpeculativeContext(const Code* code,
                                   std::vector<SpeculativeContext>& ctx);
 
+    int findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
     void reset() {
         recordings_index_.clear();

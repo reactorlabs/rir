@@ -78,8 +78,9 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
             0, std::vector<SpeculativeContext>{});
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
         // dummy init, overwritten later
-        event = std::make_unique<rir::recording::DeoptEvent>(
-            DeoptReason::unknown(), nullptr, 0);
+        // FIXME:
+        // event = std::make_unique<rir::recording::DeoptEvent>(
+        //     DeoptReason::unknown(), nullptr, 0);
     } else {
         Rf_error("can't deserialize event of unknown class");
     }

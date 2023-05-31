@@ -320,16 +320,19 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-DeoptEvent::DeoptEvent(DeoptReason deoptReason, SEXP deoptTrigger,
-                       size_t dtIndex)
-    : deoptReason(deoptReason), deoptTrigger(deoptTrigger), dtIndex(dtIndex) {
-    if (this->deoptTrigger)
-        R_PreserveObject(deoptTrigger);
+DeoptEvent::DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
+                       int reasonCodeIdx, uint32_t reasonCodeOff, SEXP trigger)
+    : functionIdx_(functionIdx), reason_(reason), reasonCodeIdx_(reasonCodeIdx),
+      reasonCodeOff_(reasonCodeOff), trigger_(trigger) {
+    if (this->trigger_) {
+        R_PreserveObject(trigger_);
+    }
 }
 
 DeoptEvent::~DeoptEvent() {
-    if (this->deoptTrigger)
-        R_ReleaseObject(this->deoptTrigger);
+    if (this->trigger_) {
+        R_ReleaseObject(this->trigger_);
+    }
 }
 
 void DeoptEvent::replay(Replay& replay, SEXP closure,
@@ -341,24 +344,32 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     // have to store the broken invariants. Nothing else.
 
     auto dt = DispatchTable::unpack(BODY(closure));
-    auto body = dt->get(this->dtIndex)->body();
+    auto fun = dt->get(functionIdx_);
 
     // Copy and set current closure's code
-    DeoptReason reason = this->deoptReason;
-    reason.origin.srcCode(body);
-    // auto bc = BC::decode(reason.pc(), reason.srcCode());
-
-    reason.record(this->deoptTrigger);
+    // FIXME:
+    // Code *code = ...;
+    // Code* deoptSrcCode = ...;
+    // Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
+    // FeedbackOrigin origin(deoptSrcCode, deoptPc);
+    // DeoptReason reason(origin, reason);
+    //
+    // reason.record(this->trigger_);
+    // code->recordDeopt(...)
 }
 
 SEXP DeoptEvent::toSEXP() const {
-    const char* fields[] = {"reason", "trigger", "dt_index", ""};
+    const char* fields[] = {"functionIdx",     "reason",  "reason_code_idx",
+                            "reason_code_off", "trigger", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
-    SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->deoptReason));
-    SET_VECTOR_ELT(sexp, 1, this->deoptTrigger);
-    SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->dtIndex));
+    // FIXME: record
+    // SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->functionIdx_));
+    // SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->reason_));
+    // SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->reasonCodeOff_));
+    // SET_VECTOR_ELT(sexp, 3, serialization::to_sexp(this->reasonCodeIdx_));
+    // SET_VECTOR_ELT(sexp, 4, this->trigger_);
     UNPROTECT(1);
     return sexp;
 }
@@ -367,14 +378,15 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
     assert(Rf_length(sexp) == 3);
 
-    this->deoptReason =
-        serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 0));
-
-    auto trigger = VECTOR_ELT(sexp, 1);
-    R_PreserveObject(trigger);
-    this->deoptTrigger = trigger;
-
-    this->dtIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 2));
+    // FIXME:
+    // this->deoptReason =
+    //     serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 0));
+    //
+    // auto trigger = VECTOR_ELT(sexp, 1);
+    // R_PreserveObject(trigger);
+    // this->deoptTrigger = trigger;
+    //
+    // this->dtIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 2));
 }
 
 void recordCompile(SEXP const cls, const std::string& name,
@@ -397,28 +409,78 @@ void recordCompile(SEXP const cls, const std::string& name,
     v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
 }
 
-void recordDeopt(const SEXP cls, DeoptReason reason, SEXP trigger) {
+int Record::findIndex(rir::Code* code, rir::Code* needle) {
+    if (code == needle) {
+        return 0;
+    }
+
+    // find the index of the reason source
+    // 1. try promises
+    for (int i = 0; i < code->extraPoolSize; i++) {
+        if (code->getPromise(i) == needle) {
+            return -(i + 1);
+        }
+    }
+
+    // 2. try closures
+
+    Opcode* end = code->endCode();
+    Opcode* pc = code->code();
+    Opcode* prev = NULL;
+    Opcode* pprev = NULL;
+
+    while (pc < end) {
+        auto bc = BC::decode(pc, code);
+
+        switch (bc.bc) {
+        case Opcode::close_: {
+            // prev is the push_ of srcref
+            // pprev is the push_ of body
+
+            auto body = BC::decodeShallow(pprev).immediateConst();
+            auto dt = DispatchTable::unpack(body);
+            // FIXME: check if the dt->baseline()->code() is the same as needle
+            // initialize new entry in fun_recordings_ if needed
+            break;
+        }
+        default: {
+        }
+        }
+        pprev = prev;
+        prev = pc;
+        pc = bc.next(pc);
+    }
+
+    // FIXME: return the index into the fun_recordings_
+    return 0;
+}
+
+void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
+                 SEXP trigger) {
     if (!is_recording_) {
         return;
     }
 
+    // find the affected version
+    int funIdx = 0;
     auto dt = DispatchTable::unpack(BODY(cls));
-    int dtIndex = -1;
-    // Reverse order because we're more likely to find our Code near the end of
-    // the dt
-    for (int i = (int)dt->size(); i-- > 0;) {
-        auto body = dt->get(i)->body();
-        if (reason.srcCode() == body) {
-            dtIndex = i;
+    // it deopts from native so it cannot be the baseline RIR
+    for (int i = 1; i < dt->size(); i++) {
+        if (dt->get(i)->body() == c) {
+            funIdx = i;
             break;
         }
     }
 
-    if (dtIndex == -1) {
-        Rf_error("didn't see closure in dt");
+    auto reasonCodeIdx = recorder_.findIndex(c, reason.srcCode());
+
+    if (funIdx == 0) {
+        Rf_error("Could not find function index for code: %p in closure: %p", c,
+                 cls);
     }
 
-    DeoptEvent event(reason, trigger, dtIndex);
+    DeoptEvent event(funIdx, reason.reason, reasonCodeIdx,
+                     reason.origin.offset(), trigger);
 
     auto rec = recorder_.initOrGetRecording(cls);
     auto& v = rec.second;
