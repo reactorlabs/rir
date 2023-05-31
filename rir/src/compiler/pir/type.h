@@ -100,7 +100,6 @@ enum class TypeFlags : uint8_t {
     maybeObject,
     maybeNotFastVecelt,
     maybeAttrib,
-    // notWrappedMissing,
 
     maybeNAOrNaN,
     maybeMissing,
@@ -249,7 +248,7 @@ struct PirType {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::special | RType::builtin |
                        RType::prom | RType::code | RType::env | RType::unbound |
-                       RType::ast | RType::dots | RType::other | RType::missing)
+                       RType::ast | RType::dots | RType::other)
             .orMaybeMissing()
             .orNAOrNaN()
             .orAttribsOrObj();
@@ -425,8 +424,7 @@ struct PirType {
     ensureMissingInvariant(RTypeSet& r, PirType::FlagSet& flags) const {
 
         if (!flags.includes(TypeFlags::lazy) &&
-            !flags.includes(TypeFlags::promiseWrapped) &&
-            !r.includes(RType::prom)
+            !flags.includes(TypeFlags::promiseWrapped)
 
         ) {
             if (r.includes(RType::missing) ||
@@ -503,7 +501,7 @@ struct PirType {
         // }
 
         auto newType = t_.r;
-        if (!maybePromiseWrapped() && !t_.r.includes(RType::prom)) {
+        if (!maybePromiseWrapped()) {
             newType.reset(RType::missing);
         }
 
