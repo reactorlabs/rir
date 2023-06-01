@@ -23,7 +23,7 @@ namespace rir {
  */
 class CompilerClient {
     struct ResponseData {
-        rir::Function* version;
+        SEXP sexp;
         std::string finalPir;
     };
   public:
