@@ -3,6 +3,7 @@
 //
 
 #include "CompilerClient.h"
+#include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
@@ -95,26 +96,9 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         // + debug.functionFilterString
         // + sizeof(debug.style) (always 4)
         // + debug.style
-        const size_t requestSize =
-            sizeof(PIR_COMPILE_MAGIC) +
-            sizeof(size_t) +
-            sizeof(uint64_t) +
-            sizeof(size_t) +
-            sizeof(Context) +
-            sizeof(size_t) +
-            name.size() +
-            sizeof(size_t) +
-            sizeof(debug.flags) +
-            sizeof(size_t) +
-            debug.passFilterString.size() +
-            sizeof(size_t) +
-            debug.functionFilterString.size() +
-            sizeof(size_t) +
-            sizeof(debug.style);
-        ByteBuffer requestData(requestSize);
+        ByteBuffer requestData;
         requestData.putLong(PIR_COMPILE_MAGIC);
-        requestData.putLong(sizeof(SEXP));
-        requestData.putBytes((uint8_t*)&what, sizeof(SEXP));
+        serialize(what, requestData);
         requestData.putLong(sizeof(Context));
         requestData.putBytes((uint8_t*)&assumptions, sizeof(Context));
         requestData.putLong(name.size());
@@ -127,22 +111,27 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         requestData.putBytes((uint8_t*)debug.functionFilterString.c_str(), debug.functionFilterString.size());
         requestData.putLong(sizeof(debug.style));
         requestData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
-        zmq::message_t request(requestData.data(), requestSize);
+        zmq::message_t request(requestData.data(), requestData.size());
 
         // Send the request
         auto requestSize2 = *socket->send(std::move(request), zmq::send_flags::none);
-        assert(requestSize2 == requestSize);
+        assert(requestSize2 == requestData.size());
         // Wait for the response
         zmq::message_t response;
-        auto responseSize = *socket->recv(response, zmq::recv_flags::none);
-        assert(responseSize == response.size());
-        // TODO: Actually deserialize final PIR and closure version from
-        //     response (this just receives a dummy message to verify request
-        //     and response are transmitted and paired correctly)
-        assert(responseSize == sizeof(SEXP));
-        SEXP responseWhat = *(SEXP*)response.data();
-        assert(responseWhat == what && "PIR compiler server response doesn't match request");
-        return CompilerClient::ResponseData{nullptr, std::string("hello ") + std::to_string((uint64_t)what)};
+        socket->recv(response, zmq::recv_flags::none);
+        // Receive the response
+        // Response data format =
+        //   PIR_COMPILE_RESPONSE_MAGIC
+        // + serialize(what)
+        // + sizeof(pirPrint)
+        // + pirPrint
+        ByteBuffer responseBuffer((uint8_t*)response.data(), response.size());
+        auto responseMagic = responseBuffer.getLong();
+        assert(responseMagic == PIR_COMPILE_RESPONSE_MAGIC);
+        SEXP responseWhat = deserialize(responseBuffer);
+        auto pirPrintSize = responseBuffer.getLong();
+        std::string pirPrint((char*)responseBuffer.data(), pirPrintSize);
+        return CompilerClient::ResponseData{responseWhat, pirPrint};
     }));
 }
 
@@ -162,7 +151,7 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
     auto localPir = printClosureVersionForCompilerServerComparison(version);
     // Tried using a second thread-pool here but it causes "mutex lock failed:
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
-    std::async(std::launch::async, [=]() {
+    (void)std::async(std::launch::async, [=]() {
         response.wait();
         auto resp = response.get();
         checkDiscrepancy(localPir, resp.finalPir);
