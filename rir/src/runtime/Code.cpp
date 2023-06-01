@@ -5,6 +5,7 @@
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "utils/Pool.h"
+#include "utils/UUIDPool.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
 #include <llvm/Support/Errno.h>
@@ -112,22 +113,22 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->src = InInteger(inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
-        code->trivialExpr = ReadItem(refTable, inp);
+        code->trivialExpr = UUIDPool::readItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = ReadItem(refTable, inp);
+    SEXP extraPool = UUIDPool::readItem(refTable, inp);
     PROTECT(extraPool);
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        argReorder = ReadItem(refTable, inp);
+        argReorder = UUIDPool::readItem(refTable, inp);
         PROTECT(argReorder);
     }
-    SEXP rirFunction = ReadItem(refTable, inp);
+    SEXP rirFunction = UUIDPool::readItem(refTable, inp);
     PROTECT(rirFunction);
 
     // Bytecode
@@ -136,7 +137,8 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     // Srclist
     for (unsigned i = 0; i < code->srcLength; i++) {
         code->srclist()[i].pcOffset = InInteger(inp);
-        code->srclist()[i].srcIdx = src_pool_add(ReadItem(refTable, inp));
+        // TODO: Intern
+        code->srclist()[i].srcIdx = src_pool_read_item(refTable, inp);
     }
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
@@ -159,18 +161,18 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, src);
     OutInteger(out, trivialExpr != nullptr);
     if (trivialExpr)
-        WriteItem(trivialExpr, refTable, out);
+        UUIDPool::writeItem(trivialExpr, refTable, out);
     OutInteger(out, stackLength);
     OutInteger(out, localsCount);
     OutInteger(out, bindingCacheSize);
     OutInteger(out, codeSize);
     OutInteger(out, srcLength);
     OutInteger(out, extraPoolSize);
-    WriteItem(getEntry(0), refTable, out);
+    UUIDPool::writeItem(getEntry(0), refTable, out);
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))
-        WriteItem(getEntry(2), refTable, out);
-    WriteItem(getEntry(3), refTable, out);
+        UUIDPool::writeItem(getEntry(2), refTable, out);
+    UUIDPool::writeItem(getEntry(3), refTable, out);
 
     // Bytecode
     BC::serialize(refTable, out, code(), codeSize, this);
@@ -178,7 +180,7 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
         OutInteger(out, srclist()[i].pcOffset);
-        WriteItem(src_pool_at(srclist()[i].srcIdx), refTable, out);
+        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 }
 

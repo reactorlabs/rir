@@ -1,8 +1,13 @@
 #include "instance.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "utils/UUIDPool.h"
 
 namespace rir {
+
+#ifdef DO_INTERN
+static std::unordered_map<SEXP, size_t> src_pool_interned;
+#endif
 
 void initializeResizeableList(ResizeableList* l, size_t capacity, SEXP parent,
                               size_t index) {
@@ -65,6 +70,20 @@ void context_init() {
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
     }
+}
+
+size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in) {
+    auto item = UUIDPool::readItem(ref_table, in);
+#ifdef DO_INTERN
+    if (src_pool_interned.count(item)) {
+        return src_pool_interned.at(item);
+    }
+#endif
+    size_t i = src_pool_add(item);
+#ifdef DO_INTERN
+    src_pool_interned[item] = i;
+#endif
+    return i;
 }
 
 } // namespace rir
