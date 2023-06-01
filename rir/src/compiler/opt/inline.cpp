@@ -343,14 +343,10 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 auto type = ld->type.notMissing();
                                 if (mk->isEager()) {
                                     auto inType = mk->eagerArg()->type;
-                                    // std::cerr  << "\n";
-                                    // mk->print(std::cerr, true);
-                                    // std::cerr << "\n";
+
                                     type = inType.orFullyPromiseWrapped();
 
-                                    // std::cerr << "new type: " << type <<
-                                    // "\n";
-                                    // type =
+                                    // auto type =
                                     // inType.forced().orPromiseWrapped(); if
                                     // (!inType.maybeMissing())
                                     //     type = type.notMissing();
