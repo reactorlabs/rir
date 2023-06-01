@@ -164,7 +164,15 @@ class Record {
 
 // utilities
 SEXP setClassName(SEXP s, const char* className);
-std::string sexpAddress(const SEXP s);
+template <typename Pointee>
+std::string stringAddressOf(const Pointee* s) {
+    char* caddress;
+    if (asprintf(&caddress, "%p", (void*)s) == -1) {
+        Rf_error("Getting address of pointee failed");
+    }
+
+    return caddress;
+}
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
 SEXP getEnvironment(const std::string& name);

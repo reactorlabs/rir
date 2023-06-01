@@ -103,8 +103,11 @@ void Record::recordSpeculativeContext(const Code* code,
 
 std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
                                                             std::string name) {
-    auto address = sexpAddress(cls);
-    auto r = recordings_index_.insert({address, fun_recordings_.size()});
+    auto clsAddress = stringAddressOf(cls);
+    auto dtAddress = stringAddressOf(BODY(cls));
+
+    recordings_index_.insert({clsAddress, fun_recordings_.size()});
+    auto r = recordings_index_.insert({dtAddress, fun_recordings_.size()});
     FunRecording* v;
 
     if (r.second) {
@@ -491,15 +494,6 @@ SEXP setClassName(SEXP s, const char* className) {
     SEXP t = Rf_mkString(className);
     Rf_setAttrib(s, R_ClassSymbol, t);
     return s;
-}
-
-std::string sexpAddress(const SEXP s) {
-    char* caddress;
-    if (asprintf(&caddress, "%p", (void*)s) == -1) {
-        Rf_error("Getting address of SEXP failed");
-    }
-
-    return caddress;
 }
 
 std::string getEnvironmentName(SEXP env) {
