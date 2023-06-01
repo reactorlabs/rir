@@ -441,7 +441,7 @@ struct PirType {
 
         PirType r;
         if (isRType())
-            r.t_ = this->notMissing().t_.r | o.notMissing().t_.r;
+            r.t_ = notMissing().t_.r | o.notMissing().t_.r;
         else
             r.t_ = t_.n | o.t_.n;
 
@@ -458,7 +458,7 @@ struct PirType {
 
         PirType r;
         if (isRType())
-            r.t_ = t_.r & o.t_.r;
+            r.t_ = notMissing().t_.r & o.notMissing().t_.r;
         else
             r.t_ = t_.n & o.t_.n;
 
