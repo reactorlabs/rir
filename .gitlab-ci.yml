@@ -189,7 +189,7 @@ tests_fullverify:
     - make -j6
     - bin/tests
 
-# Test particular features, like deoptimization and serialization
+# Test particular features, like deoptimization
 test_features_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
@@ -265,6 +265,28 @@ test_features_3:
     when: on_failure
     expire_in: 1 week
 
+# Test serialization
+test_serialize:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - RIR_SERIALIZE_CHAOS=5 bin/tests
+    - PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=5 bin/gnur-make-tests check || $SAVE_LOGS
+    - RIR_SERIALIZE_CHAOS=10 bin/tests
+  artifacts:
+    paths:
+      - logs
+    when: on_failure
+    expire_in: 1 week
 
 # Run ubsan and gc torture
 test_gctorture_1:
