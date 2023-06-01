@@ -279,7 +279,7 @@ struct PirType {
     }
 
     static constexpr PirType dotsArg() {
-        return (PirType() | RType::missing | RType::dots).notPromiseWrapped();
+        return (PirType() | RType::dots).notPromiseWrapped().orMaybeMissing();
     }
 
     static constexpr PirType simpleScalarInt() {
@@ -975,7 +975,7 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     }
 
     if (t.maybePromiseWrapped() && t.maybeMissing())
-        out << " | missing";
+        out << " | miss";
 
     return out;
 }
