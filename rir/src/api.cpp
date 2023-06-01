@@ -619,9 +619,24 @@ REXPORT SEXP playground() {
 
     // type = type.orPromiseWrapped();
 
-    auto type = rir::pir::PirType::any().notMissing().forced().maybeMissing();
+    // auto type =
+    // rir::pir::PirType::any().notMissing().forced().maybeMissing();
 
-    std::cerr << type;
+    auto intOrMissing = rir::pir::PirType::simpleScalarInt().orMaybeMissing();
+    auto intPromiseWrapped =
+        rir::pir::PirType::simpleScalarInt().orPromiseWrapped();
+    auto orr = intOrMissing | intPromiseWrapped;
+    // assert(rir::pir::PirType::simpleScalarInt().orFullyPromiseWrapped().orMaybeMissing())
+    std::cerr << "int or missing: " << intOrMissing;
+    std::cerr << "\n";
+    std::cerr << "int promise wrapped: " << intPromiseWrapped;
+    std::cerr << "\n";
+    std::cerr << "or: " << orr;
+    std::cerr << "\n";
+    std::cerr << "exp: "
+              << rir::pir::PirType::simpleScalarInt()
+                     .orFullyPromiseWrapped()
+                     .orMaybeMissing();
 
     std::cerr << "\n\n\n";
 

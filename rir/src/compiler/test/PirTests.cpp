@@ -901,6 +901,10 @@ bool testTypeRules() {
     assert(!PirType::simpleScalarInt()
                 .extractType(PirType(RType::real).noAttribsOrObject())
                 .isVoid());
+    assert((PirType::simpleScalarInt().orMaybeMissing() |
+            PirType::simpleScalarInt().orPromiseWrapped()) ==
+           PirType::simpleScalarInt().orFullyPromiseWrapped().orMaybeMissing());
+
     return true;
 }
 
