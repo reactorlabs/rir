@@ -139,24 +139,24 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            i.pool = Pool::insert(ReadItem(refTable, inp));
+            i.pool = Pool::readItem(refTable, inp);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            i.poolAndCache.poolIndex = Pool::insert(ReadItem(refTable, inp));
+            i.poolAndCache.poolIndex = Pool::readItem(refTable, inp);
             i.poolAndCache.cacheIndex = InInteger(inp);
             break;
         case Opcode::guard_fun_:
-            i.guard_fun_args.name = Pool::insert(ReadItem(refTable, inp));
-            i.guard_fun_args.expected = Pool::insert(ReadItem(refTable, inp));
+            i.guard_fun_args.name = Pool::readItem(refTable, inp);
+            i.guard_fun_args.expected = Pool::readItem(refTable, inp);
             i.guard_fun_args.id = InInteger(inp);
             break;
         case Opcode::call_:
         case Opcode::named_call_:
         case Opcode::call_dots_: {
             i.callFixedArgs.nargs = InInteger(inp);
-            i.callFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            i.callFixedArgs.ast = Pool::readItem(refTable, inp);
             InBytes(inp, &i.callFixedArgs.given, sizeof(Context));
             Opcode* c = code + 1 + sizeof(CallFixedArgs);
             // Read implicit promise argument offsets
@@ -164,15 +164,15 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 PoolIdx* names = (PoolIdx*)c;
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    names[j] = Pool::insert(ReadItem(refTable, inp));
+                    names[j] = Pool::readItem(refTable, inp);
             }
             break;
         }
         case Opcode::call_builtin_:
             i.callBuiltinFixedArgs.nargs = InInteger(inp);
-            i.callBuiltinFixedArgs.ast = Pool::insert(ReadItem(refTable, inp));
+            i.callBuiltinFixedArgs.ast = Pool::readItem(refTable, inp);
             i.callBuiltinFixedArgs.builtin =
-                Pool::insert(ReadItem(refTable, inp));
+                Pool::readItem(refTable, inp);
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
@@ -234,36 +234,36 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            WriteItem(Pool::get(i.pool), refTable, out);
+            Pool::writeItem(i.pool, refTable, out);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            WriteItem(Pool::get(i.poolAndCache.poolIndex), refTable, out);
+            Pool::writeItem(i.poolAndCache.poolIndex, refTable, out);
             OutInteger(out, i.poolAndCache.cacheIndex);
             break;
         case Opcode::guard_fun_:
-            WriteItem(Pool::get(i.guard_fun_args.name), refTable, out);
-            WriteItem(Pool::get(i.guard_fun_args.expected), refTable, out);
+            Pool::writeItem(i.guard_fun_args.name, refTable, out);
+            Pool::writeItem(i.guard_fun_args.expected, refTable, out);
             OutInteger(out, i.guard_fun_args.id);
             break;
         case Opcode::call_:
         case Opcode::call_dots_:
         case Opcode::named_call_:
             OutInteger(out, i.callFixedArgs.nargs);
-            WriteItem(Pool::get(i.callFixedArgs.ast), refTable, out);
+            Pool::writeItem(i.callFixedArgs.ast, refTable, out);
             OutBytes(out, &i.callFixedArgs.given, sizeof(Context));
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    WriteItem(Pool::get(bc.callExtra().callArgumentNames[j]),
-                              refTable, out);
+                    Pool::writeItem(bc.callExtra().callArgumentNames[j],
+                                    refTable, out);
             }
             break;
         case Opcode::call_builtin_:
             OutInteger(out, i.callBuiltinFixedArgs.nargs);
-            WriteItem(Pool::get(i.callBuiltinFixedArgs.ast), refTable, out);
-            WriteItem(Pool::get(i.callBuiltinFixedArgs.builtin), refTable, out);
+            Pool::writeItem(i.callBuiltinFixedArgs.ast, refTable, out);
+            Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:

@@ -559,7 +559,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer) {
     R_InitOutPStream(
         &out,
         (R_pstream_data_t)&buffer,
-        R_pstream_binary_format,
+        R_pstream_ascii_format,
         R_STREAM_DEFAULT_VERSION,
         rStreamOutChar,
         rStreamOutBytes,

@@ -28,6 +28,8 @@ class Pool {
         return i;
     }
 
+    static BC::PoolIdx readItem(SEXP ref_table, R_inpstream_t in);
+
     static BC::PoolIdx makeSpace() {
         size_t i = cp_pool_add(R_NilValue);
         patchable.insert(i);
