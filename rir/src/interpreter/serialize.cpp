@@ -2,6 +2,7 @@
 #include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
+#include "utils/UUIDPool.h"
 
 namespace rir {
 
@@ -39,7 +40,7 @@ void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
     }
 }
 
-SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
+static SEXP _deserializeRir(SEXP refTable, R_inpstream_t inp) {
     unsigned code = InInteger(inp);
     switch (code) {
     case DISPATCH_TABLE_MAGIC:
@@ -54,6 +55,10 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         assert(false);
         return nullptr;
     }
+}
+
+SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
+    return UUIDPool::intern(_deserializeRir(refTable, inp));
 }
 
 SEXP copyBySerial(SEXP x) {
