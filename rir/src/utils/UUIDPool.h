@@ -12,10 +12,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-/// If not defined, we won't actually intern anything.
-/// Importantly, by default we intern some deserialized SEXPs. Since that is the
-/// only thing we intern, this is effectively the flag to disable this feature
-/// (if we ever intern anything else maybe we'll have a separate flag)
 #define DO_INTERN
 
 namespace rir {
@@ -27,17 +23,20 @@ namespace rir {
 class UUIDPool {
     static std::unordered_map<UUID, SEXP> interned;
 
+    /// Intern the SEXP, except we already know its hash
+    static SEXP intern(SEXP e, UUID uuid);
   public:
     /// Will hash the SEXP and then, if we've already interned, return the
-    ///    existing version. Otherwise we will insert it into the pool and
-    ///    return it as-is.
+    /// existing version. Otherwise we will insert it into the pool and return
+    /// it as-is.
     static SEXP intern(SEXP e);
     /// Read item and intern
     static SEXP readItem(SEXP ref_table, R_inpstream_t in);
     /// Write item, ensuring that it will actually be reused in redundant
-    /// readItem calls even on a separate process
-    /// TODO: implement
-    static SEXP writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
+    /// readItem calls even on a separate process. Actually, this just calls
+    /// WriteItem, but makes the readItem / writeItem calls more symmetric
+    /// because readItem has to intern
+    static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
 };
 
 } // namespace rir

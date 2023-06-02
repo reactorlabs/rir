@@ -3,7 +3,6 @@
 //
 
 #include "UUIDPool.h"
-#include "ByteBuffer.h"
 #include "api.h"
 
 namespace rir {
@@ -13,25 +12,77 @@ std::unordered_map<UUID, SEXP> UUIDPool::interned;
 #ifdef DO_INTERN
 /// Hash the SEXP in a way that ignores pointers
 static UUID hashSexp(SEXP e) {
-    ByteBuffer buffer;
-    serialize(e, buffer);
-    return UUID::hash(buffer.data(), buffer.size());
+    UUIDHasher hasher;
+    hash(e, hasher);
+    return hasher.uuid();
 }
 #endif
 
-SEXP UUIDPool::intern(SEXP e) {
+SEXP UUIDPool::intern(SEXP e, UUID hash) {
 #ifdef DO_INTERN
-    UUID uuid = hashSexp(e);
-    if (interned.count(uuid)) {
-        return interned.at(uuid);
+    SLOWASSERT(hash == hashSexp(e) && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
+    if (interned.count(hash)) {
+        return interned.at(hash);
     }
-    interned[uuid] = e;
+    interned[hash] = e;
 #endif
     return e;
 }
 
-SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
-    return intern(ReadItem(ref_table, in));
+SEXP UUIDPool::intern(SEXP e) {
+#ifdef DO_INTERN
+    return intern(e, hashSexp(e));
+#else
+    return e;
+#endif
 }
+
+struct RStreamAndHasher {
+    R_inpstream_t stream;
+    UUIDHasher hasher;
+
+    explicit RStreamAndHasher(R_inpstream_t stream) : stream(stream) {}
+    const UUID& uuid() const { return hasher.uuid(); }
+};
+
+static int rStreamInChar(R_inpstream_t hashIn) {
+    auto streamAndHasher = (RStreamAndHasher*)hashIn->data;
+    auto in = streamAndHasher->stream;
+    auto hasher = &streamAndHasher->hasher;
+
+    auto data = in->InChar(in);
+    hasher->hashUChar((unsigned char)data);
+    return data;
+}
+
+static void rStreamInBytes(R_inpstream_t hashIn, void* data, int size) {
+    auto streamAndHasher = (RStreamAndHasher*)hashIn->data;
+    auto in = streamAndHasher->stream;
+    auto hasher = &streamAndHasher->hasher;
+
+    in->InBytes(in, data, size);
+    hasher->hashBytes(data, size);
+}
+
+SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
+    RStreamAndHasher streamAndHasher{in};
+    R_inpstream_st hashIn{};
+    R_InitInPStream(
+        &hashIn,
+        (R_pstream_data_t)&streamAndHasher,
+        in->type,
+        rStreamInChar,
+        rStreamInBytes,
+        in->InPersistHookFunc,
+        in->InPersistHookData
+    );
+    SEXP sexp = ReadItem(ref_table, &hashIn);
+    return intern(sexp, streamAndHasher.uuid());
+}
+
+void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
+    WriteItem(sexp, ref_table, out);
+}
+
 
 } // namespace rir

@@ -4,13 +4,17 @@
 #include "R/r.h"
 #include "compiler/log/debug.h"
 #include "runtime/Context.h"
-#include "utils/ByteBuffer.h"
 
 #include <stdint.h>
 
 #define REXPORT extern "C"
 
 extern int R_ENABLE_JIT;
+
+namespace rir {
+class UUIDHasher;
+} // namespace rir
+class ByteBuffer;
 
 REXPORT SEXP rirInvocationCount(SEXP what);
 REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,
@@ -27,6 +31,9 @@ extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);
 REXPORT SEXP rirSerialize(SEXP data, SEXP file);
 REXPORT SEXP rirDeserialize(SEXP file);
+/// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it
+/// but XORing the bits instead of collecting them.
+__attribute__((unused)) void hash(SEXP sexp, rir::UUIDHasher& hasher);
 /// Serialize a SEXP (doesn't have to be RIR) into the buffer
 void serialize(SEXP sexp, ByteBuffer& buffer);
 /// Deserialize an SEXP (doesn't have to be RIR) from the buffer
