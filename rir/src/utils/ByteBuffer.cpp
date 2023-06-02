@@ -143,7 +143,7 @@ namespace bb {
 *
 * @return size of the internal buffer
      */
-    uint32_t ByteBuffer::size() {
+    uint32_t ByteBuffer::size() const {
         return buf.size();
     }
 

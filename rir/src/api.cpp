@@ -18,6 +18,8 @@
 #include "compiler/test/PirTests.h"
 #include "compiler_server_client_shared_utils.h"
 #include "interpreter/interp_incl.h"
+#include "utils/ByteBuffer.h"
+#include "utils/UUID.h"
 #include "utils/cast.h"
 #include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
@@ -36,6 +38,7 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 // This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
 static const int R_STREAM_DEFAULT_VERSION = 3;
+static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_ascii_format;
 
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
@@ -530,9 +533,20 @@ REXPORT SEXP rirDeserialize(SEXP fileSexp) {
     return res;
 }
 
+static void rStreamHashChar(R_outpstream_t stream, int data) {
+    auto hasher = (UUIDHasher*)stream->data;
+    hasher->hashUChar((unsigned char)data);
+}
+
+static void rStreamHashBytes(R_outpstream_t stream, void* data, int length) {
+    auto hasher = (UUIDHasher*)stream->data;
+    hasher->hashBytes(data, length);
+}
+
 static void rStreamOutChar(R_outpstream_t stream, int data) {
     auto buffer = (ByteBuffer*)stream->data;
-    buffer->putInt(reinterpret_int32(data));
+    auto data2 = (unsigned char)data;
+    buffer->putBytes(&data2, sizeof(unsigned char));
 }
 
 static void rStreamOutBytes(R_outpstream_t stream, void* data, int length) {
@@ -542,12 +556,32 @@ static void rStreamOutBytes(R_outpstream_t stream, void* data, int length) {
 
 static int rStreamInChar(R_inpstream_t stream) {
     auto buffer = (ByteBuffer*)stream->data;
-    return reinterpret_uint32(buffer->getInt());
+    unsigned char c;
+    buffer->getBytes(&c, sizeof(unsigned char));
+    return c;
 }
 
 static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
     auto buffer = (ByteBuffer*)stream->data;
     buffer->getBytes((uint8_t*)data, length);
+}
+
+void hash(SEXP sexp, UUIDHasher& hasher) {
+    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    pir::Parameter::RIR_PRESERVE = true;
+    struct R_outpstream_st out{};
+    R_InitOutPStream(
+        &out,
+        (R_pstream_data_t)&hasher,
+        R_STREAM_FORMAT,
+        R_STREAM_DEFAULT_VERSION,
+        rStreamHashChar,
+        rStreamHashBytes,
+        nullptr,
+        nullptr
+    );
+    R_Serialize(sexp, &out);
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer) {
@@ -557,7 +591,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer) {
     R_InitOutPStream(
         &out,
         (R_pstream_data_t)&buffer,
-        R_pstream_ascii_format,
+        R_STREAM_FORMAT,
         R_STREAM_DEFAULT_VERSION,
         rStreamOutChar,
         rStreamOutBytes,
@@ -575,7 +609,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer) {
     R_InitInPStream(
         &in,
         (R_pstream_data_t)&sexpBuffer,
-        R_pstream_binary_format,
+        R_STREAM_FORMAT,
         rStreamInChar,
         rStreamInBytes,
         nullptr,

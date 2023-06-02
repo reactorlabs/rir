@@ -86,4 +86,8 @@ size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in) {
     return i;
 }
 
+void src_pool_write_item(size_t idx, SEXP ref_table, R_outpstream_t out) {
+    UUIDPool::writeItem(src_pool_at(idx), ref_table, out);
+}
+
 } // namespace rir
