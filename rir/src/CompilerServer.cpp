@@ -61,7 +61,8 @@ void CompilerServer::tryRun() {
         // + sizeof(debug.style) (always 4)
         // + debug.style
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
-        assert(requestBuffer.getLong() == PIR_COMPILE_MAGIC && "Invalid request magic");
+        auto magic = requestBuffer.getLong();
+        assert(magic == PIR_COMPILE_MAGIC && "Invalid request magic");
         SEXP what = deserialize(requestBuffer);
         auto assumptionsSize = requestBuffer.getLong();
         assert(assumptionsSize == sizeof(Context) && "Invalid assumptions size");
@@ -106,7 +107,8 @@ void CompilerServer::tryRun() {
         responseBuffer.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
         zmq::message_t response(responseBuffer.data(), requestBuffer.size());
         auto responseSize = *socket.send(std::move(response), zmq::send_flags::none);
-        assert(responseSize == responseBuffer.size());
+        auto responseSize2 = responseBuffer.size();
+        assert(responseSize == responseSize2);
         std::cerr << "Sent response (" << responseSize << " bytes)" << std::endl;
     }
 }

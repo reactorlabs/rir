@@ -6,6 +6,7 @@
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "utils/ByteBuffer.h"
+#include "utils/Terminal.h"
 #include "utils/ctpl.h"
 #include <array>
 #include <zmq.hpp>
@@ -19,10 +20,12 @@ using namespace ctpl;
 // is single-threded, but if we have multi-threaded servers in the future we can
 // increase.
 static int NUM_THREADS;
+static std::chrono::seconds PIR_CLIENT_TIMEOUT;
 thread_pool* threads;
 
 static bool didInit = false;
 static zmq::context_t* context;
+static std::vector<std::string> serverAddrs;
 static std::vector<zmq::socket_t*> sockets;
 
 void CompilerClient::tryInit() {
@@ -40,9 +43,13 @@ void CompilerClient::tryInit() {
 
     assert(!didInit);
     didInit = true;
+    PIR_CLIENT_TIMEOUT = std::chrono::seconds(
+        getenv("PIR_CLIENT_TIMEOUT") == nullptr
+            ? 10
+            : strtol(getenv("PIR_CLIENT_TIMEOUT"), nullptr, 10)
+    );
 
     std::istringstream serverAddrReader(serverAddrStr);
-    std::vector<std::string> serverAddrs;
     while (!serverAddrReader.fail()) {
         std::string serverAddr;
         std::getline(serverAddrReader, serverAddr, ',');
@@ -78,6 +85,11 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
     }
     return new CompilerClient::Handle(threads->push([=](int index) {
         auto socket = sockets[index];
+        if (!socket->handle()) {
+            const auto& serverAddr = serverAddrs[index];
+            std::cerr << "CompilerClient: reconnecting to " << serverAddr << std::endl;
+            socket->connect(serverAddr);
+        }
 
         // Serialize the request
         // Request data format =
@@ -114,8 +126,9 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         zmq::message_t request(requestData.data(), requestData.size());
 
         // Send the request
-        auto requestSize2 = *socket->send(std::move(request), zmq::send_flags::none);
-        assert(requestSize2 == requestData.size());
+        auto requestSize = *socket->send(std::move(request), zmq::send_flags::none);
+        auto requestSize2 = requestData.size();
+        assert(requestSize == requestSize2);
         // Wait for the response
         zmq::message_t response;
         socket->recv(response, zmq::recv_flags::none);
@@ -141,7 +154,8 @@ static void checkDiscrepancy(const std::string& localPir, const std::string& rem
         return;
     }
     // TODO: Actually log diff
-    std::cerr << "Discrepancy between local and remote PIR\n";
+    std::cerr << console::with_red("Discrepancy between local and remote PIR")
+              << std::endl;
     std::cerr << "Local PIR:\n" << localPir << "\n\n";
     std::cerr << "Remote PIR:\n" << remotePir << "\n\n";
 }
@@ -152,7 +166,22 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
     // Tried using a second thread-pool here but it causes "mutex lock failed:
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
     (void)std::async(std::launch::async, [=]() {
-        response.wait();
+        // Wait for the response, with timeout if set
+        if (PIR_CLIENT_TIMEOUT == std::chrono::seconds(0)) {
+            response.wait();
+        } else {
+            switch (response.wait_for(PIR_CLIENT_TIMEOUT)) {
+            case std::future_status::ready:
+                break;
+            case std::future_status::timeout:
+                std::cerr << console::with_red("Timeout waiting for remote PIR")
+                          << std::endl;
+                return;
+            case std::future_status::deferred:
+                assert(false);
+            }
+        }
+        // Get the response which is ready now, and check
         auto resp = response.get();
         checkDiscrepancy(localPir, resp.finalPir);
     });

@@ -93,14 +93,14 @@ UUID UUID::hash(const void* data, size_t size) {
     return uuid;
 }
 
-UUID UUID::deserialize(SEXP refTable, R_inpstream_t inp) {
+UUID UUID::deserialize(__attribute__((unused)) SEXP _refTable, R_inpstream_t inp) {
     UUID uuid;
     InBytes(inp, &uuid.msb, sizeof(uuid.msb));
     InBytes(inp, &uuid.lsb, sizeof(uuid.lsb));
     return uuid;
 }
 
-void UUID::serialize(SEXP refTable, R_outpstream_t out) const {
+void UUID::serialize(__attribute__((unused)) SEXP _refTable, R_outpstream_t out) const {
     OutBytes(out, &msb, sizeof(msb));
     OutBytes(out, &lsb, sizeof(lsb));
 }
@@ -118,6 +118,52 @@ std::ostream& operator<<(std::ostream& stream, const UUID& uuid) {
 
 bool UUID::operator==(const UUID& other) const {
     return msb == other.msb && lsb == other.lsb;
+}
+
+void UUIDHasher::hashUChar(unsigned char c) {
+    hashBytes(&c, sizeof(unsigned char));
+}
+
+void UUIDHasher::hashBytes(const void* data, size_t size) {
+    while (offset != 0 && offset < sizeof(uint64_t)) {
+        if (size == 0) {
+            break;
+        }
+        _uuid.msb ^= (uint64_t)*(uint8_t*)data << (offset * 8);
+        offset++;
+        data = (void*)((uintptr_t)data + 1);
+        size--;
+    }
+    while (offset != 0) {
+        if (size == 0) {
+            break;
+        }
+        _uuid.lsb ^= (uint64_t)*(uint8_t*)data << ((offset - sizeof(uint64_t)) * 8);
+        offset++;
+        data = (void*)((uintptr_t)data + 1);
+        size--;
+        if (offset == sizeof(uint64_t)) {
+            offset = 0;
+        }
+    }
+    while (size >= sizeof(uint64_t) * 2) {
+        _uuid.msb ^= *(uint64_t*)data;
+        _uuid.lsb ^= *(uint64_t*)((uintptr_t)data + sizeof(uint64_t));
+        data = (void*)((uintptr_t)data + sizeof(uint64_t) * 2);
+        size -= sizeof(uint64_t) * 2;
+    }
+    if (size >= sizeof(uint64_t)) {
+        _uuid.msb ^= *(uint64_t*)data;
+        data = (void*)((uintptr_t)data + sizeof(uint64_t));
+        size -= sizeof(uint64_t);
+        offset += sizeof(uint64_t);
+    }
+    while (size > 0) {
+        _uuid.lsb ^= (uint64_t)*(uint8_t*)data << ((offset - sizeof(uint64_t)) * 8);
+        offset++;
+        data = (void*)((uintptr_t)data + 1);
+        size--;
+    }
 }
 
 } // namespace rir

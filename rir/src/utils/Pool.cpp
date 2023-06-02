@@ -13,6 +13,10 @@ BC::PoolIdx Pool::readItem(SEXP ref_table, R_inpstream_t in) {
     return insert(UUIDPool::readItem(ref_table, in));
 }
 
+void Pool::writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
+    UUIDPool::writeItem(get(idx), ref_table, out);
+}
+
 BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))
         return numbers.at(n);

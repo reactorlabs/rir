@@ -59,7 +59,7 @@ namespace bb {
         //ByteBuffer compact(); // TODO?
         bool equals(ByteBuffer* other); // Compare if the contents are equivalent
         void resize(uint32_t newSize);
-        uint32_t size(); // Size of internal vector
+        uint32_t size() const; // Size of internal vector
         uint8_t* data();
 
         // Basic Searching (Linear)

@@ -6,6 +6,8 @@
 
 namespace rir {
 
+class UUIDHasher;
+
 /// A 128-bit UUID
 #pragma pack(push, 1)
 class UUID {
@@ -23,15 +25,28 @@ class UUID {
     static UUID random();
     /// Generates a UUID by hashing the data
     static UUID hash(const void* data, size_t size);
-    static UUID deserialize(SEXP refTable, R_inpstream_t inp);
+    static UUID deserialize(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
     std::string str() const;
 
     friend std::ostream& operator<<(std::ostream&, const UUID&);
     bool operator==(const UUID& other) const;
     friend struct std::hash<UUID>;
+
+    friend class UUIDHasher;
 };
 #pragma pack(pop)
+
+class UUIDHasher {
+    UUID _uuid;
+    size_t offset = 0;
+
+  public:
+    UUIDHasher() = default;
+    void hashUChar(unsigned char c);
+    void hashBytes(const void* data, size_t size);
+    const UUID& uuid() const { return _uuid; }
+};
 
 } // namespace rir
 
