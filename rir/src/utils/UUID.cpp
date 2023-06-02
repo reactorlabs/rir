@@ -5,12 +5,6 @@
 
 namespace rir {
 
-// Generates a random UUID
-UUID UUID::random() {
-    return {arc4random(), arc4random(), arc4random(),
-            arc4random()};
-}
-
 // Generates a UUID by hashing the data
 UUID UUID::hash(const void* data, size_t size) {
     UUID uuid;

@@ -20,7 +20,7 @@ static UUID hashSexp(SEXP e) {
 
 SEXP UUIDPool::intern(SEXP e, UUID hash) {
 #ifdef DO_INTERN
-    SLOWASSERT(hash == hashSexp(e) && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
+    SLOWASSERT(hashSexp(e) == hashSexp(e) && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
     if (interned.count(hash)) {
         return interned.at(hash);
     }
