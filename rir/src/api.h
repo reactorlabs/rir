@@ -42,6 +42,8 @@ SEXP deserialize(ByteBuffer& sexpBuffer);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+__attribute__((unused)) REXPORT SEXP tryToRunCompilerServer();
+
 // this method is just to have an easy way to play around with the code and get
 // feedback by calling .Call('playground')
 REXPORT SEXP playground();
