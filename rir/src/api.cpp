@@ -4,6 +4,7 @@
 
 #include "api.h"
 #include "CompilerClient.h"
+#include "CompilerServer.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"
@@ -708,6 +709,12 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     INTEGER(res)[0] = n1;
     INTEGER(res)[1] = n2;
     return res;
+}
+
+REXPORT SEXP tryToRunCompilerServer() {
+    CompilerServer::tryRun();
+    R_Visible = (Rboolean)false;
+    return R_NilValue;
 }
 
 REXPORT SEXP playground() {

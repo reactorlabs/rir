@@ -29,15 +29,20 @@ class CompilerClient {
   public:
     class Handle {
         friend class CompilerClient;
+#ifdef MULTI_THREADED_COMPILER_CLIENT
         std::shared_ptr<int> socketIndexRef;
         std::future<ResponseData> response;
         Handle(const std::shared_ptr<int>& socketIndexRef,
                std::future<ResponseData> response)
             : socketIndexRef(socketIndexRef), response(std::move(response)) {}
+#else
+        ResponseData response;
+        Handle(ResponseData response) : response(std::move(response)) {}
+#endif
       public:
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
-        void compare(pir::ClosureVersion* version);
+        void compare(pir::ClosureVersion* version) const;
     };
 
     /// Initializes if PIR_CLIENT_ADDR is set
