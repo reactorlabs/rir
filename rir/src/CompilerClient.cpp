@@ -27,6 +27,7 @@ static bool didInit = false;
 static zmq::context_t* context;
 static std::vector<std::string> serverAddrs;
 static std::vector<zmq::socket_t*> sockets;
+static std::vector<bool> socketsConnected;
 
 void CompilerClient::tryInit() {
     // get the server address from the environment
@@ -76,6 +77,7 @@ void CompilerClient::tryInit() {
         auto socket = new zmq::socket_t(*context, zmq::socket_type::req);
         socket->connect(serverAddr);
         sockets.push_back(socket);
+        socketsConnected.push_back(true);
     }
 }
 
@@ -83,13 +85,23 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
     if (!didInit) {
       return nullptr;
     }
-    return new CompilerClient::Handle(threads->push([=](int index) {
+    std::shared_ptr<int> socketIndexRef(new int(-1));
+    return new CompilerClient::Handle{socketIndexRef, threads->push([=](int index) {
         auto socket = sockets[index];
+        auto socketConnected = socketsConnected[index];
         if (!socket->handle()) {
+            std::cerr << "CompilerClient: socket closed" << std::endl;
+            *socket = zmq::socket_t(*context, zmq::socket_type::req);
+            socketConnected = false;
+        }
+        if (!socketConnected) {
             const auto& serverAddr = serverAddrs[index];
             std::cerr << "CompilerClient: reconnecting to " << serverAddr << std::endl;
             socket->connect(serverAddr);
+            socketsConnected[index] = true;
         }
+        *socketIndexRef = index;
+        std::cerr << "Socket " << index << " sending request" << std::endl;
 
         // Serialize the request
         // Request data format =
@@ -145,7 +157,7 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         auto pirPrintSize = responseBuffer.getLong();
         std::string pirPrint((char*)responseBuffer.data(), pirPrintSize);
         return CompilerClient::ResponseData{responseWhat, pirPrint};
-    }));
+    })};
 }
 
 static void checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
@@ -173,10 +185,22 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
             switch (response.wait_for(PIR_CLIENT_TIMEOUT)) {
             case std::future_status::ready:
                 break;
-            case std::future_status::timeout:
+            case std::future_status::timeout: {
                 std::cerr << console::with_red("Timeout waiting for remote PIR")
                           << std::endl;
+                // Disconnect because the server probably crashed, and we want
+                // to be able to restart without restarting the client; it will
+                // attempt to reconnect before sending the next request
+                auto socketIndex = *socketIndexRef;
+                if (socketIndex != -1) {
+                    std::cerr << "Disconnecting " << socketIndex << ", will reconnect on next request" << std::endl;
+                    auto socket = sockets[socketIndex];
+                    auto socketAddr = serverAddrs[socketIndex];
+                    socket->disconnect(socketAddr);
+                    socketsConnected[socketIndex] = false;
+                }
                 return;
+            }
             case std::future_status::deferred:
                 assert(false);
             }

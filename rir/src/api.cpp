@@ -380,6 +380,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        {});
 
     delete m;
+    delete compilerServerHandle;
     UNPROTECT(1);
     return what;
 }

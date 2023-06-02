@@ -29,9 +29,11 @@ class CompilerClient {
   public:
     class Handle {
         friend class CompilerClient;
+        std::shared_ptr<int> socketIndexRef;
         std::future<ResponseData> response;
-        explicit Handle(std::future<ResponseData> response)
-            : response(std::move(response)) {}
+        Handle(const std::shared_ptr<int>& socketIndexRef,
+               std::future<ResponseData> response)
+            : socketIndexRef(socketIndexRef), response(std::move(response)) {}
       public:
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
