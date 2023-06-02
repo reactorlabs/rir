@@ -7,12 +7,15 @@
 #include "compiler_server_client_shared_utils.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
+#ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
+#endif
 #include <array>
 #include <zmq.hpp>
 
 namespace rir {
 
+#ifdef MULTI_THREADED_COMPILER_CLIENT
 using namespace ctpl;
 
 // Thread pool to handle compiler-server requests (AKA will only wait for this
@@ -20,8 +23,9 @@ using namespace ctpl;
 // is single-threded, but if we have multi-threaded servers in the future we can
 // increase.
 static int NUM_THREADS;
-static std::chrono::seconds PIR_CLIENT_TIMEOUT;
 thread_pool* threads;
+static std::chrono::seconds PIR_CLIENT_TIMEOUT;
+#endif
 
 static bool didInit = false;
 static zmq::context_t* context;
@@ -44,11 +48,6 @@ void CompilerClient::tryInit() {
 
     assert(!didInit);
     didInit = true;
-    PIR_CLIENT_TIMEOUT = std::chrono::seconds(
-        getenv("PIR_CLIENT_TIMEOUT") == nullptr
-            ? 10
-            : strtol(getenv("PIR_CLIENT_TIMEOUT"), nullptr, 10)
-    );
 
     std::istringstream serverAddrReader(serverAddrStr);
     while (!serverAddrReader.fail()) {
@@ -58,8 +57,13 @@ void CompilerClient::tryInit() {
             continue;
         serverAddrs.push_back(serverAddr);
     }
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+    PIR_CLIENT_TIMEOUT = std::chrono::seconds(
+        getenv("PIR_CLIENT_TIMEOUT") == nullptr
+            ? 10
+            : strtol(getenv("PIR_CLIENT_TIMEOUT"), nullptr, 10)
+    );
     NUM_THREADS = (int)serverAddrs.size();
-
     // initialize the thread pool
     threads = new thread_pool(NUM_THREADS);
     // initialize the zmq context
@@ -72,6 +76,12 @@ void CompilerClient::tryInit() {
         NUM_THREADS,
         NUM_THREADS
     );
+#else
+    assert(serverAddrs.size() == 1 &&
+           "can't have multiple servers without multi-threaded client");
+    context = new zmq::context_t(1, 1);
+#endif
+
     // initialize the zmq sockets and connect to the servers
     for (const auto& serverAddr : serverAddrs) {
         auto socket = new zmq::socket_t(*context, zmq::socket_type::req);
@@ -85,8 +95,7 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
     if (!didInit) {
       return nullptr;
     }
-    std::shared_ptr<int> socketIndexRef(new int(-1));
-    return new CompilerClient::Handle{socketIndexRef, threads->push([=](int index) {
+    auto getResponse = [=](int index) {
         auto socket = sockets[index];
         auto socketConnected = socketsConnected[index];
         if (!socket->handle()) {
@@ -96,11 +105,11 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         }
         if (!socketConnected) {
             const auto& serverAddr = serverAddrs[index];
-            std::cerr << "CompilerClient: reconnecting to " << serverAddr << std::endl;
+            std::cerr << "CompilerClient: reconnecting to " << serverAddr
+                      << std::endl;
             socket->connect(serverAddr);
             socketsConnected[index] = true;
         }
-        *socketIndexRef = index;
         std::cerr << "Socket " << index << " sending request" << std::endl;
 
         // Serialize the request
@@ -130,15 +139,18 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         requestData.putLong(sizeof(debug.flags));
         requestData.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
         requestData.putLong(debug.passFilterString.size());
-        requestData.putBytes((uint8_t*)debug.passFilterString.c_str(), debug.passFilterString.size());
+        requestData.putBytes((uint8_t*)debug.passFilterString.c_str(),
+                             debug.passFilterString.size());
         requestData.putLong(debug.functionFilterString.size());
-        requestData.putBytes((uint8_t*)debug.functionFilterString.c_str(), debug.functionFilterString.size());
+        requestData.putBytes((uint8_t*)debug.functionFilterString.c_str(),
+                             debug.functionFilterString.size());
         requestData.putLong(sizeof(debug.style));
         requestData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
         zmq::message_t request(requestData.data(), requestData.size());
 
         // Send the request
-        auto requestSize = *socket->send(std::move(request), zmq::send_flags::none);
+        auto requestSize =
+            *socket->send(std::move(request), zmq::send_flags::none);
         auto requestSize2 = requestData.size();
         assert(requestSize == requestSize2);
         // Wait for the response
@@ -157,7 +169,17 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         auto pirPrintSize = responseBuffer.getLong();
         std::string pirPrint((char*)responseBuffer.data(), pirPrintSize);
         return CompilerClient::ResponseData{responseWhat, pirPrint};
+    };
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+    std::shared_ptr<int> socketIndexRef(new int(-1));
+    return new CompilerClient::Handle{socketIndexRef, threads->push([=](index) {
+        *socketIndexRef = index;
+        return getResponse(index);
     })};
+#else
+    auto response = getResponse(0);
+    return new CompilerClient::Handle{response};
+#endif
 }
 
 static void checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
@@ -173,8 +195,9 @@ static void checkDiscrepancy(const std::string& localPir, const std::string& rem
 }
 
 
-void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
+void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
     auto localPir = printClosureVersionForCompilerServerComparison(version);
+#ifdef MULTI_THREADED_COMPILER_CLIENT
     // Tried using a second thread-pool here but it causes "mutex lock failed:
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
     (void)std::async(std::launch::async, [=]() {
@@ -209,6 +232,9 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) {
         auto resp = response.get();
         checkDiscrepancy(localPir, resp.finalPir);
     });
+#else
+    checkDiscrepancy(localPir, response.finalPir);
+#endif
 }
 
 } // namespace rir

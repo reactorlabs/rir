@@ -216,3 +216,6 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+# We need to ensure the compiler server starts after ALL code is loaded, so it can't be in initializeRuntime
+invisible(.Call("tryToRunCompilerServer"))
