@@ -16,13 +16,8 @@ class UUID {
 
     UUID() : msb(0), lsb(0) {}
     UUID(uint64_t msb, uint64_t lsb) : msb(msb), lsb(lsb) {}
-    UUID(uint32_t a, uint32_t b, uint32_t c, uint32_t d)
-        : msb((uint64_t)a | ((uint64_t)b << 32)),
-          lsb((uint64_t)c | ((uint64_t)d << 32)) {}
 
   public:
-    /// Generates a random UUID
-    static UUID random();
     /// Generates a UUID by hashing the data
     static UUID hash(const void* data, size_t size);
     static UUID deserialize(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);

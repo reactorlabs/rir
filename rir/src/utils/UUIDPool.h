@@ -10,7 +10,6 @@
 #include "interpreter/instance.h"
 
 #include <unordered_map>
-#include <unordered_set>
 
 #define DO_INTERN
 
@@ -19,7 +18,7 @@ namespace rir {
 /// A pool of SEXPs with a UUID.
 /// When we deserialize some SEXPs, after deserialization we will check their
 ///    hash and try to reuse an SEXP already interned if possible. Otherwise we
-//     will intern for future deserializations.
+///    store ("intern") for future deserializations.
 class UUIDPool {
     static std::unordered_map<UUID, SEXP> interned;
 
