@@ -9,15 +9,6 @@ namespace rir {
 
 std::unordered_map<UUID, SEXP> UUIDPool::interned;
 
-#ifdef DO_INTERN
-/// Hash the SEXP in a way that ignores pointers
-static UUID hashSexp(SEXP e) {
-    UUIDHasher hasher;
-    hash(e, hasher);
-    return hasher.uuid();
-}
-#endif
-
 SEXP UUIDPool::intern(SEXP e, UUID hash) {
 #ifdef DO_INTERN
     SLOWASSERT(hashSexp(e) == hashSexp(e) && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
