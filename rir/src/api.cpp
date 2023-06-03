@@ -568,7 +568,13 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
     buffer->getBytes((uint8_t*)data, length);
 }
 
-void hash(SEXP sexp, UUIDHasher& hasher) {
+UUID hashSexp(SEXP sexp) {
+    UUIDHasher hasher;
+    hashSexp(sexp, hasher);
+    return hasher.uuid();
+}
+
+void hashSexp(SEXP sexp, UUIDHasher& hasher) {
     oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     struct R_outpstream_st out{};

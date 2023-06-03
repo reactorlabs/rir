@@ -1,4 +1,5 @@
 #include "R/r.h"
+#include "api.h"
 #include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
@@ -71,6 +72,7 @@ SEXP copyBySerial(SEXP x) {
     PROTECT(data);
     SEXP copy = R_unserialize(data, R_NilValue);
     UNPROTECT(1);
+    assert(hashSexp(x) == hashSexp(copy));
     pir::Parameter::RIR_PRESERVE = oldPreserve;
     return copy;
 }
