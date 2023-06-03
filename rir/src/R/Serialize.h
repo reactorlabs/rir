@@ -2,8 +2,6 @@
 
 #include <R/r.h>
 
-#define REXPORT extern "C"
-
 REXPORT SEXP R_serialize(SEXP object, SEXP icon, SEXP ascii, SEXP Sversion,
                          SEXP fun);
 REXPORT SEXP R_unserialize(SEXP icon, SEXP fun);
