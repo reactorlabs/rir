@@ -7,7 +7,9 @@
 
 #include <stdint.h>
 
-#define REXPORT extern "C"
+#ifndef REXPORT
+#define REXPORT extern "C" __attribute__((unused))
+#endif
 
 extern int R_ENABLE_JIT;
 
@@ -46,7 +48,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
-__attribute__((unused)) REXPORT SEXP tryToRunCompilerServer();
+REXPORT SEXP tryToRunCompilerServer();
 
 // this method is just to have an easy way to play around with the code and get
 // feedback by calling .Call('playground')
