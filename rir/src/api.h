@@ -7,10 +7,6 @@
 
 #include <stdint.h>
 
-#ifndef REXPORT
-#define REXPORT extern "C" __attribute__((unused))
-#endif
-
 extern int R_ENABLE_JIT;
 
 namespace rir {

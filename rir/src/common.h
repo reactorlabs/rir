@@ -15,6 +15,8 @@ extern void printBacktrace();
     {}
 #endif
 
+#define REXPORT extern "C"
+
 // from boost
 #include <functional>
 template <class T>
