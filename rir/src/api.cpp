@@ -28,7 +28,6 @@
 #include <cassert>
 #include <cstdio>
 #include <list>
-#include <memory>
 #include <string>
 
 using namespace rir;
@@ -537,7 +536,7 @@ REXPORT SEXP rirDeserialize(SEXP fileSexp) {
 
 static void rStreamHashChar(R_outpstream_t stream, int data) {
     auto hasher = (UUIDHasher*)stream->data;
-    hasher->hashUChar((unsigned char)data);
+    hasher->hashBytesOf<unsigned char>((unsigned char)data);
 }
 
 static void rStreamHashBytes(R_outpstream_t stream, void* data, int length) {

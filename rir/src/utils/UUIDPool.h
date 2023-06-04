@@ -29,12 +29,9 @@ class UUIDPool {
     /// existing version. Otherwise we will insert it into the pool and return
     /// it as-is.
     static SEXP intern(SEXP e);
-    /// Read item and intern
+    /// Currently just reads item, in the future may read item and intern
     static SEXP readItem(SEXP ref_table, R_inpstream_t in);
-    /// Write item, ensuring that it will actually be reused in redundant
-    /// readItem calls even on a separate process. Actually, this just calls
-    /// WriteItem, but makes the readItem / writeItem calls more symmetric
-    /// because readItem has to intern
+    /// Currently just writes item, in the future may write item and intern
     static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
 };
 

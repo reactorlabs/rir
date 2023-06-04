@@ -62,4 +62,17 @@ FeedbackIndex PirTypeFeedback::rirIdx(size_t slot) {
     return getMDEntryOfSlot(slot).rirIdx;
 }
 
+PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+    (void)refTable;
+    (void)inp;
+    assert(false && "TODO PirTypeFeedback::deserialize");
+}
+
+void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+    (void)this;
+    (void)refTable;
+    (void)out;
+    assert(false && "TODO PirTypeFeedback::serialize");
+}
+
 } // namespace rir
