@@ -220,8 +220,14 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static Code* deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp);
+    static Code* deserialize(SEXP refTable, R_inpstream_t inp) {
+        return deserialize(nullptr, refTable, inp);
+    }
+    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const;
+    void serialize(SEXP refTable, R_outpstream_t out) const {
+        serialize(true, refTable, out);
+    }
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;

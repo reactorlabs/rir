@@ -4,6 +4,7 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "utils/UUIDPool.h"
 #include "utils/random.h"
 
 namespace rir {
@@ -199,8 +200,7 @@ struct DispatchTable
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,
-                            Function::deserialize(refTable, inp)->container());
+            table->setEntry(i,UUIDPool::readItem(refTable, inp));
         }
         UNPROTECT(1);
         return table;
@@ -209,7 +209,7 @@ struct DispatchTable
     void serialize(SEXP refTable, R_outpstream_t out) const {
         HashAdd(container(), refTable);
         OutInteger(out, 1);
-        baseline()->serialize(refTable, out);
+        UUIDPool::writeItem(baseline()->container(), refTable, out);
     }
 
     Context userDefinedContext() const { return userDefinedContext_; }

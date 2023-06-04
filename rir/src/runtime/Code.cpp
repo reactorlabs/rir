@@ -104,11 +104,12 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     return sidx;
 }
 
-Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
+Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp) {
+    Protect p;
     size_t size = InInteger(inp);
-    SEXP store = Rf_allocVector(EXTERNALSXP, size);
-    PROTECT(store);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     Code* code = new (DATAPTR(store)) Code;
+    AddReadRef(refTable, store);
     code->nativeCode_ = nullptr; // not serialized for now
     code->src = InInteger(inp);
     bool hasTr = InInteger(inp);
@@ -120,16 +121,17 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = UUIDPool::readItem(refTable, inp);
-    PROTECT(extraPool);
+    SEXP extraPool = p(UUIDPool::readItem(refTable, inp));
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        argReorder = UUIDPool::readItem(refTable, inp);
-        PROTECT(argReorder);
+        argReorder = p(UUIDPool::readItem(refTable, inp));
     }
-    SEXP rirFunction = UUIDPool::readItem(refTable, inp);
-    PROTECT(rirFunction);
+    if (!rirFunction) {
+        // Have to readItem so we read a cyclic reference if necessary
+        rirFunction = Function::unpack(UUIDPool::readItem(refTable, inp));
+        p(rirFunction->container());
+    }
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
@@ -145,18 +147,17 @@ Code* Code::deserialize(SEXP refTable, R_inpstream_t inp) {
                   // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
-    code->setEntry(3, rirFunction);
+    code->function(rirFunction);
     if (hasArgReorder) {
         code->setEntry(2, argReorder);
-        UNPROTECT(1);
     }
-    UNPROTECT(3);
 
     return code;
 }
 
-void Code::serialize(SEXP refTable, R_outpstream_t out) const {
+void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size());
+    HashAdd(container(), refTable);
     // Header
     OutInteger(out, src);
     OutInteger(out, trivialExpr != nullptr);
@@ -172,7 +173,10 @@ void Code::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))
         UUIDPool::writeItem(getEntry(2), refTable, out);
-    UUIDPool::writeItem(getEntry(3), refTable, out);
+    if (includeFunction) {
+        // Have to writeItem so we write a reference if necessary
+        UUIDPool::writeItem(function()->container(), refTable, out);
+    }
 
     // Bytecode
     BC::serialize(refTable, out, code(), codeSize, this);
