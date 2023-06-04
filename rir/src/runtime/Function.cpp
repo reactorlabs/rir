@@ -1,19 +1,23 @@
 #include "Function.h"
+#include "R/Protect.h"
 #include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
+#include "utils/UUIDPool.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
 
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
+    Protect p;
     size_t functionSize = InInteger(inp);
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
     const Context as = Context::deserialize(refTable, inp);
-    SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
     void* payload = DATAPTR(store);
     Function* fun =
         new (payload) Function(functionSize, nullptr, {}, sig, as, nullptr);
+    AddReadRef(refTable, store);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     // What this loop does is that it sets the function owned (yet not
@@ -23,26 +27,18 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (unsigned i = 0; i < fun->numArgs_ + NUM_PTRS; i++) {
         fun->setEntry(i, R_NilValue);
     }
-    PROTECT(store);
-    AddReadRef(refTable, store);
-    TypeFeedback* feedback = TypeFeedback::deserialize(refTable, inp);
-    PROTECT(feedback->container());
-    fun->typeFeedback(feedback);
-    SEXP body = Code::deserialize(refTable, inp)->container();
+    auto feedback = p(UUIDPool::readItem(refTable, inp));
+    fun->typeFeedback(TypeFeedback::unpack(feedback));
+    auto body = p(UUIDPool::readItem(refTable, inp));
     fun->body(body);
-    PROTECT(body);
-    int protectCount = 3;
     for (unsigned i = 0; i < fun->numArgs_; i++) {
         if ((bool)InInteger(inp)) {
-            SEXP arg = Code::deserialize(refTable, inp)->container();
-            PROTECT(arg);
-            protectCount++;
+            SEXP arg = p(UUIDPool::readItem(refTable, inp));
             fun->setEntry(Function::NUM_PTRS + i, arg);
         } else
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
     }
     fun->flags = EnumSet<Flag>(InInteger(inp));
-    UNPROTECT(protectCount);
     return fun;
 }
 
@@ -50,15 +46,23 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, size);
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
-    OutInteger(out, numArgs_);
     HashAdd(container(), refTable);
-    typeFeedback()->serialize(refTable, out);
-    body()->serialize(refTable, out);
+    OutInteger(out, numArgs_);
+    UUIDPool::writeItem(typeFeedback()->container(), refTable, out);
+    // TODO: why are body and args not set sometimes when we hash deserialized
+    //     value to check hash consistency? It probably has something to do with
+    //     cyclic references in serialization, but why?
+    //     (This is one of the reasons we use SEXP instead of unpacking Code for
+    //      body and default args, also because we are going to serialize the
+    //      SEXP anyways to properly handle cyclic references)
+    UUIDPool::writeItem(refTable, getEntry(0), out);
     for (unsigned i = 0; i < numArgs_; i++) {
-        Code* arg = defaultArg(i);
+        CodeSEXP arg = defaultArg_[i];
         OutInteger(out, (int)(arg != nullptr));
-        if (arg)
-            defaultArg(i)->serialize(refTable, out);
+        if (arg) {
+            // arg->serialize(false, refTable, out);
+            UUIDPool::writeItem(refTable, arg, out);
+        }
     }
     OutInteger(out, flags.to_i());
 }
