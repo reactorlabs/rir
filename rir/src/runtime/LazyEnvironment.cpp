@@ -35,4 +35,18 @@ bool LazyEnvironment::isMissing(size_t i) {
     return missing[i] || getArg(i) == R_MissingArg;
 }
 
+LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) {
+    (void)refTable;
+    (void)inp;
+    assert(false && "TODO LazyEnvironment::deserialize");
+}
+
+void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
+    (void)this;
+    (void)refTable;
+    (void)out;
+    assert(false && "TODO LazyEnvironment::serialize");
+}
+
+
 } // namespace rir

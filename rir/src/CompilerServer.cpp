@@ -90,6 +90,14 @@ void CompilerServer::tryRun() {
         requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
         pir::DebugOptions debug(debugFlags, passFilterString, functionFilterString, debugStyle);
 
+        // TODO: Intern deserialized request: get hash while deserializing,
+        //     check if this hash already exists, and if so, return the
+        //     memoized pirCompile.
+        // TODO: Later, we'll have the compile-client send a hash-only first for
+        //     large requests, and the server can respond with the memoized
+        //     pirCompile if it exists, or a PIR_COMPILE_RESPONSE_NEEDS_FULL
+        //     otherwise.
+
         std::string pirPrint;
         pirCompile(what, assumptions, name, debug, &pirPrint);
 

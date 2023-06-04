@@ -114,11 +114,19 @@ bool UUID::operator==(const UUID& other) const {
     return msb == other.msb && lsb == other.lsb;
 }
 
-void UUIDHasher::hashUChar(unsigned char c) {
-    hashBytes(&c, sizeof(unsigned char));
+bool UUID::operator!=(const UUID& other) const {
+    return !(*this == other);
 }
 
 void UUIDHasher::hashBytes(const void* data, size_t size) {
+    // XORs each byte to the UUID over and over, preserving offset so that
+    // multiple calls to hashBytes over the same sequence of bytes produces the
+    // same result as a single call to hashBytes over the entire sequence.
+    // ---
+    // The actual implementation is a bit optimized. Maybe the compiler is smart
+    // enough to do this automatically, but I'm not sure:
+    // - First we XOR bytes until offset == 0 again
+    //   - Case where offset < 64-bits (8 bytes, sizeof(uint64_t))
     while (offset != 0 && offset < sizeof(uint64_t)) {
         if (size == 0) {
             break;
@@ -128,6 +136,8 @@ void UUIDHasher::hashBytes(const void* data, size_t size) {
         data = (void*)((uintptr_t)data + 1);
         size--;
     }
+    //  - Case where offset < 128-bits (16 bytes, sizeof(uint64_t * 2), sizeof(UUID))).
+    //    If offset is already 0 both this and the above are skipped.
     while (offset != 0) {
         if (size == 0) {
             break;
@@ -136,24 +146,25 @@ void UUIDHasher::hashBytes(const void* data, size_t size) {
         offset++;
         data = (void*)((uintptr_t)data + 1);
         size--;
-        if (offset == sizeof(uint64_t)) {
+        if (offset == sizeof(uint64_t) * 2) {
             offset = 0;
         }
     }
+    // - Next we can XOR 128-bit (16 byte, sizeof(uint64_t) * 2, sizeof(UUID))
+    //   chunks at a time, until we have less than 128 bits left
     while (size >= sizeof(uint64_t) * 2) {
         _uuid.msb ^= *(uint64_t*)data;
         _uuid.lsb ^= *(uint64_t*)((uintptr_t)data + sizeof(uint64_t));
         data = (void*)((uintptr_t)data + sizeof(uint64_t) * 2);
         size -= sizeof(uint64_t) * 2;
     }
-    if (size >= sizeof(uint64_t)) {
-        _uuid.msb ^= *(uint64_t*)data;
-        data = (void*)((uintptr_t)data + sizeof(uint64_t));
-        size -= sizeof(uint64_t);
-        offset += sizeof(uint64_t);
-    }
+    // - Finally we XOR the remaining bytes, one at a time
     while (size > 0) {
-        _uuid.lsb ^= (uint64_t)*(uint8_t*)data << ((offset - sizeof(uint64_t)) * 8);
+        if (offset < sizeof(uint64_t)) {
+            _uuid.msb ^= (uint64_t)*(uint8_t*)data << (offset * 8);
+        } else {
+            _uuid.lsb ^= (uint64_t)*(uint8_t*)data << ((offset - sizeof(uint64_t)) * 8);
+        }
         offset++;
         data = (void*)((uintptr_t)data + 1);
         size--;

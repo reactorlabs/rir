@@ -75,6 +75,9 @@ struct PirTypeFeedback
         }
     }
 
+    static PirTypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
+
   private:
     MDEntry& getMDEntryOfSlot(size_t slot) {
         assert(slot < MAX_SLOT_IDX);

@@ -12,9 +12,9 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
+    AddReadRef(refTable, store);
     void* payload = DATAPTR(store);
     Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
-    AddReadRef(refTable, store);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
@@ -34,10 +34,10 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
+    HashAdd(container(), refTable);
     OutInteger(out, size);
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
-    HashAdd(container(), refTable);
     OutInteger(out, numArgs_);
     // TODO: why are body and args not set sometimes when we hash deserialized
     //     value to check hash consistency? It probably has something to do with
@@ -45,13 +45,13 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     //     (This is one of the reasons we use SEXP instead of unpacking Code for
     //      body and default args, also because we are going to serialize the
     //      SEXP anyways to properly handle cyclic references)
-    UUIDPool::writeItem(refTable, getEntry(0), out);
+    UUIDPool::writeItem(getEntry(0), refTable, out);
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
         OutInteger(out, (int)(arg != nullptr));
         if (arg) {
             // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(refTable, arg, out);
+            UUIDPool::writeItem(arg, refTable, out);
         }
     }
     OutInteger(out, flags.to_i());

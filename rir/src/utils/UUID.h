@@ -26,6 +26,7 @@ class UUID {
 
     friend std::ostream& operator<<(std::ostream&, const UUID&);
     bool operator==(const UUID& other) const;
+    bool operator!=(const UUID& other) const;
     friend struct std::hash<UUID>;
 
     friend class UUIDHasher;
@@ -38,7 +39,7 @@ class UUIDHasher {
 
   public:
     UUIDHasher() = default;
-    void hashUChar(unsigned char c);
+    template<typename T> void hashBytesOf(T c) { hashBytes(&c, sizeof(T)); }
     void hashBytes(const void* data, size_t size);
     const UUID& uuid() const { return _uuid; }
 };
