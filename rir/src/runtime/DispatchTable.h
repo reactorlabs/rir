@@ -194,23 +194,8 @@ struct DispatchTable
 
     size_t capacity() const { return info.gc_area_length; }
 
-    static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
-        DispatchTable* table = create();
-        PROTECT(table->container());
-        AddReadRef(refTable, table->container());
-        table->size_ = InInteger(inp);
-        for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,UUIDPool::readItem(refTable, inp));
-        }
-        UNPROTECT(1);
-        return table;
-    }
-
-    void serialize(SEXP refTable, R_outpstream_t out) const {
-        HashAdd(container(), refTable);
-        OutInteger(out, 1);
-        UUIDPool::writeItem(baseline()->container(), refTable, out);
-    }
+    static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {

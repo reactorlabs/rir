@@ -65,4 +65,17 @@ Opcode* PirTypeFeedback::getOriginOfSlot(size_t slot) {
     return getSrcCodeOfSlot(slot)->code() + getBCOffsetOfSlot(slot);
 }
 
+PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+    (void)refTable;
+    (void)inp;
+    assert(false && "TODO PirTypeFeedback::deserialize");
+}
+
+void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+    (void)this;
+    (void)refTable;
+    (void)out;
+    assert(false && "TODO PirTypeFeedback::serialize");
+}
+
 } // namespace rir

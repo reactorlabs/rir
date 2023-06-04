@@ -82,6 +82,9 @@ struct LazyEnvironment
         return le;
     }
 
+    static LazyEnvironment* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
+
     // This byteset remembers which slots have been overwritten, such that they
     // should not be considered missing anymore.
     char missing[];

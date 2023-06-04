@@ -108,8 +108,8 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     Protect p;
     size_t size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
-    Code* code = new (DATAPTR(store)) Code;
     AddReadRef(refTable, store);
+    Code* code = new (DATAPTR(store)) Code;
     code->nativeCode_ = nullptr; // not serialized for now
     code->src = InInteger(inp);
     bool hasTr = InInteger(inp);
@@ -129,8 +129,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     }
     if (!rirFunction) {
         // Have to readItem so we read a cyclic reference if necessary
-        rirFunction = Function::unpack(UUIDPool::readItem(refTable, inp));
-        p(rirFunction->container());
+        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
     }
 
     // Bytecode
@@ -156,8 +155,8 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 }
 
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
-    OutInteger(out, size());
     HashAdd(container(), refTable);
+    OutInteger(out, size());
     // Header
     OutInteger(out, src);
     OutInteger(out, trivialExpr != nullptr);

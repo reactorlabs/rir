@@ -72,6 +72,9 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             true);
     }
 
+    static LazyArglist* deserialize(SEXP refTable, R_inpstream_t inp);
+    void serialize(SEXP refTable, R_outpstream_t out) const;
+
   private:
     // cppcheck-suppress uninitMemberVarPrivate
     LazyArglist(ArglistOrder::CallId id, SEXP arglistOrder, size_t length,
