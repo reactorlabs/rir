@@ -11,7 +11,9 @@ std::unordered_map<UUID, SEXP> UUIDPool::interned;
 
 SEXP UUIDPool::intern(SEXP e, UUID hash) {
 #ifdef DO_INTERN
+    PROTECT(e);
     SLOWASSERT(hashSexp(e) == hashSexp(e) && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
+    UNPROTECT(1);
     if (interned.count(hash)) {
         return interned.at(hash);
     }

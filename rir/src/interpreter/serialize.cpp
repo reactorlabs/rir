@@ -54,7 +54,6 @@ static SEXP _deserializeRir(SEXP refTable, R_inpstream_t inp) {
         std::cerr << "couldn't deserialize EXTERNALSXP with code: 0x"
                   << std::hex << code << "\n";
         assert(false);
-        return nullptr;
     }
 }
 
