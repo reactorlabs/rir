@@ -574,7 +574,8 @@ struct PirType {
         // newFlags.set(TypeFlags::promiseWrapped);
         // return PirType(newType, newFlags);
 
-        return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+        return PirType(t_.r | RType::missing,
+                       flags_ | TypeFlags::promiseWrapped);
         // return orFullyPromiseWrapped();
     }
 
@@ -590,7 +591,7 @@ struct PirType {
 
     inline constexpr PirType orLazy() const {
         assert(isRType());
-        return PirType(t_.r,
+        return PirType(t_.r | RType::missing,
                        flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
     }
 
