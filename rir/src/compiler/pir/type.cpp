@@ -156,6 +156,7 @@ PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
                 t_.r.set(RType::missing);
         } else {
             flags_.set(TypeFlags::lazy);
+            t_.r.set(RType::missing);
         }
     }
 

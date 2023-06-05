@@ -149,7 +149,6 @@ struct PirType {
                TypeFlags::maybeObject | TypeFlags::maybeNotFastVecelt |
                TypeFlags::maybeAttrib | TypeFlags::maybeNotScalar |
                TypeFlags::maybeNAOrNaN | TypeFlags::rtype;
-        //| TypeFlags::maybeMissing;
     }
     static constexpr FlagSet optimisticRTypeFlags() {
         return FlagSet() | TypeFlags::rtype;
