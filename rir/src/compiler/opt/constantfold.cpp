@@ -345,9 +345,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto argValType = argVal->type;
 
                         auto canRemoveCheck =
-                            MkArg::Cast(argVal) ||
-                            (!argValType.maybePromiseWrapped() &&
-                             !argValType.maybeMissing());
+                            MkArg::Cast(argVal->cFollowCasts()) ||
+                            (!argValType.maybeMissing());
                         if (canRemoveCheck) {
                             // std::cerr << "\n";
                             // i->print(std::cerr, true);
