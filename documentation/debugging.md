@@ -405,3 +405,16 @@ In order to use rr inside a docker container, it is necessary to run it with som
 `docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it registry.gitlab.com/rirvm/rir_mirror/benchmark:SOME_COMMIT_ID`
 
 Recording Ř works just fine, with the usual `-d rr` . However, when running  `rr replay`, it complains about not being able to find the debug symbols. To overcome this issue type in: `/opt/rir/external/custom-r/bin/exec/R` right after `rr replay` (within the *rr* prompt).
+
+## CLion
+
+You can create run/debug configurations for Ř in CLion.
+
+CLion should be smart enough to automatically generate a CMake configuration from our `CMakeLists.txt`, and thus have some preset run configurations. The one you will use is `rir`. This configuration will already build Ř in a folder called `cmake-build-debug`. However, you must do some manual configuration in order to get it to run properly:
+
+- Change `executable` to `<path to rir>/external/custom-r/bin/exec/R` (this is the path to the R executable that was built by Ř; replace `<path to rir>` with the actual repo path)
+- Set the following environment variables (again, replace `<path to rir>` with the actual repo path):
+  - On Linux: `LD_LIBRARY_PATH=<path to rir>/external/custom-r/lib;EXTRA_LOAD_R=<path to rir>/rir/R/rir.R;EXTRA_LOAD_SO=<path to rir>/cmake-build-sanitize/Debug/librir.dylib;R_DOC_DIR=<path to rir>/external/custom-r/doc;R_HOME=<path to rir>/external/custom-r;R_HOME_DIR=<path to rir>/external/custom-r;R_INCLUDE_DIR=<path to rir>/external/custom-r/include;R_SHARE_DIR=<path to rir>/external/custom-r/share`
+  - On macOS: `DYLD_LIBRARY_PATH=<path to rir>/external/custom-r/lib;EXTRA_LOAD_R=<path to rir>/rir/R/rir.R;EXTRA_LOAD_SO=<path to rir>/cmake-build-sanitize/Debug/librir.dylib;R_DOC_DIR=<path to rir>/external/custom-r/doc;R_HOME=<path to rir>/external/custom-r;R_HOME_DIR=<path to rir>/external/custom-r;R_INCLUDE_DIR=<path to rir>/external/custom-r/include;R_SHARE_DIR=<path to rir>/external/custom-r/share`
+
+This should be enough to get run to start the REPL, and debug to work with breakpoints. You can also redirect input from files (e.g. one of the tests), or add extra environment variables like `PIR_DEBUG`.
