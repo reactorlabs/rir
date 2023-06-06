@@ -100,6 +100,8 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
         }
     }
 
+    size_t size() const;
+
     friend struct LazyArglistOnHeap;
     friend struct LazyArglistOnStack;
 

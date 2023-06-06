@@ -1,7 +1,7 @@
 #include "PirTypeFeedback.h"
 #include "Code.h"
+#include "R/Protect.h"
 #include "compiler/pir/instruction.h"
-#include <iostream>
 #include <unordered_map>
 
 namespace rir {
@@ -66,16 +66,48 @@ Opcode* PirTypeFeedback::getOriginOfSlot(size_t slot) {
 }
 
 PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
-    (void)refTable;
-    (void)inp;
-    assert(false && "TODO PirTypeFeedback::deserialize");
+    Protect p;
+    int size = InInteger(inp);
+    int numCodes = InInteger(inp);
+    int numEntries = InInteger(inp);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    auto typeFeedback = new (DATAPTR(store)) PirTypeFeedback(numCodes);
+    InBytes(inp, typeFeedback->entry, sizeof(typeFeedback->entry));
+    for (int i = 0; i < numCodes; i++) {
+        typeFeedback->setEntry(i, p(ReadItem(refTable, inp)));
+    }
+    InBytes(inp, typeFeedback->mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
 
 void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
-    (void)this;
-    (void)refTable;
-    (void)out;
-    assert(false && "TODO PirTypeFeedback::serialize");
+    OutInteger(out, (int)size());
+    auto numCodes = this->numCodes();
+    auto numEntries = this->numEntries();
+    OutInteger(out, numCodes);
+    OutInteger(out, numEntries);
+    OutBytes(out, entry, sizeof(entry));
+    for (int i = 0; i < numCodes; i++) {
+        WriteItem(getEntry(i), refTable, out);
+    }
+    OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
+}
+
+int PirTypeFeedback::numCodes() const {
+    return (int)info.gc_area_length;
+}
+
+int PirTypeFeedback::numEntries() const {
+    int numEntries = 0;
+    for (auto id : entry) {
+        if (id < MAX_SLOT_IDX && id > numEntries) {
+            numEntries = id + 1;
+        }
+    }
+    return numEntries;
+}
+
+size_t PirTypeFeedback::size() const {
+    return requiredSize(numCodes(), numEntries());
 }
 
 } // namespace rir
