@@ -79,6 +79,9 @@ struct PirTypeFeedback
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
   private:
+    PirTypeFeedback(int numCodes)
+        : RirRuntimeObject(sizeof(*this), numCodes) {}
+
     MDEntry& getMDEntryOfSlot(size_t slot) {
         assert(slot < MAX_SLOT_IDX);
         auto idx = entry[slot];
@@ -90,6 +93,10 @@ struct PirTypeFeedback
         return reinterpret_cast<MDEntry*>((uintptr_t)this + info.gc_area_start +
                                           sizeof(SEXP) * info.gc_area_length);
     }
+
+    int numCodes() const;
+    int numEntries() const;
+    size_t size() const;
 
     uint8_t entry[MAX_SLOT_IDX];
 };

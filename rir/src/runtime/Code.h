@@ -224,8 +224,15 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     static Code* deserialize(SEXP refTable, R_inpstream_t inp) {
         return deserialize(nullptr, refTable, inp);
     }
-    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const;
-    void serialize(SEXP refTable, R_outpstream_t out) const {
+    /// This is NOT const because it may force native-code JIT compilation.
+    ///
+    /// Why? because we need serialization to be consistent regardless of laziness, and if we have to reconstruct the
+    /// code on the compiler-client, we are recompiling which defeats the whole point.
+    ///
+    /// FUTURE: Maybe don't lazily-compile on the client if it's slow and we can do it on the server (idk if we're
+    /// compiling baseline into LLVM)
+    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out);
+    void serialize(SEXP refTable, R_outpstream_t out) {
         serialize(true, refTable, out);
     }
     void disassemble(std::ostream&, const std::string& promPrefix) const;

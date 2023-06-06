@@ -1,4 +1,6 @@
 #include "LazyEnvironment.h"
+#include "R/Protect.h"
+#include "R/Serialize.h"
 #include "utils/Pool.h"
 
 namespace rir {
@@ -36,16 +38,49 @@ bool LazyEnvironment::isMissing(size_t i) {
 }
 
 LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) {
-    (void)refTable;
-    (void)inp;
-    assert(false && "TODO LazyEnvironment::deserialize");
+    Protect p;
+    int size = InInteger(inp);
+    int nargs = InInteger(inp);
+    auto missing = new char[nargs];
+    auto names = new Immediate[nargs];
+    for (int i = 0; i < nargs; i++) {
+        missing[i] = InChar(inp);
+    }
+    for (int i = 0; i < nargs; i++) {
+        names[i] = Pool::readItem(refTable, inp);
+    }
+    SEXP materialized = p(ReadItem(refTable, inp));
+    SEXP parent = p(ReadItem(refTable, inp));
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    auto le = new (DATAPTR(store)) LazyEnvironment(parent, nargs, names);
+    le->materialized(materialized);
+    for (int i = 0; i < nargs; i++) {
+        le->missing[i] = missing[i];
+        le->setEntry(i, ReadItem(refTable, inp));
+    }
+    delete[] missing;
+    // names won't get deleted because its now owned by LazyEnvironment,
+    // but does LazyEnvironment free when destroyed?
+    return le;
 }
 
 void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
-    (void)this;
-    (void)refTable;
-    (void)out;
-    assert(false && "TODO LazyEnvironment::serialize");
+    OutInteger(out, (int)size());
+    OutInteger(out, (int)nargs);
+    for (int i = 0; i < nargs; i++) {
+        OutChar(out, missing[i]);
+    }
+    for (int i = 0; i < nargs; i++) {
+        Pool::writeItem(names[i], refTable, out);
+    }
+    for (int i = 0; i < nargs + ArgOffset; i++) {
+        WriteItem(getEntry(i), refTable, out);
+    }
+}
+
+size_t LazyEnvironment::size() const {
+    return sizeof(LazyEnvironment) + sizeof(char) * nargs +
+           sizeof(SEXP) * (nargs + ArgOffset);
 }
 
 

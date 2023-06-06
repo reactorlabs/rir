@@ -88,6 +88,9 @@ struct LazyEnvironment
     // This byteset remembers which slots have been overwritten, such that they
     // should not be considered missing anymore.
     char missing[];
+
+  private:
+    size_t size() const;
 };
 
 } // namespace rir
