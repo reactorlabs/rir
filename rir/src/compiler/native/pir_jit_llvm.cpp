@@ -556,7 +556,7 @@ void PirJitLLVM::initializeLLVM() {
     // name. symbols starting with "ept_" are external pointers, the ones
     // starting with "efn_" are external function pointers. these must exist in
     // the host process.
-    // NEW: On macOS ARM the symbols start with _ept_ and _epn_
+    // NEW: On macOS/clang/ARM (which one? idk) the symbols start with _ept_ and _epn_
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
