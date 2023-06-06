@@ -903,7 +903,10 @@ bool testTypeRules() {
                 .isVoid());
     assert((PirType::simpleScalarInt().orMaybeMissing() |
             PirType::simpleScalarInt().orPromiseWrapped()) ==
-           PirType::simpleScalarInt().orFullyPromiseWrapped().orMaybeMissing());
+           PirType::simpleScalarInt()
+               .orMaybeMissing()
+               .orFullyPromiseWrapped()
+               .orMaybeMissing());
 
     return true;
 }
