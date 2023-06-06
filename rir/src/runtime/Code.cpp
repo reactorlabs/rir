@@ -108,11 +108,18 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 
 Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp) {
     Protect p;
-    size_t size = InInteger(inp);
+    int size = (int)InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     AddReadRef(refTable, store);
     Code* code = new (DATAPTR(store)) Code;
-    code->nativeCode_ = nullptr; // not serialized for now
+    // Native code
+    auto hasNativeCode = InBool(inp);
+    if (hasNativeCode) {
+        // code->nativeCode_ = NativeCode::deserialize(inp); // TODO
+    } else {
+        code->nativeCode_ = nullptr;
+    }
+    // Header
     code->src = InInteger(inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
@@ -156,20 +163,27 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     return code;
 }
 
-void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
+void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) {
     HashAdd(container(), refTable);
-    OutInteger(out, size());
+    OutInteger(out, (int)size());
+    // Native code
+    // We may have to JIT here, see doc comment
+    auto nativeCode = this->nativeCode();
+    OutBool(out, nativeCode != nullptr);
+    if (nativeCode) {
+        // nativeCode->serialize(out); // TODO
+    }
     // Header
-    OutInteger(out, src);
+    src_pool_write_item(src, refTable, out);
     OutInteger(out, trivialExpr != nullptr);
     if (trivialExpr)
         UUIDPool::writeItem(trivialExpr, refTable, out);
-    OutInteger(out, stackLength);
-    OutInteger(out, localsCount);
-    OutInteger(out, bindingCacheSize);
-    OutInteger(out, codeSize);
-    OutInteger(out, srcLength);
-    OutInteger(out, extraPoolSize);
+    OutInteger(out, (int)stackLength);
+    OutInteger(out, (int)localsCount);
+    OutInteger(out, (int)bindingCacheSize);
+    OutInteger(out, (int)codeSize);
+    OutInteger(out, (int)srcLength);
+    OutInteger(out, (int)extraPoolSize);
     UUIDPool::writeItem(getEntry(0), refTable, out);
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))
@@ -184,7 +198,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
-        OutInteger(out, srclist()[i].pcOffset);
+        OutInteger(out, (int)srclist()[i].pcOffset);
         src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 }
