@@ -343,13 +343,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 auto type = ld->type.notMissing();
                                 if (mk->isEager()) {
                                     auto inType = mk->eagerArg()->type;
-
                                     type = inType.orFullyPromiseWrapped();
-
-                                    // auto type =
-                                    // inType.forced().orPromiseWrapped(); if
-                                    // (!inType.maybeMissing())
-                                    //     type = type.notMissing();
                                 }
                                 auto cast = new CastType(a, CastType::Upcast,
                                                          RType::prom, type);

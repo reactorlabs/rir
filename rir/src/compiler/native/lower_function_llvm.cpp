@@ -4493,19 +4493,6 @@ void LowerFunctionLLVM::compile() {
                                        .orPromiseWrapped())) {
                         res1 = builder.CreateICmpEQ(sexptype(a), c(SPECIALSXP));
                     } else {
-                        // std::cerr << "\n";
-                        // std::cerr << "arg->type: " << arg->type << "\n" <<
-                        // "t->typeTest: " << t->typeTest << "\n"; std::cerr <<
-                        // "arg->type modified: " <<
-                        //             arg->type.notMissing()
-                        //                 .notPromiseWrapped()
-                        //                 .noAttribsOrObject()
-                        //             << "\n";
-                        // assert(arg->type.notMissing()
-                        //            .notPromiseWrapped()
-                        //            .noAttribsOrObject()
-                        //            .isA(t->typeTest));
-
                         assert(arg->type.notMissing()
                                    .notPromiseWrapped()
                                    .notMissing()

@@ -492,13 +492,6 @@ struct PirType {
     PirType constexpr notMissing() const {
         assert(isRType());
 
-        // if (t_.r.includes(RType::prom)) {
-        //     std::cerr << "\n" ;
-        //     //std::cerr << *this;
-        //     std::cerr << "\n";
-        //     assert(false);
-        // }
-
         auto newType = t_.r;
         if (!maybePromiseWrapped()) {
             newType.reset(RType::missing);
@@ -506,21 +499,6 @@ struct PirType {
 
         return PirType(newType, flags_ & ~FlagSet(TypeFlags::maybeMissing));
     }
-
-    // PirType constexpr orWrappedMissing() const {
-    //     assert(isRType());
-    //     assert(maybePromiseWrapped());
-    //     return orT(RType::missing);
-    //     //return PirType(t_.r, flags_ &
-    //     ~FlagSet(TypeFlags::notWrappedMissing));
-    // }
-
-    // PirType constexpr notWrappedMissing() const {
-    //     assert(isRType());
-    //     assert(maybePromiseWrapped());
-    //     return notT(RType::missing);
-    //     // return PirType(t_.r, flags_ | TypeFlags::notWrappedMissing);
-    // }
 
     inline constexpr PirType notNAOrNaN() const {
         assert(isRType());
@@ -562,20 +540,7 @@ struct PirType {
         if (maybePromiseWrapped())
             return *this;
 
-        // auto newType = t_.r;
-        // auto newFlags = flags_;
-
-        // if (t_.r.includes(RType::missing)) {
-        //     newType.reset(RType::missing);
-        //     newFlags.set(TypeFlags::maybeMissing);
-        // }
-
-        // newFlags.set(TypeFlags::promiseWrapped);
-        // return PirType(newType, newFlags);
-
-        //| RType::missing
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
-        // return orFullyPromiseWrapped();
     }
 
 
@@ -591,7 +556,6 @@ struct PirType {
 
     inline constexpr PirType orLazy() const {
         assert(isRType());
-        //| RType::missing
         return PirType(t_.r,
                        flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
     }
@@ -656,11 +620,6 @@ struct PirType {
 
         auto newFlags = flags_;
         auto newType = t_.r;
-        // if (t_.r.includes(RType::missing) ||
-        // flags_.includes(TypeFlags::maybeMissing)) {
-        //     newFlags.set(TypeFlags::maybeMissing);
-        //     newType.set(RType::missing);
-        // }
 
         newFlags =
             newFlags & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped);

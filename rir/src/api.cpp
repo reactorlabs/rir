@@ -605,41 +605,6 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 
 REXPORT SEXP playground() {
 
-    // auto type =
-    // rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped().notWrappedMissing();
-    // auto type =
-    // rir::pir::PirType::intReal().orPromiseWrapped().orMaybeMissing(); auto
-    // type = rir::pir::PirType::theMissingValue().orFullyPromiseWrapped();
-    // auto type =
-    //     rir::pir::PirType::intReal().orMaybeMissing().orPromiseWrapped();
-
-    // SEXP res = Rf_mkPROMISE(R_NilValue, R_EmptyEnv);
-    // SET_PRVALUE(res, R_MissingArg);
-    // auto type = rir::pir::PirType(res);
-
-    // type = type.orPromiseWrapped();
-
-    // auto type =
-    // rir::pir::PirType::any().notMissing().forced().maybeMissing();
-
-    auto intOrMissing = rir::pir::PirType::simpleScalarInt().orMaybeMissing();
-    auto intPromiseWrapped =
-        rir::pir::PirType::simpleScalarInt().orPromiseWrapped();
-    auto orr = intOrMissing | intPromiseWrapped;
-    // assert(rir::pir::PirType::simpleScalarInt().orFullyPromiseWrapped().orMaybeMissing())
-    std::cerr << "int or missing: " << intOrMissing;
-    std::cerr << "\n";
-    std::cerr << "int promise wrapped: " << intPromiseWrapped;
-    std::cerr << "\n";
-    std::cerr << "or: " << orr;
-    std::cerr << "\n";
-    std::cerr << "exp: "
-              << rir::pir::PirType::simpleScalarInt()
-                     .orFullyPromiseWrapped()
-                     .orMaybeMissing();
-
-    std::cerr << "\n\n\n";
-
     return R_NilValue;
 }
 
