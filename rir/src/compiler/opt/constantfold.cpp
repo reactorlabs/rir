@@ -344,16 +344,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto argVal = i->arg(0).val();
                         auto argValType = argVal->type;
 
-                        auto canRemoveCheck =
-                            MkArg::Cast(argVal->cFollowCasts()) ||
-                            (!argValType.maybeMissing());
-                        if (canRemoveCheck) {
-                            // std::cerr << "\n";
-                            // i->print(std::cerr, true);
-                            // argVal->printRef(std::cerr);
-                            // std::cerr  << " \n";
-                            // assert(false);
-
+                        if (MkArg::Cast(argVal->cFollowCasts()) ||
+                            !argValType.maybeMissing()) {
                             i->replaceUsesWith(argVal);
                             next = bb->remove(ip);
                         }
