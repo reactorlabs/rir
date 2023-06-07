@@ -6,6 +6,7 @@
 
 #include <string>
 #include "R/r_incl.h"
+#include <memory>
 
 namespace llvm {
 
