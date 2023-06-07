@@ -5,6 +5,7 @@
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
+#include "compiler/native/SerialModule.h"
 
 #include <cassert>
 #include <cstdint>
@@ -15,10 +16,17 @@
 #include <asm/msr.h>
 #endif
 
+namespace llvm {
+
+class Function;
+
+} // namespace llvm
+
 namespace rir {
 
 typedef SEXP FunctionSEXP;
 typedef SEXP CodeSEXP;
+typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 
 #define CODE_MAGIC 0xc0de0000
 #define NATIVE_CODE_MAGIC 0xc0deffff
@@ -47,7 +55,6 @@ typedef SEXP CodeSEXP;
 
 struct InterpreterInstance;
 struct Code;
-typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
@@ -85,26 +92,24 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
-    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
+    char lazyCodeHandle[MAX_CODE_HANDLE_LENGTH] = "\0";
+    SerialModuleRef lazyCodeModule;
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
   public:
-    void lazyCodeHandle(const std::string& h) {
-        assert(h != "");
+    void lazyCode(const std::string& handle, const SerialModuleRef& module) {
+        assert(!handle.empty() && module != nullptr);
+        assert(handle.size() < MAX_CODE_HANDLE_LENGTH);
         assert(kind == Kind::Native);
-        auto l = h.length() + 1;
-        if (l > MAX_CODE_HANDLE_LENGTH) {
-            assert(false);
-            l = MAX_CODE_HANDLE_LENGTH;
-        }
-        memcpy(&lazyCodeHandle_, h.c_str(), l);
-        lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH - 1] = '\0';
+        assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
+        strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH);
+        lazyCodeModule = module;
     }
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
-        if (kind == Kind::Bytecode || *lazyCodeHandle_ == '\0')
+        if (kind == Kind::Bytecode || lazyCodeHandle[0] == '\0')
             return nullptr;
         return lazyCompile();
     }
@@ -116,7 +121,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     // evaluated (if we trigger some code in the backend, eg. during printing).
     // The current workaround is to skip them during dispatch.
     bool pendingCompilation() const {
-        return kind == Kind::Native && *lazyCodeHandle_ == '\0';
+        return kind == Kind::Native && lazyCodeHandle[0] == '\0';
     }
 
     static unsigned pad4(unsigned sizeInBytes) {
@@ -224,15 +229,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     static Code* deserialize(SEXP refTable, R_inpstream_t inp) {
         return deserialize(nullptr, refTable, inp);
     }
-    /// This is NOT const because it may force native-code JIT compilation.
-    ///
-    /// Why? because we need serialization to be consistent regardless of laziness, and if we have to reconstruct the
-    /// code on the compiler-client, we are recompiling which defeats the whole point.
-    ///
-    /// FUTURE: Maybe don't lazily-compile on the client if it's slow and we can do it on the server (idk if we're
-    /// compiling baseline into LLVM)
-    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out);
-    void serialize(SEXP refTable, R_outpstream_t out) {
+
+    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const;
+    void serialize(SEXP refTable, R_outpstream_t out) const {
         serialize(true, refTable, out);
     }
     void disassemble(std::ostream&, const std::string& promPrefix) const;

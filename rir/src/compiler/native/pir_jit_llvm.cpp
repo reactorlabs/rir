@@ -4,6 +4,7 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include "compiler/native/SerialModule.h"
 #include "utils/filesystem.h"
 
 #include "llvm/ExecutionEngine/JITSymbol.h"
@@ -24,6 +25,8 @@ namespace rir {
 namespace pir {
 
 std::unique_ptr<llvm::orc::LLJIT> PirJitLLVM::JIT;
+std::unordered_map<std::string, std::weak_ptr<SerialModule>>
+    PirJitLLVM::internedModules;
 
 size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
@@ -312,16 +315,15 @@ PirJitLLVM::~PirJitLLVM() {
 void PirJitLLVM::finalize() {
     assert(!finalized);
     if (M) {
+        auto serialModule = internModule(SerialModule(*M)).first;
         // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
             DIB->finalize();
         }
-        // TODO: maybe later have TSM from the start and use locking
-        //       to allow concurrent compilation?
-        auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
-        ExitOnErr(JIT->addIRModule(std::move(TSM)));
-        for (auto& fix : jitFixup)
-            fix.second.first->lazyCodeHandle(fix.second.second.str());
+        addToJit(std::move(M));
+        for (auto& fix : jitFixup) {
+            fix.second.first->lazyCode(fix.second.second, serialModule);
+        }
         nModules++;
     }
     finalized = true;
@@ -353,11 +355,8 @@ void PirJitLLVM::compile(
 
             DI->initializeTypes(DIB.get());
 
-            // Darwin only supports dwarf2.
             M->addModuleFlag(llvm::Module::Warning, "Dwarf Version",
-                             JIT->getTargetTriple().isOSDarwin()
-                                 ? 2
-                                 : llvm::dwarf::DWARF_VERSION);
+                             llvm::dwarf::DWARF_VERSION);
 
             // Add the current debug info version into the module.
             M->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
@@ -441,7 +440,7 @@ void PirJitLLVM::compile(
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
     if (funCompiler.hasArgReordering())
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
-    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
+    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName().str()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
         bool debug = true;
@@ -458,6 +457,15 @@ void PirJitLLVM::compile(
 }
 
 llvm::LLVMContext& PirJitLLVM::getContext() { return *TSC.getContext(); }
+
+SerialModuleRef PirJitLLVM::deserializeModule(R_inpstream_t inp) {
+    auto serialModuleAndIsNew = internModule(SerialModule::deserialize(inp));
+    auto serialModule = serialModuleAndIsNew.first;
+    if (serialModuleAndIsNew.second) {
+        addToJit(serialModule->decode());
+    }
+    return serialModule;
+}
 
 void PirJitLLVM::initializeLLVM() {
     if (initialized)
@@ -556,7 +564,8 @@ void PirJitLLVM::initializeLLVM() {
     // name. symbols starting with "ept_" are external pointers, the ones
     // starting with "efn_" are external function pointers. these must exist in
     // the host process.
-    // NEW: On macOS/clang/ARM (which one? idk) the symbols start with _ept_ and _epn_
+    // NEW: On macOS/clang/ARM (which one? idk) the symbols start with _ept_ and
+    // _efn_
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
@@ -604,6 +613,23 @@ void PirJitLLVM::initializeLLVM() {
     }
 
     initialized = true;
+}
+
+void PirJitLLVM::addToJit(std::unique_ptr<llvm::Module>&& M) {
+    // TODO: maybe later have TSM from the start and use locking
+    //       to allow concurrent compilation?
+    auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
+    ExitOnErr(JIT->addIRModule(std::move(TSM)));
+}
+
+std::pair<SerialModuleRef, bool> PirJitLLVM::internModule(rir::SerialModule&& module) {
+    auto it = internedModules.find(module.bitcode);
+    if (it != internedModules.end()) {
+        return std::make_pair(SerialModuleRef(it->second), false);
+    }
+    auto ptr = std::make_shared<SerialModule>(module);
+    internedModules.emplace(ptr->bitcode, ptr);
+    return std::make_pair(ptr, true);
 }
 
 } // namespace pir
