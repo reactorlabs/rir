@@ -104,10 +104,7 @@ void Record::recordSpeculativeContext(const Code* code,
 std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
                                                             std::string name) {
     auto clsAddress = stringAddressOf(cls);
-    auto dtAddress = stringAddressOf(BODY(cls));
-
-    recordings_index_.insert({clsAddress, fun_recordings_.size()});
-    auto r = recordings_index_.insert({dtAddress, fun_recordings_.size()});
+    auto r = recordings_index_.insert({clsAddress, fun_recordings_.size()});
     FunRecording* v;
 
     if (r.second) {
@@ -122,9 +119,44 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         UNPROTECT(1);
     } else {
         v = &fun_recordings_[r.first->second];
+        // If closure is undefined, that means this FunRecorder was created from
+        // a DispatchTable, so we init it
+        if (Rf_isNull(v->closure)) {
+            v->env = getEnvironmentName(CLOENV(cls));
+            v->closure = PROTECT(R_serialize(cls, R_NilValue, R_NilValue,
+                                             R_NilValue, R_NilValue));
+            R_PreserveObject(v->closure);
+            UNPROTECT(1);
+        }
+    }
+
+    // special functions don't have dispatch tables, let's not error here
+    if (TYPEOF(BODY(cls)) == EXTERNALSXP) {
+        auto dt = DispatchTable::unpack(BODY(cls));
+        dt_to_recording_index_.insert({dt, r.first->second});
     }
 
     return {r.first->second, *v};
+}
+
+std::pair<size_t, FunRecording&>
+Record::initOrGetRecording(const DispatchTable* dt, std::string name) {
+    // First, we check if we can find the dt in the appropriate mapping
+    auto dt_index = dt_to_recording_index_.find(dt);
+    if (dt_index != dt_to_recording_index_.end()) {
+        return {dt_index->second, fun_recordings_[dt_index->second]};
+    } else {
+        // TODO
+        Rf_error("unreachable?");
+
+        // If not, we add an empty FunRecording for it
+        FunRecording dummyRecorder = {std::move(name), {}, R_NilValue, {}};
+
+        auto insertion_index = fun_recordings_.size();
+        fun_recordings_.push_back(std::move(dummyRecorder));
+        dt_to_recording_index_.insert({dt, insertion_index});
+        return {insertion_index, fun_recordings_[insertion_index]};
+    }
 }
 
 Record::~Record() {
@@ -324,9 +356,11 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
 }
 
 DeoptEvent::DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
-                       int reasonCodeIdx, uint32_t reasonCodeOff, SEXP trigger)
-    : functionIdx_(functionIdx), reason_(reason), reasonCodeIdx_(reasonCodeIdx),
-      reasonCodeOff_(reasonCodeOff), trigger_(trigger) {
+                       std::pair<size_t, size_t> reasonCodeIdx,
+                       uint32_t reasonCodeOff, SEXP trigger)
+    : functionIdx_(functionIdx), reason_(reason),
+      reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff),
+      trigger_(trigger) {
     if (this->trigger_) {
         R_PreserveObject(trigger_);
     }
@@ -335,6 +369,20 @@ DeoptEvent::DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
 DeoptEvent::~DeoptEvent() {
     if (this->trigger_) {
         R_ReleaseObject(this->trigger_);
+    }
+}
+
+Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
+                            const std::pair<ssize_t, ssize_t> index) {
+    assert(index.first != -1);
+    SEXP closure = closures[index.first];
+    auto* dt = DispatchTable::unpack(BODY(closure));
+    Code* code = dt->baseline()->body();
+
+    if (index.second == -1) {
+        return code;
+    } else {
+        return code->getPromise(index.second);
     }
 }
 
@@ -348,17 +396,18 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
 
     auto dt = DispatchTable::unpack(BODY(closure));
     auto fun = dt->get(functionIdx_);
+    Code* code = fun->body();
 
     // Copy and set current closure's code
-    // FIXME:
-    // Code *code = ...;
-    // Code* deoptSrcCode = ...;
-    // Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
-    // FeedbackOrigin origin(deoptSrcCode, deoptPc);
-    // DeoptReason reason(origin, reason);
-    //
-    // reason.record(this->trigger_);
-    // code->recordDeopt(...)
+    Code* deoptSrcCode =
+        retrieveCodeFromIndex(replay.closures_, this->reasonCodeIdx_);
+    Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
+    FeedbackOrigin origin(deoptSrcCode, deoptPc);
+    DeoptReason reason(origin, this->reason_);
+
+    reason.record(this->trigger_);
+    fun->registerDeopt();
+    recordDeopt(code, closure, reason, this->trigger_);
 }
 
 SEXP DeoptEvent::toSEXP() const {
@@ -367,29 +416,26 @@ SEXP DeoptEvent::toSEXP() const {
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
-    // FIXME: record
-    // SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->functionIdx_));
-    // SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->reason_));
-    // SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->reasonCodeOff_));
-    // SET_VECTOR_ELT(sexp, 3, serialization::to_sexp(this->reasonCodeIdx_));
-    // SET_VECTOR_ELT(sexp, 4, this->trigger_);
+    SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->functionIdx_));
+    SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->reason_));
+    SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->reasonCodeOff_));
+    SET_VECTOR_ELT(sexp, 3, serialization::to_sexp(this->reasonCodeIdx_));
+    SET_VECTOR_ELT(sexp, 4, this->trigger_);
     UNPROTECT(1);
     return sexp;
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 3);
+    assert(Rf_length(sexp) == 5);
 
-    // FIXME:
-    // this->deoptReason =
-    //     serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 0));
-    //
-    // auto trigger = VECTOR_ELT(sexp, 1);
-    // R_PreserveObject(trigger);
-    // this->deoptTrigger = trigger;
-    //
-    // this->dtIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 2));
+    this->functionIdx_ = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+    this->reason_ = serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 1));
+    this->reasonCodeOff_ =
+        serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, 2));
+    this->reasonCodeIdx_ = serialization::pair_from_sexp(VECTOR_ELT(sexp, 3));
+    this->trigger_ = VECTOR_ELT(sexp, 4);
+    R_PreserveObject(this->trigger_);
 }
 
 void recordCompile(SEXP const cls, const std::string& name,
@@ -412,16 +458,30 @@ void recordCompile(SEXP const cls, const std::string& name,
     v.events.push_back(std::make_unique<CompilationEvent>(std::move(event)));
 }
 
-int Record::findIndex(rir::Code* code, rir::Code* needle) {
+size_t Record::indexOfBaseline(const rir::Code* code) const {
+    for (auto& entry : dt_to_recording_index_) {
+        if (entry.first->baseline()->body() == code)
+            return entry.second;
+    }
+
+    Rf_error(
+        "baseline code %p not found in current DispatchTable->RunRecorder map",
+        code);
+}
+
+std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
+                                              rir::Code* needle) {
     if (code == needle) {
-        return 0;
+        return {indexOfBaseline(code), -1};
     }
 
     // find the index of the reason source
     // 1. try promises
-    for (int i = 0; i < code->extraPoolSize; i++) {
-        if (code->getPromise(i) == needle) {
-            return -(i + 1);
+    for (size_t i = 0; i < code->extraPoolSize; i++) {
+        auto extraEntry = code->getExtraPoolEntry(i);
+        auto prom = (Code*)STDVEC_DATAPTR(extraEntry);
+        if (prom->info.magic == CODE_MAGIC && prom == needle) {
+            return {indexOfBaseline(code), i};
         }
     }
 
@@ -429,8 +489,8 @@ int Record::findIndex(rir::Code* code, rir::Code* needle) {
 
     Opcode* end = code->endCode();
     Opcode* pc = code->code();
-    Opcode* prev = NULL;
-    Opcode* pprev = NULL;
+    Opcode* prev = nullptr;
+    Opcode* pprev = nullptr;
 
     while (pc < end) {
         auto bc = BC::decode(pc, code);
@@ -442,8 +502,11 @@ int Record::findIndex(rir::Code* code, rir::Code* needle) {
 
             auto body = BC::decodeShallow(pprev).immediateConst();
             auto dt = DispatchTable::unpack(body);
-            // FIXME: check if the dt->baseline()->code() is the same as needle
-            // initialize new entry in fun_recordings_ if needed
+
+            auto location = initOrGetRecording(dt);
+            if (dt->baseline()->body() == needle) {
+                return {location.first, -1};
+            }
             break;
         }
         default: {
@@ -451,11 +514,10 @@ int Record::findIndex(rir::Code* code, rir::Code* needle) {
         }
         pprev = prev;
         prev = pc;
-        pc = bc.next(pc);
+        pc = BC::next(pc);
     }
 
-    // FIXME: return the index into the fun_recordings_
-    return 0;
+    return {-1, -1};
 }
 
 void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
@@ -475,13 +537,23 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
         }
     }
 
-    auto reasonCodeIdx = recorder_.findIndex(c, reason.srcCode());
-
     if (funIdx == 0) {
         Rf_error("Could not find function index for code: %p in closure: %p", c,
                  cls);
     }
 
+    auto reasonCodeIdx =
+        recorder_.findIndex(dt->baseline()->body(), reason.srcCode());
+
+    if (reasonCodeIdx.first < 0) {
+        Rf_error(
+            "Could not find function index for code reason %p in haystack %p",
+            reason.srcCode(), dt->baseline()->body());
+    }
+
+    std::cerr << "deopt" << std::endl;
+
+    // TODD
     DeoptEvent event(funIdx, reason.reason, reasonCodeIdx,
                      reason.origin.offset(), trigger);
 

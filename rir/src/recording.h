@@ -87,7 +87,8 @@ class CompilationEvent : public Event {
 class DeoptEvent : public Event {
   public:
     DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
-               int reasonCodeIdx, uint32_t reasonCodeOff, SEXP trigger);
+               std::pair<size_t, size_t> reasonCodeIdx, uint32_t reasonCodeOff,
+               SEXP trigger);
     ~DeoptEvent();
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
@@ -98,7 +99,7 @@ class DeoptEvent : public Event {
     size_t functionIdx_;
     DeoptReason::Reason reason_;
     /* negative indicates promise index, positive function index */
-    int reasonCodeIdx_;
+    std::pair<size_t, size_t> reasonCodeIdx_;
     uint32_t reasonCodeOff_;
     SEXP trigger_;
 };
@@ -117,11 +118,12 @@ struct FunRecording {
 
 class Replay {
     SEXP recordings_;
-    std::vector<SEXP> closures_;
 
     SEXP replayClosure(size_t idx);
 
   public:
+    std::vector<SEXP> closures_;
+
     void replaySpeculativeContext(
         DispatchTable* dt,
         std::vector<SpeculativeContext>::const_iterator& ctxStart,
@@ -139,11 +141,18 @@ class Replay {
 };
 
 class Record {
+    std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<std::string, size_t> recordings_index_;
     std::vector<FunRecording> fun_recordings_;
 
+  protected:
+    size_t indexOfBaseline(const rir::Code* code) const;
+
   public:
     ~Record();
+
+    std::pair<size_t, FunRecording&> initOrGetRecording(const DispatchTable* dt,
+                                                        std::string name = "");
 
     std::pair<size_t, FunRecording&> initOrGetRecording(const SEXP cls,
                                                         std::string name = "");
@@ -154,7 +163,7 @@ class Record {
     void recordSpeculativeContext(const Code* code,
                                   std::vector<SpeculativeContext>& ctx);
 
-    int findIndex(rir::Code* code, rir::Code* needle);
+    std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
     void reset() {
         recordings_index_.clear();
@@ -180,7 +189,8 @@ SEXP getEnvironment(const std::string& name);
 // C++ API
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
-void recordDeopt(const SEXP cls, DeoptReason reason, SEXP trigger);
+void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
+                 SEXP trigger);
 
 } // namespace recording
 
