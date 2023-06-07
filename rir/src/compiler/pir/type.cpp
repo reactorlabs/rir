@@ -259,11 +259,13 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         if (assumptions.isNotObj(i))
             type = type & type.notMissing().notObject();
         if (assumptions.isSimpleReal(i))
-            type = type &
-                   PirType::simpleScalarReal().orPromiseWrappedWithMissing();
+            type = type & PirType::simpleScalarReal()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
         if (assumptions.isSimpleInt(i))
-            type =
-                type & PirType::simpleScalarInt().orPromiseWrappedWithMissing();
+            type = type & PirType::simpleScalarInt()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
     }
     // well, if the intersection of context info and current type is void, we
     // probably made a wrong speculation. it's most probably a bug somewhere,
