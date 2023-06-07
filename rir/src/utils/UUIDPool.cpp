@@ -18,6 +18,8 @@ SEXP UUIDPool::intern(SEXP e, UUID hash) {
     if (interned.count(hash)) {
         return interned.at(hash);
     }
+    // Object will be permanently preserved since it's permanently interned
+    R_PreserveObject(e);
     interned[hash] = e;
 #endif
     return e;

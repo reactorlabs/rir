@@ -26,6 +26,7 @@
 namespace rir {
 
 struct Code;
+class SerialModule;
 
 namespace pir {
 
@@ -43,6 +44,7 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 class PirJitLLVM {
   public:
     static std::unique_ptr<llvm::orc::LLJIT> JIT;
+    static std::unordered_map<std::string, std::weak_ptr<SerialModule>> internedModules;
     explicit PirJitLLVM(const std::string& name);
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
@@ -61,6 +63,10 @@ class PirJitLLVM {
                                                   llvm::FunctionType*)>;
 
     static llvm::LLVMContext& getContext();
+
+    /// Deserialize and the module. Then if interned, return the interned
+    /// version, otherwise intern AND add to LLJIT.
+    static SerialModuleRef deserializeModule(R_inpstream_t inp);
 
   private:
     std::string name;
@@ -82,12 +88,15 @@ class PirJitLLVM {
         return ss.str().substr(0, rir::Code::MAX_CODE_HANDLE_LENGTH - 6);
     }
 
-    std::unordered_map<Code*, std::pair<rir::Code*, llvm::StringRef>> jitFixup;
+    std::unordered_map<Code*, std::pair<rir::Code*, std::string>> jitFixup;
     bool finalized = false;
 
     static size_t nModules;
     static void initializeLLVM();
     static bool initialized;
+
+    static void addToJit(std::unique_ptr<llvm::Module>&& module);
+    static std::pair<SerialModuleRef, bool> internModule(SerialModule&& module);
 
     // Support for debugging pir in gdb
   public:
