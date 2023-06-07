@@ -57,6 +57,8 @@ Code* Code::NewNative(Immediate ast) {
 Code::~Code() {
     // TODO: Not sure if this is actually called
     // Otherwise the pointer will leak a few bytes
+    // We will leak SerialModule, although we already "leak" JITted modules so
+    // the serial version is probably not a big deal...
 }
 
 void Code::function(Function* fun) { setEntry(3, fun->container()); }
@@ -112,15 +114,9 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     AddReadRef(refTable, store);
     Code* code = new (DATAPTR(store)) Code;
-    // Native code
-    auto hasNativeCode = InBool(inp);
-    if (hasNativeCode) {
-        // code->nativeCode_ = NativeCode::deserialize(inp); // TODO
-    } else {
-        code->nativeCode_ = nullptr;
-    }
+
     // Header
-    code->src = InInteger(inp);
+    code->src = src_pool_read_item(refTable, inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
         code->trivialExpr = UUIDPool::readItem(refTable, inp);
@@ -160,19 +156,24 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         code->setEntry(2, argReorder);
     }
 
+    // Native code
+    code->kind = (Kind)InInteger(inp);
+    if (code->kind == Kind::Native) {
+        auto lazyCodeHandleLen = InInteger(inp);
+        InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
+        code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
+        code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp);
+    }
+    // Native code is always null here because it's lazy
+    code->nativeCode_ = nullptr;
+
     return code;
 }
 
-void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) {
+void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
-    // Native code
-    // We may have to JIT here, see doc comment
-    auto nativeCode = this->nativeCode();
-    OutBool(out, nativeCode != nullptr);
-    if (nativeCode) {
-        // nativeCode->serialize(out); // TODO
-    }
+
     // Header
     src_pool_write_item(src, refTable, out);
     OutInteger(out, trivialExpr != nullptr);
@@ -200,6 +201,20 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) {
     for (unsigned i = 0; i < srcLength; i++) {
         OutInteger(out, (int)srclist()[i].pcOffset);
         src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+    }
+
+    // Native code
+    OutInteger(out, (int)kind);
+    assert(!pendingCompilation() &&
+           "TODO handle pending code being serialized. It's in a state we "
+           "can't really deserialize from, so we want to just not serialize in "
+           "this situation if possible (via the DispatchTable). Otherwise idk");
+    if (kind == Kind::Native) {
+        assert(lazyCodeHandle[0] != '\0');
+        auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+        OutInteger(out, lazyCodeHandleLen);
+        OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+        lazyCodeModule->serialize(out);
     }
 }
 
@@ -311,7 +326,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
     case Kind::Native: {
         if (nativeCode_) {
-            out << "nativeCode " << (void*)nativeCode_ << "\n";
+            out << "nativeCode " << nativeCode_ << "\n";
         } else {
             out << "nativeCode (compilation pending)\n";
         }
@@ -376,8 +391,8 @@ llvm::ExitOnError ExitOnErr;
 
 NativeCode Code::lazyCompile() {
     assert(kind == Kind::Native);
-    assert(*lazyCodeHandle_ != '\0');
-    auto symbol = ExitOnErr(pir::PirJitLLVM::JIT->lookup(lazyCodeHandle_));
+    assert(*lazyCodeHandle != '\0');
+    auto symbol = ExitOnErr(pir::PirJitLLVM::JIT->lookup(lazyCodeHandle));
     nativeCode_ = (NativeCode)symbol.getAddress();
     return nativeCode_;
 }

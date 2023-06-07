@@ -75,6 +75,7 @@ PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) 
         typeFeedback->setEntry(i, p(ReadItem(refTable, inp)));
     }
     InBytes(inp, typeFeedback->mdEntries(), (int)sizeof(MDEntry) * numEntries);
+    return typeFeedback;
 }
 
 void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
