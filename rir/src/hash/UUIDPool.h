@@ -29,10 +29,16 @@ class UUIDPool {
     /// existing version. Otherwise we will insert it into the pool and return
     /// it as-is.
     static SEXP intern(SEXP e);
-    /// Currently just reads item, in the future may read item and intern
+    // Currently unused
+    /* /// Reads item and interns, possibly returning the already-interned version.
+    ///
+    /// The SEXP MUST NOT contain any references to external SEXPs.
     static SEXP readItem(SEXP ref_table, R_inpstream_t in);
-    /// Currently just writes item, in the future may write item and intern
-    static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
+    /// Interns and then writes the item, possibly writing the already-interned
+    /// version (though they should write the exact same data).
+    ///
+    /// The SEXP MUST NOT contain any references to external SEXPs.
+    static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out); */
 };
 
 } // namespace rir

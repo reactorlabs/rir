@@ -33,6 +33,13 @@ else ()
     link_libraries(${ZEROMQ_DIR}/lib/libzmq.so)
 endif ()
 
+# Use OpenSSL
+if (${APPLE})
+    set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl)
+endif ()
+find_package(OpenSSL REQUIRED)
+link_libraries(OpenSSL::Crypto)
+
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")

@@ -2,11 +2,11 @@
 #include "R/r.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "hash/UUIDPool.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
-#include "utils/UUIDPool.h"
 
 namespace rir {
 
