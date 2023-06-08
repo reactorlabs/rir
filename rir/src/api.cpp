@@ -18,10 +18,9 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "compiler_server_client_shared_utils.h"
+#include "hash/UUID.h"
 #include "interpreter/interp_incl.h"
 #include "utils/ByteBuffer.h"
-#include "utils/UUID.h"
-#include "utils/cast.h"
 #include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 
@@ -570,7 +569,7 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 UUID hashSexp(SEXP sexp) {
     UUIDHasher hasher;
     hashSexp(sexp, hasher);
-    return hasher.uuid();
+    return hasher.finalize();
 }
 
 void hashSexp(SEXP sexp, UUIDHasher& hasher) {
