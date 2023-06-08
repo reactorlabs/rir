@@ -33,13 +33,13 @@ SEXP UUIDPool::intern(SEXP e) {
 #endif
 }
 
-/* /// Wrap data to also get UUID while deserializing
+/// Wrap data to also get UUID while deserializing
 struct RStreamWrapper {
     R_inpstream_t stream;
     UUIDHasher hasher;
 
     explicit RStreamWrapper(R_inpstream_t stream) : stream(stream) {}
-    const UUID& uuid() const { return hasher.uuid(); }
+    UUID finalize() { return hasher.finalize(); }
 };
 
 static int rStreamWrapInChar(R_inpstream_t hashIn) {
@@ -61,7 +61,8 @@ static void rStreamWrapInBytes(R_inpstream_t hashIn, void* data, int size) {
     hasher->hashBytes(data, size);
 }
 
-SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
+// Currently unused
+/* SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     RStreamWrapper streamWrapper{in};
     R_inpstream_st hashIn{};
     R_InitInPStream(
@@ -74,24 +75,11 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
         in->InPersistHookData
     );
     SEXP sexp = ReadItem(ref_table, &hashIn);
-    return intern(sexp, streamWrapper.uuid());
-} */
-
-SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
-    // TODO: We can't actually intern when reading data, because we don't know if
-    //     the data is still being constructed (contains an out-of-scope read-ref).
-    //     In the future, we could modify custom-r to detect and report GetReadRef
-    //     and AddReadRef.
-    return ReadItem(ref_table, in);
+    return intern(sexp, streamWrapper.finalize());
 }
-
 
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
-    // We can't intern because it would cause an infinite loop when hashing,
-    // however there are ways to check if it's worth the performance overhead
-    // (probably not though)
-    WriteItem(sexp, ref_table, out);
-}
-
+    WriteItem(intern(sexp), ref_table, out);
+} */
 
 } // namespace rir

@@ -1,27 +1,34 @@
 #pragma once
 
-#include <R/r.h>
+#include "R/r.h"
 
 #include <string>
+#include <openssl/evp.h>
 
 namespace rir {
 
 class UUIDHasher;
 
-/// A 128-bit UUID
+/// A 256-bit UUID
 #pragma pack(push, 1)
 class UUID {
-    uint64_t msb;
-    uint64_t lsb;
+    uint64_t a;
+    uint64_t b;
+    uint64_t c;
+    uint64_t d;
 
-    UUID() : msb(0), lsb(0) {}
-    UUID(uint64_t msb, uint64_t lsb) : msb(msb), lsb(lsb) {}
+    UUID() : a(0), b(0), c(0), d(0) {}
+    UUID(uint64_t a, uint64_t b, uint64_t c, uint64_t d)
+        : a(a), b(b), c(c), d(d) {}
 
   public:
-    /// Generates a UUID by hashing the data
+    /// Generates a UUID for the data
     static UUID hash(const void* data, size_t size);
+    /// Deserialize a UUID from the R stream
     static UUID deserialize(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);
+    /// Serialize a UUID to the R stream
     void serialize(SEXP refTable, R_outpstream_t out) const;
+    /// Print the UUID as a hexadecimal string
     std::string str() const;
 
     friend std::ostream& operator<<(std::ostream&, const UUID&);
@@ -33,15 +40,20 @@ class UUID {
 };
 #pragma pack(pop)
 
+/// Create a UUID for a stream of data
 class UUIDHasher {
-    UUID _uuid;
-    size_t offset = 0;
+    EVP_MD_CTX* ctx;
+    bool finalized;
 
   public:
-    UUIDHasher() = default;
+    UUIDHasher();
+    ~UUIDHasher();
+    /// Hash the data-structure, which should not contain any references
     template<typename T> void hashBytesOf(T c) { hashBytes(&c, sizeof(T)); }
+    /// Hash the data, which should not contain any references
     void hashBytes(const void* data, size_t size);
-    const UUID& uuid() const { return _uuid; }
+    /// Get the UUID. After calling this, you can't call hashBytes anymore.
+    UUID finalize();
 };
 
 } // namespace rir
