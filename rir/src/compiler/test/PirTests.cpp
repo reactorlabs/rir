@@ -1080,9 +1080,7 @@ static Test tests[] = {
              return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
          }),
     Test("Test dead store analysis", &testDeadStore),
-    Test("Test type rules", &testTypeRules)
-
-};
+    Test("Test type rules", &testTypeRules)};
 
 } // namespace
 
