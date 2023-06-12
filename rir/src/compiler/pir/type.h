@@ -100,9 +100,9 @@ enum class TypeFlags : uint8_t {
     maybeObject,
     maybeNotFastVecelt,
     maybeAttrib,
-    notWrappedMissing,
 
     maybeNAOrNaN,
+    maybeMissing,
     rtype,
 
     FIRST = lazy,
@@ -160,14 +160,17 @@ struct PirType {
         return t;
     }
 
-    constexpr PirType() : flags_(topRTypeFlags()), t_(RTypeSet()) {}
+    constexpr PirType() : PirType(RTypeSet(), topRTypeFlags()) {}
 
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const RType& t)
-        : flags_(defaultRTypeFlags()), t_(RTypeSet(t)) {}
+        : PirType(RTypeSet(t), defaultRTypeFlags()) {}
     // cppcheck-suppress noExplicitConstructor
-    constexpr PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
-    constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {}
+    constexpr PirType(const RTypeSet& t) : PirType(t, defaultRTypeFlags()) {}
+
+    constexpr PirType(const RTypeSet& t, const FlagSet& f) : flags_(f), t_(t) {
+        ensureMissingInvariant(t_.r, flags_);
+    }
 
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const NativeType& t) : t_(NativeTypeSet(t)) {
@@ -243,8 +246,9 @@ struct PirType {
     static constexpr PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::special | RType::builtin |
-                       RType::prom | RType::code | RType::env | RType::missing |
-                       RType::unbound | RType::ast | RType::dots | RType::other)
+                       RType::prom | RType::code | RType::env | RType::unbound |
+                       RType::ast | RType::dots | RType::other)
+            .orMaybeMissing()
             .orNAOrNaN()
             .orAttribsOrObj();
     }
@@ -269,8 +273,12 @@ struct PirType {
         return PirType(RType::env).orAttribsOrObj();
     }
 
+    static constexpr PirType theMissingValue() {
+        return PirType(RType::missing).orMaybeMissing();
+    }
+
     static constexpr PirType dotsArg() {
-        return (PirType() | RType::missing | RType::dots).notPromiseWrapped();
+        return (PirType() | RType::dots).notPromiseWrapped().orMaybeMissing();
     }
 
     static constexpr PirType simpleScalarInt() {
@@ -318,7 +326,7 @@ struct PirType {
     inline constexpr bool maybeMissing() const {
         if (!isRType())
             return false;
-        return t_.r.includes(RType::missing);
+        return flags_.includes(TypeFlags::maybeMissing);
     }
     inline constexpr bool maybeLazy() const {
         if (!isRType())
@@ -384,16 +392,63 @@ struct PirType {
         return res;
     }
 
+    inline constexpr bool isTheMissingValue() const {
+        if (!isRType())
+            return false;
+        return *this == theMissingValue();
+    }
+
+    inline constexpr bool maybeTheMissingValue() const {
+        if (!isRType())
+            return false;
+
+        return flags_.includes(TypeFlags::maybeMissing);
+    }
+
+    inline constexpr bool evaluatesToMissing() const {
+        if (!isRType())
+            return false;
+
+        return t_.r == RTypeSet(RType::missing);
+    }
+
+    inline constexpr bool maybeEvaluatesToMissing() const {
+        if (!isRType())
+            return false;
+
+        return t_.r.includes(RType::missing);
+    }
+
+    inline constexpr void
+    ensureMissingInvariant(RTypeSet& r, PirType::FlagSet& flags) const {
+
+        if (!flags.includes(TypeFlags::lazy) &&
+            !flags.includes(TypeFlags::promiseWrapped)
+
+        ) {
+            if (r.includes(RType::missing) ||
+                flags.includes(TypeFlags::maybeMissing)) {
+                flags.set(TypeFlags::maybeMissing);
+                r.set(RType::missing);
+            }
+        }
+    }
+
     inline constexpr PirType operator|(const PirType& o) const {
+
         assert(isRType() == o.isRType());
 
         PirType r;
         if (isRType())
-            r.t_ = t_.r | o.t_.r;
+            r.t_ = notMissing().t_.r | o.notMissing().t_.r;
         else
             r.t_ = t_.n | o.t_.n;
 
         r.flags_ = flags_ | o.flags_;
+
+        if (r.isRType())
+            ensureMissingInvariant(r.t_.r, r.flags_);
+
         return r;
     }
 
@@ -402,11 +457,15 @@ struct PirType {
 
         PirType r;
         if (isRType())
-            r.t_ = t_.r & o.t_.r;
+            r.t_ = notMissing().t_.r & o.notMissing().t_.r;
         else
             r.t_ = t_.n & o.t_.n;
 
         r.flags_ = flags_ & o.flags_;
+
+        if (r.isRType())
+            ensureMissingInvariant(r.t_.r, r.flags_);
+
         return r;
     }
 
@@ -432,17 +491,13 @@ struct PirType {
 
     PirType constexpr notMissing() const {
         assert(isRType());
-        return PirType(t_.r & ~RTypeSet(RType::missing), flags_);
-    }
 
-    PirType constexpr orWrappedMissing() const {
-        assert(isRType());
-        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::notWrappedMissing));
-    }
+        auto newType = t_.r;
+        if (!maybePromiseWrapped()) {
+            newType.reset(RType::missing);
+        }
 
-    PirType constexpr notWrappedMissing() const {
-        assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::notWrappedMissing);
+        return PirType(newType, flags_ & ~FlagSet(TypeFlags::maybeMissing));
     }
 
     inline constexpr PirType notNAOrNaN() const {
@@ -481,7 +536,22 @@ struct PirType {
 
     inline constexpr PirType orPromiseWrapped() const {
         assert(isRType());
+
+        if (maybePromiseWrapped())
+            return *this;
+
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+    }
+
+
+    inline constexpr PirType orFullyPromiseWrapped() const {
+        assert(isRType());
+
+        if (maybePromiseWrapped())
+            return *this;
+
+        return PirType(t_.r, (flags_ | TypeFlags::promiseWrapped) &
+                                 ~(FlagSet() | TypeFlags::maybeMissing));
     }
 
     inline constexpr PirType orLazy() const {
@@ -516,6 +586,14 @@ struct PirType {
                                  TypeFlags::maybeNotFastVecelt);
     }
 
+    inline constexpr PirType orMaybeMissing() const {
+        assert(isRType());
+        auto newType = t_.r;
+        auto newFlags = flags_ | TypeFlags::maybeMissing;
+        ensureMissingInvariant(newType, newFlags);
+        return PirType(newType, newFlags);
+    }
+
     inline constexpr PirType orFastVecelt() const {
         assert(isRType());
         return orAttribsOrObj().fastVecelt();
@@ -539,12 +617,16 @@ struct PirType {
     PirType constexpr forced() const {
         if (!maybePromiseWrapped())
             return *this;
-        return PirType(
-            // forcing can return the missing marker value
-            t_.r | (flags_.contains(TypeFlags::notWrappedMissing)
-                        ? t_.r
-                        : RTypeSet(RType::missing)),
-            flags_ & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped));
+
+        auto newFlags = flags_;
+        auto newType = t_.r;
+
+        newFlags =
+            newFlags & ~(FlagSet(TypeFlags::lazy) | TypeFlags::promiseWrapped);
+
+        ensureMissingInvariant(newType, newFlags);
+
+        return PirType(newType, newFlags);
     }
 
     inline constexpr PirType baseType() const {
@@ -622,7 +704,7 @@ struct PirType {
     }
 
     constexpr bool isVoid() const {
-        return isRType() ? t_.r.empty() : t_.n.empty();
+        return isRType() ? t_.r.empty() && !maybeMissing() : t_.n.empty();
     }
 
     static const PirType voyd() { return PirType(NativeTypeSet()); }
@@ -657,10 +739,14 @@ struct PirType {
             (!maybeNotFastVecelt() && o.maybeNotFastVecelt()) ||
             (!maybeHasAttrs() && o.maybeHasAttrs()) ||
             (!maybeNAOrNaN() && o.maybeNAOrNaN()) ||
-            (isScalar() && !o.isScalar())) {
+            (isScalar() && !o.isScalar()) ||
+            (!maybeMissing() && o.maybeMissing())) {
             return false;
         }
-        return t_.r.includes(o.t_.r);
+        // before we had: t_.r.includes(o.t_.r)
+        // but, we want this case to be accepted: int~ | missing <isSuper> int |
+        // missing
+        return notMissing().t_.r.includes(o.notMissing().t_.r);
     }
 
     // Is val an instance of this type?
@@ -806,13 +892,17 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         return out;
     }
 
+    if (t.isTheMissingValue()) {
+        out << "missing";
+        return out;
+    }
+
     // If the base type is at least a value, then it's a value
-    if (t.isRType() && PirType::val().notMissing().baseType() == t.baseType()) {
+    if (PirType::val().notMissing().baseType() == t.baseType()) {
         out << "val";
-    } else if (t.isRType() && PirType::val().baseType() == t.baseType()) {
+    } else if (PirType::val().baseType() == t.baseType()) {
         out << "val?";
-    } else if (t.isRType() &&
-               PirType::num().notMissing().baseType() == t.baseType()) {
+    } else if (PirType::num().notMissing().baseType() == t.baseType()) {
         out << "num";
     } else {
         if (t.t_.r.count() > 1)
@@ -844,6 +934,9 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
             out << "+";
         }
     }
+
+    if (t.maybePromiseWrapped() && t.maybeMissing())
+        out << " | miss";
 
     return out;
 }

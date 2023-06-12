@@ -338,6 +338,18 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (ChkMissing::Cast(i)) {
                     if (i->arg(0).val() == MissingArg::instance())
                         killUnreachable();
+                    else {
+                        // try to remove the ChkMissing if we can prove the arg
+                        // is not the missing value
+                        auto argVal = i->arg(0).val();
+                        auto argValType = argVal->type;
+
+                        if (MkArg::Cast(argVal->cFollowCasts()) ||
+                            !argValType.maybeMissing()) {
+                            i->replaceUsesWith(argVal);
+                            next = bb->remove(ip);
+                        }
+                    }
                 }
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
