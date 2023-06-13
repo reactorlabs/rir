@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# region prelude
+SCRIPTPATH=$(cd "$(dirname "$0")" && pwd)
+if [ ! -d "$SCRIPTPATH" ]; then
+    echo "${LOG_PREFIX}Could not determine absolute dir of $0"
+    echo "${LOG_PREFIX}Maybe accessed with symlink"
+fi
+export SCRIPTPATH
+
+if [ -z "$RIR_BUILD" ]; then
+    RIR_BUILD=$(pwd)
+fi
+export RIR_BUILD
+if [ ! -f $RIR_BUILD/librir.* ]; then
+    echo "${LOG_PREFIX}could not find librir. are you in the correct directory?"
+    exit 1
+fi
+
+. "${SCRIPTPATH}/script_include.sh"
+RIR_EXE="${RIR_BUILD}/bin/R"
+# endregion
+
+export PIR_SERVER_ADDR="${PIR_SERVER_ADDR=tcp://*:${PORT=5555}}"
+
+EXPECTED_PATH="${SCRIPTPATH}/test-compiler-server-expected.out"
+ACTUAL_PATH="/tmp/test-compiler-server-actual.out"
+
+echo "${LOG_PREFIX}-> Running compiler server"
+echo "${LOG_PREFIX}   Note: the compiler client will kill the server when it exits, and the harness will kill if it fails, but otherwise this will run indefinitely"
+"${RIR_EXE}" --no-save > "${ACTUAL_PATH}" 2>&1
+echo "${LOG_PREFIX}-> Comparing output"
+if diff "${EXPECTED_PATH}" "${ACTUAL_PATH}"; then
+  echo "${LOG_PREFIX}!! Files are different"
+  exit 1
+else
+  echo "${LOG_PREFIX}-> Files are the same"
+fi

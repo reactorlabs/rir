@@ -375,6 +375,27 @@ test_sanitize:
   # sometimes leak sanitizer segfaults
   retry: 2
 
+# Test the compiler server and client (on localhost)
+test_compiler_server_client:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - mkdir /opt/rir/build/debug && cd /opt/rir/build/debug && cmake -DCMAKE_BUILD_TYPE=Debug ../.. && make -j6
+    - /opt/rir/build/debug/bin/test-compiler-client-and-server
+    - /opt/rir/build/release/bin/test-compiler-client-and-server
+  artifacts:
+    paths:
+      - /tmp
+    when: on_failure
+    expire_in: 1 week
+
 # Test the benchmarks container before deploying
 test_benchmarks:
   image: registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
