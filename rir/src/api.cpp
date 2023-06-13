@@ -714,6 +714,16 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
+REXPORT SEXP rirKillCompilerServers() {
+    R_Visible = (Rboolean)false;
+    if (!CompilerClient::isRunning()) {
+        Rf_warning("Compiler client isn't running");
+        return R_NilValue;
+    }
+    CompilerClient::killServers();
+    return R_NilValue;
+}
+
 REXPORT SEXP tryToRunCompilerServer() {
     CompilerServer::tryRun();
     R_Visible = (Rboolean)false;

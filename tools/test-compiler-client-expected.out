@@ -1,0 +1,1126 @@
+PIR_CLIENT_ADDR=tcp://localhost:5555, CompilerClient initializing...
+
+R version 4.1.1 RC (2021-08-03 r80701) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: aarch64-apple-darwin22.4.0 (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> # Small closure (pir_regression.R)
+> f <- pir.compile(rir.compile(function(a) a(b=1, 2)))
+Socket 0 sending request
+> 
+> # Another small closure with a promise
+> foo <- function(x) {
++    y <- x
++    function() {
++        y <- y + 1
++        y
++    }
++ }
+> 
+> stopifnot(pir.check(foo, NoExternalCalls, warmup=function(f) {f(1);f(2)}))
+Socket 0 sending request
+> 
+> # Medium closure with nested closures (pir_check.R)
+> mandelbrot <- function(size) {
++     size = size
++     sum = 0
++     byteAcc = 0
++     bitNum  = 0
++     y = 0
++     while (y < size) {
++       ci = (2.0 * y / size) - 1.0
++       x = 0
++       while (x < size) {
++         zr   = 0.0
++         zrzr = 0.0
++         zi   = 0.0
++         zizi = 0.0
++         cr = (2.0 * x / size) - 1.5
++         z = 0
++         notDone = TRUE
++         escape = 0
++         while (notDone && (z < 50)) {
++           zr = zrzr - zizi + cr
++           zi = 2.0 * zr * zi + ci
++           zrzr = zr * zr
++           zizi = zi * zi
++           if ((zrzr + zizi) > 4.0) {
++             notDone = FALSE
++             escape  = 1
++           }
++           z = z + 1
++         }
++         byteAcc = bitwShiftL(byteAcc, 1) + escape
++         bitNum = bitNum + 1
++         if (bitNum == 8) {
++           sum = bitwXor(sum, byteAcc)
++           byteAcc = 0
++           bitNum  = 0
++         } else if (x == (size - 1)) {
++           byteAcc = bitwShiftL(byteAcc, 8 - bitNum)
++           sum = bitwXor(sum, byteAcc)
++           byteAcc = 0
++           bitNum  = 0
++         }
++         x = x + 1
++       }
++       y = y + 1
++     }
++     return (sum)
++ }
+> 
+> stopifnot(pir.check(mandelbrot, NoExternalCalls, NoPromise, warmup=function(f) {f(13);f(27)}))
+Socket 0 sending request
+Socket 0 sending request
+Socket 0 sending hashOnly request
+Socket 0 sending request
+Socket 0 sending hashOnly request
+Socket 0 sending request
+[1;31mDiscrepancy between local and remote PIR[0m
+   0f[0xXXXXXXXX]
+   1BB0
+   2  (real|miss)$~-  %0.0  = LdArg                    0
+   3  real$-          %0.1  = Force<value>             %0.0,    <real$->
+   4[1;31m  val?^ | miss    %0.2  = LdVar              eR    bitwXor, R_GlobalEnv[0m
+   4[1;32m  val?^ | miss    %0.2  = LdVar              eR    bitwShiftL, R_GlobalEnv[0m
+   5[1;31m  val?^ | miss    %0.3  = LdVar              eR    bitwShiftL, R_GlobalEnv[0m
+   5[1;32m  val?^ | miss    %0.3  = LdVar              eR    bitwXor, R_GlobalEnv[0m
+   6  env             e0.4  = (MkEnv)            l     size=%0.1, sum=0, byteAcc=0, bitNum=0, y=0, ci=unboundValue, x=unboundValue, zr=unboundValue, zrzr=unboundValue, zi=unboundValue, zizi=unboundValue, cr=unboundValue, z=unboundValue, notDone=unboundValue, escape=unboundValue, parent=R_GlobalEnv, context 1
+   7  real$#-         %0.5  = 0
+   8  real$#-         %0.6  = 0
+   9  real$#-         %0.7  = 0
+  10  real$#-         %0.8  = 0
+  11  goto BB2
+  12BB2   <- [7, 0]
+  13  real$#-         %2.0  = Phi                      %0.5:BB0, %7.2:BB7
+  14  real$#-         %2.1  = %2.0
+  15  real$-          %2.2  = Phi                      %0.6:BB0, %7.3:BB7
+  16  real$-          %2.3  = %2.2
+  17  (int|real)$-    %2.4  = Phi                      %0.7:BB0, %7.4:BB7
+  18  (int|real)$-    %2.5  = %2.4
+  19  real$#-         %2.6  = Phi                      %0.8:BB0, %7.5:BB7
+  20  real$#-         %2.7  = %2.6
+  21  lgl$-           %2.8  = Lt                 d     %2.7, %0.1, elided   <lgl$->
+  22  lgl$#-          %2.9  = CheckTrueFalse     e     %2.8
+  23  void                    Branch                   %2.9 -> BB5 (if true) | BB4 (if false)
+  24BB5   <- [2]
+  25  real$#-         %5.0  = Mul                d     2, %2.7, elided   <real$->
+  26  real$-          %5.1  = Div                d     %5.0, %0.1, elided   <real$->
+  27  real$-          %5.2  = Sub                d     %5.1, 1, elided   <real$->
+  28  void                    StVar              lWd   ci, %5.2, e0.4
+  29  void                    StVar              lWd   x, 0, e0.4
+  30  real$#-         %5.5  = %2.1
+  31  real$-          %5.6  = %2.3
+  32  (int|real)$-    %5.7  = %2.5
+  33  real$#-         %5.8  = 0
+  34  goto BB6
+  35BB4   <- [2]
+  36  lgl$#-          %4.0  = IsType                   %2.5 isA int$-
+  37  void                    Branch                   %4.0 -> BB34 (if true) | BB35 (if false)
+  38BB6   <- [5, 22]
+  39  real$#-         %6.0  = Phi                      %5.5:BB5, %22.8:BB22
+  40  real$#-         %6.1  = %6.0
+  41  real$-          %6.2  = Phi                      %5.6:BB5, %22.9:BB22
+  42  real$-          %6.3  = %6.2
+  43  (int|real)$-    %6.4  = Phi                      %5.7:BB5, %22.10:BB22
+  44  (int|real)$-    %6.5  = %6.4
+  45  real$#-         %6.6  = Phi                      %5.8:BB5, %22.11:BB22
+  46  real$#-         %6.7  = %6.6
+  47  lgl$-           %6.8  = Lt                 d     %6.7, %0.1, elided   <lgl$->
+  48  lgl$#-          %6.9  = CheckTrueFalse     e     %6.8
+  49  void                    Branch                   %6.9 -> BB8 (if true) | BB7 (if false)
+  50BB34   <- [4]
+  51  int$-           %34.0 = CastType           d     dn %2.5
+  52  void                    Visible            v     
+  53  void                    Return             l     %34.0
+  54BB35   <- [4]
+  55  fs              %35.0 = FrameState         R     0xXXXXXXXX+83: [], env=e0.4
+  56  void                    Deopt              !v    %35.0, Typecheck@0xXXXXXXXX, %2.5
+  57BB8   <- [6]
+  58  real$#-         %8.0  = Mul                d     2, %6.7, elided   <real$->
+  59  real$-          %8.1  = Div                d     %8.0, %0.1, elided   <real$->
+  60  real$-          %8.2  = Sub                d     %8.1, 1.5, elided   <real$->
+  61  void                    StVar              lWd   cr, %8.2, e0.4
+  62  void                    StVar              lWd   notDone, true, e0.4
+  63  void                    StVar              lWd   escape, 0, e0.4
+  64  real$-          %8.6  = Add                d     0, %8.2, elided   <real$->
+  65  void                    StVar              lWd   zr, %8.6, e0.4
+  66  real$-          %8.8  = Mul                d     2, %8.6, elided   <real$->
+  67  real$-          %8.9  = Mul                d     %8.8, 0, elided   <real$->
+  68  real$-          %8.10 = Add                d     %8.9, %5.2, elided   <real$->
+  69  void                    StVar              lWd   zi, %8.10, e0.4
+  70  real$-          %8.12 = Mul                d     %8.6, %8.6, elided   <real$->
+  71  void                    StVar              lWd   zrzr, %8.12, e0.4
+  72  real$-          %8.14 = Mul                d     %8.10, %8.10, elided   <real$->
+  73  void                    StVar              lWd   zizi, %8.14, e0.4
+  74  real$-          %8.16 = Add                d     %8.12, %8.14, elided   <real$->
+  75  lgl$-           %8.17 = Gt                 d     %8.16, 4, elided   <lgl$->
+  76  lgl$#-          %8.18 = CheckTrueFalse     e     %8.17
+  77  void                    Branch                   %8.18 -> BB32 (if true) | BB9 (if false)
+  78BB7   <- [6]
+  79  real$#-         %7.0  = Add                d     %2.7, 1, elided   <real$->
+  80  void                    StVar              lWd   y, %7.0, e0.4
+  81  real$#-         %7.2  = %6.1
+  82  real$-          %7.3  = %6.3
+  83  (int|real)$-    %7.4  = %6.5
+  84  real$#-         %7.5  = %7.0
+  85  goto BB2
+  86BB32   <- [8]
+  87  void                    StVar              lWd   notDone, false, e0.4
+  88  void                    StVar              lWd   escape, 1, e0.4
+  89  real$#-         %32.2 = 1
+  90  lgl$#-          %32.3 = false
+  91  goto BB10
+  92BB9   <- [8]
+  93  void                    Nop                !     
+  94  real$#-         %9.1  = 0
+  95  lgl$#-          %9.2  = true
+  96  goto BB10
+  97BB10   <- [9, 32]
+  98  real$#-         %10.0 = Phi                      %32.2:BB32, %9.1:BB9
+  99  real$#-         %10.1 = %10.0
+ 100  lgl$#-          %10.2 = Phi                      %32.3:BB32, %9.2:BB9
+ 101  lgl$#-          %10.3 = %10.2
+ 102  void                    StVar              lWd   z, 1, e0.4
+ 103  real$#-         %10.5 = %10.1
+ 104  real$-          %10.6 = %8.10
+ 105  real$-          %10.7 = %8.14
+ 106  real$-          %10.8 = %8.12
+ 107  real$#-         %10.9 = 1
+ 108  lgl$#-          %10.10 = %10.3
+ 109  goto BB11
+ 110BB11   <- [10, 29]
+ 111  real$#-         %11.0 = Phi                      %10.5:BB10, %29.6:BB29
+ 112  real$#-         %11.1 = %11.0
+ 113  real$-          %11.2 = Phi                      %10.6:BB10, %29.7:BB29
+ 114  real$-          %11.3 = %11.2
+ 115  real$-          %11.4 = Phi                      %10.7:BB10, %29.8:BB29
+ 116  real$-          %11.5 = %11.4
+ 117  real$-          %11.6 = Phi                      %10.8:BB10, %29.9:BB29
+ 118  real$-          %11.7 = %11.6
+ 119  real$#-         %11.8 = Phi                      %10.9:BB10, %29.10:BB29
+ 120  real$#-         %11.9 = %11.8
+ 121  lgl$#-          %11.10 = Phi                      %10.10:BB10, %29.11:BB29
+ 122  lgl$#-          %11.11 = %11.10
+ 123  void                    Branch                   %11.11 -> BB31 (if true) | BB12 (if false)
+ 124BB31   <- [11]
+ 125  lgl$#-          %31.0 = Lt                 d     %11.9, 50, elided   <lgl$->
+ 126  lgl$-           %31.1 = LAnd                     %11.11, %31.0
+ 127  lgl$-           %31.2 = %31.1
+ 128  goto BB13
+ 129BB12   <- [11]
+ 130  void                    Nop                !     
+ 131  lgl$#-          %12.1 = %11.11
+ 132  goto BB13
+ 133BB13   <- [12, 31]
+ 134  lgl$-           %13.0 = Phi                      %31.2:BB31, %12.1:BB12
+ 135  lgl$-           %13.1 = %13.0
+ 136  lgl$#-          %13.2 = CheckTrueFalse     e     %13.1
+ 137  void                    Branch                   %13.2 -> BB27 (if true) | BB16 (if false)
+ 138BB27   <- [13]
+ 139  real$-          %27.0 = Sub                d     %11.7, %11.5, elided   <real$->
+ 140  real$-          %27.1 = Add                d     %27.0, %8.2, elided   <real$->
+ 141  void                    StVar              lWd   zr, %27.1, e0.4
+ 142  real$-          %27.3 = Mul                d     2, %27.1, elided   <real$->
+ 143  real$-          %27.4 = Mul                d     %27.3, %11.3, elided   <real$->
+ 144  real$-          %27.5 = Add                d     %27.4, %5.2, elided   <real$->
+ 145  void                    StVar              lWd   zi, %27.5, e0.4
+ 146  real$-          %27.7 = Mul                d     %27.1, %27.1, elided   <real$->
+ 147  void                    StVar              lWd   zrzr, %27.7, e0.4
+ 148  real$-          %27.9 = Mul                d     %27.5, %27.5, elided   <real$->
+ 149  void                    StVar              lWd   zizi, %27.9, e0.4
+ 150  real$-          %27.11 = Add                d     %27.7, %27.9, elided   <real$->
+ 151  lgl$-           %27.12 = Gt                 d     %27.11, 4, elided   <lgl$->
+ 152  lgl$#-          %27.13 = CheckTrueFalse     e     %27.12
+ 153  void                    Branch                   %27.13 -> BB30 (if true) | BB28 (if false)
+ 154BB16   <- [13]
+ 155[1;31m  lgl$#-          %16.0 = Identical                %0.3, function(a, n) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 155[1;32m  lgl$#-          %16.0 = Identical                %0.2, function(a, n) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 156  void                    Branch                   %16.0 -> BB36 (if true) | BB37 (if false)
+ 157BB30   <- [27]
+ 158  void                    StVar              lWd   notDone, false, e0.4
+ 159  void                    StVar              lWd   escape, 1, e0.4
+ 160  real$#-         %30.2 = 1
+ 161  lgl$#-          %30.3 = false
+ 162  goto BB29
+ 163BB28   <- [27]
+ 164  void                    Nop                !     
+ 165  real$#-         %28.1 = %11.1
+ 166  lgl$#-          %28.2 = %11.11
+ 167  goto BB29
+ 168BB36   <- [16]
+ 169  int$-           %36.0 = CallSafeBuiltin    wed   bitwiseShiftL(%6.3, 1)    <int$->
+ 170  real$-          %36.1 = Add                d     %36.0, %11.1, elided   <real$->
+ 171  void                    StVar              lWd   byteAcc, %36.1, e0.4
+ 172  real$#-         %36.3 = Add                d     %6.1, 1, elided   <real$->
+ 173  void                    StVar              lWd   bitNum, %36.3, e0.4
+ 174  lgl$#-          %36.5 = Eq                 d     %36.3, 8, elided   <lgl$->
+ 175  void                    Branch                   %36.5 -> BB26 (if true) | BB19 (if false)
+ 176BB37   <- [16]
+ 177  fs              %37.0 = FrameState         R     0xXXXXXXXX+877: [%13.1], env=e0.4
+ 178[1;31m  void                    Deopt              !v    %37.0, CallTarget@0xXXXXXXXX, %0.3[0m
+ 178[1;32m  void                    Deopt              !v    %37.0, CallTarget@0xXXXXXXXX, %0.2[0m
+ 179BB29   <- [28, 30]
+ 180  real$#-         %29.0 = Phi                      %30.2:BB30, %28.1:BB28
+ 181  real$#-         %29.1 = %29.0
+ 182  lgl$#-          %29.2 = Phi                      %30.3:BB30, %28.2:BB28
+ 183  lgl$#-          %29.3 = %29.2
+ 184  real$#-         %29.4 = Add                d     %11.9, 1, elided   <real$->
+ 185  void                    StVar              lWd   z, %29.4, e0.4
+ 186  real$#-         %29.6 = %29.1
+ 187  real$-          %29.7 = %27.5
+ 188  real$-          %29.8 = %27.9
+ 189  real$-          %29.9 = %27.7
+ 190  real$#-         %29.10 = %29.4
+ 191  lgl$#-          %29.11 = %29.3
+ 192  goto BB11
+ 193BB26   <- [36]
+ 194[1;31m  lgl$#-          %26.0 = Identical                %0.2, function(a, b) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 194[1;32m  lgl$#-          %26.0 = Identical                %0.3, function(a, b) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 195  void                    Branch                   %26.0 -> BB38 (if true) | BB39 (if false)
+ 196BB19   <- [36]
+ 197  real$-          %19.0 = Sub                d     %0.1, 1, elided   <real$->
+ 198  lgl$-           %19.1 = Eq                 d     %6.7, %19.0, elided   <lgl$->
+ 199  lgl$#-          %19.2 = CheckTrueFalse     e     %19.1
+ 200  void                    Branch                   %19.2 -> BB23 (if true) | BB20 (if false)
+ 201BB38   <- [26]
+ 202  int$-           %38.0 = CallSafeBuiltin    wed   bitwiseXor(%6.5, %36.1)    <int$->
+ 203  void                    StVar              lWd   sum, %38.0, e0.4
+ 204  void                    StVar              lWd   byteAcc, 0, e0.4
+ 205  void                    StVar              lWd   bitNum, 0, e0.4
+ 206  real$#-         %38.4 = 0
+ 207  real$#-         %38.5 = 0
+ 208  int$-           %38.6 = %38.0
+ 209  goto BB22
+ 210BB39   <- [26]
+ 211  fs              %39.0 = FrameState         R     0xXXXXXXXX+1353: [], env=e0.4
+ 212[1;31m  void                    Deopt              !v    %39.0, CallTarget@0xXXXXXXXX, %0.2[0m
+ 212[1;32m  void                    Deopt              !v    %39.0, CallTarget@0xXXXXXXXX, %0.3[0m
+ 213BB23   <- [19]
+ 214  real$#-         %23.0 = Sub                d     8, %36.3, elided   <real$->
+ 215  int$-           %23.1 = CallSafeBuiltin    wed   bitwiseShiftL(%36.1, %23.0)    <int$->
+ 216  void                    StVar              lWd   byteAcc, %23.1, e0.4
+ 217[1;31m  lgl$#-          %23.3 = Identical                %0.2, function(a, b) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 217[1;32m  lgl$#-          %23.3 = Identical                %0.3, function(a, b) <(rir::DispatchTable*)0xXXXXXXXX|...[0m
+ 218  void                    Branch                   %23.3 -> BB40 (if true) | BB41 (if false)
+ 219BB20   <- [19]
+ 220  void                    Nop                !     
+ 221  real$#-         %20.1 = %36.3
+ 222  real$-          %20.2 = %36.1
+ 223  (int|real)$-    %20.3 = %6.5
+ 224  goto BB21
+ 225BB22   <- [21, 38]
+ 226  real$#-         %22.0 = Phi                      %38.4:BB38, %21.6:BB21
+ 227  real$#-         %22.1 = %22.0
+ 228  real$-          %22.2 = Phi                      %38.5:BB38, %21.7:BB21
+ 229  real$-          %22.3 = %22.2
+ 230  (int|real)$-    %22.4 = Phi                      %38.6:BB38, %21.8:BB21
+ 231  (int|real)$-    %22.5 = %22.4
+ 232  real$#-         %22.6 = Add                d     %6.7, 1, elided   <real$->
+ 233  void                    StVar              lWd   x, %22.6, e0.4
+ 234  real$#-         %22.8 = %22.1
+ 235  real$-          %22.9 = %22.3
+ 236  (int|real)$-    %22.10 = %22.5
+ 237  real$#-         %22.11 = %22.6
+ 238  goto BB6
+ 239BB40   <- [23]
+ 240  lgl$#-          %40.0 = IsType                   %6.5 isA int$-
+ 241  void                    Branch                   %40.0 -> BB42 (if true) | BB43 (if false)
+ 242BB41   <- [23]
+ 243  void                    Nop                !     
+ 244[1;31m  val?^ | miss    %41.1 = %0.2[0m
+ 244[1;32m  val?^ | miss    %41.1 = %0.3[0m
+ 245  dr              %41.2 = CallTarget@0xXXXXXXXX
+ 246  goto BB24
+ 247BB21   <- [20, 42]
+ 248  real$#-         %21.0 = Phi                      %42.5:BB42, %20.1:BB20
+ 249  real$#-         %21.1 = %21.0
+ 250  real$-          %21.2 = Phi                      %42.6:BB42, %20.2:BB20
+ 251  real$-          %21.3 = %21.2
+ 252  (int|real)$-    %21.4 = Phi                      %42.7:BB42, %20.3:BB20
+ 253  (int|real)$-    %21.5 = %21.4
+ 254  real$#-         %21.6 = %21.1
+ 255  real$-          %21.7 = %21.3
+ 256  (int|real)$-    %21.8 = %21.5
+ 257  goto BB22
+ 258BB42   <- [40]
+ 259  int$-           %42.0 = CastType           d     dn %6.5
+ 260  int$-           %42.1 = CallSafeBuiltin    wed   bitwiseXor(%42.0, %23.1)    <int$->
+ 261  void                    StVar              lWd   sum, %42.1, e0.4
+ 262  void                    StVar              lWd   byteAcc, 0, e0.4
+ 263  void                    StVar              lWd   bitNum, 0, e0.4
+ 264  real$#-         %42.5 = 0
+ 265  real$#-         %42.6 = 0
+ 266  int$-           %42.7 = %42.1
+ 267  goto BB21
+ 268BB43   <- [40]
+ 269  void                    Nop                !     
+ 270  (int|real)$-    %43.1 = %6.5
+ 271  dr              %43.2 = Typecheck@0xXXXXXXXX
+ 272  goto BB24
+ 273BB24   <- [41, 43]
+ 274  val?^ | miss    %24.0 = Phi                      %41.1:BB41, %43.1:BB43
+ 275  val?^ | miss    %24.1 = %24.0
+ 276  dr              %24.2 = Phi                      %41.2:BB41, %43.2:BB43
+ 277  dr              %24.3 = %24.2
+ 278  fs              %24.4 = FrameState         R     0xXXXXXXXX+1506: [], env=e0.4
+ 279  void                    Deopt              !v    %24.4, %24.3, %24.1
+> 
+> # Many closures (pir_regression6.R)
+> lsNamespaceInfo <- function(ns, ...) {
++     ns <- asNamespace(ns, base.OK = FALSE)
++     ls(..., envir = get(".__NAMESPACE__.", envir = ns, inherits = FALSE))
++ }
+> allinfoNS <- function(ns) sapply(lsNamespaceInfo(ns), getNamespaceInfo, ns=ns)
+> utils::str(allinfoNS("stats"))
+List of 9
+ $ DLLs          :Socket 0 sending hashOnly request
+Socket 0 sending request
+List of 1
+  ..$ stats:List of 5
+  .. ..$ name         : chr "stats"
+  .. ..$ path         : chr "/Users/jakobeha/Documents/grad/research/rir/external/custom-r/library/stats/libs/stats.so"
+  .. ..$ dynamicLookup: logi FALSE
+  .. ..$ handle       :Class 'DLLHandle' <externalptr> 
+  .. ..$ info         :Socket 0 sending request
+Socket 0 sending hashOnly request
+Socket 0 sending request
+Socket 0 sending hashOnly request
+Socket 0 sending request
+[1;31mDiscrepancy between local and remote PIR[0m
+   0lapply[0xXXXXXXXX]
+   1BB0
+   2  val?^           %0.0  = LdArg                    1
+   3  val?^           %0.1  = LdArg                    0
+   4[1;31m  env             e0.2  = MkEnv              l     X=%0.1, FUN=%0.0, ...(miss)=missingArg, parent=R_BaseNamespace, context 1[0m
+   4[1;32m  val?^ | miss    %0.2  = LdVar              eR    match.fun, R_BaseNamespace[0m
+   5[1;31m  prom-           %0.3  = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p0, e0.2[0m
+   5[1;32m  lgl$#-          %0.3  = Identical                %0.2, function(FUN, descend=TRUE) <(rir::DispatchTab|...[0m
+   6[1;31m  val?            %0.4  = StaticCall         !v    match.fun[0xXXXXXXXX](%0.3) e0.2   <(cls|blt)->[0m
+   6[1;32m  void                    Branch                   %0.3 -> BB17 (if true) | BB18 (if false)[0m
+   7[1;31m  void                    StVar              lW    FUN, %0.4, e0.2[0m
+   7[1;32mBB17   <- [0][0m
+   8[1;31m  val?^ | miss    %0.6  = LdVar              eR    is.vector, e0.2[0m
+   8[1;32m  env             e17.0 = MkEnv              l     X=%0.1, FUN=%0.0, ...(miss)=missingArg, parent=R_BaseNamespace, context 1[0m
+   9[1;31m  lgl$#-          %0.7  = Identical                %0.6, function(x, mode="any") <(rir::DispatchTable*)|...[0m
+   9[1;32m  prom-           %17.1 = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p0, e17.0[0m
+  10[1;31m  void                    Branch                   %0.7 -> BB14 (if true) | BB15 (if false)[0m
+  10[1;32m  val?            %17.2 = StaticCall         !v    match.fun[0xXXXXXXXX](%17.1) e17.0   <(cls|blt)->[0m
+  11[1;31mBB14   <- [0][0m
+  11[1;32m  void                    StVar              lW    FUN, %17.2, e17.0[0m
+  12[1;31m  val?^ | miss    %14.0 = LdVar              eR    X, e0.2[0m
+  12[1;32m  val?^ | miss    %17.4 = LdVar              eR    is.vector, e17.0[0m
+  13[1;31m  val?            %14.1 = Force!<lazy>       !v    %14.0, e0.2   <(str|vec)+>[0m
+  13[1;32m  lgl$#-          %17.5 = Identical                %17.4, function(x, mode="any") <(rir::DispatchTable*)|...[0m
+  14[1;31m  lgl$#-          %14.2 = CallSafeBuiltin    wed   is.vector(%14.1, "any")    <lgl$->[0m
+  14[1;32m  void                    Branch                   %17.5 -> BB19 (if true) | BB20 (if false)[0m
+  15[1;31m  lgl$#-          %14.3 = Not                d     %14.2, elided[0m
+  15[1;32mBB18   <- [0][0m
+  16[1;31m  void                    Branch                   %14.2 -> BB12 (if true) | BB5 (if false)[0m
+  16[1;32m  env             e18.0 = (MkEnv)            l     X=%0.1, FUN=%0.0, ...(miss)=missingArg, parent=R_BaseNamespace, context 1[0m
+  17[1;31mBB15   <- [0][0m
+  17[1;32m  fs              %18.1 = FrameState         R     0xXXXXXXXX+0: [], env=e18.0[0m
+  18[1;31m  fs              %15.0 = FrameState         R     0xXXXXXXXX+58: [], env=e0.2[0m
+  18[1;32m  void                    Deopt              !v    %18.1, CallTarget@0xXXXXXXXX, %0.2[0m
+  19[1;31m  void                    Deopt              !v    %15.0, CallTarget@0xXXXXXXXX, %0.6   ![0m
+  19[1;32mBB19   <- [17][0m
+  20[1;31mBB12   <- [14][0m
+  20[1;32m  val?^ | miss    %19.0 = LdVar              eR    X, e17.0[0m
+  21[1;31m  val?^ | miss    %12.0 = LdVar              eR    is.object, e0.2[0m
+  21[1;32m  val?            %19.1 = Force!<lazy>       !v    %19.0, e17.0   <(str|vec)+>[0m
+  22[1;31m  lgl$#-          %12.1 = Identical                <blt is.object>, %12.0   <true>[0m
+  22[1;32m  lgl$#-          %19.2 = CallSafeBuiltin    wed   is.vector(%19.1, "any")    <lgl$->[0m
+  23[1;31m  void                    Branch                   %12.1 -> BB16 (if true) | BB17 (if false)[0m
+  23[1;32m  lgl$#-          %19.3 = Not                d     %19.2, elided[0m
+  24[1;31mBB5   <- [14][0m
+  24[1;32m  void                    Branch                   %19.2 -> BB15 (if true) | BB7 (if false)[0m
+  25[1;31m  void                    Nop                !     [0m
+  25[1;32mBB20   <- [17][0m
+  26[1;31m  lgl$#-          %5.1  = %14.3[0m
+  26[1;32m  fs              %20.0 = FrameState         R     0xXXXXXXXX+58: [], env=e17.0[0m
+  27[1;31m  goto BB6[0m
+  27[1;32m  void                    Deopt              !v    %20.0, CallTarget@0xXXXXXXXX, %17.4   ![0m
+  28[1;31mBB16   <- [12][0m
+  28[1;32mBB15   <- [19][0m
+  29[1;31m  val?^ | miss    %16.0 = LdVar              eR    X, e0.2[0m
+  29[1;32m  val?^ | miss    %15.0 = LdVar              eR    is.object, e17.0[0m
+  30[1;31m  val?            %16.1 = Force!<wrapped>    !v    %16.0, e0.2   <(str|vec)+>[0m
+  30[1;32m  lgl$#-          %15.1 = Identical                <blt is.object>, %15.0   <true>[0m
+  31[1;31m  lgl$#-          %16.2 = CallSafeBuiltin    wed   is.object(%16.1)    <lgl$->[0m
+  31[1;32m  void                    Branch                   %15.1 -> BB21 (if true) | BB22 (if false)[0m
+  32[1;31m  lgl$-           %16.3 = LOr                      %14.3, %16.2[0m
+  32[1;32mBB7   <- [19][0m
+  33[1;31m  lgl$-           %16.4 = %16.3[0m
+  33[1;32m  void                    Nop                !     [0m
+  34[1;31m  goto BB6[0m
+  34[1;32m  lgl$#-          %7.1  = %19.3[0m
+  35[1;31mBB17   <- [12][0m
+  35[1;32m  goto BB8[0m
+  36[1;31m  fs              %17.0 = FrameState         R     0xXXXXXXXX+102: [], env=e0.2[0m
+  36[1;32mBB21   <- [15][0m
+  37[1;31m  prom-           %17.1 = MkArg                    %14.1, lapply[0xXXXXXXXX]_p1 (!refl), e0.2[0m
+  37[1;32m  val?^ | miss    %21.0 = LdVar              eR    X, e17.0[0m
+  38[1;31m  val?~           %17.2 = CastType                 up %17.1[0m
+  38[1;32m  val?            %21.1 = Force!<wrapped>    !v    %21.0, e17.0   <(str|vec)+>[0m
+  39[1;31m  env             e17.3 = (MkEnv)            l     mode(miss)="any", x=%17.2, parent=R_BaseNamespace, context 0[0m
+  39[1;32m  lgl$#-          %21.2 = CallSafeBuiltin    wed   is.object(%21.1)    <lgl$->[0m
+  40[1;31m  fs              %17.4 = FrameState         R     0xXXXXXXXX+41: [%14.2], env=e17.3, next=%17.0[0m
+  40[1;32m  lgl$-           %21.3 = LOr                      %19.3, %21.2[0m
+  41[1;31m  void                    Deopt              !v    %17.4, DeadBranchReached@0xXXXXXXXX, %12.1   ![0m
+  41[1;32m  lgl$-           %21.4 = %21.3[0m
+  42[1;31mBB6   <- [5, 16][0m
+  42[1;32m  goto BB8[0m
+  43[1;31m  lgl$-           %6.0  = Phi                      %16.4:BB16, %5.1:BB5[0m
+  43[1;32mBB22   <- [15][0m
+  44[1;31m  lgl$-           %6.1  = %6.0[0m
+  44[1;32m  fs              %22.0 = FrameState         R     0xXXXXXXXX+102: [], env=e17.0[0m
+  45[1;31m  lgl$#-          %6.2  = CheckTrueFalse     e     %6.1[0m
+  45[1;32m  prom-           %22.1 = MkArg                    %19.1, lapply[0xXXXXXXXX]_p1 (!refl), e17.0[0m
+  46[1;31m  void                    Branch                   %6.2 -> BB11 (if true) | BB7 (if false)[0m
+  46[1;32m  val?~           %22.2 = CastType                 up %22.1[0m
+  47[1;31mBB11   <- [6][0m
+  47[1;32m  env             e22.3 = (MkEnv)            l     mode(miss)="any", x=%22.2, parent=R_BaseNamespace, context 0[0m
+  48[1;31m  (cls|spec|blt)  %11.0 = LdFun              !v    as.list, e0.2[0m
+  48[1;32m  fs              %22.4 = FrameState         R     0xXXXXXXXX+41: [%19.2], env=e22.3, next=%22.0[0m
+  49[1;31m  fs              %11.1 = FrameState         R     0xXXXXXXXX+241: [%11.0], env=e0.2[0m
+  49[1;32m  void                    Deopt              !v    %22.4, DeadBranchReached@0xXXXXXXXX, %15.1   ![0m
+  50[1;31m  void                    Deopt              !v    %11.1, DeadCall@0xXXXXXXXX, %11.0   ![0m
+  50[1;32mBB8   <- [7, 21][0m
+  51[1;31mBB7   <- [6][0m
+  51[1;32m  lgl$-           %8.0  = Phi                      %21.4:BB21, %7.1:BB7[0m
+  52[1;31m  val?^ | miss    %7.0  = LdVar              eR    X, e0.2[0m
+  52[1;32m  lgl$-           %8.1  = %8.0[0m
+  53[1;31m  val?            %7.1  = Force!<wrapped>    !v    %7.0, e0.2   <(str|vec)+>[0m
+  53[1;32m  lgl$#-          %8.2  = CheckTrueFalse     e     %8.1[0m
+  54[1;31m  (nil|str)-      %7.2  = Names                    %7.1[0m
+  54[1;32m  void                    Branch                   %8.2 -> BB14 (if true) | BB9 (if false)[0m
+  55[1;31m  int$-           %7.3  = Length                   %7.1[0m
+  55[1;32mBB14   <- [8][0m
+  56[1;31m  vec-            %7.4  = CallSafeBuiltin    wed   vector("list", %7.3) [0m
+  56[1;32m  (cls|spec|blt)  %14.0 = LdFun              !v    as.list, e17.0[0m
+  57[1;31m  val+            %7.5  = SetNames           e     %7.4, %7.2[0m
+  57[1;32m  prom-           %14.1 = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p4, e17.0[0m
+  58[1;31m  int$#-          %7.6  = 0L[0m
+  58[1;32m  val?            %14.2 = Call               !v    %14.0(%14.1) e17.0   <val?_>[0m
+  59[1;31m  val+            %7.7  = %7.5[0m
+  59[1;32m  void                    StVar              lW    X, %14.2, e17.0[0m
+  60[1;31m  goto BB8[0m
+  60[1;32m  goto BB10[0m
+  61[1;31mBB8   <- [7, 9][0m
+  61[1;32mBB9   <- [8][0m
+  62[1;31m  int$-           %8.0  = Phi                      %7.6:BB7, %9.7:BB9[0m
+  62[1;32m  void                    Nop                !     [0m
+  63[1;31m  int$-           %8.1  = %8.0[0m
+  63[1;32m  goto BB10[0m
+  64[1;31m  val?            %8.2  = Phi                      %7.7:BB7, %9.8:BB9[0m
+  64[1;32mBB10   <- [9, 14][0m
+  65[1;31m  val?            %8.3  = %8.2[0m
+  65[1;32m  val?^ | miss    %10.0 = LdVar              eR    X, e17.0[0m
+  66[1;31m  int$-           %8.4  = Inc                      %8.1[0m
+  66[1;32m  val?            %10.1 = Force!<wrapped>    !v    %10.0, e17.0   <(str|vec)+>[0m
+  67[1;31m  lgl$-           %8.5  = Lt                 d     %7.3, %8.4, elided[0m
+  67[1;32m  (nil|str)-      %10.2 = Names                    %10.1[0m
+  68[1;31m  lgl$#-          %8.6  = Identical                %8.5, true[0m
+  68[1;32m  int$-           %10.3 = Length                   %10.1[0m
+  69[1;31m  void                    Branch                   %8.6 -> BB10 (if true) | BB9 (if false)[0m
+  69[1;32m  vec-            %10.4 = CallSafeBuiltin    wed   vector("list", %10.3) [0m
+  70[1;31mBB10   <- [8][0m
+  70[1;32m  val+            %10.5 = SetNames           e     %10.4, %10.2[0m
+  71[1;31m  void                    Visible            v     [0m
+  71[1;32m  int$#-          %10.6 = 0L[0m
+  72[1;31m  void                    Return             l     %8.3[0m
+  72[1;32m  val+            %10.7 = %10.5[0m
+  73[1;31mBB9   <- [8][0m
+  73[1;32m  goto BB11[0m
+  74[1;31m  void                    StVar              lW    i, %8.4, e0.2[0m
+  74[1;32mBB11   <- [12, 10][0m
+  75[1;31m  (cls|spec|blt)  %9.1  = LdFun              !v    FUN, e0.2[0m
+  75[1;32m  int$-           %11.0 = Phi                      %10.6:BB10, %12.7:BB12[0m
+  76[1;31m  prom-           %9.2  = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p2, e0.2[0m
+  76[1;32m  int$-           %11.1 = %11.0[0m
+  77[1;31m  (miss|dots)     %9.3  = LdDots             R     , e0.2[0m
+  77[1;32m  val?            %11.2 = Phi                      %10.7:BB10, %12.8:BB12[0m
+  78[1;31m  *dots-          %9.4  = ExpandDots               %9.3[0m
+  78[1;32m  val?            %11.3 = %11.2[0m
+  79[1;31m  val?            %9.5  = NamedCall          !v    %9.1(%9.2, .xpandDotsTrigger=%9.4) e0.2   <val?+>[0m
+  79[1;32m  int$-           %11.4 = Inc                      %11.1[0m
+  80[1;31m  val?            %9.6  = SetVecElt          e     %9.5, %8.3, %8.4[0m
+  80[1;32m  lgl$-           %11.5 = Lt                 d     %10.3, %11.4, elided[0m
+  81[1;31m  int$-           %9.7  = %8.4[0m
+  81[1;32m  lgl$#-          %11.6 = Identical                %11.5, true[0m
+  82[1;31m  val?            %9.8  = %9.6[0m
+  82[1;32m  void                    Branch                   %11.6 -> BB13 (if true) | BB12 (if false)[0m
+  83[1;31m  goto BB8[0m
+  83[1;32mBB13   <- [11][0m
+  84[1;31mProm 0:[0m
+  84[1;32m  void                    Visible            v     [0m
+  85[1;31mBB0[0m
+  85[1;32m  void                    Return             l     %11.3[0m
+  86[1;31m  env             e0.0  = LdFunctionEnv            [0m
+  86[1;32mBB12   <- [11][0m
+  87[1;31m  val?^ | miss    %0.1  = LdVar              eR    FUN, e0.0[0m
+  87[1;32m  void                    StVar              lW    i, %11.4, e17.0[0m
+  88[1;31m  void                    Visible            v     [0m
+  88[1;32m  (cls|spec|blt)  %12.1 = LdFun              !v    FUN, e17.0[0m
+  89[1;31m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(cls|blt)->[0m
+  89[1;32m  prom-           %12.2 = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p2, e17.0[0m
+  90[1;31m  void                    Return             l     %0.3[0m
+  90[1;32m  (miss|dots)     %12.3 = LdDots             R     , e17.0[0m
+  91[1;31mProm 1:[0m
+  91[1;32m  *dots-          %12.4 = ExpandDots               %12.3[0m
+  92[1;31mBB0[0m
+  92[1;32m  val?            %12.5 = NamedCall          !v    %12.1(%12.2, .xpandDotsTrigger=%12.4) e17.0   <val?+>[0m
+  93[1;31m  env             e0.0  = LdFunctionEnv            [0m
+  93[1;32m  val?            %12.6 = SetVecElt          e     %12.5, %11.3, %11.4[0m
+  94[1;31m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+  94[1;32m  int$-           %12.7 = %11.4[0m
+  95[1;31m  void                    Visible            v     [0m
+  95[1;32m  val?            %12.8 = %12.6[0m
+  96[1;31m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(str|vec)+>[0m
+  96[1;32m  goto BB11[0m
+  97[1;31m  void                    Return             l     %0.3[0m
+  97[1;32mProm 0:[0m
+  98[1;31mProm 2:[0m
+  98[1;32mBB0[0m
+  99[1;31mBB0[0m
+  99[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 100[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 100[1;32m  val?^ | miss    %0.1  = LdVar              eR    FUN, e0.0[0m
+ 101[1;31m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 101[1;32m  void                    Visible            v     [0m
+ 102[1;31m  val?            %0.2  = Force<wrapped>     !v    %0.1, e0.0   <(str|vec)+>[0m
+ 102[1;32m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(cls|blt)->[0m
+ 103[1;31m  lgl$#-          %0.3  = IsType                   %0.2 isA val+   <true>[0m
+ 103[1;32m  void                    Return             l     %0.3[0m
+ 104[1;31m  void                    Branch                   %0.3 -> BB2 (if true) | BB4 (if false)[0m
+ 104[1;32mProm 1:[0m
+ 105[1;31mBB2   <- [0][0m
+ 105[1;32mBB0[0m
+ 106[1;31m  val?^ | miss    %2.0  = LdVar              eR    i, e0.0[0m
+ 106[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 107[1;31m  val?            %2.1  = Force<value>       !v    %2.0, e0.0   <int$->[0m
+ 107[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 108[1;31m  val?            %2.2  = %2.1[0m
+ 108[1;32m  void                    Visible            v     [0m
+ 109[1;31m  goto BB3[0m
+ 109[1;32m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(str|vec)+>[0m
+ 110[1;31mBB4   <- [0][0m
+ 110[1;32m  void                    Return             l     %0.3[0m
+ 111[1;31m  prom-           %4.0  = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p3, e0.0[0m
+ 111[1;32mProm 2:[0m
+ 112[1;31m  prom-           %4.1  = %4.0[0m
+ 112[1;32mBB0[0m
+ 113[1;31m  goto BB3[0m
+ 113[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 114[1;31mBB3   <- [4, 2][0m
+ 114[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 115[1;31m  val?            %3.0  = Phi                      %2.2:BB2, %4.1:BB4[0m
+ 115[1;32m  val?            %0.2  = Force<wrapped>     !v    %0.1, e0.0   <(str|vec)+>[0m
+ 116[1;31m  val?            %3.1  = %3.0[0m
+ 116[1;32m  lgl$#-          %0.3  = IsType                   %0.2 isA val+   <true>[0m
+ 117[1;31m  val?            %3.2  = Extract2_1D        !v    %0.2, %3.1, e0.0   <val?->[0m
+ 117[1;32m  void                    Branch                   %0.3 -> BB2 (if true) | BB4 (if false)[0m
+ 118[1;31m  void                    Visible            v     [0m
+ 118[1;32mBB2   <- [0][0m
+ 119[1;31m  void                    Return             l     %3.2[0m
+ 119[1;32m  val?^ | miss    %2.0  = LdVar              eR    i, e0.0[0m
+ 120[1;31mProm 3:[0m
+ 120[1;32m  val?            %2.1  = Force<value>       !v    %2.0, e0.0   <int$->[0m
+ 121[1;31mBB0[0m
+ 121[1;32m  val?            %2.2  = %2.1[0m
+ 122[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 122[1;32m  goto BB3[0m
+ 123[1;31m  val?^ | miss    %0.1  = LdVar              eR    i, e0.0[0m
+ 123[1;32mBB4   <- [0][0m
+ 124[1;31m  void                    Visible            v     [0m
+ 124[1;32m  prom-           %4.0  = MkArg                    unboundValue, lapply[0xXXXXXXXX]_p3, e0.0[0m
+ 125[1;31m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 125[1;32m  prom-           %4.1  = %4.0[0m
+ 126[1;31m  void                    Return             l     %0.3[0m
+ 126[1;32m  goto BB3[0m
+ 127[1;32mBB3   <- [4, 2][0m
+ 128[1;32m  val?            %3.0  = Phi                      %2.2:BB2, %4.1:BB4[0m
+ 129[1;32m  val?            %3.1  = %3.0[0m
+ 130[1;32m  val?            %3.2  = Extract2_1D        !v    %0.2, %3.1, e0.0   <val?->[0m
+ 131[1;32m  void                    Visible            v     [0m
+ 132[1;32m  void                    Return             l     %3.2[0m
+ 133[1;32mProm 3:[0m
+ 134[1;32mBB0[0m
+ 135[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 136[1;32m  val?^ | miss    %0.1  = LdVar              eR    i, e0.0[0m
+ 137[1;32m  void                    Visible            v     [0m
+ 138[1;32m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 139[1;32m  void                    Return             l     %0.3[0m
+ 140[1;32mProm 4:[0m
+ 141[1;32mBB0[0m
+ 142[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 143[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 144[1;32m  void                    Visible            v     [0m
+ 145[1;32m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 146[1;32m  void                    Return             l     %0.3[0m
+Class 'DLLInfoReference' <externalptr> 
+  .. ..- attr(*, "class")=Socket 0 sending request
+Socket 0 sending hashOnly request
+Socket 0 sending request
+[1;31mDiscrepancy between local and remote PIR[0m
+   0do.call[0xXXXXXXXX]
+   1BB0
+   2  val?~+          %0.0  = LdArg                    2
+   3  val?^           %0.1  = LdArg                    1
+   4  val?^           %0.2  = LdArg                    0
+   5  env             e0.3  = MkEnv              l     what=%0.2, args=%0.1, quote=%0.0, envir(miss)=missingArg, parent=R_BaseNamespace, context 1
+   6  prom-           %0.4  = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p0, e0.3
+   7  val?^ | miss    %0.5  = CastType                 up %0.4
+   8  void                    StArg              lW    envir, %0.5, e0.3
+   9  val?            %0.7  = Force!<lazy>       !v    %0.1, e0.3   <vec+>
+  10  lgl$-           %0.8  = Is                       %0.7, list
+  11  lgl$#-          %0.9  = IsType                   %0.7 isA val?+
+  12[1;31m  void                    Branch                   %0.9 -> BB23 (if true) | BB24 (if false)[0m
+  12[1;32m  void                    Branch                   %0.9 -> BB25 (if true) | BB26 (if false)[0m
+  13[1;31mBB23   <- [0][0m
+  13[1;32mBB25   <- [0][0m
+  14[1;31m  lgl$-           %23.0 = Not                d     %0.8, elided[0m
+  14[1;32m  lgl$-           %25.0 = Not                d     %0.8, elided[0m
+  15[1;31m  lgl$#-          %23.1 = CheckTrueFalse     e     %23.0[0m
+  15[1;32m  lgl$#-          %25.1 = CheckTrueFalse     e     %25.0[0m
+  16[1;31m  void                    Branch                   %23.1 -> BB21 (if true) | BB3 (if false)[0m
+  16[1;32m  void                    Branch                   %25.1 -> BB23 (if true) | BB3 (if false)[0m
+  17[1;31mBB24   <- [0][0m
+  17[1;32mBB26   <- [0][0m
+  18[1;31m  fs              %24.0 = FrameState         R     0xXXXXXXXX+9: [%0.7], env=e0.3[0m
+  18[1;32m  fs              %26.0 = FrameState         R     0xXXXXXXXX+9: [%0.7], env=e0.3[0m
+  19[1;31m  void                    Deopt              !v    %24.0, Typecheck@0xXXXXXXXX, %0.7   ![0m
+  19[1;32m  void                    Deopt              !v    %26.0, Typecheck@0xXXXXXXXX, %0.7   ![0m
+  20[1;31mBB21   <- [23][0m
+  20[1;32mBB23   <- [25][0m
+  21[1;31m  (cls|spec|blt)  %21.0 = LdFun              !v    stop, e0.3[0m
+  21[1;32m  (cls|spec|blt)  %23.0 = LdFun              !v    stop, e0.3[0m
+  22[1;31m  fs              %21.1 = FrameState         R     0xXXXXXXXX+36: [%21.0], env=e0.3[0m
+  22[1;32m  val?            %23.1 = Call               !v    %23.0("second argument must be a list") e0.3[0m
+  23[1;31m  void                    Deopt              !v    %21.1, DeadCall@0xXXXXXXXX, %21.0   ![0m
+  23[1;32m  goto BB4[0m
+  24[1;31mBB3   <- [23][0m
+  24[1;32mBB3   <- [25][0m
+  25[1;31m  val?^ | miss    %3.0  = LdVar              eR    quote, e0.3[0m
+  25[1;32m  void                    Nop                !     [0m
+  26[1;31m  val?            %3.1  = Force!<value>      !v    %3.0, e0.3   <lgl$->[0m
+  26[1;32m  goto BB4[0m
+  27[1;31m  lgl$#-          %3.2  = CheckTrueFalse     we    %3.1[0m
+  27[1;32mBB4   <- [3, 23][0m
+  28[1;31m  void                    Branch                   %3.2 -> BB8 (if true) | BB6 (if false)[0m
+  28[1;32m  val?^ | miss    %4.0  = LdVar              eR    quote, e0.3[0m
+  29[1;31mBB8   <- [3][0m
+  29[1;32m  val?            %4.1  = Force!<value>      !v    %4.0, e0.3   <lgl$->[0m
+  30[1;31m  val?^ | miss    %8.0  = LdVar              eR    lapply, e0.3[0m
+  30[1;32m  lgl$#-          %4.2  = CheckTrueFalse     we    %4.1[0m
+  31[1;31m  lgl$#-          %8.1  = Identical                %8.0, function(X, FUN, ...) <(rir::DispatchTable*)0x|...[0m
+  31[1;32m  void                    Branch                   %4.2 -> BB9 (if true) | BB7 (if false)[0m
+  32[1;31m  void                    Branch                   %8.1 -> BB25 (if true) | BB26 (if false)[0m
+  32[1;32mBB9   <- [4][0m
+  33[1;31mBB6   <- [3][0m
+  33[1;32m  val?^ | miss    %9.0  = LdVar              eR    lapply, e0.3[0m
+  34[1;31m  void                    Nop                !     [0m
+  34[1;32m  lgl$#-          %9.1  = Identical                %9.0, function(X, FUN, ...) <(rir::DispatchTable*)0x|...[0m
+  35[1;31m  goto BB7[0m
+  35[1;32m  void                    Branch                   %9.1 -> BB27 (if true) | BB28 (if false)[0m
+  36[1;31mBB25   <- [8][0m
+  36[1;32mBB7   <- [4][0m
+  37[1;31m  prom-           %25.0 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p1, e0.3[0m
+  37[1;32m  void                    Nop                !     [0m
+  38[1;31m  prom-           %25.1 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p2, e0.3[0m
+  38[1;32m  goto BB8[0m
+  39[1;31m  ct              %25.2 = PushContext        lCL   %25.0, %25.1, lapply(args, enquote), function(X, FUN, ...) <(rir::DispatchTable*)0x|..., e0.3[0m
+  39[1;32mBB27   <- [9][0m
+  40[1;31m  val?^           %25.3 = CastType                 up %25.1[0m
+  40[1;32m  prom-           %27.0 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p1, e0.3[0m
+  41[1;31m  val?^           %25.4 = CastType                 up %25.0[0m
+  41[1;32m  prom-           %27.1 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p2, e0.3[0m
+  42[1;31m  env             e25.5 = MkEnv              l     X=%25.4, FUN=%25.3, ...(miss)=missingArg, parent=R_BaseNamespace, context 1[0m
+  42[1;32m  ct              %27.2 = PushContext        lCL   %27.0, %27.1, lapply(args, enquote), function(X, FUN, ...) <(rir::DispatchTable*)0x|..., e0.3[0m
+  43[1;31m  prom-           %25.6 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p3, e25.5[0m
+  43[1;32m  val?^           %27.3 = CastType                 up %27.1[0m
+  44[1;31m  val?            %25.7 = StaticCall         !v    match.fun[0xXXXXXXXX](%25.6) e25.5   <(cls|blt)->[0m
+  44[1;32m  val?^           %27.4 = CastType                 up %27.0[0m
+  45[1;31m  void                    StVar              lW    FUN, %25.7, e25.5[0m
+  45[1;32m  val?^ | miss    %27.5 = LdVar              eR    match.fun, R_BaseNamespace[0m
+  46[1;31m  val?^ | miss    %25.9 = LdVar              eR    is.vector, e25.5[0m
+  46[1;32m  lgl$#-          %27.6 = Identical                %27.5, function(FUN, descend=TRUE) <(rir::DispatchTab|...[0m
+  47[1;31m  lgl$#-          %25.10 = Identical                %25.9, function(x, mode="any") <(rir::DispatchTable*)|...[0m
+  47[1;32m  void                    Branch                   %27.6 -> BB29 (if true) | BB30 (if false)[0m
+  48[1;31m  void                    Branch                   %25.10 -> BB27 (if true) | BB28 (if false)[0m
+  48[1;32mBB28   <- [9][0m
+  49[1;31mBB26   <- [8][0m
+  49[1;32m  void                    Nop                !     [0m
+  50[1;31m  fs              %26.0 = FrameState         R     0xXXXXXXXX+91: [%3.2], env=e0.3[0m
+  50[1;32m  val?^ | miss    %28.1 = %9.0[0m
+  51[1;31m  void                    Deopt              !v    %26.0, CallTarget@0xXXXXXXXX, %8.0   ![0m
+  51[1;32m  dr              %28.2 = CallTarget@0xXXXXXXXX[0m
+  52[1;31mBB7   <- [6, 18][0m
+  52[1;32m  goto BB5[0m
+  53[1;31m  val?^ | miss    %7.0  = LdVar              eR    what, e0.3[0m
+  53[1;32mBB8   <- [7, 20][0m
+  54[1;31m  val?            %7.1  = Force!<lazy>       !v    %7.0, e0.3   <cls->[0m
+  54[1;32m  val?^ | miss    %8.0  = LdVar              eR    what, e0.3[0m
+  55[1;31m  val?^ | miss    %7.2  = LdVar              eR    args, e0.3[0m
+  55[1;32m  val?            %8.1  = Force!<lazy>       !v    %8.0, e0.3   <cls->[0m
+  56[1;31m  val?            %7.3  = Force!<value>      !v    %7.2, e0.3   <vec+>[0m
+  56[1;32m  val?^ | miss    %8.2  = LdVar              eR    args, e0.3[0m
+  57[1;31m  val?^ | miss    %7.4  = LdVar              eR    envir, e0.3[0m
+  57[1;32m  val?            %8.3  = Force!<value>      !v    %8.2, e0.3   <vec+>[0m
+  58[1;31m  void                    Visible            v     [0m
+  58[1;32m  val?^ | miss    %8.4  = LdVar              eR    envir, e0.3[0m
+  59[1;31m  val?            %7.6  = Force!<lazy>       !     %7.4, e0.3   <env->[0m
+  59[1;32m  void                    Visible            v     [0m
+  60[1;31m  val?            %7.7  = CallBuiltin        !     do.call(%7.1, %7.3, %7.6) e0.3[0m
+  60[1;32m  val?            %8.6  = Force!<lazy>       !     %8.4, e0.3   <env->[0m
+  61[1;31m  void                    Return             l     %7.7[0m
+  61[1;32m  val?            %8.7  = CallBuiltin        !     do.call(%8.1, %8.3, %8.6) e0.3[0m
+  62[1;31mBB27   <- [25][0m
+  62[1;32m  void                    Return             l     %8.7[0m
+  63[1;31m  val?^ | miss    %27.0 = LdVar              eR    X, e25.5[0m
+  63[1;32mBB29   <- [27][0m
+  64[1;31m  val?            %27.1 = Force!<lazy>       !v    %27.0, e25.5   <(str|vec)+>[0m
+  64[1;32m  env             e29.0 = MkEnv              l     X=%27.4, FUN=%27.3, ...(miss)=missingArg, parent=R_BaseNamespace, context 1[0m
+  65[1;31m  lgl$#-          %27.2 = CallSafeBuiltin    wed   is.vector(%27.1, "any")    <lgl$->[0m
+  65[1;32m  prom-           %29.1 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p3, e29.0[0m
+  66[1;31m  lgl$#-          %27.3 = Not                d     %27.2, elided[0m
+  66[1;32m  val?            %29.2 = StaticCall         !v    match.fun[0xXXXXXXXX](%29.1) e29.0   <(cls|blt)->[0m
+  67[1;31m  void                    Branch                   %27.2 -> BB20 (if true) | BB13 (if false)[0m
+  67[1;32m  void                    StVar              lW    FUN, %29.2, e29.0[0m
+  68[1;31mBB28   <- [25][0m
+  68[1;32m  val?^ | miss    %29.4 = LdVar              eR    is.vector, e29.0[0m
+  69[1;31m  fs              %28.0 = FrameState         R     0xXXXXXXXX+150: [], env=e0.3[0m
+  69[1;32m  lgl$#-          %29.5 = Identical                %29.4, function(x, mode="any") <(rir::DispatchTable*)|...[0m
+  70[1;31m  fs              %28.1 = FrameState         R     0xXXXXXXXX+58: [], env=e25.5, next=%28.0[0m
+  70[1;32m  void                    Branch                   %29.5 -> BB31 (if true) | BB32 (if false)[0m
+  71[1;31m  void                    Deopt              !v    %28.1, CallTarget@0xXXXXXXXX, %25.9   ![0m
+  71[1;32mBB30   <- [27][0m
+  72[1;31mBB20   <- [27][0m
+  72[1;32m  void                    DropContext        C     [0m
+  73[1;31m  val?^ | miss    %20.0 = LdVar              eR    is.object, e25.5[0m
+  73[1;32m  val?^ | miss    %30.1 = %27.5[0m
+  74[1;31m  lgl$#-          %20.1 = Identical                <blt is.object>, %20.0   <true>[0m
+  74[1;32m  dr              %30.2 = CallTarget@0xXXXXXXXX[0m
+  75[1;31m  void                    Branch                   %20.1 -> BB29 (if true) | BB30 (if false)[0m
+  75[1;32m  goto BB5[0m
+  76[1;31mBB13   <- [27][0m
+  76[1;32mBB5   <- [28, 30][0m
+  77[1;31m  void                    Nop                !     [0m
+  77[1;32m  val?^ | miss    %5.0  = Phi                      %28.1:BB28, %30.1:BB30[0m
+  78[1;31m  lgl$#-          %13.1 = %27.3[0m
+  78[1;32m  val?^ | miss    %5.1  = %5.0[0m
+  79[1;31m  goto BB14[0m
+  79[1;32m  dr              %5.2  = Phi                      %28.2:BB28, %30.2:BB30[0m
+  80[1;31mBB29   <- [20][0m
+  80[1;32m  dr              %5.3  = %5.2[0m
+  81[1;31m  val?^ | miss    %29.0 = LdVar              eR    X, e25.5[0m
+  81[1;32m  fs              %5.4  = FrameState         R     0xXXXXXXXX+91: [%4.2], env=e0.3[0m
+  82[1;31m  val?            %29.1 = Force!<wrapped>    !v    %29.0, e25.5   <(str|vec)+>[0m
+  82[1;32m  void                    Deopt              !v    %5.4, %5.3, %5.1   ![0m
+  83[1;31m  lgl$#-          %29.2 = CallSafeBuiltin    wed   is.object(%29.1)    <lgl$->[0m
+  83[1;32mBB31   <- [29][0m
+  84[1;31m  lgl$-           %29.3 = LOr                      %27.3, %29.2[0m
+  84[1;32m  val?^ | miss    %31.0 = LdVar              eR    X, e29.0[0m
+  85[1;31m  lgl$-           %29.4 = %29.3[0m
+  85[1;32m  val?            %31.1 = Force!<lazy>       !v    %31.0, e29.0   <(str|vec)+>[0m
+  86[1;31m  goto BB14[0m
+  86[1;32m  lgl$#-          %31.2 = CallSafeBuiltin    wed   is.vector(%31.1, "any")    <lgl$->[0m
+  87[1;31mBB30   <- [20][0m
+  87[1;32m  lgl$#-          %31.3 = Not                d     %31.2, elided[0m
+  88[1;31m  fs              %30.0 = FrameState         R     0xXXXXXXXX+150: [], env=e0.3[0m
+  88[1;32m  void                    Branch                   %31.2 -> BB22 (if true) | BB14 (if false)[0m
+  89[1;31m  fs              %30.1 = FrameState         R     0xXXXXXXXX+102: [], env=e25.5, next=%30.0[0m
+  89[1;32mBB32   <- [29][0m
+  90[1;31m  prom-           %30.2 = MkArg                    %27.1, do.call[0xXXXXXXXX]_p4 (!refl), e25.5[0m
+  90[1;32m  fs              %32.0 = FrameState         R     0xXXXXXXXX+150: [], env=e0.3[0m
+  91[1;31m  val?~           %30.3 = CastType                 up %30.2[0m
+  91[1;32m  fs              %32.1 = FrameState         R     0xXXXXXXXX+58: [], env=e29.0, next=%32.0[0m
+  92[1;31m  env             e30.4 = (MkEnv)            l     mode(miss)="any", x=%30.3, parent=R_BaseNamespace, context 0[0m
+  92[1;32m  void                    Deopt              !v    %32.1, CallTarget@0xXXXXXXXX, %29.4   ![0m
+  93[1;31m  fs              %30.5 = FrameState         R     0xXXXXXXXX+41: [%27.2], env=e30.4, next=%30.1[0m
+  93[1;32mBB22   <- [31][0m
+  94[1;31m  void                    Deopt              !v    %30.5, DeadBranchReached@0xXXXXXXXX, %20.1   ![0m
+  94[1;32m  val?^ | miss    %22.0 = LdVar              eR    is.object, e29.0[0m
+  95[1;31mBB14   <- [13, 29][0m
+  95[1;32m  lgl$#-          %22.1 = Identical                <blt is.object>, %22.0   <true>[0m
+  96[1;31m  lgl$-           %14.0 = Phi                      %29.4:BB29, %13.1:BB13[0m
+  96[1;32m  void                    Branch                   %22.1 -> BB33 (if true) | BB34 (if false)[0m
+  97[1;31m  lgl$-           %14.1 = %14.0[0m
+  97[1;32mBB14   <- [31][0m
+  98[1;31m  lgl$#-          %14.2 = CheckTrueFalse     e     %14.1[0m
+  98[1;32m  void                    Nop                !     [0m
+  99[1;31m  void                    Branch                   %14.2 -> BB19 (if true) | BB15 (if false)[0m
+  99[1;32m  lgl$#-          %14.1 = %31.3[0m
+ 100[1;31mBB19   <- [14][0m
+ 100[1;32m  goto BB15[0m
+ 101[1;31m  fs              %19.0 = FrameState         R     0xXXXXXXXX+150: [], env=e0.3[0m
+ 101[1;32mBB33   <- [22][0m
+ 102[1;31m  (cls|spec|blt)  %19.1 = LdFun              !v    as.list, e25.5[0m
+ 102[1;32m  val?^ | miss    %33.0 = LdVar              eR    X, e29.0[0m
+ 103[1;31m  fs              %19.2 = FrameState         R     0xXXXXXXXX+241: [%19.1], env=e25.5, next=%19.0[0m
+ 103[1;32m  val?            %33.1 = Force!<wrapped>    !v    %33.0, e29.0   <(str|vec)+>[0m
+ 104[1;31m  void                    Deopt              !v    %19.2, DeadCall@0xXXXXXXXX, %19.1   ![0m
+ 104[1;32m  lgl$#-          %33.2 = CallSafeBuiltin    wed   is.object(%33.1)    <lgl$->[0m
+ 105[1;31mBB15   <- [14][0m
+ 105[1;32m  lgl$-           %33.3 = LOr                      %31.3, %33.2[0m
+ 106[1;31m  val?^ | miss    %15.0 = LdVar              eR    X, e25.5[0m
+ 106[1;32m  lgl$-           %33.4 = %33.3[0m
+ 107[1;31m  val?            %15.1 = Force!<wrapped>    !v    %15.0, e25.5   <(str|vec)+>[0m
+ 107[1;32m  goto BB15[0m
+ 108[1;31m  (nil|str)-      %15.2 = Names                    %15.1[0m
+ 108[1;32mBB34   <- [22][0m
+ 109[1;31m  int$-           %15.3 = Length                   %15.1[0m
+ 109[1;32m  fs              %34.0 = FrameState         R     0xXXXXXXXX+150: [], env=e0.3[0m
+ 110[1;31m  vec-            %15.4 = CallSafeBuiltin    wed   vector("list", %15.3) [0m
+ 110[1;32m  fs              %34.1 = FrameState         R     0xXXXXXXXX+102: [], env=e29.0, next=%34.0[0m
+ 111[1;31m  val+            %15.5 = SetNames           e     %15.4, %15.2[0m
+ 111[1;32m  prom-           %34.2 = MkArg                    %31.1, do.call[0xXXXXXXXX]_p5 (!refl), e29.0[0m
+ 112[1;31m  int$#-          %15.6 = 0L[0m
+ 112[1;32m  val?~           %34.3 = CastType                 up %34.2[0m
+ 113[1;31m  val+            %15.7 = %15.5[0m
+ 113[1;32m  env             e34.4 = (MkEnv)            l     mode(miss)="any", x=%34.3, parent=R_BaseNamespace, context 0[0m
+ 114[1;31m  goto BB16[0m
+ 114[1;32m  fs              %34.5 = FrameState         R     0xXXXXXXXX+41: [%31.2], env=e34.4, next=%34.1[0m
+ 115[1;31mBB16   <- [15, 17][0m
+ 115[1;32m  void                    Deopt              !v    %34.5, DeadBranchReached@0xXXXXXXXX, %22.1   ![0m
+ 116[1;31m  int$-           %16.0 = Phi                      %15.6:BB15, %17.7:BB17[0m
+ 116[1;32mBB15   <- [14, 33][0m
+ 117[1;31m  int$-           %16.1 = %16.0[0m
+ 117[1;32m  lgl$-           %15.0 = Phi                      %33.4:BB33, %14.1:BB14[0m
+ 118[1;31m  val?            %16.2 = Phi                      %15.7:BB15, %17.8:BB17[0m
+ 118[1;32m  lgl$-           %15.1 = %15.0[0m
+ 119[1;31m  val?            %16.3 = %16.2[0m
+ 119[1;32m  lgl$#-          %15.2 = CheckTrueFalse     e     %15.1[0m
+ 120[1;31m  int$-           %16.4 = Inc                      %16.1[0m
+ 120[1;32m  void                    Branch                   %15.2 -> BB21 (if true) | BB16 (if false)[0m
+ 121[1;31m  lgl$-           %16.5 = Lt                 d     %15.3, %16.4, elided[0m
+ 121[1;32mBB21   <- [15][0m
+ 122[1;31m  lgl$#-          %16.6 = Identical                %16.5, true[0m
+ 122[1;32m  (cls|spec|blt)  %21.0 = LdFun              !v    as.list, e29.0[0m
+ 123[1;31m  void                    Branch                   %16.6 -> BB18 (if true) | BB17 (if false)[0m
+ 123[1;32m  prom-           %21.1 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p6, e29.0[0m
+ 124[1;31mBB18   <- [16][0m
+ 124[1;32m  val?            %21.2 = Call               !v    %21.0(%21.1) e29.0   <val?_>[0m
+ 125[1;31m  val?            %18.0 = PopContext         C     %16.3, %25.2   <vec+>[0m
+ 125[1;32m  void                    StVar              lW    X, %21.2, e29.0[0m
+ 126[1;31m  void                    StVar              lW    args, %18.0, e0.3[0m
+ 126[1;32m  goto BB17[0m
+ 127[1;31m  goto BB7[0m
+ 127[1;32mBB16   <- [15][0m
+ 128[1;31mBB17   <- [16][0m
+ 128[1;32m  void                    Nop                !     [0m
+ 129[1;31m  void                    StVar              lW    i, %16.4, e25.5[0m
+ 129[1;32m  goto BB17[0m
+ 130[1;31m  (cls|spec|blt)  %17.1 = LdFun              !v    FUN, e25.5[0m
+ 130[1;32mBB17   <- [16, 21][0m
+ 131[1;31m  prom-           %17.2 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p5, e25.5[0m
+ 131[1;32m  val?^ | miss    %17.0 = LdVar              eR    X, e29.0[0m
+ 132[1;31m  (miss|dots)     %17.3 = LdDots             R     , e25.5[0m
+ 132[1;32m  val?            %17.1 = Force!<wrapped>    !v    %17.0, e29.0   <(str|vec)+>[0m
+ 133[1;31m  *dots-          %17.4 = ExpandDots               %17.3[0m
+ 133[1;32m  (nil|str)-      %17.2 = Names                    %17.1[0m
+ 134[1;31m  val?            %17.5 = NamedCall          !v    %17.1(%17.2, .xpandDotsTrigger=%17.4) e25.5   <val?+>[0m
+ 134[1;32m  int$-           %17.3 = Length                   %17.1[0m
+ 135[1;31m  val?            %17.6 = SetVecElt          e     %17.5, %16.3, %16.4[0m
+ 135[1;32m  vec-            %17.4 = CallSafeBuiltin    wed   vector("list", %17.3) [0m
+ 136[1;31m  int$-           %17.7 = %16.4[0m
+ 136[1;32m  val+            %17.5 = SetNames           e     %17.4, %17.2[0m
+ 137[1;31m  val?            %17.8 = %17.6[0m
+ 137[1;32m  int$#-          %17.6 = 0L[0m
+ 138[1;31m  goto BB16[0m
+ 138[1;32m  val+            %17.7 = %17.5[0m
+ 139[1;31mProm 0:[0m
+ 139[1;32m  goto BB18[0m
+ 140[1;31mBB0[0m
+ 140[1;32mBB18   <- [19, 17][0m
+ 141[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 141[1;32m  int$-           %18.0 = Phi                      %17.6:BB17, %19.7:BB19[0m
+ 142[1;31m  (cls|spec|blt)  %0.1  = LdFun              !     parent.frame, <0xXXXXXXXX>, e0.0[0m
+ 142[1;32m  int$-           %18.1 = %18.0[0m
+ 143[1;31m  val?            %0.2  = Call               !     %0.1() e0.0   <env->[0m
+ 143[1;32m  val?            %18.2 = Phi                      %17.7:BB17, %19.8:BB19[0m
+ 144[1;31m  void                    Return             l     %0.2[0m
+ 144[1;32m  val?            %18.3 = %18.2[0m
+ 145[1;31mProm 1:[0m
+ 145[1;32m  int$-           %18.4 = Inc                      %18.1[0m
+ 146[1;31mBB0[0m
+ 146[1;32m  lgl$-           %18.5 = Lt                 d     %17.3, %18.4, elided[0m
+ 147[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 147[1;32m  lgl$#-          %18.6 = Identical                %18.5, true[0m
+ 148[1;31m  val?^ | miss    %0.1  = LdVar              eR    args, e0.0[0m
+ 148[1;32m  void                    Branch                   %18.6 -> BB20 (if true) | BB19 (if false)[0m
+ 149[1;31m  void                    Visible            v     [0m
+ 149[1;32mBB20   <- [18][0m
+ 150[1;31m  val?            %0.3  = Force<wrapped>     !     %0.1, e0.0   <vec+>[0m
+ 150[1;32m  val?            %20.0 = PopContext         C     %18.3, %27.2   <vec+>[0m
+ 151[1;31m  void                    Return             l     %0.3[0m
+ 151[1;32m  void                    StVar              lW    args, %20.0, e0.3[0m
+ 152[1;31mProm 2:[0m
+ 152[1;32m  goto BB8[0m
+ 153[1;31mBB0[0m
+ 153[1;32mBB19   <- [18][0m
+ 154[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 154[1;32m  void                    StVar              lW    i, %18.4, e29.0[0m
+ 155[1;31m  val?^ | miss    %0.1  = LdVar              eR    enquote, e0.0[0m
+ 155[1;32m  (cls|spec|blt)  %19.1 = LdFun              !v    FUN, e29.0[0m
+ 156[1;31m  void                    Visible            v     [0m
+ 156[1;32m  prom-           %19.2 = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p7, e29.0[0m
+ 157[1;31m  val?            %0.3  = Force<wrapped>     !     %0.1, e0.0   <cls->[0m
+ 157[1;32m  (miss|dots)     %19.3 = LdDots             R     , e29.0[0m
+ 158[1;31m  void                    Return             l     %0.3[0m
+ 158[1;32m  *dots-          %19.4 = ExpandDots               %19.3[0m
+ 159[1;31mProm 3:[0m
+ 159[1;32m  val?            %19.5 = NamedCall          !v    %19.1(%19.2, .xpandDotsTrigger=%19.4) e29.0   <val?+>[0m
+ 160[1;31mBB0[0m
+ 160[1;32m  val?            %19.6 = SetVecElt          e     %19.5, %18.3, %18.4[0m
+ 161[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 161[1;32m  int$-           %19.7 = %18.4[0m
+ 162[1;31m  val?^ | miss    %0.1  = LdVar              eR    FUN, e0.0[0m
+ 162[1;32m  val?            %19.8 = %19.6[0m
+ 163[1;31m  void                    Visible            v     [0m
+ 163[1;32m  goto BB18[0m
+ 164[1;31m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(cls|blt)->[0m
+ 164[1;32mProm 0:[0m
+ 165[1;31m  void                    Return             l     %0.3[0m
+ 165[1;32mBB0[0m
+ 166[1;31mProm 4:[0m
+ 166[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 167[1;31mBB0[0m
+ 167[1;32m  (cls|spec|blt)  %0.1  = LdFun              !     parent.frame, <0xXXXXXXXX>, e0.0[0m
+ 168[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 168[1;32m  val?            %0.2  = Call               !     %0.1() e0.0   <env->[0m
+ 169[1;31m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 169[1;32m  void                    Return             l     %0.2[0m
+ 170[1;31m  void                    Visible            v     [0m
+ 170[1;32mProm 1:[0m
+ 171[1;31m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(str|vec)+>[0m
+ 171[1;32mBB0[0m
+ 172[1;31m  void                    Return             l     %0.3[0m
+ 172[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 173[1;31mProm 5:[0m
+ 173[1;32m  val?^ | miss    %0.1  = LdVar              eR    args, e0.0[0m
+ 174[1;31mBB0[0m
+ 174[1;32m  void                    Visible            v     [0m
+ 175[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 175[1;32m  val?            %0.3  = Force<wrapped>     !     %0.1, e0.0   <vec+>[0m
+ 176[1;31m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 176[1;32m  void                    Return             l     %0.3[0m
+ 177[1;31m  val?            %0.2  = Force<wrapped>     !v    %0.1, e0.0   <(str|vec)+>[0m
+ 177[1;32mProm 2:[0m
+ 178[1;31m  lgl$#-          %0.3  = IsType                   %0.2 isA val+   <true>[0m
+ 178[1;32mBB0[0m
+ 179[1;31m  void                    Branch                   %0.3 -> BB2 (if true) | BB4 (if false)[0m
+ 179[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 180[1;31mBB2   <- [0][0m
+ 180[1;32m  val?^ | miss    %0.1  = LdVar              eR    enquote, e0.0[0m
+ 181[1;31m  val?^ | miss    %2.0  = LdVar              eR    i, e0.0[0m
+ 181[1;32m  void                    Visible            v     [0m
+ 182[1;31m  val?            %2.1  = Force<value>       !v    %2.0, e0.0   <int$->[0m
+ 182[1;32m  val?            %0.3  = Force<wrapped>     !     %0.1, e0.0   <cls->[0m
+ 183[1;31m  val?            %2.2  = %2.1[0m
+ 183[1;32m  void                    Return             l     %0.3[0m
+ 184[1;31m  goto BB3[0m
+ 184[1;32mProm 3:[0m
+ 185[1;31mBB4   <- [0][0m
+ 185[1;32mBB0[0m
+ 186[1;31m  prom-           %4.0  = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p6, e0.0[0m
+ 186[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 187[1;31m  prom-           %4.1  = %4.0[0m
+ 187[1;32m  val?^ | miss    %0.1  = LdVar              eR    FUN, e0.0[0m
+ 188[1;31m  goto BB3[0m
+ 188[1;32m  void                    Visible            v     [0m
+ 189[1;31mBB3   <- [4, 2][0m
+ 189[1;32m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(cls|blt)->[0m
+ 190[1;31m  val?            %3.0  = Phi                      %2.2:BB2, %4.1:BB4[0m
+ 190[1;32m  void                    Return             l     %0.3[0m
+ 191[1;31m  val?            %3.1  = %3.0[0m
+ 191[1;32mProm 5:[0m
+ 192[1;31m  val?            %3.2  = Extract2_1D        !v    %0.2, %3.1, e0.0   <val?->[0m
+ 192[1;32mBB0[0m
+ 193[1;31m  void                    Visible            v     [0m
+ 193[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 194[1;31m  void                    Return             l     %3.2[0m
+ 194[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 195[1;31mProm 6:[0m
+ 195[1;32m  void                    Visible            v     [0m
+ 196[1;31mBB0[0m
+ 196[1;32m  val?            %0.3  = Force<lazy>        !     %0.1, e0.0   <(str|vec)+>[0m
+ 197[1;31m  env             e0.0  = LdFunctionEnv            [0m
+ 197[1;32m  void                    Return             l     %0.3[0m
+ 198[1;31m  val?^ | miss    %0.1  = LdVar              eR    i, e0.0[0m
+ 198[1;32mProm 6:[0m
+ 199[1;31m  void                    Visible            v     [0m
+ 199[1;32mBB0[0m
+ 200[1;31m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 200[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 201[1;31m  void                    Return             l     %0.3[0m
+ 201[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 202[1;32m  void                    Visible            v     [0m
+ 203[1;32m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 204[1;32m  void                    Return             l     %0.3[0m
+ 205[1;32mProm 7:[0m
+ 206[1;32mBB0[0m
+ 207[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 208[1;32m  val?^ | miss    %0.1  = LdVar              eR    X, e0.0[0m
+ 209[1;32m  val?            %0.2  = Force<wrapped>     !v    %0.1, e0.0   <(str|vec)+>[0m
+ 210[1;32m  lgl$#-          %0.3  = IsType                   %0.2 isA val+   <true>[0m
+ 211[1;32m  void                    Branch                   %0.3 -> BB2 (if true) | BB4 (if false)[0m
+ 212[1;32mBB2   <- [0][0m
+ 213[1;32m  val?^ | miss    %2.0  = LdVar              eR    i, e0.0[0m
+ 214[1;32m  val?            %2.1  = Force<value>       !v    %2.0, e0.0   <int$->[0m
+ 215[1;32m  val?            %2.2  = %2.1[0m
+ 216[1;32m  goto BB3[0m
+ 217[1;32mBB4   <- [0][0m
+ 218[1;32m  prom-           %4.0  = MkArg                    unboundValue, do.call[0xXXXXXXXX]_p8, e0.0[0m
+ 219[1;32m  prom-           %4.1  = %4.0[0m
+ 220[1;32m  goto BB3[0m
+ 221[1;32mBB3   <- [4, 2][0m
+ 222[1;32m  val?            %3.0  = Phi                      %2.2:BB2, %4.1:BB4[0m
+ 223[1;32m  val?            %3.1  = %3.0[0m
+ 224[1;32m  val?            %3.2  = Extract2_1D        !v    %0.2, %3.1, e0.0   <val?->[0m
+ 225[1;32m  void                    Visible            v     [0m
+ 226[1;32m  void                    Return             l     %3.2[0m
+ 227[1;32mProm 8:[0m
+ 228[1;32mBB0[0m
+ 229[1;32m  env             e0.0  = LdFunctionEnv            [0m
+ 230[1;32m  val?^ | miss    %0.1  = LdVar              eR    i, e0.0[0m
+ 231[1;32m  void                    Visible            v     [0m
+ 232[1;32m  val?            %0.3  = Force              !     %0.1, e0.0   <val?_>[0m
+ 233[1;32m  void                    Return             l     %0.3[0m
+
+ *** caught segfault ***
+address 0x10, cause 'invalid permissions'
+
+Traceback:
+ 1: do.call(function(...) str(obj, ...), c(aList, list(...)), quote = TRUE)
+ 2: strSub(a[[i]], give.length = give.L, indent.str = paste(indent.str,     ".."), nest.lev = nest.lev + 1)
+ 3: str.default(obj, ...)
+ 4: str(obj, ...)
+ 5: (function (...) str(obj, ...))(max.level = base::quote(NA), vec.len = base::quote(4L),     digits.d = base::quote(3L), nchar.max = base::quote(128),     give.attr = base::quote(TRUE), drop.deparse.attr = base::quote(TRUE),     give.head = base::quote(TRUE), width = base::quote(80L),     envir = base::quote(NULL), strict.width = base::quote("no"),     formatNum = base::quote(function (x, ...)     format(x, trim = TRUE, drop0trailing = TRUE, ...)), list.len = base::quote(99L),     deparse.lines = base::quote(NULL), give.length = base::quote(TRUE),     nest.lev = base::quote(2), indent.str = base::quote("  .. .."))
+ 6: do.call(function(...) str(obj, ...), c(aList, list(...)), quote = TRUE)
+ 7: strSub(object[[i]], give.length = give.length, nest.lev = nest.lev +     1, indent.str = paste(indent.str, ".."))
+ 8: str.default(obj, ...)
+ 9: str(obj, ...)
+10: (function (...) str(obj, ...))(max.level = base::quote(NA), vec.len = base::quote(4L),     digits.d = base::quote(3L), nchar.max = base::quote(128),     give.attr = base::quote(TRUE), drop.deparse.attr = base::quote(TRUE),     give.head = base::quote(TRUE), width = base::quote(80L),     envir = base::quote(NULL), strict.width = base::quote("no"),     formatNum = base::quote(function (x, ...)     format(x, trim = TRUE, drop0trailing = TRUE, ...)), list.len = base::quote(99L),     deparse.lines = base::quote(NULL), give.length = base::quote(TRUE),     nest.lev = base::quote(1), indent.str = base::quote("  .."))
+11: do.call(function(...) str(obj, ...), c(aList, list(...)), quote = TRUE)
+12: strSub(object[[i]], give.length = give.length, nest.lev = nest.lev +     1, indent.str = paste(indent.str, ".."))
+13: str.default(allinfoNS("stats"))
+14: utils::str(allinfoNS("stats"))
+An irrecoverable exception occurred. R is aborting now ...
+/Users/jakobeha/Documents/grad/research/rir/tools/R: line 17: 12613 Segmentation fault: 11  $R_HOME/bin/`basename "$0"` "$@"

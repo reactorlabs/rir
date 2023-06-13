@@ -44,6 +44,10 @@ SEXP deserialize(ByteBuffer& sexpBuffer);
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
+/// Send a message from the compiler client (this) to each connected compiler
+/// server, which kills the server (exit 0) on receive. Then stops the client
+/// for the remainder of the session
+REXPORT SEXP rirKillCompilerServers();
 REXPORT SEXP tryToRunCompilerServer();
 
 // this method is just to have an easy way to play around with the code and get

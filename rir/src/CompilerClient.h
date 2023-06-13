@@ -26,6 +26,8 @@ class CompilerClient {
         SEXP sexp;
         std::string finalPir;
     };
+
+    static bool _isRunning;
   public:
     class Handle {
         friend class CompilerClient;
@@ -45,6 +47,9 @@ class CompilerClient {
         void compare(pir::ClosureVersion* version) const;
     };
 
+    /// Returns if the client was initialized
+    static bool isRunning() { return _isRunning; }
+
     /// Initializes if PIR_CLIENT_ADDR is set
     static void tryInit();
     /// Asynchronously sends the closure to the compile server and returns a
@@ -52,6 +57,11 @@ class CompilerClient {
     static Handle* pirCompile(SEXP what, const Context& assumptions,
                               const std::string& name,
                               const pir::DebugOptions& debug);
+
+    /// Send a message from the compiler client (this) to each connected
+    /// compiler server, which kills the server (exit 0) on receive. Then stops
+    /// the client for the remainder of the session
+    static void killServers();
 };
 
 } // namespace rir

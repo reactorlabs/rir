@@ -28,7 +28,7 @@ thread_pool* threads;
 static std::chrono::seconds PIR_CLIENT_TIMEOUT;
 #endif
 
-static bool didInit = false;
+bool CompilerClient::_isRunning = false;
 static zmq::context_t* context;
 static std::vector<std::string> serverAddrs;
 static std::vector<zmq::socket_t*> sockets;
@@ -47,8 +47,8 @@ void CompilerClient::tryInit() {
         return;
     }
 
-    assert(!didInit);
-    didInit = true;
+    assert(!isRunning());
+    _isRunning = true;
 
     std::istringstream serverAddrReader(serverAddrStr);
     while (!serverAddrReader.fail()) {
@@ -93,7 +93,7 @@ void CompilerClient::tryInit() {
 }
 
 CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    if (!didInit) {
+    if (!isRunning()) {
       return nullptr;
     }
     auto getResponse = [=](int index) {
@@ -129,41 +129,43 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         // + debug.functionFilterString
         // + sizeof(debug.style) (always 4)
         // + debug.style
-        ByteBuffer requestData;
-        requestData.putLong(PIR_COMPILE_MAGIC);
-        serialize(what, requestData);
-        requestData.putLong(sizeof(Context));
-        requestData.putBytes((uint8_t*)&assumptions, sizeof(Context));
-        requestData.putLong(name.size());
-        requestData.putBytes((uint8_t*)name.c_str(), name.size());
-        requestData.putLong(sizeof(debug.flags));
-        requestData.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
-        requestData.putLong(debug.passFilterString.size());
-        requestData.putBytes((uint8_t*)debug.passFilterString.c_str(),
+        ByteBuffer request;
+        request.putLong(PIR_COMPILE_MAGIC);
+        serialize(what, request);
+        request.putLong(sizeof(Context));
+        request.putBytes((uint8_t*)&assumptions, sizeof(Context));
+        request.putLong(name.size());
+        request.putBytes((uint8_t*)name.c_str(), name.size());
+        request.putLong(sizeof(debug.flags));
+        request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
+        request.putLong(debug.passFilterString.size());
+        request.putBytes((uint8_t*)debug.passFilterString.c_str(),
                              debug.passFilterString.size());
-        requestData.putLong(debug.functionFilterString.size());
-        requestData.putBytes((uint8_t*)debug.functionFilterString.c_str(),
+        request.putLong(debug.functionFilterString.size());
+        request.putBytes((uint8_t*)debug.functionFilterString.c_str(),
                              debug.functionFilterString.size());
-        requestData.putLong(sizeof(debug.style));
-        requestData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+        request.putLong(sizeof(debug.style));
+        request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
 
-        if (requestData.size() >= PIR_COMPILE_SIZE_TO_HASH_ONLY) {
-            UUID requestHash = UUID::hash(requestData.data(), requestData.size());
+        if (request.size() >= PIR_COMPILE_SIZE_TO_HASH_ONLY) {
+            UUID requestHash = UUID::hash(request.data(), request.size());
             // Serialize the hash-only request
             // Request data format =
             //   PIR_COMPILE_HASH_ONLY_MAGIC
             // + hash
-            ByteBuffer hashOnlyRequestData;
-            hashOnlyRequestData.putLong(PIR_COMPILE_HASH_ONLY_MAGIC);
-            hashOnlyRequestData.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
+            ByteBuffer hashOnlyRequest;
+            hashOnlyRequest.putLong(PIR_COMPILE_HASH_ONLY_MAGIC);
+            hashOnlyRequest.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
 
             // Send the hash-only request
             std::cerr << "Socket " << index << " sending hashOnly request"
                       << std::endl;
-            zmq::message_t hashOnlyRequest(hashOnlyRequestData.data(), hashOnlyRequestData.size());
             auto hashOnlyRequestSize =
-                *socket->send(std::move(hashOnlyRequest), zmq::send_flags::none);
-            auto hashOnlyRequestSize2 = hashOnlyRequestData.size();
+                *socket->send(zmq::message_t(
+                                  hashOnlyRequest.data(),
+                                  hashOnlyRequest.size()),
+                              zmq::send_flags::none);
+            auto hashOnlyRequestSize2 = hashOnlyRequest.size();
             assert(hashOnlyRequestSize == hashOnlyRequestSize2);
             // Wait for the response
             zmq::message_t hashOnlyResponse;
@@ -194,11 +196,13 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         }
 
         // Send the request
-        zmq::message_t request(requestData.data(), requestData.size());
         std::cerr << "Socket " << index << " sending request" << std::endl;
         auto requestSize =
-            *socket->send(std::move(request), zmq::send_flags::none);
-        auto requestSize2 = requestData.size();
+            *socket->send(zmq::message_t(
+                              request.data(),
+                              request.size()),
+                          zmq::send_flags::none);
+        auto requestSize2 = request.size();
         assert(requestSize == requestSize2);
         // Wait for the response
         zmq::message_t response;
@@ -229,6 +233,42 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
     auto response = getResponse(0);
     return new CompilerClient::Handle{response};
 #endif
+}
+
+void CompilerClient::killServers() {
+    assert(isRunning() && "Can't kill servers, the client isn't running");
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+    std::cerr << "Waiting for active server requests to end" << std::endl;
+    threads->stop(true);
+#endif
+    std::cerr << "Killing connected servers" << std::endl;
+    // Send the request PIR_COMPILE_KILL_MAGIC to all servers, and check the
+    // acknowledgement (we do this synchronously)
+    for (size_t i = 0; i < sockets.size(); i++) {
+      auto& socket = sockets[i];
+      // Send the request
+      socket->send(zmq::message_t(
+                       &PIR_COMPILE_KILL_MAGIC,
+                       sizeof(PIR_COMPILE_KILL_MAGIC)),
+                   zmq::send_flags::none);
+      // Check the acknowledgement
+      zmq::message_t response;
+      socket->recv(response, zmq::recv_flags::none);
+      if (response.size() != sizeof(PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC) ||
+          *(uint64_t*)response.data() !=
+              PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC) {
+        std::cerr << "Error: server " << i << " didn't acknowledge kill request"
+                  << std::endl;
+      }
+    }
+    // Close all sockets
+    for (auto& socket : sockets) {
+        socket->close();
+    }
+    std::fill(socketsConnected.begin(), socketsConnected.end(), false);
+    // Mark that we've stopped running
+    _isRunning = false;
+    std::cerr << "Done killing connected servers, client is no longer running" << std::endl;
 }
 
 static void normalizePir(std::string& pir) {
@@ -272,7 +312,6 @@ static void checkDiscrepancy(std::string&& localPir, std::string&& remotePir) {
         lineNum++;
     }
 }
-
 
 void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
     auto localPir = printClosureVersionForCompilerServerComparison(version);
