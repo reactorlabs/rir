@@ -126,5 +126,6 @@ allinfoNS <- function(ns) sapply(lsNamespaceInfo(ns), getNamespaceInfo, ns=ns)
 utils::str(allinfoNS("stats"))
 utils::str(allinfoNS("stats4"))
 
-# Kill the server
-rir.killCompilerServer()
+# Kill the server (named "servers" because it kills all connected servers,
+# but there is only one in this case)
+rir.killCompilerServers()
