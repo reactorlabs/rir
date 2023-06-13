@@ -11,11 +11,11 @@
 #include <array>
 #include <zmq.hpp>
 
-#define SOFT_ASSERT(x)                                                         \
+#define SOFT_ASSERT(x) do {                                                    \
     if (!(x)) {                                                                \
         std::cerr << "Assertion failed: " << #x << std::endl;                  \
         break;                                                                 \
-    }
+    } } while (false)
 
 namespace rir {
 
@@ -47,6 +47,9 @@ void CompilerServer::tryRun() {
     socket.bind(serverAddr);
 
     _isRunning = true;
+    // _isRunning is used because of nested calls in the for loop, but CLion
+    // doesn't see
+    (void)_isRunning;
     // Won't return
     for (;;) {
         std::cerr << "Waiting for next request..." << std::endl;
@@ -76,28 +79,45 @@ void CompilerServer::tryRun() {
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
         auto magic = requestBuffer.getLong();
         switch (magic) {
+        case PIR_COMPILE_KILL_MAGIC: {
+            std::cerr << "Received kill request" << std::endl;
+            socket.send(zmq::message_t(
+                            &PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC,
+                            sizeof(PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC)),
+                        zmq::send_flags::none);
+            std::cerr << "Sent kill acknowledgement, will die" << std::endl;
+            _isRunning = false;
+            exit(0);
+        }
         case PIR_COMPILE_HASH_ONLY_MAGIC: {
             UUID hash;
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
             if (memoized.count(hash)) {
                 std::cerr << "Found memoized result for hash (hash-only) " << hash << std::endl;
                 auto result = memoized[hash];
-                socket.send(zmq::buffer(result.data(), result.size()), zmq::send_flags::none);
+                socket.send(zmq::message_t(result.data(), result.size()),
+                            zmq::send_flags::none);
                 std::cerr << "Sent memoized result for hash (hash-only) " << hash << std::endl;
             } else {
                 std::cerr << "No memoized result for hash (hash-only) " << hash << std::endl;
-                socket.send(zmq::buffer(&PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC, sizeof(PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC)), zmq::send_flags::none);
+                socket.send(zmq::message_t(
+                                &PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC,
+                                sizeof(PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC)),
+                            zmq::send_flags::none);
                 std::cerr << "Sent request full for hash (hash-only) " << hash << std::endl;
             }
             break;
         }
         case PIR_COMPILE_MAGIC: {
             // Check if we memoized
-            UUID requestHash = UUID::hash(requestBuffer.data(), requestBuffer.size());
+            UUID requestHash = UUID::hash(request.data(), request.size());
             if (memoized.count(requestHash)) {
                 std::cerr << "Found memoized result for hash " << requestHash << std::endl;
                 auto result = memoized[requestHash];
-                socket.send(zmq::buffer(result.data(), result.size()), zmq::send_flags::none);
+                socket.send(zmq::message_t(
+                                result.data(),
+                                result.size()),
+                            zmq::send_flags::none);
                 std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
                 break;
             } else {
@@ -146,22 +166,23 @@ void CompilerServer::tryRun() {
             // + serialize(what)
             // + sizeof(pirPrint)
             // + pirPrint
-            ByteBuffer responseBuffer;
-            responseBuffer.putLong(PIR_COMPILE_RESPONSE_MAGIC);
-            serialize(what, responseBuffer);
+            ByteBuffer response;
+            response.putLong(PIR_COMPILE_RESPONSE_MAGIC);
+            serialize(what, response);
             auto pirPrintSize = pirPrint.size();
-            responseBuffer.putLong(pirPrintSize);
-            responseBuffer.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+            response.putLong(pirPrintSize);
+            response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
 
             // Memoize the response
-            memoized[requestHash] = responseBuffer;
+            memoized[requestHash] = response;
 
-            // Send the response
-            zmq::message_t response(responseBuffer.data(),
-                                    responseBuffer.size());
+            // Send the response;
             auto responseSize =
-                *socket.send(std::move(response), zmq::send_flags::none);
-            auto responseSize2 = responseBuffer.size();
+                *socket.send(zmq::message_t(
+                                 response.data(),
+                                 response.size()),
+                             zmq::send_flags::none);
+            auto responseSize2 = response.size();
             SOFT_ASSERT(responseSize == responseSize2);
 
             std::cerr << "Sent response (" << responseSize << " bytes)"

@@ -1,0 +1,41 @@
+#!/bin/bash -e
+
+# region prelude
+set -e
+SCRIPTPATH=$(cd "$(dirname "$0")" && pwd)
+if [ ! -d "$SCRIPTPATH" ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
+export SCRIPTPATH
+
+if [ -z "$RIR_BUILD" ]; then
+    RIR_BUILD=$(pwd)
+fi
+export RIR_BUILD
+if [ ! -f $RIR_BUILD/librir.* ]; then
+    echo "could not find librir. are you in the correct directory?"
+    exit 1
+fi
+
+. "${SCRIPTPATH}/script_include.sh"
+# endregion
+
+export PORT="${PORT=5555}"
+
+# From https://stackoverflow.com/questions/71776455/stop-bash-if-any-of-the-functions-fail-in-parallel
+# We run both the compiler server and client, but exit early if either of them fails
+# Boilerplate
+LOCKDIR=$(mktemp -d) || exit "$?"
+trap 'exit 1' ABRT
+trap 'mv "$LOCKDIR" "$LOCKDIR~" && rm -rf "$LOCKDIR~"; kill 0' EXIT
+diex() {
+  echo "!! $1 crashed" >&2;
+  ln -s _ "$LOCKDIR/.lock" 2> /dev/null && kill -ABRT "$$";
+}
+
+# Actually run compiler server and client, we delay the client a bit to ensure the server is started
+{ LOG_PREFIX="(server) " "${SCRIPTPATH}/test-compiler-server-only" || diex "server"; } &
+{ sleep 0.1; LOG_PREFIX="(client) " "${SCRIPTPATH}/test-compiler-client-only" || diex "client"; } &
+# Ensure the process keeps running until the children are actually done
+wait
