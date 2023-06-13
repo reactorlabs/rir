@@ -231,16 +231,46 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
 #endif
 }
 
-static void checkDiscrepancy(const std::string& localPir, const std::string& remotePir) {
-    // Don't need to log if there is no discrepancy.
+static void normalizePir(std::string& pir) {
+    // Replace addresses with 0xXXXXXXXX, since they will be different
+    static const std::regex ADDRESS_REGEX("0x[0-9a-fA-F]+");
+    static const char* ADDRESS_REPLACE = "0xXXXXXXXX";
+    pir = std::regex_replace(pir, ADDRESS_REGEX, ADDRESS_REPLACE);
+}
+
+static void checkDiscrepancy(std::string&& localPir, std::string&& remotePir) {
+    normalizePir(localPir);
+    normalizePir(remotePir);
+    // Don't need to log if there's no discrepancy.
     if (localPir == remotePir) {
         return;
     }
-    // TODO: Actually log diff
     std::cerr << console::with_red("Discrepancy between local and remote PIR")
               << std::endl;
-    std::cerr << "Local PIR:\n" << localPir << "\n\n";
-    std::cerr << "Remote PIR:\n" << remotePir << "\n\n";
+    // Print a fancy line-by-line diff
+    std::istringstream localPirStream(localPir);
+    std::istringstream remotePirStream(remotePir);
+    size_t lineNum = 0;
+    std::string localLine;
+    std::string remoteLine;
+    while (std::getline(localPirStream, localLine) &&
+               std::getline(remotePirStream, remoteLine)) {
+        if (localLine == remoteLine) {
+            std::cerr << std::setw(4) << lineNum << localLine << std::endl;
+        } else {
+            std::cerr << std::setw(4) << lineNum << console::with_red(localLine) << std::endl;
+            std::cerr << std::setw(4) << lineNum << console::with_green(remoteLine) << std::endl;
+        }
+        lineNum++;
+    }
+    while (std::getline(localPirStream, localLine)) {
+        std::cerr << std::setw(4) << lineNum << console::with_red(localLine) << std::endl;
+        lineNum++;
+    }
+    while (std::getline(remotePirStream, remoteLine)) {
+        std::cerr << std::setw(4) << lineNum << console::with_green(remoteLine) << std::endl;
+        lineNum++;
+    }
 }
 
 
@@ -279,10 +309,12 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
         }
         // Get the response which is ready now, and check
         auto resp = response.get();
-        checkDiscrepancy(localPir, resp.finalPir);
+        auto remotePir = resp.finalPir;
+        checkDiscrepancy(std::move(localPir), std::move(remotePir));
     });
 #else
-    checkDiscrepancy(localPir, response.finalPir);
+    auto remotePir = response.finalPir;
+    checkDiscrepancy(std::move(localPir), std::move(remotePir));
 #endif
 }
 

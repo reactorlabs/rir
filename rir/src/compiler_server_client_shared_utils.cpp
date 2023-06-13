@@ -15,7 +15,7 @@ size_t PIR_COMPILE_SIZE_TO_HASH_ONLY =
 
 std::string printClosureVersionForCompilerServerComparison(pir::ClosureVersion* version) {
     std::stringstream pir;
-    version->print(pir::DebugStyle::Standard, pir, true, false);
+    version->print(pir::DebugStyle::Standard, pir, false, false);
     return pir.str();
 }
 

@@ -15,6 +15,7 @@ struct ConsoleColor {
         return false;
     }
     static void red(std::ostream& out) { out << "\033[1;31m"; }
+    static void green(std::ostream& out) { out << "\033[1;32m"; }
     static void yellow(std::ostream& out) { out << "\033[1;33m"; }
     static void blue(std::ostream& out) { out << "\033[1;34m"; }
     static void magenta(std::ostream& out) { out << "\033[1;35m"; }
@@ -40,6 +41,9 @@ namespace console {
     __attribute__((unused)) static const SetColor<ConsoleColor::clear> clear{};
     __attribute__((unused)) static WithColor<ConsoleColor::red> with_red(std::string msg) {
         return WithColor<ConsoleColor::red>(std::move(msg));
+    }
+    __attribute__((unused)) static WithColor<ConsoleColor::green> with_green(std::string msg) {
+        return WithColor<ConsoleColor::green>(std::move(msg));
     }
 } // namespace console
 
