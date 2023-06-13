@@ -33,7 +33,7 @@ SEXP UUIDPool::intern(SEXP e) {
 #endif
 }
 
-/// Wrap data to also get UUID while deserializing
+/* /// Wrap data to also get UUID while deserializing
 struct RStreamWrapper {
     R_inpstream_t stream;
     UUIDHasher hasher;
@@ -62,7 +62,7 @@ static void rStreamWrapInBytes(R_inpstream_t hashIn, void* data, int size) {
 }
 
 // Currently unused
-/* SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
+SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     RStreamWrapper streamWrapper{in};
     R_inpstream_st hashIn{};
     R_InitInPStream(

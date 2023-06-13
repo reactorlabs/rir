@@ -5,6 +5,7 @@
 #include "CompilerClient.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
+#include "hash/UUID.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
 #ifdef MULTI_THREADED_COMPILER_CLIENT
@@ -110,7 +111,6 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
             socket->connect(serverAddr);
             socketsConnected[index] = true;
         }
-        std::cerr << "Socket " << index << " sending request" << std::endl;
 
         // Serialize the request
         // Request data format =
@@ -146,9 +146,56 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
                              debug.functionFilterString.size());
         requestData.putLong(sizeof(debug.style));
         requestData.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
-        zmq::message_t request(requestData.data(), requestData.size());
+
+        if (requestData.size() >= PIR_COMPILE_SIZE_TO_HASH_ONLY) {
+            UUID requestHash = UUID::hash(requestData.data(), requestData.size());
+            // Serialize the hash-only request
+            // Request data format =
+            //   PIR_COMPILE_HASH_ONLY_MAGIC
+            // + hash
+            ByteBuffer hashOnlyRequestData;
+            hashOnlyRequestData.putLong(PIR_COMPILE_HASH_ONLY_MAGIC);
+            hashOnlyRequestData.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
+
+            // Send the hash-only request
+            std::cerr << "Socket " << index << " sending hashOnly request"
+                      << std::endl;
+            zmq::message_t hashOnlyRequest(hashOnlyRequestData.data(), hashOnlyRequestData.size());
+            auto hashOnlyRequestSize =
+                *socket->send(std::move(hashOnlyRequest), zmq::send_flags::none);
+            auto hashOnlyRequestSize2 = hashOnlyRequestData.size();
+            assert(hashOnlyRequestSize == hashOnlyRequestSize2);
+            // Wait for the response
+            zmq::message_t hashOnlyResponse;
+            socket->recv(hashOnlyResponse, zmq::recv_flags::none);
+            // Receive the response
+            // Response data format =
+            //   PIR_COMPILE_RESPONSE_MAGIC
+            // + serialize(what)
+            // + sizeof(pirPrint)
+            // + pirPrint
+            // | PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC
+            ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
+            auto hashOnlyResponseMagic = hashOnlyResponseBuffer.getLong();
+            switch (hashOnlyResponseMagic) {
+            case PIR_COMPILE_RESPONSE_MAGIC: {
+                SEXP hashOnlyResponseWhat = deserialize(hashOnlyResponseBuffer);
+                auto pirPrintSize = hashOnlyResponseBuffer.getLong();
+                std::string pirPrint((char*)hashOnlyResponseBuffer.data(),
+                                     pirPrintSize);
+                return CompilerClient::ResponseData{hashOnlyResponseWhat,
+                                                    pirPrint};
+            }
+            case PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC:
+                break;
+            default:
+                assert(false && "invalid hash-only response magic");
+            }
+        }
 
         // Send the request
+        zmq::message_t request(requestData.data(), requestData.size());
+        std::cerr << "Socket " << index << " sending request" << std::endl;
         auto requestSize =
             *socket->send(std::move(request), zmq::send_flags::none);
         auto requestSize2 = requestData.size();
