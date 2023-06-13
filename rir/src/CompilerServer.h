@@ -21,7 +21,12 @@ namespace rir {
  * by calling pirCompile.
  */
 class CompilerServer {
+    static bool _isRunning;
+
   public:
+    /// Is this Ř instance a compiler server?
+    static bool isRunning() { return _isRunning; }
+
     /// If PIR_SERVER_ADDR is set, initializes and starts handling requests
     static void tryRun();
 };
