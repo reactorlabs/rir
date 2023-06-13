@@ -5,14 +5,23 @@
 #include "CompilerServer.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
+#include "hash/UUID.h"
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
 #include <array>
 #include <zmq.hpp>
 
+#define SOFT_ASSERT(x)                                                         \
+    if (!(x)) {                                                                \
+        std::cerr << "Assertion failed: " << #x << std::endl;                  \
+        break;                                                                 \
+    }
+
 namespace rir {
 
 using namespace ctpl;
+
+static std::unordered_map<UUID, ByteBuffer> memoized;
 
 void CompilerServer::tryRun() {
     // get the server address from the environment
@@ -46,7 +55,9 @@ void CompilerServer::tryRun() {
 
         // Deserialize the request
         // Request data format =
-        //   PIR_COMPILE_MAGIC
+        //   PIR_COMPILE_HASH_ONLY_MAGIC
+        // + hash
+        // | PIR_COMPILE_MAGIC
         // + serialize(what)
         // + sizeof(assumptions) (always 8)
         // + assumptions
@@ -62,62 +73,103 @@ void CompilerServer::tryRun() {
         // + debug.style
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
         auto magic = requestBuffer.getLong();
-        assert(magic == PIR_COMPILE_MAGIC && "Invalid request magic");
-        SEXP what = deserialize(requestBuffer);
-        auto assumptionsSize = requestBuffer.getLong();
-        assert(assumptionsSize == sizeof(Context) && "Invalid assumptions size");
-        Context assumptions;
-        requestBuffer.getBytes((uint8_t*)&assumptions, assumptionsSize);
-        auto nameSize = requestBuffer.getLong();
-        std::string name;
-        name.resize(nameSize);
-        requestBuffer.getBytes((uint8_t*)name.data(), nameSize);
-        auto debugFlagsSize = requestBuffer.getLong();
-        assert(debugFlagsSize == sizeof(pir::DebugOptions::DebugFlags) && "Invalid debug flags size");
-        pir::DebugOptions::DebugFlags debugFlags;
-        requestBuffer.getBytes((uint8_t*)&debugFlags, debugFlagsSize);
-        auto passFilterStringSize = requestBuffer.getLong();
-        std::string passFilterString;
-        passFilterString.resize(passFilterStringSize);
-        requestBuffer.getBytes((uint8_t*)passFilterString.data(), passFilterStringSize);
-        auto functionFilterStringSize = requestBuffer.getLong();
-        std::string functionFilterString;
-        functionFilterString.resize(functionFilterStringSize);
-        requestBuffer.getBytes((uint8_t*)functionFilterString.data(), functionFilterStringSize);
-        auto debugStyleSize = requestBuffer.getLong();
-        assert(debugStyleSize == sizeof(pir::DebugStyle) && "Invalid debug style size");
-        pir::DebugStyle debugStyle;
-        requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
-        pir::DebugOptions debug(debugFlags, passFilterString, functionFilterString, debugStyle);
+        switch (magic) {
+        case PIR_COMPILE_HASH_ONLY_MAGIC: {
+            UUID hash;
+            requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
+            if (memoized.count(hash)) {
+                std::cerr << "Found memoized result for hash (hash-only) " << hash << std::endl;
+                auto result = memoized[hash];
+                socket.send(zmq::buffer(result.data(), result.size()), zmq::send_flags::none);
+                std::cerr << "Sent memoized result for hash (hash-only) " << hash << std::endl;
+            } else {
+                std::cerr << "No memoized result for hash (hash-only) " << hash << std::endl;
+                socket.send(zmq::buffer(&PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC, sizeof(PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC)), zmq::send_flags::none);
+                std::cerr << "Sent request full for hash (hash-only) " << hash << std::endl;
+            }
+            break;
+        }
+        case PIR_COMPILE_MAGIC: {
+            // Check if we memoized
+            UUID requestHash = UUID::hash(requestBuffer.data(), requestBuffer.size());
+            if (memoized.count(requestHash)) {
+                std::cerr << "Found memoized result for hash " << requestHash << std::endl;
+                auto result = memoized[requestHash];
+                socket.send(zmq::buffer(result.data(), result.size()), zmq::send_flags::none);
+                std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
+                break;
+            } else {
+                std::cerr << "No memoized result for hash " << requestHash << std::endl;
+            }
 
-        // TODO: Intern deserialized request: get hash while deserializing,
-        //     check if this hash already exists, and if so, return the
-        //     memoized pirCompile.
-        // TODO: Later, we'll have the compile-client send a hash-only first for
-        //     large requests, and the server can respond with the memoized
-        //     pirCompile if it exists, or a PIR_COMPILE_RESPONSE_NEEDS_FULL
-        //     otherwise.
+            SEXP what = deserialize(requestBuffer);
+            auto assumptionsSize = requestBuffer.getLong();
+            SOFT_ASSERT(assumptionsSize == sizeof(Context) &&
+                        "Invalid assumptions size");
+            Context assumptions;
+            requestBuffer.getBytes((uint8_t*)&assumptions, assumptionsSize);
+            auto nameSize = requestBuffer.getLong();
+            std::string name;
+            name.resize(nameSize);
+            requestBuffer.getBytes((uint8_t*)name.data(), nameSize);
+            auto debugFlagsSize = requestBuffer.getLong();
+            SOFT_ASSERT(debugFlagsSize == sizeof(pir::DebugOptions::DebugFlags) &&
+                        "Invalid debug flags size");
+            pir::DebugOptions::DebugFlags debugFlags;
+            requestBuffer.getBytes((uint8_t*)&debugFlags, debugFlagsSize);
+            auto passFilterStringSize = requestBuffer.getLong();
+            std::string passFilterString;
+            passFilterString.resize(passFilterStringSize);
+            requestBuffer.getBytes((uint8_t*)passFilterString.data(),
+                                   passFilterStringSize);
+            auto functionFilterStringSize = requestBuffer.getLong();
+            std::string functionFilterString;
+            functionFilterString.resize(functionFilterStringSize);
+            requestBuffer.getBytes((uint8_t*)functionFilterString.data(),
+                                   functionFilterStringSize);
+            auto debugStyleSize = requestBuffer.getLong();
+            SOFT_ASSERT(debugStyleSize == sizeof(pir::DebugStyle) &&
+                        "Invalid debug style size");
+            pir::DebugStyle debugStyle;
+            requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
+            pir::DebugOptions debug(debugFlags, passFilterString,
+                                    functionFilterString, debugStyle);
 
-        std::string pirPrint;
-        pirCompile(what, assumptions, name, debug, &pirPrint);
+            std::string pirPrint;
+            pirCompile(what, assumptions, name, debug, &pirPrint);
 
-        // Send the response
-        // Response data format =
-        //   PIR_COMPILE_RESPONSE_MAGIC
-        // + serialize(what)
-        // + sizeof(pirPrint)
-        // + pirPrint
-        ByteBuffer responseBuffer;
-        responseBuffer.putLong(PIR_COMPILE_RESPONSE_MAGIC);
-        serialize(what, responseBuffer);
-        auto pirPrintSize = pirPrint.size();
-        responseBuffer.putLong(pirPrintSize);
-        responseBuffer.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-        zmq::message_t response(responseBuffer.data(), requestBuffer.size());
-        auto responseSize = *socket.send(std::move(response), zmq::send_flags::none);
-        auto responseSize2 = responseBuffer.size();
-        assert(responseSize == responseSize2);
-        std::cerr << "Sent response (" << responseSize << " bytes)" << std::endl;
+            // Serialize the response
+            // Response data format =
+            //   PIR_COMPILE_RESPONSE_MAGIC
+            // + serialize(what)
+            // + sizeof(pirPrint)
+            // + pirPrint
+            ByteBuffer responseBuffer;
+            responseBuffer.putLong(PIR_COMPILE_RESPONSE_MAGIC);
+            serialize(what, responseBuffer);
+            auto pirPrintSize = pirPrint.size();
+            responseBuffer.putLong(pirPrintSize);
+            responseBuffer.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+
+            // Memoize the response
+            memoized[requestHash] = responseBuffer;
+
+            // Send the response
+            zmq::message_t response(responseBuffer.data(),
+                                    requestBuffer.size());
+            auto responseSize =
+                *socket.send(std::move(response), zmq::send_flags::none);
+            auto responseSize2 = responseBuffer.size();
+            SOFT_ASSERT(responseSize == responseSize2);
+
+            std::cerr << "Sent response (" << responseSize << " bytes)"
+                      << std::endl;
+            break;
+        }
+        default:
+            std::cerr << "Invalid magic: " << magic << std::endl;
+            break;
+        }
     }
 }
 
