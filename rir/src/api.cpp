@@ -35,7 +35,7 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
 // This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
 static const int R_STREAM_DEFAULT_VERSION = 3;
-static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_ascii_format;
+static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;

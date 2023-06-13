@@ -214,7 +214,9 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         assert(responseMagic == PIR_COMPILE_RESPONSE_MAGIC);
         SEXP responseWhat = deserialize(responseBuffer);
         auto pirPrintSize = responseBuffer.getLong();
-        std::string pirPrint((char*)responseBuffer.data(), pirPrintSize);
+        std::string pirPrint;
+        pirPrint.resize(pirPrintSize);
+        responseBuffer.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
         return CompilerClient::ResponseData{responseWhat, pirPrint};
     };
 #ifdef MULTI_THREADED_COMPILER_CLIENT
