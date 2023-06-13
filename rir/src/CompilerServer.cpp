@@ -21,6 +21,7 @@ namespace rir {
 
 using namespace ctpl;
 
+bool CompilerServer::_isRunning = false;
 static std::unordered_map<UUID, ByteBuffer> memoized;
 
 void CompilerServer::tryRun() {
@@ -45,6 +46,7 @@ void CompilerServer::tryRun() {
     zmq::socket_t socket(context, zmq::socket_type::rep);
     socket.bind(serverAddr);
 
+    _isRunning = true;
     // Won't return
     for (;;) {
         std::cerr << "Waiting for next request..." << std::endl;
@@ -156,7 +158,7 @@ void CompilerServer::tryRun() {
 
             // Send the response
             zmq::message_t response(responseBuffer.data(),
-                                    requestBuffer.size());
+                                    responseBuffer.size());
             auto responseSize =
                 *socket.send(std::move(response), zmq::send_flags::none);
             auto responseSize2 = responseBuffer.size();
