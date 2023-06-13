@@ -5,7 +5,7 @@
 
 namespace rir {
 
-size_t LazyEnvironment::getArgIdx(SEXP n) {
+size_t LazyEnvironment::getArgIdx(SEXP n) const {
     size_t i = 0;
     while (i < nargs) {
         auto name = Pool::get(names[i]);
@@ -18,21 +18,21 @@ size_t LazyEnvironment::getArgIdx(SEXP n) {
     return i;
 }
 
-SEXP LazyEnvironment::getArg(SEXP n) {
+SEXP LazyEnvironment::getArg(SEXP n) const {
     auto i = getArgIdx(n);
     if (i == nargs)
         return R_UnboundValue;
     return getArg(i);
 }
 
-bool LazyEnvironment::isMissing(SEXP n) {
+bool LazyEnvironment::isMissing(SEXP n) const {
     auto i = getArgIdx(n);
     if (i == nargs)
         return false;
     return isMissing(i);
 }
 
-bool LazyEnvironment::isMissing(size_t i) {
+bool LazyEnvironment::isMissing(size_t i) const {
     assert(i < nargs);
     return missing[i] || getArg(i) == R_MissingArg;
 }
@@ -49,14 +49,14 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
     for (int i = 0; i < nargs; i++) {
         names[i] = Pool::readItem(refTable, inp);
     }
-    SEXP materialized = p(ReadItem(refTable, inp));
-    SEXP parent = p(ReadItem(refTable, inp));
+    SEXP materialized = p.nullable(ReadNullableItem(refTable, inp));
+    SEXP parent = p.nullable(ReadNullableItem(refTable, inp));
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     auto le = new (DATAPTR(store)) LazyEnvironment(parent, nargs, names);
     le->materialized(materialized);
     for (int i = 0; i < nargs; i++) {
         le->missing[i] = missing[i];
-        le->setEntry(i, ReadItem(refTable, inp));
+        le->setArg(i, ReadNullableItem(refTable, inp), false);
     }
     delete[] missing;
     // names won't get deleted because its now owned by LazyEnvironment,
@@ -73,8 +73,11 @@ void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
     for (int i = 0; i < (int)nargs; i++) {
         Pool::writeItem(names[i], refTable, out);
     }
-    for (int i = 0; i < (int)nargs + ArgOffset; i++) {
-        WriteItem(getEntry(i), refTable, out);
+    WriteNullableItem(materialized(), refTable, out);
+    // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
+    WriteNullableItem(getParent(), refTable, out);
+    for (int i = 0; i < (int)nargs; i++) {
+        WriteNullableItem(getArg((size_t)i), refTable, out);
     }
 }
 
