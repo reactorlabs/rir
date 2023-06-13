@@ -456,7 +456,12 @@ void PirJitLLVM::compile(
     });
 }
 
-llvm::LLVMContext& PirJitLLVM::getContext() { return *TSC.getContext(); }
+llvm::LLVMContext& PirJitLLVM::getContext() {
+    if (!initialized) {
+        initializeLLVM();
+    }
+    return *TSC.getContext();
+}
 
 SerialModuleRef PirJitLLVM::deserializeModule(R_inpstream_t inp) {
     auto serialModuleAndIsNew = internModule(SerialModule::deserialize(inp));
