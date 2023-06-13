@@ -183,8 +183,9 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
             case PIR_COMPILE_RESPONSE_MAGIC: {
                 SEXP hashOnlyResponseWhat = deserialize(hashOnlyResponseBuffer);
                 auto pirPrintSize = hashOnlyResponseBuffer.getLong();
-                std::string pirPrint((char*)hashOnlyResponseBuffer.data(),
-                                     pirPrintSize);
+                std::string pirPrint;
+                pirPrint.resize(pirPrintSize);
+                hashOnlyResponseBuffer.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
                 return CompilerClient::ResponseData{hashOnlyResponseWhat,
                                                     pirPrint};
             }
