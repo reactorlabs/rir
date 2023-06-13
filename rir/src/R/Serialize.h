@@ -80,3 +80,18 @@ static inline void OutSize(R_outpstream_t stream, size_t x) {
 static inline size_t InSize(R_inpstream_t stream) {
     return (size_t)InU64(stream);
 }
+
+static inline void WriteNullableItem(SEXP s, SEXP ref_table, R_outpstream_t stream) {
+    OutBool(stream, s != nullptr);
+    if (s) {
+        WriteItem(s, ref_table, stream);
+    }
+}
+
+static inline SEXP ReadNullableItem(SEXP ref_table, R_inpstream_t stream) {
+    if (InBool(stream)) {
+        return ReadItem(ref_table, stream);
+    } else {
+        return nullptr;
+    }
+}
