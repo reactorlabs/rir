@@ -67,13 +67,13 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
 void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, (int)size());
     OutInteger(out, (int)nargs);
-    for (int i = 0; i < nargs; i++) {
+    for (int i = 0; i < (int)nargs; i++) {
         OutChar(out, missing[i]);
     }
-    for (int i = 0; i < nargs; i++) {
+    for (int i = 0; i < (int)nargs; i++) {
         Pool::writeItem(names[i], refTable, out);
     }
-    for (int i = 0; i < nargs + ArgOffset; i++) {
+    for (int i = 0; i < (int)nargs + ArgOffset; i++) {
         WriteItem(getEntry(i), refTable, out);
     }
 }
