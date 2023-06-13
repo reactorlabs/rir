@@ -17,11 +17,11 @@ class UUID {
     uint64_t c;
     uint64_t d;
 
-    UUID() : a(0), b(0), c(0), d(0) {}
     UUID(uint64_t a, uint64_t b, uint64_t c, uint64_t d)
         : a(a), b(b), c(c), d(d) {}
 
   public:
+    UUID() : a(0), b(0), c(0), d(0) {}
     /// Generates a UUID for the data
     static UUID hash(const void* data, size_t size);
     /// Deserialize a UUID from the R stream
