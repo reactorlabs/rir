@@ -103,7 +103,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         assert(handle.size() < MAX_CODE_HANDLE_LENGTH);
         assert(kind == Kind::Native);
         assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
-        strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH);
+        strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH - 1);
         lazyCodeModule = module;
     }
     NativeCode nativeCode() {
