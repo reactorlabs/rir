@@ -387,12 +387,14 @@ test_compiler_server_client:
   except:
     - schedules
   script:
+    - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - /opt/rir/tools/fetch-llvm.sh
     - mkdir /opt/rir/build/debug && cd /opt/rir/build/debug && cmake -DCMAKE_BUILD_TYPE=Debug ../.. && make -j6
-    - /opt/rir/build/debug/bin/test-compiler-client-and-server
+    - ./bin/test-compiler-client-and-server; mkdir tmp && cp /tmp/test-* tmp/
     - /opt/rir/build/release/bin/test-compiler-client-and-server
   artifacts:
     paths:
-      - /tmp
+      - tmp
     when: on_failure
     expire_in: 1 week
 
