@@ -397,6 +397,7 @@ test_compiler_server_client:
   artifacts:
     paths:
       - results
+    when: always
     expire_in: 1 week
 
 # Test the benchmarks container before deploying
