@@ -76,8 +76,9 @@ struct PirTypeFeedback
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
   private:
-    PirTypeFeedback(int numCodes)
-        : RirRuntimeObject(sizeof(*this), numCodes) {}
+    explicit PirTypeFeedback(int numCodes)
+        : RirRuntimeObject(sizeof(*this), numCodes),
+          entry() {}
 
     MDEntry& getMDEntryOfSlot(size_t slot) {
         assert(slot < MAX_SLOT_IDX);
