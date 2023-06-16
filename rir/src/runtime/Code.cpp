@@ -32,6 +32,7 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
     assert(!fun || rir::Function::check(fun));
     if (fun)
         setEntry(3, fun);
+    setEntry(4, R_NilValue);
 }
 
 Code* Code::New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
@@ -52,11 +53,29 @@ Code* Code::NewNative(Immediate ast) {
     return New(Kind::Native, ast, 0, 0, 0, 0);
 }
 
-Code::~Code() {
-    // TODO: Not sure if this is actually called
-    // Otherwise the pointer will leak a few bytes
-    // We will leak SerialModule, although we already "leak" JITted modules so
-    // the serial version is probably not a big deal...
+void Code::setLazyCodeModuleFinalizer() {
+    auto finalizer = makeFinalizer(Code::finalizeLazyCodeModuleFromContainer);
+    setEntry(4, finalizer);
+}
+
+void Code::finalizeLazyCodeModuleFromContainer(SEXP sexp) {
+    Code::unpack(sexp)->finalizeLazyCodeModule();
+}
+
+void Code::finalizeLazyCodeModule() {
+    assert(lazyCodeModule);
+    // Causes this to free the shared reference
+    lazyCodeModule = nullptr;
+}
+
+void Code::lazyCode(const std::string& handle, const SerialModuleRef& module) {
+    assert(!handle.empty() && module != nullptr);
+    assert(handle.size() < MAX_CODE_HANDLE_LENGTH);
+    assert(kind == Kind::Native);
+    assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
+    strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH - 1);
+    lazyCodeModule = module;
+    setLazyCodeModuleFinalizer();
 }
 
 void Code::function(Function* fun) { setEntry(3, fun->container()); }
@@ -161,6 +180,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
         code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
         code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp);
+        code->setLazyCodeModuleFinalizer();
     }
     // Native code is always null here because it's lazy
     code->nativeCode_ = nullptr;
