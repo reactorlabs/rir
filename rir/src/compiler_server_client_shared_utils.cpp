@@ -8,9 +8,9 @@
 
 namespace rir {
 
-size_t PIR_COMPILE_SIZE_TO_HASH_ONLY =
-    getenv("PIR_COMPILE_SIZE_TO_HASH_ONLY")
-        ? strtol(getenv("PIR_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
+size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY =
+    getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY")
+        ? strtol(getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
         : 1024 * 1024;
 
 std::string printClosureVersionForCompilerServerComparison(pir::ClosureVersion* version) {
