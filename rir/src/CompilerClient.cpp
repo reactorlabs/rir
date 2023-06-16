@@ -116,7 +116,7 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         // Request data format =
         //   PIR_COMPILE_MAGIC
         // + sizeof(what)
-        // + what
+        // + serialize(what)
         // + sizeof(assumptions) (always 8)
         // + assumptions
         // + sizeof(name)

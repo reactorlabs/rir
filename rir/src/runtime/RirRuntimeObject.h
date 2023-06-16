@@ -71,6 +71,12 @@ struct RirRuntimeObject {
         return EXTERNALSXP_ENTRY(this->container(), pos);
     }
 
+    /// Creates an SEXP which, when the container is freed, will run finalizer
+    /// on it.
+    SEXP makeFinalizer(R_CFinalizer_t finalizer) const {
+        return R_MakeWeakRefC(container(),R_NilValue,finalizer,(Rboolean)true);
+    }
+
     RirRuntimeObject(uint32_t gc_area_start, uint32_t gc_area_length)
         : info{gc_area_start, gc_area_length, MAGIC} {
         uint8_t* start = (uint8_t*)this + gc_area_start;
