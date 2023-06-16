@@ -25,8 +25,13 @@ using namespace ctpl;
 // increase.
 static int NUM_THREADS;
 thread_pool* threads;
-static std::chrono::seconds PIR_CLIENT_TIMEOUT;
+static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
+
+static bool PIR_CLIENT_SKIP_DISCREPANCY_CHECK =
+    getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK") != nullptr &&
+    strcmp(getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK"), "") != 0 &&
+    strcmp(getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK"), "0") != 0;
 
 bool CompilerClient::_isRunning = false;
 static zmq::context_t* context;
@@ -59,9 +64,9 @@ void CompilerClient::tryInit() {
         serverAddrs.push_back(serverAddr);
     }
 #ifdef MULTI_THREADED_COMPILER_CLIENT
-    PIR_CLIENT_TIMEOUT = std::chrono::seconds(
+    PIR_CLIENT_TIMEOUT = std::chrono::milliseconds(
         getenv("PIR_CLIENT_TIMEOUT") == nullptr
-            ? 10
+            ? 10000
             : strtol(getenv("PIR_CLIENT_TIMEOUT"), nullptr, 10)
     );
     NUM_THREADS = (int)serverAddrs.size();
@@ -147,7 +152,7 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         request.putLong(sizeof(debug.style));
         request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
 
-        if (request.size() >= PIR_COMPILE_SIZE_TO_HASH_ONLY) {
+        if (request.size() >= PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY) {
             UUID requestHash = UUID::hash(request.data(), request.size());
             // Serialize the hash-only request
             // Request data format =
@@ -280,6 +285,9 @@ static void normalizePir(std::string& pir) {
 }
 
 static void checkDiscrepancy(std::string&& localPir, std::string&& remotePir) {
+    if (PIR_CLIENT_SKIP_DISCREPANCY_CHECK) {
+        return;
+    }
     normalizePir(localPir);
     normalizePir(remotePir);
     // Don't need to log if there's no discrepancy.
@@ -321,7 +329,7 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
     (void)std::async(std::launch::async, [=]() {
         // Wait for the response, with timeout if set
-        if (PIR_CLIENT_TIMEOUT == std::chrono::seconds(0)) {
+        if (PIR_CLIENT_TIMEOUT == std::chrono::milliseconds(0)) {
             response.wait();
         } else {
             switch (response.wait_for(PIR_CLIENT_TIMEOUT)) {

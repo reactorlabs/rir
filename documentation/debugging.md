@@ -168,6 +168,9 @@ debugging:
 * `rir.eval`: evaluates the code in RIR
 * `rir.body`: returns the body of rir-compiled function. The body is the vector
   containing its ast maps and code objects
+* `rir.serialize`: Serializes the SEXP, preserving RIR/PIR-compiled closures, to the given path
+* `rir.deserialize`: Deserializes and returns the SEXP at the given path
+* `rir.killCompilerServers`: (on client) send a special request to kill compiler servers connected to this client
 * `.printInvocation`: prints invocation during evaluation
 * `.int3`: breakpoint during evaluation
 
