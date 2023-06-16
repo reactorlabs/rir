@@ -387,15 +387,16 @@ test_compiler_server_client:
   except:
     - schedules
   script:
+    - mkdir $CI_PROJECT_DIR/results && mkdir $CI_PROJECT_DIR/results/debug && mkdir $CI_PROJECT_DIR/results/release
     - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - /opt/rir/tools/fetch-llvm.sh
     - mkdir /opt/rir/build/debug && cd /opt/rir/build/debug && cmake -DCMAKE_BUILD_TYPE=Debug ../.. && make -j6
-    - ./bin/test-compiler-client-and-server; mkdir tmp && cp /tmp/test-* tmp/
-    - /opt/rir/build/release/bin/test-compiler-client-and-server
+    - ./bin/test-compiler-client-and-server; cp /tmp/test-* $CI_PROJECT_DIR/results/debug
+    - cd /opt/rir/build/release
+    - ./bin/test-compiler-client-and-server; cp /tmp/test-* $CI_PROJECT_DIR/results/release
   artifacts:
     paths:
-      - tmp
-    when: on_failure
+      - results
     expire_in: 1 week
 
 # Test the benchmarks container before deploying
