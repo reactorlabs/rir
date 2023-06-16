@@ -4,6 +4,10 @@
 
 namespace rir {
 
+// ? idk why but this came up in the gitlab:
+//     style: Parameter 'p' can be declared with const [constParameter]
+// this is not true
+// cppcheck-suppress constParameter
 R_bcstack_t deserializeStackArg(Protect& p, SEXP refTable, R_inpstream_t inp) {
     R_bcstack_t res;
     res.tag = InInteger(inp);

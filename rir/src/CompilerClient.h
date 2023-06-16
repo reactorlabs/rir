@@ -39,7 +39,7 @@ class CompilerClient {
             : socketIndexRef(socketIndexRef), response(std::move(response)) {}
 #else
         ResponseData response;
-        Handle(ResponseData response) : response(std::move(response)) {}
+        explicit Handle(ResponseData response) : response(std::move(response)) {}
 #endif
       public:
         /// When we get response PIR, compares it with given locally-compiled

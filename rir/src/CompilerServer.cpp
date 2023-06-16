@@ -11,9 +11,10 @@
 #include <array>
 #include <zmq.hpp>
 
-#define SOFT_ASSERT(x) do {                                                    \
+#define SOFT_ASSERT(x, msg) do {                                               \
     if (!(x)) {                                                                \
-        std::cerr << "Assertion failed: " << #x << std::endl;                  \
+        std::cerr << "Assertion failed (client issue): " << msg << " (" << #x  \
+                  << ")" << std::endl;                                         \
         break;                                                                 \
     } } while (false)
 
@@ -126,7 +127,7 @@ void CompilerServer::tryRun() {
 
             SEXP what = deserialize(requestBuffer);
             auto assumptionsSize = requestBuffer.getLong();
-            SOFT_ASSERT(assumptionsSize == sizeof(Context) &&
+            SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");
             Context assumptions;
             requestBuffer.getBytes((uint8_t*)&assumptions, assumptionsSize);
@@ -135,7 +136,7 @@ void CompilerServer::tryRun() {
             name.resize(nameSize);
             requestBuffer.getBytes((uint8_t*)name.data(), nameSize);
             auto debugFlagsSize = requestBuffer.getLong();
-            SOFT_ASSERT(debugFlagsSize == sizeof(pir::DebugOptions::DebugFlags) &&
+            SOFT_ASSERT(debugFlagsSize == sizeof(pir::DebugOptions::DebugFlags),
                         "Invalid debug flags size");
             pir::DebugOptions::DebugFlags debugFlags;
             requestBuffer.getBytes((uint8_t*)&debugFlags, debugFlagsSize);
@@ -150,7 +151,7 @@ void CompilerServer::tryRun() {
             requestBuffer.getBytes((uint8_t*)functionFilterString.data(),
                                    functionFilterStringSize);
             auto debugStyleSize = requestBuffer.getLong();
-            SOFT_ASSERT(debugStyleSize == sizeof(pir::DebugStyle) &&
+            SOFT_ASSERT(debugStyleSize == sizeof(pir::DebugStyle),
                         "Invalid debug style size");
             pir::DebugStyle debugStyle;
             requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
@@ -183,7 +184,8 @@ void CompilerServer::tryRun() {
                                  response.size()),
                              zmq::send_flags::none);
             auto responseSize2 = response.size();
-            SOFT_ASSERT(responseSize == responseSize2);
+            SOFT_ASSERT(responseSize == responseSize2,
+                        "Client didn't receive the full response");
 
             std::cerr << "Sent response (" << responseSize << " bytes)"
                       << std::endl;

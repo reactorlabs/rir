@@ -104,7 +104,8 @@ struct ArglistOrder
 
   private:
     explicit ArglistOrder(size_t nCalls)
-        : RirRuntimeObject(0, 0), nCalls(nCalls) {}
+        : RirRuntimeObject(0, 0), nCalls(nCalls),
+          data() {}
 };
 
 #pragma pack(pop)
