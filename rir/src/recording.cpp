@@ -73,8 +73,12 @@ void Record::recordSpeculativeContext(const Code* code,
                 size_t idx;
                 if (i < observed.numTargets) {
                     auto target = observed.getTarget(code, i);
-                    auto rec = initOrGetRecording(target);
-                    idx = rec.first;
+                    if (Rf_isFunction(target)) {
+                        auto rec = initOrGetRecording(target);
+                        idx = rec.first;
+                    } else {
+                        idx = NO_INDEX;
+                    }
                 } else {
                     idx = NO_INDEX;
                 }
@@ -103,6 +107,7 @@ void Record::recordSpeculativeContext(const Code* code,
 
 std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
                                                             std::string name) {
+    assert(Rf_isFunction(cls));
     auto clsAddress = stringAddressOf(cls);
     auto r = recordings_index_.insert({clsAddress, fun_recordings_.size()});
     FunRecording* v;

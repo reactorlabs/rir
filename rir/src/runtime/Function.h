@@ -8,6 +8,8 @@
 
 namespace rir {
 
+class DispatchTable;
+
 /**
  * Aliases for readability.
  */
@@ -186,6 +188,21 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return deadCallReached_;
     }
 
+    void attachDispatchTable(DispatchTable* dt) {
+        // If a DT is already attached, only clearing it is allowed
+        if (dt != nullptr) {
+            assert(dispatchTable_ == nullptr &&
+                   "tried to insert Function into a second DispatchTable");
+        }
+        dispatchTable_ = dt;
+    }
+
+    DispatchTable* dispatchTable() const {
+        assert(dispatchTable_ &&
+               "Function was never inserted/was removed from DispatchTable");
+        return dispatchTable_;
+    }
+
   private:
     unsigned numArgs_;
 
@@ -199,6 +216,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
+    DispatchTable* dispatchTable_ = nullptr;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
     // locals contains: body

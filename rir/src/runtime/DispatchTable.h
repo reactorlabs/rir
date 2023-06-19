@@ -25,7 +25,9 @@ struct DispatchTable
 
     Function* get(size_t i) const {
         assert(i < size());
-        return Function::unpack(getEntry(i));
+        auto f = Function::unpack(getEntry(i));
+        assert(f->dispatchTable() == this);
+        return f;
     }
 
     Function* best() const {
@@ -37,6 +39,7 @@ struct DispatchTable
         auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==
                FunctionSignature::Environment::CallerProvided);
+        assert(f->dispatchTable() == this);
         return f;
     }
 
@@ -92,6 +95,7 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        f->attachDispatchTable(this);
     }
 
     bool contains(const Context& assumptions) const {
@@ -113,6 +117,7 @@ struct DispatchTable
             setEntry(i, getEntry(i + 1));
         }
         setEntry(i, nullptr);
+        funCode->function()->attachDispatchTable(nullptr);
         size_--;
     }
 
@@ -132,6 +137,7 @@ struct DispatchTable
                     // deopt loops
                     fun->addDeoptCount(old->deoptCount());
                     setEntry(i, fun->container());
+                    fun->attachDispatchTable(this);
                     assert(get(i) == fun);
                 }
                 return;
@@ -155,6 +161,7 @@ struct DispatchTable
 #endif
             // Evict one element and retry
             auto pos = 1 + (Random::singleton()() % (size() - 1));
+            get(pos)->attachDispatchTable(nullptr);
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
@@ -167,6 +174,7 @@ struct DispatchTable
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());
+        fun->attachDispatchTable(this);
 
 #ifdef DEBUG_DISPATCH
         std::cout << "Added version to DT, new order is: \n";
@@ -228,6 +236,8 @@ struct DispatchTable
 
         clone->size_ = j;
         clone->userDefinedContext_ = udc;
+        assert(false); // Cloning effectively makes multiple Functions have the
+                       // same DT, which breaks the backpointer thingy
         return clone;
     }
 
