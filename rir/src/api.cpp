@@ -322,6 +322,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             auto apply = [&](SEXP body, pir::ClosureVersion* c) {
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
+                std::cerr << "Function " << name << " has dispatch table "
+                          << DispatchTable::unpack(body) << std::endl;
                 DispatchTable::unpack(body)->insert(fun);
                 if (body == BODY(what))
                     done = fun;

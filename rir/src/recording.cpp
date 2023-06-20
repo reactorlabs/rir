@@ -464,13 +464,13 @@ void recordCompile(SEXP const cls, const std::string& name,
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) const {
-    for (auto& entry : dt_to_recording_index_) {
-        if (entry.first->baseline()->body() == code)
-            return entry.second;
+    auto entry = dt_to_recording_index_.find(code->function()->dispatchTable());
+    if (entry != dt_to_recording_index_.end()) {
+        return entry->second;
     }
 
     Rf_error(
-        "baseline code %p not found in current DispatchTable->RunRecorder map",
+        "baseline code %p not found in current DispatchTable->FunRecorder map",
         code);
 }
 
@@ -490,39 +490,8 @@ std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
         }
     }
 
-    // 2. try closures
-
-    Opcode* end = code->endCode();
-    Opcode* pc = code->code();
-    Opcode* prev = nullptr;
-    Opcode* pprev = nullptr;
-
-    while (pc < end) {
-        auto bc = BC::decode(pc, code);
-
-        switch (bc.bc) {
-        case Opcode::close_: {
-            // prev is the push_ of srcref
-            // pprev is the push_ of body
-
-            auto body = BC::decodeShallow(pprev).immediateConst();
-            auto dt = DispatchTable::unpack(body);
-
-            auto location = initOrGetRecording(dt);
-            if (dt->baseline()->body() == needle) {
-                return {location.first, -1};
-            }
-            break;
-        }
-        default: {
-        }
-        }
-        pprev = prev;
-        prev = pc;
-        pc = BC::next(pc);
-    }
-
-    return {-1, -1};
+    // 2. search globally
+    return {indexOfBaseline(needle), -1};
 }
 
 void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
@@ -535,28 +504,21 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     int funIdx = 0;
     auto dt = DispatchTable::unpack(BODY(cls));
     // it deopts from native so it cannot be the baseline RIR
-    for (int i = 1; i < dt->size(); i++) {
+    for (size_t i = 1; i < dt->size(); i++) {
         if (dt->get(i)->body() == c) {
             funIdx = i;
             break;
         }
     }
 
-    if (funIdx == 0) {
-        Rf_error("Could not find function index for code: %p in closure: %p", c,
-                 cls);
-    }
+    assert(funIdx != 0 && "Could not find deopted function index in its "
+                          "closure's dispatch table");
 
     auto reasonCodeIdx =
         recorder_.findIndex(dt->baseline()->body(), reason.srcCode());
 
-    if (reasonCodeIdx.first < 0) {
-        Rf_error(
-            "Could not find function index for code reason %p in haystack %p",
-            reason.srcCode(), dt->baseline()->body());
-    }
-
-    std::cerr << "deopt" << std::endl;
+    assert(reasonCodeIdx.first >= 0 &&
+           "Could not locate deopt reason location");
 
     // TODD
     DeoptEvent event(funIdx, reason.reason, reasonCodeIdx,

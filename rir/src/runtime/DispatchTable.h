@@ -106,6 +106,7 @@ struct DispatchTable
     }
 
     void remove(Code* funCode) {
+        std::cerr << "removing function " << funCode->function() << std::endl;
         size_t i = 1;
         for (; i < size(); ++i) {
             if (get(i)->body() == funCode)
@@ -116,8 +117,8 @@ struct DispatchTable
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
+        get(i)->attachDispatchTable(nullptr);
         setEntry(i, nullptr);
-        funCode->function()->attachDispatchTable(nullptr);
         size_--;
     }
 
@@ -136,6 +137,13 @@ struct DispatchTable
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
                     fun->addDeoptCount(old->deoptCount());
+                    if (getEntry(i)) {
+                        auto* overwritten = get(i);
+                        std::cerr << "overwrote function " << overwritten
+                                  << " in DT" << std::endl;
+                        overwritten->attachDispatchTable(nullptr);
+                    }
+
                     setEntry(i, fun->container());
                     fun->attachDispatchTable(this);
                     assert(get(i) == fun);
@@ -207,8 +215,9 @@ struct DispatchTable
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,
-                            Function::deserialize(refTable, inp)->container());
+            auto fun = Function::deserialize(refTable, inp);
+            table->setEntry(i, fun->container());
+            fun->attachDispatchTable(table);
         }
         UNPROTECT(1);
         return table;
@@ -225,19 +234,19 @@ struct DispatchTable
 
         auto clone = create(this->capacity());
         clone->setEntry(0, this->getEntry(0));
+        clone->get(0)->attachDispatchTable(clone);
 
         auto j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 clone->setEntry(j, getEntry(i));
+                clone->get(j)->attachDispatchTable(clone);
                 j++;
             }
         }
 
         clone->size_ = j;
         clone->userDefinedContext_ = udc;
-        assert(false); // Cloning effectively makes multiple Functions have the
-                       // same DT, which breaks the backpointer thingy
         return clone;
     }
 
