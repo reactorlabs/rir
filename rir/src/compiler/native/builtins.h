@@ -87,6 +87,7 @@ struct NativeBuiltins {
         length,
         recordTypefeedback,
         deopt,
+        recordCall,
         assertFail,
         printValue,
         extract11,

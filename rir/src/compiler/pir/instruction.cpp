@@ -10,6 +10,8 @@
 #include "api.h"
 #include "compiler/analysis/cfg.h"
 #include "runtime/DispatchTable.h"
+#include "singleton_values.h"
+#include "type.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 
@@ -1013,6 +1015,19 @@ void Deopt::printArgs(std::ostream& out, bool tty) const {
 
 bool Deopt::hasDeoptReason() const {
     return deoptReason() != DeoptReasonWrapper::unknown();
+}
+
+RecordCall::RecordCall(unsigned idx)
+    : FixedLenInstruction(PirType::voyd(), {{PirType::any()}},
+                          {{UnknownDeoptTrigger::instance()}}),
+      idx(idx) {}
+
+Value* RecordCall::getCallee() const { return arg<0>().val(); }
+void RecordCall::setCallee(Value* callee) { arg<0>().val() = callee; }
+
+void RecordCall::printArgs(std::ostream& out, bool tty) const {
+    out << "#" << idx << " ";
+    getCallee()->printRef(out);
 }
 
 MkCls::MkCls(Closure* cls, SEXP formals, SEXP srcRef,

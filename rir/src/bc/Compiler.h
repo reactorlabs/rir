@@ -21,6 +21,8 @@ class Compiler {
     SEXP formals;
     SEXP closureEnv;
 
+    unsigned recordCallsSize;
+
     Preserve preserve;
 
     explicit Compiler(SEXP exp)
@@ -55,7 +57,8 @@ class Compiler {
         auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        auto dt = DispatchTable::create();
+        auto dt =
+            DispatchTable::create(DEFAULT_TABLE_CAPACITY, c.recordCallsSize);
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
@@ -80,7 +83,8 @@ class Compiler {
         auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        auto dt = DispatchTable::create();
+        auto dt =
+            DispatchTable::create(DEFAULT_TABLE_CAPACITY, c.recordCallsSize);
         p(dt->container());
 
         // Initialize the vtable. Initially the table has one entry, which is

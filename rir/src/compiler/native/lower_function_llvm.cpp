@@ -3594,6 +3594,13 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+            case Tag::RecordCall: {
+                auto rec = RecordCall::Cast(i);
+                call(NativeBuiltins::get(NativeBuiltins::Id::recordCall),
+                     {paramClosure(), c(rec->idx), loadSxp(rec->arg(0).val())});
+                break;
+            }
+
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(i);
                 auto parent = loadSxp(mkenv->env());

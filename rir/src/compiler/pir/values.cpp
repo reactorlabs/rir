@@ -3,6 +3,7 @@
 #include "tag.h"
 
 #include "R/Printing.h"
+#include "type.h"
 #include "utils/Pool.h"
 
 namespace rir {

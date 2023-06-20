@@ -14,6 +14,7 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 
 #include <cassert>
@@ -57,6 +58,11 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 
     std::cout << "== closure " << what << " (dispatch table " << t << ", env "
               << CLOENV(what) << ") ==\n";
+
+    std::cout << "== speculative context ==" << std::endl;
+    t->typeFeedback().print(std::cout, t->baseline()->body());
+    std::cout << std::endl;
+
     for (size_t entry = 0; entry < t->size(); ++entry) {
         Function* f = t->get(entry);
         std::cout << "= version " << entry << " (" << f << ") =\n";

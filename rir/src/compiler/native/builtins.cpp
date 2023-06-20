@@ -10,6 +10,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback.h"
+#include "types_llvm.h"
 #include "utils/Pool.h"
 
 #include "R/Protect.h"
@@ -827,6 +828,12 @@ static SEXP deoptSentinelContainer = []() {
     UNPROTECT(1);
     return store;
 }();
+
+void recordCallImpl(SEXP cls, unsigned idx, SEXP callee) {
+    // Rprintf("record: closure: %p index: %d callee: %p\n", cls, idx, callee);
+    auto dt = DispatchTable::unpack(BODY(cls));
+    dt->typeFeedback().record_callee(idx, dt->baseline()->body(), callee);
+}
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
@@ -2428,6 +2435,9 @@ void NativeBuiltins::initializeBuiltins() {
         (void*)&recordTypefeedbackImpl,
         llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
         {}};
+    get_(Id::recordCall) = {
+        "recordCall", (void*)&recordCallImpl,
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i32, t::SEXP}, false)};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(t::t_void,

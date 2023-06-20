@@ -4,11 +4,13 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "TypeFeedback.h"
 #include "utils/random.h"
 
 namespace rir {
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
+#define DEFAULT_TABLE_CAPACITY 20
 
 typedef SEXP DispatchTableEntry;
 
@@ -184,20 +186,21 @@ struct DispatchTable
 #endif
     }
 
-    static DispatchTable* create(size_t capacity = 20) {
+    static DispatchTable* create(size_t capacity, size_t recordCalls) {
         size_t sz =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
-        return new (INTEGER(s)) DispatchTable(capacity);
+        return new (INTEGER(s)) DispatchTable(capacity, recordCalls);
     }
 
     size_t capacity() const { return info.gc_area_length; }
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
-        DispatchTable* table = create();
+        DispatchTable* table = create(1, 1);
         PROTECT(table->container());
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
+        // FIXME: feedback
         for (size_t i = 0; i < table->size(); i++) {
             table->setEntry(i,
                             Function::deserialize(refTable, inp)->container());
@@ -209,13 +212,15 @@ struct DispatchTable
     void serialize(SEXP refTable, R_outpstream_t out) const {
         HashAdd(container(), refTable);
         OutInteger(out, 1);
+        // FIXME: feedback
         baseline()->serialize(refTable, out);
     }
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {
 
-        auto clone = create(this->capacity());
+        auto clone =
+            create(this->capacity(), this->typeFeedback_.callees_size());
         clone->setEntry(0, this->getEntry(0));
 
         auto j = 1;
@@ -235,17 +240,21 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
+    TypeFeedback& typeFeedback() { return typeFeedback_; }
+
   private:
     DispatchTable() = delete;
-    explicit DispatchTable(size_t cap)
+    explicit DispatchTable(size_t capacity, size_t recordCallsSize)
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
               sizeof(DispatchTable),
               // GC area is just the pointers in the entry array
-              cap) {}
+              capacity),
+          typeFeedback_(TypeFeedback(recordCallsSize)) {}
 
     size_t size_ = 0;
     Context userDefinedContext_;
+    TypeFeedback typeFeedback_;
 };
 
 #pragma pack(pop)

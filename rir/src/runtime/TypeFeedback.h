@@ -4,8 +4,12 @@
 #include "R/r.h"
 #include "common.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <ostream>
+#include <vector>
 
 namespace rir {
 
@@ -28,12 +32,13 @@ struct ObservedCallees {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
     uint32_t invalid : 1;
+    std::array<unsigned, MaxTargets> targets;
 
     void record(Code* caller, SEXP callee, bool invalidateWhenFull = false);
     SEXP getTarget(const Code* code, size_t pos) const;
-
-    std::array<unsigned, MaxTargets> targets;
+    void print(std::ostream& out, const Code* code) const;
 };
+
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
@@ -112,11 +117,11 @@ struct ObservedValues {
                     << ((stateBeforeLastForce ==
                          ObservedValues::StateBeforeLastForce::value)
                             ? "value"
-                            : (stateBeforeLastForce ==
-                               ObservedValues::StateBeforeLastForce::
-                                   evaluatedPromise)
-                                  ? "evaluatedPromise"
-                                  : "promise");
+                        : (stateBeforeLastForce ==
+                           ObservedValues::StateBeforeLastForce::
+                               evaluatedPromise)
+                            ? "evaluatedPromise"
+                            : "promise");
             }
         } else {
             out << "<?>";
@@ -245,6 +250,29 @@ struct DeoptReason {
 };
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
+
+class TypeFeedback {
+    std::unique_ptr<ObservedCallees[]> callees_;
+    unsigned callees_size_;
+
+  public:
+    TypeFeedback(unsigned recordCallsSize)
+        : callees_(new ObservedCallees[recordCallsSize]),
+          callees_size_(recordCallsSize) {
+        for (unsigned i = 0; i < recordCallsSize; i++) {
+            callees_[i] = ObservedCallees{};
+        }
+    }
+
+    void record_callee(unsigned idx, Code* caller, SEXP callee) {
+        assert(idx < callees_size_);
+        callees_[idx].record(caller, callee);
+    }
+
+    unsigned callees_size() { return callees_size_; }
+    ObservedCallees& getCallees(unsigned idx);
+    void print(std::ostream& out, const Code* code) const;
+};
 
 #pragma pack(pop)
 

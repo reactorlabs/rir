@@ -23,7 +23,11 @@ class CodeStream;
 BC_NOARGS(V, _)
 #undef V
 
-BC BC::recordCall() { return BC(Opcode::record_call_); }
+BC BC::recordCall(unsigned idx) {
+    ImmediateArguments i;
+    i.i = idx;
+    return BC(Opcode::record_call_, i);
+}
 
 BC BC::recordType() { return BC(Opcode::record_type_); }
 
