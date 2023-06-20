@@ -17,7 +17,8 @@ class Rir2Pir {
   public:
     Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
             const std::string& name,
-            const std::list<PirTypeFeedback*>& outerFeedback);
+            const std::list<PirTypeFeedback*>& outerFeedback,
+            DispatchTable* dt);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
     bool tryCompileContinuation(Builder& insert, Opcode* start,
@@ -58,6 +59,7 @@ class Rir2Pir {
     ClosureLog& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
+    DispatchTable* table;
     std::unordered_map<SEXP, MkCls*> localFuns;
 
     std::unordered_set<SEXP> deoptedCallTargets;
@@ -89,7 +91,8 @@ class PromiseRir2Pir : public Rir2Pir {
                    const std::string& name,
                    const std::list<PirTypeFeedback*>& outerFeedback,
                    bool inlining)
-        : Rir2Pir(cmp, cls, log, name, outerFeedback), inlining_(inlining) {}
+        : Rir2Pir(cmp, cls, log, name, outerFeedback, nullptr),
+          inlining_(inlining) {}
 
   private:
     bool inlining_;

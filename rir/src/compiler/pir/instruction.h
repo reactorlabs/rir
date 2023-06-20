@@ -2716,6 +2716,18 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
+class RecordCall : public FixedLenInstruction<Tag::RecordCall, RecordCall, 1,
+                                              Effects::AnyI(), HasEnvSlot::No,
+                                              Controlflow::None> {
+  public:
+    unsigned idx;
+
+    explicit RecordCall(unsigned idx);
+    Value* getCallee() const;
+    void setCallee(Value* callee);
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
 /*
  * if the test fails, jump to the deopt branch of the checkpoint.
  */

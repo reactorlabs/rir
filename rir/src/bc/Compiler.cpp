@@ -201,8 +201,11 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
+    unsigned nextRecordCallIdx() { return recordCallIdx++; }
+
   private:
     unsigned int pushedPromiseContexts = 0;
+    unsigned recordCallIdx = 0;
 };
 
 struct LoadArgsResult {
@@ -943,7 +946,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::ldfun(farrow_sym);
 
             if (Compiler::profile)
-                cs << BC::recordCall();
+                cs << BC::recordCall(ctx.nextRecordCallIdx());
 
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
@@ -1872,7 +1875,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     }
 
     if (Compiler::profile)
-        cs << BC::recordCall();
+        cs << BC::recordCall(ctx.nextRecordCallIdx());
 
     auto compileCall = [&](LoadArgsResult& info) {
         if (info.hasDots) {
@@ -1892,7 +1895,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadOneArg(ctx, args, ArgType::RAW_VALUE, info);
         compileLoadOneArg(ctx, CDR(args), ArgType::RAW_VALUE, info);
         if (Compiler::profile)
-            cs << BC::recordCall();
+            cs << BC::recordCall(ctx.nextRecordCallIdx());
         // Load the rest of the args
         compileLoadArgs(ctx, ast, fun, args, info, voidContext, 2, 0);
     } else {
@@ -2058,6 +2061,7 @@ SEXP Compiler::finalize() {
     CodeVerifier::verifyFunctionLayout(function.function()->container());
 #endif
 
+    recordCallsSize = ctx.nextRecordCallIdx();
     return function.function()->container();
 }
 

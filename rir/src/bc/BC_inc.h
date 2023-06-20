@@ -152,7 +152,6 @@ class BC {
         uint32_t i;
         RirTypecheck typecheck;
         NumLocals loc;
-        ObservedCallees callFeedback;
         ObservedValues typeFeedback;
         ObservedTest testFeedback;
         PoolAndCachePositionRange poolAndCache;
@@ -309,7 +308,7 @@ class BC {
 #define V(NESTED, name, name_) inline static BC name();
     BC_NOARGS(V, _)
 #undef V
-    inline static BC recordCall();
+    inline static BC recordCall(unsigned idx);
     inline static BC recordBinop();
     inline static BC recordType();
     inline static BC recordTest();
@@ -455,13 +454,6 @@ class BC {
             break;
         }
 
-        case Opcode::record_call_: {
-            // Read call target feedback from the extra pool
-            for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
-                callFeedbackExtra().targets.push_back(
-                    immediate.callFeedback.getTarget(code, i));
-            break;
-        }
         default: {
         }
         }
@@ -580,10 +572,8 @@ class BC {
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
-            memcpy(&immediate.i, pc, sizeof(immediate.i));
-            break;
         case Opcode::record_call_:
-            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
+            memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
         case Opcode::record_test_:
             memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,

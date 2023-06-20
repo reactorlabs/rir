@@ -67,5 +67,11 @@ class Const : public ValueImpl<Const, Tag::Constant> {
     friend class Module;
 };
 
+class Index : public ValueImpl<Index, Tag::RecordCall> {
+  private:
+    explicit Index(unsigned idx);
+    unsigned idx;
+};
+
 } // namespace pir
 } // namespace rir

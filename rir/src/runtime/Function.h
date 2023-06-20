@@ -8,6 +8,8 @@
 
 namespace rir {
 
+struct DispatchTable;
+
 /**
  * Aliases for readability.
  */
@@ -135,7 +137,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         RIR_FUNCTION_FLAGS(V)
 #undef V
 
-        FIRST = Deopt,
+            FIRST = Deopt,
         LAST = DisableNumArgumentsSpezialization
     };
     EnumSet<Flag> flags;

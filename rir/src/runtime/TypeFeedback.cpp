@@ -6,6 +6,7 @@
 #include "runtime/Function.h"
 
 #include <cassert>
+#include <ostream>
 
 namespace rir {
 
@@ -13,7 +14,6 @@ void ObservedCallees::record(Code* caller, SEXP callee,
                              bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
-
 
     if (numTargets < MaxTargets) {
         int i = 0;
@@ -108,6 +108,39 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::EnvStubMaterialized: {
         break;
     }
+    }
+}
+
+void ObservedCallees::print(std::ostream& out, const Code* code) const {
+    if (taken == ObservedCallees::CounterOverflow)
+        out << "*, <";
+    else
+        out << taken << ", <";
+    if (numTargets == ObservedCallees::MaxTargets)
+        out << "*>, ";
+    else
+        out << numTargets << ">, ";
+
+    out << (invalid ? "invalid" : "valid");
+    out << (numTargets ? ", " : " ");
+
+    for (unsigned i = 0; i < numTargets; ++i) {
+        auto target = getTarget(code, i);
+        out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
+    }
+}
+
+ObservedCallees& TypeFeedback::getCallees(unsigned idx) {
+    assert(idx < callees_size_);
+    return callees_[idx];
+}
+
+void TypeFeedback::print(std::ostream& out, const Code* code) const {
+    out << "== callees:" << std::endl;
+    for (unsigned i = 0; i < callees_size_; i++) {
+        out << "#" << i << ": ";
+        callees_[i].print(out, code);
+        out << std::endl;
     }
 }
 

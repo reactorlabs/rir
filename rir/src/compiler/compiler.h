@@ -57,7 +57,8 @@ class Compiler {
 
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const Context& ctx, bool root, MaybeCls success,
-                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback);
+                        Maybe fail, std::list<PirTypeFeedback*> outerFeedback,
+                        DispatchTable* table, bool baseline);
 
     Preserve preserve_;
 

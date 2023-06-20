@@ -55,7 +55,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
                                                      tbl->userDefinedContext());
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
-                   success, fail, outerFeedback);
+                   success, fail, outerFeedback, tbl, tbl->size() == 1);
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -71,7 +71,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback);
+                   fail, outerFeedback, src, src->size() == 1);
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
@@ -89,7 +89,8 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
+    // TODO: baseline?
+    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, tbl);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
         log.flush();
@@ -105,7 +106,8 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                               const Context& ctx, bool root, MaybeCls success,
                               Maybe fail,
-                              std::list<PirTypeFeedback*> outerFeedback) {
+                              std::list<PirTypeFeedback*> outerFeedback,
+                              DispatchTable* table, bool baseline) {
 
     if (!ctx.includes(minimalContext)) {
         for (const auto a : minimalContext) {
@@ -141,7 +143,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
-    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback);
+    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback, table);
 
     auto& context = version->context();
     bool failedToCompileDefaultArgs = false;
