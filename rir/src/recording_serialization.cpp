@@ -20,7 +20,8 @@ SEXP to_sexp(
     auto vec = PROTECT(Rf_mkNamed(VECSXP, (const char**)keys.get()));
     ki = 0;
     for (auto& kv : obj) {
-        SET_VECTOR_ELT(vec, ki++, to_sexp(kv.second));
+        SET_VECTOR_ELT(vec, ki++, PROTECT(to_sexp(kv.second)));
+        UNPROTECT(1);
     }
 
     UNPROTECT(1);
@@ -175,11 +176,11 @@ DeoptReason::Reason deopt_reason_from_sexp(SEXP sexp) {
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
     const char* fields[] = {"name", "env", "closure", "events", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
-    SET_VECTOR_ELT(vec, 0, Rf_mkString(obj.name.c_str()));
-    SET_VECTOR_ELT(vec, 1, Rf_mkString(obj.env.c_str()));
+    SET_VECTOR_ELT(vec, 0, PROTECT(Rf_mkString(obj.name.c_str())));
+    SET_VECTOR_ELT(vec, 1, PROTECT(Rf_mkString(obj.env.c_str())));
     SET_VECTOR_ELT(vec, 2, obj.closure);
-    SET_VECTOR_ELT(vec, 3, to_sexp(obj.events));
-    UNPROTECT(1);
+    SET_VECTOR_ELT(vec, 3, PROTECT(to_sexp(obj.events)));
+    UNPROTECT(4);
     return vec;
 }
 

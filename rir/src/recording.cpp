@@ -151,10 +151,6 @@ Record::initOrGetRecording(const DispatchTable* dt, std::string name) {
     if (dt_index != dt_to_recording_index_.end()) {
         return {dt_index->second, fun_recordings_[dt_index->second]};
     } else {
-        // TODO
-        Rf_error("unreachable?");
-
-        // If not, we add an empty FunRecording for it
         FunRecording dummyRecorder = {std::move(name), {}, R_NilValue, {}};
 
         auto insertion_index = fun_recordings_.size();
@@ -288,8 +284,9 @@ void Replay::replaySpeculativeContext(
                     continue;
                 }
 
-                SEXP callee = replayClosure(callee_idx);
+                SEXP callee = PROTECT(replayClosure(callee_idx));
                 feedback->record(code, callee);
+                UNPROTECT(1);
             }
 
             break;
@@ -530,8 +527,9 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
 }
 
 SEXP setClassName(SEXP s, const char* className) {
-    SEXP t = Rf_mkString(className);
+    SEXP t = PROTECT(Rf_mkString(className));
     Rf_setAttrib(s, R_ClassSymbol, t);
+    UNPROTECT(1);
     return s;
 }
 
