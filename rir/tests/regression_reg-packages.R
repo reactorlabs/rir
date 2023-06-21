@@ -1,3 +1,7 @@
+if (Sys.getenv("RIR_SERIALIZE_CHAOS") != "")
+  q()
+
+
 unlockBinding(".make_numeric_version", .BaseNamespaceEnv)
 .BaseNamespaceEnv$.make_numeric_version <-
 function(x, strict = TRUE, regexp, classes = NULL)
