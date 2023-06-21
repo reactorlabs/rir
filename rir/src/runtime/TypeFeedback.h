@@ -251,6 +251,8 @@ struct DeoptReason {
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
 
+enum class TypeFeedbackKind : uint8_t { Callee, Test, Value };
+
 class TypeFeedback {
     std::unique_ptr<ObservedCallees[]> callees_;
     unsigned callees_size_;
@@ -270,7 +272,7 @@ class TypeFeedback {
     }
 
     unsigned callees_size() { return callees_size_; }
-    ObservedCallees& getCallees(unsigned idx);
+    ObservedCallees& callees(unsigned idx);
     void print(std::ostream& out, const Code* code) const;
 };
 

@@ -130,7 +130,7 @@ void ObservedCallees::print(std::ostream& out, const Code* code) const {
     }
 }
 
-ObservedCallees& TypeFeedback::getCallees(unsigned idx) {
+ObservedCallees& TypeFeedback::callees(unsigned idx) {
     assert(idx < callees_size_);
     return callees_[idx];
 }

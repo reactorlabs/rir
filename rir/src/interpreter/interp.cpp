@@ -2306,9 +2306,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            ObservedCallees* feedback = (ObservedCallees*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
+            ObservedCallees& feedback =
+                c->function()->dispatchTable()->typeFeedback().callees(idx);
             SEXP callee = ostack_top();
-            feedback->record(c, callee);
+            feedback.record(c, callee);
             pc += sizeof(ObservedCallees);
             NEXT();
         }

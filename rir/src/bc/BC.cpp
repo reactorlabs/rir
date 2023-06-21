@@ -323,8 +323,7 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_type_ &&
-        bc != Opcode::record_test_)
+    if (bc != Opcode::record_type_ && bc != Opcode::record_test_)
         printOpcode(out);
 
     switch (bc) {
@@ -395,7 +394,7 @@ void BC::print(std::ostream& out) const {
         out << (BC::RirTypecheck)immediate.i;
         break;
     case Opcode::record_call_: {
-        out << "[ record_call #" << immediate.i << "]";
+        out << "#" << immediate.i;
         break;
     }
 

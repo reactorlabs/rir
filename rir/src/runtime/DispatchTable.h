@@ -106,8 +106,11 @@ struct DispatchTable
     void remove(Code* funCode) {
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->body() == funCode)
+            auto fun = get(i);
+            if (fun->body() == funCode) {
+                fun->dispatchTable(nullptr);
                 break;
+            }
         }
         if (i == size())
             return;
@@ -124,6 +127,7 @@ struct DispatchTable
         assert(size() > 0);
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
+        fun->dispatchTable(this);
         auto assumptions = fun->context();
         size_t i;
         for (i = size() - 1; i > 0; --i) {
@@ -136,6 +140,7 @@ struct DispatchTable
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }
+                old->dispatchTable(nullptr);
                 return;
             }
             if (!(assumptions < get(i)->context())) {
