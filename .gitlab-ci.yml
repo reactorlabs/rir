@@ -391,10 +391,10 @@ test_compiler_server_client:
     - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - /opt/rir/tools/fetch-llvm.sh
     - mkdir /opt/rir/build/debug && cd /opt/rir/build/debug && cmake -DCMAKE_BUILD_TYPE=Debug ../.. && make -j6
-    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server
+    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server || exit 1
     - cp /tmp/test-compiler-server-actual.out /tmp/test-compiler-client-actual.out $CI_PROJECT_DIR/results/debug/
     - cd /opt/rir/build/release
-    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server
+    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server || exit 1
     - cp /tmp/test-compiler-server-actual.out /tmp/test-compiler-client-actual.out $CI_PROJECT_DIR/results/release/
   artifacts:
     paths:
