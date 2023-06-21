@@ -280,7 +280,7 @@ test_serialize:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
     - RIR_SERIALIZE_CHAOS=5 bin/tests
-    - PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=5 bin/gnur-make-tests check || $SAVE_LOGS
+    - PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=50 bin/gnur-make-tests check || $SAVE_LOGS
     - RIR_SERIALIZE_CHAOS=10 bin/tests
   artifacts:
     paths:
