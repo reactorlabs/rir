@@ -188,6 +188,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return deadCallReached_;
     }
 
+    void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
+    DispatchTable* dispatchTable() { return dispatchTable_; }
+
   private:
     unsigned numArgs_;
 
@@ -201,6 +204,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
+    DispatchTable* dispatchTable_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
     // locals contains: body

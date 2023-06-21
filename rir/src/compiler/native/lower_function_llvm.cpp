@@ -3,6 +3,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "builtins.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/native/allocator.h"
 #include "compiler/native/builtins.h"
@@ -23,6 +24,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GlobalObject.h>
@@ -3594,10 +3596,14 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
+                // FIXME: can I have just one record instruction? with 2 bits
+                // for the kind?
             case Tag::RecordCall: {
                 auto rec = RecordCall::Cast(i);
-                call(NativeBuiltins::get(NativeBuiltins::Id::recordCall),
-                     {paramClosure(), c(rec->idx), loadSxp(rec->arg(0).val())});
+                call(
+                    NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
+                    {c((unsigned)TypeFeedbackKind::Callee), c(rec->idx),
+                     paramClosure(), loadSxp(rec->arg(0).val())});
                 break;
             }
 
@@ -6131,19 +6137,24 @@ void LowerFunctionLLVM::compile() {
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback() &&
                     i->typeFeedback().feedbackOrigin.pc()) {
-                    call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
-                         {c((void*)i->typeFeedback().feedbackOrigin.pc()),
-                          c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
-                          load(i)});
+                    // FIXME: record
+                    // call(NativeBuiltins::get(
+                    //          NativeBuiltins::Id::recordTypefeedback),
+                    //      {c((void*)i->typeFeedback().feedbackOrigin.pc()),
+                    //       c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
+                    //       load(i)});
                 }
                 if (i->hasCallFeedback()) {
+                    assert(false);
                     assert(i->callFeedback().feedbackOrigin.pc());
-                    call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
-                         {c((void*)i->callFeedback().feedbackOrigin.pc()),
-                          c((void*)i->callFeedback().feedbackOrigin.srcCode()),
-                          load(i)});
+                    // FIXME: record
+                    // call(NativeBuiltins::get(
+                    //          NativeBuiltins::Id::recordTypefeedback),
+                    //      {c((unsigned)TypeFeedbackKind::Callee),
+                    //       // TODO: need the offset
+                    //       c((void*)i->callFeedback().feedbackOrigin.pc()),
+                    //       c((void*)i->callFeedback().feedbackOrigin.srcCode()),
+                    //       load(i)});
                 }
             }
 

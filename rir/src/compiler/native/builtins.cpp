@@ -961,34 +961,36 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
-    switch (*pos) {
-    case Opcode::record_test_: {
-        ObservedTest* feedback = (ObservedTest*)(pos + 1);
-        feedback->record(value);
-        break;
-    }
-    case Opcode::record_type_: {
-        assert(*pos == Opcode::record_type_);
-        ObservedValues* feedback = (ObservedValues*)(pos + 1);
-        feedback->record(value);
-        if (TYPEOF(value) == PROMSXP) {
-            if (PRVALUE(value) == R_UnboundValue &&
-                feedback->stateBeforeLastForce < ObservedValues::promise)
-                feedback->stateBeforeLastForce = ObservedValues::promise;
-            else if (feedback->stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
-                feedback->stateBeforeLastForce =
-                    ObservedValues::evaluatedPromise;
-        } else {
-            if (feedback->stateBeforeLastForce < ObservedValues::value)
-                feedback->stateBeforeLastForce = ObservedValues::value;
-        }
-        break;
-    }
-    case Opcode::record_call_: {
-        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
-        feedback->record(code, value);
+void recordTypefeedbackImpl(TypeFeedbackKind kind, unsigned idx, SEXP cls,
+                            SEXP value) {
+    switch (kind) {
+    // case TypeFeedbackKind::Test: {
+    //     ObservedTest* feedback = (ObservedTest*)(pos + 1);
+    //     feedback->record(value);
+    //     break;
+    // }
+    // case TypeFeedbackKind::Value: {
+    //     ObservedValues* feedback = (ObservedValues*)(pos + 1);
+    //     feedback->record(value);
+    //     if (TYPEOF(value) == PROMSXP) {
+    //         if (PRVALUE(value) == R_UnboundValue &&
+    //             feedback->stateBeforeLastForce < ObservedValues::promise)
+    //             feedback->stateBeforeLastForce = ObservedValues::promise;
+    //         else if (feedback->stateBeforeLastForce <
+    //                  ObservedValues::evaluatedPromise)
+    //             feedback->stateBeforeLastForce =
+    //                 ObservedValues::evaluatedPromise;
+    //     } else {
+    //         if (feedback->stateBeforeLastForce < ObservedValues::value)
+    //             feedback->stateBeforeLastForce = ObservedValues::value;
+    //     }
+    //     break;
+    // }
+    case TypeFeedbackKind::Callee: {
+        auto dt = DispatchTable::unpack(BODY(cls));
+        auto baseline = dt->baseline()->body();
+        auto& feedback = dt->typeFeedback().callees(idx);
+        feedback.record(baseline, value);
         break;
     }
     default:
@@ -2433,7 +2435,8 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::recordTypefeedback) = {
         "recordTypefeedback",
         (void*)&recordTypefeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
+        llvm::FunctionType::get(t::t_void, {t::i32, t::i32, t::SEXP, t::SEXP},
+                                false),
         {}};
     get_(Id::recordCall) = {
         "recordCall", (void*)&recordCallImpl,

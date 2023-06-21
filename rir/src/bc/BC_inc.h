@@ -405,14 +405,6 @@ class BC {
             extraInformation.get());
     }
 
-    CallFeedbackExtraInformation& callFeedbackExtra() const {
-        assert(bc == Opcode::record_call_ && "not a record call instruction");
-        assert(extraInformation.get() &&
-               "missing extra information. created through decodeShallow?");
-        return *static_cast<CallFeedbackExtraInformation*>(
-            extraInformation.get());
-    }
-
   private:
     void allocExtraInformation() {
         assert(extraInformation == nullptr);
@@ -425,10 +417,6 @@ class BC {
         case Opcode::call_dots_:
         case Opcode::named_call_: {
             extraInformation.reset(new CallInstructionExtraInformation);
-            break;
-        }
-        case Opcode::record_call_: {
-            extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
         default: {

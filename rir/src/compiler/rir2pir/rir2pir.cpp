@@ -439,11 +439,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (table != nullptr && table->size() == 1) {
             // the baseline function does what the record_call_ instruction does
             // in RIR
+            // FIXME: use one RecordTypeFeedback?
             auto rec = insert(new RecordCall(bc.immediate.i));
             rec->setCallee(target);
         } else {
             const auto& feedback =
-                table->typeFeedback().getCallees(bc.immediate.i);
+                table->typeFeedback().callees(bc.immediate.i);
 
             if (!inPromise() && !inlining() && feedback.taken == 0 &&
                 insert.function->optFunction->invocationCount() > 1 &&
