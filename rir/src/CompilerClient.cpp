@@ -277,6 +277,40 @@ void CompilerClient::killServers() {
     std::cerr << "Done killing connected servers, client is no longer running" << std::endl;
 }
 
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+ResponseData CompilerClient::Handle::getResponse() {
+    // Wait for the response, with timeout if set
+    if (PIR_CLIENT_TIMEOUT == std::chrono::milliseconds(0)) {
+        response.wait();
+    } else {
+        switch (response.wait_for(PIR_CLIENT_TIMEOUT)) {
+        case std::future_status::ready:
+        break;
+        case std::future_status::timeout: {
+        std::cerr << console::with_red("Timeout waiting for remote PIR")
+                  << std::endl;
+        // Disconnect because the server probably crashed, and we want
+        // to be able to restart without restarting the client; it will
+        // attempt to reconnect before sending the next request
+        auto socketIndex = *socketIndexRef;
+        if (socketIndex != -1) {
+            std::cerr << "Disconnecting " << socketIndex << ", will reconnect on next request" << std::endl;
+            auto socket = sockets[socketIndex];
+            auto socketAddr = serverAddrs[socketIndex];
+            socket->disconnect(socketAddr);
+            socketsConnected[socketIndex] = false;
+        }
+        return;
+        }
+        case std::future_status::deferred:
+        assert(false);
+        }
+    }
+    // Get the response which is ready now
+    return response.get();
+}
+#endif
+
 static void normalizePir(std::string& pir) {
     // Replace addresses with 0xXXXXXXXX, since they will be different
     static const std::regex ADDRESS_REGEX("0x[0-9a-fA-F]+");
@@ -328,35 +362,7 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
     // Tried using a second thread-pool here but it causes "mutex lock failed:
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
     (void)std::async(std::launch::async, [=]() {
-        // Wait for the response, with timeout if set
-        if (PIR_CLIENT_TIMEOUT == std::chrono::milliseconds(0)) {
-            response.wait();
-        } else {
-            switch (response.wait_for(PIR_CLIENT_TIMEOUT)) {
-            case std::future_status::ready:
-                break;
-            case std::future_status::timeout: {
-                std::cerr << console::with_red("Timeout waiting for remote PIR")
-                          << std::endl;
-                // Disconnect because the server probably crashed, and we want
-                // to be able to restart without restarting the client; it will
-                // attempt to reconnect before sending the next request
-                auto socketIndex = *socketIndexRef;
-                if (socketIndex != -1) {
-                    std::cerr << "Disconnecting " << socketIndex << ", will reconnect on next request" << std::endl;
-                    auto socket = sockets[socketIndex];
-                    auto socketAddr = serverAddrs[socketIndex];
-                    socket->disconnect(socketAddr);
-                    socketsConnected[socketIndex] = false;
-                }
-                return;
-            }
-            case std::future_status::deferred:
-                assert(false);
-            }
-        }
-        // Get the response which is ready now, and check
-        auto resp = response.get();
+        auto resp = this.getResponse();
         auto remotePir = resp.finalPir;
         checkDiscrepancy(std::move(localPir), std::move(remotePir));
     });
@@ -364,6 +370,14 @@ void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
     auto remotePir = response.finalPir;
     checkDiscrepancy(std::move(localPir), std::move(remotePir));
 #endif
+}
+
+/// Block and get the SEXP
+SEXP CompilerClient::Handle::getSexp() const {
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+    auto response = getResponse();
+#endif
+    return response.sexp;
 }
 
 } // namespace rir

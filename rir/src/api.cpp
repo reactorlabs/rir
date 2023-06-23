@@ -307,81 +307,90 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     auto compilerServerHandle = CompilerClient::pirCompile(what, assumptions, name, debug);
 
-    PROTECT(what);
+    if (!compilerServerHandle || PIR_CLIENT_DRY_RUN) {
+        // Actually pirCompile on the client
+        PROTECT(what);
 
-    bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    // compile to pir
-    pir::Module* m = new pir::Module;
-    pir::Log logger(debug);
-    logger.title("Compiling " + name);
-    pir::Compiler cmp(m, logger);
-    auto compile = [&](pir::ClosureVersion* c) {
-        logger.flushAll();
-        cmp.optimizeModule();
+        bool dryRun = debug.includes(pir::DebugFlag::DryRun);
+        // compile to pir
+        pir::Module* m = new pir::Module;
+        pir::Log logger(debug);
+        logger.title("Compiling " + name);
+        pir::Compiler cmp(m, logger);
+        auto compile = [&](pir::ClosureVersion* c) {
+            logger.flushAll();
+            cmp.optimizeModule();
 
-        if (dryRun)
-            return;
+            if (dryRun)
+                return;
 
-        rir::Function* done = nullptr;
-        {
-            // Single Backend instance, gets destroyed at the end of this block
-            // to finalize the LLVM module so that we can eagerly compile the
-            // body
-            pir::Backend backend(m, logger, name);
-            auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-                auto fun = backend.getOrCompile(c);
-                Protect p(fun->container());
-                DispatchTable::unpack(body)->insert(fun);
-                if (body == BODY(what))
-                    done = fun;
-            };
-            m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
-                if (c->owner()->hasOriginClosure()) {
-                    auto cls = c->owner()->rirClosure();
-                    auto body = BODY(cls);
-                    auto dt = DispatchTable::unpack(body);
-                    if (dt->contains(c->context())) {
-                        // Dispatch also to versions with pending compilation
-                        // since we're not evaluating
-                        auto other = dt->dispatch(c->context(), false);
-                        assert(other != dt->baseline());
-                        assert(other->context() == c->context());
-                        if (other->body()->isCompiled())
+            rir::Function* done = nullptr;
+            {
+                // Single Backend instance, gets destroyed at the end of this block to finalize the LLVM module so that we can eagerly compile the body
+                pir::Backend backend(m, logger, name);
+                auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+                    auto fun = backend.getOrCompile(c);
+                    Protect p(fun->container());
+                    DispatchTable::unpack(body)->insert(fun);
+                    if (body == BODY(what))
+                        done = fun;
+                };
+                m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
+                    if (c->owner()->hasOriginClosure()) {
+                        auto cls = c->owner()->rirClosure();
+                        auto body = BODY(cls);
+                        auto dt = DispatchTable::unpack(body);
+                        if (dt->contains(c->context())) {
+                            // Dispatch also to versions with pending compilation since we're not evaluating
+                            auto other = dt->dispatch(c->context(), false);
+                            assert(other != dt->baseline());
+                            assert(other->context() == c->context());
+                            if (other->body()->isCompiled())
+                                return;
+                        }
+                        // Don't lower functions that have not been called often, as they have incomplete type-feedback.
+                        if (dt->size() == 1 &&
+                            dt->baseline()->invocationCount() < 2)
                             return;
+                        apply(body, c);
                     }
-                    // Don't lower functions that have not been called often, as
-                    // they have incomplete type-feedback.
-                    if (dt->size() == 1 &&
-                        dt->baseline()->invocationCount() < 2)
-                        return;
-                    apply(body, c);
-                }
-            });
-            if (!done)
-                apply(BODY(what), c);
-        }
-        // Eagerly compile the main function
-        done->body()->nativeCode();
-        if (closureVersionPirPrint) {
-            *closureVersionPirPrint =
-                printClosureVersionForCompilerServerComparison(c);
-        }
-        if (compilerServerHandle) {
-          // Compare compiled version with remote for discrepancies
-          compilerServerHandle->compare(c);
-        }
-    };
+                });
+                if (!done)
+                    apply(BODY(what), c);
+            }
+            // Eagerly compile the main function
+            done->body()->nativeCode();
+            if (closureVersionPirPrint) {
+                *closureVersionPirPrint =
+                    printClosureVersionForCompilerServerComparison(c);
+            }
+            if (compilerServerHandle) {
+                // Compare compiled version with remote for discrepancies
+                compilerServerHandle->compare(c);
+            }
+        };
 
-    cmp.compileClosure(what, name, assumptions, true, compile,
-                       [&]() {
-                           if (debug.includes(pir::DebugFlag::ShowWarnings))
-                               std::cerr << "Compilation failed\n";
-                       },
-                       {});
+        cmp.compileClosure(what, name, assumptions, true, compile,
+                           [&]() {
+                               if (debug.includes(pir::DebugFlag::ShowWarnings))
+                                   std::cerr << "Compilation failed\n";
+                           },
+                           {});
 
-    delete m;
+        UNPROTECT(1);
+        delete m;
+    } else {
+        // replace with the compiler server's version
+        auto newWhat = compilerServerHandle->getSexp();
+        // Formals etc. are the same, we don't touch them during compilation.
+        // We should even be able to just send and receive BODY(what) instead of
+        // what, something to look at in the future...
+        SET_BODY(what, BODY(newWhat));
+        // gc should cleanup the original BODY(what) since nothing points to it
+        // anymore, though it would be nice if there's a way to do so
+        // explicitly...
+    }
     delete compilerServerHandle;
-    UNPROTECT(1);
     return what;
 }
 

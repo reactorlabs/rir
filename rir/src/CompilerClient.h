@@ -37,6 +37,8 @@ class CompilerClient {
         Handle(const std::shared_ptr<int>& socketIndexRef,
                std::future<ResponseData> response)
             : socketIndexRef(socketIndexRef), response(std::move(response)) {}
+        /// Block and get the response data
+        ResponseData getResponse() const;
 #else
         ResponseData response;
         explicit Handle(ResponseData response) : response(std::move(response)) {}
@@ -45,6 +47,8 @@ class CompilerClient {
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
         void compare(pir::ClosureVersion* version) const;
+        /// Block and get the SEXP
+        SEXP getSexp() const;
     };
 
     /// Returns if the client was initialized
