@@ -205,9 +205,6 @@ SEXP Replay::replayClosure(size_t idx) {
         event->replay(*this, closure, recording.name);
     }
 
-    std::cerr << "Replayed: " << recording.name << " from " << recording.env
-              << std::endl;
-
     if (name != R_NilValue) {
         SEXP env = getEnvironment(recording.env);
 
@@ -397,8 +394,12 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     // have to store the broken invariants. Nothing else.
 
     auto dt = DispatchTable::unpack(BODY(closure));
-    auto fun = dt->get(functionIdx_);
-    Code* code = fun->body();
+    Function* fun = nullptr;
+    Code* code = nullptr;
+    if (functionIdx_) {
+        fun = dt->get(functionIdx_);
+        code = fun->body();
+    }
 
     // Copy and set current closure's code
     Code* deoptSrcCode =
@@ -407,9 +408,14 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     FeedbackOrigin origin(deoptSrcCode, deoptPc);
     DeoptReason reason(origin, this->reason_);
 
-    reason.record(this->trigger_);
-    fun->registerDeopt();
     recordDeopt(code, closure, reason, this->trigger_);
+    reason.record(this->trigger_);
+    if (fun) {
+        // We're doing fun->registerDeopt(), but without the incrementation, as
+        // it is done by DtOverwriteEvent
+        assert(fun->isOptimized());
+        fun->flags.set(Function::Flag::Deopt);
+    }
 }
 
 SEXP DeoptEvent::toSEXP() const {
@@ -418,11 +424,12 @@ SEXP DeoptEvent::toSEXP() const {
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
-    SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->functionIdx_));
-    SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->reason_));
-    SET_VECTOR_ELT(sexp, 2, serialization::to_sexp(this->reasonCodeOff_));
-    SET_VECTOR_ELT(sexp, 3, serialization::to_sexp(this->reasonCodeIdx_));
-    SET_VECTOR_ELT(sexp, 4, this->trigger_);
+    int i = 0;
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->functionIdx_));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reason_));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeOff_));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeIdx_));
+    SET_VECTOR_ELT(sexp, i++, this->trigger_);
     UNPROTECT(1);
     return sexp;
 }
@@ -431,13 +438,47 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
     assert(Rf_length(sexp) == 5);
 
-    this->functionIdx_ = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
-    this->reason_ = serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, 1));
+    int i = 0;
+    this->functionIdx_ =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->reason_ =
+        serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, i++));
     this->reasonCodeOff_ =
-        serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, 2));
-    this->reasonCodeIdx_ = serialization::pair_from_sexp(VECTOR_ELT(sexp, 3));
-    this->trigger_ = VECTOR_ELT(sexp, 4);
+        serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->reasonCodeIdx_ = serialization::pair_from_sexp(VECTOR_ELT(sexp, i++));
+    this->trigger_ = VECTOR_ELT(sexp, i++);
     R_PreserveObject(this->trigger_);
+}
+
+DtOverwriteEvent::DtOverwriteEvent(size_t funIdx, size_t oldDeoptCount)
+    : funIdx(funIdx), oldDeoptCount(oldDeoptCount) {}
+
+void DtOverwriteEvent::replay(Replay& replay, SEXP closure,
+                              std::string& closure_name) const {
+    DispatchTable* dt = DispatchTable::unpack(BODY(closure));
+    dt->get(funIdx)->addDeoptCount(oldDeoptCount);
+}
+
+SEXP DtOverwriteEvent::toSEXP() const {
+    const char* fields[] = {"version_index", "old_deopt_count", ""};
+    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
+    setClassName(sexp, R_CLASS_OVERWRITE_EVENT);
+
+    int i = 0;
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->funIdx));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->oldDeoptCount));
+    UNPROTECT(1);
+    return sexp;
+}
+
+void DtOverwriteEvent::fromSEXP(SEXP sexp) {
+    assert(Rf_isVector(sexp));
+    assert(Rf_length(sexp) == 2);
+
+    int i = 0;
+    this->funIdx = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->oldDeoptCount =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
 void recordCompile(SEXP const cls, const std::string& name,
@@ -498,7 +539,7 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     }
 
     // find the affected version
-    int funIdx = 0;
+    size_t funIdx = 0;
     auto dt = DispatchTable::unpack(BODY(cls));
     // it deopts from native so it cannot be the baseline RIR
     for (size_t i = 1; i < dt->size(); i++) {
@@ -508,22 +549,31 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
         }
     }
 
-    assert(funIdx != 0 && "Could not find deopted function index in its "
-                          "closure's dispatch table");
-
     auto reasonCodeIdx =
         recorder_.findIndex(dt->baseline()->body(), reason.srcCode());
 
     assert(reasonCodeIdx.first >= 0 &&
            "Could not locate deopt reason location");
 
-    // TODD
     DeoptEvent event(funIdx, reason.reason, reasonCodeIdx,
                      reason.origin.offset(), trigger);
 
     auto rec = recorder_.initOrGetRecording(cls);
     auto& v = rec.second;
     v.events.push_back(std::make_unique<DeoptEvent>(std::move(event)));
+}
+
+void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
+                       size_t oldDeoptCount) {
+    if (!is_recording_) {
+        return;
+    }
+
+    DtOverwriteEvent event(funIdx, oldDeoptCount);
+
+    auto rec = recorder_.initOrGetRecording(dt);
+    auto& v = rec.second;
+    v.events.push_back(std::make_unique<DtOverwriteEvent>(std::move(event)));
 }
 
 SEXP setClassName(SEXP s, const char* className) {

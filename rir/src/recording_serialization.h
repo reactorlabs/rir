@@ -9,6 +9,7 @@
 
 #define R_CLASS_COMPILE_EVENT "event_compile"
 #define R_CLASS_DEOPT_EVENT "event_deopt"
+#define R_CLASS_OVERWRITE_EVENT "event_overwrite"
 #define R_CLASS_CTX_CALLEES "ctx_callees"
 #define R_CLASS_CTX_TEST "ctx_test"
 #define R_CLASS_CTX_VALUES "ctx_values"

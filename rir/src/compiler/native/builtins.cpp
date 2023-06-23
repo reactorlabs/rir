@@ -833,8 +833,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
-    auto* dt = DispatchTable::unpack(BODY(cls));
-    std::cerr << "deopt " << dt << " / " << c->function() << std::endl;
     recording::recordDeopt(c, cls, *deoptReason, deoptTrigger);
 
     assert(m->numFrames >= 1);

@@ -111,8 +111,10 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
         // dummy init, overwritten later
         event = std::make_unique<rir::recording::DeoptEvent>(
-            (size_t)-1, DeoptReason::Reason::Unknown,
+            0, DeoptReason::Reason::Unknown,
             std::make_pair((size_t)-1, (size_t)-1), (uint32_t)0, nullptr);
+    } else if (Rf_inherits(sexp, R_CLASS_OVERWRITE_EVENT)) {
+        event = std::make_unique<rir::recording::DtOverwriteEvent>(-1, -1);
     } else {
         Rf_error("can't deserialize event of unknown class");
     }

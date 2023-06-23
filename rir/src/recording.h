@@ -96,12 +96,25 @@ class DeoptEvent : public Event {
                 std::string& closure_name) const override;
 
   private:
+    /* 0 if it couldn't be found */
     size_t functionIdx_;
     DeoptReason::Reason reason_;
     /* negative indicates promise index, positive function index */
     std::pair<size_t, size_t> reasonCodeIdx_;
     uint32_t reasonCodeOff_;
     SEXP trigger_;
+};
+
+class DtOverwriteEvent : public Event {
+  public:
+    DtOverwriteEvent(size_t funIdx, size_t oldDeoptCount);
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP file) override;
+    void replay(Replay& replay, SEXP closure,
+                std::string& closure_name) const override;
+
+  private:
+    size_t funIdx, oldDeoptCount;
 };
 
 struct FunRecording {
@@ -191,6 +204,8 @@ void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
                  SEXP trigger);
+void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
+                       size_t oldDeoptCount);
 
 } // namespace recording
 
