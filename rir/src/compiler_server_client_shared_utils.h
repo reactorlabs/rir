@@ -16,6 +16,9 @@ const uint64_t PIR_COMPILE_RESPONSE_MAGIC = 0x9BEEB1E5356F1A36;
 const uint64_t PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC = 0x9BEEB1E5356F1A37;
 const uint64_t PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC = 0x9BEEB1E5356F1A38;
 
+/// If set, we still compile on the client and only compare the compiler server
+/// and client results, instead of replacing the SEXP with the compiled version.
+extern bool PIR_CLIENT_DRY_RUN;
 extern size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY;
 
 std::string printClosureVersionForCompilerServerComparison(pir::ClosureVersion* version);

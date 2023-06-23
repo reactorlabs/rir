@@ -8,6 +8,11 @@
 
 namespace rir {
 
+bool PIR_CLIENT_DRY_RUN = getenv("PIR_CLIENT_DRY_RUN") != nullptr &&
+                          strcmp(getenv("PIR_CLIENT_DRY_RUN"), "") != 0 &&
+                          strcmp(getenv("PIR_CLIENT_DRY_RUN"), "0") != 0 &&
+                          strcmp(getenv("PIR_CLIENT_DRY_RUN"), "false") != 0;
+
 size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY =
     getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY")
         ? strtol(getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
