@@ -1,6 +1,7 @@
+# Serialization can cause namespaces to get attached multiple times, because serializing
+# and deserializing namespaces affects them (TODO: investigate)
 if (Sys.getenv("RIR_SERIALIZE_CHAOS") != "")
   q()
-
 
 unlockBinding(".make_numeric_version", .BaseNamespaceEnv)
 .BaseNamespaceEnv$.make_numeric_version <-
