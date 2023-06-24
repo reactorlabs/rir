@@ -159,7 +159,7 @@ void CompilerServer::tryRun() {
                                     functionFilterString, debugStyle);
 
             std::string pirPrint;
-            pirCompile(what, assumptions, name, debug, &pirPrint);
+            what = pirCompile(what, assumptions, name, debug, &pirPrint);
 
             // Serialize the response
             // Response data format =
