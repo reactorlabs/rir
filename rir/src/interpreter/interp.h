@@ -114,7 +114,7 @@ inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {
         name = lhs;
     if (flags.contains(Function::MarkOpt))
         fun->flags.reset(Function::MarkOpt);
-    globalContext()->closureOptimizer(callee, given, name);
+    SET_BODY(callee, BODY(globalContext()->closureOptimizer(callee, given, name)));
 }
 
 inline bool matches(const CallContext& call, Function* f) {
