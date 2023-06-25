@@ -22,13 +22,15 @@ namespace rir {
 class UUIDPool {
     static std::unordered_map<UUID, SEXP> interned;
 
-    /// Intern the SEXP, except we already know its hash
-    static SEXP intern(SEXP e, UUID uuid);
   public:
+    /// Intern the SEXP, except we already know its hash
+    static SEXP intern(SEXP e, const UUID& uuid);
     /// Will hash the SEXP and then, if we've already interned, return the
     /// existing version. Otherwise we will insert it into the pool and return
     /// it as-is.
     static SEXP intern(SEXP e);
+    /// Gets the interned value by hash, or nullptr if not interned
+    static SEXP get(const UUID& hash);
     // Currently unused
     /* /// Reads item and interns, possibly returning the already-interned version.
     ///
