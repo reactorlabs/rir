@@ -21,7 +21,6 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
-          // GC area has only 1 pointer
           NumLocals),
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
       stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
@@ -127,7 +126,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
 
 Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp) {
     Protect p;
-    int size = (int)InInteger(inp);
+    auto size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     AddReadRef(refTable, store);
     Code* code = new (DATAPTR(store)) Code;
@@ -165,7 +164,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     }
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
-                  // GC area has only 1 pointer
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
     code->function(rirFunction);
