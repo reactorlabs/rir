@@ -80,29 +80,38 @@ LowerFunctionLLVM::getBuiltin(const rir::pir::NativeBuiltin& b) {
 
 llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  llvm::Type* ty,
+                                                 const SerialRepr& repr,
                                                  bool constant) {
     assert(what);
     char name[21];
     sprintf(name, "ept_%lx", (uintptr_t)what);
     return getModule().getOrInsertGlobal(name, ty, [&]() {
-        return new llvm::GlobalVariable(
+        auto var = new llvm::GlobalVariable(
             getModule(), ty, constant,
             llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
             nullptr, name, nullptr,
             llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+        var->setMetadata("serial", repr.metadata(var->getContext()));
+        return var;
     });
 }
 
 llvm::FunctionCallee
-LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty) {
+LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
+                                     int builtinId) {
     assert(what);
     char name[21];
     sprintf(name, "efn_%lx", (uintptr_t)what);
-    return getModule().getOrInsertFunction(name, ty);
+    auto llvmFn = getModule().getOrInsertFunction(name, ty);
+    getModule().getOrInsertNamedMetadata("serialValues")->addOperand(
+        SerialRepr::functionMetadata(llvmFn.getCallee()->getContext(),
+                                     name,
+                                     builtinId));
+    return llvmFn;
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
-    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int));
+    builder.CreateStore(c(i), convertToPointer(&R_Visible, t::Int, SerialRepr::R_Visible{}));
 }
 
 llvm::Value* LowerFunctionLLVM::force(Instruction* i, llvm::Value* arg) {
@@ -163,7 +172,7 @@ void LowerFunctionLLVM::insn_assert(llvm::Value* v, const char* msg,
     if (p)
         call(NativeBuiltins::get(NativeBuiltins::Id::printValue), {p});
     call(NativeBuiltins::get(NativeBuiltins::Id::assertFail),
-         {convertToPointer((void*)msg, t::i8, true)});
+         {convertToPointer((void*)msg, t::i8, SerialRepr::String{msg}, true)});
 
     builder.CreateUnreachable();
     builder.SetInsertPoint(ok);
@@ -297,7 +306,8 @@ void LowerFunctionLLVM::decStack(int i) {
     builder.CreateStore(up, nodestackPtrAddr);
 }
 
-llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
+llvm::Value* LowerFunctionLLVM::callRBuiltin(int builtinId,
+                                             SEXP builtin,
                                              const std::vector<Value*>& args,
                                              int srcIdx, CCODE builtinFun,
                                              llvm::Value* env) {
@@ -314,7 +324,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(SEXP builtin,
         });
     }
 
-    auto f = convertToFunction((void*)builtinFun, t::builtinFunction);
+    auto f = convertToFunction((void*)builtinFun, t::builtinFunction, builtinId);
 
     std::stack<llvm::Value*> loadedArgs;
     auto n = numTemps;
@@ -411,7 +421,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
     } else if (val == OpaqueTrue::instance()) {
         static int one = 1;
         // Something that is always true, but llvm does not know about
-        res = builder.CreateLoad(convertToPointer(&one, t::Int, true));
+        res = builder.CreateLoad(convertToPointer(&one, t::Int, SerialRepr::OpaqueTrue{}, true));
     } else if (auto ld = Const::Cast(val)) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
@@ -2104,7 +2114,7 @@ void LowerFunctionLLVM::compile() {
         }
     }
 
-    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr);
+    nodestackPtrAddr = convertToPointer(&R_BCNodeStackTop, t::stackCellPtr, SerialRepr::R_BCNodeStackTop{});
     basepointer = nodestackPtr();
 
     size_t additionalStackSlots = 0;
@@ -2357,7 +2367,7 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::DropContext: {
                 auto globalContextPtrAddr =
-                    convertToPointer(&R_GlobalContext, t::RCNTXT_ptr);
+                    convertToPointer(&R_GlobalContext, t::RCNTXT_ptr, SerialRepr::R_GlobalContext{});
                 auto globalContextPtr =
                     builder.CreateLoad(globalContextPtrAddr);
                 auto callflagAddr =
@@ -2474,8 +2484,8 @@ void LowerFunctionLLVM::compile() {
                 auto callTheBuiltin = [&]() -> llvm::Value* {
                     // Some "safe" builtins still look up functions in the base
                     // env
-                    return callRBuiltin(b->builtinSexp, args, i->srcIdx,
-                                        b->builtin,
+                    return callRBuiltin(b->builtinId, b->builtinSexp, args,
+                                        i->srcIdx, b->builtin,
                                         constant(R_BaseEnv, t::SEXP));
                 };
 
@@ -3326,7 +3336,8 @@ void LowerFunctionLLVM::compile() {
                 std::vector<Value*> args;
                 b->eachCallArg([&](Value* v) { args.push_back(v); });
                 setVal(i, callRBuiltin(
-                              b->builtinSexp, args, i->srcIdx, b->builtin,
+                              b->builtinId, b->builtinSexp, args, i->srcIdx,
+                              b->builtin,
                               b->hasEnv() ? loadSxp(b->env())
                                           : constant(R_BaseEnv, t::SEXP)));
                 break;
@@ -3588,7 +3599,7 @@ void LowerFunctionLLVM::compile() {
                 withCallFrame(args, [&]() {
                     return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                 {paramCode(), paramClosure(),
-                                 convertToPointer(m, t::i8, true), paramArgs(),
+                                 convertToPointer(m, t::i8, SerialRepr::DeoptMetadata{m}, true), paramArgs(),
                                  c(deopt->escapedEnv, 1),
                                  load(deopt->deoptReason()),
                                  loadSxp(deopt->deoptTrigger())});
@@ -6169,7 +6180,7 @@ void LowerFunctionLLVM::compile() {
                         }
                         call(NativeBuiltins::get(NativeBuiltins::Id::checkType),
                              {loadSxp(i), c((unsigned long)i->type.serialize()),
-                              convertToPointer(msg, t::i8, true)});
+                              convertToPointer(msg, t::i8, SerialRepr::String{msg}, true)});
                     }
                 }
 #ifdef ENABLE_SLOWASSERT

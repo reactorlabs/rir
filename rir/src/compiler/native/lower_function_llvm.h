@@ -7,6 +7,7 @@
 #include "compiler/native/builtins.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include "compiler/native/SerialRepr.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
 #include <llvm/IR/Instructions.h>
@@ -112,11 +113,17 @@ class LowerFunctionLLVM {
     llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
 
     llvm::FunctionCallee convertToFunction(const void* what,
-                                           llvm::FunctionType* ty);
+                                           llvm::FunctionType* ty,
+                                           /// Currently only for builtins, if
+                                           /// we need to convert more functions
+                                           /// we'll need to change to fn-id,
+                                           /// tagged union or something else
+                                           int builtinId);
     llvm::Value* convertToPointer(const void* what, llvm::Type* ty,
+                                  const SerialRepr& repr,
                                   bool constant = false);
     llvm::Value* convertToPointer(SEXP what, bool constant = false) {
-        return convertToPointer(what, t::SEXPREC, constant);
+        return convertToPointer(what, t::SEXPREC, SerialRepr::SEXP{what}, constant);
     }
 
     struct Variable {
@@ -393,7 +400,8 @@ class LowerFunctionLLVM {
 
     llvm::CallInst* call(const NativeBuiltin& builtin,
                          const std::vector<llvm::Value*>& args);
-    llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,
+    llvm::Value* callRBuiltin(int builtinId, SEXP builtin,
+                              const std::vector<Value*>& args,
                               int srcIdx, CCODE, llvm::Value* env);
 
     llvm::Value* box(llvm::Value* v, PirType t, bool protect = true);
