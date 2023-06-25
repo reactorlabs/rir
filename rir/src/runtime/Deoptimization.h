@@ -4,6 +4,8 @@
 #include <R/r.h>
 #include <iostream>
 
+class ByteBuffer;
+
 namespace rir {
 #pragma pack(push)
 #pragma pack(1)
@@ -17,12 +19,13 @@ struct FrameInfo {
     size_t stackSize;
     bool inPromise;
 
-    FrameInfo() {}
-    FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
-        : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
+    void deserialize(ByteBuffer& buf);
+    void serialize(ByteBuffer& buf) const;
 };
 
 struct DeoptMetadata {
+    static DeoptMetadata* deserialize(ByteBuffer& buf);
+    void serialize(ByteBuffer& buf) const;
     void print(std::ostream& out) const;
     size_t numFrames;
     FrameInfo frames[];

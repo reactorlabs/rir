@@ -10,7 +10,7 @@ namespace rir {
 
 std::unordered_map<UUID, SEXP> UUIDPool::interned;
 
-SEXP UUIDPool::intern(SEXP e, UUID hash) {
+SEXP UUIDPool::intern(SEXP e, const UUID& hash) {
 #ifdef DO_INTERN
     PROTECT(e);
     SLOWASSERT(hashSexp(e) == hash && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
@@ -31,6 +31,15 @@ SEXP UUIDPool::intern(SEXP e) {
 #else
     return e;
 #endif
+}
+
+SEXP UUIDPool::get(const UUID& hash) {
+#ifdef DO_INTERN
+    if (interned.count(hash)) {
+        return interned.at(hash);
+    }
+#endif
+    return nullptr;
 }
 
 /* /// Wrap data to also get UUID while deserializing
