@@ -3600,10 +3600,11 @@ void LowerFunctionLLVM::compile() {
                 // for the kind?
             case Tag::RecordCall: {
                 auto rec = RecordCall::Cast(i);
+
                 call(
                     NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
-                    {c((unsigned)TypeFeedbackKind::Callee), c(rec->idx),
-                     paramClosure(), loadSxp(rec->arg(0).val())});
+                    {paramClosure(), c(rec->idx), loadSxp(rec->arg(0).val())});
+
                 break;
             }
 

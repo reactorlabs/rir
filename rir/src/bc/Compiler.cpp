@@ -10,6 +10,7 @@
 #include "interpreter/interp.h"
 #include "interpreter/interp_incl.h"
 #include "interpreter/safe_force.h"
+#include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/Pool.h"
 
@@ -136,6 +137,7 @@ class CompilerContext {
 
     FunctionWriter& fun;
     Preserve& preserve;
+    TypeFeedback::Builder typeFeedbackBuilder;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
@@ -201,11 +203,8 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    unsigned nextRecordCallIdx() { return recordCallIdx++; }
-
   private:
     unsigned int pushedPromiseContexts = 0;
-    unsigned recordCallIdx = 0;
 };
 
 struct LoadArgsResult {
@@ -946,7 +945,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::ldfun(farrow_sym);
 
             if (Compiler::profile)
-                cs << BC::recordCall(ctx.nextRecordCallIdx());
+                cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
 
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
@@ -1875,7 +1874,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     }
 
     if (Compiler::profile)
-        cs << BC::recordCall(ctx.nextRecordCallIdx());
+        cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
 
     auto compileCall = [&](LoadArgsResult& info) {
         if (info.hasDots) {
@@ -1895,7 +1894,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadOneArg(ctx, args, ArgType::RAW_VALUE, info);
         compileLoadOneArg(ctx, CDR(args), ArgType::RAW_VALUE, info);
         if (Compiler::profile)
-            cs << BC::recordCall(ctx.nextRecordCallIdx());
+            cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
         // Load the rest of the args
         compileLoadArgs(ctx, ast, fun, args, info, voidContext, 2, 0);
     } else {
@@ -2055,13 +2054,13 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    function.finalize(body, signature, Context());
+    function.finalize(body, signature, Context(),
+                      ctx.typeFeedbackBuilder.build());
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container());
 #endif
 
-    recordCallsSize = ctx.nextRecordCallIdx();
     return function.function()->container();
 }
 

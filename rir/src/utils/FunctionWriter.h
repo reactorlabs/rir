@@ -5,6 +5,7 @@
 #include "bc/BC_inc.h"
 #include "interpreter/instance.h"
 #include "runtime/Function.h"
+#include "runtime/TypeFeedback.h"
 
 #include <iostream>
 #include <map>
@@ -40,7 +41,7 @@ class FunctionWriter {
     }
 
     void finalize(Code* body, const FunctionSignature& signature,
-                  const Context& context) {
+                  const Context& context, TypeFeedback&& feedback) {
         assert(function_ == nullptr && "Trying to finalize a second time");
 
         size_t dataSize = defaultArgs.size() * sizeof(SEXP);
@@ -48,8 +49,9 @@ class FunctionWriter {
 
         SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
         void* payload = INTEGER(store);
-        Function* fun = new (payload) Function(functionSize, body->container(),
-                                               defaultArgs, signature, context);
+        Function* fun =
+            new (payload) Function(functionSize, body->container(), defaultArgs,
+                                   signature, context, std::move(feedback));
         preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);

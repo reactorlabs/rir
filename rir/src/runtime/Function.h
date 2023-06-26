@@ -5,6 +5,7 @@
 #include "FunctionSignature.h"
 #include "R/r.h"
 #include "RirRuntimeObject.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
 
@@ -45,16 +46,19 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
-             const FunctionSignature& signature, const Context& ctx)
+             const FunctionSignature& signature, const Context& ctx,
+             TypeFeedback&& typeFeedback)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx) {
+          signature_(signature), context_(ctx),
+          typeFeedback_(std::move(typeFeedback)) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
+        typeFeedback_.owner_ = this;
     }
 
     Code* body() const { return Code::unpack(getEntry(0)); }
@@ -191,6 +195,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
 
+    void typeFeedback(TypeFeedback&& typeFeedback) {
+        typeFeedback_ = std::move(typeFeedback);
+    }
+
+    TypeFeedback& typeFeedback() { return typeFeedback_; }
+
   private:
     unsigned numArgs_;
 
@@ -205,6 +215,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
     DispatchTable* dispatchTable_;
+    TypeFeedback typeFeedback_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
     // locals contains: body

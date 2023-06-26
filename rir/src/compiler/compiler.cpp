@@ -3,6 +3,7 @@
 #include "pir/continuation.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Map.h"
 #include "utils/measuring.h"
 
@@ -89,8 +90,9 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    // TODO: baseline?
-    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, tbl);
+    auto& typeFeedback = tbl->baseline()->typeFeedback();
+    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback,
+                    tbl->size() == 1);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
         log.flush();
@@ -144,7 +146,9 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
-    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback, table);
+    auto& typeFeedback = table->baseline()->typeFeedback();
+    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
+                    typeFeedback, table->size() == 1);
 
     auto& context = version->context();
     bool failedToCompileDefaultArgs = false;

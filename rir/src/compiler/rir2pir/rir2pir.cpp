@@ -17,6 +17,7 @@
 #include "compiler/util/visitor.h"
 #include "insert_cast.h"
 #include "runtime/ArglistOrder.h"
+#include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
@@ -145,9 +146,10 @@ namespace pir {
 Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                  const std::string& name,
                  const std::list<PirTypeFeedback*>& outerFeedback,
-                 DispatchTable* table)
+                 rir::TypeFeedback& typeFeedback, bool baseline)
     : compiler(cmp), cls(cls), log(log), name(name),
-      outerFeedback(outerFeedback), table(table) {
+      outerFeedback(outerFeedback), typeFeedback(typeFeedback),
+      baseline(baseline) {
     if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
         this->outerFeedback.push_back(
             cls->optFunction->body()->pirTypeFeedback());
@@ -436,15 +438,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::record_call_: {
         Value* target = top();
 
-        if (table != nullptr && table->size() == 1) {
-            // the baseline function does what the record_call_ instruction does
-            // in RIR
-            // FIXME: use one RecordTypeFeedback?
+        if (baseline) {
             auto rec = insert(new RecordCall(bc.immediate.i));
             rec->setCallee(target);
         } else {
-            const auto& feedback =
-                table->typeFeedback().callees(bc.immediate.i);
+            const auto& feedback = typeFeedback.callees(bc.immediate.i);
 
             if (!inPromise() && !inlining() && feedback.taken == 0 &&
                 insert.function->optFunction->invocationCount() > 1 &&
@@ -1363,12 +1361,14 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
 }
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, false)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
+                          baseline, false)
         .tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, true)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
+                          baseline, true)
         .tryTranslate(srcCode, insert);
 }
 

@@ -1,6 +1,8 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
+#include "runtime/TypeFeedback.h"
+#include <vector>
 
 namespace rir {
 
@@ -10,7 +12,9 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
     void* payload = DATAPTR(store);
-    Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
+    // FIXME: support type feedback deserialization
+    Function* fun = new (payload)
+        Function(functionSize, nullptr, {}, sig, as, TypeFeedback({}));
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
@@ -37,6 +41,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
+    // FIXME: support type feedback deserialization
     OutInteger(out, size);
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);

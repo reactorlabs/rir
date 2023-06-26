@@ -9,11 +9,13 @@
 #include <iostream>
 #include <memory>
 #include <ostream>
+#include <variant>
 #include <vector>
 
 namespace rir {
 
 struct Code;
+struct Function;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -72,6 +74,8 @@ struct ObservedTest {
         }
         seen = Both;
     }
+
+    void print(std::ostream& out) const {}
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
@@ -251,29 +255,64 @@ struct DeoptReason {
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
 
-enum class TypeFeedbackKind : uint8_t { Callee, Test, Value };
-
 class TypeFeedback {
-    std::unique_ptr<ObservedCallees[]> callees_;
-    unsigned callees_size_;
+    friend Function;
+
+    enum class TypeFeedbackKind : uint8_t { Callees, Test, Values };
+
+    struct TypeFeedbackSlot {
+      private:
+        union Feedback {
+            ObservedCallees callees;
+            ObservedValues values;
+            ObservedTest test;
+        };
+
+        Feedback feedback_;
+
+        TypeFeedbackSlot(TypeFeedbackKind kind, Feedback feedback)
+            : feedback_(feedback), kind(kind) {}
+
+      public:
+        TypeFeedbackSlot(ObservedCallees callees)
+            : feedback_({.callees = callees}), kind(TypeFeedbackKind::Callees) {
+        }
+
+        TypeFeedbackKind kind;
+
+        void print(std::ostream& out, const Function* function) const;
+
+        ObservedCallees& callees() {
+            assert(kind == TypeFeedbackKind::Callees);
+            return feedback_.callees;
+        }
+    };
+
+    typedef std::vector<TypeFeedbackSlot> FeedbackSlots;
+
+    Function* owner_;
+    FeedbackSlots slots_;
+
+    TypeFeedback(FeedbackSlots&& slots) : slots_(std::move(slots)) {}
 
   public:
-    TypeFeedback(unsigned recordCallsSize)
-        : callees_(new ObservedCallees[recordCallsSize]),
-          callees_size_(recordCallsSize) {
-        for (unsigned i = 0; i < recordCallsSize; i++) {
-            callees_[i] = ObservedCallees{};
+    static TypeFeedback empty() { return TypeFeedback({}); }
+
+    class Builder {
+        std::vector<TypeFeedbackSlot> slots_;
+
+      public:
+        unsigned int addCallee() {
+            slots_.push_back(ObservedCallees());
+            return slots_.size() - 1;
         }
-    }
 
-    void record_callee(unsigned idx, Code* caller, SEXP callee) {
-        assert(idx < callees_size_);
-        callees_[idx].record(caller, callee);
-    }
+        TypeFeedback build() { return TypeFeedback(std::move(slots_)); }
+    };
 
-    unsigned callees_size() { return callees_size_; }
     ObservedCallees& callees(unsigned idx);
-    void print(std::ostream& out, const Code* code) const;
+    void print(std::ostream& out) const;
+    void record(unsigned idx, SEXP callee);
 };
 
 #pragma pack(pop)

@@ -5,6 +5,7 @@
 #include "R/Protect.h"
 #include "R/r.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/FunctionWriter.h"
 #include "utils/Pool.h"
 
@@ -24,6 +25,8 @@ class Compiler {
     unsigned recordCallsSize;
 
     Preserve preserve;
+
+    TypeFeedback::Builder typeFeedbackBuilder;
 
     explicit Compiler(SEXP exp)
         : exp(exp), formals(R_NilValue), closureEnv(nullptr) {
@@ -57,12 +60,12 @@ class Compiler {
         auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        auto dt =
-            DispatchTable::create(DEFAULT_TABLE_CAPACITY, c.recordCallsSize);
+        auto dt = DispatchTable::create();
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
         dt->baseline(Function::unpack(res));
+        // dt->typeFeedback(c.typeFeedback());
 
         return dt->container();
     }
@@ -83,8 +86,7 @@ class Compiler {
         auto res = p(c.finalize());
 
         // Allocate a new vtable.
-        auto dt =
-            DispatchTable::create(DEFAULT_TABLE_CAPACITY, c.recordCallsSize);
+        auto dt = DispatchTable::create();
         p(dt->container());
 
         // Initialize the vtable. Initially the table has one entry, which is
