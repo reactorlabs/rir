@@ -3,6 +3,7 @@
 
 #include "compiler/compiler.h"
 #include "compiler/pir/builder.h"
+#include "runtime/TypeFeedback.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -18,7 +19,7 @@ class Rir2Pir {
     Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
             const std::string& name,
             const std::list<PirTypeFeedback*>& outerFeedback,
-            DispatchTable* dt);
+            rir::TypeFeedback& typeFeedback, bool baseline);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
     bool tryCompileContinuation(Builder& insert, Opcode* start,
@@ -59,7 +60,8 @@ class Rir2Pir {
     ClosureLog& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
-    DispatchTable* table;
+    rir::TypeFeedback& typeFeedback;
+    bool baseline;
     std::unordered_map<SEXP, MkCls*> localFuns;
 
     std::unordered_set<SEXP> deoptedCallTargets;
@@ -90,8 +92,8 @@ class PromiseRir2Pir : public Rir2Pir {
     PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                    const std::string& name,
                    const std::list<PirTypeFeedback*>& outerFeedback,
-                   bool inlining)
-        : Rir2Pir(cmp, cls, log, name, outerFeedback, nullptr),
+                   rir::TypeFeedback& feedback, bool baseline, bool inlining)
+        : Rir2Pir(cmp, cls, log, name, outerFeedback, feedback, baseline),
           inlining_(inlining) {}
 
   private:

@@ -16,6 +16,7 @@
 #include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/FunctionWriter.h"
 #include "utils/measuring.h"
@@ -404,7 +405,8 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     }
 
     log.finalPIR();
-    function.finalize(body, signature, cls->context());
+    function.finalize(body, signature, cls->context(),
+                      rir::TypeFeedback::empty());
     for (auto& c : done)
         c.second->function(function.function());
 

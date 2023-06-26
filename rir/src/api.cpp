@@ -59,9 +59,7 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     std::cout << "== closure " << what << " (dispatch table " << t << ", env "
               << CLOENV(what) << ") ==\n";
 
-    std::cout << "== speculative context ==" << std::endl;
-    t->typeFeedback().print(std::cout, t->baseline()->body());
-    std::cout << std::endl;
+    t->baseline()->typeFeedback().print(std::cout);
 
     for (size_t entry = 0; entry < t->size(); ++entry) {
         Function* f = t->get(entry);

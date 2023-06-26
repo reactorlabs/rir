@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <ostream>
+#include <vector>
 
 namespace rir {
 
@@ -131,17 +132,45 @@ void ObservedCallees::print(std::ostream& out, const Code* code) const {
 }
 
 ObservedCallees& TypeFeedback::callees(unsigned idx) {
-    assert(idx < callees_size_);
-    return callees_[idx];
+    assert(idx < slots_.size());
+
+    return slots_[idx].callees();
 }
 
-void TypeFeedback::print(std::ostream& out, const Code* code) const {
-    out << "== callees:" << std::endl;
-    for (unsigned i = 0; i < callees_size_; i++) {
-        out << "#" << i << ": ";
-        callees_[i].print(out, code);
+void TypeFeedback::TypeFeedbackSlot::print(std::ostream& out,
+                                           const Function* function) const {
+    switch (kind) {
+    case TypeFeedbackKind::Callees:
+        feedback_.callees.print(out, function->body());
+        break;
+    case TypeFeedbackKind::Test:
+        break;
+    case TypeFeedbackKind::Values:
+        break;
+    }
+}
+
+void TypeFeedback::print(std::ostream& out) const {
+    std::cout << "== type feedback ==" << std::endl;
+    int i = 0;
+    for (auto& slot : slots_) {
+        out << "#" << i++ << ": ";
+        slot.print(out, owner_);
         out << std::endl;
     }
 }
 
+void TypeFeedback::record(unsigned idx, SEXP value) {
+    assert(idx < slots_.size());
+
+    switch (slots_[idx].kind) {
+    case TypeFeedbackKind::Callees:
+        slots_[idx].callees().record(owner_->body(), value);
+        break;
+    case TypeFeedbackKind::Test:
+        break;
+    case TypeFeedbackKind::Values:
+        break;
+    }
+}
 } // namespace rir

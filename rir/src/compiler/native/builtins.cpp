@@ -822,18 +822,13 @@ static SEXP deoptSentinelContainer = []() {
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
     R_PreserveObject(store);
-    deoptSentinel = new (INTEGER(store))
-        Function(0, c->container(), {}, deoptSentinelSig, Context());
+    deoptSentinel =
+        new (INTEGER(store)) Function(0, c->container(), {}, deoptSentinelSig,
+                                      Context(), rir::TypeFeedback::empty());
     deoptSentinel->registerDeopt();
     UNPROTECT(1);
     return store;
 }();
-
-void recordCallImpl(SEXP cls, unsigned idx, SEXP callee) {
-    // Rprintf("record: closure: %p index: %d callee: %p\n", cls, idx, callee);
-    auto dt = DispatchTable::unpack(BODY(cls));
-    dt->typeFeedback().record_callee(idx, dt->baseline()->body(), callee);
-}
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
@@ -961,41 +956,39 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(TypeFeedbackKind kind, unsigned idx, SEXP cls,
-                            SEXP value) {
-    switch (kind) {
-    // case TypeFeedbackKind::Test: {
-    //     ObservedTest* feedback = (ObservedTest*)(pos + 1);
-    //     feedback->record(value);
-    //     break;
+void recordTypefeedbackImpl(SEXP cls, unsigned idx, SEXP value) {
+    // switch (kind) {
+    // // case TypeFeedbackKind::Test: {
+    // //     ObservedTest* feedback = (ObservedTest*)(pos + 1);
+    // //     feedback->record(value);
+    // //     break;
+    // // }
+    // // case TypeFeedbackKind::Value: {
+    // //     ObservedValues* feedback = (ObservedValues*)(pos + 1);
+    // //     feedback->record(value);
+    // //     if (TYPEOF(value) == PROMSXP) {
+    // //         if (PRVALUE(value) == R_UnboundValue &&
+    // //             feedback->stateBeforeLastForce < ObservedValues::promise)
+    // //             feedback->stateBeforeLastForce = ObservedValues::promise;
+    // //         else if (feedback->stateBeforeLastForce <
+    // //                  ObservedValues::evaluatedPromise)
+    // //             feedback->stateBeforeLastForce =
+    // //                 ObservedValues::evaluatedPromise;
+    // //     } else {
+    // //         if (feedback->stateBeforeLastForce < ObservedValues::value)
+    // //             feedback->stateBeforeLastForce = ObservedValues::value;
+    // //     }
+    // //     break;
+    // // }
+    // default:
+    //     assert(false);
     // }
-    // case TypeFeedbackKind::Value: {
-    //     ObservedValues* feedback = (ObservedValues*)(pos + 1);
-    //     feedback->record(value);
-    //     if (TYPEOF(value) == PROMSXP) {
-    //         if (PRVALUE(value) == R_UnboundValue &&
-    //             feedback->stateBeforeLastForce < ObservedValues::promise)
-    //             feedback->stateBeforeLastForce = ObservedValues::promise;
-    //         else if (feedback->stateBeforeLastForce <
-    //                  ObservedValues::evaluatedPromise)
-    //             feedback->stateBeforeLastForce =
-    //                 ObservedValues::evaluatedPromise;
-    //     } else {
-    //         if (feedback->stateBeforeLastForce < ObservedValues::value)
-    //             feedback->stateBeforeLastForce = ObservedValues::value;
-    //     }
-    //     break;
-    // }
-    case TypeFeedbackKind::Callee: {
-        auto dt = DispatchTable::unpack(BODY(cls));
-        auto baseline = dt->baseline()->body();
-        auto& feedback = dt->typeFeedback().callees(idx);
-        feedback.record(baseline, value);
-        break;
-    }
-    default:
-        assert(false);
-    }
+
+    // TODO: can we pass the feedback directly?
+    auto dt = DispatchTable::unpack(BODY(cls));
+    auto baseline = dt->baseline();
+    auto& feedback = baseline->typeFeedback();
+    feedback.record(idx, value);
 }
 
 void assertFailImpl(const char* msg) {
@@ -2435,12 +2428,8 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::recordTypefeedback) = {
         "recordTypefeedback",
         (void*)&recordTypefeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::i32, t::i32, t::SEXP, t::SEXP},
-                                false),
+        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i32, t::SEXP}, false),
         {}};
-    get_(Id::recordCall) = {
-        "recordCall", (void*)&recordCallImpl,
-        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i32, t::SEXP}, false)};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(t::t_void,
