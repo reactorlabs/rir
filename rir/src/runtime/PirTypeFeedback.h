@@ -5,6 +5,7 @@
 #include "compiler/pir/type.h"
 #include "runtime/TypeFeedback.h"
 
+#include <cstdint>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,7 +22,7 @@ struct Code;
 namespace pir {
 struct TypeFeedback;
 struct CallFeedback;
-}
+} // namespace pir
 
 struct PirTypeFeedback
     : public RirRuntimeObject<PirTypeFeedback, PIR_TYPE_FEEDBACK_MAGIC> {
@@ -45,11 +46,8 @@ struct PirTypeFeedback
     ObservedValues& getSampleOfSlot(size_t slot) {
         return getMDEntryOfSlot(slot).feedback;
     }
-    unsigned getBCOffsetOfSlot(size_t slot) {
-        return getMDEntryOfSlot(slot).offset;
-    }
-    Code* getSrcCodeOfSlot(size_t slot);
-    Opcode* getOriginOfSlot(size_t slot);
+
+    uint32_t rirIdx(size_t slot);
 
     static size_t requiredSize(size_t origins, size_t entries) {
         return sizeof(PirTypeFeedback) + sizeof(SEXP) * origins +
@@ -57,8 +55,8 @@ struct PirTypeFeedback
     }
 
     struct MDEntry {
-        uint8_t srcCode;
-        unsigned offset;
+        uint8_t funIdx;
+        uint32_t rirIdx;
         ObservedValues feedback;
         pir::PirType previousType;
         unsigned sampleCount = 0;

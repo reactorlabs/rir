@@ -21,6 +21,7 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
+#include <cstdint>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -373,73 +374,90 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_test_: {
-        auto feedback = bc.immediate.testFeedback;
-        if (feedback.seen == ObservedTest::OnlyTrue ||
-            feedback.seen == ObservedTest::OnlyFalse) {
-            if (auto i = Instruction::Cast(at(0))) {
-                auto v = feedback.seen == ObservedTest::OnlyTrue
-                             ? (Value*)True::instance()
-                             : (Value*)False::instance();
-                if (!i->typeFeedback().value) {
-                    auto& t = i->updateTypeFeedback();
-                    t.value = v;
-                    t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
-                } else if (i->typeFeedback().value != v) {
-                    i->updateTypeFeedback().value = nullptr;
+        uint32_t idx = bc.immediate.i;
+        Value* target = top();
+
+        if (baseline) {
+            auto rec = insert(new Record(rir::TypeFeedbackKind::Test, idx));
+            rec->setCallee(target);
+        } else {
+            auto& feedback = typeFeedback.test(idx);
+
+            if (feedback.seen == ObservedTest::OnlyTrue ||
+                feedback.seen == ObservedTest::OnlyFalse) {
+                if (auto i = Instruction::Cast(at(0))) {
+                    auto v = feedback.seen == ObservedTest::OnlyTrue
+                                 ? (Value*)True::instance()
+                                 : (Value*)False::instance();
+                    if (!i->typeFeedback().value) {
+                        auto& t = i->updateTypeFeedback();
+                        t.value = v;
+                        t.feedbackOrigin =
+                            FeedbackOrigin(srcCode->function(), idx);
+                    } else if (i->typeFeedback().value != v) {
+                        i->updateTypeFeedback().value = nullptr;
+                    }
                 }
+            } else if (feedback.seen == ObservedTest::None) {
+                // To communicate to the backend that feedback is missing that
+                // should still be collected.
+                if (auto i = Instruction::Cast(at(0)))
+                    i->updateTypeFeedback();
             }
-        } else if (feedback.seen == ObservedTest::None) {
-            // To communicate to the backend that feedback is missing that
-            // should still be collected.
-            if (auto i = Instruction::Cast(at(0)))
-                i->updateTypeFeedback();
         }
         break;
     }
 
     case Opcode::record_type_: {
-        // TODO: for the baseline version add the recording instructions
-        //       with a check that can trigger the recompilation
-        auto feedback = bc.immediate.typeFeedback;
-        if (auto i = Instruction::Cast(at(0))) {
-            // Search for the most specific feedback for this location
-            for (auto fb : outerFeedback) {
-                bool found = false;
-                // TODO: implement with a find method on register map
-                fb->forEachSlot(
-                    [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
-                        found = true;
-                        auto origin = fb->getOriginOfSlot(i);
-                        if (origin == pos && mdEntry.readyForReopt) {
-                            feedback = mdEntry.feedback;
-                        }
-                    });
-                if (found)
-                    break;
-            }
-            // TODO: deal with multiple locations
-            auto& t = i->updateTypeFeedback();
-            t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
-            if (feedback.numTypes) {
-                t.type.merge(feedback);
-                if (auto force = Force::Cast(i)) {
-                    force->observed = static_cast<Force::ArgumentKind>(
-                        feedback.stateBeforeLastForce);
+        uint32_t idx = bc.immediate.i;
+        Value* target = top();
+
+        if (baseline) {
+            auto rec = insert(new Record(rir::TypeFeedbackKind::Type, idx));
+            rec->setCallee(target);
+        } else {
+            auto& feedback = typeFeedback.values(idx);
+            if (auto i = Instruction::Cast(at(0))) {
+                // Search for the most specific feedback for this location
+                for (auto fb : outerFeedback) {
+                    bool found = false;
+                    // TODO: implement with a find method on register map
+                    fb->forEachSlot(
+                        [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
+                            found = true;
+                            auto origin = fb->rirIdx(i);
+                            if (origin == idx && mdEntry.readyForReopt) {
+                                feedback = mdEntry.feedback;
+                            }
+                        });
+                    if (found)
+                        break;
                 }
-            } else if (t.type.isVoid() &&
-                       (!insert.function->optFunction->isOptimized() ||
-                        insert.function->optFunction->deoptCount() == 0)) {
-                t.type = PirType::val().notObject().fastVecelt();
+                // TODO: deal with multiple locations
+                auto& t = i->updateTypeFeedback();
+                t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+                if (feedback.numTypes) {
+                    t.type.merge(feedback);
+                    if (auto force = Force::Cast(i)) {
+                        force->observed = static_cast<Force::ArgumentKind>(
+                            feedback.stateBeforeLastForce);
+                    }
+                } else if (t.type.isVoid() &&
+                           (!insert.function->optFunction->isOptimized() ||
+                            insert.function->optFunction->deoptCount() == 0)) {
+                    t.type = PirType::val().notObject().fastVecelt();
+                }
             }
         }
         break;
     }
 
     case Opcode::record_call_: {
+        uint32_t idx = bc.immediate.i;
         Value* target = top();
 
         if (baseline) {
-            auto rec = insert(new RecordCall(bc.immediate.i));
+            auto rec = insert(new Record(rir::TypeFeedbackKind::Call, idx));
             rec->setCallee(target);
         } else {
             const auto& feedback = typeFeedback.callees(bc.immediate.i);
@@ -452,8 +470,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto sp =
                     insert.registerFrameState(srcCode, pos, stack, inPromise());
 
-                DeoptReason reason = DeoptReason(FeedbackOrigin(srcCode, pos),
-                                                 DeoptReason::DeadCall);
+                DeoptReason reason =
+                    DeoptReason(FeedbackOrigin(srcCode->function(), idx),
+                                DeoptReason::DeadCall);
 
                 auto d = insert(new Deopt(sp));
                 d->setDeoptReason(compiler.module->deoptReasonValue(reason),
@@ -467,7 +486,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 //
                 auto& f = i->updateCallFeedback();
                 f.taken = feedback.taken;
-                f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+                f.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
                 if (feedback.numTargets == 1) {
                     assert(!feedback.invalid &&
                            "feedback can't be invalid if numTargets is 1");
@@ -500,7 +519,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     if (auto c = cls->isContinuation()) {
                         if (auto d = c->continuationContext->asDeoptContext()) {
                             if (d->reason().reason == DeoptReason::CallTarget) {
-                                if (d->reason().pc() == pos) {
+                                if (d->reason().origin.idx() == idx) {
                                     auto deoptCallTarget =
                                         d->callTargetTrigger();
                                     for (size_t i = 0; i < feedback.numTargets;

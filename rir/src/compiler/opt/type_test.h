@@ -35,10 +35,10 @@ class TypeTest {
                 return failed();
         }
 
-        if (!feedback.feedbackOrigin.pc())
+        if (!feedback.feedbackOrigin.isValid())
             return failed();
 
-        assert(feedback.feedbackOrigin.pc());
+        assert(feedback.feedbackOrigin.isValid());
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||

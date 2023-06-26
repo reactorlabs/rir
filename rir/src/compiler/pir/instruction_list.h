@@ -124,6 +124,6 @@
     V(SetNames)                                                                \
     V(PirCopy)                                                                 \
     V(Nop)                                                                     \
-    V(RecordCall)
+    V(Record)
 
 #endif

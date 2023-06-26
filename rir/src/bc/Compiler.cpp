@@ -203,6 +203,12 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
+    BC recordType() { return BC::recordType(typeFeedbackBuilder.addValue()); }
+
+    BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
+
+    BC recordTest() { return BC::recordTest(typeFeedbackBuilder.addTest()); }
+
   private:
     unsigned int pushedPromiseContexts = 0;
 };
@@ -259,7 +265,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     // loop peel is a copy of the condition and body, with no backwards jumps
     if (Compiler::loopPeelingEnabled && peelLoop) {
         compileCond();
-        cs << BC::recordTest() << BC::brfalse(breakBranch);
+        cs << ctx.recordTest() << BC::brfalse(breakBranch);
         compileBody();
     }
 
@@ -350,7 +356,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         // branch
         cs << BC::pop();
     } else {
-        cs << BC::recordTest() << BC::brtrue(skipRegularForBranch);
+        cs << ctx.recordTest() << BC::brtrue(skipRegularForBranch);
         //   <regular for>
         // Note that we call the builtin `for` and pass the body as a
         // promise to lower the bytecode size
@@ -380,7 +386,7 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << BC::recordType();
+            cs << ctx.recordType();
 
         cs << BC::br(endBranch);
         cs << skipRegularForBranch;
@@ -388,16 +394,16 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // } else {
 
     // m' <- colonCastLhs(m')
-    cs << BC::swap() << BC::colonCastLhs() << BC::recordType()
+    cs << BC::swap() << BC::colonCastLhs() << ctx.recordType()
        << BC::ensureNamed() << BC::swap();
 
     // n' <- colonCastRhs(m', n')
-    cs << BC::colonCastRhs() << BC::ensureNamed() << BC::recordType();
+    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordType();
 
     // step <- if (m' <= n') 1L else -1L
     cs << BC::dup2() << BC::le();
     cs.addSrc(R_NilValue);
-    cs << BC::recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
+    cs << ctx.recordTest() << BC::brfalse(stepElseBranch) << BC::push(1)
        << BC::br(stepEndBranch) << stepElseBranch << BC::push(-1)
        << stepEndBranch;
 
@@ -541,7 +547,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         if (voidContext)
             cs << BC::pop();
         else if (Compiler::profile)
-            cs << BC::recordType();
+            cs << ctx.recordType();
 
         return true;
     }
@@ -796,7 +802,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             }
 
             if (Compiler::profile)
-                cs << BC::recordType();
+                cs << ctx.recordType();
 
             if (maybeChanges(target, *idx) ||
                 (dims > 1 && maybeChanges(target, *(idx + 1))) ||
@@ -945,7 +951,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::ldfun(farrow_sym);
 
             if (Compiler::profile)
-                cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
+                cs << ctx.recordCall();
 
             // prepare x, yk, z as promises
             LoadArgsResult load_arg_res;
@@ -1019,7 +1025,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
                 // The return value, RHS, is TOS
                 cs << BC::invisible();
                 if (Compiler::profile) {
-                    cs << BC::recordType();
+                    cs << ctx.recordType();
                 }
             }
 
@@ -1159,7 +1165,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         BC::Label contBranch = cs.mkLabel();
 
         cs << BC::dup() << BC::is(BC::RirTypecheck::isNonObject)
-           << BC::recordTest() << BC::brfalse(objBranch)
+           << ctx.recordTest() << BC::brfalse(objBranch)
            << BC::br(nonObjBranch);
 
         cs << objBranch;
@@ -1200,7 +1206,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs.addSrc(ast);
         if (!voidContext) {
             if (Compiler::profile)
-                cs << BC::recordType();
+                cs << ctx.recordType();
             cs << BC::visible();
         } else {
             cs << BC::pop();
@@ -1309,7 +1315,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs.addSrc(R_NilValue);
 
             if (record)
-                cs << BC::recordTest();
+                cs << ctx.recordTest();
 
             // If outside bound, branch, otherwise index into the vector
             cs << BC::brtrue(breakBranch) << BC::pull(2) << BC::pull(1)
@@ -1495,14 +1501,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         // !isVector(x)
         cs << BC::dup() << BC::is(BC::RirTypecheck::isVector)
-           << BC::recordTest() << BC::brtrue(vecArityBr);
+           << ctx.recordTest() << BC::brtrue(vecArityBr);
         cs << BC::br(vecErrorBr);
 
         // ... || LENGTH(x) != 1
         cs << vecArityBr << BC::dup() << BC::length_() << BC::push(1)
            << BC::eq();
         cs.addSrc(R_NilValue); // to make code verifier happy
-        cs << BC::recordTest() << BC::brtrue(vecEContBr);
+        cs << ctx.recordTest() << BC::brtrue(vecEContBr);
 
         cs << vecErrorBr;
         ctx.emitError("EXPR must be a length 1 vector", ast);
@@ -1511,7 +1517,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         cs << vecEContBr;
 
         cs << BC::dup() << BC::is(BC::RirTypecheck::isFactor)
-           << BC::recordTest() << BC::brfalse(facWContBr);
+           << ctx.recordTest() << BC::brfalse(facWContBr);
 
         ctx.emitWarning("EXPR is a \"factor\", treated as integer.\n Consider "
                         "using 'switch(as.character( * ), ...)' instead.",
@@ -1524,14 +1530,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             cs << BC::br(nilBr);
         }
         cs << BC::dup() << BC::is(BC::RirTypecheck::isSTRSXP)
-           << BC::recordTest() << BC::brtrue(strBr);
+           << ctx.recordTest() << BC::brtrue(strBr);
         cs << BC::asSwitchIdx();
 
         // currently stack is [arg[0]] (converted to integer)
         for (size_t i = 0; i < labels.size(); ++i) {
             cs << BC::dup() << BC::push(Rf_ScalarInteger(i + 1)) << BC::eq();
             cs.addSrc(R_NilValue); // call argument for builtin
-            cs << BC::asbool() << BC::recordTest() << BC::brtrue(labels[i]);
+            cs << BC::asbool() << ctx.recordTest() << BC::brtrue(labels[i]);
         }
         cs << BC::br(nilBr) << strBr;
         if (dupDflt) {
@@ -1545,14 +1551,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             // BC::asbool to compare the cases.
             cs << BC::dup()
                << BC::callBuiltin(1, R_NilValue, getBuiltinFun("is.na"))
-               << BC::asbool() << BC::recordTest() << BC::brfalse(strNAContBr)
+               << BC::asbool() << ctx.recordTest() << BC::brfalse(strNAContBr)
                << BC::pop() << BC::push(Rf_mkString("NA")) << strNAContBr;
 
             for (size_t i = 0; i < expressions.size(); ++i) {
                 for (auto& n : groups[i]) {
                     cs << BC::dup() << BC::push(n) << BC::eq();
                     cs.addSrc(R_NilValue); // call argument for builtin
-                    cs << BC::asbool() << BC::recordTest()
+                    cs << BC::asbool() << ctx.recordTest()
                        << BC::brtrue(groupLabels[i]);
                 }
             }
@@ -1860,7 +1866,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
                     theEnd = cs.mkLabel();
                     cs << BC::push(builtin) << BC::dup()
                        << BC::ldvarNoForce(fun) << BC::identicalNoforce()
-                       << BC::recordTest() << BC::brtrue(eager);
+                       << ctx.recordTest() << BC::brtrue(eager);
 
                     cs << BC::pop();
                 }
@@ -1874,7 +1880,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     }
 
     if (Compiler::profile)
-        cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
+        cs << ctx.recordCall();
 
     auto compileCall = [&](LoadArgsResult& info) {
         if (info.hasDots) {
@@ -1894,7 +1900,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
         compileLoadOneArg(ctx, args, ArgType::RAW_VALUE, info);
         compileLoadOneArg(ctx, CDR(args), ArgType::RAW_VALUE, info);
         if (Compiler::profile)
-            cs << BC::recordCall(ctx.typeFeedbackBuilder.addCallee());
+            cs << ctx.recordCall();
         // Load the rest of the args
         compileLoadArgs(ctx, ast, fun, args, info, voidContext, 2, 0);
     } else {
@@ -1917,7 +1923,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args,
     if (voidContext)
         cs << BC::pop();
     else if (Compiler::profile)
-        cs << BC::recordType();
+        cs << ctx.recordType();
 }
 
 // Lookup
@@ -1935,7 +1941,7 @@ void compileGetvar(CompilerContext& ctx, SEXP name) {
             cs << BC::ldvar(name);
         }
         if (Compiler::profile)
-            cs << BC::recordType();
+            cs << ctx.recordType();
     }
 }
 

@@ -957,6 +957,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 }
 
 void recordTypefeedbackImpl(SEXP cls, unsigned idx, SEXP value) {
+    // FIXME: implement
     // switch (kind) {
     // // case TypeFeedbackKind::Test: {
     // //     ObservedTest* feedback = (ObservedTest*)(pos + 1);
@@ -984,6 +985,10 @@ void recordTypefeedbackImpl(SEXP cls, unsigned idx, SEXP value) {
     //     assert(false);
     // }
 
+    std::cerr << idx << " " << cls << std::endl;
+    if (!cls) {
+        return;
+    }
     // TODO: can we pass the feedback directly?
     auto dt = DispatchTable::unpack(BODY(cls));
     auto baseline = dt->baseline();
