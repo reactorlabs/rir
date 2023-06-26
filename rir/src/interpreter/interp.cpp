@@ -2310,23 +2310,22 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP callee = ostack_top();
             c->function()->typeFeedback().record(idx, callee);
-            pc += sizeof(ObservedCallees);
             NEXT();
         }
 
         INSTRUCTION(record_test_) {
-            ObservedTest* feedback = (ObservedTest*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedTest);
+            c->function()->typeFeedback().record(idx, t);
             NEXT();
         }
 
         INSTRUCTION(record_type_) {
-            ObservedValues* feedback = (ObservedValues*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedValues);
+            c->function()->typeFeedback().record(idx, t);
             NEXT();
         }
 

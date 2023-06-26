@@ -187,7 +187,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         map->forEachSlot(
             [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
                 auto feedback = mdEntry.feedback;
-                out << " - slot #" << i << ": " << mdEntry.offset << " : [";
+                out << " - slot #" << i << ": " << mdEntry.rirIdx << " : [";
                 feedback.print(out);
                 out << "] (" << mdEntry.sampleCount << " records - "
                     << (mdEntry.readyForReopt ? "ready" : "not ready")

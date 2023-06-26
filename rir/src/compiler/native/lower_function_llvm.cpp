@@ -420,13 +420,14 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         auto srcAddr = (Constant*)builder.CreateIntToPtr(
             llvm::ConstantInt::get(
                 PirJitLLVM::getContext(),
-                llvm::APInt(64,
-                            reinterpret_cast<uint64_t>(dr->reason.srcCode()),
-                            false)),
+                llvm::APInt(
+                    64,
+                    reinterpret_cast<uint64_t>(dr->reason.origin.function()),
+                    false)),
             t::voidPtr);
         auto drs = llvm::ConstantStruct::get(
             t::DeoptReason, {c(dr->reason.reason, 32),
-                             c(dr->reason.origin.offset(), 32), srcAddr});
+                             c(dr->reason.origin.idx(), 32), srcAddr});
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
@@ -3596,14 +3597,13 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-                // FIXME: can I have just one record instruction? with 2 bits
-                // for the kind?
-            case Tag::RecordCall: {
-                auto rec = RecordCall::Cast(i);
+            case Tag::Record: {
+                auto rec = Record::Cast(i);
+                auto cls = paramClosure();
 
                 call(
                     NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
-                    {paramClosure(), c(rec->idx), loadSxp(rec->arg(0).val())});
+                    {cls, c(rec->idx), loadSxp(rec->arg(0).val())});
 
                 break;
             }
@@ -6136,26 +6136,17 @@ void LowerFunctionLLVM::compile() {
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
-                if (i->hasTypeFeedback() &&
-                    i->typeFeedback().feedbackOrigin.pc()) {
-                    // FIXME: record
-                    // call(NativeBuiltins::get(
-                    //          NativeBuiltins::Id::recordTypefeedback),
-                    //      {c((void*)i->typeFeedback().feedbackOrigin.pc()),
-                    //       c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
-                    //       load(i)});
+                if (i->hasTypeFeedback()) {
+                    call(NativeBuiltins::get(
+                             NativeBuiltins::Id::recordTypefeedback),
+                         {paramClosure(),
+                          c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
                 }
                 if (i->hasCallFeedback()) {
-                    assert(false);
-                    assert(i->callFeedback().feedbackOrigin.pc());
-                    // FIXME: record
-                    // call(NativeBuiltins::get(
-                    //          NativeBuiltins::Id::recordTypefeedback),
-                    //      {c((unsigned)TypeFeedbackKind::Callee),
-                    //       // TODO: need the offset
-                    //       c((void*)i->callFeedback().feedbackOrigin.pc()),
-                    //       c((void*)i->callFeedback().feedbackOrigin.srcCode()),
-                    //       load(i)});
+                    call(NativeBuiltins::get(
+                             NativeBuiltins::Id::recordTypefeedback),
+                         {paramClosure(),
+                          c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
                 }
             }
 
@@ -6261,12 +6252,13 @@ void LowerFunctionLLVM::compile() {
             auto i = var.first;
             if (Rep::Of(i) != Rep::SEXP)
                 continue;
-            if (!i->typeFeedback().feedbackOrigin.pc())
+            if (!i->typeFeedback().feedbackOrigin.function())
                 continue;
             if (!var.second.initialized)
                 continue;
             if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
-                codes.insert(i->typeFeedback().feedbackOrigin.srcCode());
+                codes.insert(
+                    i->typeFeedback().feedbackOrigin.function()->body());
                 variableMapping.emplace(var.second.stackSlot,
                                         i->typeFeedback());
 #ifdef DEBUG_REGISTER_MAP

@@ -10,6 +10,7 @@
 #include "api.h"
 #include "compiler/analysis/cfg.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/TypeFeedback.h"
 #include "singleton_values.h"
 #include "type.h"
 #include "utils/Pool.h"
@@ -17,6 +18,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -213,7 +215,7 @@ void Instruction::print(std::ostream& out, bool tty) const {
             typeFeedback().value->printRef(out);
         else if (!typeFeedback().type.isVoid())
             out << typeFeedback().type;
-        if (!typeFeedback().feedbackOrigin.pc())
+        if (!typeFeedback().feedbackOrigin.function())
             out << "@?";
         out << ">";
     }
@@ -1017,16 +1019,29 @@ bool Deopt::hasDeoptReason() const {
     return deoptReason() != DeoptReasonWrapper::unknown();
 }
 
-RecordCall::RecordCall(unsigned idx)
+Record::Record(rir::TypeFeedbackKind kind, uint32_t idx)
     : FixedLenInstruction(PirType::voyd(), {{PirType::any()}},
                           {{UnknownDeoptTrigger::instance()}}),
-      idx(idx) {}
+      kind(kind), idx(idx) {}
 
-Value* RecordCall::getCallee() const { return arg<0>().val(); }
-void RecordCall::setCallee(Value* callee) { arg<0>().val() = callee; }
+Value* Record::getCallee() const { return arg<0>().val(); }
+void Record::setCallee(Value* callee) { arg<0>().val() = callee; }
 
-void RecordCall::printArgs(std::ostream& out, bool tty) const {
+void Record::printArgs(std::ostream& out, bool tty) const {
+    switch (kind) {
+    case TypeFeedbackKind::Test:
+        out << "test";
+        break;
+    case TypeFeedbackKind::Call:
+        out << "call";
+        break;
+    case TypeFeedbackKind::Type:
+        out << "type";
+        break;
+    }
+
     out << "#" << idx << " ";
+
     getCallee()->printRef(out);
 }
 

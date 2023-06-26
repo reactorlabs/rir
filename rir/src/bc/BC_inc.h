@@ -152,8 +152,6 @@ class BC {
         uint32_t i;
         RirTypecheck typecheck;
         NumLocals loc;
-        ObservedValues typeFeedback;
-        ObservedTest testFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         ImmediateArguments() {
@@ -308,10 +306,10 @@ class BC {
 #define V(NESTED, name, name_) inline static BC name();
     BC_NOARGS(V, _)
 #undef V
-    inline static BC recordCall(unsigned idx);
+    inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
-    inline static BC recordType();
-    inline static BC recordTest();
+    inline static BC recordType(uint32_t idx);
+    inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
@@ -561,15 +559,9 @@ class BC {
         case Opcode::is_:
         case Opcode::put_:
         case Opcode::record_call_:
-            memcpy(&immediate.i, pc, sizeof(immediate.i));
-            break;
         case Opcode::record_test_:
-            memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,
-                   sizeof(ObservedValues));
-            break;
         case Opcode::record_type_:
-            memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
-                   sizeof(ObservedValues));
+            memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)

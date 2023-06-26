@@ -67,7 +67,7 @@ class Const : public ValueImpl<Const, Tag::Constant> {
     friend class Module;
 };
 
-class Index : public ValueImpl<Index, Tag::RecordCall> {
+class Index : public ValueImpl<Index, Tag::Record> {
   private:
     explicit Index(unsigned idx);
     unsigned idx;

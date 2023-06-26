@@ -23,15 +23,23 @@ class CodeStream;
 BC_NOARGS(V, _)
 #undef V
 
-BC BC::recordCall(unsigned idx) {
+BC BC::recordCall(uint32_t idx) {
     ImmediateArguments i;
     i.i = idx;
     return BC(Opcode::record_call_, i);
 }
 
-BC BC::recordType() { return BC(Opcode::record_type_); }
+BC BC::recordType(uint32_t idx) {
+    ImmediateArguments i;
+    i.i = idx;
+    return BC(Opcode::record_type_, i);
+}
 
-BC BC::recordTest() { return BC(Opcode::record_test_); }
+BC BC::recordTest(uint32_t idx) {
+    ImmediateArguments i;
+    i.i = idx;
+    return BC(Opcode::record_test_, i);
+}
 
 BC BC::asSwitchIdx() { return BC(Opcode::as_switch_idx_); }
 
