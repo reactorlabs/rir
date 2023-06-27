@@ -30,16 +30,6 @@ extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);
 REXPORT SEXP rirSerialize(SEXP data, SEXP file);
 REXPORT SEXP rirDeserialize(SEXP file);
-/// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
-/// XORing the bits instead of collecting them.
-rir::UUID hashSexp(SEXP sexp);
-/// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it but
-/// XORing the bits instead of collecting them.
-void hashSexp(SEXP sexp, rir::UUIDHasher& hasher);
-/// Serialize a SEXP (doesn't have to be RIR) into the buffer
-void serialize(SEXP sexp, ByteBuffer& buffer);
-/// Deserialize an SEXP (doesn't have to be RIR) from the buffer
-SEXP deserialize(ByteBuffer& sexpBuffer);
 
 REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();

@@ -3,6 +3,7 @@
 #include "runtime/Code.h"
 #include "hash/UUID.h"
 #include "hash/UUIDPool.h"
+#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {
@@ -10,16 +11,15 @@ namespace rir {
 void FrameInfo::deserialize(ByteBuffer& buf) {
     UUID codeUuid;
     buf.getBytes((uint8_t*)&codeUuid, sizeof(codeUuid));
-    code = Code::unpack(::deserialize(buf));
+    code = Code::unpack(rir::deserialize(buf, true));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
     inPromise = (bool)buf.getInt();
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    auto codeUuid = hashSexp(code->container());
-    UUIDPool::intern(code->container(), codeUuid);
-    buf.putBytes((uint8_t*)&codeUuid, sizeof(codeUuid));
+    UUIDPool::intern(code->container(), true, false);
+    rir::serialize(code->container(), buf, true);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
