@@ -33,10 +33,6 @@ extern "C" Rboolean R_Visible;
 
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 3;
 
-// This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
-static const int R_STREAM_DEFAULT_VERSION = 3;
-static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
-
 static size_t oldMaxInput = 0;
 static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
@@ -542,99 +538,6 @@ REXPORT SEXP rirDeserialize(SEXP fileSexp) {
     fclose(file);
     pir::Parameter::RIR_PRESERVE = oldPreserve;
     return res;
-}
-
-static void rStreamHashChar(R_outpstream_t stream, int data) {
-    auto hasher = (UUIDHasher*)stream->data;
-    hasher->hashBytesOf<unsigned char>((unsigned char)data);
-}
-
-static void rStreamHashBytes(R_outpstream_t stream, void* data, int length) {
-    auto hasher = (UUIDHasher*)stream->data;
-    hasher->hashBytes(data, length);
-}
-
-static void rStreamOutChar(R_outpstream_t stream, int data) {
-    auto buffer = (ByteBuffer*)stream->data;
-    auto data2 = (unsigned char)data;
-    buffer->putBytes(&data2, sizeof(unsigned char));
-}
-
-static void rStreamOutBytes(R_outpstream_t stream, void* data, int length) {
-    auto buffer = (ByteBuffer*)stream->data;
-    buffer->putBytes((uint8_t*)data, length);
-}
-
-static int rStreamInChar(R_inpstream_t stream) {
-    auto buffer = (ByteBuffer*)stream->data;
-    unsigned char c;
-    buffer->getBytes(&c, sizeof(unsigned char));
-    return c;
-}
-
-static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
-    auto buffer = (ByteBuffer*)stream->data;
-    buffer->getBytes((uint8_t*)data, length);
-}
-
-UUID hashSexp(SEXP sexp) {
-    UUIDHasher hasher;
-    hashSexp(sexp, hasher);
-    return hasher.finalize();
-}
-
-void hashSexp(SEXP sexp, UUIDHasher& hasher) {
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
-    pir::Parameter::RIR_PRESERVE = true;
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&hasher,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamHashChar,
-        rStreamHashBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-}
-
-void serialize(SEXP sexp, ByteBuffer& buffer) {
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
-    pir::Parameter::RIR_PRESERVE = true;
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&buffer,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamOutChar,
-        rStreamOutBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-}
-
-SEXP deserialize(ByteBuffer& sexpBuffer) {
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
-    pir::Parameter::RIR_PRESERVE = true;
-    struct R_inpstream_st in{};
-    R_InitInPStream(
-        &in,
-        (R_pstream_data_t)&sexpBuffer,
-        R_STREAM_FORMAT,
-        rStreamInChar,
-        rStreamInBytes,
-        nullptr,
-        nullptr
-    );
-    SEXP sexp = R_Unserialize(&in);
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-    return sexp;
 }
 
 REXPORT SEXP rirEnableLoopPeeling() {

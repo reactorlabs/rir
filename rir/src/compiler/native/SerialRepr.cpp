@@ -4,6 +4,8 @@
 
 #include "SerialRepr.h"
 #include "api.h"
+#include "hash/UUIDPool.h"
+#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
@@ -13,7 +15,8 @@ namespace pir {
 
 llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
-    serialize(what, buf);
+    UUIDPool::intern(what, true, false);
+    serialize(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "DeoptMetadata"),

@@ -8,39 +8,70 @@
 #include "UUID.h"
 #include "bc/BC_inc.h"
 #include "interpreter/instance.h"
+#include "utils/ByteBuffer.h"
 
 #include <unordered_map>
+#include <unordered_set>
 
 #define DO_INTERN
 
 namespace rir {
 
-/// A pool of SEXPs with a UUID.
-/// When we deserialize some SEXPs, after deserialization we will check their
-///    hash and try to reuse an SEXP already interned if possible. Otherwise we
-///    store ("intern") for future deserializations.
+/// A global set of SEXPs identified by a unique UUID computed by hash.
+/// Structurally equivalent SEXPs will have the same UUID, and structurally
+/// different SEXPs will, with extremely high probability, have different UUIDs.
+/// "Structurally equivalent" means that an SEXP's UUID is independent of its
+/// address in memory, and even different R sessions can identify structurally-
+/// equivalent SEXPs by the same UUID.
+///
+/// The UUID is computed by hashing the SEXP's serialized form. When serializing
+/// an SEXP, we only serialize hashes to connected RIR objects, to avoid
+/// serializing copies of SEXPs we already have and then effectively duplicating
+/// them by deserializing. However, when we serialize an SEXP to compute its
+/// hash, we always serialize the connected objects, because some of those
+/// connections may be cyclic and we a) need to handle this via refs (we use R's
+/// ref-table) and b) want the refs to be deterministic (which requires the
+/// "hash" of the connected object to be different than what we get from hashing
+/// object directly, because the numbers and expansion of the refs differ).
+///
+/// Each SEXP in the set has a WeakRef finalizer which will remove the SEXP when
+/// it's garbage collected, so the pool won't continually increase in size. When
+/// SEXPs need to be remembered (by the compiler server), they must be
+/// explicitly preserved.
 class UUIDPool {
     static std::unordered_map<UUID, SEXP> interned;
+    static std::unordered_map<SEXP, UUID> hashes;
+    static std::unordered_set<SEXP> preserved;
+    static std::unordered_map<UUID, ByteBuffer> serialized;
 
+#ifdef DO_INTERN
+    static void uninternGcd(SEXP e);
+#endif
+
+    /// Intern the SEXP when we already know its hash, not recursive and not
+    /// preserving.
+    ///
+    /// @see UUIDPool::intern(SEXP)
+    static SEXP intern(SEXP e, const UUID& uuid, bool preserve);
   public:
-    /// Intern the SEXP, except we already know its hash
-    static SEXP intern(SEXP e, const UUID& uuid);
-    /// Will hash the SEXP and then, if we've already interned, return the
-    /// existing version. Otherwise we will insert it into the pool and return
-    /// it as-is.
-    static SEXP intern(SEXP e);
-    /// Gets the interned value by hash, or nullptr if not interned
+    /// Will hash the SEXP and:
+    /// - If not in the pool, will add it *and* if `recursive` is set,
+    ///   recursively intern connected SEXPs. Then returns the original SEXP
+    /// - If already in the pool, returns the existing SEXP
+    static SEXP intern(SEXP e, bool recursive, bool preserve);
+    /// Gets the interned SEXP by hash, or nullptr if not interned
     static SEXP get(const UUID& hash);
-    // Currently unused
-    /* /// Reads item and interns, possibly returning the already-interned version.
+    /// Reads item and interns, returning the existing copy if already interned.
     ///
-    /// The SEXP MUST NOT contain any references to external SEXPs.
+    /// This also recursively interns connected SEXPs, not directly, but they
+    /// are read from this function themselves.
     static SEXP readItem(SEXP ref_table, R_inpstream_t in);
-    /// Interns and then writes the item, possibly writing the already-interned
-    /// version (though they should write the exact same data).
+    /// When serializing with `useHashes=true`, asserts that the SEXP is
+    /// interned (required for `useHashes=true`) and writes the SEXP's hash.
     ///
-    /// The SEXP MUST NOT contain any references to external SEXPs.
-    static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out); */
+    /// When "serializing" to compute the hash and serializing with
+    /// `useHashes=false`, calls `WriteItem` to write the SEXP as usual.
+    static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
 };
 
 } // namespace rir
