@@ -33,7 +33,6 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
     assert(!fun || rir::Function::check(fun));
     if (fun)
         setEntry(3, fun);
-    setEntry(4, R_NilValue);
 }
 
 Code* Code::New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
@@ -55,8 +54,7 @@ Code* Code::NewNative(Immediate ast) {
 }
 
 void Code::setLazyCodeModuleFinalizer() {
-    auto finalizer = makeFinalizer(Code::finalizeLazyCodeModuleFromContainer);
-    setEntry(4, finalizer);
+    makeFinalizer(Code::finalizeLazyCodeModuleFromContainer);
 }
 
 void Code::finalizeLazyCodeModuleFromContainer(SEXP sexp) {
@@ -137,22 +135,21 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     code->src = src_pool_read_item(refTable, inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
-        code->trivialExpr = ReadItem(refTable, inp);
+        code->trivialExpr = UUIDPool::readItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = p(ReadItem(refTable, inp));
+    SEXP extraPool = p(UUIDPool::readItem(refTable, inp));
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        argReorder = p(ReadItem(refTable, inp));
+        argReorder = p(UUIDPool::readItem(refTable, inp));
     }
     if (!rirFunction) {
-        // Have to readItem so we read a cyclic reference if necessary
-        rirFunction = Function::unpack(p(ReadItem(refTable, inp)));
+        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
     }
 
     // Bytecode
@@ -196,20 +193,19 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     src_pool_write_item(src, refTable, out);
     OutInteger(out, trivialExpr != nullptr);
     if (trivialExpr)
-        WriteItem(trivialExpr, refTable, out);
+        UUIDPool::writeItem(trivialExpr, refTable, out);
     OutInteger(out, (int)stackLength);
     OutInteger(out, (int)localsCount);
     OutInteger(out, (int)bindingCacheSize);
     OutInteger(out, (int)codeSize);
     OutInteger(out, (int)srcLength);
     OutInteger(out, (int)extraPoolSize);
-    WriteItem(getEntry(0), refTable, out);
+    UUIDPool::writeItem(getEntry(0), refTable, out);
     OutInteger(out, getEntry(2) != nullptr);
     if (getEntry(2))
-        WriteItem(getEntry(2), refTable, out);
+        UUIDPool::writeItem(getEntry(2), refTable, out);
     if (includeFunction) {
-        // Have to writeItem so we write a reference if necessary
-        WriteItem(function()->container(), refTable, out);
+        UUIDPool::writeItem(function()->container(), refTable, out);
     }
 
     // Bytecode

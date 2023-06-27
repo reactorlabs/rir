@@ -73,8 +73,8 @@ struct RirRuntimeObject {
 
     /// Creates an SEXP which, when the container is freed, will run finalizer
     /// on it.
-    SEXP makeFinalizer(R_CFinalizer_t finalizer) const {
-        return R_MakeWeakRefC(container(),R_NilValue,finalizer,(Rboolean)true);
+    void makeFinalizer(R_CFinalizer_t finalizer) const {
+        return R_RegisterCFinalizerEx(container(),finalizer, (Rboolean)true);
     }
 
     RirRuntimeObject(uint32_t gc_area_start, uint32_t gc_area_length)

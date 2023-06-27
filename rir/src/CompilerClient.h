@@ -12,7 +12,11 @@
 #include "runtime/Context.h"
 #include <future>
 
+class ByteBuffer;
+
 namespace rir {
+
+class UUID;
 
 /**
  * Compiler server client.
@@ -22,28 +26,42 @@ namespace rir {
  * compile RIR to PIR (currently just compares to check for discrepancies).
  */
 class CompilerClient {
-    struct ResponseData {
+    struct CompiledResponseData {
         SEXP sexp;
         std::string finalPir;
     };
-
-    static bool _isRunning;
-  public:
+    template<typename T>
     class Handle {
         friend class CompilerClient;
 #ifdef MULTI_THREADED_COMPILER_CLIENT
         std::shared_ptr<int> socketIndexRef;
-        std::future<ResponseData> response;
-        Handle(const std::shared_ptr<int>& socketIndexRef,
-               std::future<ResponseData> response)
+        std::future<T> response;
+        CompiledHandle(const std::shared_ptr<int>& socketIndexRef,
+                       std::future<T> response)
             : socketIndexRef(socketIndexRef), response(std::move(response)) {}
         /// Block and get the response data
-        ResponseData getResponse() const;
+        T getResponse() const;
 #else
-        ResponseData response;
-        explicit Handle(ResponseData response) : response(std::move(response)) {}
+        T response;
+        explicit Handle(T response) : response(std::move(response)) {}
 #endif
+    };
+
+    static bool _isRunning;
+
+    template<typename T>
+    static Handle<T>* request(
+            const std::function<void(ByteBuffer&)>&& makeRequest,
+            const std::function<T(ByteBuffer&)>&& makeResponse);
+  public:
+    class CompiledHandle {
+        friend class CompilerClient;
+        Handle<CompiledResponseData>* inner;
+        explicit CompiledHandle(Handle<CompiledResponseData>* inner)
+            : inner(inner) {}
       public:
+        ~CompiledHandle() { delete inner; }
+
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
         void compare(pir::ClosureVersion* version) const;
@@ -58,9 +76,15 @@ class CompilerClient {
     static void tryInit();
     /// Asynchronously sends the closure to the compile server and returns a
     /// handle to use the result.
-    static Handle* pirCompile(SEXP what, const Context& assumptions,
+    static CompiledHandle* pirCompile(SEXP what, const Context& assumptions,
                               const std::string& name,
                               const pir::DebugOptions& debug);
+    /// Synchronously retrieves the closure with the given hash from the server.
+    /// If in the future we make this asynchronous, should still return a
+    /// closure SEXP but make it block while we're waiting for the response.
+    ///
+    /// Returns `nullptr` if the server doesn't have the closure.
+    static SEXP retrieve(const UUID& hash);
 
     /// Send a message from the compiler client (this) to each connected
     /// compiler server, which kills the server (exit 0) on receive. Then stops

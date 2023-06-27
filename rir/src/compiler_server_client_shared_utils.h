@@ -9,12 +9,31 @@
 
 namespace rir {
 
-const uint64_t PIR_COMPILE_MAGIC = 0x217A25432A462D4A;
-const uint64_t PIR_COMPILE_HASH_ONLY_MAGIC = 0x217A25432A462D4B;
-const uint64_t PIR_COMPILE_KILL_MAGIC = 0x217A25432A462D4C;
-const uint64_t PIR_COMPILE_RESPONSE_MAGIC = 0x9BEEB1E5356F1A36;
-const uint64_t PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC = 0x9BEEB1E5356F1A37;
-const uint64_t PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC = 0x9BEEB1E5356F1A38;
+enum class Request : uint64_t {
+    /// For large requests, we send the hash. If the server already received
+    /// the same request it will serve the cached response. Otherwise it will
+    /// send `Response::NeedsFull`
+    Memoize = 0x217A25432A462D4B,
+    /// Compile a function with assumptions and debug options
+    Compile = 0x217A25432A462D4A,
+    /// Retrieve an SEXP on the server referenced from by an SEXP on the client
+    Retrieve = 0x217A25432A462D4D,
+    /// Kill the server
+    Kill = 0x217A25432A462D4C,
+};
+
+enum Response : uint64_t {
+    /// Memoized request - needs the full response
+    NeedsFull = 0x9BEEB1E5356F1A37,
+    /// Compiled closure
+    Compiled = 0x9BEEB1E5356F1A36,
+    /// Retrieved SEXP
+    Retrieved = 0x9BEEB1E5356F1A3D,
+    /// SEXP isn't in server
+    RetrieveFailed = 0x9BEEB1E5356F1A3E,
+    /// Acknowledge that the server has been killed
+    Killed = 0x9BEEB1E5356F1A38
+};
 
 /// If set, we still compile on the client and only compare the compiler server
 /// and client results, instead of replacing the SEXP with the compiled version.

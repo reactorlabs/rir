@@ -62,8 +62,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     enum class Kind { Bytecode, Native } kind;
 
-    // extra pool, pir type feedback, arg reordering info, finalizer
-    static constexpr size_t NumLocals = 5;
+    // extra pool, pir type feedback, arg reordering info, rir function
+    static constexpr size_t NumLocals = 4;
 
     Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx,
          unsigned codeSize, unsigned sourceSize, size_t localsCnt,

@@ -14,6 +14,7 @@
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
+#include "serialize.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 

@@ -6,6 +6,8 @@
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "hash/UUID.h"
+#include "hash/UUIDPool.h"
+#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
 #include <array>
@@ -23,7 +25,7 @@ namespace rir {
 using namespace ctpl;
 
 bool CompilerServer::_isRunning = false;
-static std::unordered_map<UUID, ByteBuffer> memoized;
+static std::unordered_map<UUID, ByteBuffer> memoizedRequests;
 
 void CompilerServer::tryRun() {
     // get the server address from the environment
@@ -59,73 +61,97 @@ void CompilerServer::tryRun() {
         socket.recv(request, zmq::recv_flags::none);
         std::cerr << "Got request (" << request.size() << " bytes)" << std::endl;
 
-        // Deserialize the request
+        // Deserialize the request.
         // Request data format =
-        //   PIR_COMPILE_HASH_ONLY_MAGIC
-        // + hash
-        // | PIR_COMPILE_MAGIC
-        // + serialize(what)
-        // + sizeof(assumptions) (always 8)
-        // + assumptions
-        // + sizeof(name)
-        // + name
-        // + sizeof(debug.flags) (always 4)
-        // + debug.flags
-        // + sizeof(debug.passFilterString)
-        // + debug.passFilterString
-        // + sizeof(debug.functionFilterString)
-        // + debug.functionFilterString
-        // + sizeof(debug.style) (always 4)
-        // + debug.style
+        // - Request
+        // + ...
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
-        auto magic = requestBuffer.getLong();
+        auto magic = (Request)requestBuffer.getLong();
+
+        // Handle Kill (not memoized) or Memoize
         switch (magic) {
-        case PIR_COMPILE_KILL_MAGIC: {
+        case Request::Kill: {
+            // ... (end of request)
             std::cerr << "Received kill request" << std::endl;
-            socket.send(zmq::message_t(
-                            &PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC,
-                            sizeof(PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC)),
+            // Send Response::Killed
+            auto response = Response::Killed;
+            socket.send(zmq::message_t(&response, sizeof(response)),
                         zmq::send_flags::none);
             std::cerr << "Sent kill acknowledgement, will die" << std::endl;
             _isRunning = false;
             exit(0);
         }
-        case PIR_COMPILE_HASH_ONLY_MAGIC: {
+        case Request::Memoize: {
+            // ...
+            // + UUID hash
             UUID hash;
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
-            if (memoized.count(hash)) {
-                std::cerr << "Found memoized result for hash (hash-only) " << hash << std::endl;
-                auto result = memoized[hash];
+            if (memoizedRequests.count(hash)) {
+                std::cerr << "Found memoized result for hash (hash-only) "
+                          << hash << std::endl;
+                // Send the response (memoized)
+                auto result = memoizedRequests[hash];
                 socket.send(zmq::message_t(result.data(), result.size()),
                             zmq::send_flags::none);
-                std::cerr << "Sent memoized result for hash (hash-only) " << hash << std::endl;
+                std::cerr << "Sent memoized result for hash (hash-only) "
+                          << hash << std::endl;
             } else {
-                std::cerr << "No memoized result for hash (hash-only) " << hash << std::endl;
-                socket.send(zmq::message_t(
-                                &PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC,
-                                sizeof(PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC)),
+                std::cerr << "No memoized result for hash (hash-only) " << hash
+                          << std::endl;
+                // Send Response::NeedsFull
+                auto response = Response::NeedsFull;
+                socket.send(zmq::message_t(&response, sizeof(response)),
                             zmq::send_flags::none);
-                std::cerr << "Sent request full for hash (hash-only) " << hash << std::endl;
+                std::cerr << "Sent request full for hash (hash-only) " << hash
+                          << std::endl;
             }
+            continue;
+        }
+        default:
             break;
         }
-        case PIR_COMPILE_MAGIC: {
-            // Check if we memoized
-            UUID requestHash = UUID::hash(request.data(), request.size());
-            if (memoized.count(requestHash)) {
-                std::cerr << "Found memoized result for hash " << requestHash << std::endl;
-                auto result = memoized[requestHash];
-                socket.send(zmq::message_t(
-                                result.data(),
-                                result.size()),
-                            zmq::send_flags::none);
-                std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
-                break;
-            } else {
-                std::cerr << "No memoized result for hash " << requestHash << std::endl;
-            }
 
-            SEXP what = deserialize(requestBuffer);
+        // Handle if we memoized
+        UUID requestHash = UUID::hash(request.data(), request.size());
+        if (memoizedRequests.count(requestHash)) {
+            std::cerr << "Found memoized result for hash " << requestHash << std::endl;
+            // Send the response (memoized)
+            auto result = memoizedRequests[requestHash];
+            socket.send(zmq::message_t(
+                            result.data(),
+                            result.size()),
+                        zmq::send_flags::none);
+            std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
+            continue;
+        } else {
+            std::cerr << "No memoized result for hash " << requestHash << std::endl;
+        }
+
+        // Handle other request types
+        ByteBuffer response;
+        switch (magic) {
+        case Request::Compile: {
+            // ...
+            // + serialize(what)
+            // + sizeof(assumptions) (always 8)
+            // + assumptions
+            // + sizeof(name)
+            // + name
+            // + sizeof(debug.flags) (always 4)
+            // + debug.flags
+            // + sizeof(debug.passFilterString)
+            // + debug.passFilterString
+            // + sizeof(debug.functionFilterString)
+            // + debug.functionFilterString
+            // + sizeof(debug.style) (always 4)
+            // + debug.style
+
+            // Client won't sent hashed SEXPs because it doesn't necessarily
+            // remember them, and because the server doesn't care about
+            // connected SEXPs like the client; the only thing duplicate SEXPs
+            // may cause is wasted memory, but since we're on the server and
+            // preserving everything this is less of an issue.
+            SEXP what = deserialize(requestBuffer, false);
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");
@@ -161,40 +187,70 @@ void CompilerServer::tryRun() {
             std::string pirPrint;
             what = pirCompile(what, assumptions, name, debug, &pirPrint);
 
+            // Intern, not because we'll have reused it (highly unlikely since
+            // we memoize requests, and it doesn't affect anything anyways), but
+            // because we want to store it in the UUID pool for Retrieve requests
+            // (since we memoize requests) so that compiler client can retrieve it later
+
             // Serialize the response
             // Response data format =
-            //   PIR_COMPILE_RESPONSE_MAGIC
+            //   Response::Compiled
             // + serialize(what)
             // + sizeof(pirPrint)
             // + pirPrint
-            ByteBuffer response;
-            response.putLong(PIR_COMPILE_RESPONSE_MAGIC);
-            serialize(what, response);
+            response.putLong((uint64_t)Response::Compiled);
+            serialize(what, response, true);
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-
-            // Memoize the response
-            memoized[requestHash] = response;
-
-            // Send the response;
-            auto responseSize =
-                *socket.send(zmq::message_t(
-                                 response.data(),
-                                 response.size()),
-                             zmq::send_flags::none);
-            auto responseSize2 = response.size();
-            SOFT_ASSERT(responseSize == responseSize2,
-                        "Client didn't receive the full response");
-
-            std::cerr << "Sent response (" << responseSize << " bytes)"
-                      << std::endl;
             break;
         }
-        default:
-            std::cerr << "Invalid magic: " << magic << std::endl;
+        case Request::Retrieve: {
+            // ...
+            // + UUID hash
+            UUID hash;
+            requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
+
+            // Get SEXP
+            SEXP what = UUIDPool::get(hash);
+
+            // Serialize the response
+            if (what) {
+                // Response data format =
+                //   Response::Retrieved
+                // + serialize(what)
+                response.putLong(Response::Retrieved);
+                serialize(what, response, true);
+            } else {
+                // Response data format =
+                //   Response::RetrieveFailed
+                response.putLong(Response::RetrieveFailed);
+            }
             break;
         }
+        case Request::Kill:
+        case Request::Memoize:
+            assert(false);
+        /*default:
+            std::cerr << "Invalid magic: " << (uint64_t)magic << std::endl;
+            break;*/
+        }
+
+        // Memoize the response
+        memoizedRequests[requestHash] = response;
+
+        // Send the response;
+        auto responseSize =
+            *socket.send(zmq::message_t(
+                             response.data(),
+                             response.size()),
+                         zmq::send_flags::none);
+        auto responseSize2 = response.size();
+        SOFT_ASSERT(responseSize == responseSize2,
+                    "Client didn't receive the full response");
+
+        std::cerr << "Sent response (" << responseSize << " bytes)"
+                  << std::endl;
     }
 }
 

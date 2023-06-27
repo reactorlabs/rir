@@ -6,6 +6,7 @@
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "hash/UUID.h"
+#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
 #ifdef MULTI_THREADED_COMPILER_CLIENT
@@ -97,9 +98,12 @@ void CompilerClient::tryInit() {
     }
 }
 
-CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
+template<typename T>
+CompilerClient::Handle<T>* CompilerClient::request(
+        const std::function<void(ByteBuffer&)>&& makeRequest,
+        const std::function<T(ByteBuffer&)>&& makeResponse) {
     if (!isRunning()) {
-      return nullptr;
+        return nullptr;
     }
     auto getResponse = [=](int index) {
         auto socket = sockets[index];
@@ -119,47 +123,18 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
 
         // Serialize the request
         // Request data format =
-        //   PIR_COMPILE_MAGIC
-        // + sizeof(what)
-        // + serialize(what)
-        // + sizeof(assumptions) (always 8)
-        // + assumptions
-        // + sizeof(name)
-        // + name
-        // + sizeof(debug.flags) (always 4)
-        // + debug.flags
-        // + sizeof(debug.passFilterString)
-        // + debug.passFilterString
-        // + sizeof(debug.functionFilterString)
-        // + debug.functionFilterString
-        // + sizeof(debug.style) (always 4)
-        // + debug.style
+        //   from makeRequest()
         ByteBuffer request;
-        request.putLong(PIR_COMPILE_MAGIC);
-        serialize(what, request);
-        request.putLong(sizeof(Context));
-        request.putBytes((uint8_t*)&assumptions, sizeof(Context));
-        request.putLong(name.size());
-        request.putBytes((uint8_t*)name.c_str(), name.size());
-        request.putLong(sizeof(debug.flags));
-        request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
-        request.putLong(debug.passFilterString.size());
-        request.putBytes((uint8_t*)debug.passFilterString.c_str(),
-                             debug.passFilterString.size());
-        request.putLong(debug.functionFilterString.size());
-        request.putBytes((uint8_t*)debug.functionFilterString.c_str(),
-                             debug.functionFilterString.size());
-        request.putLong(sizeof(debug.style));
-        request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+        makeRequest(request);
 
         if (request.size() >= PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY) {
             UUID requestHash = UUID::hash(request.data(), request.size());
             // Serialize the hash-only request
             // Request data format =
-            //   PIR_COMPILE_HASH_ONLY_MAGIC
+            //   Request::Memoize
             // + hash
             ByteBuffer hashOnlyRequest;
-            hashOnlyRequest.putLong(PIR_COMPILE_HASH_ONLY_MAGIC);
+            hashOnlyRequest.putLong((uint64_t)Request::Memoize);
             hashOnlyRequest.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
 
             // Send the hash-only request
@@ -177,27 +152,12 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
             socket->recv(hashOnlyResponse, zmq::recv_flags::none);
             // Receive the response
             // Response data format =
-            //   PIR_COMPILE_RESPONSE_MAGIC
-            // + serialize(what)
-            // + sizeof(pirPrint)
-            // + pirPrint
-            // | PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC
+            //   Response::NeedsFull
+            // | from makeResponse()
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
             auto hashOnlyResponseMagic = hashOnlyResponseBuffer.getLong();
-            switch (hashOnlyResponseMagic) {
-            case PIR_COMPILE_RESPONSE_MAGIC: {
-                SEXP hashOnlyResponseWhat = deserialize(hashOnlyResponseBuffer);
-                auto pirPrintSize = hashOnlyResponseBuffer.getLong();
-                std::string pirPrint;
-                pirPrint.resize(pirPrintSize);
-                hashOnlyResponseBuffer.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-                return CompilerClient::ResponseData{hashOnlyResponseWhat,
-                                                    pirPrint};
-            }
-            case PIR_COMPILE_HASH_ONLY_RESPONSE_FAILURE_MAGIC:
-                break;
-            default:
-                assert(false && "invalid hash-only response magic");
+            if (hashOnlyResponseMagic != Response::NeedsFull) {
+                return makeResponse(hashOnlyResponseBuffer);
             }
         }
 
@@ -215,29 +175,108 @@ CompilerClient::Handle* CompilerClient::pirCompile(SEXP what, const Context& ass
         socket->recv(response, zmq::recv_flags::none);
         // Receive the response
         // Response data format =
-        //   PIR_COMPILE_RESPONSE_MAGIC
-        // + serialize(what)
-        // + sizeof(pirPrint)
-        // + pirPrint
+        //   from makeResponse()
         ByteBuffer responseBuffer((uint8_t*)response.data(), response.size());
-        auto responseMagic = responseBuffer.getLong();
-        assert(responseMagic == PIR_COMPILE_RESPONSE_MAGIC);
-        SEXP responseWhat = deserialize(responseBuffer);
-        auto pirPrintSize = responseBuffer.getLong();
-        std::string pirPrint;
-        pirPrint.resize(pirPrintSize);
-        responseBuffer.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-        return CompilerClient::ResponseData{responseWhat, pirPrint};
+        return makeResponse(responseBuffer);
     };
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     std::shared_ptr<int> socketIndexRef(new int(-1));
-    return new CompilerClient::Handle{socketIndexRef, threads->push([=](index) {
-        *socketIndexRef = index;
-        return getResponse(index);
-    })};
+    return new CompilerClient::Handle<T>{socketIndexRef, threads->push([=](index) {
+                                             *socketIndexRef = index;
+                                             return getResponse(index);
+                                         })};
 #else
     auto response = getResponse(0);
-    return new CompilerClient::Handle{response};
+    return new CompilerClient::Handle<T>{response};
+#endif
+}
+
+CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
+    auto handle = request<CompiledResponseData>(
+        [=](ByteBuffer& request) {
+            // Request data format =
+            //   Request::Compile
+            // + sizeof(what)
+            // + serialize(what)
+            // + sizeof(assumptions) (always 8)
+            // + assumptions
+            // + sizeof(name)
+            // + name
+            // + sizeof(debug.flags) (always 4)
+            // + debug.flags
+            // + sizeof(debug.passFilterString)
+            // + debug.passFilterString
+            // + sizeof(debug.functionFilterString)
+            // + debug.functionFilterString
+            // + sizeof(debug.style) (always 4)
+            // + debug.style
+            request.putLong((uint64_t)Request::Compile);
+            serialize(what, request, false);
+            request.putLong(sizeof(Context));
+            request.putBytes((uint8_t*)&assumptions, sizeof(Context));
+            request.putLong(name.size());
+            request.putBytes((uint8_t*)name.c_str(), name.size());
+            request.putLong(sizeof(debug.flags));
+            request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
+            request.putLong(debug.passFilterString.size());
+            request.putBytes((uint8_t*)debug.passFilterString.c_str(),
+                             debug.passFilterString.size());
+            request.putLong(debug.functionFilterString.size());
+            request.putBytes((uint8_t*)debug.functionFilterString.c_str(),
+                             debug.functionFilterString.size());
+            request.putLong(sizeof(debug.style));
+            request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+        },
+        [](ByteBuffer& response) {
+            // Response data format =
+            //   Response::Compiled
+            // + serialize(what)
+            // + sizeof(pirPrint)
+            // + pirPrint
+            auto responseMagic = response.getLong();
+            assert(responseMagic == Response::Compiled);
+            SEXP responseWhat = deserialize(response, true);
+            auto pirPrintSize = response.getLong();
+            std::string pirPrint;
+            pirPrint.resize(pirPrintSize);
+            response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+            return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
+        }
+    );
+    return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
+}
+
+SEXP CompilerClient::retrieve(const rir::UUID& hash) {
+    auto handle = request<SEXP>(
+        [=](ByteBuffer& request) {
+            // Request data format =
+            //   Request::Retrieve
+            // + hash
+            request.putLong((uint64_t)Request::Retrieve);
+            request.putBytes((uint8_t*)&hash, sizeof(hash));
+        },
+        [](ByteBuffer& response) -> SEXP {
+            // Response data format =
+            //   Response::Retrieved
+            // + serialize(what)
+            // | Response::RetrieveFailed
+            auto responseMagic = response.getLong();
+            switch (responseMagic) {
+            case Response::Retrieved:
+                return deserialize(response, true);
+            case Response::RetrieveFailed:
+                return nullptr;
+            default:
+                assert(false && "Unexpected response magic");
+            }
+        }
+    );
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+#error "TODO create closure which blocks until the response is ready"
+#else
+    auto response = handle ? handle->response : nullptr;
+    delete handle;
+    return response;
 #endif
 }
 
@@ -253,16 +292,14 @@ void CompilerClient::killServers() {
     for (size_t i = 0; i < sockets.size(); i++) {
       auto& socket = sockets[i];
       // Send the request
-      socket->send(zmq::message_t(
-                       &PIR_COMPILE_KILL_MAGIC,
-                       sizeof(PIR_COMPILE_KILL_MAGIC)),
+      auto request = Request::Kill;
+      socket->send(zmq::message_t(&request, sizeof(request)),
                    zmq::send_flags::none);
       // Check the acknowledgement
       zmq::message_t response;
       socket->recv(response, zmq::recv_flags::none);
-      if (response.size() != sizeof(PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC) ||
-          *(uint64_t*)response.data() !=
-              PIR_COMPILE_KILL_ACKNOWLEDGEMENT_MAGIC) {
+      if (response.size() != sizeof(Response::Killed) ||
+          *(Response*)response.data() != Response::Killed) {
         std::cerr << "Error: server " << i << " didn't acknowledge kill request"
                   << std::endl;
       }
@@ -278,7 +315,7 @@ void CompilerClient::killServers() {
 }
 
 #ifdef MULTI_THREADED_COMPILER_CLIENT
-ResponseData CompilerClient::Handle::getResponse() {
+CompiledResponseData CompilerClient::CompiledHandle::getResponse() {
     // Wait for the response, with timeout if set
     if (PIR_CLIENT_TIMEOUT == std::chrono::milliseconds(0)) {
         response.wait();
@@ -356,28 +393,28 @@ static void checkDiscrepancy(std::string&& localPir, std::string&& remotePir) {
     }
 }
 
-void CompilerClient::Handle::compare(pir::ClosureVersion* version) const {
+void CompilerClient::CompiledHandle::compare(pir::ClosureVersion* version) const {
     auto localPir = printClosureVersionForCompilerServerComparison(version);
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     // Tried using a second thread-pool here but it causes "mutex lock failed:
     // Invalid argument" for `response` (and `shared_future` doesn't fix it)
     (void)std::async(std::launch::async, [=]() {
-        auto resp = this.getResponse();
+        auto resp = inner->getResponse();
         auto remotePir = resp.finalPir;
         checkDiscrepancy(std::move(localPir), std::move(remotePir));
     });
 #else
-    auto remotePir = response.finalPir;
+    auto remotePir = inner->response.finalPir;
     checkDiscrepancy(std::move(localPir), std::move(remotePir));
 #endif
 }
 
 /// Block and get the SEXP
-SEXP CompilerClient::Handle::getSexp() const {
+SEXP CompilerClient::CompiledHandle::getSexp() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
-    auto response = getResponse();
+    auto response = inner->getResponse();
 #endif
-    return response.sexp;
+    return inner->response.sexp;
 }
 
 } // namespace rir

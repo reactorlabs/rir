@@ -10,11 +10,11 @@ std::unordered_map<SEXP, size_t> Pool::contents;
 std::unordered_set<size_t> Pool::patchable;
 
 BC::PoolIdx Pool::readItem(SEXP ref_table, R_inpstream_t in) {
-    return insert(ReadItem(ref_table, in));
+    return insert(UUIDPool::readItem(ref_table, in));
 }
 
 void Pool::writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
-    WriteItem(get(idx), ref_table, out);
+    UUIDPool::writeItem(get(idx), ref_table, out);
 }
 
 BC::PoolIdx Pool::getNum(double n) {
