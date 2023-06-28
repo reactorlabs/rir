@@ -2,6 +2,7 @@
 #include "R/Serialize.h"
 
 #include <sstream>
+#include <iomanip>
 
 namespace rir {
 
@@ -29,7 +30,8 @@ void UUID::serialize(__attribute__((unused)) SEXP _refTable, R_outpstream_t out)
 
 std::string UUID::str() const {
     std::ostringstream str;
-    str << std::hex << a << b << c << d << std::dec;
+    str << std::setfill('0') << std::setw(sizeof(a)) << std::right
+        << std::hex << a << b << c << d << std::dec;
     return str.str();
 }
 
