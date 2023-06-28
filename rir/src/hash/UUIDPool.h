@@ -41,11 +41,23 @@ namespace rir {
 class UUIDPool {
     static std::unordered_map<UUID, SEXP> interned;
     static std::unordered_map<SEXP, UUID> hashes;
+    /// This and `prevToIntern` effectively form multiple double-linked lists of
+    /// SEXPs with the same UUID hash (one list for each hash) in the order we
+    /// would assign them to be the "interned" SEXP for the UUID; when the
+    /// "interned" SEXP gets gcd, we replace it with the next SEXP in the list,
+    /// otherwise we remove the UUID because there is no longer a corresponding
+    /// live SEXP.
+    static std::unordered_map<SEXP, SEXP> nextToIntern;
+    /// See `nextToIntern` doc
+    static std::unordered_map<SEXP, SEXP> prevToIntern;
     static std::unordered_set<SEXP> preserved;
     static std::unordered_map<UUID, ByteBuffer> serialized;
 
 #ifdef DO_INTERN
     static void uninternGcd(SEXP e);
+    /// Remove map from SEXP to UUID, but the UUID maps to a different SEXP
+    /// which is also the one we preserve if preserved = true
+    static void uninternGcdCopy(SEXP e);
 #endif
 
     /// Intern the SEXP when we already know its hash, not recursive and not
