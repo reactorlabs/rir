@@ -23,6 +23,7 @@ static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 static bool oldPreserve = false;
 static bool isSerializingViaMainApi = false;
 static bool _useHashes = false;
+static bool _isHashing = false;
 static std::queue<SEXP>* connectedWorklist = nullptr;
 
 // Will serialize s if it's an instance of CLS
@@ -171,8 +172,11 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
 }
 
 void hashSexp(SEXP sexp, UUIDHasher& hasher) {
+    assert(!_isHashing &&
+           "currently hashing, and nested calls to hashSexp not supported");
     oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
+    _isHashing = true;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -185,12 +189,15 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    _isHashing = false;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     assert(!isSerializingViaMainApi &&
            "nested calls to serialize + deserialize not supported");
+    assert(!_isHashing &&
+           "currently hashing, and nested calls to serialize not supported");
     isSerializingViaMainApi = true;
     _useHashes = useHashes;
     oldPreserve = pir::Parameter::RIR_PRESERVE;
@@ -245,6 +252,11 @@ bool useHashes(__attribute__((unused)) R_outpstream_t out) {
 bool useHashes(__attribute__((unused)) R_inpstream_t in) {
     // Trying to pretend we don't use a singleton...
     return _useHashes;
+}
+
+bool isHashing(__attribute__((unused)) R_outpstream_t out) {
+    // Trying to pretend we don't use a singleton...
+    return _isHashing;
 }
 
 std::queue<SEXP>* worklist(__attribute__((unused)) R_outpstream_t out) {
