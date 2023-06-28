@@ -128,6 +128,12 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
     } else {
         registerFinalizerIfPossible(e, uninternGcd);
     }
+    if (hashes.count(e)) {
+        LOG(std::cout << "SEXP UUID changed from " << hashes.at(e) << " to "
+                      << hash << ": " << e << "\n");
+        Rf_PrintValue(e);
+        assert(false);
+    }
     LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
     interned[hash] = e;
     hashes[e] = hash;

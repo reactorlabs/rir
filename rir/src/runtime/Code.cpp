@@ -6,6 +6,7 @@
 #include "bc/BC_inc.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "hash/UUIDPool.h"
+#include "interpreter/serialize.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 
@@ -200,16 +201,32 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     OutInteger(out, (int)codeSize);
     OutInteger(out, (int)srcLength);
     OutInteger(out, (int)extraPoolSize);
-    UUIDPool::writeItem(getEntry(0), refTable, out);
-    OutInteger(out, getEntry(2) != nullptr);
-    if (getEntry(2))
-        UUIDPool::writeItem(getEntry(2), refTable, out);
-    if (includeFunction) {
-        UUIDPool::writeItem(function()->container(), refTable, out);
-    }
 
-    // Bytecode
-    BC::serialize(refTable, out, code(), codeSize, this);
+    // This stuff is mutable so we don't want to hash it
+    if (!isHashing(out)) {
+        UUIDPool::writeItem(getEntry(0), refTable, out);
+        OutInteger(out, getEntry(2) != nullptr);
+        if (getEntry(2))
+            UUIDPool::writeItem(getEntry(2), refTable, out);
+        if (includeFunction) {
+            UUIDPool::writeItem(function()->container(), refTable, out);
+        }
+
+        // Bytecode
+        BC::serialize(refTable, out, code(), codeSize, this);
+    } else {
+        auto wl = worklist(out);
+        if (wl) {
+            for (auto i = 0; i < NumLocals; i++) {
+                if (getEntry(i)) {
+                    wl->push(getEntry(i));
+                }
+                if (includeFunction && function()->container()) {
+                    wl->push(function()->container());
+                }
+            }
+        }
+    }
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
@@ -217,18 +234,21 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 
-    // Native code
-    OutInteger(out, (int)kind);
-    assert(!pendingCompilation() &&
-           "TODO handle pending code being serialized. It's in a state we "
-           "can't really deserialize from, so we want to just not serialize in "
-           "this situation if possible (via the DispatchTable). Otherwise idk");
-    if (kind == Kind::Native) {
-        assert(lazyCodeHandle[0] != '\0');
-        auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-        OutInteger(out, lazyCodeHandleLen);
-        OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-        lazyCodeModule->serialize(out);
+    // This stuff is mutable so we don't want to hash it
+    if (!isHashing(out)) {
+        // Native code
+        OutInteger(out, (int)kind);
+        assert(!pendingCompilation() &&
+               "TODO handle pending code being serialized. It's in a state we "
+               "can't really deserialize from, so we want to just not serialize in "
+               "this situation if possible (via the DispatchTable). Otherwise idk");
+        if (kind == Kind::Native) {
+            assert(lazyCodeHandle[0] != '\0');
+            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+            OutInteger(out, lazyCodeHandleLen);
+            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+            lazyCodeModule->serialize(out);
+        }
     }
 }
 

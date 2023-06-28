@@ -28,9 +28,19 @@ UUID hashSexp(SEXP sexp);
 /// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it but
 /// XORing the bits instead of collecting them, and add connected RIR object
 /// containers to the worklist.
+///
+/// @see hashSexp(SEXP sexp, UUIDHasher& hasher)
 void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist);
 /// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it but
 /// XORing the bits instead of collecting them.
+///
+/// It's specifically important that the compiler-client request hash contains
+/// parts of the SEXP, like feedback, which we DON'T get by calling hashSexp.
+/// This is because we use hashSexp for interning and we don't want interned
+/// SEXPs to change hash, but when the request SEXP changes, we genuinely want
+/// it to alter the response. We really need to look over what is mutable and
+/// what isn't, and how we are going to do different kinds of hashing for
+/// different purposes.
 void hashSexp(SEXP sexp, UUIDHasher& hasher);
 /// Serialize a SEXP (doesn't have to be RIR) into the buffer.
 ///
@@ -54,6 +64,8 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes);
 bool useHashes(R_outpstream_t out);
 /// Whether to use hashes when deserializing in the current stream
 bool useHashes(R_inpstream_t in);
+/// If true we're hashing, otherwise we're actually serializing
+bool isHashing(R_outpstream_t out);
 /// Worklist for the current stream
 std::queue<SEXP>* worklist(R_outpstream_t out);
 
