@@ -112,6 +112,14 @@ class LowerFunctionLLVM {
 
     llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
 
+    static llvm::FunctionCallee convertToFunction(llvm::Module& mod,
+                                                  const void* what,
+                                                  llvm::FunctionType* ty,
+                                                  /// Currently only for builtins, if
+                                                  /// we need to convert more functions
+                                                  /// we'll need to change to fn-id,
+                                                  /// tagged union or something else
+                                                  int builtinId);
     llvm::FunctionCallee convertToFunction(const void* what,
                                            llvm::FunctionType* ty,
                                            /// Currently only for builtins, if
@@ -119,6 +127,9 @@ class LowerFunctionLLVM {
                                            /// we'll need to change to fn-id,
                                            /// tagged union or something else
                                            int builtinId);
+    static llvm::Value* convertToPointer(llvm::Module& mod, const void* what,
+                                         llvm::Type* ty, bool constant,
+                                         llvm::MDNode* reprMeta);
     llvm::Value* convertToPointer(const void* what, llvm::Type* ty,
                                   const SerialRepr& repr,
                                   bool constant = false);

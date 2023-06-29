@@ -77,36 +77,50 @@ LowerFunctionLLVM::getBuiltin(const rir::pir::NativeBuiltin& b) {
     return getModule().getOrInsertFunction(b.name, b.llvmSignature);
 }
 
+llvm::Value* LowerFunctionLLVM::convertToPointer(llvm::Module& mod,
+                                                 const void* what,
+                                                 llvm::Type* ty,
+                                                 bool constant,
+                                                 llvm::MDNode* reprMeta) {
+    assert(what);
+    char name[21];
+    sprintf(name, "ept_%lx", (uintptr_t)what);
+    return mod.getOrInsertGlobal(name, ty, [&]() {
+        auto var = new llvm::GlobalVariable(
+            mod, ty, constant,
+            llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
+            nullptr, name, nullptr,
+            llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
+        var->setMetadata(SerialRepr::POINTER_METADATA_NAME, reprMeta);
+        return var;
+    });
+}
+
 llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  llvm::Type* ty,
                                                  const SerialRepr& repr,
                                                  bool constant) {
+    return convertToPointer(getModule(), what, ty, constant, repr.metadata(getModule().getContext()));
+}
+
+llvm::FunctionCallee
+LowerFunctionLLVM::convertToFunction(llvm::Module& mod, const void* what,
+                                     llvm::FunctionType* ty, int builtinId) {
     assert(what);
     char name[21];
-    sprintf(name, "ept_%lx", (uintptr_t)what);
-    return getModule().getOrInsertGlobal(name, ty, [&]() {
-        auto var = new llvm::GlobalVariable(
-            getModule(), ty, constant,
-            llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
-            nullptr, name, nullptr,
-            llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
-        var->setMetadata("serial", repr.metadata(var->getContext()));
-        return var;
-    });
+    sprintf(name, "efn_%lx", (uintptr_t)what);
+    auto llvmFn = mod.getOrInsertFunction(name, ty);
+    mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)->addOperand(
+        SerialRepr::functionMetadata(llvmFn.getCallee()->getContext(),
+                                     name,
+                                     builtinId));
+    return llvmFn;
 }
 
 llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
                                      int builtinId) {
-    assert(what);
-    char name[21];
-    sprintf(name, "efn_%lx", (uintptr_t)what);
-    auto llvmFn = getModule().getOrInsertFunction(name, ty);
-    getModule().getOrInsertNamedMetadata("serialValues")->addOperand(
-        SerialRepr::functionMetadata(llvmFn.getCallee()->getContext(),
-                                     name,
-                                     builtinId));
-    return llvmFn;
+    return convertToFunction(getModule(), what, ty, builtinId);
 }
 
 void LowerFunctionLLVM::setVisible(int i) {

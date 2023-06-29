@@ -3,12 +3,15 @@
 //
 
 #include "SerialRepr.h"
-#include "api.h"
+#include "R/Funtab.h"
+#include "compiler/native/lower_function_llvm.h"
+#include "compiler/native/types_llvm.h"
 #include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
+#include <llvm/IR/Module.h>
 
 namespace rir {
 namespace pir {
@@ -19,7 +22,7 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
     serialize(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
-        {llvm::MDString::get(ctx, "DeoptMetadata"),
+        {llvm::MDString::get(ctx, "SEXP"),
          llvm::MDString::get(
              ctx,
              llvm::StringRef((const char*)buf.data(), buf.size()))});
@@ -28,7 +31,7 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
 llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
     return llvm::MDTuple::get(
         ctx,
-        {llvm::MDString::get(ctx, "DeoptMetadata"),
+        {llvm::MDString::get(ctx, "String"),
          llvm::MDString::get(ctx, str)});
 }
 
@@ -71,11 +74,110 @@ llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
                                            const char* llvmValueName,
                                            int builtinId) {
     return llvm::MDTuple::get(
-            ctx,
-            {llvm::MDString::get(ctx, "Function"),
-                   llvm::MDString::get(ctx, llvmValueName),
+        ctx,
+        {llvm::MDString::get(ctx, llvmValueName),
          llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
              llvm::Type::getInt32Ty(ctx), builtinId))});
+}
+
+static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
+    auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    return (void*)deserialize(buffer, true);
+}
+
+static void* getMetadataPtr_String(const llvm::MDNode& meta) {
+    auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    // TODO: May need this to be a const char and then leak, or call c_str and
+    //     it somehow doesn't leak or get freed early?
+    return (void*)new std::string(data);
+}
+
+static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta) {
+    auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    return (void*)DeoptMetadata::deserialize(buffer);
+}
+
+static void* getMetadataPtr_OpaqueTrue(__attribute__((unused)) const llvm::MDNode& meta) {
+    return (void*)OpaqueTrue::instance();
+}
+
+static void* getMetadataPtr_R_Visible(__attribute__((unused)) const llvm::MDNode& meta) {
+    return (void*)&R_Visible;
+}
+
+static void* getMetadataPtr_R_BCNodeStackTop(__attribute__((unused)) const llvm::MDNode& meta) {
+    return (void*)&R_BCNodeStackTop;
+}
+
+static void* getMetadataPtr_R_GlobalContext(__attribute__((unused)) const llvm::MDNode& meta) {
+    return (void*)&R_GlobalContext;
+}
+
+
+typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta);
+static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
+    {"SEXP", getMetadataPtr_SEXP},
+    {"String", getMetadataPtr_String},
+    {"DeoptMetadata", getMetadataPtr_DeoptMetadata},
+    {"OpaqueTrue", getMetadataPtr_OpaqueTrue},
+    {"R_Visible", getMetadataPtr_R_Visible},
+    {"R_BCNodeStackTop", getMetadataPtr_R_BCNodeStackTop},
+    {"R_GlobalContext", getMetadataPtr_R_GlobalContext}
+};
+
+static void patchPointerMetadata(llvm::Module& mod,
+                                 llvm::GlobalVariable& inst,
+                                 llvm::MDNode* ptrMeta) {
+    auto type = ((llvm::MDString&)*ptrMeta->getOperand(0)).getString();
+    auto llvmType = inst.getType();
+    auto isConstant = inst.isConstant();
+    auto ptr = getMetadataPtr[type.str()](*ptrMeta);
+    auto replacement = LowerFunctionLLVM::convertToPointer(mod, ptr, llvmType, isConstant, ptrMeta);
+    inst.replaceAllUsesWith(replacement);
+}
+
+static void patchInstructionMetadata(llvm::Module& mod) {
+    for (auto& fun : mod.functions()) {
+        for (auto& bb : fun) {
+            for (auto& inst : bb) {
+                auto ptrMeta = inst.getMetadata(SerialRepr::POINTER_METADATA_NAME);
+                if (ptrMeta) {
+                    patchPointerMetadata(mod, (llvm::GlobalVariable&)inst, ptrMeta);
+                }
+            }
+        }
+    }
+}
+
+static void patchWithFunctionMetadata1(llvm::Module& mod,
+                                       const llvm::MDNode* operand) {
+    auto& meta = *(const llvm::MDTuple*)operand;
+    auto llvmValueName = ((const llvm::MDString&)*meta.getOperand(0)).getString();
+    auto builtinId = (int)((const llvm::ConstantInt&)*meta.getOperand(1)).getZExtValue();
+    auto llvmValue = mod.getNamedValue(llvmValueName);
+
+    SEXP builtin = getBuiltinFun(builtinId);
+    auto replacement = LowerFunctionLLVM::convertToFunction(
+        mod, builtin, t::builtinFunction, builtinId);
+
+    llvmValue->replaceAllUsesWith(replacement.getCallee());
+}
+
+static void patchFunctionMetadata(llvm::Module& mod) {
+    auto meta = mod.getNamedMetadata(pir::SerialRepr::FUNCTION_METADATA_NAME);
+    if (!meta) {
+        return;
+    }
+    for (auto operand : meta->operands()) {
+        patchWithFunctionMetadata1(mod, operand);
+    }
+}
+
+void SerialRepr::patch(llvm::Module& mod) {
+    patchInstructionMetadata(mod);
+    patchFunctionMetadata(mod);
 }
 
 } // namespace pir
