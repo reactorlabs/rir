@@ -46,6 +46,8 @@ void UUIDPool::uninternGcd(SEXP e) {
 
     // Remove hash
     assert(hashes.count(e) && "SEXP was never interned");
+    // Why does cppcheck think this is unused?
+    // cppcheck-suppress unreadVariable
     auto hash = hashes.at(e);
     hashes.erase(e);
     assert(interned.count(hash) && "SEXP was interned, but the corresponding UUID is empty");
@@ -206,6 +208,8 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     }
     if (useHashes(out)) {
         assert(hashes.count(sexp) && "SEXP not interned");
+        // Why does cppcheck think this is unused?
+        // cppcheck-suppress unreadVariable
         auto hash = hashes.at(sexp);
         OutBytes(out, &hash, sizeof(hash));
     } else {
