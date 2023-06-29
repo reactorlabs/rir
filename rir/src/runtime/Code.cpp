@@ -217,7 +217,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     } else {
         auto wl = worklist(out);
         if (wl) {
-            for (auto i = 0; i < NumLocals; i++) {
+            for (size_t i = 0; i < NumLocals; i++) {
                 if (getEntry(i)) {
                     wl->push(getEntry(i));
                 }
