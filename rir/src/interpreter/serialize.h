@@ -18,6 +18,9 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 /// Will serialize and deserialize the SEXP, returning a deep copy.
 SEXP copyBySerial(SEXP x);
 
+/// An output stream which simply discards its output
+R_outpstream_st nullOutputStream();
+
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
 /// XORing the bits instead of collecting them, and add connected RIR object
 /// containers to the worklist.

@@ -12,15 +12,14 @@
 namespace rir {
 
 bool pir::Parameter::RIR_PRESERVE =
-    getenv("RIR_PRESERVE") ? atoi(getenv("RIR_PRESERVE")) : false;
+    getenv("RIR_PRESERVE") != nullptr && strtol(getenv("RIR_PRESERVE"), nullptr, 10);
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
-    getenv("RIR_SERIALIZE_CHAOS") ? atoi(getenv("RIR_SERIALIZE_CHAOS")) : 0;
+    getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
 
 // This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
 static const int R_STREAM_DEFAULT_VERSION = 3;
 static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 
-static bool oldPreserve = false;
 static bool isSerializingViaMainApi = false;
 static bool _useHashes = false;
 static bool _isHashing = false;
@@ -86,7 +85,7 @@ SEXP copyBySerial(SEXP x) {
         return x;
 
     Protect p;
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
     SEXP copy = p(R_unserialize(data, R_NilValue));
@@ -117,6 +116,10 @@ SEXP copyBySerial(SEXP x) {
     pir::Parameter::RIR_PRESERVE = oldPreserve;
     return copy;
 }
+
+static void rStreamDiscardChar(R_outpstream_t stream, int data) {}
+
+static void rStreamDiscardBytes(R_outpstream_t stream, void* data, int length) {}
 
 static void rStreamHashChar(R_outpstream_t stream, int data) {
     auto hasher = (UUIDHasher*)stream->data;
@@ -151,6 +154,21 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
     buffer->getBytes((uint8_t*)data, length);
 }
 
+R_outpstream_st nullOutputStream() {
+    R_outpstream_st out{};
+    R_InitOutPStream(
+        &out,
+        (R_pstream_data_t) nullptr,
+        R_STREAM_FORMAT,
+        R_STREAM_DEFAULT_VERSION,
+        rStreamDiscardChar,
+        rStreamDiscardBytes,
+        nullptr,
+        nullptr
+    );
+    return out;
+}
+
 UUID hashSexp(SEXP sexp, std::queue<SEXP>& worklist) {
     UUIDHasher hasher;
     hashSexp(sexp, hasher, worklist);
@@ -174,7 +192,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
 void hashSexp(SEXP sexp, UUIDHasher& hasher) {
     assert(!_isHashing &&
            "currently hashing, and nested calls to hashSexp not supported");
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     _isHashing = true;
     struct R_outpstream_st out{};
@@ -200,7 +218,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
            "currently hashing, and nested calls to serialize not supported");
     isSerializingViaMainApi = true;
     _useHashes = useHashes;
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     struct R_outpstream_st out{};
     R_InitOutPStream(
@@ -224,7 +242,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
            "nested calls to serialize + deserialize not supported");
     isSerializingViaMainApi = true;
     _useHashes = useHashes;
-    oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     struct R_inpstream_st in{};
     R_InitInPStream(
@@ -242,7 +260,6 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
     isSerializingViaMainApi = false;
     return sexp;
 }
-
 
 bool useHashes(__attribute__((unused)) R_outpstream_t out) {
     // Trying to pretend we don't use a singleton...

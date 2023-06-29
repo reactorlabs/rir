@@ -81,9 +81,6 @@ class UUIDPool {
     /// When "serializing" to compute the hash and serializing with
     /// `useHashes=false`, calls `WriteItem` to write the SEXP as usual.
     static void writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
-    /// If recursively interning and the SEXP is non-null and not yet interned,
-    /// will add it to the worklist
-    static void addToInternWorklist(SEXP sexp, R_outpstream_t out);
 };
 
 } // namespace rir
