@@ -8,6 +8,7 @@
 #include "runtime/Deoptimization.h"
 
 namespace llvm {
+class Module;
 class LLVMContext;
 class MDNode;
 }
@@ -20,6 +21,9 @@ class SerialRepr {
     explicit SerialRepr() {}
 
   public:
+    static constexpr const char* POINTER_METADATA_NAME = "rir.serial.pointer";
+    static constexpr const char* FUNCTION_METADATA_NAME = "rir.serial.function";
+
     class SEXP;
     class String;
     class DeoptMetadata;
@@ -32,6 +36,11 @@ class SerialRepr {
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
                                           const char* llvmValueName,
                                           int builtinId);
+
+    /// Replace pointers with the serialized encodings, fetching from the
+    /// compiler server if necessary. See lower_function_llvm.cpp for where
+    /// exactly we store the metadata
+    static void patch(llvm::Module& mod);
 };
 
 class SerialRepr::SEXP : public SerialRepr {

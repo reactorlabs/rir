@@ -5,6 +5,7 @@
 #include "SerialModule.h"
 #include "R/Serialize.h"
 #include "compiler/native/pir_jit_llvm.h"
+#include "compiler/native/SerialRepr.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/Module.h>
@@ -25,7 +26,9 @@ SerialModule::SerialModule(const llvm::Module& module) {
 std::unique_ptr<llvm::Module> SerialModule::decode() const {
     llvm::StringRef data(bitcode);
     llvm::MemoryBufferRef buffer(data, "rir::SerialModule");
-    return ExitOnErr(llvm::parseBitcodeFile(buffer, pir::PirJitLLVM::getContext()));
+    auto mod = ExitOnErr(llvm::parseBitcodeFile(buffer, pir::PirJitLLVM::getContext()));
+    pir::SerialRepr::patch(*mod);
+    return mod;
 }
 
 SerialModule SerialModule::deserialize(R_inpstream_t inp) {
