@@ -212,4 +212,11 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     }
 }
 
+void UUIDPool::addToInternWorklist(SEXP sexp, R_outpstream_t out) {
+    auto wl = worklist(out);
+    if (sexp && wl && !hashes.count(sexp)) {
+        wl->push(sexp);
+    }
+}
+
 } // namespace rir

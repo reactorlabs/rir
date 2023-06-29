@@ -213,16 +213,11 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         // Bytecode
         BC::serialize(refTable, out, code(), codeSize, this);
     } else {
-        auto wl = worklist(out);
-        if (wl) {
-            for (size_t i = 0; i < NumLocals; i++) {
-                if (getEntry(i)) {
-                    wl->push(getEntry(i));
-                }
-                if (includeFunction && function()->container()) {
-                    wl->push(function()->container());
-                }
-            }
+        for (size_t i = 0; i < NumLocals; i++) {
+            UUIDPool::addToInternWorklist(getEntry(i), out);
+        }
+        if (includeFunction) {
+            UUIDPool::addToInternWorklist(function()->container(), out);
         }
     }
 
