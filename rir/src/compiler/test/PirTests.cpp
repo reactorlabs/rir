@@ -353,6 +353,7 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
     }
 
     rirFun = pirCompile(rirFun, {}, "from_testPir2Rir", rir::pir::DebugOptions());
+    (void)rirFun;
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {
