@@ -20,7 +20,6 @@ unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
 static const int R_STREAM_DEFAULT_VERSION = 3;
 static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 
-static bool isSerializingViaMainApi = false;
 static bool _useHashes = false;
 static bool _isHashing = false;
 static std::queue<SEXP>* connectedWorklist = nullptr;
@@ -182,18 +181,18 @@ UUID hashSexp(SEXP sexp) {
 }
 
 void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
-    assert(connectedWorklist == nullptr &&
-           "currently hashing with worklist, and nested calls not supported");
+    auto oldConnectedWorklist = connectedWorklist;
     connectedWorklist = &worklist;
     hashSexp(sexp, hasher);
-    connectedWorklist = nullptr;
+    connectedWorklist = oldConnectedWorklist;
 }
 
 void hashSexp(SEXP sexp, UUIDHasher& hasher) {
-    assert(!_isHashing &&
-           "currently hashing, and nested calls to hashSexp not supported");
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldUseHashes = _useHashes;
+    auto oldIsHashing = _isHashing;
     pir::Parameter::RIR_PRESERVE = true;
+    _useHashes = false;
     _isHashing = true;
     struct R_outpstream_st out{};
     R_InitOutPStream(
@@ -207,19 +206,18 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
         nullptr
     );
     R_Serialize(sexp, &out);
-    _isHashing = false;
+    _isHashing = oldIsHashing;
+    _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
-    assert(!isSerializingViaMainApi &&
-           "nested calls to serialize + deserialize not supported");
-    assert(!_isHashing &&
-           "currently hashing, and nested calls to serialize not supported");
-    isSerializingViaMainApi = true;
-    _useHashes = useHashes;
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldUseHashes = _useHashes;
+    auto oldIsHashing = _isHashing;
     pir::Parameter::RIR_PRESERVE = true;
+    _useHashes = useHashes;
+    _isHashing = false;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -232,18 +230,18 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    _isHashing = oldIsHashing;
+    _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
-    _useHashes = false;
-    isSerializingViaMainApi = false;
 }
 
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
-    assert(!isSerializingViaMainApi &&
-           "nested calls to serialize + deserialize not supported");
-    isSerializingViaMainApi = true;
-    _useHashes = useHashes;
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldUseHashes = _useHashes;
+    auto oldIsHashing = _isHashing;
     pir::Parameter::RIR_PRESERVE = true;
+    _useHashes = useHashes;
+    _isHashing = false;
     struct R_inpstream_st in{};
     R_InitInPStream(
         &in,
@@ -255,9 +253,9 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
         nullptr
     );
     SEXP sexp = R_Unserialize(&in);
+    _isHashing = oldIsHashing;
+    _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
-    _useHashes = false;
-    isSerializingViaMainApi = false;
     return sexp;
 }
 
