@@ -3,6 +3,7 @@
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
 #include "hash/UUIDPool.h"
+#include "interpreter/serialize.h"
 
 namespace rir {
 
@@ -34,6 +35,12 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
+    // Some stuff is mutable or not part of the structural identity, so we don't
+    // want to hash it. However, we still need to serialize recursive items. To
+    // do this, we temporarily replace out with a void stream.
+    R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = isHashing(out) ? &nullOut : out;
+
     HashAdd(container(), refTable);
     OutInteger(out, size);
     signature().serialize(refTable, out);
@@ -54,7 +61,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
             UUIDPool::writeItem(arg, refTable, out);
         }
     }
-    OutInteger(out, flags.to_i());
+    OutInteger(noHashOut, (int)flags.to_i());
 }
 
 void Function::disassemble(std::ostream& out) {
