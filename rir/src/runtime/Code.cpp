@@ -187,6 +187,12 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 }
 
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
+    // Some stuff is mutable or not part of the structural identity, so we don't
+    // want to hash it. However, we still need to serialize recursive items. To
+    // do this, we temporarily replace out with a void stream.
+    R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = isHashing(out) ? &nullOut : out;
+
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
 
@@ -195,33 +201,23 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     OutInteger(out, trivialExpr != nullptr);
     if (trivialExpr)
         UUIDPool::writeItem(trivialExpr, refTable, out);
-    OutInteger(out, (int)stackLength);
-    OutInteger(out, (int)localsCount);
-    OutInteger(out, (int)bindingCacheSize);
-    OutInteger(out, (int)codeSize);
-    OutInteger(out, (int)srcLength);
-    OutInteger(out, (int)extraPoolSize);
+    OutInteger(noHashOut, (int)stackLength);
+    OutInteger(noHashOut, (int)localsCount);
+    OutInteger(noHashOut, (int)bindingCacheSize);
+    OutInteger(noHashOut, (int)codeSize);
+    OutInteger(noHashOut, (int)srcLength);
+    OutInteger(noHashOut, (int)extraPoolSize);
 
-    // This stuff is mutable so we don't want to hash it
-    if (!isHashing(out)) {
-        UUIDPool::writeItem(getEntry(0), refTable, out);
-        OutInteger(out, getEntry(2) != nullptr);
-        if (getEntry(2))
-            UUIDPool::writeItem(getEntry(2), refTable, out);
-        if (includeFunction) {
-            UUIDPool::writeItem(function()->container(), refTable, out);
-        }
-
-        // Bytecode
-        BC::serialize(refTable, out, code(), codeSize, this);
-    } else {
-        for (size_t i = 0; i < NumLocals; i++) {
-            UUIDPool::addToInternWorklist(getEntry(i), out);
-        }
-        if (includeFunction) {
-            UUIDPool::addToInternWorklist(function()->container(), out);
-        }
+    UUIDPool::writeItem(getEntry(0), refTable, noHashOut);
+    OutInteger(noHashOut, getEntry(2) != nullptr);
+    if (getEntry(2))
+        UUIDPool::writeItem(getEntry(2), refTable, noHashOut);
+    if (includeFunction) {
+        UUIDPool::writeItem(function()->container(), refTable, noHashOut);
     }
+
+    // Bytecode
+    BC::serialize(refTable, noHashOut, code(), codeSize, this);
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
@@ -229,21 +225,18 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 
-    // This stuff is mutable so we don't want to hash it
-    if (!isHashing(out)) {
-        // Native code
-        OutInteger(out, (int)kind);
-        assert(!pendingCompilation() &&
-               "TODO handle pending code being serialized. It's in a state we "
-               "can't really deserialize from, so we want to just not serialize in "
-               "this situation if possible (via the DispatchTable). Otherwise idk");
-        if (kind == Kind::Native) {
-            assert(lazyCodeHandle[0] != '\0');
-            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-            OutInteger(out, lazyCodeHandleLen);
-            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-            lazyCodeModule->serialize(out);
-        }
+    // Native code
+    OutInteger(noHashOut, (int)kind);
+    assert((isHashing(out) || !pendingCompilation()) &&
+           "TODO handle pending code being serialized. It's in a state we "
+           "can't really deserialize from, so we want to just not serialize in "
+           "this situation if possible (via the DispatchTable). Otherwise idk");
+    if (kind == Kind::Native && !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
+        assert(lazyCodeHandle[0] != '\0');
+        auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+        OutInteger(noHashOut, lazyCodeHandleLen);
+        OutBytes(noHashOut, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+        lazyCodeModule->serialize(noHashOut);
     }
 }
 

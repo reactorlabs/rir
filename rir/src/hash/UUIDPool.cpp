@@ -9,7 +9,8 @@
 #include "interpreter/serialize.h"
 #include <queue>
 
-#define LOG(stmt) stmt
+// Can change this to log interned and uninterned hashes and pointers
+#define LOG(stmt) if (false) stmt
 
 namespace rir {
 
@@ -209,13 +210,6 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
         OutBytes(out, &hash, sizeof(hash));
     } else {
         WriteItem(sexp, ref_table, out);
-    }
-}
-
-void UUIDPool::addToInternWorklist(SEXP sexp, R_outpstream_t out) {
-    auto wl = worklist(out);
-    if (sexp && wl && !hashes.count(sexp)) {
-        wl->push(sexp);
     }
 }
 
