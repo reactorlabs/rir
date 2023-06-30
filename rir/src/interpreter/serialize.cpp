@@ -181,19 +181,14 @@ UUID hashSexp(SEXP sexp) {
 }
 
 void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
-    auto oldConnectedWorklist = connectedWorklist;
-    connectedWorklist = &worklist;
-    hashSexp(sexp, hasher);
-    connectedWorklist = oldConnectedWorklist;
-}
-
-void hashSexp(SEXP sexp, UUIDHasher& hasher) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
+    auto oldConnectedWorklist = connectedWorklist;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = false;
     _isHashing = true;
+    connectedWorklist = &worklist;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -206,6 +201,34 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    connectedWorklist = oldConnectedWorklist;
+    _isHashing = oldIsHashing;
+    _useHashes = oldUseHashes;
+    pir::Parameter::RIR_PRESERVE = oldPreserve;
+}
+
+void hashSexp(SEXP sexp, UUIDHasher& hasher) {
+    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+    auto oldUseHashes = _useHashes;
+    auto oldIsHashing = _isHashing;
+    auto oldConnectedWorklist = connectedWorklist;
+    pir::Parameter::RIR_PRESERVE = true;
+    _useHashes = false;
+    _isHashing = true;
+    connectedWorklist = nullptr;
+    struct R_outpstream_st out{};
+    R_InitOutPStream(
+        &out,
+        (R_pstream_data_t)&hasher,
+        R_STREAM_FORMAT,
+        R_STREAM_DEFAULT_VERSION,
+        rStreamHashChar,
+        rStreamHashBytes,
+        nullptr,
+        nullptr
+    );
+    R_Serialize(sexp, &out);
+    connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
@@ -215,9 +238,11 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
+    auto oldConnectedWorklist = connectedWorklist;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = useHashes;
     _isHashing = false;
+    connectedWorklist = nullptr;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -230,6 +255,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
@@ -239,9 +265,11 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
+    auto oldConnectedWorklist = connectedWorklist;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = useHashes;
     _isHashing = false;
+    connectedWorklist = nullptr;
     struct R_inpstream_st in{};
     R_InitInPStream(
         &in,
@@ -253,6 +281,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
         nullptr
     );
     SEXP sexp = R_Unserialize(&in);
+    connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
