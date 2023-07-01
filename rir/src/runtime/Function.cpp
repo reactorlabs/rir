@@ -52,13 +52,13 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     //     (This is one of the reasons we use SEXP instead of unpacking Code for
     //      body and default args, also because we are going to serialize the
     //      SEXP anyways to properly handle cyclic references)
-    UUIDPool::writeItem(getEntry(0), refTable, out);
+    UUIDPool::writeItem(getEntry(0), refTable, noHashOut);
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
-        OutInteger(out, (int)(arg != nullptr));
+        OutInteger(noHashOut, (int)(arg != nullptr));
         if (arg) {
             // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(arg, refTable, out);
+            UUIDPool::writeItem(arg, refTable, noHashOut);
         }
     }
     OutInteger(noHashOut, (int)flags.to_i());
