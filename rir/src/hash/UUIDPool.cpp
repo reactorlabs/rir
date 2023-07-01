@@ -27,6 +27,10 @@ std::unordered_map<UUID, ByteBuffer> UUIDPool::serialized;
 static std::unordered_map<UUID, std::string> disassembly;
 #endif
 
+static bool internable(SEXP e) {
+    return TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP;
+}
+
 #ifdef DO_INTERN
 static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
     switch (TYPEOF(e)) {
@@ -104,7 +108,7 @@ void UUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
-    assert(TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP);
+    assert(internable(e));
 
 #ifdef DO_INTERN
     PROTECT(e);
@@ -194,7 +198,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
 }
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
-    if (TYPEOF(e) != CLOSXP && TYPEOF(e) != EXTERNALSXP) {
+    if (!internable(e)) {
         return e;
     }
 
@@ -213,7 +217,7 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
         while (!worklist.empty()) {
             e = worklist.front();
             worklist.pop();
-            if (TYPEOF(e) != CLOSXP && TYPEOF(e) != EXTERNALSXP) {
+            if (!internable(e)) {
                 continue;
             }
 
@@ -263,7 +267,7 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     if (wl && !hashes.count(sexp)) {
         wl->push(sexp);
     }
-    if (useHashes(out)) {
+    if (useHashes(out) && !internable(sexp)) {
         assert(hashes.count(sexp) && "SEXP not interned");
         // Why does cppcheck think this is unused?
         // cppcheck-suppress unreadVariable
