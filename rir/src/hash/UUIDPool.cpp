@@ -213,6 +213,10 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
         while (!worklist.empty()) {
             e = worklist.front();
             worklist.pop();
+            if (TYPEOF(e) != CLOSXP && TYPEOF(e) != EXTERNALSXP) {
+                continue;
+            }
+
             intern(e, hashSexp(e, worklist), preserve);
         }
         return ret;
