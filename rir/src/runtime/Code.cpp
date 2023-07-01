@@ -196,9 +196,9 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     // Header
     src_pool_write_item(src, refTable, out);
-    OutInteger(out, trivialExpr != nullptr);
+    OutInteger(noHashOut, trivialExpr != nullptr);
     if (trivialExpr)
-        UUIDPool::writeItem(trivialExpr, refTable, out);
+        UUIDPool::writeItem(trivialExpr, refTable, noHashOut);
     OutInteger(noHashOut, (int)stackLength);
     OutInteger(noHashOut, (int)localsCount);
     OutInteger(noHashOut, (int)bindingCacheSize);
@@ -219,8 +219,8 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
-        OutInteger(out, (int)srclist()[i].pcOffset);
-        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+        OutInteger(noHashOut, (int)srclist()[i].pcOffset);
+        src_pool_write_item(srclist()[i].srcIdx, refTable, noHashOut);
     }
 
     // Native code
@@ -354,7 +354,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
 }
 
-void Code::print(std::ostream& out) const {
+void Code::print(std::ostream& out, bool hashInfo) const {
     out << "Code object\n";
     out << std::left << std::setw(20) << "   Source: " << src
         << " (index into src pool)\n";
@@ -364,6 +364,9 @@ void Code::print(std::ostream& out) const {
         << "\n";
     out << std::left << std::setw(20) << "   Code size: " << codeSize
         << "[B]\n";
+    if (hashInfo) {
+        out << std::left << std::setw(20) << "   Size: " << size() << "[B]\n";
+    }
 
     if (info.magic != CODE_MAGIC) {
         out << "Wrong magic number -- corrupted IR bytecode";
@@ -372,6 +375,14 @@ void Code::print(std::ostream& out) const {
 
     out << "\n";
     disassemble(out);
+
+    if (hashInfo) {
+        out << "src = \n" << Print::dumpSexp(src_pool_at(src)) << "\n";
+        for (unsigned i = 0; i < srcLength; i++) {
+            out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
+            out << Print::dumpSexp(src_pool_at(i), 500) << "\n";
+        }
+    }
 }
 
 unsigned Code::addExtraPoolEntry(SEXP v) {

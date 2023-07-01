@@ -60,7 +60,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
-    void disassemble(std::ostream&);
+    void disassemble(std::ostream&) const;
+    void print(std::ostream&, bool hashInfo = false) const;
 
     bool isOptimized() const {
         return signature_.optimization !=
@@ -74,9 +75,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    size_t invocationCount() { return invocationCount_; }
+    size_t invocationCount() const { return invocationCount_; }
 
-    size_t deoptCount() { return deoptCount_; }
+    size_t deoptCount() const { return deoptCount_; }
     void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     static inline unsigned long rdtsc() {
@@ -116,7 +117,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             invoked = 0;
         }
     }
-    unsigned long invocationTime() { return execTime; }
+    unsigned long invocationTime() const { return execTime; }
     void clearInvocationTime() { execTime = 0; }
 
     unsigned size; /// Size, in bytes, of the function and its data

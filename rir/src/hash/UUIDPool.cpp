@@ -152,12 +152,12 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
     if (Function::check(e)) {
         auto fun = Function::unpack(e);
         std::stringstream s;
-        fun->disassemble(s);
+        fun->print(s, true);
         disassembly[hash] = s.str();
     } else if (Code::check(e)) {
         auto code = Code::unpack(e);
         std::stringstream s;
-        code->disassemble(s);
+        code->print(s, true);
         disassembly[hash] = s.str();
     }
 #endif
