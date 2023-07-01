@@ -148,39 +148,6 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
         registerFinalizerIfPossible(e, uninternGcd);
     }
 
-    // Sanity check in case the UUID changed
-    if (hashes.count(e)) {
-        std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
-                  << hash << ": " << e << "\n";
-        Rf_PrintValue(e);
-
-#ifdef DEBUG_DISASSEMBLY
-        if (Function::check(e)) {
-            auto fun = Function::unpack(e);
-            std::stringstream s;
-            fun->disassemble(s);
-            auto oldDisassembly = disassembly[hash];
-            auto newDisassembly = s.str();
-            if (oldDisassembly != newDisassembly) {
-                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
-                          << "\nto:\n" << newDisassembly << "\n";
-            }
-        } else if (Code::check(e)) {
-            auto code = Code::unpack(e);
-            std::stringstream s;
-            code->disassemble(s);
-            auto oldDisassembly = disassembly[hash];
-            auto newDisassembly = s.str();
-            if (oldDisassembly != newDisassembly) {
-                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
-                          << "\nto:\n" << newDisassembly << "\n";
-            }
-        }
-#endif
-
-        assert(false);
-    }
-
 #ifdef DEBUG_DISASSEMBLY
     if (Function::check(e)) {
         auto fun = Function::unpack(e);
@@ -194,6 +161,24 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
         disassembly[hash] = s.str();
     }
 #endif
+
+    // Sanity check in case the UUID changed
+    if (hashes.count(e)) {
+        std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
+                  << hash << ": " << e << "\n";
+        Rf_PrintValue(e);
+
+#ifdef DEBUG_DISASSEMBLY
+        auto oldDisassembly = disassembly[hashes.at(e)];
+        auto newDisassembly = disassembly[hash];
+        if (oldDisassembly != newDisassembly) {
+            std::cerr << "note: disassembly changed from:\n" << oldDisassembly
+                      << "\nto:\n" << newDisassembly << "\n";
+        }
+#endif
+
+        assert(false);
+    }
 
     // Do intern
     LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
