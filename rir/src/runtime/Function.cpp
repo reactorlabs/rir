@@ -42,22 +42,22 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     auto noHashOut = isHashing(out) ? &nullOut : out;
 
     HashAdd(container(), refTable);
-    OutInteger(noHashOut, size);
-    signature().serialize(refTable, noHashOut);
-    context_.serialize(refTable, noHashOut);
-    OutInteger(noHashOut, numArgs_);
+    OutInteger(out, size);
+    signature().serialize(refTable, out);
+    context_.serialize(refTable, out);
+    OutInteger(out, numArgs_);
     // TODO: why are body and args not set sometimes when we hash deserialized
     //     value to check hash consistency? It probably has something to do with
     //     cyclic references in serialization, but why?
     //     (This is one of the reasons we use SEXP instead of unpacking Code for
     //      body and default args, also because we are going to serialize the
     //      SEXP anyways to properly handle cyclic references)
-    UUIDPool::writeItem(getEntry(0), refTable, noHashOut);
+    UUIDPool::writeItem(getEntry(0), refTable, out);
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
         OutInteger(noHashOut, (int)(arg != nullptr));
         if (arg) {
-            // arg->serialize(false, refTable, out);
+            // arg->serialize(false, refTable, noHashOut);
             UUIDPool::writeItem(arg, refTable, noHashOut);
         }
     }
