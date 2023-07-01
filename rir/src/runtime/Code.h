@@ -231,7 +231,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
-    void print(std::ostream&) const;
+    void print(std::ostream&, bool hashInfo = false) const;
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

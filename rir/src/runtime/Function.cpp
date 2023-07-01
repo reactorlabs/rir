@@ -64,8 +64,15 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(noHashOut, (int)flags.to_i());
 }
 
-void Function::disassemble(std::ostream& out) {
-    out << "[sigature] ";
+void Function::disassemble(std::ostream& out) const {
+    print(out);
+}
+
+void Function::print(std::ostream& out, bool hashInfo) const {
+    if (hashInfo) {
+        out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
+    }
+    out << "[signature] ";
     signature().print(out);
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
@@ -82,7 +89,18 @@ void Function::disassemble(std::ostream& out) {
         << ", time: " << ((double)invocationTime() / 1e6)
         << "ms, deopt: " << deoptCount();
     out << "\n";
-    body()->disassemble(out);
+    if (hashInfo) {
+        body()->print(out, true);
+        for (unsigned i = 0; i < numArgs_; i++) {
+            CodeSEXP arg = defaultArg_[i];
+            if (arg) {
+                out << "[default arg " << i << "]\n";
+                Code::unpack(arg)->print(out, true);
+            }
+        }
+    } else {
+        body()->disassemble(out);
+    }
 }
 
 static int GLOBAL_SPECIALIZATION_LEVEL =
