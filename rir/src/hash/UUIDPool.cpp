@@ -267,7 +267,7 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     if (wl && !hashes.count(sexp)) {
         wl->push(sexp);
     }
-    if (useHashes(out) && !internable(sexp)) {
+    if (useHashes(out) && internable(sexp)) {
         assert(hashes.count(sexp) && "SEXP not interned");
         // Why does cppcheck think this is unused?
         // cppcheck-suppress unreadVariable
