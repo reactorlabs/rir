@@ -9,6 +9,8 @@
 #include "interpreter/serialize.h"
 #include <queue>
 
+#define DEBUG_DISASSEMBLY
+
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (false) stmt
 
@@ -20,6 +22,10 @@ std::unordered_map<SEXP, SEXP> UUIDPool::nextToIntern;
 std::unordered_map<SEXP, SEXP> UUIDPool::prevToIntern;
 std::unordered_set<SEXP> UUIDPool::preserved;
 std::unordered_map<UUID, ByteBuffer> UUIDPool::serialized;
+
+#ifdef DEBUG_DISASSEMBLY
+static std::unordered_map<UUID, std::string> disassembly;
+#endif
 
 #ifdef DO_INTERN
 static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
@@ -103,8 +109,11 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
     SLOWASSERT(hashSexp(e) == hash && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
     UNPROTECT(1);
     if (interned.count(hash)) {
+        // Reuse interned SEXP
         auto existing = interned.at(hash);
         if (!hashes.count(e)) {
+            // This SEXP is structurally-equivalent to the interned SEXP but not
+            // the same (different pointers), so we must still record it
             LOG(std::cout << "Reuse intern: " << hash << " -> " << e << "\n");
             hashes[e] = hash;
 
@@ -116,31 +125,82 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
             nextToIntern[oldLast] = e;
             prevToIntern[e] = oldLast;
 
-            registerFinalizerIfPossible(e, uninternGcd);
+            // And register finalizer
+            if (!preserve) {
+                registerFinalizerIfPossible(e, uninternGcd);
+            }
         }
         e = existing;
         if (preserve && !preserved.count(e)) {
+            // Hashing with preserve and this interned SEXP wasn't yet preserved
             R_PreserveObject(e);
             preserved.insert(e);
         }
         return e;
     }
+
+    // Intern new SEXP
+    // First preserve or register finalizer
     if (preserve) {
         R_PreserveObject(e);
         preserved.insert(e);
     } else {
         registerFinalizerIfPossible(e, uninternGcd);
     }
+
+    // Sanity check in case the UUID changed
     if (hashes.count(e)) {
         std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
                   << hash << ": " << e << "\n";
         Rf_PrintValue(e);
+
+#ifdef DEBUG_DISASSEMBLY
+        if (Function::check(e)) {
+            auto fun = Function::unpack(e);
+            std::stringstream s;
+            fun->disassemble(s);
+            auto oldDisassembly = disassembly[hash];
+            auto newDisassembly = s.str();
+            if (oldDisassembly != newDisassembly) {
+                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
+                          << "\nto:\n" << newDisassembly << "\n";
+            }
+        } else if (Code::check(e)) {
+            auto code = Code::unpack(e);
+            std::stringstream s;
+            code->disassemble(s);
+            auto oldDisassembly = disassembly[hash];
+            auto newDisassembly = s.str();
+            if (oldDisassembly != newDisassembly) {
+                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
+                          << "\nto:\n" << newDisassembly << "\n";
+            }
+        }
+#endif
+
         assert(false);
     }
+
+#ifdef DEBUG_DISASSEMBLY
+    if (Function::check(e)) {
+        auto fun = Function::unpack(e);
+        std::stringstream s;
+        fun->disassemble(s);
+        disassembly[hash] = s.str();
+    } else if (Code::check(e)) {
+        auto code = Code::unpack(e);
+        std::stringstream s;
+        code->disassemble(s);
+        disassembly[hash] = s.str();
+    }
+#endif
+
+    // Do intern
     LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
     interned[hash] = e;
     hashes[e] = hash;
 #endif
+
     return e;
 }
 
