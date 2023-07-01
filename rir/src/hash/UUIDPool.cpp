@@ -104,7 +104,7 @@ void UUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
-    assert(TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP)
+    assert(TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP);
 
 #ifdef DO_INTERN
     PROTECT(e);
