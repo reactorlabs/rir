@@ -104,6 +104,8 @@ void UUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
+    assert(TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP)
+
 #ifdef DO_INTERN
     PROTECT(e);
     SLOWASSERT(hashSexp(e) == hash && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
@@ -192,6 +194,10 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
 }
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
+    if (TYPEOF(e) != CLOSXP && TYPEOF(e) != EXTERNALSXP) {
+        return e;
+    }
+
 #ifdef DO_INTERN
     if (hashes.count(e) && !recursive) {
         // Already interned, don't compute hash
