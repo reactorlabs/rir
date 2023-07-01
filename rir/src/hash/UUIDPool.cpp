@@ -174,6 +174,8 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
         if (oldDisassembly != newDisassembly) {
             std::cerr << "note: disassembly changed from:\n" << oldDisassembly
                       << "\nto:\n" << newDisassembly << "\n";
+        } else {
+            std::cerr << "note: disassembly:\n" << oldDisassembly << "\n";
         }
 #endif
 
