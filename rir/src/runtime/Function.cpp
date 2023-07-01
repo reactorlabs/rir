@@ -51,11 +51,11 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     auto noHashOut = isHashing(out) ? &nullOut : out;
 
     HashAdd(container(), refTable);
-    OutInteger(out, size);
-    signature().serialize(refTable, out);
-    context_.serialize(refTable, out);
-    OutInteger(out, numArgs_);
-    UUIDPool::writeItem(typeFeedback()->container(), refTable, out);
+    OutInteger(noHashOut, size);
+    signature().serialize(refTable, noHashOut);
+    context_.serialize(refTable, noHashOut);
+    OutInteger(noHashOut, numArgs_);
+    UUIDPool::writeItem(typeFeedback()->container(), refTable, noHashOut);
     // TODO: why are body and args not set sometimes when we hash deserialized
     //     value to check hash consistency? It probably has something to do with
     //     cyclic references in serialization, but why?
