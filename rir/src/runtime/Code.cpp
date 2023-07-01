@@ -219,8 +219,8 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
-        OutInteger(noHashOut, (int)srclist()[i].pcOffset);
-        src_pool_write_item(srclist()[i].srcIdx, refTable, noHashOut);
+        OutInteger(out, (int)srclist()[i].pcOffset);
+        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 
     // Native code
