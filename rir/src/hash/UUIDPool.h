@@ -70,10 +70,12 @@ class UUIDPool {
     static SEXP intern(SEXP e, bool recursive, bool preserve);
     /// Gets the interned SEXP by hash, or nullptr if not interned
     static SEXP get(const UUID& hash);
-    /// Reads item and interns, returning the existing copy if already interned.
+    /// When deserializing with `useHashes=true`, reads a hash, then looks it up
+    /// in the intern pool. If the SEXP isn't in the intern pool, fetches it
+    /// from the compiler server. If the compiler server isn't connected or
+    /// doesn't have the SEXP, `Rf_error`s.
     ///
-    /// This also recursively interns connected SEXPs, not directly, but they
-    /// are read from this function themselves.
+    /// Otherwise, Calls `ReadItem` to read the SEXP as usual.
     static SEXP readItem(SEXP ref_table, R_inpstream_t in);
     /// When serializing with `useHashes=true`, asserts that the SEXP is
     /// interned (required for `useHashes=true`) and writes the SEXP's hash.

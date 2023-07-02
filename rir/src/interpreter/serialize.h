@@ -56,11 +56,10 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes);
 /// Deserialize an SEXP (doesn't have to be RIR) from the buffer
 ///
 /// If useHashes is true, connected RIR objects are deserialized from UUIDs
-/// and an attached "peer UUID" instead of their full content, and retrieved
-/// from the UUIDPool. If the UUIDs aren't in the pool, this sends a request to
-/// the peer with the "peer UUID" (also in the deserialized data), and fails if
-/// the peer isn't connected or we can't get a response. The corresponding call
-/// to serialize MUST have been done with `useHashes=true` as well.
+/// and retrieved from the UUIDPool. If the UUIDs aren't in the pool, this sends
+/// a request to compiler server, and fails if it isn't connected or we can't
+/// get a response. The corresponding call to serialize MUST have been done with
+/// `useHashes=true` as well.
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes);
 
 /// Whether to use hashes when serializing in the current stream

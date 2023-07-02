@@ -157,6 +157,12 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
 #ifdef DEBUG_DISASSEMBLY
     if (Function::check(e)) {
         auto fun = Function::unpack(e);
+        if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
+            std::cerr << "Tried to serialize function during its construction: "
+                      << e << "\n";
+            Rf_PrintValue(e);
+            assert(false);
+        }
         std::stringstream s;
         fun->print(s, true);
         disassembly[hash] = s.str();
@@ -257,7 +263,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
         }
         Rf_error("SEXP deserialized from hash which we don't have, and no server");
     } else {
-        return intern(ReadItem(ref_table, in), false, false);
+        return ReadItem(ref_table, in);
     }
 }
 

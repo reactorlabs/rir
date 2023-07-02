@@ -190,7 +190,9 @@ void CompilerServer::tryRun() {
             // Intern, not because we'll have reused it (highly unlikely since
             // we memoize requests, and it doesn't affect anything anyways), but
             // because we want to store it in the UUID pool for Retrieve requests
-            // (since we memoize requests) so that compiler client can retrieve it later
+            // (since we memoize requests) so that compiler client can retrieve
+            // it later
+            UUIDPool::intern(what, true, true);
 
             // Serialize the response
             // Response data format =

@@ -27,6 +27,7 @@ struct Parameter {
 
     static size_t RECOMPILE_THRESHOLD;
 
+    /// Controls whether we save RIR data in native R serialization (e.g. on quit())
     static bool RIR_PRESERVE;
     static unsigned RIR_SERIALIZE_CHAOS;
 
