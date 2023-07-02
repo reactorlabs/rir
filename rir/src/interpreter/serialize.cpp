@@ -89,7 +89,7 @@ SEXP copyBySerial(SEXP x) {
     SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
     SEXP copy = p(R_unserialize(data, R_NilValue));
 #ifdef DO_INTERN
-    copy = UUIDPool::intern(copy, false, false);
+    copy = UUIDPool::intern(copy, true, false);
 #endif
 #if defined(ENABLE_SLOWASSERT) && defined(CHECK_COPY_BY_SERIAL)
     auto xHash = hashSexp(x);
