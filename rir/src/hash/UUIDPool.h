@@ -70,6 +70,9 @@ class UUIDPool {
     static SEXP intern(SEXP e, bool recursive, bool preserve);
     /// Gets the interned SEXP by hash, or nullptr if not interned
     static SEXP get(const UUID& hash);
+    /// Gets the SEXP's memoized hash, or the null hash if the SEXP was never
+    /// interned
+    static const UUID& getHash(SEXP sexp);
     /// When deserializing with `useHashes=true`, reads a hash, then looks it up
     /// in the intern pool. If the SEXP isn't in the intern pool, fetches it
     /// from the compiler server. If the compiler server isn't connected or

@@ -40,6 +40,10 @@ std::ostream& operator<<(std::ostream& stream, const UUID& uuid) {
     return stream;
 }
 
+UUID::operator bool() const {
+    return a || b || c || d;
+}
+
 bool UUID::operator==(const UUID& other) const {
     return a == other.a && b == other.b && c == other.c && d == other.d;
 }

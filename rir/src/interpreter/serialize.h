@@ -60,11 +60,14 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes);
 /// a request to compiler server, and fails if it isn't connected or we can't
 /// get a response. The corresponding call to serialize MUST have been done with
 /// `useHashes=true` as well.
-///
-/// If `retrieveHash` is non-null, the first deserialized internable SEXP will
-/// be interned with that hash before being fully deserialized, to support
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes);
+/// Equivalent to `deserialize(ByteBuffer& sexpBuffer, bool useHashes)`, except
+/// the first deserialized internable SEXP will also be interned with that hash
+/// before being fully deserialized. This function is used/needed to support
 /// deserializing recursive hashed structures.
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID* retrieveHash = nullptr);
+///
+/// @see deserialize(ByteBuffer& sexpBuffer, bool useHashes)
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& retrieveHash);
 
 /// Whether to use hashes when serializing in the current stream
 bool useHashes(R_outpstream_t out);
