@@ -60,7 +60,11 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes);
 /// a request to compiler server, and fails if it isn't connected or we can't
 /// get a response. The corresponding call to serialize MUST have been done with
 /// `useHashes=true` as well.
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes);
+///
+/// If `retrieveHash` is non-null, the first deserialized internable SEXP will
+/// be interned with that hash before being fully deserialized, to support
+/// deserializing recursive hashed structures.
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID* retrieveHash = nullptr);
 
 /// Whether to use hashes when serializing in the current stream
 bool useHashes(R_outpstream_t out);
@@ -70,5 +74,7 @@ bool useHashes(R_inpstream_t in);
 bool isHashing(R_outpstream_t out);
 /// Worklist for the current stream
 std::queue<SEXP>* worklist(R_outpstream_t out);
+/// If `retrieveHash` is set, interns SEXP with it and unsets it.
+void useRetrieveHashIfSet(R_inpstream_t inp, SEXP sexp);
 
 } // namespace rir

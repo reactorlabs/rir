@@ -29,7 +29,7 @@ static std::unordered_map<UUID, std::string> disassembly;
 #endif
 
 static bool internable(SEXP e) {
-    return TYPEOF(e) == CLOSXP || TYPEOF(e) == EXTERNALSXP;
+    return TYPEOF(e) == EXTERNALSXP;
 }
 
 #ifdef DO_INTERN
@@ -108,12 +108,14 @@ void UUIDPool::uninternGcd(SEXP e) {
 }
 #endif
 
-SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve) {
+SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
     assert(internable(e));
+    (void)expectHashToBeTheSame;
 
 #ifdef DO_INTERN
     PROTECT(e);
-    SLOWASSERT(hashSexp(e) == hash && "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
+    SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
+               "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
     UNPROTECT(1);
     if (interned.count(hash)) {
         // Reuse interned SEXP

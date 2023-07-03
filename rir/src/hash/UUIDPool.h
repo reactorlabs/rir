@@ -57,12 +57,12 @@ class UUIDPool {
     static void uninternGcd(SEXP e);
 #endif
 
-    /// Intern the SEXP when we already know its hash, not recursive and not
-    /// preserving.
-    ///
-    /// @see UUIDPool::intern(SEXP)
-    static SEXP intern(SEXP e, const UUID& uuid, bool preserve);
   public:
+    /// Intern the SEXP when we already know its hash, not recursively.
+    ///
+    /// @see UUIDPool::intern(SEXP, bool, bool)
+    static SEXP intern(SEXP e, const UUID& uuid, bool preserve,
+                       bool expectHashToBeTheSame = true);
     /// Will hash the SEXP and:
     /// - If not in the pool, will add it *and* if `recursive` is set,
     ///   recursively intern connected SEXPs. Then returns the original SEXP

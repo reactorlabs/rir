@@ -128,6 +128,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     auto size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     AddReadRef(refTable, store);
+    useRetrieveHashIfSet(inp, store);
     Code* code = new (DATAPTR(store)) Code;
 
     // Header
