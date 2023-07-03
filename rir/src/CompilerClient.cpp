@@ -248,7 +248,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             SEXP responseWhat = UUIDPool::get(responseWhatHash);
             if (!responseWhat) {
                 // Actually deserialize
-                deserialize(response, true, responseWhatHash);
+                responseWhat = deserialize(response, true, responseWhatHash);
             }
             return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
         }
