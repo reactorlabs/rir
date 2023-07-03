@@ -158,22 +158,27 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
     }
 
 #ifdef DEBUG_DISASSEMBLY
-    if (Function::check(e)) {
-        auto fun = Function::unpack(e);
-        if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
-            std::cerr << "Tried to serialize function during its construction: "
-                      << e << "\n";
-            Rf_PrintValue(e);
-            assert(false);
+    if (expectHashToBeTheSame) {
+        if (Function::check(e)) {
+            auto fun = Function::unpack(e);
+            if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
+                std::cerr
+                    << "Tried to serialize function during its construction: "
+                    << e << "\n";
+                Rf_PrintValue(e);
+                assert(false);
+            }
+            std::stringstream s;
+            fun->print(s, true);
+            disassembly[hash] = s.str();
+        } else if (Code::check(e)) {
+            auto code = Code::unpack(e);
+            std::stringstream s;
+            code->print(s, true);
+            disassembly[hash] = s.str();
         }
-        std::stringstream s;
-        fun->print(s, true);
-        disassembly[hash] = s.str();
-    } else if (Code::check(e)) {
-        auto code = Code::unpack(e);
-        std::stringstream s;
-        code->print(s, true);
-        disassembly[hash] = s.str();
+    } else {
+        disassembly[hash] = "(recursively interned, can't debug this way)";
     }
 #endif
 
