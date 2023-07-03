@@ -131,6 +131,7 @@ void CompilerServer::tryRun() {
         ByteBuffer response;
         switch (magic) {
         case Request::Compile: {
+            std::cerr << "Received compile request" << std::endl;
             // ...
             // + serialize(what)
             // + sizeof(assumptions) (always 8)
@@ -208,6 +209,7 @@ void CompilerServer::tryRun() {
             break;
         }
         case Request::Retrieve: {
+            std::cerr << "Received retrieve request" << std::endl;
             // ...
             // + UUID hash
             UUID hash;
@@ -217,13 +219,17 @@ void CompilerServer::tryRun() {
             SEXP what = UUIDPool::get(hash);
 
             // Serialize the response
+            std::cerr << "Retrieve" << hash << " = ";
             if (what) {
+                std::cerr << what << std::endl;
+                Rf_PrintValue(what);
                 // Response data format =
                 //   Response::Retrieved
                 // + serialize(what)
                 response.putLong(Response::Retrieved);
                 serialize(what, response, true);
             } else {
+                std::cerr << " (not found)" << std::endl;
                 // Response data format =
                 //   Response::RetrieveFailed
                 response.putLong(Response::RetrieveFailed);
