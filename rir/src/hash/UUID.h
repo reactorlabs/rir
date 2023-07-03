@@ -21,6 +21,7 @@ class UUID {
         : a(a), b(b), c(c), d(d) {}
 
   public:
+    /// The null UUID (0x0)
     UUID() : a(0), b(0), c(0), d(0) {}
     /// Generates a UUID for the data
     static UUID hash(const void* data, size_t size);
@@ -32,6 +33,8 @@ class UUID {
     std::string str() const;
 
     friend std::ostream& operator<<(std::ostream&, const UUID&);
+    /// `false` iff this is the null UUID (0x0)
+    operator bool() const;
     bool operator==(const UUID& other) const;
     bool operator!=(const UUID& other) const;
     friend struct std::hash<UUID>;

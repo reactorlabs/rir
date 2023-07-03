@@ -255,6 +255,16 @@ SEXP UUIDPool::get(const UUID& hash) {
     return nullptr;
 }
 
+const UUID& UUIDPool::getHash(SEXP sexp) {
+#ifdef DO_INTERN
+    if (hashes.count(sexp)) {
+        return hashes.at(sexp);
+    }
+#endif
+    static UUID empty;
+    return empty;
+}
+
 SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
         // Read whether we are serializing hash
@@ -272,7 +282,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
                 LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
-                    return intern(sexp, hash, false);
+                    return sexp;
                 }
                 Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
             }

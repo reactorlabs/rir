@@ -6,6 +6,7 @@
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "hash/UUID.h"
+#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
@@ -230,16 +231,25 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
         [](ByteBuffer& response) {
             // Response data format =
             //   Response::Compiled
-            // + serialize(what)
             // + sizeof(pirPrint)
             // + pirPrint
+            // + hashSexp(what)
+            // + serialize(what)
             auto responseMagic = response.getLong();
             assert(responseMagic == Response::Compiled);
-            SEXP responseWhat = deserialize(response, true);
             auto pirPrintSize = response.getLong();
             std::string pirPrint;
             pirPrint.resize(pirPrintSize);
             response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+            UUID responseWhatHash;
+            response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
+            // Try to get hashed if we already have the compiled value
+            // (unlikely but maybe possible)
+            SEXP responseWhat = UUIDPool::get(responseWhatHash);
+            if (!responseWhat) {
+                // Actually deserialize
+                deserialize(response, true, responseWhatHash);
+            }
             return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
         }
     );
@@ -263,7 +273,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             auto responseMagic = response.getLong();
             switch (responseMagic) {
             case Response::Retrieved:
-                return deserialize(response, true, &hash);
+                return deserialize(response, true, hash);
             case Response::RetrieveFailed:
                 return nullptr;
             default:
