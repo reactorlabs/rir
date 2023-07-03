@@ -250,22 +250,29 @@ SEXP UUIDPool::get(const UUID& hash) {
 
 SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
-        UUID hash;
-        InBytes(in, &hash, sizeof(hash));
-        if (interned.count(hash)) {
-            return interned.at(hash);
-        }
-        if (CompilerClient::isRunning()) {
-            auto sexp = CompilerClient::retrieve(hash);
-            if (sexp) {
-                return intern(sexp, hash, false);
+        // Read whether we are serializing hash
+        auto isInternable = InBool(in);
+        if (isInternable) {
+            // Read hash instead of regular data,
+            // then retrieve by hash from interned or server
+            UUID hash;
+            InBytes(in, &hash, sizeof(hash));
+            if (interned.count(hash)) {
+                return interned.at(hash);
             }
-            Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+            if (CompilerClient::isRunning()) {
+                auto sexp = CompilerClient::retrieve(hash);
+                if (sexp) {
+                    return intern(sexp, hash, false);
+                }
+                Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+            }
+            Rf_error("SEXP deserialized from hash which we don't have, and no server");
         }
-        Rf_error("SEXP deserialized from hash which we don't have, and no server");
-    } else {
-        return ReadItem(ref_table, in);
     }
+
+    // Read regular data
+    return ReadItem(ref_table, in);
 }
 
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
@@ -274,15 +281,23 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     if (wl && !hashes.count(sexp)) {
         wl->push(sexp);
     }
-    if (useHashes(out) && internable(sexp)) {
-        assert(hashes.count(sexp) && "SEXP not interned");
-        // Why does cppcheck think this is unused?
-        // cppcheck-suppress unreadVariable
-        auto hash = hashes.at(sexp);
-        OutBytes(out, &hash, sizeof(hash));
-    } else {
-        WriteItem(sexp, ref_table, out);
+    if (useHashes(out)) {
+        auto isInternable = internable(sexp);
+        // Write whether we are serializing hash
+        OutBool(out, isInternable);
+        if (isInternable) {
+            // Write hash instead of regular data
+            assert(hashes.count(sexp) && "SEXP not interned");
+            // Why does cppcheck think this is unused?
+            // cppcheck-suppress unreadVariable
+            auto hash = hashes.at(sexp);
+            OutBytes(out, &hash, sizeof(hash));
+            return;
+        }
     }
+
+    // Write regular data
+    WriteItem(sexp, ref_table, out);
 }
 
 } // namespace rir
