@@ -207,10 +207,6 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 }
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
-    if (!internable(e)) {
-        return e;
-    }
-
 #ifdef DO_INTERN
     if (hashes.count(e) && !recursive) {
         // Already interned, don't compute hash
@@ -222,19 +218,23 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
     }
     if (recursive) {
         std::queue<SEXP> worklist;
-        auto ret = intern(e, hashSexp(e, worklist), preserve);
+        // Compute hash, whether internable or not, to add to worklist
+        auto hash = hashSexp(e, worklist);
+        auto ret = internable(e) ? intern(e, hash, preserve) : e;
         while (!worklist.empty()) {
             e = worklist.front();
             worklist.pop();
+
+            // Compute hash, whether internable or not, to add to worklist
+            hash = hashSexp(e, worklist);
             if (!internable(e)) {
                 continue;
             }
-
-            intern(e, hashSexp(e, worklist), preserve);
+            intern(e, hash, preserve);
         }
         return ret;
     } else {
-        return intern(e, hashSexp(e), preserve);
+        return internable(e) ? intern(e, hashSexp(e), preserve) : e;
     }
 #else
     return e;
