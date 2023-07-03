@@ -4,6 +4,7 @@
 
 #include "UUIDPool.h"
 #include "CompilerClient.h"
+#include "CompilerServer.h"
 #include "R/Serialize.h"
 #include "api.h"
 #include "interpreter/serialize.h"
@@ -12,7 +13,7 @@
 #define DEBUG_DISASSEMBLY
 
 // Can change this to log interned and uninterned hashes and pointers
-#define LOG(stmt) if (false) stmt
+#define LOG(stmt) if (CompilerServer::isRunning()) stmt
 
 namespace rir {
 
