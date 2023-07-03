@@ -75,13 +75,17 @@ class CompilerClient {
     /// Initializes if PIR_CLIENT_ADDR is set
     static void tryInit();
     /// Asynchronously sends the closure to the compile server and returns a
-    /// handle to use the result.
+    /// handle to use the result. Automatically interns the result,
     static CompiledHandle* pirCompile(SEXP what, const Context& assumptions,
                               const std::string& name,
                               const pir::DebugOptions& debug);
     /// Synchronously retrieves the closure with the given hash from the server.
     /// If in the future we make this asynchronous, should still return a
     /// closure SEXP but make it block while we're waiting for the response.
+    ///
+    /// The SEXP is also interned. It must actually be interned before we finish
+    /// deserializing for recursive retrievals (a -> retrieve b -> retrieve a ->
+    /// ...).
     ///
     /// Returns `nullptr` if the server doesn't have the closure.
     static SEXP retrieve(const UUID& hash);

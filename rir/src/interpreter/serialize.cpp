@@ -23,7 +23,7 @@ static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 static bool _useHashes = false;
 static bool _isHashing = false;
 static std::queue<SEXP>* connectedWorklist = nullptr;
-static const UUID* retrieveHash = nullptr;
+static UUID retrieveHash;
 
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
@@ -191,7 +191,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
     _useHashes = false;
     _isHashing = true;
     connectedWorklist = &worklist;
-    retrieveHash = nullptr;
+    retrieveHash = UUID();
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -221,7 +221,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
     _useHashes = false;
     _isHashing = true;
     connectedWorklist = nullptr;
-    retrieveHash = nullptr;
+    retrieveHash = UUID();
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -251,7 +251,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     _useHashes = useHashes;
     _isHashing = false;
     connectedWorklist = nullptr;
-    retrieveHash = nullptr;
+    retrieveHash = UUID();
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -271,7 +271,11 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     pir::Parameter::RIR_PRESERVE = oldPreserve;
 }
 
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID* newRetrieveHash) {
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
+    return deserialize(sexpBuffer, useHashes, UUID());
+}
+
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
@@ -293,7 +297,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID* newRetrieve
         nullptr
     );
     SEXP sexp = R_Unserialize(&in);
-    assert(retrieveHash == nullptr && "retrieve hash not taken");
+    assert(!retrieveHash && "retrieve hash not taken");
     retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
@@ -324,8 +328,8 @@ std::queue<SEXP>* worklist(__attribute__((unused)) R_outpstream_t out) {
 
 void useRetrieveHashIfSet(__attribute__((unused)) R_inpstream_t inp, SEXP sexp) {
     if (retrieveHash) {
-        UUIDPool::intern(sexp, *retrieveHash, false, false);
-        retrieveHash = nullptr;
+        UUIDPool::intern(sexp, retrieveHash, false, false);
+        retrieveHash = UUID();
     }
 }
 

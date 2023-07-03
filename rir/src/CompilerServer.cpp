@@ -198,14 +198,17 @@ void CompilerServer::tryRun() {
             // Serialize the response
             // Response data format =
             //   Response::Compiled
-            // + serialize(what)
             // + sizeof(pirPrint)
             // + pirPrint
+            // + hashSexp(what)
+            // + serialize(what)
             response.putLong((uint64_t)Response::Compiled);
-            serialize(what, response, true);
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+            auto hash = UUIDPool::getHash(what);
+            response.putBytes((uint8_t*)&hash, sizeof(UUID));
+            serialize(what, response, true);
             break;
         }
         case Request::Retrieve: {
