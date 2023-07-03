@@ -14,6 +14,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
     AddReadRef(refTable, store);
+    useRetrieveHashIfSet(inp, store);
     void* payload = DATAPTR(store);
     Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
     fun->numArgs_ = InInteger(inp);

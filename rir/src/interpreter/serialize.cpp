@@ -23,6 +23,7 @@ static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 static bool _useHashes = false;
 static bool _isHashing = false;
 static std::queue<SEXP>* connectedWorklist = nullptr;
+static const UUID* retrieveHash = nullptr;
 
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
@@ -185,10 +186,12 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
     auto oldConnectedWorklist = connectedWorklist;
+    auto oldRetrieveHash = retrieveHash;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = false;
     _isHashing = true;
     connectedWorklist = &worklist;
+    retrieveHash = nullptr;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -201,6 +204,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
@@ -212,10 +216,12 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
     auto oldConnectedWorklist = connectedWorklist;
+    auto oldRetrieveHash = retrieveHash;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = false;
     _isHashing = true;
     connectedWorklist = nullptr;
+    retrieveHash = nullptr;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -228,6 +234,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
@@ -239,10 +246,12 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
     auto oldConnectedWorklist = connectedWorklist;
+    auto oldRetrieveHash = retrieveHash;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = useHashes;
     _isHashing = false;
     connectedWorklist = nullptr;
+    retrieveHash = nullptr;
     struct R_outpstream_st out{};
     R_InitOutPStream(
         &out,
@@ -255,21 +264,24 @@ void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
         nullptr
     );
     R_Serialize(sexp, &out);
+    retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
     pir::Parameter::RIR_PRESERVE = oldPreserve;
 }
 
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
+SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID* newRetrieveHash) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
     auto oldConnectedWorklist = connectedWorklist;
+    auto oldRetrieveHash = retrieveHash;
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = useHashes;
     _isHashing = false;
     connectedWorklist = nullptr;
+    retrieveHash = newRetrieveHash;
     struct R_inpstream_st in{};
     R_InitInPStream(
         &in,
@@ -281,6 +293,8 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
         nullptr
     );
     SEXP sexp = R_Unserialize(&in);
+    assert(retrieveHash == nullptr && "retrieve hash not taken");
+    retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;
     _useHashes = oldUseHashes;
@@ -306,6 +320,13 @@ bool isHashing(__attribute__((unused)) R_outpstream_t out) {
 std::queue<SEXP>* worklist(__attribute__((unused)) R_outpstream_t out) {
     // Trying to pretend we don't use a singleton...
     return connectedWorklist;
+}
+
+void useRetrieveHashIfSet(__attribute__((unused)) R_inpstream_t inp, SEXP sexp) {
+    if (retrieveHash) {
+        UUIDPool::intern(sexp, *retrieveHash, false, false);
+        retrieveHash = nullptr;
+    }
 }
 
 
