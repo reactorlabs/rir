@@ -13,7 +13,7 @@
 #define DEBUG_DISASSEMBLY
 
 // Can change this to log interned and uninterned hashes and pointers
-#define LOG(stmt) if (CompilerServer::isRunning()) stmt
+#define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt
 
 namespace rir {
 
@@ -260,9 +260,11 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
             UUID hash;
             InBytes(in, &hash, sizeof(hash));
             if (interned.count(hash)) {
+                LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
                 return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
+                LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
                     return intern(sexp, hash, false);
