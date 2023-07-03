@@ -255,7 +255,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             request.putLong((uint64_t)Request::Retrieve);
             request.putBytes((uint8_t*)&hash, sizeof(hash));
         },
-        [](ByteBuffer& response) -> SEXP {
+        [=](ByteBuffer& response) -> SEXP {
             // Response data format =
             //   Response::Retrieved
             // + serialize(what)
@@ -263,7 +263,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             auto responseMagic = response.getLong();
             switch (responseMagic) {
             case Response::Retrieved:
-                return deserialize(response, true);
+                return deserialize(response, true, &hash);
             case Response::RetrieveFailed:
                 return nullptr;
             default:
