@@ -1,23 +1,26 @@
+#include "SerialAst.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
-#include "runtime/ArglistOrder.h"
-#include "runtime/Function.h"
 
 namespace rir {
 
-inline static void serializeAstVector(R_outpstream_t out, SEXP s, void (*serializeElem)(R_outpstream_t, SEXP, int)) {
+// Assumes all symbols are never freed (currently yes because they're in a pool,
+// and it makes sense since they're all AST nodes)
+static std::unordered_map<SEXP, UUID> hashCache;
+
+inline static void serializeAstVector(UUIDHasher& hasher, SEXP s, void (*serializeElem)(UUIDHasher&, SEXP, int)) {
     // assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
     assert(!OBJECT(s) && "unexpected object in AST");
     assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
     assert(!ALTREP(s) && "unexpected altrep in AST");
     size_t length = STDVEC_LENGTH(s);
     for (size_t i = 0; i < length; ++i) {
-        serializeElem(out, s, i);
+        serializeElem(hasher, s, i);
     }
 }
 
-void serializeAst(R_outpstream_t out, SEXP s) {
-    OutInteger(out, TYPEOF(s));
+void serializeAst(UUIDHasher& hasher, SEXP s) {
+    hasher.hashBytesOf<int>(TYPEOF(s));
     switch (TYPEOF(s)) {
     case NILSXP: {
         break;
@@ -25,26 +28,26 @@ void serializeAst(R_outpstream_t out, SEXP s) {
 
     case SYMSXP: {
         if (s == R_UnboundValue) {
-            OutInteger(out, 0);
+            hasher.hashBytesOf<int>(0);
         } else if (s == R_MissingArg) {
-            OutInteger(out, 1);
+            hasher.hashBytesOf<int>(1);
         } else if (s == R_RestartToken) {
-            OutInteger(out, 2);
+            hasher.hashBytesOf<int>(2);
         } else if (s == symbol::expandDotsTrigger) {
             assert(false && "unexpected expandDotsTrigger in AST");
         } else {
-            OutInteger(out, 3);
+            hasher.hashBytesOf<int>(3);
             const char* name = CHAR(PRINTNAME(s));
-            OutChar(out, strlen(name));
-            OutBytes(out, (const void*)name, strlen(name));
+            hasher.hashBytesOf<size_t>(strlen(name));
+            hasher.hashBytes((const void*)name, strlen(name));
         }
         break;
     }
 
     case LISTSXP: {
-        OutInteger(out, Rf_length(s));
+        hasher.hashBytesOf<int>(Rf_length(s));
         for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
-            serializeAst(out, CAR(cur));
+            serializeAst(hasher, CAR(cur));
         }
         break;
     }
@@ -62,78 +65,78 @@ void serializeAst(R_outpstream_t out, SEXP s) {
     }
 
     case LANGSXP: {
-        OutInteger(out, Rf_length(s));
+        hasher.hashBytesOf<int>(Rf_length(s));
         for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
-            serializeAst(out, CAR(cur));
+            serializeAst(hasher, CAR(cur));
         }
         break;
     }
 
     case SPECIALSXP:
     case BUILTINSXP: {
-        OutInteger(out, getBuiltinNr(s));
+        hasher.hashBytesOf<int>(getBuiltinNr(s));
         break;
     }
 
     case CHARSXP: {
         if (s == NA_STRING) {
-            OutInteger(out, 0);
+            hasher.hashBytesOf<int>(0);
         } else {
-            OutInteger(out, 1);
+            hasher.hashBytesOf<int>(1);
             const char* chr = CHAR(s);
-            OutChar(out, strlen(chr));
-            OutBytes(out, (const void*)chr, strlen(chr));
+            hasher.hashBytesOf<size_t>(strlen(chr));
+            hasher.hashBytes((const void*)chr, strlen(chr));
         }
         break;
     }
 
     case LGLSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            OutInteger(out, LOGICAL(s)[i]);
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            hasher.hashBytesOf<int>(LOGICAL(s)[i]);
         });
         break;
     }
 
     case INTSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            OutInteger(out, INTEGER(s)[i]);
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            hasher.hashBytesOf<int>(INTEGER(s)[i]);
         });
         break;
     }
 
     case REALSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            OutReal(out, REAL(s)[i]);
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            hasher.hashBytesOf<double>(REAL(s)[i]);
         });
         break;
     }
 
     case CPLXSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            OutComplex(out, COMPLEX(s)[i]);
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            hasher.hashBytesOf<Rcomplex>(COMPLEX(s)[i]);
         });
         break;
     }
 
     case STRSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
             const char* chr = CHAR(STRING_ELT(s, i));
-            OutChar(out, strlen(chr));
-            OutBytes(out, (const void*)chr, strlen(chr));
+            hasher.hashBytesOf<size_t>(strlen(chr));
+            hasher.hashBytes((const void*)chr, strlen(chr));
         });
         break;
     }
 
     case VECSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            serializeAst(out, VECTOR_ELT(s, i));
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            serializeAst(hasher, VECTOR_ELT(s, i));
         });
         break;
     }
 
     case RAWSXP: {
-        serializeAstVector(out, s, [](R_outpstream_t out, SEXP s, int i) {
-            OutChar(out, RAW(s)[i]);
+        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+            hasher.hashBytesOf<Rbyte>(RAW(s)[i]);
         });
         break;
     }
@@ -156,5 +159,17 @@ void serializeAst(R_outpstream_t out, SEXP s) {
     }
     }
 }
+
+UUID serializeAst(SEXP s) {
+    if (hashCache.count(s)) {
+        return hashCache[s];
+    }
+    UUIDHasher hasher;
+    serializeAst(hasher, s);
+    auto uuid = hasher.finalize();
+    hashCache[s] = uuid;
+    return uuid;
+}
+
 
 } // namespace rir
