@@ -187,6 +187,15 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     return code;
 }
 
+static void serializeSrc(unsigned int src, SEXP refTable, R_outpstream_t out) {
+    if (isHashing(out)) {
+        auto str = Print::dumpSexp(src_pool_at(src), (size_t)INT32_MAX);
+        OutBytes(out, str.data(), (int)str.size());
+    } else {
+        src_pool_write_item(src, refTable, out);
+    }
+}
+
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
     // Some stuff is mutable or not part of the structural identity, so we don't
     // want to hash it. However, we still need to serialize recursive items. To
@@ -198,7 +207,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     OutInteger(out, (int)size());
 
     // Header
-    src_pool_write_item(src, refTable, out);
+    serializeSrc(src, refTable, out);
     OutInteger(noHashOut, trivialExpr != nullptr);
     if (trivialExpr)
         UUIDPool::writeItem(trivialExpr, refTable, noHashOut);
@@ -223,7 +232,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
         OutInteger(out, (int)srclist()[i].pcOffset);
-        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+        serializeSrc(srclist()[i].srcIdx, refTable, out);
     }
 
     // Native code
