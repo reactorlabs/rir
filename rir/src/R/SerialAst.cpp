@@ -1,6 +1,7 @@
 #include "SerialAst.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
+#include <unordered_map>
 
 namespace rir {
 
