@@ -224,6 +224,7 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
     if (recursive) {
         std::queue<SEXP> worklist;
         // Compute hash, whether internable or not, to add to worklist
+        // cppcheck-suppress unreadVariable
         auto hash = hashSexp(e, worklist);
         auto ret = internable(e) ? intern(e, hash, preserve) : e;
         while (!worklist.empty()) {
@@ -232,6 +233,7 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             worklist.pop();
 
             // Compute hash, whether internable or not, to add to worklist
+            // cppcheck-suppress unreadVariable
             hash = hashSexp(e, worklist);
             intern(e, hash, preserve);
         }
