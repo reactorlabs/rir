@@ -1,6 +1,7 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
+#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
@@ -187,8 +188,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 
 static void serializeSrc(unsigned int src, SEXP refTable, R_outpstream_t out) {
     if (isHashing(out)) {
-        auto str = Print::dumpSexp(src_pool_at(src), (size_t)INT32_MAX);
-        OutBytes(out, str.data(), (int)str.size());
+        serializeAst(out, src_pool_at(src));
     } else {
         src_pool_write_item(src, refTable, out);
     }
