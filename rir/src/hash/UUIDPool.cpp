@@ -229,13 +229,14 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
         auto ret = internable(e) ? intern(e, hash, preserve) : e;
         while (!worklist.empty()) {
             e = worklist.front();
-            assert(internable(e));
             worklist.pop();
 
-            // Compute hash, whether internable or not, to add to worklist
-            // cppcheck-suppress unreadVariable
-            hash = hashSexp(e, worklist);
-            intern(e, hash, preserve);
+            assert(internable(e));
+            if (hashes.count(e)) {
+                continue;
+            }
+
+            intern(e, hashSexp(e, worklist), preserve);
         }
         return ret;
     } else {
