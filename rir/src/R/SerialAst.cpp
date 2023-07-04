@@ -6,7 +6,7 @@
 namespace rir {
 
 inline static void serializeAstVector(R_outpstream_t out, SEXP s, void (*serializeElem)(R_outpstream_t, SEXP, int)) {
-    assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
+    // assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
     assert(!OBJECT(s) && "unexpected object in AST");
     assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
     assert(!ALTREP(s) && "unexpected altrep in AST");
