@@ -228,13 +228,11 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
         auto ret = internable(e) ? intern(e, hash, preserve) : e;
         while (!worklist.empty()) {
             e = worklist.front();
+            assert(internable(e));
             worklist.pop();
 
             // Compute hash, whether internable or not, to add to worklist
             hash = hashSexp(e, worklist);
-            if (!internable(e)) {
-                continue;
-            }
             intern(e, hash, preserve);
         }
         return ret;
@@ -297,7 +295,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     assert(!worklist(out) || !useHashes(out));
     auto wl = worklist(out);
-    if (wl && !hashes.count(sexp)) {
+    if (wl && !hashes.count(sexp) && internable(sexp)) {
         wl->push(sexp);
     }
     if (useHashes(out)) {
