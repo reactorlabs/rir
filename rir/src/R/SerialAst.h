@@ -7,6 +7,6 @@
 namespace rir {
 
 /// Serialize only the AST part of an S-expression
-static void serializeAst(R_outpstream_t out, SEXP s);
+void serializeAst(R_outpstream_t out, SEXP s);
 
 } // namespace rir
