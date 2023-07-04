@@ -190,7 +190,8 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 
 static void serializeSrc(unsigned int src, SEXP refTable, R_outpstream_t out) {
     if (isHashing(out)) {
-        serializeAst(out, src_pool_at(src));
+        auto uuid = serializeAst(src_pool_at(src));
+        OutBytes(out, (const char*)&uuid, sizeof(uuid));
     } else {
         src_pool_write_item(src, refTable, out);
     }
