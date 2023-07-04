@@ -16,7 +16,7 @@ inline static void serializeAstVector(R_outpstream_t out, SEXP s, void (*seriali
     }
 }
 
-static void serializeAst(R_outpstream_t out, SEXP s) {
+void serializeAst(R_outpstream_t out, SEXP s) {
     OutInteger(out, TYPEOF(s));
     switch (TYPEOF(s)) {
     case NILSXP: {
