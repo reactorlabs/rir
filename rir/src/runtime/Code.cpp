@@ -378,11 +378,11 @@ void Code::print(std::ostream& out, bool hashInfo) const {
     disassemble(out);
 
     if (hashInfo) {
-        out << "src = \n" << Print::dumpSexp(src_pool_at(src), 500)
+        out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_T_MAX)
             << ", hash = " << hashSexp(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
             out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
-            out << Print::dumpSexp(src_pool_at(i), 500)
+            out << Print::dumpSexp(src_pool_at(i), SIZE_T_MAX)
                 << ", hash = " << hashSexp(src_pool_at(i)) << "\n";
         }
     }
