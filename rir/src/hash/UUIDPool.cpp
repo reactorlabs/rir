@@ -5,6 +5,7 @@
 #include "UUIDPool.h"
 #include "CompilerClient.h"
 #include "CompilerServer.h"
+#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "api.h"
 #include "interpreter/serialize.h"
@@ -318,6 +319,15 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
 
     // Write regular data
     WriteItem(sexp, ref_table, out);
+}
+
+void UUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
+    if (isHashing(out)) {
+        auto uuid = serializeAst(src);
+        OutBytes(out, (const char*)&uuid, sizeof(uuid));
+    } else {
+        writeItem(src, refTable, out);
+    }
 }
 
 } // namespace rir

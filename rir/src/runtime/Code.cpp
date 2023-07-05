@@ -1,7 +1,6 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
-#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
@@ -190,15 +189,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     return code;
 }
 
-static void serializeSrc(unsigned int src, SEXP refTable, R_outpstream_t out) {
-    if (isHashing(out)) {
-        auto uuid = serializeAst(src_pool_at(src));
-        OutBytes(out, (const char*)&uuid, sizeof(uuid));
-    } else {
-        src_pool_write_item(src, refTable, out);
-    }
-}
-
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
     // Some stuff is mutable or not part of the structural identity, so we don't
     // want to hash it. However, we still need to serialize recursive items. To
@@ -210,7 +200,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     OutInteger(out, (int)size());
 
     // Header
-    serializeSrc(src, refTable, out);
+    src_pool_write_item(src, refTable, out);
     OutInteger(noHashOut, trivialExpr != nullptr);
     if (trivialExpr)
         UUIDPool::writeItem(trivialExpr, refTable, noHashOut);
@@ -230,12 +220,12 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     }
 
     // Bytecode
-    BC::serialize(refTable, noHashOut, code(), codeSize, this);
+    BC::serialize(refTable, out, code(), codeSize, this);
 
     // Srclist
     for (unsigned i = 0; i < srcLength; i++) {
         OutInteger(out, (int)srclist()[i].pcOffset);
-        serializeSrc(srclist()[i].srcIdx, refTable, out);
+        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
     }
 
     // Native code

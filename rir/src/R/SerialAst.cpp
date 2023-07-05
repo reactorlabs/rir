@@ -35,9 +35,9 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
         } else if (s == R_RestartToken) {
             hasher.hashBytesOf<int>(2);
         } else if (s == symbol::expandDotsTrigger) {
-            assert(false && "unexpected expandDotsTrigger in AST");
-        } else {
             hasher.hashBytesOf<int>(3);
+        } else {
+            hasher.hashBytesOf<int>(4);
             const char* name = CHAR(PRINTNAME(s));
             hasher.hashBytesOf<size_t>(strlen(name));
             hasher.hashBytes((const void*)name, strlen(name));
