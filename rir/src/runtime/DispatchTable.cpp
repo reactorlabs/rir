@@ -9,6 +9,10 @@ DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
     AddReadRef(refTable, table->container());
     useRetrieveHashIfSet(inp, table->container());
     table->size_ = InInteger(inp);
+    // Need to keep gc happy since we resized (maybe unnecessary?)
+    for (size_t i = 0; i < table->size(); i++) {
+        table->setEntry(i, R_NilValue);
+    }
     for (size_t i = 0; i < table->size(); i++) {
         table->setEntry(i,ReadItem(refTable, inp));
     }
