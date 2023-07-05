@@ -39,6 +39,10 @@ struct Parameter {
     static bool ENABLE_PIR2RIR;
 
     static bool ENABLE_OSR;
+
+    /// Serialize LLVM bitcode. Enabled regardless of env var iff the compiler
+    /// server is running.
+    static bool DEBUG_SERIALIZE_LLVM;
 };
 
 } // namespace pir

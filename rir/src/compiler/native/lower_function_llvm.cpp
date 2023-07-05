@@ -91,7 +91,9 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(llvm::Module& mod,
             llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
             nullptr, name, nullptr,
             llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
-        var->setMetadata(SerialRepr::POINTER_METADATA_NAME, reprMeta);
+        if (reprMeta) {
+            var->setMetadata(SerialRepr::POINTER_METADATA_NAME, reprMeta);
+        }
         return var;
     });
 }
@@ -100,7 +102,10 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  llvm::Type* ty,
                                                  const SerialRepr& repr,
                                                  bool constant) {
-    return convertToPointer(getModule(), what, ty, constant, repr.metadata(getModule().getContext()));
+    return convertToPointer(getModule(), what, ty, constant,
+                            Parameter::DEBUG_SERIALIZE_LLVM
+                                ? repr.metadata(getModule().getContext())
+                                : nullptr);
 }
 
 llvm::FunctionCallee
@@ -110,10 +115,11 @@ LowerFunctionLLVM::convertToFunction(llvm::Module& mod, const void* what,
     char name[21];
     sprintf(name, "efn_%lx", (uintptr_t)what);
     auto llvmFn = mod.getOrInsertFunction(name, ty);
-    mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)->addOperand(
-        SerialRepr::functionMetadata(llvmFn.getCallee()->getContext(),
-                                     name,
-                                     builtinId));
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)
+            ->addOperand(SerialRepr::functionMetadata(
+                llvmFn.getCallee()->getContext(), name, builtinId));
+    }
     return llvmFn;
 }
 

@@ -5,6 +5,7 @@
 #include "CompilerServer.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
+#include "compiler/parameter.h"
 #include "hash/UUID.h"
 #include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
@@ -50,6 +51,7 @@ void CompilerServer::tryRun() {
     socket.bind(serverAddr);
 
     _isRunning = true;
+    pir::Parameter::DEBUG_SERIALIZE_LLVM = true;
     // _isRunning is used because of nested calls in the for loop, but CLion
     // doesn't see
     (void)_isRunning;

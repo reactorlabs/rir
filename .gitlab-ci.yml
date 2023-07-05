@@ -265,7 +265,7 @@ test_features_3:
     when: on_failure
     expire_in: 1 week
 
-# Test serialization
+# Test serialization (no LLVM bitcode)
 test_serialize:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
@@ -279,9 +279,37 @@ test_serialize:
   script:
     - /opt/rir/container/install-test-deps.sh
     - cd /opt/rir/build/release
-    - RIR_SERIALIZE_CHAOS=5 bin/tests
+    - RIR_SERIALIZE_CHAOS=5 FAST_TESTS=1 bin/tests
     - PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=50 bin/gnur-make-tests check || $SAVE_LOGS
+    - ../../tools/check-gnur-make-tests-error
     - RIR_SERIALIZE_CHAOS=10 bin/tests
+  artifacts:
+    paths:
+      - logs
+    when: on_failure
+    expire_in: 1 week
+    
+# Test LLVM bitcode serialization
+test_llvm_serialize:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - DEBUG_SERIALIZE_LLVM=1 FAST_TESTS=1 bin/tests
+    - DEBUG_SERIALIZE_LLVM=1 bin/gnur-make-tests check-devel || $SAVE_LOGS
+    - ../../tools/check-gnur-make-tests-error
+    - DEBUG_SERIALIZE_LLVM=1 FAST_TESTS=1 RIR_SERIALIZE_CHAOS=5 bin/tests
+    - DEBUG_SERIALIZE_LLVM=1 RIR_SERIALIZE_CHAOS=10 bin/tests
+    - DEBUG_SERIALIZE_LLVM=1 PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=50 bin/gnur-make-tests check-devel || $SAVE_LOGS
+    - ../../tools/check-gnur-make-tests-error
   artifacts:
     paths:
       - logs
