@@ -25,7 +25,7 @@ static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 
 static bool _useHashes = false;
 static bool _isHashing = false;
-static std::queue<SEXP>* connectedWorklist = nullptr;
+static ConnectedWorklist* connectedWorklist = nullptr;
 static UUID retrieveHash;
 
 // Will serialize s if it's an instance of CLS
@@ -172,7 +172,7 @@ R_outpstream_st nullOutputStream() {
     return out;
 }
 
-UUID hashSexp(SEXP sexp, std::queue<SEXP>& worklist) {
+UUID hashSexp(SEXP sexp, ConnectedWorklist& worklist) {
     UUIDHasher hasher;
     hashSexp(sexp, hasher, worklist);
     return hasher.finalize();
@@ -184,7 +184,7 @@ UUID hashSexp(SEXP sexp) {
     return hasher.finalize();
 }
 
-void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist) {
+void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& worklist) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
@@ -324,7 +324,7 @@ bool isHashing(__attribute__((unused)) R_outpstream_t out) {
     return _isHashing;
 }
 
-std::queue<SEXP>* worklist(__attribute__((unused)) R_outpstream_t out) {
+ConnectedWorklist* worklist(__attribute__((unused)) R_outpstream_t out) {
     // Trying to pretend we don't use a singleton...
     return connectedWorklist;
 }

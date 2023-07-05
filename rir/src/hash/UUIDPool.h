@@ -12,6 +12,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 
 #define DO_INTERN
 
@@ -90,6 +91,14 @@ class UUIDPool {
     /// since it may if we call `writeItem` even though the AST itself doesn't
     /// change
     static void writeAst(SEXP src, SEXP ref_table, R_outpstream_t out);
+};
+
+/// Would be an inner class but we can't: https://stackoverflow.com/a/951245
+class ConnectedWorklist {
+    std::queue<SEXP> worklist;
+    std::unordered_set<SEXP> seen;
+
+    friend class UUIDPool;
 };
 
 } // namespace rir

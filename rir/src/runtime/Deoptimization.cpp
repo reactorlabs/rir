@@ -18,11 +18,14 @@ void FrameInfo::deserialize(ByteBuffer& buf) {
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    UUIDPool::intern(code->container(), true, false);
     rir::serialize(code->container(), buf, true);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
+}
+
+void FrameInfo::internRecursive() const {
+    UUIDPool::intern(code->container(), true, false);
 }
 
 DeoptMetadata* DeoptMetadata::deserialize(ByteBuffer& buf) {
@@ -41,6 +44,12 @@ void DeoptMetadata::serialize(ByteBuffer& buf) const {
     buf.putInt((uint32_t)numFrames);
     for (size_t i = 0; i < numFrames; ++i) {
         frames[i].serialize(buf);
+    }
+}
+
+void DeoptMetadata::internRecursive() const {
+    for (size_t i = 0; i < numFrames; ++i) {
+        frames[i].internRecursive();
     }
 }
 

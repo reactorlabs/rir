@@ -21,11 +21,13 @@ struct FrameInfo {
 
     void deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
+    void internRecursive() const;
 };
 
 struct DeoptMetadata {
     static DeoptMetadata* deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
+    void internRecursive() const;
     void print(std::ostream& out) const;
     size_t numFrames;
     FrameInfo frames[];

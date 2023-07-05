@@ -7,9 +7,10 @@
 #include "R/r_incl.h"
 #include "hash/UUID.h"
 #include "utils/ByteBuffer.h"
-#include <queue>
 
 namespace rir {
+
+class ConnectedWorklist;
 
 /// Function passed to GNU-R, use `serialize` instead
 void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out);
@@ -24,7 +25,7 @@ R_outpstream_st nullOutputStream();
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
 /// XORing the bits instead of collecting them, and add connected RIR object
 /// containers to the worklist.
-UUID hashSexp(SEXP sexp, std::queue<SEXP>& worklist);
+UUID hashSexp(SEXP sexp, ConnectedWorklist& worklist);
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
 /// XORing the bits instead of collecting them.
 UUID hashSexp(SEXP sexp);
@@ -33,7 +34,7 @@ UUID hashSexp(SEXP sexp);
 /// containers to the worklist.
 ///
 /// @see hashSexp(SEXP sexp, UUIDHasher& hasher)
-void hashSexp(SEXP sexp, UUIDHasher& hasher, std::queue<SEXP>& worklist);
+void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& worklist);
 /// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it but
 /// XORing the bits instead of collecting them.
 ///
@@ -76,7 +77,7 @@ bool useHashes(R_inpstream_t in);
 /// If true we're hashing, otherwise we're actually serializing
 bool isHashing(R_outpstream_t out);
 /// Worklist for the current stream
-std::queue<SEXP>* worklist(R_outpstream_t out);
+ConnectedWorklist* worklist(R_outpstream_t out);
 /// If `retrieveHash` is set, interns SEXP with it and unsets it.
 void useRetrieveHashIfSet(R_inpstream_t inp, SEXP sexp);
 
