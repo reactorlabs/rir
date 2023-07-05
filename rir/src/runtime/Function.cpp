@@ -15,11 +15,11 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
     AddReadRef(refTable, store);
     useRetrieveHashIfSet(inp, store);
-    void* payload = DATAPTR(store);
-    Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
+    auto fun = new (DATAPTR(store)) Function(functionSize, nullptr, {}, sig, as);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
-    for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
+    // Need to keep gc happy since we resized
+    for (unsigned i = 0; i < fun->numArgs_ + (unsigned)NUM_PTRS; i++) {
         fun->setEntry(i, R_NilValue);
     }
     SEXP body = p(UUIDPool::readItem(refTable, inp));
