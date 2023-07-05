@@ -37,6 +37,7 @@ llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
 
 llvm::MDNode* SerialRepr::DeoptMetadata::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
+    m->internRecursive();
     m->serialize(buf);
     return llvm::MDTuple::get(
         ctx,
