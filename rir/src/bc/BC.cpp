@@ -227,7 +227,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            Pool::writeItem(i.pool, refTable, out);
+            Pool::writeItem(i.pool, refTable, noHashOut);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
@@ -237,7 +237,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             break;
         case Opcode::guard_fun_:
             Pool::writeAst(i.guard_fun_args.name, refTable, out);
-            Pool::writeItem(i.guard_fun_args.expected, refTable, out);
+            Pool::writeItem(i.guard_fun_args.expected, refTable, noHashOut);
             OutInteger(out, i.guard_fun_args.id);
             break;
         case Opcode::call_:
@@ -256,7 +256,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::call_builtin_:
             OutInteger(out, i.callBuiltinFixedArgs.nargs);
             Pool::writeAst(i.callBuiltinFixedArgs.ast, refTable, out);
-            Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
+            Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, noHashOut);
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
