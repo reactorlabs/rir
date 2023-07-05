@@ -5,6 +5,7 @@
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "bc/CodeStream.h"
+#include "interpreter/serialize.h"
 #include "utils/Pool.h"
 
 #include <iomanip>
@@ -213,6 +214,12 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
 
 void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                    size_t codeSize, const Code* container) {
+    // Some stuff is mutable or not part of the structural identity, so we don't
+    // want to hash it. However, we still need to serialize recursive items. To
+    // do this, we temporarily replace out with a void stream.
+    R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = isHashing(out) ? &nullOut : out;
+
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
         OutChar(out, (int)*code);
@@ -239,11 +246,11 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            Pool::writeItem(i.poolAndCache.poolIndex, refTable, out);
+            Pool::writeAst(i.poolAndCache.poolIndex, refTable, out);
             OutInteger(out, i.poolAndCache.cacheIndex);
             break;
         case Opcode::guard_fun_:
-            Pool::writeItem(i.guard_fun_args.name, refTable, out);
+            Pool::writeAst(i.guard_fun_args.name, refTable, out);
             Pool::writeItem(i.guard_fun_args.expected, refTable, out);
             OutInteger(out, i.guard_fun_args.id);
             break;
@@ -251,23 +258,27 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::call_dots_:
         case Opcode::named_call_:
             OutInteger(out, i.callFixedArgs.nargs);
-            Pool::writeItem(i.callFixedArgs.ast, refTable, out);
+            Pool::writeAst(i.callFixedArgs.ast, refTable, out);
             OutBytes(out, &i.callFixedArgs.given, sizeof(Context));
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    Pool::writeItem(bc.callExtra().callArgumentNames[j],
-                                    refTable, out);
+                    Pool::writeAst(bc.callExtra().callArgumentNames[j],
+                                   refTable, out);
             }
             break;
         case Opcode::call_builtin_:
             OutInteger(out, i.callBuiltinFixedArgs.nargs);
-            Pool::writeItem(i.callBuiltinFixedArgs.ast, refTable, out);
+            Pool::writeAst(i.callBuiltinFixedArgs.ast, refTable, out);
             Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
+            assert((size - 1) % 4 == 0);
+            if (size != 0)
+                OutBytes(noHashOut, code + 1, (int)size - 1);
+            break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -282,7 +293,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size != 0)
-                OutBytes(out, code + 1, size - 1);
+                OutBytes(out, code + 1, (int)size - 1);
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

@@ -17,6 +17,10 @@ void Pool::writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
     UUIDPool::writeItem(get(idx), ref_table, out);
 }
 
+void Pool::writeAst(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
+    UUIDPool::writeAst(get(idx), ref_table, out);
+}
+
 BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))
         return numbers.at(n);
