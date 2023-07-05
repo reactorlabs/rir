@@ -7,6 +7,7 @@
 #include "compiler/native/SerialModule.h"
 #include "utils/filesystem.h"
 
+#include "compiler/parameter.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -315,7 +316,10 @@ PirJitLLVM::~PirJitLLVM() {
 void PirJitLLVM::finalize() {
     assert(!finalized);
     if (M) {
-        auto serialModule = internModule(SerialModule(*M)).first;
+        auto serialModule =
+            Parameter::DEBUG_SERIALIZE_LLVM ?
+            internModule(SerialModule(*M)).first :
+            nullptr;
         // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
             DIB->finalize();

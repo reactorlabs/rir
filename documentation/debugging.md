@@ -104,6 +104,12 @@ For more flags see compiler/parameter.h.
         n          serialize and deserialize the dispatch table on every `n`th
                    RIR call. WARNING: This sometimes prevents optimization
 
+    DEBUG_SERIALIZE_LLVM=
+        1          serialize LLVM IR, and add metadata to make it patchable on
+                   different sessions. This will be set regardless of the env
+                   var if RIR_PRESERVE is set or the compiler server is running,
+                   so the only time this is useful is when debugging.
+
 ### Disassembly annotations
 
 #### Assumptions
