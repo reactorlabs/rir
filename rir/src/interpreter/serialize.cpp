@@ -15,6 +15,9 @@ bool pir::Parameter::RIR_PRESERVE =
     getenv("RIR_PRESERVE") != nullptr && strtol(getenv("RIR_PRESERVE"), nullptr, 10);
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
+bool pir::Parameter::DEBUG_SERIALIZE_LLVM =
+    RIR_PRESERVE ||
+    (getenv("DEBUG_SERIALIZE_LLVM") != nullptr && strtol(getenv("DEBUG_SERIALIZE_LLVM"), nullptr, 10));
 
 // This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
 static const int R_STREAM_DEFAULT_VERSION = 3;

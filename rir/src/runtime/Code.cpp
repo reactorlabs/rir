@@ -68,13 +68,15 @@ void Code::finalizeLazyCodeModule() {
 }
 
 void Code::lazyCode(const std::string& handle, const SerialModuleRef& module) {
-    assert(!handle.empty() && module != nullptr);
+    assert(!handle.empty());
     assert(handle.size() < MAX_CODE_HANDLE_LENGTH);
     assert(kind == Kind::Native);
     assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
     strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH - 1);
     lazyCodeModule = module;
-    setLazyCodeModuleFinalizer();
+    if (module) {
+        setLazyCodeModuleFinalizer();
+    }
 }
 
 void Code::function(Function* fun) { setEntry(3, fun->container()); }
@@ -177,8 +179,10 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         auto lazyCodeHandleLen = InInteger(inp);
         InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
         code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
-        code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp);
-        code->setLazyCodeModuleFinalizer();
+        if (InBool(inp)) {
+            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp);
+            code->setLazyCodeModuleFinalizer();
+        }
     }
     // Native code is always null here because it's lazy
     code->nativeCode_ = nullptr;
@@ -245,7 +249,10 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
         OutInteger(noHashOut, lazyCodeHandleLen);
         OutBytes(noHashOut, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-        lazyCodeModule->serialize(noHashOut);
+        OutBool(noHashOut, lazyCodeModule != nullptr);
+        if (lazyCodeModule) {
+            lazyCodeModule->serialize(noHashOut);
+        }
     }
 }
 
@@ -342,7 +349,13 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
     case Kind::Native: {
         if (nativeCode_) {
-            out << "nativeCode " << nativeCode_ << "\n";
+            out << "nativeCode " << nativeCode_ << ", module:";
+            if (lazyCodeModule) {
+                out << "\n" << lazyCodeModule;
+            } else {
+                out << " (elided)";
+            }
+            out << "\n";
         } else {
             out << "nativeCode (compilation pending)\n";
         }

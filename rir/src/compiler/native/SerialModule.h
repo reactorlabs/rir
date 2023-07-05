@@ -44,6 +44,7 @@ class SerialModule {
     static SerialModule deserialize(R_inpstream_t inp);
   public:
     void serialize(R_outpstream_t out) const;
+    friend std::ostream& operator<<(std::ostream&, const SerialModule&);
 };
 
 } // namespace rir
