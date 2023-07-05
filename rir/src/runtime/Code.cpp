@@ -1,6 +1,7 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
+#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
@@ -392,11 +393,11 @@ void Code::print(std::ostream& out, bool hashInfo) const {
 
     if (hashInfo) {
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
-            << ", hash = " << hashSexp(src_pool_at(src)) << "\n";
+            << ", hash = " << serializeAst(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
             out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
             out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
-                << ", hash = " << hashSexp(src_pool_at(i)) << "\n";
+                << ", hash = " << serializeAst(src_pool_at(i)) << "\n";
         }
     }
 }
