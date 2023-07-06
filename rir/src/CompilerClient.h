@@ -67,6 +67,8 @@ class CompilerClient {
         void compare(pir::ClosureVersion* version) const;
         /// Block and get the SEXP
         SEXP getSexp() const;
+        /// Block and get the final PIR debug print
+        const std::string& getFinalPir() const;
     };
 
     /// Returns if the client was initialized
