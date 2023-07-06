@@ -5,6 +5,7 @@
 #pragma once
 
 #include "R/r_incl.h"
+#include "bc/BC.h"
 #include "runtime/Deoptimization.h"
 
 namespace llvm {
@@ -23,6 +24,7 @@ class SerialRepr {
   public:
     static constexpr const char* POINTER_METADATA_NAME = "rir.serial.pointer";
     static constexpr const char* FUNCTION_METADATA_NAME = "rir.serial.function";
+    static constexpr const char* NAMES_METADATA_NAME = "rir.serial.names";
 
     class SEXP;
     class String;
@@ -38,6 +40,8 @@ class SerialRepr {
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
                                           const char* llvmValueName,
                                           int builtinId);
+    static llvm::MDNode* namesMetadata(llvm::LLVMContext& ctx,
+                                       const std::vector<BC::PoolIdx>& names);
 
     /// Replace pointers with the serialized encodings, fetching from the
     /// compiler server if necessary. See lower_function_llvm.cpp for where

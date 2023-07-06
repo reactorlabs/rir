@@ -65,12 +65,19 @@ llvm::Value* LowerFunctionLLVM::PhiBuilder::operator()(size_t numInputs) {
     return phi_;
 }
 
-llvm::Value* LowerFunctionLLVM::globalConst(llvm::Constant* init,
-                                            llvm::Type* ty) {
+llvm::GlobalVariable* LowerFunctionLLVM::globalConst(llvm::Module& mod,
+                                                     llvm::Constant* init,
+                                                     llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
-    return new llvm::GlobalVariable(getModule(), ty, true,
-                                    llvm::GlobalValue::PrivateLinkage, init);
+    return new llvm::GlobalVariable(mod, ty, true,
+                                    llvm::GlobalValue::PrivateLinkage,
+                                    init);
+}
+
+llvm::GlobalVariable* LowerFunctionLLVM::globalConst(llvm::Constant* init,
+                                                     llvm::Type* ty) {
+    return globalConst(getModule(), init, ty);
 }
 
 llvm::FunctionCallee
@@ -128,6 +135,24 @@ llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
                                      int builtinId) {
     return convertToFunction(getModule(), what, ty, builtinId);
+}
+
+llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
+    std::vector<llvm::Constant*> constVector;
+    for (const auto& e : names)
+        constVector.push_back(c(e));
+    auto ty = llvm::ArrayType::get(t::Int, names.size());
+    auto vectorConst = llvm::ConstantArray::get(ty, constVector);
+    auto vectorStore = globalConst(mod, vectorConst);
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        vectorStore->setMetadata(SerialRepr::NAMES_METADATA_NAME,
+                                 SerialRepr::namesMetadata(mod.getContext(), names));
+    }
+    return vectorStore;
+}
+
+llvm::Value* LowerFunctionLLVM::llvmNames(const std::vector<BC::PoolIdx>& names) {
+    return builder.CreateBitCast(llvmNames(getModule(), names), t::IntPtr);
 }
 
 void LowerFunctionLLVM::setVisible(int i) {
@@ -1881,8 +1906,7 @@ bool LowerFunctionLLVM::compileDotcall(
     if (!seenDots)
         return false;
     Context asmpt = calli->inferAvailableAssumptions();
-    auto namesConst = c(newNames);
-    auto namesStore = globalConst(namesConst);
+    auto namesStore = llvmNames(newNames);
 
     auto callId = ArglistOrder::NOT_REORDERED;
     if (calli->isReordered())
@@ -1901,7 +1925,7 @@ bool LowerFunctionLLVM::compileDotcall(
                               i->hasEnv() ? loadSxp(i->env())
                                           : constant(R_BaseEnv, t::SEXP),
                               c(calli->nCallArgs()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
+                              namesStore,
                               c(asmpt.toI()),
                           });
                   },
@@ -3398,8 +3422,7 @@ void LowerFunctionLLVM::compile() {
                 std::vector<BC::PoolIdx> names;
                 for (size_t i = 0; i < b->names.size(); ++i)
                     names.push_back(Pool::insert((b->names[i])));
-                auto namesConst = c(names);
-                auto namesStore = globalConst(namesConst);
+                auto namesStore = llvmNames(names);
 
                 auto callId = ArglistOrder::NOT_REORDERED;
                 if (b->isReordered())
@@ -3416,7 +3439,7 @@ void LowerFunctionLLVM::compile() {
                                 loadSxp(b->cls()),
                                 loadSxp(b->env()),
                                 c(b->nCallArgs()),
-                                builder.CreateBitCast(namesStore, t::IntPtr),
+                                namesStore,
                                 c(asmpt.toI()),
                             });
                     }));
@@ -3632,15 +3655,14 @@ void LowerFunctionLLVM::compile() {
                         n = CONS_NR(n, R_NilValue);
                     names.push_back(Pool::insert(n));
                 }
-                auto namesConst = c(names);
-                auto namesStore = globalConst(namesConst);
+                auto namesStore = llvmNames(names);
 
                 if (mkenv->stub) {
                     auto env =
                         call(NativeBuiltins::get(
                                  NativeBuiltins::Id::createStubEnvironment),
                              {parent, c((int)mkenv->nLocals()),
-                              builder.CreateBitCast(namesStore, t::IntPtr),
+                              namesStore,
                               c(mkenv->context)});
                     protectTemp(env);
                     size_t pos = 0;
