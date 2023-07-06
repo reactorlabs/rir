@@ -35,6 +35,19 @@ llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
          llvm::MDString::get(ctx, str)});
 }
 
+llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
+    ByteBuffer buf;
+    auto sexp = code->container();
+    UUIDPool::intern(sexp, true, false);
+    serialize(sexp, buf, true);
+    return llvm::MDTuple::get(
+        ctx,
+        {llvm::MDString::get(ctx, "Code"),
+         llvm::MDString::get(
+             ctx,
+             llvm::StringRef((const char*)buf.data(), buf.size()))});
+}
+
 llvm::MDNode* SerialRepr::DeoptMetadata::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     m->internRecursive();
@@ -71,6 +84,12 @@ llvm::MDNode* SerialRepr::R_GlobalContext::metadata(llvm::LLVMContext& ctx) cons
         {llvm::MDString::get(ctx, "R_GlobalContext")});
 }
 
+llvm::MDNode* SerialRepr::R_ReturnedValue::metadata(llvm::LLVMContext& ctx) const {
+    return llvm::MDTuple::get(
+        ctx,
+        {llvm::MDString::get(ctx, "R_ReturnedValue")});
+}
+
 llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
                                            const char* llvmValueName,
                                            int builtinId) {
@@ -92,6 +111,13 @@ static void* getMetadataPtr_String(const llvm::MDNode& meta) {
     // TODO: May need this to be a const char and then leak, or call c_str and
     //     it somehow doesn't leak or get freed early?
     return (void*)new std::string(data);
+}
+
+static void* getMetadataPtr_Code(const llvm::MDNode& meta) {
+    auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    auto sexp = deserialize(buffer, true);
+    return (void*)rir::Code::unpack(sexp);
 }
 
 static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta) {
@@ -116,16 +142,21 @@ static void* getMetadataPtr_R_GlobalContext(__attribute__((unused)) const llvm::
     return (void*)&R_GlobalContext;
 }
 
+static void* getMetadataPtr_R_ReturnedValue(__attribute__((unused)) const llvm::MDNode& meta) {
+    return (void*)&R_ReturnedValue;
+}
 
 typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta);
 static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
     {"SEXP", getMetadataPtr_SEXP},
     {"String", getMetadataPtr_String},
+    {"Code", getMetadataPtr_Code},
     {"DeoptMetadata", getMetadataPtr_DeoptMetadata},
     {"OpaqueTrue", getMetadataPtr_OpaqueTrue},
     {"R_Visible", getMetadataPtr_R_Visible},
     {"R_BCNodeStackTop", getMetadataPtr_R_BCNodeStackTop},
-    {"R_GlobalContext", getMetadataPtr_R_GlobalContext}
+    {"R_GlobalContext", getMetadataPtr_R_GlobalContext},
+    {"R_ReturnedValue", getMetadataPtr_R_ReturnedValue}
 };
 
 static void patchPointerMetadata(llvm::Module& mod,
@@ -159,7 +190,7 @@ static void patchWithFunctionMetadata1(llvm::Module& mod,
     auto builtinId = (int)((const llvm::ConstantInt&)*meta.getOperand(1)).getZExtValue();
     auto llvmValue = mod.getNamedValue(llvmValueName);
 
-    SEXP builtin = getBuiltinFun(builtinId);
+    auto builtin = getBuiltinFun(builtinId);
     auto replacement = LowerFunctionLLVM::convertToFunction(
         mod, builtin, t::builtinFunction, builtinId);
 

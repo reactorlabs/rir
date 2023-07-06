@@ -66,6 +66,10 @@ void initializeTypes(LLVMContext& context) {
     t::RirRuntimeObject = StructType::create(context, "RirRuntimeObject");
     t::RirRuntimeObject->setBody(fields);
 
+    // Code is a subclass of RirRuntimeObject. It has additional fields but LLVM
+    // doesn't care
+    t::Code_ptr = PointerType::get(t::RirRuntimeObject, 0);
+
     t::stackCell = StructType::create(context, "R_bcstack_t");
     // struct { int tag; int flags; union { ival, dval, sxpval} }
     fields = {t::Int, t::Int, t::SEXP};
@@ -166,6 +170,7 @@ StructType* SEXPREC;
 StructType* VECTOR_SEXPREC;
 
 StructType* LazyEnvironment;
+PointerType* Code_ptr;
 StructType* RirRuntimeObject;
 
 StructType* setjmp_buf;

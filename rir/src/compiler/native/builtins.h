@@ -85,7 +85,7 @@ struct NativeBuiltins {
         checkTrueFalse,
         asLogicalBlt,
         length,
-        recordTypefeedback,
+        recordFeedback,
         deopt,
         assertFail,
         printValue,
