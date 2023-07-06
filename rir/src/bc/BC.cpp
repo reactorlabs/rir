@@ -232,6 +232,32 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             assert(*code != Opcode::nop_);
             break;
         case Opcode::push_:
+            if (isHashing(out)) {
+                // TODO: handle this correctly because although it passes tests,
+                //  there are probably counterexamples where different hashes
+                //  are eq... (without SYMSXP we get a failure in rir_switch.r)
+                auto s = Pool::get(i.pool);
+                OutInteger(out, TYPEOF(s));
+                switch (TYPEOF(s)) {
+                case SYMSXP:
+                // ...or we may not need these cases (just SYMSXP passes rir_switch.r)
+                case INTSXP:
+                case LGLSXP:
+                case REALSXP:
+                case RAWSXP:
+                case CHARSXP:
+                case STRSXP:
+                case SPECIALSXP:
+                case BUILTINSXP:
+                    Pool::writeAst(i.pool, refTable, out);
+                    break;
+                default:
+                    break;
+                }
+            } else {
+                Pool::writeItem(i.pool, refTable, out);
+            }
+            break;
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
@@ -241,7 +267,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            Pool::writeItem(i.pool, refTable, noHashOut);
+            Pool::writeAst(i.pool, refTable, out);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
