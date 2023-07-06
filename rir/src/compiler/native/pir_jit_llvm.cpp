@@ -589,7 +589,8 @@ void PirJitLLVM::initializeLLVM() {
 
                 if (ept || efn) {
                     auto isUnderscoreVariant = n.substr(0, 1) == "_";
-                    auto addrStr = n.substr(isUnderscoreVariant ? 5 : 4);
+                    // 16 = sizeof(uintptr_t)
+                    auto addrStr = n.substr(isUnderscoreVariant ? 5 : 4, 16);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(

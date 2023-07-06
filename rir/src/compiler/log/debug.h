@@ -57,10 +57,10 @@ enum class DebugStyle {
 struct DebugOptions {
     typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
-    const std::regex passFilter;
-    const std::string passFilterString;
-    const std::regex functionFilter;
-    const std::string functionFilterString;
+    std::regex passFilter;
+    std::string passFilterString;
+    std::regex functionFilter;
+    std::string functionFilterString;
     DebugStyle style;
 
     DebugOptions operator|(const DebugFlags& f) const {

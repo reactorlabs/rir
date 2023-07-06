@@ -69,6 +69,7 @@ llvm::GlobalVariable* LowerFunctionLLVM::globalConst(llvm::Module& mod,
                                                      llvm::Type* ty) {
     if (!ty)
         ty = init->getType();
+    // ???: Should this be inserted with getOrInsertGlobal?
     return new llvm::GlobalVariable(mod, ty, true,
                                     llvm::GlobalValue::PrivateLinkage,
                                     init);
@@ -90,8 +91,12 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(llvm::Module& mod,
                                                  bool constant,
                                                  llvm::MDNode* reprMeta) {
     assert(what);
-    char name[21];
-    sprintf(name, "ept_%lx", (uintptr_t)what);
+    // We need the name to be module-unique because we need to distinguish
+    // patched pointers (which will be in a different module). This assumes we
+    // don't get a module pointer collision, so we should make more stable
+    // later.
+    char name[38];
+    sprintf(name, "ept_%lx_%lx", (uintptr_t)what, (uintptr_t)&mod);
     return mod.getOrInsertGlobal(name, ty, [&]() {
         auto var = new llvm::GlobalVariable(
             mod, ty, constant,
@@ -119,8 +124,12 @@ llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(llvm::Module& mod, const void* what,
                                      llvm::FunctionType* ty, int builtinId) {
     assert(what);
-    char name[21];
-    sprintf(name, "efn_%lx", (uintptr_t)what);
+    // We need the name to be module-unique because we need to distinguish
+    // patched functions (which will be in a different module). This assumes we
+    // don't get a module pointer collision, so we should make more stable
+    // later.
+    char name[38];
+    sprintf(name, "efn_%lx_%lx", (uintptr_t)what, (uintptr_t)&mod);
     auto llvmFn = mod.getOrInsertFunction(name, ty);
     if (Parameter::DEBUG_SERIALIZE_LLVM) {
         mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)
@@ -137,31 +146,55 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
 }
 
 llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i) {
-    auto value = new llvm::GlobalVariable(t::i32, true, llvm::GlobalValue::PrivateLinkage,
-                                          c(i), "srcIdx");
-    if (Parameter::DEBUG_SERIALIZE_LLVM) {
-        value->setMetadata(SerialRepr::SRC_IDX_METADATA_NAME,
-                           SerialRepr::srcIdxMetadata(mod.getContext(), i));
-    }
-    return value;
+    char name[30];
+    // We need the name to be module-unique because we need to distinguish
+    // patched src-idxs (which will be in a different module). This assumes we
+    // don't get a module pointer collision, so we should make more stable
+    // later.
+    sprintf(name, "src_%08x_%lx", i, (uintptr_t)&mod);
+    return mod.getOrInsertGlobal(name, t::i32, [&]() {
+        auto value = new llvm::GlobalVariable(mod, t::i32, true,
+                                              llvm::GlobalValue::PrivateLinkage,
+                                              c(i), name);
+        if (Parameter::DEBUG_SERIALIZE_LLVM) {
+            value->setMetadata(SerialRepr::SRC_IDX_METADATA_NAME,
+                               SerialRepr::srcIdxMetadata(mod.getContext(), i));
+        }
+        return value;
+    });
 }
 
 llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
-    return llvmSrcIdx(getModule(), i);
+    // Assuming this gets optimized out. Otherwise we can use regular
+    // ConstantInt like before, but we need to find a way to effectively add
+    // metadata to each src-idx ConstantInt.
+    return builder.CreateLoad(llvmSrcIdx(getModule(), i));
 }
 
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
-    auto value = new llvm::GlobalVariable(t::i32, true, llvm::GlobalValue::PrivateLinkage,
-                                          c(i), "poolIdx");
-    if (Parameter::DEBUG_SERIALIZE_LLVM) {
-        value->setMetadata(SerialRepr::POOL_IDX_METADATA_NAME,
-                           SerialRepr::poolIdxMetadata(mod.getContext(), i));
-    }
-    return value;
+    char name[29];
+    // We need the name to be module-unique because we need to distinguish
+    // patched co-idxs (which will be in a different module). This assumes we
+    // don't get a module pointer collision, so we should make more stable
+    // later.
+    sprintf(name, "cp_%08x_%lx", i, (uintptr_t)&mod);
+    return mod.getOrInsertGlobal(name, t::i32, [&]() {
+        auto value = new llvm::GlobalVariable(mod, t::i32, true,
+                                              llvm::GlobalValue::PrivateLinkage,
+                                              c(i), name);
+        if (Parameter::DEBUG_SERIALIZE_LLVM) {
+            value->setMetadata(SerialRepr::POOL_IDX_METADATA_NAME,
+                               SerialRepr::poolIdxMetadata(mod.getContext(), i));
+        }
+        return value;
+    });
 }
 
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
-    return llvmPoolIdx(getModule(), i);
+    // Assuming this gets optimized out. Otherwise we can use regular
+    // ConstantInt like before, but we need to find a way to effectively add
+    // metadata to each pool-idx ConstantInt.
+    return builder.CreateLoad(llvmPoolIdx(getModule(), i));
 }
 
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
@@ -385,7 +418,8 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(int builtinId,
             return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
                             paramCode(),
-                            llvmSrcIdx(srcIdx),
+                            // Call ASTs in cp pool, not src pool
+                            llvmPoolIdx(srcIdx),
                             constant(builtin, t::SEXP),
                             env,
                             c(args.size()),
@@ -495,16 +529,10 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
         auto dr = (DeoptReasonWrapper*)val;
-        auto srcAddr = (Constant*)builder.CreateIntToPtr(
-            llvm::ConstantInt::get(
-                PirJitLLVM::getContext(),
-                llvm::APInt(64,
-                            reinterpret_cast<uint64_t>(dr->reason.srcCode()),
-                            false)),
-            t::voidPtr);
+        auto srcCode = llvm::cast<Constant>(convertToPointer(dr->reason.srcCode(), true));
         auto drs = llvm::ConstantStruct::get(
             t::DeoptReason, {c(dr->reason.reason, 32),
-                             c(dr->reason.origin.offset(), 32), srcAddr});
+                             c(dr->reason.origin.offset(), 32), srcCode});
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
@@ -1945,7 +1973,8 @@ bool LowerFunctionLLVM::compileDotcall(
                           {
                               c(callId),
                               paramCode(),
-                              llvmSrcIdx(i->srcIdx),
+                              // Call ASTs in cp pool, not src pool
+                              llvmPoolIdx(i->srcIdx),
                               callee(),
                               i->hasEnv() ? loadSxp(i->env())
                                           : constant(R_BaseEnv, t::SEXP),
@@ -3426,7 +3455,9 @@ void LowerFunctionLLVM::compile() {
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
                                NativeBuiltins::get(NativeBuiltins::Id::call),
-                               {c(callId), paramCode(), llvmSrcIdx(b->srcIdx),
+                               {c(callId), paramCode(),
+                                // Call ASTs in cp pool, not src pool
+                                llvmPoolIdx(b->srcIdx),
                                 loadSxp(b->cls()), loadSxp(b->env()),
                                 c(b->nCallArgs()), c(asmpt.toI())});
                        }));
@@ -3460,7 +3491,8 @@ void LowerFunctionLLVM::compile() {
                             {
                                 c(callId),
                                 paramCode(),
-                                llvmSrcIdx(b->srcIdx),
+                                // Call ASTs in cp pool, not src pool
+                                llvmPoolIdx(b->srcIdx),
                                 loadSxp(b->cls()),
                                 loadSxp(b->env()),
                                 c(b->nCallArgs()),
@@ -3489,7 +3521,9 @@ void LowerFunctionLLVM::compile() {
                         i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
                                 NativeBuiltins::get(NativeBuiltins::Id::call),
-                                {c(callId), paramCode(), llvmSrcIdx(calli->srcIdx),
+                                {c(callId), paramCode(),
+                                 // Call ASTs in cp pool, not src pool
+                                 llvmPoolIdx(calli->srcIdx),
                                  loadSxp(calli->runtimeClosure()),
                                  loadSxp(calli->env()), c(calli->nCallArgs()),
                                  c(asmpt.toI())});
@@ -3529,7 +3563,8 @@ void LowerFunctionLLVM::compile() {
                                     paramCode(),
                                     constant(callee, t::SEXP),
                                     llvmPoolIdx(idx),
-                                    llvmSrcIdx(calli->srcIdx),
+                                    // Call ASTs in cp pool, not src pool
+                                    llvmPoolIdx(calli->srcIdx),
                                     loadSxp(calli->env()),
                                     c(args.size()),
                                     c(asmpt.toI()),
@@ -3548,7 +3583,8 @@ void LowerFunctionLLVM::compile() {
                                {
                                    c(callId),
                                    paramCode(),
-                                   c(calli->srcIdx),
+                                   // Call ASTs in cp pool, not src pool
+                                   llvmPoolIdx(calli->srcIdx),
                                    convertToPointer(calli->cls()->rirClosure()),
                                    loadSxp(calli->env()),
                                    c(calli->nCallArgs()),

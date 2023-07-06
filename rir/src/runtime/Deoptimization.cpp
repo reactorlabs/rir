@@ -7,8 +7,6 @@
 namespace rir {
 
 void FrameInfo::deserialize(ByteBuffer& buf) {
-    UUID codeUuid;
-    buf.getBytes((uint8_t*)&codeUuid, sizeof(codeUuid));
     code = Code::unpack(UUIDPool::readItem(buf, true));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();

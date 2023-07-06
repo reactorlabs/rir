@@ -114,7 +114,7 @@ void initializeTypes(LLVMContext& context) {
     t::RCNTXT->setBody(fields);
 
     t::DeoptReason = StructType::create(context, "DeoptReason");
-    fields = {t::i32, t::i32, t::voidPtr};
+    fields = {t::i32, t::i32, t::Code_ptr};
     t::DeoptReason->setBody(fields, true);
     t::DeoptReasonPtr = llvm::PointerType::get(t::DeoptReason, 0);
 
