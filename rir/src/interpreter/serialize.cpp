@@ -28,6 +28,17 @@ static bool _isHashing = false;
 static ConnectedWorklist* connectedWorklist = nullptr;
 static UUID retrieveHash;
 
+/// We need to disable the GC during deserialization, because otherwise there
+/// are crashes. It might be something wrong on our end, but I spent a lot of
+/// time looking at potential cases, and it also could be something in GNU-R.
+static inline SEXP disableGc(const std::function<SEXP()>&& f) {
+    auto gcEnabled = R_GCEnabled;
+    R_GCEnabled = 0;
+    auto res = f();
+    R_GCEnabled = gcEnabled;
+    return res;
+}
+
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
 static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
@@ -91,7 +102,7 @@ SEXP copyBySerial(SEXP x) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     pir::Parameter::RIR_PRESERVE = true;
     SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-    SEXP copy = p(R_unserialize(data, R_NilValue));
+    SEXP copy = p(disableGc([&]{ return R_unserialize(data, R_NilValue); }));
 #ifdef DO_INTERN
     copy = UUIDPool::intern(copy, true, false);
 #endif
@@ -120,9 +131,12 @@ SEXP copyBySerial(SEXP x) {
     return copy;
 }
 
-static void rStreamDiscardChar(R_outpstream_t stream, int data) {}
+static void rStreamDiscardChar(__attribute__((unused)) R_outpstream_t stream,
+                               __attribute__((unused)) int data) {}
 
-static void rStreamDiscardBytes(R_outpstream_t stream, void* data, int length) {}
+static void rStreamDiscardBytes(__attribute__((unused)) R_outpstream_t stream,
+                                __attribute__((unused)) void* data,
+                                __attribute__((unused)) int length) {}
 
 static void rStreamHashChar(R_outpstream_t stream, int data) {
     auto hasher = (UUIDHasher*)stream->data;
@@ -299,7 +313,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieve
         nullptr,
         nullptr
     );
-    SEXP sexp = R_Unserialize(&in);
+    SEXP sexp = disableGc([&]{ return R_Unserialize(&in); });
     assert(!retrieveHash && "retrieve hash not taken");
     retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;

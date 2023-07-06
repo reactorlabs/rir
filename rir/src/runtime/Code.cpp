@@ -133,8 +133,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     AddReadRef(refTable, store);
     useRetrieveHashIfSet(inp, store);
     Code* code = new (DATAPTR(store)) Code;
-    // Don't include anything in gc to prevent crashes (probably unnecessary?)
-    code->info = {0, 0, CODE_MAGIC};
 
     // Header
     code->src = src_pool_read_item(refTable, inp);
