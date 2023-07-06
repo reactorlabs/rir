@@ -266,12 +266,9 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         eternalConst.count(co))
         return convertToPointer(co, true);
 
-    auto i = Pool::insert(co);
-    llvm::Value* pos = builder.CreateLoad(constantpool);
-    pos = builder.CreateBitCast(dataPtr(pos, false),
-                                PointerType::get(t::SEXP, 0));
-    pos = builder.CreateGEP(pos, c(i));
-    return builder.CreateLoad(pos);
+    // Could also Pool::insert or UUIDPool::intern
+    R_PreserveObject(co);
+    return convertToPointer(co);
 }
 
 llvm::Value* LowerFunctionLLVM::nodestackPtr() {
@@ -702,7 +699,7 @@ void LowerFunctionLLVM::compilePushContext(Instruction* i) {
     {
         builder.SetInsertPoint(didLongjmp);
         llvm::Value* returned = builder.CreateLoad(
-            builder.CreateIntToPtr(c((void*)&R_ReturnedValue), t::SEXP_ptr));
+            convertToPointer((const void*)&R_ReturnedValue, t::SEXP, SerialRepr::R_ReturnedValue{}));
         auto restart =
             builder.CreateICmpEQ(returned, constant(R_RestartToken, t::SEXP));
 
@@ -2201,9 +2198,6 @@ void LowerFunctionLLVM::compile() {
             }
         };
 
-        constantpool = builder.CreateIntToPtr(c(globalContext()), t::SEXP_ptr);
-        constantpool = builder.CreateGEP(constantpool, c(1));
-
         Visitor::run(code->entry, [&](BB* bb) {
             for (auto i : *bb) {
                 if (!liveness.count(i) || !allocator.needsAVariable(i))
@@ -3507,8 +3501,7 @@ void LowerFunctionLLVM::compile() {
                                    c(callId),
                                    paramCode(),
                                    c(calli->srcIdx),
-                                   builder.CreateIntToPtr(
-                                       c(calli->cls()->rirClosure()), t::SEXP),
+                                   convertToPointer(calli->cls()->rirClosure()),
                                    loadSxp(calli->env()),
                                    c(calli->nCallArgs()),
                                    c(asmpt.toI()),

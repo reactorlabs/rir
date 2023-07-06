@@ -43,7 +43,6 @@ class LowerFunctionLLVM {
     size_t numTemps;
     size_t maxTemps;
     llvm::Value* basepointer = nullptr;
-    llvm::Value* constantpool = nullptr;
     llvm::BasicBlock* entryBlock = nullptr;
     int inPushContext = 0;
     std::unordered_set<Value*> escapesInlineContext;
@@ -135,6 +134,11 @@ class LowerFunctionLLVM {
                                   bool constant = false);
     llvm::Value* convertToPointer(SEXP what, bool constant = false) {
         return convertToPointer(what, t::SEXPREC, SerialRepr::SEXP{what}, constant);
+    }
+    llvm::Value* convertToPointer(rir::Code* code_, bool constant = false) {
+        // TODO: May need to use actual Code type which has more fields than
+        //  RirRuntimeObject
+        return convertToPointer(code_, t::RirRuntimeObject, SerialRepr::Code{code_}, constant);
     }
 
     struct Variable {
@@ -297,11 +301,6 @@ class LowerFunctionLLVM {
     llvm::Value* paramClosure() { return args[3]; }
 
     std::vector<llvm::Value*> loadedArgs;
-
-    static llvm::Constant* c(void* i) {
-        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                      llvm::APInt(64, (intptr_t)i));
-    }
 
     static llvm::Constant* c(unsigned long i, int bs = 64) {
         return llvm::ConstantInt::get(PirJitLLVM::getContext(),
