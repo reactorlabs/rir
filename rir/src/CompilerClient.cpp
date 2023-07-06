@@ -325,7 +325,7 @@ void CompilerClient::killServers() {
 }
 
 #ifdef MULTI_THREADED_COMPILER_CLIENT
-CompiledResponseData CompilerClient::CompiledHandle::getResponse() {
+const CompiledResponseData& CompilerClient::CompiledHandle::getResponse() {
     // Wait for the response, with timeout if set
     if (PIR_CLIENT_TIMEOUT == std::chrono::milliseconds(0)) {
         response.wait();
@@ -422,9 +422,20 @@ void CompilerClient::CompiledHandle::compare(pir::ClosureVersion* version) const
 /// Block and get the SEXP
 SEXP CompilerClient::CompiledHandle::getSexp() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
-    auto response = inner->getResponse();
+    auto& response = inner->getResponse();
+#else
+    auto& response = inner->response;
 #endif
-    return inner->response.sexp;
+    return response.sexp;
+}
+
+const std::string& CompilerClient::CompiledHandle::getFinalPir() const {
+#ifdef MULTI_THREADED_COMPILER_CLIENT
+    auto& response = inner->getResponse();
+#else
+    auto& response = inner->response;
+#endif
+    return response.finalPir;
 }
 
 } // namespace rir

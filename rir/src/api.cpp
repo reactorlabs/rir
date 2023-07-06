@@ -373,6 +373,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         UNPROTECT(1);
         delete m;
     } else {
+        if (debug.flags.contains(pir::DebugFlag::PrintFinalPir)) {
+            auto finalPir = compilerServerHandle->getFinalPir();
+            std::cerr << "Final PIR of '" << name << "':\n" << finalPir << "\n";
+        }
+
         // replace with the compiler server's version
         auto newWhat = compilerServerHandle->getSexp();
         // Formals etc. are the same, we don't touch them during compilation.
