@@ -132,17 +132,31 @@ llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
 }
 
 llvm::MDNode* SerialRepr::srcIdxMetadata(llvm::LLVMContext& ctx, Immediate i) {
+    // Source pool should never have global SEXPs, except R_NilValue which is
+    // trivial to serialize (specifically, we care about having no global envs)
+    auto what = src_pool_at(i);
+    ByteBuffer buf;
+    UUIDPool::intern(what, true, false);
+    UUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
-        {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
-            llvm::Type::getInt32Ty(ctx), i))});
+        {llvm::MDString::get(
+            ctx,
+            llvm::StringRef((const char*)buf.data(), buf.size()))});
 }
 
 llvm::MDNode* SerialRepr::poolIdxMetadata(llvm::LLVMContext& ctx, BC::PoolIdx i) {
+    // We assume the constant pool as used here has no global environments or
+    // other tricky exprs, if it does we need to abstract SEXP::metadata...
+    auto what = Pool::get(i);
+    ByteBuffer buf;
+    UUIDPool::intern(what, true, false);
+    UUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
-        {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
-            llvm::Type::getInt32Ty(ctx), i))});
+        {llvm::MDString::get(
+            ctx,
+            llvm::StringRef((const char*)buf.data(), buf.size()))});
 }
 
 llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
@@ -151,13 +165,32 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
     args.reserve(names.size());
     for (auto i : names) {
         auto sexp = Pool::get(i);
-        if (TYPEOF(sexp) != SYMSXP) {
-            std::cerr << "Expected name (symbol), got: " << i << "\n";
+        switch (TYPEOF(sexp)) {
+        case SYMSXP:
+            args.push_back(llvm::MDString::get(ctx, CHAR(PRINTNAME(sexp))));
+            break;
+        case LISTSXP:
+            if (TYPEOF(CAR(sexp)) != SYMSXP || CDR(sexp) != R_NilValue) {
+                std::cerr << "List name is expected to be CONS(actual_name, R_NilValue)\n";
+                Rf_PrintValue(sexp);
+                assert(false);
+            }
+            args.push_back(llvm::MDTuple::get(ctx, {llvm::MDString::get(ctx, CHAR(PRINTNAME(CAR(sexp))))}));
+            break;
+        case NILSXP:
+            args.push_back(llvm::MDTuple::get(ctx, {}));
+            break;
+        // TODO: Do we need INTSXP?
+        case INTSXP:
+            args.push_back(llvm::ConstantAsMetadata::get(
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx),
+                                       INTEGER(sexp)[0])));
+            break;
+        default:
+            std::cerr << "Unhandled name type: " << TYPEOF(sexp) << "\n";
             Rf_PrintValue(sexp);
             assert(false);
         }
-        auto name = CHAR(PRINTNAME(sexp));
-        args.push_back(llvm::MDString::get(ctx, name));
     }
     return llvm::MDTuple::get(ctx, args);
 }
@@ -259,6 +292,7 @@ static llvm::Value* patchSrcIdxMetadata(llvm::Module& mod,
     // TODO: Reuse index if it's already in the source pool
     //  (and maybe merge and refactor pools)
     auto i = src_pool_add(sexp);
+    Rf_PrintValue(sexp);
     return LowerFunctionLLVM::llvmSrcIdx(mod, i);
 }
 
@@ -277,12 +311,46 @@ static llvm::Value* patchNamesMetadata(llvm::Module& mod,
                                        llvm::MDNode* namesMeta) {
     std::vector<BC::PoolIdx> names;
     for (auto& nameOperand : namesMeta->operands()) {
-        auto name = ((llvm::MDString*)nameOperand.get())->getString();
-        auto sexp = Rf_install(name.str().c_str());
-        // Presumably Rf_install interns, but we inserting a lot of redundant
-        // names in the pool. Does it make sense to have a hashmap of inserted
-        // SEXPs?
-        names.push_back(Pool::insert(sexp));
+        auto nameNode = nameOperand.get();
+        auto nameTuple = llvm::dyn_cast_or_null<llvm::MDTuple>(nameNode);
+        auto nameStr =
+            llvm::dyn_cast_or_null<llvm::MDString>(nameNode);
+        auto nameInt =
+            llvm::dyn_cast_or_null<llvm::ValueAsMetadata>(nameNode);
+        if (nameTuple) {
+            switch (nameTuple->getNumOperands()) {
+            case 0: {
+                // We should probably ensure that we only have one R_NilValue in
+                // the pool...
+                names.push_back(Pool::insert(R_NilValue));
+                break;
+            }
+            case 1: {
+                // This is a "cons name" AKA CONS_NR(actualName, R_NilValue). These are used to distinguish missing values.
+                nameNode = nameTuple->getOperand(0).get();
+                nameStr = llvm::dyn_cast<llvm::MDString>(nameNode);
+                auto sexp = CONS_NR(
+                    Rf_install(nameStr->getString().str().c_str()), R_NilValue);
+                // Presumably Rf_install interns, but we inserting a lot of redundant names in the pool. Does it make sense to have a hashmap of inserted SEXPs?
+                names.push_back(Pool::insert(sexp));
+                break;
+            }
+            default:
+                assert(false && "Unexpected name operand tuple size");
+            }
+        } else if (nameStr) {
+            auto sexp = Rf_install(nameStr->getString().str().c_str());
+            // Presumably Rf_install interns, but we inserting a lot of redundant
+            // names in the pool. Does it make sense to have a hashmap of inserted
+            // SEXPs?
+            names.push_back(Pool::insert(sexp));
+        } else if (nameInt) {
+            auto value = (int)((llvm::ConstantInt*)nameInt->getValue())->getZExtValue();
+            // Pool::getInt does intern
+            names.push_back(Pool::getInt(value));
+        } else {
+            assert(false && "Unexpected name operand type");
+        }
     }
 
     return LowerFunctionLLVM::llvmNames(mod, names);

@@ -186,6 +186,22 @@ void CompilerServer::tryRun() {
             requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
             pir::DebugOptions debug(debugFlags, passFilterString,
                                     functionFilterString, debugStyle);
+            // It's a bit confusing that debug options are passed from the
+            // client. We may want this to be the case, but we also want server
+            // debug options; the current solution is to merge them and take
+            // whatever's overridden from either.
+            debug.flags = debug.flags | pir::DebugOptions::DefaultDebugOptions.flags;
+            if (pir::DebugOptions::DefaultDebugOptions.passFilterString != ".*") {
+                debug.passFilterString = pir::DebugOptions::DefaultDebugOptions.passFilterString;
+                debug.passFilter = pir::DebugOptions::DefaultDebugOptions.passFilter;
+            }
+            if (pir::DebugOptions::DefaultDebugOptions.passFilterString != ".*") {
+                debug.passFilterString = pir::DebugOptions::DefaultDebugOptions.passFilterString;
+                debug.passFilter = pir::DebugOptions::DefaultDebugOptions.passFilter;
+            }
+            if (pir::DebugOptions::DefaultDebugOptions.style != pir::DebugStyle::Standard) {
+                debug.style = pir::DebugOptions::DefaultDebugOptions.style;
+            }
 
             std::string pirPrint;
             what = pirCompile(what, assumptions, name, debug, &pirPrint);
@@ -224,7 +240,7 @@ void CompilerServer::tryRun() {
             SEXP what = UUIDPool::get(hash);
 
             // Serialize the response
-            std::cerr << "Retrieve" << hash << " = ";
+            std::cerr << "Retrieve " << hash << " = ";
             if (what) {
                 std::cerr << what << std::endl;
                 Rf_PrintValue(what);
@@ -234,7 +250,7 @@ void CompilerServer::tryRun() {
                 response.putLong(Response::Retrieved);
                 serialize(what, response, true);
             } else {
-                std::cerr << " (not found)" << std::endl;
+                std::cerr << "(not found)" << std::endl;
                 // Response data format =
                 //   Response::RetrieveFailed
                 response.putLong(Response::RetrieveFailed);
