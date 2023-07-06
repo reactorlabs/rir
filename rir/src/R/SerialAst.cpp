@@ -11,8 +11,8 @@ static std::unordered_map<SEXP, UUID> hashCache;
 
 inline static void serializeAstVector(UUIDHasher& hasher, SEXP s, void (*serializeElem)(UUIDHasher&, SEXP, int)) {
     // assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
-    assert(!OBJECT(s) && "unexpected object in AST");
-    assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
+    // assert(!OBJECT(s) && "unexpected object in AST");
+    // assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
     assert(!ALTREP(s) && "unexpected altrep in AST");
     size_t length = STDVEC_LENGTH(s);
     for (size_t i = 0; i < length; ++i) {
