@@ -238,6 +238,7 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                     Pool::writeAst(i.pool, refTable, out);
                     break;
                 default:
+                    Pool::writeItem(i.pool, refTable, noHashOut);
                     break;
                 }
             } else {
