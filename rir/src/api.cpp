@@ -18,7 +18,6 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "compiler_server_client_shared_utils.h"
-#include "hash/UUID.h"
 #include "interpreter/interp_incl.h"
 #include "utils/ByteBuffer.h"
 #include "runtime/DispatchTable.h"

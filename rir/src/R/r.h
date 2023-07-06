@@ -51,6 +51,7 @@ extern FUNTAB R_FunTab[];
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
+extern int R_GCEnabled;
 }
 
 // Performance critical stuff copied from Rinlinedfun.h
