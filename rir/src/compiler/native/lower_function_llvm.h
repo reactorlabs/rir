@@ -141,6 +141,10 @@ class LowerFunctionLLVM {
         return convertToPointer(code_, t::RirRuntimeObject, SerialRepr::Code{code_}, constant);
     }
 
+    static llvm::Value* llvmSrcIdx(llvm::Module& mod, Immediate i);
+    llvm::Value* llvmSrcIdx(Immediate i);
+    static llvm::Value* llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i);
+    llvm::Value* llvmPoolIdx(BC::PoolIdx i);
     static llvm::Value* llvmNames(llvm::Module& mod,
                                   const std::vector<BC::PoolIdx>& names);
     llvm::Value* llvmNames(const std::vector<BC::PoolIdx>& names);
