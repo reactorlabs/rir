@@ -199,6 +199,10 @@ namespace bb {
         }
     }
 
+    bool ByteBuffer::getBool() const {
+        return read<bool>();
+    }
+
     char ByteBuffer::getChar() const {
         return read<char>();
     }
@@ -275,6 +279,14 @@ namespace bb {
         // Insert the data one byte at a time into the internal buffer at position i+starting index
         for (uint32_t i = 0; i < len; i++)
             append<uint8_t>(b[i]);
+    }
+
+    void ByteBuffer::putBool(bool b) {
+        append<bool>(b);
+    }
+
+    void ByteBuffer::putBool(bool b, uint32_t index) {
+        insert<bool>(b, index);
     }
 
     void ByteBuffer::putChar(char value) {
