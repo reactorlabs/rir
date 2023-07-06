@@ -24,6 +24,8 @@ class SerialRepr {
   public:
     static constexpr const char* POINTER_METADATA_NAME = "rir.serial.pointer";
     static constexpr const char* FUNCTION_METADATA_NAME = "rir.serial.function";
+    static constexpr const char* SRC_IDX_METADATA_NAME = "rir.serial.srcIdx";
+    static constexpr const char* POOL_IDX_METADATA_NAME = "rir.serial.poolIdx";
     static constexpr const char* NAMES_METADATA_NAME = "rir.serial.names";
 
     class SEXP;
@@ -40,6 +42,10 @@ class SerialRepr {
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
                                           const char* llvmValueName,
                                           int builtinId);
+    static llvm::MDNode* srcIdxMetadata(llvm::LLVMContext& ctx,
+                                        Immediate srcIdx);
+    static llvm::MDNode* poolIdxMetadata(llvm::LLVMContext& ctx,
+                                         BC::PoolIdx poolIdx);
     static llvm::MDNode* namesMetadata(llvm::LLVMContext& ctx,
                                        const std::vector<BC::PoolIdx>& names);
 

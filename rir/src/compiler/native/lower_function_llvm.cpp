@@ -136,6 +136,34 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
     return convertToFunction(getModule(), what, ty, builtinId);
 }
 
+llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i) {
+    auto value = new llvm::GlobalVariable(t::i32, true, llvm::GlobalValue::PrivateLinkage,
+                                          c(i), "srcIdx");
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        value->setMetadata(SerialRepr::SRC_IDX_METADATA_NAME,
+                           SerialRepr::srcIdxMetadata(mod.getContext(), i));
+    }
+    return value;
+}
+
+llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
+    return llvmSrcIdx(getModule(), i);
+}
+
+llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
+    auto value = new llvm::GlobalVariable(t::i32, true, llvm::GlobalValue::PrivateLinkage,
+                                          c(i), "poolIdx");
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        value->setMetadata(SerialRepr::POOL_IDX_METADATA_NAME,
+                           SerialRepr::poolIdxMetadata(mod.getContext(), i));
+    }
+    return value;
+}
+
+llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
+    return llvmPoolIdx(getModule(), i);
+}
+
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
     std::vector<llvm::Constant*> constVector;
     for (const auto& e : names)
@@ -357,7 +385,7 @@ llvm::Value* LowerFunctionLLVM::callRBuiltin(int builtinId,
             return call(NativeBuiltins::get(NativeBuiltins::Id::callBuiltin),
                         {
                             paramCode(),
-                            c(srcIdx),
+                            llvmSrcIdx(srcIdx),
                             constant(builtin, t::SEXP),
                             env,
                             c(args.size()),
@@ -1629,7 +1657,7 @@ void LowerFunctionLLVM::compileRelop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
+                       {a, b, e, llvmSrcIdx(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((uint8_t)i->tag, 8)});
@@ -1697,7 +1725,7 @@ void LowerFunctionLLVM::compileBinop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                       {a, b, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
+                       {a, b, e, llvmSrcIdx(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::binop),
                        {a, b, c((uint8_t)i->tag, 8)});
@@ -1782,7 +1810,7 @@ void LowerFunctionLLVM::compileUnop(
         if (i->hasEnv()) {
             auto e = loadSxp(i->env());
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unopEnv),
-                       {a, e, c(i->srcIdx), c((uint8_t)i->tag, 8)});
+                       {a, e, llvmSrcIdx(i->srcIdx), c((uint8_t)i->tag, 8)});
         } else {
             res = call(NativeBuiltins::get(NativeBuiltins::Id::unop),
                        {a, c((uint8_t)i->tag, 8)});
@@ -1917,7 +1945,7 @@ bool LowerFunctionLLVM::compileDotcall(
                           {
                               c(callId),
                               paramCode(),
-                              c(i->srcIdx),
+                              llvmSrcIdx(i->srcIdx),
                               callee(),
                               i->hasEnv() ? loadSxp(i->env())
                                           : constant(R_BaseEnv, t::SEXP),
@@ -3398,7 +3426,7 @@ void LowerFunctionLLVM::compile() {
                 setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
                            return call(
                                NativeBuiltins::get(NativeBuiltins::Id::call),
-                               {c(callId), paramCode(), c(b->srcIdx),
+                               {c(callId), paramCode(), llvmSrcIdx(b->srcIdx),
                                 loadSxp(b->cls()), loadSxp(b->env()),
                                 c(b->nCallArgs()), c(asmpt.toI())});
                        }));
@@ -3432,7 +3460,7 @@ void LowerFunctionLLVM::compile() {
                             {
                                 c(callId),
                                 paramCode(),
-                                c(b->srcIdx),
+                                llvmSrcIdx(b->srcIdx),
                                 loadSxp(b->cls()),
                                 loadSxp(b->env()),
                                 c(b->nCallArgs()),
@@ -3461,7 +3489,7 @@ void LowerFunctionLLVM::compile() {
                         i, withCallFrame(args, [&]() -> llvm::Value* {
                             return call(
                                 NativeBuiltins::get(NativeBuiltins::Id::call),
-                                {c(callId), paramCode(), c(calli->srcIdx),
+                                {c(callId), paramCode(), llvmSrcIdx(calli->srcIdx),
                                  loadSxp(calli->runtimeClosure()),
                                  loadSxp(calli->env()), c(calli->nCallArgs()),
                                  c(asmpt.toI())});
@@ -3500,12 +3528,12 @@ void LowerFunctionLLVM::compile() {
                                     c(callId),
                                     paramCode(),
                                     constant(callee, t::SEXP),
-                                    c(idx),
-                                    c(calli->srcIdx),
+                                    llvmPoolIdx(idx),
+                                    llvmSrcIdx(calli->srcIdx),
                                     loadSxp(calli->env()),
                                     c(args.size()),
                                     c(asmpt.toI()),
-                                    c(missAsmptIdx),
+                                    llvmPoolIdx(missAsmptIdx),
                                 });
                         });
                         setVal(i, res);
@@ -3759,7 +3787,7 @@ void LowerFunctionLLVM::compile() {
                     if (i->hasEnv()) {
                         res = call(
                             NativeBuiltins::get(NativeBuiltins::Id::notEnv),
-                            {argumentNative, loadSxp(i->env()), c(i->srcIdx)});
+                            {argumentNative, loadSxp(i->env()), llvmSrcIdx(i->srcIdx)});
                     } else {
                         res =
                             call(NativeBuiltins::get(NativeBuiltins::Id::notOp),
@@ -4323,7 +4351,7 @@ void LowerFunctionLLVM::compile() {
                     auto e = loadSxp(i->env());
                     res =
                         call(NativeBuiltins::get(NativeBuiltins::Id::binopEnv),
-                             {loadSxp(a), loadSxp(b), e, c(i->srcIdx),
+                             {loadSxp(a), loadSxp(b), e, llvmSrcIdx(i->srcIdx),
                               c((uint8_t)i->tag, 8)});
                 } else if (Rep::Of(a) == Rep::i32 && Rep::Of(b) == Rep::i32) {
                     res = call(NativeBuiltins::get(NativeBuiltins::Id::colon),
@@ -5060,7 +5088,7 @@ void LowerFunctionLLVM::compile() {
                 auto idx = loadSxp(extract->idx());
                 auto res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract11),
-                         {vector, idx, env, c(extract->srcIdx)});
+                         {vector, idx, env, llvmSrcIdx(extract->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -5148,7 +5176,7 @@ void LowerFunctionLLVM::compile() {
                 auto res0 =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract12),
                          {vector, idx1, idx2, loadSxp(extract->env()),
-                          c(extract->srcIdx)});
+                          llvmSrcIdx(extract->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -5216,14 +5244,14 @@ void LowerFunctionLLVM::compile() {
                     auto vector = loadSxp(extract->vec());
                     res0 = call(getter,
                                 {vector, load(extract->idx()),
-                                 loadSxp(extract->env()), c(extract->srcIdx)});
+                                 loadSxp(extract->env()), llvmSrcIdx(extract->srcIdx)});
                 } else {
                     auto vector = loadSxp(extract->vec());
                     auto idx = loadSxp(extract->idx());
                     res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract21),
                              {vector, idx, loadSxp(extract->env()),
-                              c(extract->srcIdx)});
+                              llvmSrcIdx(extract->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5251,7 +5279,7 @@ void LowerFunctionLLVM::compile() {
 
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::extract13),
-                         {vector, idx1, idx2, idx3, env, c(extract->srcIdx)});
+                         {vector, idx1, idx2, idx3, env, llvmSrcIdx(extract->srcIdx)});
                 setVal(i, res);
 
                 break;
@@ -5333,7 +5361,7 @@ void LowerFunctionLLVM::compile() {
                     res0 = call(getter,
                                 {vector, load(extract->idx1()),
                                  load(extract->idx2()), loadSxp(extract->env()),
-                                 c(extract->srcIdx)});
+                                 llvmSrcIdx(extract->srcIdx)});
                 } else {
 
                     auto vector = loadSxp(extract->vec());
@@ -5342,7 +5370,7 @@ void LowerFunctionLLVM::compile() {
                     res0 =
                         call(NativeBuiltins::get(NativeBuiltins::Id::extract22),
                              {vector, idx1, idx2, loadSxp(extract->env()),
-                              c(extract->srcIdx)});
+                              llvmSrcIdx(extract->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5368,7 +5396,7 @@ void LowerFunctionLLVM::compile() {
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign13),
                          {vector, idx1, idx2, idx3, val,
-                          loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                          loadSxp(subAssign->env()), llvmSrcIdx(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }
@@ -5385,7 +5413,7 @@ void LowerFunctionLLVM::compile() {
                 auto res =
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign12),
                          {vector, idx1, idx2, val, loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
+                          llvmSrcIdx(subAssign->srcIdx)});
                 setVal(i, res);
                 break;
             }
@@ -5491,13 +5519,13 @@ void LowerFunctionLLVM::compile() {
                         setter,
                         {loadSxp(subAssign->vec()), load(subAssign->idx1()),
                          load(subAssign->idx2()), load(subAssign->val()),
-                         loadSxp(subAssign->env()), c(subAssign->srcIdx)});
+                         loadSxp(subAssign->env()), llvmSrcIdx(subAssign->srcIdx)});
                 } else {
                     assign = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign22),
                         {loadSxp(subAssign->vec()), idx1, idx2,
                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                         c(subAssign->srcIdx)});
+                         llvmSrcIdx(subAssign->srcIdx)});
                 }
 
                 res.addInput(assign);
@@ -5585,7 +5613,7 @@ void LowerFunctionLLVM::compile() {
                     call(NativeBuiltins::get(NativeBuiltins::Id::subassign11),
                          {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                           loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                          c(subAssign->srcIdx)});
+                          llvmSrcIdx(subAssign->srcIdx)});
 
                 res.addInput(convert(res0, i->type));
                 if (fastcase) {
@@ -5698,13 +5726,13 @@ void LowerFunctionLLVM::compile() {
                         call(setter,
                              {loadSxp(subAssign->vec()), load(subAssign->idx()),
                               load(subAssign->val()), loadSxp(subAssign->env()),
-                              c(subAssign->srcIdx)});
+                              llvmSrcIdx(subAssign->srcIdx)});
                 } else {
                     res0 = call(
                         NativeBuiltins::get(NativeBuiltins::Id::subassign21),
                         {loadSxp(subAssign->vec()), loadSxp(subAssign->idx()),
                          loadSxp(subAssign->val()), loadSxp(subAssign->env()),
-                         c(subAssign->srcIdx)});
+                         llvmSrcIdx(subAssign->srcIdx)});
                 }
 
                 res.addInput(convert(res0, i->type));
@@ -5963,7 +5991,7 @@ void LowerFunctionLLVM::compile() {
                 if (Rep::Of(a) == Rep::SEXP || Rep::Of(b) == Rep::SEXP) {
                     setVal(i, call(NativeBuiltins::get(
                                        NativeBuiltins::Id::colonInputEffects),
-                                   {loadSxp(a), loadSxp(b), c(i->srcIdx)}));
+                                   {loadSxp(a), loadSxp(b), llvmSrcIdx(i->srcIdx)}));
                     break;
                 }
 

@@ -131,6 +131,20 @@ llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
              llvm::Type::getInt32Ty(ctx), builtinId))});
 }
 
+llvm::MDNode* SerialRepr::srcIdxMetadata(llvm::LLVMContext& ctx, Immediate i) {
+    return llvm::MDTuple::get(
+        ctx,
+        {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+            llvm::Type::getInt32Ty(ctx), i))});
+}
+
+llvm::MDNode* SerialRepr::poolIdxMetadata(llvm::LLVMContext& ctx, BC::PoolIdx i) {
+    return llvm::MDTuple::get(
+        ctx,
+        {llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(
+            llvm::Type::getInt32Ty(ctx), i))});
+}
+
 llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
                                         const std::vector<BC::PoolIdx>& names) {
     std::vector<llvm::Metadata*> args;
@@ -237,6 +251,28 @@ static llvm::Value* patchPointerMetadata(llvm::Module& mod,
     return LowerFunctionLLVM::convertToPointer(mod, ptr, llvmType, isConstant, ptrMeta);
 }
 
+static llvm::Value* patchSrcIdxMetadata(llvm::Module& mod,
+                                        llvm::MDNode* srcIdxMeta) {
+    auto data = ((llvm::MDString*)srcIdxMeta->getOperand(0).get())->getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    auto sexp = UUIDPool::readItem(buffer, true);
+    // TODO: Reuse index if it's already in the source pool
+    //  (and maybe merge and refactor pools)
+    auto i = src_pool_add(sexp);
+    return LowerFunctionLLVM::llvmSrcIdx(mod, i);
+}
+
+static llvm::Value* patchPoolIdxMetadata(llvm::Module& mod,
+                                         llvm::MDNode* poolIdxMeta) {
+    auto data = ((llvm::MDString*)poolIdxMeta->getOperand(0).get())->getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    auto sexp = UUIDPool::readItem(buffer, true);
+    // TODO: Reuse index if it's already in the constant pool
+    //  (and maybe merge and refactor pools)
+    auto i = Pool::insert(sexp);
+    return LowerFunctionLLVM::llvmPoolIdx(mod, i);
+}
+
 static llvm::Value* patchNamesMetadata(llvm::Module& mod,
                                        llvm::MDNode* namesMeta) {
     std::vector<BC::PoolIdx> names;
@@ -263,11 +299,21 @@ static void patchGlobalMetadatas(llvm::Module& mod) {
     std::vector<std::pair<llvm::GlobalVariable*, llvm::Value*>> replacements;
     for (auto& global : oldGlobals) {
         auto ptrMeta = global->getMetadata(SerialRepr::POINTER_METADATA_NAME);
+        auto srcIdxMeta = global->getMetadata(SerialRepr::SRC_IDX_METADATA_NAME);
+        auto poolIdxMeta = global->getMetadata(SerialRepr::POOL_IDX_METADATA_NAME);
         auto namesMeta = global->getMetadata(SerialRepr::NAMES_METADATA_NAME);
 
         llvm::Value* replacement = nullptr;
         if (ptrMeta) {
             replacement = patchPointerMetadata(mod, *global, ptrMeta);
+        }
+        if (srcIdxMeta) {
+            assert(!replacement);
+            replacement = patchSrcIdxMetadata(mod, srcIdxMeta);
+        }
+        if (poolIdxMeta) {
+            assert(!replacement);
+            replacement = patchPoolIdxMetadata(mod, poolIdxMeta);
         }
         if (namesMeta) {
             assert(!replacement);
