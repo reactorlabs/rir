@@ -141,6 +141,10 @@ class LowerFunctionLLVM {
         return convertToPointer(code_, t::RirRuntimeObject, SerialRepr::Code{code_}, constant);
     }
 
+    static llvm::Value* llvmNames(llvm::Module& mod,
+                                  const std::vector<BC::PoolIdx>& names);
+    llvm::Value* llvmNames(const std::vector<BC::PoolIdx>& names);
+
     struct Variable {
         bool deadMove(const Variable& other) const;
 
@@ -327,15 +331,11 @@ class LowerFunctionLLVM {
                                      llvm::APFloat(d));
     }
 
-    static llvm::Constant* c(const std::vector<unsigned int>& array) {
-        std::vector<llvm::Constant*> init;
-        for (const auto& e : array)
-            init.push_back(c(e));
-        auto ty = llvm::ArrayType::get(t::Int, array.size());
-        return llvm::ConstantArray::get(ty, init);
-    }
-
-    llvm::Value* globalConst(llvm::Constant* init, llvm::Type* ty = nullptr);
+    static llvm::GlobalVariable* globalConst(llvm::Module& mod,
+                                             llvm::Constant* init,
+                                             llvm::Type* ty = nullptr);
+    llvm::GlobalVariable* globalConst(llvm::Constant* init,
+                                      llvm::Type* ty = nullptr);
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);

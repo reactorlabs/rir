@@ -42,6 +42,11 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
             ctx,
             {llvm::MDString::get(ctx, "Global"),
              llvm::MDString::get(ctx, globalsRev.at(what))});
+    } else if (TYPEOF(what) == BUILTINSXP || TYPEOF(what) == SPECIALSXP) {
+        return llvm::MDTuple::get(
+            ctx,
+            {llvm::MDString::get(ctx, "Builtin"),
+             llvm::MDString::get(ctx, getBuiltinName(what))});
     }
     ByteBuffer buf;
     UUIDPool::intern(what, true, false);
@@ -126,9 +131,27 @@ llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
              llvm::Type::getInt32Ty(ctx), builtinId))});
 }
 
+llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
+                                        const std::vector<BC::PoolIdx>& names) {
+    std::vector<llvm::Metadata*> args;
+    args.reserve(names.size());
+    for (auto i : names) {
+        auto sexp = Pool::get(i);
+        assert(TYPEOF(sexp) == SYMSXP);
+        auto name = CHAR(PRINTNAME(sexp));
+        args.push_back(llvm::MDString::get(ctx, name));
+    }
+    return llvm::MDTuple::get(ctx, args);
+}
+
 static void* getMetadataPtr_Global(const llvm::MDNode& meta) {
     auto name = ((const llvm::MDString&)*meta.getOperand(1)).getString();
     return (void*)globals.at(name.str());
+}
+
+static void* getMetadataPtr_Builtin(const llvm::MDNode& meta) {
+    auto name = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    return (void*)getBuiltinFun(name.str().c_str());
 }
 
 static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
@@ -188,6 +211,7 @@ static void* getMetadataPtr_R_ReturnedValue(__attribute__((unused)) const llvm::
 typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta);
 static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
     {"Global", getMetadataPtr_Global},
+    {"Builtin", getMetadataPtr_Builtin},
     {"SEXP", getMetadataPtr_SEXP},
     {"String", getMetadataPtr_String},
     {"Code", getMetadataPtr_Code},
@@ -210,21 +234,38 @@ static void patchPointerMetadata(llvm::Module& mod,
     inst.replaceAllUsesWith(replacement);
 }
 
-static void patchInstructionMetadata(llvm::Module& mod) {
-    for (auto& fun : mod.functions()) {
-        for (auto& bb : fun) {
-            for (auto& inst : bb) {
-                auto ptrMeta = inst.getMetadata(SerialRepr::POINTER_METADATA_NAME);
-                if (ptrMeta) {
-                    patchPointerMetadata(mod, (llvm::GlobalVariable&)inst, ptrMeta);
-                }
-            }
+static void patchNamesMetadata(llvm::Module& mod,
+                               llvm::GlobalVariable& inst,
+                               llvm::MDNode* namesMeta) {
+    std::vector<BC::PoolIdx> names;
+    for (auto& nameOperand : namesMeta->operands()) {
+        auto name = ((const llvm::MDString&)nameOperand).getString();
+        auto sexp = Rf_install(name.str().c_str());
+        // Presumably Rf_install interns, but we inserting a lot of redundant
+        // names in the pool. Does it make sense to have a hashmap of inserted
+        // SEXPs?
+        names.push_back(Pool::insert(sexp));
+    }
+
+    auto replacement = LowerFunctionLLVM::llvmNames(mod, names);
+    inst.replaceAllUsesWith(replacement);
+}
+
+static void patchGlobalMetadatas(llvm::Module& mod) {
+    for (auto& global : mod.globals()) {
+        auto ptrMeta = global.getMetadata(SerialRepr::POINTER_METADATA_NAME);
+        if (ptrMeta) {
+            patchPointerMetadata(mod, global, ptrMeta);
+        }
+        auto namesMeta = global.getMetadata(SerialRepr::NAMES_METADATA_NAME);
+        if (namesMeta) {
+            patchNamesMetadata(mod, global, namesMeta);
         }
     }
 }
 
-static void patchWithFunctionMetadata1(llvm::Module& mod,
-                                       const llvm::MDNode* operand) {
+static void patchFunctionMetadata(llvm::Module& mod,
+                                      const llvm::MDNode* operand) {
     auto& meta = *(const llvm::MDTuple*)operand;
     auto llvmValueName = ((const llvm::MDString&)*meta.getOperand(0)).getString();
     auto builtinId = (int)((const llvm::ConstantInt&)*meta.getOperand(1)).getZExtValue();
@@ -237,19 +278,19 @@ static void patchWithFunctionMetadata1(llvm::Module& mod,
     llvmValue->replaceAllUsesWith(replacement.getCallee());
 }
 
-static void patchFunctionMetadata(llvm::Module& mod) {
+static void patchFunctionMetadatas(llvm::Module& mod) {
     auto meta = mod.getNamedMetadata(pir::SerialRepr::FUNCTION_METADATA_NAME);
     if (!meta) {
         return;
     }
     for (auto operand : meta->operands()) {
-        patchWithFunctionMetadata1(mod, operand);
+        patchFunctionMetadata(mod, operand);
     }
 }
 
 void SerialRepr::patch(llvm::Module& mod) {
-    patchInstructionMetadata(mod);
-    patchFunctionMetadata(mod);
+    patchGlobalMetadatas(mod);
+    patchFunctionMetadatas(mod);
 }
 
 } // namespace pir
