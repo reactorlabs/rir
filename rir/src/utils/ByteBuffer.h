@@ -90,6 +90,7 @@ namespace bb {
         uint8_t get() const; // Relative get method. Reads the uint8_t at the buffers current position then increments the position
         uint8_t get(uint32_t index) const; // Absolute get method. Read uint8_t at index
         void getBytes(uint8_t* buf, uint32_t len) const; // Absolute read into array buf of length len
+        bool getBool() const; // Relative
         char getChar() const; // Relative
         char getChar(uint32_t index) const; // Absolute
         double getDouble() const;
@@ -110,6 +111,8 @@ namespace bb {
         void put(uint8_t b, uint32_t index); // Absolute write at index
         void putBytes(uint8_t* b, uint32_t len); // Relative write
         void putBytes(uint8_t* b, uint32_t len, uint32_t index); // Absolute write starting at index
+        void putBool(bool b); // Relative write
+        void putBool(bool b, uint32_t index); // Absolute write at index
         void putChar(char value); // Relative
         void putChar(char value, uint32_t index); // Absolute
         void putDouble(double value);

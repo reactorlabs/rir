@@ -1,9 +1,7 @@
 #include "Deoptimization.h"
-#include "api.h"
 #include "runtime/Code.h"
 #include "hash/UUID.h"
 #include "hash/UUIDPool.h"
-#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {
@@ -11,14 +9,14 @@ namespace rir {
 void FrameInfo::deserialize(ByteBuffer& buf) {
     UUID codeUuid;
     buf.getBytes((uint8_t*)&codeUuid, sizeof(codeUuid));
-    code = Code::unpack(rir::deserialize(buf, true));
+    code = Code::unpack(UUIDPool::readItem(buf, true));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
     inPromise = (bool)buf.getInt();
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    rir::serialize(code->container(), buf, true);
+    UUIDPool::writeItem(code->container(), buf, true);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
@@ -26,6 +24,10 @@ void FrameInfo::serialize(ByteBuffer& buf) const {
 
 void FrameInfo::internRecursive() const {
     UUIDPool::intern(code->container(), true, false);
+}
+
+void FrameInfo::preserveSexps() const {
+    R_PreserveObject(code->container());
 }
 
 DeoptMetadata* DeoptMetadata::deserialize(ByteBuffer& buf) {
@@ -53,6 +55,11 @@ void DeoptMetadata::internRecursive() const {
     }
 }
 
+void DeoptMetadata::preserveSexps() const {
+    for (size_t i = 0; i < numFrames; ++i) {
+        frames[i].preserveSexps();
+    }
+}
 
 void DeoptMetadata::print(std::ostream& out) const {
     for (size_t i = 0; i < numFrames; ++i) {

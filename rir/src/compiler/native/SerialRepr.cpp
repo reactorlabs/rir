@@ -7,7 +7,6 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/types_llvm.h"
 #include "hash/UUIDPool.h"
-#include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
@@ -16,10 +15,37 @@
 namespace rir {
 namespace pir {
 
+static std::unordered_map<std::string, SEXP> globals = {
+    {"R_GlobalEnv", R_GlobalEnv},
+    {"R_BaseEnv", R_BaseEnv},
+    {"R_BaseNamespace", R_BaseNamespace},
+    {"R_TrueValue", R_TrueValue},
+    {"R_NilValue", R_NilValue},
+    {"R_FalseValue", R_FalseValue},
+    {"R_UnboundValue", R_UnboundValue},
+    {"R_MissingArg", R_MissingArg},
+    {"R_LogicalNAValue", R_LogicalNAValue},
+    {"R_EmptyEnv", R_EmptyEnv},
+};
+
+static std::unordered_map<SEXP, std::string> globalsRev = []{
+    std::unordered_map<SEXP, std::string> res;
+    for (auto& e : globals) {
+        res[e.second] = e.first;
+    }
+    return res;
+}();
+
 llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
+    if (globalsRev.count(what)) {
+        return llvm::MDTuple::get(
+            ctx,
+            {llvm::MDString::get(ctx, "Global"),
+             llvm::MDString::get(ctx, globalsRev.at(what))});
+    }
     ByteBuffer buf;
     UUIDPool::intern(what, true, false);
-    serialize(what, buf, true);
+    UUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "SEXP"),
@@ -39,7 +65,7 @@ llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     auto sexp = code->container();
     UUIDPool::intern(sexp, true, false);
-    serialize(sexp, buf, true);
+    UUIDPool::writeItem(sexp, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "Code"),
@@ -100,30 +126,43 @@ llvm::MDNode* SerialRepr::functionMetadata(llvm::LLVMContext& ctx,
              llvm::Type::getInt32Ty(ctx), builtinId))});
 }
 
+static void* getMetadataPtr_Global(const llvm::MDNode& meta) {
+    auto name = ((const llvm::MDString&)*meta.getOperand(1)).getString();
+    return (void*)globals.at(name.str());
+}
+
 static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
     auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    return (void*)deserialize(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, true);
+    // TODO: Don't permanently preserve SEXP, instead attach it to the Code
+    //  object so that it gets freed when the Code object is freed
+    R_PreserveObject(sexp);
+    return (void*)sexp;
 }
 
 static void* getMetadataPtr_String(const llvm::MDNode& meta) {
     auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
-    // TODO: May need this to be a const char and then leak, or call c_str and
-    //     it somehow doesn't leak or get freed early?
+    // TODO: This will also need to be gc-attached to the Code object
     return (void*)new std::string(data);
 }
 
 static void* getMetadataPtr_Code(const llvm::MDNode& meta) {
     auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = deserialize(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, true);
+    // TODO: This will also need to be gc-attached to the Code object
+    R_PreserveObject(sexp);
     return (void*)rir::Code::unpack(sexp);
 }
 
 static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta) {
     auto data = ((const llvm::MDString&)*meta.getOperand(1)).getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    return (void*)DeoptMetadata::deserialize(buffer);
+    auto m = DeoptMetadata::deserialize(buffer);
+    // TODO: This will also need to be gc-attached to the Code object
+    m->preserveSexps();
+    return (void*)m;
 }
 
 static void* getMetadataPtr_OpaqueTrue(__attribute__((unused)) const llvm::MDNode& meta) {
@@ -148,6 +187,7 @@ static void* getMetadataPtr_R_ReturnedValue(__attribute__((unused)) const llvm::
 
 typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta);
 static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
+    {"Global", getMetadataPtr_Global},
     {"SEXP", getMetadataPtr_SEXP},
     {"String", getMetadataPtr_String},
     {"Code", getMetadataPtr_Code},

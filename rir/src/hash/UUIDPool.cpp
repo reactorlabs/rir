@@ -300,6 +300,35 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     return ReadItem(ref_table, in);
 }
 
+SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
+    if (useHashes) {
+        // Read whether we are serializing hash
+        auto isInternable = buf.getBool();
+        if (isInternable) {
+            // Read hash instead of regular data,
+            // then retrieve by hash from interned or server
+            UUID hash;
+            buf.getBytes((uint8_t*)&hash, sizeof(hash));
+            if (interned.count(hash)) {
+                LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
+                return interned.at(hash);
+            }
+            if (CompilerClient::isRunning()) {
+                LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
+                auto sexp = CompilerClient::retrieve(hash);
+                if (sexp) {
+                    return sexp;
+                }
+                Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+            }
+            Rf_error("SEXP deserialized from hash which we don't have, and no server");
+        }
+    }
+
+    // Read regular data
+    return deserialize(buf, useHashes);
+}
+
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     assert(!worklist(out) || !useHashes(out));
     auto wl = worklist(out);
@@ -324,6 +353,26 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
 
     // Write regular data
     WriteItem(sexp, ref_table, out);
+}
+
+void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
+    if (useHashes) {
+        auto isInternable = internable(sexp);
+        // Write whether we are serializing hash
+        buf.putBool(isInternable);
+        if (isInternable) {
+            // Write hash instead of regular data
+            assert(hashes.count(sexp) && "SEXP not interned");
+            // Why does cppcheck think this is unused?
+            // cppcheck-suppress unreadVariable
+            auto hash = hashes.at(sexp);
+            buf.putBytes((uint8_t*)&hash, sizeof(hash));
+            return;
+        }
+    }
+
+    // Write regular data
+    serialize(sexp, buf, useHashes);
 }
 
 void UUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
