@@ -954,7 +954,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
+void recordFeedbackImpl(uint32_t offset, rir::Code* code, SEXP value) {
+    // NOT code->code() + offset
+    Opcode* pos = (Opcode*)((uintptr_t)code + offset);
     switch (*pos) {
     case Opcode::record_test_: {
         ObservedTest* feedback = (ObservedTest*)(pos + 1);
@@ -2427,10 +2429,10 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
-    get_(Id::recordTypefeedback) = {
-        "recordTypefeedback",
-        (void*)&recordTypefeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
+    get_(Id::recordFeedback) = {
+        "recordFeedback",
+        (void*)&recordFeedbackImpl,
+        llvm::FunctionType::get(t::t_void, {t::i32, t::Code_ptr, t::SEXP}, false),
         {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,

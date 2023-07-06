@@ -26,11 +26,13 @@ class SerialRepr {
 
     class SEXP;
     class String;
+    class Code;
     class DeoptMetadata;
     class OpaqueTrue;
     class R_Visible;
     class R_BCNodeStackTop;
     class R_GlobalContext;
+    class R_ReturnedValue;
 
     virtual llvm::MDNode* metadata(llvm::LLVMContext& ctx) const = 0;
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
@@ -56,6 +58,14 @@ class SerialRepr::String : public SerialRepr {
 
   public:
     explicit String(const char* str) : SerialRepr(), str(str) {}
+
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+};
+class SerialRepr::Code : public SerialRepr {
+    rir::Code* code;
+
+  public:
+    Code(rir::Code* code) : SerialRepr(), code(code) {}
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };
@@ -88,6 +98,12 @@ class SerialRepr::R_BCNodeStackTop : public SerialRepr {
 class SerialRepr::R_GlobalContext : public SerialRepr {
   public:
     R_GlobalContext() : SerialRepr() {}
+
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+};
+class SerialRepr::R_ReturnedValue : public SerialRepr {
+  public:
+    R_ReturnedValue() : SerialRepr() {}
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };
