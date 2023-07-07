@@ -1377,6 +1377,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                              const std::vector<PirType>& initialStack) {
     assert(!finalized);
+    SLOWASSERT(start >= srcCode->code());
+    SLOWASSERT(start <= srcCode->endCode());
 
     auto firstBB = insert.getCurrentBB();
     insert.createNextBB();
