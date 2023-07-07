@@ -74,7 +74,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
                    fail, outerFeedback);
 }
 
-void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
+void Compiler::compileContinuation(SEXP closure, rir::Code* c,
                                    const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
@@ -85,13 +85,13 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     auto pirClosure = module->getOrDeclareRirClosure(
         ctx->asDeoptContext() ? "deoptless" : "osr", closure, fun, {});
-    auto version = pirClosure->declareContinuation(ctx, curFun);
+    auto version = pirClosure->declareContinuation(ctx, c->function());
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
 
-    if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
+    if (rir2pir.tryCompileContinuation(builder, c, ctx->pc(), ctx->stack())) {
         log.flush();
         return success(version);
     }
