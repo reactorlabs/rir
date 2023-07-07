@@ -199,8 +199,10 @@ void TypeFeedback::record(unsigned idx, SEXP value) {
         slots_[idx].callees().record(owner_->body(), value);
         break;
     case TypeFeedbackKind::Test:
+        slots_[idx].test().record(value);
         break;
     case TypeFeedbackKind::Type:
+        slots_[idx].values().record(value);
         break;
     }
 }

@@ -1996,9 +1996,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        ObservedValues* feedback = (ObservedValues*)(pc + 1);
-        if (feedback->stateBeforeLastForce < state)
-            feedback->stateBeforeLastForce = state;
+        ObservedValues& feedback =
+            c->function()->typeFeedback().values((Immediate) * (pc + 1));
+        if (feedback.stateBeforeLastForce < state)
+            feedback.stateBeforeLastForce = state;
     };
 
     // main loop
