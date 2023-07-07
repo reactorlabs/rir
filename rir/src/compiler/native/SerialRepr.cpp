@@ -404,10 +404,15 @@ static void patchFunctionMetadata(llvm::Module& mod,
     auto builtinId = (int)((llvm::ConstantInt*)((llvm::ConstantAsMetadata*)meta.getOperand(1).get())->getValue())->getZExtValue();
     auto llvmValue = mod.getNamedValue(llvmValueName);
 
-    auto builtin = getBuiltinFun(builtinId);
+    auto builtin = getBuiltin(getBuiltinFun(builtinId));
     auto replacement = LowerFunctionLLVM::convertToFunction(
-        mod, builtin, t::builtinFunction, builtinId);
+        mod, (void*)builtin, t::builtinFunction, builtinId);
 
+    // I don't know why the types are different, but they shouldn't be
+    // (every builtin has the same type, but the same types in the old module
+    //  are different from those of the new one. Maybe that will be an issue
+    //  later on...)
+    replacement.getCallee()->mutateType(llvmValue->getType());
     llvmValue->replaceAllUsesWith(replacement.getCallee());
 }
 
