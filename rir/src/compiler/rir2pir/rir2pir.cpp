@@ -1434,10 +1434,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         BC bc = BC::advance(&finger, srcCode);
         // cppcheck-suppress variableScope
         const auto nextPos = finger;
+        SLOWASSERT(nextPos <= end);
 
         assert(pos != end);
         if (bc.isJmp()) {
             auto trg = bc.jmpTarget(pos);
+            SLOWASSERT(trg <= end);
             if (bc.isUncondJmp()) {
                 finger = trg;
                 continue;
@@ -1576,6 +1578,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             BC ldcode = BC::advance(&pc, srcCode);
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
+            SLOWASSERT(pc <= end);
 
             SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
