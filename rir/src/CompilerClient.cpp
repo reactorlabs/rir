@@ -424,7 +424,7 @@ SEXP CompilerClient::CompiledHandle::getSexp() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     auto& response = inner->getResponse();
 #else
-    auto& response = inner->response;
+    const auto& response = inner->response;
 #endif
     return response.sexp;
 }
@@ -433,7 +433,7 @@ const std::string& CompilerClient::CompiledHandle::getFinalPir() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     auto& response = inner->getResponse();
 #else
-    auto& response = inner->response;
+    const auto& response = inner->response;
 #endif
     return response.finalPir;
 }

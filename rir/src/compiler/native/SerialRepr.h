@@ -75,7 +75,7 @@ class SerialRepr::Code : public SerialRepr {
     rir::Code* code;
 
   public:
-    Code(rir::Code* code) : SerialRepr(), code(code) {}
+    explicit Code(rir::Code* code) : SerialRepr(), code(code) {}
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };

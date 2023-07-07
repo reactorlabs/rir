@@ -195,9 +195,9 @@ void CompilerServer::tryRun() {
                 debug.passFilterString = pir::DebugOptions::DefaultDebugOptions.passFilterString;
                 debug.passFilter = pir::DebugOptions::DefaultDebugOptions.passFilter;
             }
-            if (pir::DebugOptions::DefaultDebugOptions.passFilterString != ".*") {
-                debug.passFilterString = pir::DebugOptions::DefaultDebugOptions.passFilterString;
-                debug.passFilter = pir::DebugOptions::DefaultDebugOptions.passFilter;
+            if (pir::DebugOptions::DefaultDebugOptions.functionFilterString != ".*") {
+                debug.functionFilterString = pir::DebugOptions::DefaultDebugOptions.functionFilterString;
+                debug.functionFilter = pir::DebugOptions::DefaultDebugOptions.functionFilter;
             }
             if (pir::DebugOptions::DefaultDebugOptions.style != pir::DebugStyle::Standard) {
                 debug.style = pir::DebugOptions::DefaultDebugOptions.style;
