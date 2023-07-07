@@ -1329,10 +1329,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     return true;
 }
 
-bool Rir2Pir::tryCompileContinuation(Builder& insert, Opcode* start,
+bool Rir2Pir::tryCompileContinuation(Builder& insert, rir::Code* c, Opcode* start,
                                      const std::vector<PirType>& initialStack) {
-    return tryCompile(cls->owner()->rirFunction()->body(), insert, start,
-                      initialStack);
+    return tryCompile(c, insert, start, initialStack);
 }
 
 bool Rir2Pir::tryCompile(Builder& insert) {
