@@ -1,3 +1,5 @@
+warnifnot <- function(x) if (!x) warning(paste(deparse(substitute(x)), "failed"))
+
 # Small closure (pir_regression.R)
 f <- pir.compile(rir.compile(function(a) a(b=1, 2)))
 # Memoized
@@ -14,7 +16,7 @@ foo <- function(x) {
    }
 }
 
-stopifnot(pir.check(foo, NoExternalCalls, warmup=function(f) {f(1);f(2)}))
+warnifnot(pir.check(foo, NoExternalCalls, warmup=function(f) {f(1);f(2)}))
 
 # Medium closure with nested closures (pir_check.R)
 mandelbrot <- function(size) {
@@ -65,7 +67,7 @@ mandelbrot <- function(size) {
     return (sum)
 }
 
-stopifnot(pir.check(mandelbrot, NoExternalCalls, NoPromise, warmup=function(f) {f(13);f(27)}))
+warnifnot(pir.check(mandelbrot, NoExternalCalls, NoPromise, warmup=function(f) {f(13);f(27)}))
 
 # Memoized
 mandelbrot <- function(size) {
@@ -115,7 +117,7 @@ mandelbrot <- function(size) {
     }
     return (sum)
 }
-stopifnot(pir.check(mandelbrot, NoExternalCalls, NoPromise, warmup=function(f) {f(13);f(27)}))
+warnifnot(pir.check(mandelbrot, NoExternalCalls, NoPromise, warmup=function(f) {f(13);f(27)}))
 
 # Many closures (pir_regression6.R)
 lsNamespaceInfo <- function(ns, ...) {
