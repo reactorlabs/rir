@@ -165,10 +165,14 @@ llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i) {
 }
 
 llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
-    // Assuming this gets optimized out. Otherwise we can use regular
-    // ConstantInt like before, but we need to find a way to effectively add
-    // metadata to each src-idx ConstantInt.
-    return builder.CreateLoad(llvmSrcIdx(getModule(), i));
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        // Assuming this gets optimized out. Otherwise we can use regular
+        // ConstantInt like before, but we need to find a way to effectively add
+        // metadata to each src-idx ConstantInt.
+        return builder.CreateLoad(llvmSrcIdx(getModule(), i));
+    } else {
+        return c(i);
+    }
 }
 
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
@@ -191,10 +195,14 @@ llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
 }
 
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
-    // Assuming this gets optimized out. Otherwise we can use regular
-    // ConstantInt like before, but we need to find a way to effectively add
-    // metadata to each pool-idx ConstantInt.
-    return builder.CreateLoad(llvmPoolIdx(getModule(), i));
+    if (Parameter::DEBUG_SERIALIZE_LLVM) {
+        // Assuming this gets optimized out. Otherwise we can use regular
+        // ConstantInt like before, but we need to find a way to effectively add
+        // metadata to each pool-idx ConstantInt.
+        return builder.CreateLoad(llvmPoolIdx(getModule(), i));
+    } else {
+        return c(i);
+    }
 }
 
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
