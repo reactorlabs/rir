@@ -24,4 +24,12 @@ void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
+void DispatchTable::print(std::ostream& out, bool hashInfo) const {
+    out << "DispatchTable(size = " << size() << "):\n";
+    for (size_t i = 0; i < size(); i++) {
+        std::cout << "Entry " << i << ":\n";
+        get(i)->print(out, hashInfo);
+    }
+}
+
 } // namespace rir

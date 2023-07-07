@@ -9,6 +9,7 @@
 #include "R/Serialize.h"
 #include "api.h"
 #include "interpreter/serialize.h"
+#include "runtime/DispatchTable.h"
 #include <queue>
 
 #define DEBUG_DISASSEMBLY
@@ -160,7 +161,12 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
 #ifdef DEBUG_DISASSEMBLY
     if (expectHashToBeTheSame) {
-        if (Function::check(e)) {
+        if (DispatchTable::check(e)) {
+            auto dt = DispatchTable::unpack(e);
+            std::stringstream s;
+            dt->print(s, true);
+            disassembly[hash] = s.str();
+        } else if (Function::check(e)) {
             auto fun = Function::unpack(e);
             if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
                 std::cerr
