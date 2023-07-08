@@ -218,7 +218,7 @@ static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
 static void* getMetadataPtr_String(const llvm::MDNode& meta) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     // TODO: This will also need to be gc-attached to the Code object
-    return (void*)new std::string(data);
+    return (void*)(new std::string(data))->c_str();
 }
 
 static void* getMetadataPtr_Code(const llvm::MDNode& meta) {
