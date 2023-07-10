@@ -38,7 +38,14 @@ struct Parameter {
 
     static bool ENABLE_PIR2RIR;
 
+    /// Enabled by default, but PIR_OSR=0 will disable
     static bool ENABLE_OSR;
+    /// Enable OSR even during serialization, where it's known to break, and on
+    /// the compiler client (not dry-run), where it's also known to break and
+    /// the client shouldn't be serializing code anyways.
+    ///
+    /// Disabled by default, but PIR_OSR=1 will enable
+    static bool FORCE_ENABLE_OSR;
 
     /// Serialize LLVM bitcode. Enabled regardless of env var iff the compiler
     /// server is running.
