@@ -314,7 +314,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieve
         nullptr
     );
     SEXP sexp = disableGc([&]{ return R_Unserialize(&in); });
-    assert(!retrieveHash && "retrieve hash not taken");
+    // assert(!retrieveHash && "retrieve hash not taken");
     retrieveHash = oldRetrieveHash;
     connectedWorklist = oldConnectedWorklist;
     _isHashing = oldIsHashing;

@@ -35,8 +35,9 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     // Some stuff is mutable or not part of the structural identity, so we don't
     // want to hash it. However, we still need to serialize recursive items. To
     // do this, we temporarily replace out with a void stream.
+    // TODO!: Working on this...
     // R_outpstream_st nullOut = nullOutputStream();
-    // auto noHashOut = isHashing(out) ? &nullOut : out;
+    auto noHashOut = out;
 
     HashAdd(container(), refTable);
     OutInteger(out, size);
@@ -58,7 +59,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
             UUIDPool::writeItem(arg, refTable, out);
         }
     }
-    OutInteger(out, (int)flags.to_i());
+    OutInteger(noHashOut, (int)flags.to_i());
 }
 
 void Function::disassemble(std::ostream& out) const {
