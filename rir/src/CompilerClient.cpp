@@ -158,6 +158,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
             auto hashOnlyResponseMagic = hashOnlyResponseBuffer.getLong();
             if (hashOnlyResponseMagic != Response::NeedsFull) {
+                hashOnlyResponseBuffer.setReadPos(0);
                 return makeResponse(hashOnlyResponseBuffer);
             }
         }
