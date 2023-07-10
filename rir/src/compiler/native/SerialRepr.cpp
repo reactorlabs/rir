@@ -15,6 +15,8 @@
 namespace rir {
 namespace pir {
 
+// Some of these would serialize fine regardless, thanks to
+// serialize.c:SaveSpecialHook
 static std::unordered_map<std::string, SEXP> globals = {
     {"R_GlobalEnv", R_GlobalEnv},
     {"R_BaseEnv", R_BaseEnv},
@@ -24,6 +26,7 @@ static std::unordered_map<std::string, SEXP> globals = {
     {"R_FalseValue", R_FalseValue},
     {"R_UnboundValue", R_UnboundValue},
     {"R_MissingArg", R_MissingArg},
+    {"R_RestartToken", R_RestartToken},
     {"R_LogicalNAValue", R_LogicalNAValue},
     {"R_EmptyEnv", R_EmptyEnv},
 };
