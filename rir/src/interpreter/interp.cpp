@@ -1,4 +1,5 @@
 #include "interp.h"
+#include "CompilerClient.h"
 #include "R/Funtab.h"
 #include "R/Printing.h"
 #include "R/Protect.h"
@@ -9,6 +10,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "compiler_server_client_shared_utils.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -1896,6 +1898,8 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
 
 bool pir::Parameter::ENABLE_OSR =
     !getenv("PIR_OSR") || *getenv("PIR_OSR") != '0';
+bool pir::Parameter::FORCE_ENABLE_OSR =
+    getenv("PIR_OSR") && *getenv("PIR_OSR") == '1';
 static size_t osrLimit =
     getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
@@ -3215,8 +3219,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
+            // We enable OSR if:
+            // - We are NOT in serialize chaos mode (deserialization breaks OSR)
+            // - AND we are NOT in preserve mode (deserialization breaks OSR)
+            // - AND the compiler-client is NOT running (deserialization breaks
+            //   OSR; but even if it worked, we don't want to compile anything
+            //   locally, and OSR on the compiler-server isn't implemented)
+            // - OR any of the above is true, but we're forcing OSR regardless
+            //   (e.g. for testing)
             // TODO: why does osr-in deserialized code break?
-            if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
+            if ((!pir::Parameter::RIR_SERIALIZE_CHAOS &&
+                 !pir::Parameter::RIR_PRESERVE &&
+                 !CompilerClient::isRunning()) ||
+                pir::Parameter::FORCE_ENABLE_OSR) {
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     loopCounter = 0;
