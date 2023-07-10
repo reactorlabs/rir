@@ -217,8 +217,9 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
     // Some stuff is mutable or not part of the structural identity, so we don't
     // want to hash it. However, we still need to serialize recursive items. To
     // do this, we temporarily replace out with a void stream.
-    R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = isHashing(out) ? &nullOut : out;
+    // TODO!: Working on this...
+    // R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = out;
 
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);

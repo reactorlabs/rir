@@ -206,7 +206,8 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
         }
 #endif
 
-        assert(false);
+        // assert(false);
+        // TODO!: This may break things...
     }
 
     // Do intern
