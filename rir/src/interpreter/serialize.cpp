@@ -186,9 +186,9 @@ R_outpstream_st nullOutputStream() {
     return out;
 }
 
-UUID hashSexp(SEXP sexp, ConnectedWorklist& worklist) {
+UUID hashSexp(SEXP sexp, ConnectedWorklist& connected) {
     UUIDHasher hasher;
-    hashSexp(sexp, hasher, worklist);
+    hashSexp(sexp, hasher, connected);
     return hasher.finalize();
 }
 
@@ -198,7 +198,7 @@ UUID hashSexp(SEXP sexp) {
     return hasher.finalize();
 }
 
-void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& worklist) {
+void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& connected) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
@@ -207,7 +207,7 @@ void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& worklist) {
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = false;
     _isHashing = true;
-    connectedWorklist = &worklist;
+    connectedWorklist = &connected;
     retrieveHash = UUID();
     struct R_outpstream_st out{};
     R_InitOutPStream(
@@ -338,7 +338,7 @@ bool isHashing(__attribute__((unused)) R_outpstream_t out) {
     return _isHashing;
 }
 
-ConnectedWorklist* worklist(__attribute__((unused)) R_outpstream_t out) {
+ConnectedWorklist* connected(__attribute__((unused)) R_outpstream_t out) {
     // Trying to pretend we don't use a singleton...
     return connectedWorklist;
 }

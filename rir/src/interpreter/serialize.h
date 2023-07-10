@@ -25,7 +25,7 @@ R_outpstream_st nullOutputStream();
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
 /// XORing the bits instead of collecting them, and add connected RIR object
 /// containers to the worklist.
-UUID hashSexp(SEXP sexp, ConnectedWorklist& worklist);
+UUID hashSexp(SEXP sexp, ConnectedWorklist& connected);
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
 /// XORing the bits instead of collecting them.
 UUID hashSexp(SEXP sexp);
@@ -34,7 +34,7 @@ UUID hashSexp(SEXP sexp);
 /// containers to the worklist.
 ///
 /// @see hashSexp(SEXP sexp, UUIDHasher& hasher)
-void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& worklist);
+void hashSexp(SEXP sexp, UUIDHasher& hasher, ConnectedWorklist& connected);
 /// Hash an SEXP (doesn't have to be RIR) into the hasher, by serializing it but
 /// XORing the bits instead of collecting them.
 ///
@@ -76,8 +76,8 @@ bool useHashes(R_outpstream_t out);
 bool useHashes(R_inpstream_t in);
 /// If true we're hashing, otherwise we're actually serializing
 bool isHashing(R_outpstream_t out);
-/// Worklist for the current stream
-ConnectedWorklist* worklist(R_outpstream_t out);
+/// Connected worklist for the current stream, or `nullptr` if there is none
+ConnectedWorklist* connected(R_outpstream_t out);
 /// If `retrieveHash` is set, interns SEXP with it and unsets it.
 void useRetrieveHashIfSet(R_inpstream_t inp, SEXP sexp);
 
