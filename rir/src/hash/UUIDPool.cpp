@@ -230,25 +230,19 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
         return e;
     }
     if (recursive) {
-        ConnectedWorklist worklist;
-        // Compute hash, whether internable or not, to add to worklist
+        ConnectedWorklist connected;
+        // Compute hash, whether internable or not, to add connected objects
+        // which are internable to connected
         // cppcheck-suppress unreadVariable
-        auto hash = hashSexp(e, worklist);
+        auto hash = hashSexp(e, connected);
         auto ret = internable(e) ? intern(e, hash, preserve) : e;
-        while (!worklist.worklist.empty()) {
-            e = worklist.worklist.front();
-            worklist.worklist.pop();
-
+        while ((e = connected.pop())) {
+            assert(internable(e));
             if (hashes.count(e)) {
                 continue;
             }
 
-            // Compute hash, whether internable or not, to add to worklist
-            // cppcheck-suppress unreadVariable
-            hash = hashSexp(e, worklist);
-            if (internable(e)) {
-                intern(e, hash, preserve);
-            }
+            intern(e, hashSexp(e), preserve);
         }
         return ret;
     } else {
@@ -337,11 +331,10 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
 }
 
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
-    assert(!worklist(out) || !useHashes(out));
-    auto wl = worklist(out);
-    if (wl && !hashes.count(sexp) && !wl->seen.count(sexp)) {
-        wl->worklist.push(sexp);
-        wl->seen.insert(sexp);
+    assert(!connected(out) || !useHashes(out));
+    auto wl = connected(out);
+    if (wl && internable(sexp) && !hashes.count(sexp)) {
+        wl->insert(sexp);
     }
     if (useHashes(out)) {
         auto isInternable = internable(sexp);
