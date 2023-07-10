@@ -1,4 +1,7 @@
-warnifnot <- function(x) if (!x) warning(paste(deparse(substitute(x)), "failed"))
+warnifnot <- function(x) {
+    text <- deparse(substitute(x))
+    if (!x) warning(paste(text, "failed"))
+}
 
 # Small closure (pir_regression.R)
 f <- pir.compile(rir.compile(function(a) a(b=1, 2)))
