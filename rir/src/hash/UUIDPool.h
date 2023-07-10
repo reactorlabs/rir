@@ -108,10 +108,19 @@ class UUIDPool {
 
 /// Would be an inner class but we can't: https://stackoverflow.com/a/951245
 class ConnectedWorklist {
-    std::queue<SEXP> worklist;
     std::unordered_set<SEXP> seen;
 
     friend class UUIDPool;
+    void insert(SEXP e) { seen.insert(e); }
+    SEXP pop() {
+        auto it = seen.begin();
+        if (it == seen.end()) {
+            return nullptr;
+        }
+        SEXP e = *it;
+        seen.erase(it);
+        return e;
+    }
 };
 
 } // namespace rir
