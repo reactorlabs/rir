@@ -235,7 +235,7 @@ static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta) {
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto m = DeoptMetadata::deserialize(buffer);
     // TODO: This will also need to be gc-attached to the Code object
-    m->preserveSexps();
+    m->preserve();
     return (void*)m;
 }
 
