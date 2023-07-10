@@ -22,14 +22,17 @@ struct FrameInfo {
     void deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
     void internRecursive() const;
-    void preserveSexps() const;
+    /// Preserves the code object's container
+    void preserve() const;
 };
 
 struct DeoptMetadata {
+    SEXP container() const;
     static DeoptMetadata* deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
     void internRecursive() const;
-    void preserveSexps() const;
+    /// Preserves the container and the frame code objects' containers
+    void preserve() const;
     void print(std::ostream& out) const;
     size_t numFrames;
     FrameInfo frames[];

@@ -24,8 +24,15 @@ void FrameInfo::internRecursive() const {
     UUIDPool::intern(code->container(), true, false);
 }
 
-void FrameInfo::preserveSexps() const {
+void FrameInfo::preserve() const {
     R_PreserveObject(code->container());
+}
+
+SEXP DeoptMetadata::container() const {
+    // cppcheck-suppress thisSubtraction
+    SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
+    assert(TYPEOF(result) == RAWSXP && "DeoptMetadata not embedded in container, or corrupt.");
+    return result;
 }
 
 DeoptMetadata* DeoptMetadata::deserialize(ByteBuffer& buf) {
@@ -53,9 +60,10 @@ void DeoptMetadata::internRecursive() const {
     }
 }
 
-void DeoptMetadata::preserveSexps() const {
+void DeoptMetadata::preserve() const {
+    R_PreserveObject(this->container());
     for (size_t i = 0; i < numFrames; ++i) {
-        frames[i].preserveSexps();
+        frames[i].preserve();
     }
 }
 
