@@ -379,7 +379,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (baseline) {
             auto rec = insert(new Record(rir::TypeFeedbackKind::Test, idx));
-            rec->setCallee(target);
+            rec->setValue(target);
         } else {
             auto& feedback = typeFeedback.test(idx);
 
@@ -414,9 +414,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (baseline) {
             auto rec = insert(new Record(rir::TypeFeedbackKind::Type, idx));
-            rec->setCallee(target);
+            rec->setValue(target);
         } else {
-            auto& feedback = typeFeedback.values(idx);
+            auto& feedback = typeFeedback.types(idx);
             if (auto i = Instruction::Cast(at(0))) {
                 // Search for the most specific feedback for this location
                 for (auto fb : outerFeedback) {
@@ -458,7 +458,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (baseline) {
             auto rec = insert(new Record(rir::TypeFeedbackKind::Call, idx));
-            rec->setCallee(target);
+            rec->setValue(target);
         } else {
             const auto& feedback = typeFeedback.callees(bc.immediate.i);
 

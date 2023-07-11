@@ -203,7 +203,7 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    BC recordType() { return BC::recordType(typeFeedbackBuilder.addValue()); }
+    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 

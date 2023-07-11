@@ -976,7 +976,7 @@ void recordTypefeedbackImpl(rir::Code* code, uint32_t idx, SEXP value) {
         break;
     }
     case TypeFeedbackKind::Type: {
-        auto& feedback = slot.values();
+        auto& feedback = slot.type();
         feedback.record(value);
 
         if (TYPEOF(value) == PROMSXP) {
