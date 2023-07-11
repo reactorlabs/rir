@@ -1024,8 +1024,8 @@ Record::Record(rir::TypeFeedbackKind kind, uint32_t idx)
                           {{UnknownDeoptTrigger::instance()}}),
       kind(kind), idx(idx) {}
 
-Value* Record::getCallee() const { return arg<0>().val(); }
-void Record::setCallee(Value* callee) { arg<0>().val() = callee; }
+Value* Record::getValue() const { return arg<0>().val(); }
+void Record::setValue(Value* value) { arg<0>().val() = value; }
 
 void Record::printArgs(std::ostream& out, bool tty) const {
     switch (kind) {
@@ -1042,7 +1042,7 @@ void Record::printArgs(std::ostream& out, bool tty) const {
 
     out << "#" << idx << " ";
 
-    getCallee()->printRef(out);
+    getValue()->printRef(out);
 }
 
 MkCls::MkCls(Closure* cls, SEXP formals, SEXP srcRef,

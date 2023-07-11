@@ -58,7 +58,7 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback().values(origin.idx());
+        auto feedback = origin.function()->typeFeedback().types(origin.idx());
         feedback.record(val);
         if (TYPEOF(val) == PROMSXP) {
             if (PRVALUE(val) == R_UnboundValue &&
@@ -118,8 +118,8 @@ ObservedCallees& TypeFeedback::callees(uint32_t idx) {
 
 ObservedTest& TypeFeedback::test(uint32_t idx) { return (*this)[idx].test(); }
 
-ObservedValues& TypeFeedback::values(uint32_t idx) {
-    return (*this)[idx].values();
+ObservedValues& TypeFeedback::types(uint32_t idx) {
+    return (*this)[idx].type();
 }
 
 void ObservedTest::print(std::ostream& out) const {
@@ -176,7 +176,7 @@ void TypeFeedbackSlot::print(std::ostream& out,
         feedback_.test.print(out);
         break;
     case TypeFeedbackKind::Type:
-        feedback_.values.print(out);
+        feedback_.type.print(out);
         break;
     }
 }
@@ -202,7 +202,7 @@ void TypeFeedback::record(unsigned idx, SEXP value) {
         slots_[idx].test().record(value);
         break;
     case TypeFeedbackKind::Type:
-        slots_[idx].values().record(value);
+        slots_[idx].type().record(value);
         break;
     }
 }

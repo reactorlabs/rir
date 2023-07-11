@@ -241,7 +241,7 @@ struct TypeFeedbackSlot {
   private:
     union Feedback {
         ObservedCallees callees;
-        ObservedValues values;
+        ObservedValues type;
         ObservedTest test;
     };
 
@@ -258,7 +258,7 @@ struct TypeFeedbackSlot {
         : feedback_({.test = test}), kind(TypeFeedbackKind::Test) {}
 
     TypeFeedbackSlot(ObservedValues values)
-        : feedback_({.values = values}), kind(TypeFeedbackKind::Type) {}
+        : feedback_({.type = values}), kind(TypeFeedbackKind::Type) {}
 
     TypeFeedbackKind kind;
 
@@ -274,9 +274,9 @@ struct TypeFeedbackSlot {
         return feedback_.test;
     }
 
-    ObservedValues& values() {
+    ObservedValues& type() {
         assert(kind == TypeFeedbackKind::Type);
-        return feedback_.values;
+        return feedback_.type;
     }
 };
 
@@ -308,7 +308,7 @@ class TypeFeedback {
             return slots_.size() - 1;
         }
 
-        uint32_t addValue() {
+        uint32_t addType() {
             slots_.push_back(ObservedValues());
             return slots_.size() - 1;
         }
@@ -319,7 +319,7 @@ class TypeFeedback {
     TypeFeedbackSlot& operator[](size_t idx);
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
-    ObservedValues& values(uint32_t idx);
+    ObservedValues& types(uint32_t idx);
 
     void print(std::ostream& out) const;
 

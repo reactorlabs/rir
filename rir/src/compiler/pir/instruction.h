@@ -2724,8 +2724,8 @@ class Record
     uint32_t idx;
 
     explicit Record(rir::TypeFeedbackKind kind, unsigned idx);
-    Value* getCallee() const;
-    void setCallee(Value* callee);
+    Value* getValue() const;
+    void setValue(Value* callee);
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
