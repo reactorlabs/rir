@@ -76,9 +76,16 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    size_t invocationCount() { return invocationCount_; }
+    size_t invocationCount() {
+        assert(!overridenBy);
+        return invocationCount_;
+    }
 
-    size_t deoptCount() { return deoptCount_; }
+    size_t deoptCount() {
+        assert(!overridenBy);
+        return deoptCount_;
+    }
+
     void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     static inline unsigned long rdtsc() {
@@ -202,6 +209,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                "Function was never inserted/was removed from DispatchTable");
         return dispatchTable_;
     }
+
+    Function* overridenBy = nullptr;
 
   private:
     unsigned numArgs_;

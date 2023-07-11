@@ -10,7 +10,8 @@ namespace rir {
 
 struct DispatchTable;
 namespace recording {
-    void recordDtOverwrite(const DispatchTable* dt, size_t funIdx, size_t oldDeoptCount);
+void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
+                       size_t oldDeoptCount);
 }
 
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
@@ -142,7 +143,8 @@ struct DispatchTable
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
                     fun->addDeoptCount(old->deoptCount());
-                    recording::recordDtOverwrite(this, i, old->deoptCount());
+                    old->overridenBy = fun;
+                    // recording::recordDtOverwrite(this, i, old->deoptCount());
                     old->attachDispatchTable(nullptr);
 
                     setEntry(i, fun->container());
