@@ -5,7 +5,7 @@
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
-#include "hash/UUIDPool.h"
+#include "hash/RirUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
 
@@ -138,21 +138,21 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     code->src = src_pool_read_item(refTable, inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
-        code->trivialExpr = UUIDPool::readItem(refTable, inp);
+        code->trivialExpr = RirUIDPool::readItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = p(UUIDPool::readItem(refTable, inp));
+    SEXP extraPool = p(RirUIDPool::readItem(refTable, inp));
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        argReorder = p(UUIDPool::readItem(refTable, inp));
+        argReorder = p(RirUIDPool::readItem(refTable, inp));
     }
     if (!rirFunction) {
-        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
+        rirFunction = Function::unpack(p(RirUIDPool::readItem(refTable, inp)));
     }
 
     // Bytecode
@@ -191,61 +191,64 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 }
 
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
-    // Some stuff is mutable or not part of the structural identity, so we don't
-    // want to hash it. However, we still need to serialize recursive items. To
-    // do this, we temporarily replace out with a void stream.
-    // TODO!: Working on this...
-    // R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = out;
-
     HashAdd(container(), refTable);
-    OutInteger(out, (int)size());
+    BIG_HASH({
+        OutInteger(out, (int)size());
+    });
 
     // Header
-    src_pool_write_item(src, refTable, out);
-    OutInteger(noHashOut, trivialExpr != nullptr);
-    if (trivialExpr)
-        UUIDPool::writeItem(trivialExpr, refTable, noHashOut);
-    OutInteger(noHashOut, (int)stackLength);
-    OutInteger(noHashOut, (int)localsCount);
-    OutInteger(noHashOut, (int)bindingCacheSize);
-    OutInteger(noHashOut, (int)codeSize);
-    OutInteger(noHashOut, (int)srcLength);
-    OutInteger(noHashOut, (int)extraPoolSize);
+    SMALL_HASH({
+        src_pool_write_item(src, refTable, out);
+        OutInteger(out, trivialExpr != nullptr);
+        if (trivialExpr)
+            RirUIDPool::writeItem(trivialExpr, refTable, out);
+        OutInteger(out, (int)stackLength);
+        OutInteger(out, (int)localsCount);
+        OutInteger(out, (int)bindingCacheSize);
+        OutInteger(out, (int)codeSize);
+        OutInteger(out, (int)srcLength);
+        OutInteger(out, (int)extraPoolSize);
 
-    UUIDPool::writeItem(getEntry(0), refTable, noHashOut);
-    OutInteger(noHashOut, getEntry(2) != nullptr);
-    if (getEntry(2))
-        UUIDPool::writeItem(getEntry(2), refTable, noHashOut);
-    if (includeFunction) {
-        UUIDPool::writeItem(function()->container(), refTable, noHashOut);
-    }
+        RirUIDPool::writeItem(getEntry(0), refTable, out);
+        OutInteger(out, getEntry(2) != nullptr);
+        if (getEntry(2))
+            RirUIDPool::writeItem(getEntry(2), refTable, out);
+        if (includeFunction) {
+            RirUIDPool::writeItem(function()->container(), refTable, out);
+        }
+    });
 
     // Bytecode
     BC::serialize(refTable, out, code(), codeSize, this);
 
     // Srclist
-    for (unsigned i = 0; i < srcLength; i++) {
-        OutInteger(out, (int)srclist()[i].pcOffset);
-        src_pool_write_item(srclist()[i].srcIdx, refTable, out);
-    }
+    BIG_HASH({
+        for (unsigned i = 0; i < srcLength; i++) {
+            OutInteger(out, (int)srclist()[i].pcOffset);
+            src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+        }
+    });
 
     // Native code
-    OutInteger(noHashOut, (int)kind);
-    assert((isHashing(out) || !pendingCompilation()) &&
-           "TODO handle pending code being serialized. It's in a state we "
-           "can't really deserialize from, so we want to just not serialize in "
-           "this situation if possible (via the DispatchTable). Otherwise idk");
-    if (kind == Kind::Native && !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
-        assert(lazyCodeHandle[0] != '\0');
-        auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-        OutInteger(noHashOut, lazyCodeHandleLen);
-        OutBytes(noHashOut, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-        OutBool(noHashOut, lazyCodeModule != nullptr);
-        if (lazyCodeModule) {
-            lazyCodeModule->serialize(noHashOut);
+    SMALL_HASH({
+        OutInteger(out, (int)kind);
+        assert((isHashing(out) || !pendingCompilation()) &&
+               "TODO handle pending code being serialized. It's in a state we "
+               "can't really deserialize from, so we want to just not "
+               "serialize in this situation if possible (via the "
+               "DispatchTable). Otherwise idk");
+        if (kind == Kind::Native &&
+            !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
+            assert(lazyCodeHandle[0] != '\0');
+            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+            OutInteger(out, lazyCodeHandleLen);
+            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+            OutBool(out, lazyCodeModule != nullptr);
+            if (lazyCodeModule) {
+                lazyCodeModule->serialize(out);
+            }
         }
-    }
+    });
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
@@ -394,11 +397,11 @@ void Code::print(std::ostream& out, bool hashInfo) const {
 
     if (hashInfo) {
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
-            << ", hash = " << serializeAst(src_pool_at(src)) << "\n";
+            << ", hash = " << hashAst(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
             out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
             out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
-                << ", hash = " << serializeAst(src_pool_at(i)) << "\n";
+                << ", hash = " << hashAst(src_pool_at(i)) << "\n";
         }
     }
 }

@@ -359,7 +359,7 @@ llvm::Value* LowerFunctionLLVM::constant(SEXP co, const Rep& needed) {
         eternalConst.count(co))
         return convertToPointer(co, true);
 
-    // Could also Pool::insert or UUIDPool::intern
+    // Could also Pool::insert or RirUIDPool::intern
     R_PreserveObject(co);
     return convertToPointer(co);
 }

@@ -9,7 +9,7 @@ namespace rir {
 // and it makes sense since they're all AST nodes)
 static std::unordered_map<SEXP, UUID> hashCache;
 
-inline static void serializeAstVector(UUIDHasher& hasher, SEXP s, void (*serializeElem)(UUIDHasher&, SEXP, int)) {
+inline static void serializeAstVector(UUID::Hasher& hasher, SEXP s, void (*serializeElem)(UUID::Hasher&, SEXP, int)) {
     // assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
     // assert(!OBJECT(s) && "unexpected object in AST");
     // assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
@@ -20,7 +20,7 @@ inline static void serializeAstVector(UUIDHasher& hasher, SEXP s, void (*seriali
     }
 }
 
-void serializeAst(UUIDHasher& hasher, SEXP s) {
+void hashAst(UUID::Hasher& hasher, SEXP s) {
     hasher.hashBytesOf<int>(TYPEOF(s));
     switch (TYPEOF(s)) {
     case NILSXP: {
@@ -48,7 +48,7 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
     case LISTSXP: {
         hasher.hashBytesOf<int>(Rf_length(s));
         for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
-            serializeAst(hasher, CAR(cur));
+            hashAst(hasher, CAR(cur));
         }
         break;
     }
@@ -68,7 +68,7 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
     case LANGSXP: {
         hasher.hashBytesOf<int>(Rf_length(s));
         for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
-            serializeAst(hasher, CAR(cur));
+            hashAst(hasher, CAR(cur));
         }
         break;
     }
@@ -92,35 +92,35 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
     }
 
     case LGLSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             hasher.hashBytesOf<int>(LOGICAL(s)[i]);
         });
         break;
     }
 
     case INTSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             hasher.hashBytesOf<int>(INTEGER(s)[i]);
         });
         break;
     }
 
     case REALSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             hasher.hashBytesOf<double>(REAL(s)[i]);
         });
         break;
     }
 
     case CPLXSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             hasher.hashBytesOf<Rcomplex>(COMPLEX(s)[i]);
         });
         break;
     }
 
     case STRSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             const char* chr = CHAR(STRING_ELT(s, i));
             hasher.hashBytesOf<size_t>(strlen(chr));
             hasher.hashBytes((const void*)chr, strlen(chr));
@@ -129,14 +129,14 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
     }
 
     case VECSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
-            serializeAst(hasher, VECTOR_ELT(s, i));
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
+            hashAst(hasher, VECTOR_ELT(s, i));
         });
         break;
     }
 
     case RAWSXP: {
-        serializeAstVector(hasher, s, [](UUIDHasher& hasher, SEXP s, int i) {
+        serializeAstVector(hasher, s, [](UUID::Hasher& hasher, SEXP s, int i) {
             hasher.hashBytesOf<Rbyte>(RAW(s)[i]);
         });
         break;
@@ -161,12 +161,12 @@ void serializeAst(UUIDHasher& hasher, SEXP s) {
     }
 }
 
-UUID serializeAst(SEXP s) {
+UUID hashAst(SEXP s) {
     if (hashCache.count(s)) {
         return hashCache[s];
     }
-    UUIDHasher hasher;
-    serializeAst(hasher, s);
+    UUID::Hasher hasher;
+    hashAst(hasher, s);
     auto uuid = hasher.finalize();
     hashCache[s] = uuid;
     return uuid;

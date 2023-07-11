@@ -7,8 +7,6 @@
 
 namespace rir {
 
-class UUIDHasher;
-
 /// A 256-bit UUID
 #pragma pack(push, 1)
 class UUID {
@@ -21,6 +19,7 @@ class UUID {
         : a(a), b(b), c(c), d(d) {}
 
   public:
+    class Hasher;
     /// The null UUID (0x0)
     UUID() : a(0), b(0), c(0), d(0) {}
     /// Generates a UUID for the data
@@ -38,19 +37,17 @@ class UUID {
     bool operator==(const UUID& other) const;
     bool operator!=(const UUID& other) const;
     friend struct std::hash<UUID>;
-
-    friend class UUIDHasher;
 };
 #pragma pack(pop)
 
 /// Create a UUID for a stream of data
-class UUIDHasher {
+class UUID::Hasher {
     EVP_MD_CTX* ctx;
     bool finalized;
 
   public:
-    UUIDHasher();
-    ~UUIDHasher();
+    Hasher();
+    ~Hasher();
     /// Hash the data-structure, which should not contain any references
     template<typename T> void hashBytesOf(T c) { hashBytes(&c, sizeof(T)); }
     /// Hash the data, which should not contain any references

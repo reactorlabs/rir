@@ -7,7 +7,7 @@
 namespace rir {
 
 UUID UUID::hash(const void* data, size_t size) {
-    UUIDHasher hasher;
+    UUID::Hasher hasher;
     hasher.hashBytes(data, size);
     return hasher.finalize();
 }
@@ -52,7 +52,7 @@ bool UUID::operator!=(const UUID& other) const {
     return a != other.a || b != other.b || c != other.c || d != other.d;
 }
 
-UUIDHasher::UUIDHasher() : ctx(EVP_MD_CTX_new()), finalized(false) {
+UUID::Hasher::Hasher() : ctx(EVP_MD_CTX_new()), finalized(false) {
     if (!ctx) {
         assert(false && "Failed to create EVP_MD_CTX");
     }
@@ -61,18 +61,18 @@ UUIDHasher::UUIDHasher() : ctx(EVP_MD_CTX_new()), finalized(false) {
     }
 }
 
-UUIDHasher::~UUIDHasher() {
-    assert(finalized && "UUIDHasher was not finalized");
+UUID::Hasher::~Hasher() {
+    assert(finalized && "UUID::Hasher was not finalized");
 }
 
-void UUIDHasher::hashBytes(const void* data, size_t size) {
+void UUID::Hasher::hashBytes(const void* data, size_t size) {
     // Update the context with new data
     if (EVP_DigestUpdate(ctx, data, size) != 1) {
         assert(false && "Failed to update hash with new data");
     }
 }
 
-UUID UUIDHasher::finalize() {
+UUID UUID::Hasher::finalize() {
     unsigned int len = EVP_MD_size(EVP_sha256());
     unsigned char result[EVP_MAX_MD_SIZE];  // Holds the final hash
 

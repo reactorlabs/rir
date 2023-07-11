@@ -17,18 +17,20 @@ DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
-    // Some stuff is mutable or not part of the structural identity, so we don't
-    // want to hash it. However, we still need to serialize recursive items. To
-    // do this, we temporarily replace out with a void stream.
-    R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = isHashing(out) ? &nullOut : out;
-
     HashAdd(container(), refTable);
-    OutInteger(noHashOut, (int)size());
-    for (size_t i = 0; i < size(); i++) {
-        // Only hash baseline so the hash doesn't change
-        WriteItem(getEntry(i), refTable, i == 0 ? out : noHashOut);
-    }
+    NO_HASH({
+        OutInteger(out, (int)size());
+    });
+    BIG_HASH({
+        assert(size() > 0);
+        WriteItem(getEntry(0), refTable, out);
+    });
+    NO_HASH({
+        for (size_t i = 1; i < size(); i++) {
+            // Only hash baseline so the hash doesn't change
+            WriteItem(getEntry(i), refTable, out);
+        }
+    });
 }
 
 void DispatchTable::print(std::ostream& out, bool hashInfo) const {
