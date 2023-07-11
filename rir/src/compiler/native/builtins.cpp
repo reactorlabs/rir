@@ -24,6 +24,7 @@
 
 #include "llvm/IR/Attributes.h"
 
+#include <cstdint>
 #include <random>
 
 namespace rir {
@@ -956,44 +957,42 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(SEXP cls, unsigned idx, SEXP value) {
-    // FIXME: implement
-    // switch (kind) {
-    // // case TypeFeedbackKind::Test: {
-    // //     ObservedTest* feedback = (ObservedTest*)(pos + 1);
-    // //     feedback->record(value);
-    // //     break;
-    // // }
-    // // case TypeFeedbackKind::Value: {
-    // //     ObservedValues* feedback = (ObservedValues*)(pos + 1);
-    // //     feedback->record(value);
-    // //     if (TYPEOF(value) == PROMSXP) {
-    // //         if (PRVALUE(value) == R_UnboundValue &&
-    // //             feedback->stateBeforeLastForce < ObservedValues::promise)
-    // //             feedback->stateBeforeLastForce = ObservedValues::promise;
-    // //         else if (feedback->stateBeforeLastForce <
-    // //                  ObservedValues::evaluatedPromise)
-    // //             feedback->stateBeforeLastForce =
-    // //                 ObservedValues::evaluatedPromise;
-    // //     } else {
-    // //         if (feedback->stateBeforeLastForce < ObservedValues::value)
-    // //             feedback->stateBeforeLastForce = ObservedValues::value;
-    // //     }
-    // //     break;
-    // // }
-    // default:
-    //     assert(false);
-    // }
-
-    std::cerr << idx << " " << cls << std::endl;
-    if (!cls) {
-        return;
-    }
-    // TODO: can we pass the feedback directly?
-    auto dt = DispatchTable::unpack(BODY(cls));
+void recordTypefeedbackImpl(rir::Code* code, uint32_t idx, SEXP value) {
+    // we cannot pass the feedback directly because the call to this builtin is
+    // generated from places that do not have access to the feedback vector
+    auto dt = code->function()->dispatchTable();
     auto baseline = dt->baseline();
-    auto& feedback = baseline->typeFeedback();
-    feedback.record(idx, value);
+    auto& slot = baseline->typeFeedback()[idx];
+
+    switch (slot.kind) {
+    case TypeFeedbackKind::Call: {
+        auto& feedback = slot.callees();
+        feedback.record(baseline->body(), value);
+        break;
+    }
+    case TypeFeedbackKind::Test: {
+        auto& feedback = slot.test();
+        feedback.record(value);
+        break;
+    }
+    case TypeFeedbackKind::Type: {
+        auto& feedback = slot.values();
+        feedback.record(value);
+
+        if (TYPEOF(value) == PROMSXP) {
+            if (PRVALUE(value) == R_UnboundValue &&
+                feedback.stateBeforeLastForce < ObservedValues::promise)
+                feedback.stateBeforeLastForce = ObservedValues::promise;
+            else if (feedback.stateBeforeLastForce <
+                     ObservedValues::evaluatedPromise)
+                feedback.stateBeforeLastForce =
+                    ObservedValues::evaluatedPromise;
+        } else {
+            if (feedback.stateBeforeLastForce < ObservedValues::value)
+                feedback.stateBeforeLastForce = ObservedValues::value;
+        }
+    }
+    }
 }
 
 void assertFailImpl(const char* msg) {
@@ -1457,8 +1456,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     RCNTXT cntxt;
 
-    // This code needs to be protected, because its slot in the dispatch table
-    // could get overwritten while we are executing it.
+    // This code needs to be protected, because its slot in the dispatch
+    // table could get overwritten while we are executing it.
     PROTECT(fun->container());
 
     initClosureContext(ast, &cntxt, symbol::delayedEnv, env, lazyArgs.asSexp(),
@@ -2033,7 +2032,8 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
+                REAL(vec)
+                [n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2094,7 +2094,8 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
+                REAL(vec)
+                [n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2433,7 +2434,8 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::recordTypefeedback) = {
         "recordTypefeedback",
         (void*)&recordTypefeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::SEXP, t::i32, t::SEXP}, false),
+        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
+                                false),
         {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,

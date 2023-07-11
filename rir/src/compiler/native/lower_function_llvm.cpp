@@ -3599,11 +3599,10 @@ void LowerFunctionLLVM::compile() {
 
             case Tag::Record: {
                 auto rec = Record::Cast(i);
-                auto cls = paramClosure();
 
                 call(
                     NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
-                    {cls, c(rec->idx), loadSxp(rec->arg(0).val())});
+                    {paramCode(), c(rec->idx), loadSxp(rec->arg(0).val())});
 
                 break;
             }
@@ -6139,13 +6138,13 @@ void LowerFunctionLLVM::compile() {
                 if (i->hasTypeFeedback()) {
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),
-                         {paramClosure(),
+                         {paramCode(),
                           c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
                 }
                 if (i->hasCallFeedback()) {
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),
-                         {paramClosure(),
+                         {paramCode(),
                           c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
                 }
             }
