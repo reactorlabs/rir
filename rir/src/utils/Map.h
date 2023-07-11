@@ -66,6 +66,29 @@ class SmallMap {
         return end() - 1;
     }
 
+    void erase(const K& k) {
+        if (big) {
+            auto p = index.find(k);
+            if (p != index.end()) {
+                auto idx = p->second;
+                index.erase(p);
+                container[idx] = container.back();
+                index[container[idx].first] = idx;
+                container.pop_back();
+                return;
+            }
+        } else {
+            for (auto it = container.begin(), end = container.end(); it != end; ++it) {
+                if (it->first == k) {
+                    *it = container.back();
+                    container.pop_back();
+                    return;
+                }
+            }
+        }
+        assert(false);
+    }
+
     V& at(const K& k) {
         if (big)
             return container[index.at(k)].second;

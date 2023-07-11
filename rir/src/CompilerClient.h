@@ -16,7 +16,7 @@ class ByteBuffer;
 
 namespace rir {
 
-class UUID;
+struct RirUID;
 
 /**
  * Compiler server client.
@@ -90,7 +90,7 @@ class CompilerClient {
     /// ...).
     ///
     /// Returns `nullptr` if the server doesn't have the closure.
-    static SEXP retrieve(const UUID& hash);
+    static SEXP retrieve(const RirUID& hash);
 
     /// Send a message from the compiler client (this) to each connected
     /// compiler server, which kills the server (exit 0) on receive. Then stops

@@ -2,7 +2,7 @@
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
-#include "hash/UUIDPool.h"
+#include "hash/RirUIDPool.h"
 #include "interpreter/serialize.h"
 
 namespace rir {
@@ -18,11 +18,11 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto fun = new (DATAPTR(store)) Function(functionSize, nullptr, {}, sig, as);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
-    SEXP body = p(UUIDPool::readItem(refTable, inp));
+    SEXP body = p(RirUIDPool::readItem(refTable, inp));
     fun->body(body);
     for (unsigned i = 0; i < fun->numArgs_; i++) {
         if ((bool)InInteger(inp)) {
-            SEXP arg = p(UUIDPool::readItem(refTable, inp));
+            SEXP arg = p(RirUIDPool::readItem(refTable, inp));
             fun->setEntry(Function::NUM_PTRS + i, arg);
         } else
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
@@ -32,34 +32,32 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
-    // Some stuff is mutable or not part of the structural identity, so we don't
-    // want to hash it. However, we still need to serialize recursive items. To
-    // do this, we temporarily replace out with a void stream.
-    // TODO!: Working on this...
-    // R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = out;
-
     HashAdd(container(), refTable);
-    OutInteger(out, size);
-    signature().serialize(refTable, out);
-    context_.serialize(refTable, out);
-    OutInteger(out, numArgs_);
-    // TODO: why are body and args not set sometimes when we hash deserialized
-    //     value to check hash consistency? It probably has something to do with
-    //     cyclic references in serialization, but why?
-    //     (This is one of the reasons we use SEXP instead of unpacking Code for
-    //      body and default args, also because we are going to serialize the
-    //      SEXP anyways to properly handle cyclic references)
-    UUIDPool::writeItem(getEntry(0), refTable, out);
+    BIG_HASH({
+        OutInteger(out, size);
+        signature().serialize(refTable, out);
+        context_.serialize(refTable, out);
+        OutInteger(out, numArgs_);
+    });
+    // TODO: why are body and args not set sometimes when we hash
+    //  deserialized value to check hash consistency? It probably has
+    //  something to do with cyclic references in serialization, but why?
+    //  (This is one of the reasons we use SEXP instead of unpacking Code
+    //  for body and default args, also because we are going to serialize
+    //  the SEXP anyways to properly handle cyclic references)
+    RirUIDPool::writeItem(getEntry(0), refTable, out);
+
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
         OutInteger(out, (int)(arg != nullptr));
         if (arg) {
             // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(arg, refTable, out);
+            RirUIDPool::writeItem(arg, refTable, out);
         }
     }
-    OutInteger(noHashOut, (int)flags.to_i());
+    SMALL_HASH({
+        OutInteger(out, (int)flags.to_i());
+    });
 }
 
 void Function::disassemble(std::ostream& out) const {

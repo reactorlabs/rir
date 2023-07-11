@@ -5,10 +5,11 @@
 #pragma once
 
 #include "R/r.h"
-#include "UUID.h"
+#include "RirUID.h"
 #include "bc/BC_inc.h"
 #include "interpreter/instance.h"
 #include "utils/ByteBuffer.h"
+#include "utils/Set.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -18,14 +19,14 @@
 
 namespace rir {
 
-/// A global set of SEXPs identified by a unique UUID computed by hash.
-/// Structurally equivalent SEXPs will have the same UUID, and structurally
-/// different SEXPs will, with extremely high probability, have different UUIDs.
-/// "Structurally equivalent" means that an SEXP's UUID is independent of its
+/// A global set of SEXPs identified by a unique UID computed by hash.
+/// Structurally equivalent SEXPs will have the same UID, and structurally
+/// different SEXPs will, with extremely high probability, have different UIDs.
+/// "Structurally equivalent" means that an SEXP's UID is independent of its
 /// address in memory, and even different R sessions can identify structurally-
-/// equivalent SEXPs by the same UUID.
+/// equivalent SEXPs by the same UID.
 ///
-/// The UUID is computed by hashing the SEXP's serialized form. When serializing
+/// The UID is computed by hashing the SEXP's serialized form. When serializing
 /// an SEXP, we only serialize hashes to connected RIR objects, to avoid
 /// serializing copies of SEXPs we already have and then effectively duplicating
 /// them by deserializing. However, when we serialize an SEXP to compute its
@@ -39,20 +40,10 @@ namespace rir {
 /// it's garbage collected, so the pool won't continually increase in size. When
 /// SEXPs need to be remembered (by the compiler server), they must be
 /// explicitly preserved.
-class UUIDPool {
-    static std::unordered_map<UUID, SEXP> interned;
+class RirUIDPool {
+    static std::unordered_map<UUID, SmallSet<SEXP>> interned;
     static std::unordered_map<SEXP, UUID> hashes;
-    /// This and `prevToIntern` effectively form multiple double-linked lists of
-    /// SEXPs with the same UUID hash (one list for each hash) in the order we
-    /// would assign them to be the "interned" SEXP for the UUID; when the
-    /// "interned" SEXP gets gcd, we replace it with the next SEXP in the list,
-    /// otherwise we remove the UUID because there is no longer a corresponding
-    /// live SEXP.
-    static std::unordered_map<SEXP, SEXP> nextToIntern;
-    /// See `nextToIntern` doc
-    static std::unordered_map<SEXP, SEXP> prevToIntern;
     static std::unordered_set<SEXP> preserved;
-    static std::unordered_map<UUID, ByteBuffer> serialized;
 
 #ifdef DO_INTERN
     static void uninternGcd(SEXP e);
@@ -61,8 +52,8 @@ class UUIDPool {
   public:
     /// Intern the SEXP when we already know its hash, not recursively.
     ///
-    /// @see UUIDPool::intern(SEXP, bool, bool)
-    static SEXP intern(SEXP e, const UUID& uuid, bool preserve,
+    /// @see RirUIDPool::intern(SEXP, bool, bool)
+    static SEXP intern(SEXP e, const RirUID& uuid, bool preserve,
                        bool expectHashToBeTheSame = true);
     /// Will hash the SEXP and:
     /// - If not in the pool, will add it *and* if `recursive` is set,
@@ -70,10 +61,10 @@ class UUIDPool {
     /// - If already in the pool, returns the existing SEXP
     static SEXP intern(SEXP e, bool recursive, bool preserve);
     /// Gets the interned SEXP by hash, or nullptr if not interned
-    static SEXP get(const UUID& hash);
+    static SEXP get(const RirUID& hash);
     /// Gets the SEXP's memoized hash, or the null hash if the SEXP was never
     /// interned
-    static const UUID& getHash(SEXP sexp);
+    static RirUID getHash(SEXP sexp);
     /// When deserializing with `useHashes=true`, reads a hash, then looks it up
     /// in the intern pool. If the SEXP isn't in the intern pool, fetches it
     /// from the compiler server. If the compiler server isn't connected or
@@ -110,7 +101,7 @@ class UUIDPool {
 class ConnectedWorklist {
     std::unordered_set<SEXP> seen;
 
-    friend class UUIDPool;
+    friend class RirUIDPool;
     void insert(SEXP e) { seen.insert(e); }
     SEXP pop() {
         auto it = seen.begin();

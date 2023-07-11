@@ -5,9 +5,9 @@
 
 namespace rir {
 
-/// Serialize only the AST part of an S-expression
-void serializeAst(UUIDHasher& bb, SEXP s);
-/// Serialize only the AST part of an S-expression
-UUID serializeAst(SEXP s);
+/// Create a UUID (immutable part of RirUID) from only the AST part of a SEXP
+void hashAst(UUID::Hasher& bb, SEXP s);
+/// Create a UUID (immutable part of RirUID) from only the AST part of a SEXP
+UUID hashAst(SEXP s);
 
 } // namespace rir

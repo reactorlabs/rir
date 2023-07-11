@@ -1,6 +1,6 @@
 #include "utils/Pool.h"
 #include "R/Protect.h"
-#include "hash/UUIDPool.h"
+#include "hash/RirUIDPool.h"
 
 namespace rir {
 
@@ -10,15 +10,15 @@ std::unordered_map<SEXP, size_t> Pool::contents;
 std::unordered_set<size_t> Pool::patchable;
 
 BC::PoolIdx Pool::readItem(SEXP ref_table, R_inpstream_t in) {
-    return insert(UUIDPool::readItem(ref_table, in));
+    return insert(RirUIDPool::readItem(ref_table, in));
 }
 
 void Pool::writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
-    UUIDPool::writeItem(get(idx), ref_table, out);
+    RirUIDPool::writeItem(get(idx), ref_table, out);
 }
 
 void Pool::writeAst(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
-    UUIDPool::writeAst(get(idx), ref_table, out);
+    RirUIDPool::writeAst(get(idx), ref_table, out);
 }
 
 BC::PoolIdx Pool::getNum(double n) {
