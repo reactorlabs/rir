@@ -382,8 +382,8 @@ SEXP Replay::replayClosure(size_t idx) {
 
     assert(TYPEOF(closure) == CLOSXP);
 
-    // TODO: the env parameter is likely not correct
-    rirCompile(closure, R_GlobalEnv);
+    // The env parameter seems to be never read
+    rirCompile(closure, R_NilValue);
     rehydrated_closures[idx] = closure;
 
     if (name != R_NilValue) {
