@@ -116,7 +116,6 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         // we are seeing it for the first time
         fun_recordings_.push_back(FunRecording{});
         v = &fun_recordings_.back();
-        v->name = name;
         v->env = getEnvironmentName(CLOENV(cls));
         v->closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
@@ -133,6 +132,10 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
             R_PreserveObject(v->closure);
             UNPROTECT(1);
         }
+    }
+
+    if (v->name.empty() && !name.empty()) {
+        v->name = name;
     }
 
     // special functions don't have dispatch tables, let's not error here
@@ -198,7 +201,7 @@ SEXP Replay::replayClosure(size_t idx) {
 
     closure = PROTECT(R_unserialize(recording.closure, R_NilValue));
     // TODO: the env parameter is likely not correct
-    closure = rirCompile(closure, R_GlobalEnv);
+    rirCompile(closure, R_GlobalEnv);
     closures_[idx] = closure;
 
     for (auto& event : recording.events) {
@@ -276,6 +279,8 @@ void Replay::replaySpeculativeContext(
             ObservedCallees* feedback = (ObservedCallees*)(pc + 1);
             auto callees_idx = (*ctxStart++).value.callees;
 
+            // TODO not sure if this is correct, but it fixes an issue
+            feedback->numTargets = 0;
             for (auto callee_idx : callees_idx) {
                 if (callee_idx == NO_INDEX) {
                     continue;
@@ -457,6 +462,7 @@ void DtOverwriteEvent::replay(Replay& replay, SEXP closure,
                               std::string& closure_name) const {
     DispatchTable* dt = DispatchTable::unpack(BODY(closure));
     dt->get(funIdx)->addDeoptCount(oldDeoptCount);
+    recordDtOverwrite(dt, funIdx, oldDeoptCount);
 }
 
 SEXP DtOverwriteEvent::toSEXP() const {
@@ -565,7 +571,7 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
 
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
                        size_t oldDeoptCount) {
-    if (!is_recording_) {
+    if (!is_recording_ || oldDeoptCount == 0) {
         return;
     }
 
