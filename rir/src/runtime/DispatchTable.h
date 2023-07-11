@@ -4,8 +4,8 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
-#include "hash/UUIDPool.h"
 #include "TypeFeedback.h"
+#include "hash/RirUIDPool.h"
 #include "utils/random.h"
 #include <ostream>
 

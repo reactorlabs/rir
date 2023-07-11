@@ -6,7 +6,7 @@
 #include "R/Funtab.h"
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/types_llvm.h"
-#include "hash/UUIDPool.h"
+#include "hash/RirUIDPool.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>
@@ -52,8 +52,8 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
              llvm::MDString::get(ctx, getBuiltinName(what))});
     }
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    RirUIDPool::intern(what, true, false);
+    RirUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "SEXP"),
@@ -72,8 +72,8 @@ llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
 llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     auto sexp = code->container();
-    UUIDPool::intern(sexp, true, false);
-    UUIDPool::writeItem(sexp, buf, true);
+    RirUIDPool::intern(sexp, true, false);
+    RirUIDPool::writeItem(sexp, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "Code"),
@@ -139,8 +139,8 @@ llvm::MDNode* SerialRepr::srcIdxMetadata(llvm::LLVMContext& ctx, Immediate i) {
     // trivial to serialize (specifically, we care about having no global envs)
     auto what = src_pool_at(i);
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    RirUIDPool::intern(what, true, false);
+    RirUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -153,8 +153,8 @@ llvm::MDNode* SerialRepr::poolIdxMetadata(llvm::LLVMContext& ctx, BC::PoolIdx i)
     // other tricky exprs, if it does we need to abstract SEXP::metadata...
     auto what = Pool::get(i);
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    RirUIDPool::intern(what, true, false);
+    RirUIDPool::writeItem(what, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -211,7 +211,7 @@ static void* getMetadataPtr_Builtin(const llvm::MDNode& meta) {
 static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = RirUIDPool::readItem(buffer, true);
     // TODO: Don't permanently preserve SEXP, instead attach it to the Code
     //  object so that it gets freed when the Code object is freed
     R_PreserveObject(sexp);
@@ -227,7 +227,7 @@ static void* getMetadataPtr_String(const llvm::MDNode& meta) {
 static void* getMetadataPtr_Code(const llvm::MDNode& meta) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = RirUIDPool::readItem(buffer, true);
     // TODO: This will also need to be gc-attached to the Code object
     R_PreserveObject(sexp);
     return (void*)rir::Code::unpack(sexp);
@@ -291,7 +291,7 @@ static llvm::Value* patchSrcIdxMetadata(llvm::Module& mod,
                                         llvm::MDNode* srcIdxMeta) {
     auto data = ((llvm::MDString*)srcIdxMeta->getOperand(0).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = RirUIDPool::readItem(buffer, true);
     // TODO: Reuse index if it's already in the source pool
     //  (and maybe merge and refactor pools)
     auto i = src_pool_add(sexp);
@@ -303,7 +303,7 @@ static llvm::Value* patchPoolIdxMetadata(llvm::Module& mod,
                                          llvm::MDNode* poolIdxMeta) {
     auto data = ((llvm::MDString*)poolIdxMeta->getOperand(0).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = RirUIDPool::readItem(buffer, true);
     // TODO: Reuse index if it's already in the constant pool
     //  (and maybe merge and refactor pools)
     auto i = Pool::insert(sexp);

@@ -7,6 +7,7 @@
 #include "bc/CodeStream.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
+#include "hash/RirUID.h"
 
 #include <iomanip>
 #include <iostream>
@@ -200,16 +201,9 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
 
 void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                    size_t codeSize, const Code* container) {
-    // Some stuff is mutable or not part of the structural identity, so we don't
-    // want to hash it. However, we still need to serialize recursive items. To
-    // do this, we temporarily replace out with a void stream.
-    // TODO!: Working on this...
-    // R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = out;
-
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
-        OutChar(out, (int)*code);
+        BIG_HASH({ OutChar(out, (int)*code); });
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments i = bc.immediate;
         switch (*code) {
@@ -236,10 +230,10 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                 case STRSXP:
                 case SPECIALSXP:
                 case BUILTINSXP:
-                    Pool::writeAst(i.pool, refTable, out);
+                    BIG_HASH({ Pool::writeAst(i.pool, refTable, out); });
                     break;
                 default:
-                    Pool::writeItem(i.pool, refTable, noHashOut);
+                    SMALL_HASH({ Pool::writeItem(i.pool, refTable, out); });
                     break;
                 }
             } else {
@@ -255,43 +249,47 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            Pool::writeAst(i.pool, refTable, out);
+            BIG_HASH({ Pool::writeAst(i.pool, refTable, out); });
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            Pool::writeAst(i.poolAndCache.poolIndex, refTable, out);
-            OutInteger(out, i.poolAndCache.cacheIndex);
+            BIG_HASH({ Pool::writeAst(i.poolAndCache.poolIndex, refTable, out); });
+            BIG_HASH({ OutInteger(out, i.poolAndCache.cacheIndex); });
             break;
         case Opcode::guard_fun_:
-            Pool::writeAst(i.guard_fun_args.name, refTable, out);
-            Pool::writeItem(i.guard_fun_args.expected, refTable, noHashOut);
-            OutInteger(out, i.guard_fun_args.id);
+            BIG_HASH({ Pool::writeAst(i.guard_fun_args.name, refTable, out); });
+            SMALL_HASH({ Pool::writeItem(i.guard_fun_args.expected, refTable, out); });
+            BIG_HASH({ OutInteger(out, i.guard_fun_args.id); });
             break;
         case Opcode::call_:
         case Opcode::call_dots_:
         case Opcode::named_call_:
-            OutInteger(out, i.callFixedArgs.nargs);
-            Pool::writeAst(i.callFixedArgs.ast, refTable, out);
-            OutBytes(out, &i.callFixedArgs.given, sizeof(Context));
+            BIG_HASH({ OutInteger(out, i.callFixedArgs.nargs); });
+            BIG_HASH({ Pool::writeAst(i.callFixedArgs.ast, refTable, out); });
+            BIG_HASH({ OutBytes(out, &i.callFixedArgs.given, sizeof(Context)); });
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
-                for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    Pool::writeAst(bc.callExtra().callArgumentNames[j],
-                                   refTable, out);
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    BIG_HASH({
+                        Pool::writeAst(bc.callExtra().callArgumentNames[j],
+                                       refTable, out);
+                    });
+                }
             }
             break;
         case Opcode::call_builtin_:
-            OutInteger(out, i.callBuiltinFixedArgs.nargs);
-            Pool::writeAst(i.callBuiltinFixedArgs.ast, refTable, out);
-            Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, noHashOut);
+            BIG_HASH({ OutInteger(out, i.callBuiltinFixedArgs.nargs); });
+            BIG_HASH({ Pool::writeAst(i.callBuiltinFixedArgs.ast, refTable, out); });
+            SMALL_HASH({ Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out); });
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
             assert((size - 1) % 4 == 0);
-            if (size != 0)
-                OutBytes(noHashOut, code + 1, (int)size - 1);
+            if (size != 0) {
+                SMALL_HASH({ OutBytes(out, code + 1, (int)size - 1); });
+            }
             break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
@@ -306,8 +304,9 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::put_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
-            if (size != 0)
-                OutBytes(out, code + 1, (int)size - 1);
+            if (size != 0) {
+                BIG_HASH({ OutBytes(out, code + 1, (int)size - 1); });
+            }
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

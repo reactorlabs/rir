@@ -4,10 +4,11 @@
 
 #include "CompilerServer.h"
 #include "api.h"
-#include "compiler_server_client_shared_utils.h"
 #include "compiler/parameter.h"
+#include "compiler_server_client_shared_utils.h"
+#include "hash/RirUID.h"
+#include "hash/RirUIDPool.h"
 #include "hash/UUID.h"
-#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
@@ -211,7 +212,7 @@ void CompilerServer::tryRun() {
             // because we want to store it in the UUID pool for Retrieve requests
             // (since we memoize requests) so that compiler client can retrieve
             // it later
-            UUIDPool::intern(what, true, true);
+            RirUIDPool::intern(what, true, true);
 
             // Serialize the response
             // Response data format =
@@ -224,20 +225,20 @@ void CompilerServer::tryRun() {
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = UUIDPool::getHash(what);
-            response.putBytes((uint8_t*)&hash, sizeof(UUID));
+            auto hash = RirUIDPool::getHash(what);
+            response.putBytes((uint8_t*)&hash, sizeof(hash));
             serialize(what, response, true);
             break;
         }
         case Request::Retrieve: {
             std::cerr << "Received retrieve request" << std::endl;
             // ...
-            // + UUID hash
-            UUID hash;
-            requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
+            // + RirUID hash
+            RirUID hash;
+            requestBuffer.getBytes((uint8_t*)&hash, sizeof(RirUID));
 
             // Get SEXP
-            SEXP what = UUIDPool::get(hash);
+            SEXP what = RirUIDPool::get(hash);
 
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";

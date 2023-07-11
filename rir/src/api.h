@@ -9,12 +9,6 @@
 
 extern int R_ENABLE_JIT;
 
-namespace rir {
-class UUID;
-class UUIDHasher;
-} // namespace rir
-class ByteBuffer;
-
 REXPORT SEXP rirInvocationCount(SEXP what);
 REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,
                                SEXP debugStyle);
