@@ -62,6 +62,9 @@ class RirUIDPool {
     static SEXP intern(SEXP e, bool recursive, bool preserve);
     /// Gets the interned SEXP by hash, or nullptr if not interned
     static SEXP get(const RirUID& hash);
+    /// Gets the first live interned SEXP with the big hash, or nullptr if there
+    /// are none
+    static SEXP getAny(const UUID& bigHash);
     /// Gets the SEXP's memoized hash, or the null hash if the SEXP was never
     /// interned
     static RirUID getHash(SEXP sexp);

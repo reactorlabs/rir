@@ -139,24 +139,20 @@ static void rStreamDiscardBytes(__attribute__((unused)) R_outpstream_t stream,
                                 __attribute__((unused)) void* data,
                                 __attribute__((unused)) int length) {}
 
-static void rStreamSmallHashChar(R_outpstream_t stream, int data) {
-    auto hasher = (UUID::Hasher*)stream->data;
-    hasher->hashBytesOf<unsigned char>((unsigned char)data);
-}
-
-static void rStreamSmallHashBytes(R_outpstream_t stream, void* data, int length) {
-    auto hasher = (UUID::Hasher*)stream->data;
-    hasher->hashBytes(data, length);
-}
-
 static void rStreamHashChar(R_outpstream_t stream, int data) {
+    SLOWASSERT(isHashing(stream));
     auto hasher = (RirUID::Hasher*)stream->data;
-    hasher->big.hashBytesOf<unsigned char>((unsigned char)data);
+    auto& specificHasher =
+        isOnlySmallHashing(stream) ? hasher->small : hasher->big;
+    specificHasher.hashBytesOf<unsigned char>((unsigned char)data);
 }
 
 static void rStreamHashBytes(R_outpstream_t stream, void* data, int length) {
+    SLOWASSERT(isHashing(stream));
     auto hasher = (RirUID::Hasher*)stream->data;
-    hasher->big.hashBytes(data, length);
+    auto& specificHasher =
+        isOnlySmallHashing(stream) ? hasher->small : hasher->big;
+    specificHasher.hashBytes(data, length);
 }
 
 static void rStreamOutChar(R_outpstream_t stream, int data) {
@@ -197,7 +193,8 @@ R_outpstream_st nullOutputStream() {
     return out;
 }
 
-static void smallHashSexp(SEXP sexp, UUID::Hasher& hasher) {
+static void hashSexp(SEXP sexp, RirUID::Hasher& hasher, bool isOnlySmallHashing,
+                     ConnectedWorklist* connected) {
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
@@ -207,74 +204,8 @@ static void smallHashSexp(SEXP sexp, UUID::Hasher& hasher) {
     pir::Parameter::RIR_PRESERVE = true;
     _useHashes = false;
     _isHashing = true;
-    _isOnlySmallHashing = true;
-    connectedWorklist = nullptr;
-    retrieveHash = RirUID();
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&hasher,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamSmallHashChar,
-        rStreamSmallHashBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    retrieveHash = oldRetrieveHash;
-    connectedWorklist = oldConnectedWorklist;
-    _isOnlySmallHashing = oldIsOnlySmallHashing;
-    _isHashing = oldIsHashing;
-    _useHashes = oldUseHashes;
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-}
-
-static void hashSexp(SEXP sexp, RirUID::Hasher& hasher, ConnectedWorklist& connected) {
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    auto oldUseHashes = _useHashes;
-    auto oldIsHashing = _isHashing;
-    auto oldIsOnlySmallHashing = _isOnlySmallHashing;
-    auto oldConnectedWorklist = connectedWorklist;
-    auto oldRetrieveHash = retrieveHash;
-    pir::Parameter::RIR_PRESERVE = true;
-    _useHashes = false;
-    _isHashing = true;
-    _isOnlySmallHashing = false;
-    connectedWorklist = &connected;
-    retrieveHash = RirUID();
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&hasher,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamHashChar,
-        rStreamHashBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    retrieveHash = oldRetrieveHash;
-    connectedWorklist = oldConnectedWorklist;
-    _isOnlySmallHashing = oldIsOnlySmallHashing;
-    _isHashing = oldIsHashing;
-    _useHashes = oldUseHashes;
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-}
-
-static void hashSexp(SEXP sexp, RirUID::Hasher& hasher) {
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    auto oldUseHashes = _useHashes;
-    auto oldIsHashing = _isHashing;
-    auto oldIsOnlySmallHashing = _isOnlySmallHashing;
-    auto oldConnectedWorklist = connectedWorklist;
-    auto oldRetrieveHash = retrieveHash;
-    pir::Parameter::RIR_PRESERVE = true;
-    _useHashes = false;
-    _isHashing = true;
-    _isOnlySmallHashing = false;
-    connectedWorklist = nullptr;
+    _isOnlySmallHashing = isOnlySmallHashing;
+    connectedWorklist = connected;
     retrieveHash = RirUID();
     struct R_outpstream_st out{};
     R_InitOutPStream(
@@ -297,20 +228,20 @@ static void hashSexp(SEXP sexp, RirUID::Hasher& hasher) {
 }
 
 UUID smallHashSexp(SEXP sexp) {
-    UUID::Hasher hasher;
-    smallHashSexp(sexp, hasher);
-    return hasher.finalize();
+    RirUID::Hasher hasher;
+    hashSexp(sexp, hasher, true, nullptr);
+    return hasher.finalize().small;
 }
 
 RirUID hashSexp(SEXP sexp, ConnectedWorklist& connected) {
     RirUID::Hasher hasher;
-    hashSexp(sexp, hasher, connected);
+    hashSexp(sexp, hasher, false, &connected);
     return hasher.finalize();
 }
 
 RirUID hashSexp(SEXP sexp) {
     RirUID::Hasher hasher;
-    hashSexp(sexp, hasher);
+    hashSexp(sexp, hasher, false, nullptr);
     return hasher.finalize();
 }
 
@@ -403,6 +334,10 @@ bool isHashing(__attribute__((unused)) R_outpstream_t out) {
 bool isOnlySmallHashing(__attribute__((unused)) R_outpstream_t out) {
     // Trying to pretend we don't use a singleton...
     return _isOnlySmallHashing;
+}
+
+bool isOnlyBigHashing(__attribute__((unused)) R_outpstream_t out) {
+    return isHashing(out) && !isOnlySmallHashing(out);
 }
 
 ConnectedWorklist* connected(__attribute__((unused)) R_outpstream_t out) {
