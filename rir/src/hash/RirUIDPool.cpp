@@ -53,10 +53,20 @@ static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
 }
 
 void RirUIDPool::uninternGcd(SEXP e) {
-    assert(!preserved.count(e) && "preserved SEXP is getting gcd");
+    // There seems to be a bug somewhere where R is calls finalizer on the wrong
+    // object, or calls it twice...
+    if (preserved.count(e)) {
+        Rf_warning("WARNING: preserved SEXP is supposedly getting gcd");
+        Rf_PrintValue(e);
+        return;
+    }
+    if (!hashes.count(e)) {
+        Rf_warning("WARNING: SEXP getting gcd is supposedly never interned");
+        Rf_PrintValue(e);
+        return;
+    }
 
     // Remove hash
-    assert(hashes.count(e) && "SEXP was never interned");
     auto hash = hashes.at(e);
     hashes.erase(e);
 
@@ -88,11 +98,11 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
             // will only be used if the previous SEXP changes its RirUID or gets
             // gcd and uninterned.
             LOG(std::cout << "Reuse intern: " << hash << " -> " << e << "\n");
+            similar.insert(e);
+            hashes[e] = hash.big;
             if (!preserve) {
                 registerFinalizerIfPossible(e, uninternGcd);
             }
-            similar.insert(e);
-            hashes[e] = hash.big;
         }
         e = *existing;
         if (preserve && !preserved.count(e)) {
@@ -104,14 +114,6 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
     }
 
     // Intern new SEXP
-    // First preserve or register finalizer
-    if (preserve) {
-        R_PreserveObject(e);
-        preserved.insert(e);
-    } else {
-        registerFinalizerIfPossible(e, uninternGcd);
-    }
-
 #ifdef DEBUG_DISASSEMBLY
     if (expectHashToBeTheSame) {
         if (DispatchTable::check(e)) {
@@ -166,6 +168,14 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
     LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
     similar.insert(e);
     hashes[e] = hash.big;
+
+    // Preserve or register finalizer
+    if (preserve) {
+        R_PreserveObject(e);
+        preserved.insert(e);
+    } else {
+        registerFinalizerIfPossible(e, uninternGcd);
+    }
 #endif
 
     return e;

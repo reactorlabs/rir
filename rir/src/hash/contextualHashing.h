@@ -10,48 +10,52 @@
 
 namespace rir {
 
+SEXP copyRefTable(SEXP refTable);
+
 __attribute__((unused)) static inline void
-bigHash(R_outpstream_t out,
-        const std::function<void(R_outpstream_t out)>& code) {
+bigHash(R_outpstream_t out, SEXP refTable,
+        const std::function<void(R_outpstream_t out, SEXP refTable)>& code) {
     // Big hashing or regular serialization = run normally
     // Small hashing = skip (there's never a worklist with small hashing)
     if (!isOnlySmallHashing(out)) {
-        code(out);
+        code(out, refTable);
     }
 }
 
 __attribute__((unused)) static inline void
-smallHash(R_outpstream_t out,
-          const std::function<void(R_outpstream_t out)>& code) {
+smallHash(R_outpstream_t out, SEXP refTable,
+          const std::function<void(R_outpstream_t out, SEXP refTable)>& code) {
     // Big hashing = don't add to hash, but do add to worklist
     // Small hashing or regular serialization = run normally
     if (isOnlyBigHashing(out)) {
         if (connected(out)) {
             auto nullOut = nullOutputStream();
-            code(&nullOut);
+            code(&nullOut, PROTECT(copyRefTable(refTable)));
+            UNPROTECT(1);
         }
     } else {
-        code(out);
+        code(out, refTable);
     }
 }
 
 __attribute__((unused)) static inline void
-noHash(R_outpstream_t out,
-       const std::function<void(R_outpstream_t out)>& code) {
+noHash(R_outpstream_t out, SEXP refTable,
+       const std::function<void(R_outpstream_t out, SEXP refTable)>& code) {
     // Big hashing = don't add to hash, but do add to worklist
     // Small hashing = skip (there's never a worklist with small hashing)
     if (isHashing(out)) {
         if (connected(out)) {
             auto nullOut = nullOutputStream();
-            code(&nullOut);
+            code(&nullOut, PROTECT(copyRefTable(refTable)));
+            UNPROTECT(1);
         }
     } else {
-        code(out);
+        code(out, refTable);
     }
 }
 
 } // namespace rir
 
-#define BIG_HASH(code) bigHash(out, [&](R_outpstream_t out) code)
-#define SMALL_HASH(code) smallHash(out, [&](R_outpstream_t out) code)
-#define NO_HASH(code) noHash(out, [&](R_outpstream_t out) code)
+#define BIG_HASH(code) bigHash(out, refTable, [&](R_outpstream_t out, SEXP refTable) code)
+#define SMALL_HASH(code) smallHash(out, refTable, [&](R_outpstream_t out, SEXP refTable) code)
+#define NO_HASH(code) noHash(out, refTable, [&](R_outpstream_t out, SEXP refTable) code)
