@@ -216,6 +216,16 @@ SEXP RirUIDPool::get(const RirUID& hash) {
     return nullptr;
 }
 
+SEXP RirUIDPool::getAny(const UUID& bigHash) {
+#ifdef DO_INTERN
+    auto& similar = interned[bigHash];
+    if (!similar.empty()) {
+        return *similar.begin();
+    }
+#endif
+    return nullptr;
+}
+
 RirUID RirUIDPool::getHash(SEXP sexp) {
 #ifdef DO_INTERN
     if (hashes.count(sexp)) {

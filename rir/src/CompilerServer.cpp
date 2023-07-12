@@ -41,6 +41,7 @@ void CompilerServer::tryRun() {
 #endif
         return;
     }
+    const char* failSlow = getenv("PIR_FAIL_SLOW");
 
     // initialize the zmq context
     zmq::context_t context(
@@ -239,11 +240,24 @@ void CompilerServer::tryRun() {
 
             // Get SEXP
             SEXP what = RirUIDPool::get(hash);
+            SEXP whatAny = what ? what : RirUIDPool::getAny(hash.big);
 
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";
             if (what) {
                 std::cerr << what << std::endl;
+                Rf_PrintValue(what);
+                // Response data format =
+                //   Response::Retrieved
+                // + serialize(what)
+                response.putLong(Response::Retrieved);
+                serialize(what, response, true);
+            } else if (whatAny && failSlow) {
+                // Client will crash if we don't return anything, so right now
+                // we pretend we found it. Although this is a bug, and the SEXP
+                // is semantically different so the client will probably crash
+                // anyways...
+                std::cerr << "!! WARNING: there was no SEXP with that hash, but we found one with the big hash" << std::endl;
                 Rf_PrintValue(what);
                 // Response data format =
                 //   Response::Retrieved

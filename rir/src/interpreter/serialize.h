@@ -60,6 +60,8 @@ bool useHashes(R_outpstream_t out);
 bool useHashes(R_inpstream_t in);
 /// If true we're hashing, otherwise we're actually serializing
 bool isHashing(R_outpstream_t out);
+/// If true we're hashing, and only hashing the immutable parts of an SEXP
+bool isOnlyBigHashing(R_outpstream_t out);
 /// If true we're hashing, and only hashing the semantics-altering mutable parts
 /// of an SEXP
 bool isOnlySmallHashing(R_outpstream_t out);

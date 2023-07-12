@@ -1,4 +1,5 @@
 #include "DispatchTable.h"
+#include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 
 namespace rir {
