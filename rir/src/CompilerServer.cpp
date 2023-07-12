@@ -258,12 +258,12 @@ void CompilerServer::tryRun() {
                 // is semantically different so the client will probably crash
                 // anyways...
                 std::cerr << "!! WARNING: there was no SEXP with that hash, but we found one with the big hash" << std::endl;
-                Rf_PrintValue(what);
+                Rf_PrintValue(whatAny);
                 // Response data format =
                 //   Response::Retrieved
-                // + serialize(what)
+                // + serialize(whatAny)
                 response.putLong(Response::Retrieved);
-                serialize(what, response, true);
+                serialize(whatAny, response, true);
             } else {
                 std::cerr << "(not found)" << std::endl;
                 // Response data format =

@@ -214,6 +214,8 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         OutInteger(out, getEntry(2) != nullptr);
         if (getEntry(2))
             RirUIDPool::writeItem(getEntry(2), refTable, out);
+    });
+    NO_HASH({
         if (includeFunction) {
             RirUIDPool::writeItem(function()->container(), refTable, out);
         }
