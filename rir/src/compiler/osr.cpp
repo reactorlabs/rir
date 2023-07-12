@@ -4,6 +4,7 @@
 #include "compiler/compiler.h"
 #include "pir/deopt_context.h"
 #include "pir/pir_impl.h"
+#include "runtime/DispatchTable.h"
 
 namespace rir {
 namespace pir {
@@ -30,6 +31,9 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
         [&]() { std::cerr << "Continuation compilation failed\n"; });
 
     delete module;
+
+    auto dt = DispatchTable::unpack(BODY(closure));
+    fun->dispatchTable(dt);
 
     return fun;
 }
