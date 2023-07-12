@@ -7,6 +7,7 @@
 #include "bc/BC_inc.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "hash/RirUIDPool.h"
+#include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"

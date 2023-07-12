@@ -4,6 +4,7 @@
 #include "Rinternals.h"
 #include "compiler/compiler.h"
 #include "hash/RirUIDPool.h"
+#include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 #include "runtime/TypeFeedback.h"
 

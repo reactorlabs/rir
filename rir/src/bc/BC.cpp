@@ -1,16 +1,13 @@
 #include "BC.h"
-#include "R/Funtab.h"
 #include "R/Printing.h"
-#include "R/RList.h"
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "bc/CodeStream.h"
+#include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
-#include "hash/RirUID.h"
 
 #include <iomanip>
-#include <iostream>
 
 namespace rir {
 

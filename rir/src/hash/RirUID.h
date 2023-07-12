@@ -6,13 +6,6 @@
 
 #include "hash/UUID.h"
 
-// TODO: Actually change the hasher within code, so that BIG_HASH will not run
-//  when small hashing, SMALL_HASH will hash to the semantics-altering mutable
-//  part when big hashing, and NO_HASH will skip hashing entirely
-#define BIG_HASH(code) do { if (!isOnlySmallHashing(out)) code } while (0)
-#define SMALL_HASH(code) do { if (!isOnlySmallHashing(out)) code } while (0)
-#define NO_HASH(code) do { if (!isOnlySmallHashing(out)) code } while (0)
-
 namespace rir {
 
 /// A unique identifier for a rir object.
