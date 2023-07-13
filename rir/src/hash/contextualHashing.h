@@ -28,11 +28,8 @@ smallHash(R_outpstream_t out, SEXP refTable,
     // Big hashing = don't add to hash, but do add to worklist
     // Small hashing or regular serialization = run normally
     if (isOnlyBigHashing(out)) {
-        if (connected(out)) {
-            auto nullOut = nullOutputStream();
-            code(&nullOut, PROTECT(copyRefTable(refTable)));
-            UNPROTECT(1);
-        }
+        auto nullOut = nullOutputStream();
+        code(&nullOut, refTable);
     } else {
         code(out, refTable);
     }
@@ -44,11 +41,8 @@ noHash(R_outpstream_t out, SEXP refTable,
     // Big hashing = don't add to hash, but do add to worklist
     // Small hashing = skip (there's never a worklist with small hashing)
     if (isHashing(out)) {
-        if (connected(out)) {
-            auto nullOut = nullOutputStream();
-            code(&nullOut, PROTECT(copyRefTable(refTable)));
-            UNPROTECT(1);
-        }
+        auto nullOut = nullOutputStream();
+        code(&nullOut, refTable);
     } else {
         code(out, refTable);
     }
