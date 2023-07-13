@@ -21,7 +21,6 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
-#include <cstdint>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -1388,13 +1387,13 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
-                          baseline, false)
+                          false)
         .tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
-                          baseline, true)
+                          true)
         .tryTranslate(srcCode, insert);
 }
 

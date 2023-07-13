@@ -3,7 +3,6 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-#include "builtins.h"
 #include "compiler/analysis/reference_count.h"
 #include "compiler/native/allocator.h"
 #include "compiler/native/builtins.h"
@@ -24,7 +23,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstdlib>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GlobalObject.h>
@@ -6261,7 +6259,7 @@ void LowerFunctionLLVM::compile() {
             auto i = var.first;
             if (Rep::Of(i) != Rep::SEXP)
                 continue;
-            if (!i->typeFeedback().feedbackOrigin.function())
+            if (!i->typeFeedback().feedbackOrigin.isValid())
                 continue;
             if (!var.second.initialized)
                 continue;

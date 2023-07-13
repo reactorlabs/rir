@@ -4,6 +4,7 @@
 #include "R/Preserve.h"
 #include "compiler/log/log.h"
 #include "pir/pir.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/FormalArgs.h"
 
 #include <list>
@@ -58,7 +59,7 @@ class Compiler {
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const Context& ctx, bool root, MaybeCls success,
                         Maybe fail, std::list<PirTypeFeedback*> outerFeedback,
-                        rir::DispatchTable* table);
+                        rir::TypeFeedback& typeFeedback);
 
     Preserve preserve_;
 

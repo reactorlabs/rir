@@ -206,7 +206,6 @@ struct DispatchTable
         PROTECT(table->container());
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
-        // FIXME: feedback
         for (size_t i = 0; i < table->size(); i++) {
             table->setEntry(i,
                             Function::deserialize(refTable, inp)->container());
@@ -218,7 +217,6 @@ struct DispatchTable
     void serialize(SEXP refTable, R_outpstream_t out) const {
         HashAdd(container(), refTable);
         OutInteger(out, 1);
-        // FIXME: feedback
         baseline()->serialize(refTable, out);
     }
 
