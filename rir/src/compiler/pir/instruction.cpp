@@ -1019,10 +1019,11 @@ bool Deopt::hasDeoptReason() const {
     return deoptReason() != DeoptReasonWrapper::unknown();
 }
 
-Record::Record(rir::TypeFeedbackKind kind, uint32_t idx)
+Record::Record(rir::TypeFeedback* feedback, rir::TypeFeedbackKind kind,
+               uint32_t idx)
     : FixedLenInstruction(PirType::voyd(), {{PirType::any()}},
                           {{UnknownDeoptTrigger::instance()}}),
-      kind(kind), idx(idx) {}
+      feedback(feedback), kind(kind), idx(idx) {}
 
 Value* Record::getValue() const { return arg<0>().val(); }
 void Record::setValue(Value* value) { arg<0>().val() = value; }
@@ -1040,7 +1041,7 @@ void Record::printArgs(std::ostream& out, bool tty) const {
         break;
     }
 
-    out << "#" << idx << " ";
+    out << "#" << idx << " (" << feedback << ") ";
 
     getValue()->printRef(out);
 }

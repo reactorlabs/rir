@@ -38,8 +38,8 @@ struct ObservedCallees {
     std::array<unsigned, MaxTargets> targets;
 
     void record(Code* caller, SEXP callee, bool invalidateWhenFull = false);
-    SEXP getTarget(const Code* code, size_t pos) const;
-    void print(std::ostream& out, const Code* code) const;
+    SEXP getTarget(const Function* function, size_t pos) const;
+    void print(std::ostream& out, const Function* function) const;
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
@@ -154,7 +154,7 @@ struct FeedbackOrigin {
     FeedbackOrigin() {}
     FeedbackOrigin(rir::Function* fun, uint32_t idx);
 
-    bool isValid() const { return function_ != nullptr; }
+    bool isValid() const;
     TypeFeedbackSlot* slot() const;
     uint32_t idx() const { return idx_; }
     Function* function() const { return function_; }
@@ -324,6 +324,8 @@ class TypeFeedback {
     void print(std::ostream& out) const;
 
     void record(uint32_t idx, SEXP callee);
+
+    uint32_t size() const { return slots_.size(); }
 };
 
 #pragma pack(pop)

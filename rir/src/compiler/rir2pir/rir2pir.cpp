@@ -378,7 +378,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* target = top();
 
         if (baseline) {
-            auto rec = insert(new Record(rir::TypeFeedbackKind::Test, idx));
+            auto feedback = &srcCode->function()->typeFeedback();
+            auto rec =
+                insert(new Record(feedback, rir::TypeFeedbackKind::Test, idx));
             rec->setValue(target);
         } else {
             auto& feedback = typeFeedback.test(idx);
@@ -413,7 +415,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* target = top();
 
         if (baseline) {
-            auto rec = insert(new Record(rir::TypeFeedbackKind::Type, idx));
+            auto feedback = &srcCode->function()->typeFeedback();
+            auto rec =
+                insert(new Record(feedback, rir::TypeFeedbackKind::Type, idx));
             rec->setValue(target);
         } else {
             auto& feedback = typeFeedback.types(idx);
@@ -457,7 +461,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* target = top();
 
         if (baseline) {
-            auto rec = insert(new Record(rir::TypeFeedbackKind::Call, idx));
+            auto feedback = &srcCode->function()->typeFeedback();
+            auto rec =
+                insert(new Record(feedback, rir::TypeFeedbackKind::Call, idx));
             rec->setValue(target);
         } else {
             const auto& feedback = typeFeedback.callees(bc.immediate.i);
@@ -490,7 +496,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (feedback.numTargets == 1) {
                     assert(!feedback.invalid &&
                            "feedback can't be invalid if numTargets is 1");
-                    f.monomorphic = feedback.getTarget(srcCode, 0);
+                    f.monomorphic = feedback.getTarget(srcCode->function(), 0);
                     f.type = TYPEOF(f.monomorphic);
                     f.stableEnv = true;
                 } else if (feedback.numTargets > 1) {
@@ -499,7 +505,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     bool stableBody = !feedback.invalid;
                     bool stableEnv = !feedback.invalid;
                     for (size_t i = 0; i < feedback.numTargets; ++i) {
-                        SEXP b = feedback.getTarget(srcCode, i);
+                        SEXP b = feedback.getTarget(srcCode->function(), i);
                         if (!first) {
                             first = b;
                         } else {
@@ -524,7 +530,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                         d->callTargetTrigger();
                                     for (size_t i = 0; i < feedback.numTargets;
                                          ++i) {
-                                        SEXP b = feedback.getTarget(srcCode, i);
+                                        SEXP b = feedback.getTarget(
+                                            srcCode->function(), i);
                                         if (b != deoptCallTarget)
                                             deoptedCallTargets.insert(b);
                                     }

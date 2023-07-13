@@ -957,41 +957,29 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(rir::Code* code, uint32_t idx, SEXP value) {
+void recordTypefeedbackImpl(rir::TypeFeedback* typeFeedback, uint32_t idx,
+                            SEXP value) {
     // we cannot pass the feedback directly because the call to this builtin is
     // generated from places that do not have access to the feedback vector
-    auto dt = code->function()->dispatchTable();
-    auto baseline = dt->baseline();
-    auto& slot = baseline->typeFeedback()[idx];
+    typeFeedback->record(idx, value);
 
-    switch (slot.kind) {
-    case TypeFeedbackKind::Call: {
-        auto& feedback = slot.callees();
-        feedback.record(baseline->body(), value);
-        break;
-    }
-    case TypeFeedbackKind::Test: {
-        auto& feedback = slot.test();
-        feedback.record(value);
-        break;
-    }
-    case TypeFeedbackKind::Type: {
+    auto& slot = (*typeFeedback)[idx];
+    if (slot.kind == TypeFeedbackKind::Type) {
         auto& feedback = slot.type();
-        feedback.record(value);
 
         if (TYPEOF(value) == PROMSXP) {
             if (PRVALUE(value) == R_UnboundValue &&
-                feedback.stateBeforeLastForce < ObservedValues::promise)
+                feedback.stateBeforeLastForce < ObservedValues::promise) {
                 feedback.stateBeforeLastForce = ObservedValues::promise;
-            else if (feedback.stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
+            } else if (feedback.stateBeforeLastForce <
+                       ObservedValues::evaluatedPromise) {
                 feedback.stateBeforeLastForce =
                     ObservedValues::evaluatedPromise;
+            }
         } else {
             if (feedback.stateBeforeLastForce < ObservedValues::value)
                 feedback.stateBeforeLastForce = ObservedValues::value;
         }
-    }
     }
 }
 
