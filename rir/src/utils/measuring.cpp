@@ -47,7 +47,7 @@ struct MeasuringImpl {
     TimePoint end;
     size_t threshold = 0;
     const unsigned width = 40;
-    const unsigned maxTimedEventsToPrint = 10000;
+    const unsigned maxTimedEventsToPrint = 1000;
     bool shouldOutput = false;
 
     MeasuringImpl() : start(std::chrono::high_resolution_clock::now()) {}
@@ -132,7 +132,9 @@ struct MeasuringImpl {
                     << (totalTimedEventsDuration.count() / totalLifetime.count() * 100) << "%):\n";
                 out << "  Super sums ordered by duration:\n";
                 size_t totalCount = 0;
-                for (auto& t : timedEventSuperSumsOrderedByDuration) {
+                for (auto it = timedEventSuperSumsOrderedByDuration.rbegin();
+                     it != timedEventSuperSumsOrderedByDuration.rend(); ++it) {
+                    auto& t = *it;
                     auto& name = std::get<0>(t.second);
                     auto count = std::get<1>(t.second);
                     auto duration = t.first;
@@ -147,7 +149,9 @@ struct MeasuringImpl {
                 out << "  Sums ordered by duration:\n";
                 std::unordered_set<SEXP> printedAssociateds;
                 totalCount = 0;
-                for (auto& t : timedEventSumsOrderedByDuration) {
+                for (auto it = timedEventSumsOrderedByDuration.rbegin();
+                     it != timedEventSumsOrderedByDuration.rend(); ++it) {
+                    auto& t = *it;
                     auto& name = std::get<0>(t.second);
                     auto& associated = std::get<1>(t.second);
                     auto count = std::get<2>(t.second);
