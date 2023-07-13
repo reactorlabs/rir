@@ -147,10 +147,9 @@ namespace pir {
 Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                  const std::string& name,
                  const std::list<PirTypeFeedback*>& outerFeedback,
-                 rir::TypeFeedback& typeFeedback, bool baseline)
+                 rir::TypeFeedback& typeFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
-      outerFeedback(outerFeedback), typeFeedback(typeFeedback),
-      baseline(baseline) {
+      outerFeedback(outerFeedback), typeFeedback(typeFeedback) {
     if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
         this->outerFeedback.push_back(
             cls->optFunction->body()->pirTypeFeedback());
@@ -375,82 +374,64 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::record_test_: {
         uint32_t idx = bc.immediate.i;
-        Value* target = top();
+        auto& feedback = typeFeedback.test(idx);
 
-        if (baseline) {
-            auto feedback = &srcCode->function()->typeFeedback();
-            auto rec =
-                insert(new Record(feedback, rir::TypeFeedbackKind::Test, idx));
-            rec->setValue(target);
-        } else {
-            auto& feedback = typeFeedback.test(idx);
-
-            if (feedback.seen == ObservedTest::OnlyTrue ||
-                feedback.seen == ObservedTest::OnlyFalse) {
-                if (auto i = Instruction::Cast(at(0))) {
-                    auto v = feedback.seen == ObservedTest::OnlyTrue
-                                 ? (Value*)True::instance()
-                                 : (Value*)False::instance();
-                    if (!i->typeFeedback().value) {
-                        auto& t = i->updateTypeFeedback();
-                        t.value = v;
-                        t.feedbackOrigin =
-                            FeedbackOrigin(srcCode->function(), idx);
-                    } else if (i->typeFeedback().value != v) {
-                        i->updateTypeFeedback().value = nullptr;
-                    }
+        if (feedback.seen == ObservedTest::OnlyTrue ||
+            feedback.seen == ObservedTest::OnlyFalse) {
+            if (auto i = Instruction::Cast(at(0))) {
+                auto v = feedback.seen == ObservedTest::OnlyTrue
+                             ? (Value*)True::instance()
+                             : (Value*)False::instance();
+                if (!i->typeFeedback().value) {
+                    auto& t = i->updateTypeFeedback();
+                    t.value = v;
+                    t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+                } else if (i->typeFeedback().value != v) {
+                    i->updateTypeFeedback().value = nullptr;
                 }
-            } else if (feedback.seen == ObservedTest::None) {
-                // To communicate to the backend that feedback is missing that
-                // should still be collected.
-                if (auto i = Instruction::Cast(at(0)))
-                    i->updateTypeFeedback();
             }
+        } else if (feedback.seen == ObservedTest::None) {
+            // To communicate to the backend that feedback is missing that
+            // should still be collected.
+            if (auto i = Instruction::Cast(at(0)))
+                i->updateTypeFeedback();
         }
         break;
     }
 
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
-        Value* target = top();
+        auto& feedback = typeFeedback.types(idx);
 
-        if (baseline) {
-            auto feedback = &srcCode->function()->typeFeedback();
-            auto rec =
-                insert(new Record(feedback, rir::TypeFeedbackKind::Type, idx));
-            rec->setValue(target);
-        } else {
-            auto& feedback = typeFeedback.types(idx);
-            if (auto i = Instruction::Cast(at(0))) {
-                // Search for the most specific feedback for this location
-                for (auto fb : outerFeedback) {
-                    bool found = false;
-                    // TODO: implement with a find method on register map
-                    fb->forEachSlot(
-                        [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
-                            found = true;
-                            auto origin = fb->rirIdx(i);
-                            if (origin == idx && mdEntry.readyForReopt) {
-                                feedback = mdEntry.feedback;
-                            }
-                        });
-                    if (found)
-                        break;
+        if (auto i = Instruction::Cast(at(0))) {
+            // Search for the most specific feedback for this location
+            for (auto fb : outerFeedback) {
+                bool found = false;
+                // TODO: implement with a find method on register map
+                fb->forEachSlot(
+                    [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
+                        found = true;
+                        auto origin = fb->rirIdx(i);
+                        if (origin == idx && mdEntry.readyForReopt) {
+                            feedback = mdEntry.feedback;
+                        }
+                    });
+                if (found)
+                    break;
+            }
+            // TODO: deal with multiple locations
+            auto& t = i->updateTypeFeedback();
+            t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+            if (feedback.numTypes) {
+                t.type.merge(feedback);
+                if (auto force = Force::Cast(i)) {
+                    force->observed = static_cast<Force::ArgumentKind>(
+                        feedback.stateBeforeLastForce);
                 }
-                // TODO: deal with multiple locations
-                auto& t = i->updateTypeFeedback();
-                t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
-                if (feedback.numTypes) {
-                    t.type.merge(feedback);
-                    if (auto force = Force::Cast(i)) {
-                        force->observed = static_cast<Force::ArgumentKind>(
-                            feedback.stateBeforeLastForce);
-                    }
-                } else if (t.type.isVoid() &&
-                           (!insert.function->optFunction->isOptimized() ||
-                            insert.function->optFunction->deoptCount() == 0)) {
-                    t.type = PirType::val().notObject().fastVecelt();
-                }
+            } else if (t.type.isVoid() &&
+                       (!insert.function->optFunction->isOptimized() ||
+                        insert.function->optFunction->deoptCount() == 0)) {
+                t.type = PirType::val().notObject().fastVecelt();
             }
         }
         break;
@@ -460,108 +441,96 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         uint32_t idx = bc.immediate.i;
         Value* target = top();
 
-        if (baseline) {
-            auto feedback = &srcCode->function()->typeFeedback();
-            auto rec =
-                insert(new Record(feedback, rir::TypeFeedbackKind::Call, idx));
-            rec->setValue(target);
-        } else {
-            const auto& feedback = typeFeedback.callees(bc.immediate.i);
+        const auto& feedback = typeFeedback.callees(bc.immediate.i);
 
-            if (!inPromise() && !inlining() && feedback.taken == 0 &&
-                insert.function->optFunction->invocationCount() > 1 &&
-                srcCode->function()->deadCallReached() < 3) {
-                // If this call was never executed we might as well compile an
-                // unconditional deopt.
-                auto sp =
-                    insert.registerFrameState(srcCode, pos, stack, inPromise());
+        if (!inPromise() && !inlining() && feedback.taken == 0 &&
+            insert.function->optFunction->invocationCount() > 1 &&
+            srcCode->function()->deadCallReached() < 3) {
+            // If this call was never executed we might as well compile an
+            // unconditional deopt.
+            auto sp =
+                insert.registerFrameState(srcCode, pos, stack, inPromise());
 
-                DeoptReason reason =
-                    DeoptReason(FeedbackOrigin(srcCode->function(), idx),
-                                DeoptReason::DeadCall);
+            DeoptReason reason =
+                DeoptReason(FeedbackOrigin(srcCode->function(), idx),
+                            DeoptReason::DeadCall);
 
-                auto d = insert(new Deopt(sp));
-                d->setDeoptReason(compiler.module->deoptReasonValue(reason),
-                                  target);
-                stack.clear();
-            } else if (auto i = Instruction::Cast(target)) {
-                // See if the call feedback suggests a monomorphic target
-                // TODO: Deopts in promises are not supported by the promise
-                // inliner. So currently it does not pay off to put any deopts
-                // in there.
-                //
-                auto& f = i->updateCallFeedback();
-                f.taken = feedback.taken;
-                f.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
-                if (feedback.numTargets == 1) {
-                    assert(!feedback.invalid &&
-                           "feedback can't be invalid if numTargets is 1");
-                    f.monomorphic = feedback.getTarget(srcCode->function(), 0);
-                    f.type = TYPEOF(f.monomorphic);
-                    f.stableEnv = true;
-                } else if (feedback.numTargets > 1) {
-                    SEXP first = nullptr;
-                    bool stableType = !feedback.invalid;
-                    bool stableBody = !feedback.invalid;
-                    bool stableEnv = !feedback.invalid;
-                    for (size_t i = 0; i < feedback.numTargets; ++i) {
-                        SEXP b = feedback.getTarget(srcCode->function(), i);
-                        if (!first) {
-                            first = b;
+            auto d = insert(new Deopt(sp));
+            d->setDeoptReason(compiler.module->deoptReasonValue(reason),
+                              target);
+            stack.clear();
+        } else if (auto i = Instruction::Cast(target)) {
+            // See if the call feedback suggests a monomorphic target
+            // TODO: Deopts in promises are not supported by the promise
+            // inliner. So currently it does not pay off to put any deopts
+            // in there.
+            //
+            auto& f = i->updateCallFeedback();
+            f.taken = feedback.taken;
+            f.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+            if (feedback.numTargets == 1) {
+                assert(!feedback.invalid &&
+                       "feedback can't be invalid if numTargets is 1");
+                f.monomorphic = feedback.getTarget(srcCode->function(), 0);
+                f.type = TYPEOF(f.monomorphic);
+                f.stableEnv = true;
+            } else if (feedback.numTargets > 1) {
+                SEXP first = nullptr;
+                bool stableType = !feedback.invalid;
+                bool stableBody = !feedback.invalid;
+                bool stableEnv = !feedback.invalid;
+                for (size_t i = 0; i < feedback.numTargets; ++i) {
+                    SEXP b = feedback.getTarget(srcCode->function(), i);
+                    if (!first) {
+                        first = b;
+                    } else {
+                        if (TYPEOF(b) != TYPEOF(first))
+                            stableType = stableBody = stableEnv = false;
+                        else if (TYPEOF(b) == CLOSXP) {
+                            if (BODY(first) != BODY(b))
+                                stableBody = false;
+                            if (CLOENV(first) != CLOENV(b))
+                                stableEnv = false;
                         } else {
-                            if (TYPEOF(b) != TYPEOF(first))
-                                stableType = stableBody = stableEnv = false;
-                            else if (TYPEOF(b) == CLOSXP) {
-                                if (BODY(first) != BODY(b))
-                                    stableBody = false;
-                                if (CLOENV(first) != CLOENV(b))
-                                    stableEnv = false;
-                            } else {
-                                stableBody = stableEnv = false;
-                            }
+                            stableBody = stableEnv = false;
                         }
                     }
+                }
 
-                    if (auto c = cls->isContinuation()) {
-                        if (auto d = c->continuationContext->asDeoptContext()) {
-                            if (d->reason().reason == DeoptReason::CallTarget) {
-                                if (d->reason().origin.idx() == idx) {
-                                    auto deoptCallTarget =
-                                        d->callTargetTrigger();
-                                    for (size_t i = 0; i < feedback.numTargets;
-                                         ++i) {
-                                        SEXP b = feedback.getTarget(
-                                            srcCode->function(), i);
-                                        if (b != deoptCallTarget)
-                                            deoptedCallTargets.insert(b);
-                                    }
-                                    if (feedback.numTargets == 2) {
-                                        assert(
-                                            !feedback.invalid &&
-                                            "Feedback should not be invalid");
-                                        first = deoptCallTarget;
-                                        stableBody = stableEnv = stableType =
-                                            true;
-                                        if (TYPEOF(deoptCallTarget) == CLOSXP &&
-                                            !isValidClosureSEXP(
-                                                deoptCallTarget))
-                                            rir::Compiler::compileClosure(
-                                                deoptCallTarget);
-                                        deoptedCallReplacement =
-                                            deoptCallTarget;
-                                    }
+                if (auto c = cls->isContinuation()) {
+                    if (auto d = c->continuationContext->asDeoptContext()) {
+                        if (d->reason().reason == DeoptReason::CallTarget) {
+                            if (d->reason().origin.idx() == idx) {
+                                auto deoptCallTarget = d->callTargetTrigger();
+                                for (size_t i = 0; i < feedback.numTargets;
+                                     ++i) {
+                                    SEXP b = feedback.getTarget(
+                                        srcCode->function(), i);
+                                    if (b != deoptCallTarget)
+                                        deoptedCallTargets.insert(b);
+                                }
+                                if (feedback.numTargets == 2) {
+                                    assert(!feedback.invalid &&
+                                           "Feedback should not be invalid");
+                                    first = deoptCallTarget;
+                                    stableBody = stableEnv = stableType = true;
+                                    if (TYPEOF(deoptCallTarget) == CLOSXP &&
+                                        !isValidClosureSEXP(deoptCallTarget))
+                                        rir::Compiler::compileClosure(
+                                            deoptCallTarget);
+                                    deoptedCallReplacement = deoptCallTarget;
                                 }
                             }
                         }
                     }
-
-                    if (stableType)
-                        f.type = TYPEOF(first);
-                    if (stableBody)
-                        f.monomorphic = first;
-                    if (stableEnv)
-                        f.stableEnv = true;
                 }
+
+                if (stableType)
+                    f.type = TYPEOF(first);
+                if (stableBody)
+                    f.monomorphic = first;
+                if (stableEnv)
+                    f.stableEnv = true;
             }
         }
         break;

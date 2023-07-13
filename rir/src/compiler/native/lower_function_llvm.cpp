@@ -3597,17 +3597,6 @@ void LowerFunctionLLVM::compile() {
                 break;
             }
 
-            case Tag::Record: {
-                auto rec = Record::Cast(i);
-
-                call(
-                    NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
-                    {convertToPointer(rec->feedback, t::i8, true), c(rec->idx),
-                     loadSxp(rec->arg(0).val())});
-
-                break;
-            }
-
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(i);
                 auto parent = loadSxp(mkenv->env());

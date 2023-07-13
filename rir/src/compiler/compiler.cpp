@@ -91,8 +91,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
     auto& typeFeedback = tbl->baseline()->typeFeedback();
-    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback,
-                    tbl->size() == 1);
+    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
         log.flush();
@@ -148,7 +147,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto& log = logger.open(version);
     auto& typeFeedback = table->baseline()->typeFeedback();
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
-                    typeFeedback, table->size() == 1);
+                    typeFeedback);
 
     auto& context = version->context();
     bool failedToCompileDefaultArgs = false;

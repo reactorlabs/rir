@@ -123,7 +123,6 @@
     V(Names)                                                                   \
     V(SetNames)                                                                \
     V(PirCopy)                                                                 \
-    V(Nop)                                                                     \
-    V(Record)
+    V(Nop)
 
 #endif

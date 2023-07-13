@@ -2716,21 +2716,6 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class Record
-    : public FixedLenInstruction<Tag::Record, Record, 1, Effects::AnyI(),
-                                 HasEnvSlot::No, Controlflow::None> {
-  public:
-    rir::TypeFeedback* feedback;
-    rir::TypeFeedbackKind kind;
-    uint32_t idx;
-
-    explicit Record(rir::TypeFeedback* feedback, rir::TypeFeedbackKind kind,
-                    unsigned idx);
-    Value* getValue() const;
-    void setValue(Value* callee);
-    void printArgs(std::ostream& out, bool tty) const override;
-};
-
 /*
  * if the test fails, jump to the deopt branch of the checkpoint.
  */

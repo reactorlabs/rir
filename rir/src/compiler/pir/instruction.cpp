@@ -1019,33 +1019,6 @@ bool Deopt::hasDeoptReason() const {
     return deoptReason() != DeoptReasonWrapper::unknown();
 }
 
-Record::Record(rir::TypeFeedback* feedback, rir::TypeFeedbackKind kind,
-               uint32_t idx)
-    : FixedLenInstruction(PirType::voyd(), {{PirType::any()}},
-                          {{UnknownDeoptTrigger::instance()}}),
-      feedback(feedback), kind(kind), idx(idx) {}
-
-Value* Record::getValue() const { return arg<0>().val(); }
-void Record::setValue(Value* value) { arg<0>().val() = value; }
-
-void Record::printArgs(std::ostream& out, bool tty) const {
-    switch (kind) {
-    case TypeFeedbackKind::Test:
-        out << "test";
-        break;
-    case TypeFeedbackKind::Call:
-        out << "call";
-        break;
-    case TypeFeedbackKind::Type:
-        out << "type";
-        break;
-    }
-
-    out << "#" << idx << " (" << feedback << ") ";
-
-    getValue()->printRef(out);
-}
-
 MkCls::MkCls(Closure* cls, SEXP formals, SEXP srcRef,
              DispatchTable* originalBody, Value* lexicalEnv)
     : FixedLenInstructionWithEnvSlot(PirType::closure(), lexicalEnv), cls(cls),
