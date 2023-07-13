@@ -22,8 +22,6 @@ class Compiler {
     SEXP formals;
     SEXP closureEnv;
 
-    unsigned recordCallsSize;
-
     Preserve preserve;
 
     TypeFeedback::Builder typeFeedbackBuilder;
