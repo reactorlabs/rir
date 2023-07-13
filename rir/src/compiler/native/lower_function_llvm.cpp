@@ -3602,7 +3602,8 @@ void LowerFunctionLLVM::compile() {
 
                 call(
                     NativeBuiltins::get(NativeBuiltins::Id::recordTypefeedback),
-                    {paramCode(), c(rec->idx), loadSxp(rec->arg(0).val())});
+                    {convertToPointer(rec->feedback, t::i8, true), c(rec->idx),
+                     loadSxp(rec->arg(0).val())});
 
                 break;
             }
@@ -6132,19 +6133,28 @@ void LowerFunctionLLVM::compile() {
 
             // For OSR-in try to collect more typefeedback for the part of the
             // code that was not yet executed.
+            // FIXME: is this correct? the feedbackOrigin index?
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback()) {
-                    call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
-                         {paramCode(),
-                          c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
+                    auto& origin = i->typeFeedback().feedbackOrigin;
+                    if (origin.isValid()) {
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::recordTypefeedback),
+                             {convertToPointer(
+                                  &origin.function()->typeFeedback(), t::i8,
+                                  true),
+                              c(origin.idx()), load(i)});
+                    }
                 }
                 if (i->hasCallFeedback()) {
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),
-                         {paramCode(),
+                         {convertToPointer(&i->callFeedback()
+                                                .feedbackOrigin.function()
+                                                ->typeFeedback(),
+                                           t::i8, true),
                           c(i->typeFeedback().feedbackOrigin.idx()), load(i)});
                 }
             }

@@ -32,9 +32,9 @@ void ObservedCallees::record(Code* caller, SEXP callee,
     }
 }
 
-SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
+SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
     assert(pos < numTargets);
-    return code->getExtraPoolEntry(targets[pos]);
+    return function->body()->getExtraPoolEntry(targets[pos]);
 }
 
 FeedbackOrigin::FeedbackOrigin(rir::Function* function, uint32_t idx)
@@ -87,7 +87,7 @@ void DeoptReason::record(SEXP val) const {
     }
 }
 
-void ObservedCallees::print(std::ostream& out, const Code* code) const {
+void ObservedCallees::print(std::ostream& out, const Function* function) const {
     out << "callees: ";
     if (taken == ObservedCallees::CounterOverflow)
         out << "*, <";
@@ -102,7 +102,7 @@ void ObservedCallees::print(std::ostream& out, const Code* code) const {
     out << (numTargets ? ", " : " ");
 
     for (unsigned i = 0; i < numTargets; ++i) {
-        auto target = getTarget(code, i);
+        auto target = getTarget(function, i);
         out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
     }
 }
@@ -170,7 +170,7 @@ void TypeFeedbackSlot::print(std::ostream& out,
                              const Function* function) const {
     switch (kind) {
     case TypeFeedbackKind::Call:
-        feedback_.callees.print(out, function->body());
+        feedback_.callees.print(out, function);
         break;
     case TypeFeedbackKind::Test:
         feedback_.test.print(out);
@@ -182,7 +182,8 @@ void TypeFeedbackSlot::print(std::ostream& out,
 }
 
 void TypeFeedback::print(std::ostream& out) const {
-    std::cout << "== type feedback ==" << std::endl;
+    std::cout << "== type feedback " << this << " (fun " << owner_
+              << ") ==" << std::endl;
     int i = 0;
     for (auto& slot : slots_) {
         out << "#" << i++ << ": ";
@@ -213,5 +214,8 @@ TypeFeedbackSlot* FeedbackOrigin::slot() const {
     } else {
         return nullptr;
     }
+}
+bool FeedbackOrigin::isValid() const {
+    return function_ != nullptr && function_->typeFeedback().size() > idx_;
 }
 } // namespace rir
