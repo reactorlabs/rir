@@ -10,7 +10,6 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback.h"
-#include "types_llvm.h"
 #include "utils/Pool.h"
 
 #include "R/Protect.h"
@@ -24,7 +23,6 @@
 
 #include "llvm/IR/Attributes.h"
 
-#include <cstdint>
 #include <random>
 
 namespace rir {
@@ -2017,8 +2015,7 @@ SEXP subassign22iiiImpl(SEXP vec, int idx1, int idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)
-                [n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
+                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
@@ -2079,8 +2076,7 @@ SEXP subassign22rriImpl(SEXP vec, double idx1, double idx2, int val, SEXP env,
         }
         if (TYPEOF(vec) == REALSXP) {
             if (pos1 < n.row && pos2 < n.col) {
-                REAL(vec)
-                [n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
+                REAL(vec)[n.row * pos2 + pos1] = val == NA_INTEGER ? NAN : val;
                 UNPROTECT(prot);
                 return vec;
             }
