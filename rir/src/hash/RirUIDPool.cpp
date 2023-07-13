@@ -2,14 +2,15 @@
 // Created by Jakob Hain on 6/1/23.
 //
 
+#include "RirUIDPool.h"
 #include "CompilerClient.h"
 #include "CompilerServer.h"
 #include "R/SerialAst.h"
 #include "R/Serialize.h"
-#include "RirUIDPool.h"
 #include "api.h"
 #include "interpreter/serialize.h"
 #include "runtime/DispatchTable.h"
+#include "utils/measuring.h"
 #include <queue>
 
 #define DEBUG_DISASSEMBLY
@@ -18,6 +19,10 @@
 #define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt
 
 namespace rir {
+
+bool PIR_MEASURE_INTERNING =
+    getenv("PIR_MEASURE_INTERNING") != nullptr &&
+    strtol(getenv("PIR_MEASURE_INTERNING"), nullptr, 10);
 
 std::unordered_map<UUID, SmallSet<SEXP>> RirUIDPool::interned;
 std::unordered_map<SEXP, UUID> RirUIDPool::hashes;
@@ -79,137 +84,140 @@ void RirUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    assert(internable(e));
-    (void)expectHashToBeTheSame;
+    return Measuring::timeEventIf<SEXP>(PIR_MEASURE_INTERNING, "specific intern", e, [&] {
+        assert(internable(e));
+        (void)expectHashToBeTheSame;
 
 #ifdef DO_INTERN
-    PROTECT(e);
-    SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
-               "SEXP hash isn't deterministic or `hash` in `RirUIDPool::intern(e, hash)` is wrong");
-    UNPROTECT(1);
-    auto& similar = interned[hash.big];
-    auto existing = std::find_if(similar.begin(), similar.end(), smallHashEq(hash.small));
-    if (existing != similar.end()) {
-        // Reuse interned SEXP
-        if (!hashes.count(e)) {
-            // This SEXP is structurally-equivalent to the interned SEXP but not
-            // the same (different pointers), so we must still record it.
-            // Since we are using SmallSet, we can insert it after and then it
-            // will only be used if the previous SEXP changes its RirUID or gets
-            // gcd and uninterned.
-            LOG(std::cout << "Reuse intern: " << hash << " -> " << e << "\n");
-            similar.insert(e);
-            hashes[e] = hash.big;
-            if (!preserve) {
-                registerFinalizerIfPossible(e, uninternGcd);
+        PROTECT(e);
+        SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
+                   "SEXP hash isn't deterministic or `hash` in `RirUIDPool::intern(e, hash)` is wrong");
+        UNPROTECT(1);
+        auto& similar = interned[hash.big];
+        auto existing = std::find_if(similar.begin(), similar.end(),
+                                     smallHashEq(hash.small));
+        if (existing != similar.end()) {
+            // Reuse interned SEXP
+            if (!hashes.count(e)) {
+                // This SEXP is structurally-equivalent to the interned SEXP but not the same (different pointers), so we must still record it. Since we are using SmallSet, we can insert it after and then it will only be used if the previous SEXP changes its RirUID or gets gcd and uninterned.
+                LOG(std::cout << "Reuse intern: " << hash << " -> " << e
+                              << "\n");
+                similar.insert(e);
+                hashes[e] = hash.big;
+                if (!preserve) {
+                    registerFinalizerIfPossible(e, uninternGcd);
+                }
             }
+            e = *existing;
+            if (preserve && !preserved.count(e)) {
+                // Hashing with preserve and this interned SEXP wasn't yet preserved
+                R_PreserveObject(e);
+                preserved.insert(e);
+            }
+            return e;
         }
-        e = *existing;
-        if (preserve && !preserved.count(e)) {
-            // Hashing with preserve and this interned SEXP wasn't yet preserved
+
+        // Intern new SEXP
+#ifdef DEBUG_DISASSEMBLY
+        if (expectHashToBeTheSame) {
+            if (DispatchTable::check(e)) {
+                auto dt = DispatchTable::unpack(e);
+                std::stringstream s;
+                dt->print(s, true);
+                disassembly[hash.big] = s.str();
+            } else if (Function::check(e)) {
+                auto fun = Function::unpack(e);
+                if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
+                    std::cerr << "Tried to serialize function during its construction: "
+                              << e << "\n";
+                    Rf_PrintValue(e);
+                    assert(false);
+                }
+                std::stringstream s;
+                fun->print(s, true);
+                disassembly[hash.big] = s.str();
+            } else if (Code::check(e)) {
+                auto code = Code::unpack(e);
+                std::stringstream s;
+                code->print(s, true);
+                disassembly[hash.big] = s.str();
+            }
+        } else {
+            disassembly[hash.big] =
+                "(recursively interned, can't debug this way)";
+        }
+#endif
+
+        // Sanity check in case the big UUID changed
+        if (hashes.count(e) && hashes.at(e) != hash.big) {
+            std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
+                      << hash.big << ": " << e << "\n";
+            Rf_PrintValue(e);
+
+#ifdef DEBUG_DISASSEMBLY
+            auto oldDisassembly = disassembly[hashes.at(e)];
+            auto newDisassembly = disassembly[hash.big];
+            if (oldDisassembly != newDisassembly) {
+                std::cerr << "note: disassembly changed from:\n"
+                          << oldDisassembly << "\nto:\n"
+                          << newDisassembly << "\n";
+            } else {
+                std::cerr << "note: disassembly:\n" << oldDisassembly << "\n";
+            }
+#endif
+
+            assert(false);
+        }
+
+        // Do intern
+        LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
+        similar.insert(e);
+        hashes[e] = hash.big;
+
+        // Preserve or register finalizer
+        if (preserve) {
             R_PreserveObject(e);
             preserved.insert(e);
-        }
-        return e;
-    }
-
-    // Intern new SEXP
-#ifdef DEBUG_DISASSEMBLY
-    if (expectHashToBeTheSame) {
-        if (DispatchTable::check(e)) {
-            auto dt = DispatchTable::unpack(e);
-            std::stringstream s;
-            dt->print(s, true);
-            disassembly[hash.big] = s.str();
-        } else if (Function::check(e)) {
-            auto fun = Function::unpack(e);
-            if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
-                std::cerr
-                    << "Tried to serialize function during its construction: "
-                    << e << "\n";
-                Rf_PrintValue(e);
-                assert(false);
-            }
-            std::stringstream s;
-            fun->print(s, true);
-            disassembly[hash.big] = s.str();
-        } else if (Code::check(e)) {
-            auto code = Code::unpack(e);
-            std::stringstream s;
-            code->print(s, true);
-            disassembly[hash.big] = s.str();
-        }
-    } else {
-        disassembly[hash.big] = "(recursively interned, can't debug this way)";
-    }
-#endif
-
-    // Sanity check in case the big UUID changed
-    if (hashes.count(e) && hashes.at(e) != hash.big) {
-        std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
-                  << hash.big << ": " << e << "\n";
-        Rf_PrintValue(e);
-
-#ifdef DEBUG_DISASSEMBLY
-        auto oldDisassembly = disassembly[hashes.at(e)];
-        auto newDisassembly = disassembly[hash.big];
-        if (oldDisassembly != newDisassembly) {
-            std::cerr << "note: disassembly changed from:\n" << oldDisassembly
-                      << "\nto:\n" << newDisassembly << "\n";
         } else {
-            std::cerr << "note: disassembly:\n" << oldDisassembly << "\n";
+            registerFinalizerIfPossible(e, uninternGcd);
         }
 #endif
 
-        assert(false);
-    }
-
-    // Do intern
-    LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
-    similar.insert(e);
-    hashes[e] = hash.big;
-
-    // Preserve or register finalizer
-    if (preserve) {
-        R_PreserveObject(e);
-        preserved.insert(e);
-    } else {
-        registerFinalizerIfPossible(e, uninternGcd);
-    }
-#endif
-
-    return e;
+        return e;
+    });
 }
 
 SEXP RirUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
-    if (hashes.count(e) && !recursive) {
-        // Already interned, don't compute hash
-        if (preserve && !preserved.count(e)) {
-            R_PreserveObject(e);
-            preserved.insert(e);
-        }
-        return e;
-    }
-    if (recursive) {
-        ConnectedWorklist connected;
-        // Compute hash, whether internable or not, to add connected objects
-        // which are internable to connected
-        // cppcheck-suppress unreadVariable
-        auto hash = hashSexp(e, connected);
-        auto ret = internable(e) ? intern(e, hash, preserve) : e;
-        while ((e = connected.pop())) {
-            assert(internable(e));
-            if (hashes.count(e)) {
-                continue;
+    return Measuring::timeEventIf<SEXP>(PIR_MEASURE_INTERNING, "intern", e, [&] {
+        if (hashes.count(e) && !recursive) {
+            // Already interned, don't compute hash
+            if (preserve && !preserved.count(e)) {
+                R_PreserveObject(e);
+                preserved.insert(e);
             }
-
-            intern(e, hashSexp(e), preserve);
+            return e;
         }
-        return ret;
-    } else {
-        return internable(e) ? intern(e, hashSexp(e), preserve) : e;
-    }
+        if (recursive) {
+            ConnectedWorklist connected;
+            // Compute hash, whether internable or not, to add connected objects
+            // which are internable to connected
+            // cppcheck-suppress unreadVariable
+            auto hash = hashSexp(e, connected);
+            auto ret = internable(e) ? intern(e, hash, preserve) : e;
+            while ((e = connected.pop())) {
+                assert(internable(e));
+                if (hashes.count(e)) {
+                    continue;
+                }
+
+                intern(e, hashSexp(e), preserve);
+            }
+            return ret;
+        } else {
+            return internable(e) ? intern(e, hashSexp(e), preserve) : e;
+        }
+    });
 #else
     return e;
 #endif

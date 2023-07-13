@@ -8,6 +8,8 @@
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "utils/measuring.h"
+#include <sstream>
 
 namespace rir {
 
@@ -18,6 +20,9 @@ unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
 bool pir::Parameter::DEBUG_SERIALIZE_LLVM =
     RIR_PRESERVE ||
     (getenv("DEBUG_SERIALIZE_LLVM") != nullptr && strtol(getenv("DEBUG_SERIALIZE_LLVM"), nullptr, 10));
+bool PIR_MEASURE_SERIALIZATION =
+    getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
+    strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
 // This is a magic constant in custom-r/src/main/saveload.c:defaultSaveVersion
 static const int R_STREAM_DEFAULT_VERSION = 3;
@@ -45,7 +50,9 @@ template <typename CLS>
 static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
         OutInteger(out, b->info.magic);
-        b->serialize(refTable, out);
+        Measuring::timeEventIf(PIR_MEASURE_SERIALIZATION, "serialize", s, [&]{
+            b->serialize(refTable, out);
+        });
         return true;
     } else {
         return false;
