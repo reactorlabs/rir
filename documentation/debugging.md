@@ -57,6 +57,12 @@ complete.
     PIR_MEASURE_COMPILER_BACKEND=
         1          print overall time spend in different phases in the backend
 
+    PIR_MEASURE_SERIALIZATION=
+        1          print detailed report on time spend in serialization
+
+    PIR_MEASURE_INTERNING=
+        1          print detailed report on time spend in interning
+
 #### Controlling compilation
 
     PIR_ENABLE=
