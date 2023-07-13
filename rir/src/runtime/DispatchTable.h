@@ -6,6 +6,7 @@
 #include "RirRuntimeObject.h"
 #include "TypeFeedback.h"
 #include "utils/random.h"
+#include <ostream>
 
 namespace rir {
 
@@ -93,6 +94,7 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        f->dispatchTable(this);
     }
 
     bool contains(const Context& assumptions) const {
@@ -241,6 +243,47 @@ struct DispatchTable
 
     Context combineContextWith(Context anotherContext) {
         return userDefinedContext_ | anotherContext;
+    }
+
+    void print(std::ostream& out, bool verbose) const {
+        std::cout << "== dispatch table " << this << " ==\n";
+
+        baseline()->typeFeedback().print(std::cout);
+
+        for (size_t entry = 0; entry < size(); ++entry) {
+            Function* f = get(entry);
+            std::cout << "= version " << entry << " (" << f << ") =\n";
+            f->disassemble(std::cout);
+        }
+
+        if (verbose) {
+            auto code = baseline()->body();
+            auto pc = code->code();
+            auto notified = false;
+
+            Opcode* prev = NULL;
+            Opcode* pprev = NULL;
+
+            while (pc < code->endCode()) {
+                auto bc = BC::decode(pc, code);
+                if (bc.bc == Opcode::close_) {
+                    if (!notified) {
+                        out << "== nested closures ==\n";
+                        notified = true;
+                    }
+
+                    // prev is the push_ of srcref
+                    // pprev is the push_ of body
+                    auto body = BC::decodeShallow(pprev).immediateConst();
+                    auto dt = DispatchTable::unpack(body);
+                    dt->print(std::cout, verbose);
+                    break;
+                }
+                pprev = prev;
+                prev = pc;
+                pc = bc.next(pc);
+            }
+        }
     }
 
   private:
