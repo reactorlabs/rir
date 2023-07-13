@@ -4,6 +4,7 @@
 
 #include "api.h"
 #include "R/Serialize.h"
+#include "Rinternals.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"
 #include "compiler/backend.h"
@@ -56,16 +57,9 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     if (!t)
         Rf_error("Not a rir compiled code (CLOSXP but not DispatchTable)");
 
-    std::cout << "== closure " << what << " (dispatch table " << t << ", env "
-              << CLOENV(what) << ") ==\n";
+    std::cout << "== closure " << what << " (env " << CLOENV(what) << ") ==\n";
 
-    t->baseline()->typeFeedback().print(std::cout);
-
-    for (size_t entry = 0; entry < t->size(); ++entry) {
-        Function* f = t->get(entry);
-        std::cout << "= version " << entry << " (" << f << ") =\n";
-        f->disassemble(std::cout);
-    }
+    t->print(std::cout, Rf_asLogical(verbose));
 
     return R_NilValue;
 }
