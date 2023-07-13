@@ -323,7 +323,7 @@ class TypeFeedback {
 
     void print(std::ostream& out) const;
 
-    void record(uint32_t idx, SEXP callee);
+    TypeFeedbackSlot& record(uint32_t idx, SEXP callee);
 
     uint32_t size() const { return slots_.size(); }
 };

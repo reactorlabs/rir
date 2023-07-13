@@ -405,6 +405,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     }
 
     log.finalPIR();
+    // the type feedback is only used at the baseline
     function.finalize(body, signature, cls->context(),
                       rir::TypeFeedback::empty());
     for (auto& c : done)

@@ -959,11 +959,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
 void recordTypefeedbackImpl(rir::TypeFeedback* typeFeedback, uint32_t idx,
                             SEXP value) {
-    // we cannot pass the feedback directly because the call to this builtin is
-    // generated from places that do not have access to the feedback vector
-    typeFeedback->record(idx, value);
+    auto& slot = typeFeedback->record(idx, value);
 
-    auto& slot = (*typeFeedback)[idx];
     if (slot.kind == TypeFeedbackKind::Type) {
         auto& feedback = slot.type();
 

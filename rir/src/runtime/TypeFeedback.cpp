@@ -6,7 +6,6 @@
 #include "runtime/Function.h"
 
 #include <cassert>
-#include <cstdint>
 #include <ostream>
 #include <vector>
 
@@ -192,20 +191,22 @@ void TypeFeedback::print(std::ostream& out) const {
     }
 }
 
-void TypeFeedback::record(unsigned idx, SEXP value) {
-    assert(idx < slots_.size());
+TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
+    auto& slot = slots_[idx];
 
     switch (slots_[idx].kind) {
     case TypeFeedbackKind::Call:
-        slots_[idx].callees().record(owner_->body(), value);
+        slot.callees().record(owner_->body(), value);
         break;
     case TypeFeedbackKind::Test:
-        slots_[idx].test().record(value);
+        slot.test().record(value);
         break;
     case TypeFeedbackKind::Type:
-        slots_[idx].type().record(value);
+        slot.type().record(value);
         break;
     }
+
+    return slot;
 }
 
 TypeFeedbackSlot* FeedbackOrigin::slot() const {

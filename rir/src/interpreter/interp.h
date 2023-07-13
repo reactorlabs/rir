@@ -89,7 +89,6 @@ inline bool RecompileHeuristic(Function* fun,
     return false;
 }
 
-// FIXME: remove the table parameter?
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||

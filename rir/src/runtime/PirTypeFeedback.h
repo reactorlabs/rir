@@ -5,7 +5,6 @@
 #include "compiler/pir/type.h"
 #include "runtime/TypeFeedback.h"
 
-#include <cstdint>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>

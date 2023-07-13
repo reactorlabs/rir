@@ -10,15 +10,11 @@
 #include "api.h"
 #include "compiler/analysis/cfg.h"
 #include "runtime/DispatchTable.h"
-#include "runtime/TypeFeedback.h"
-#include "singleton_values.h"
-#include "type.h"
 #include "utils/Pool.h"
 #include "utils/Terminal.h"
 
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -215,7 +211,7 @@ void Instruction::print(std::ostream& out, bool tty) const {
             typeFeedback().value->printRef(out);
         else if (!typeFeedback().type.isVoid())
             out << typeFeedback().type;
-        if (!typeFeedback().feedbackOrigin.function())
+        if (!typeFeedback().feedbackOrigin.isValid())
             out << "@?";
         out << ">";
     }

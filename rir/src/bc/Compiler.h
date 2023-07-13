@@ -65,7 +65,6 @@ class Compiler {
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
         dt->baseline(Function::unpack(res));
-        // dt->typeFeedback(c.typeFeedback());
 
         return dt->container();
     }

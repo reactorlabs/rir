@@ -21,7 +21,6 @@
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
-#include <cstdint>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -441,13 +440,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         uint32_t idx = bc.immediate.i;
         Value* target = top();
 
-        const auto& feedback = typeFeedback.callees(bc.immediate.i);
+        auto& feedback = typeFeedback.callees(bc.immediate.i);
 
+        // If this call was never executed we might as well compile an
+        // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
             insert.function->optFunction->invocationCount() > 1 &&
             srcCode->function()->deadCallReached() < 3) {
-            // If this call was never executed we might as well compile an
-            // unconditional deopt.
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
 
@@ -1357,13 +1356,13 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
-                          baseline, false)
+                          false)
         .tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
     return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
-                          baseline, true)
+                          true)
         .tryTranslate(srcCode, insert);
 }
 

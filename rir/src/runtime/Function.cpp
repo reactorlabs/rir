@@ -2,7 +2,6 @@
 #include "R/Serialize.h"
 #include "compiler/compiler.h"
 #include "runtime/TypeFeedback.h"
-#include <vector>
 
 namespace rir {
 
