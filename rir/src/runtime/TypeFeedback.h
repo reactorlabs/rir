@@ -58,7 +58,7 @@ struct ObservedTest {
 
     ObservedTest() : seen(0), unused(0) {}
 
-    inline void record(SEXP e) {
+    inline void record(const SEXP e) {
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
@@ -247,20 +247,11 @@ struct TypeFeedbackSlot {
 
     Feedback feedback_;
 
-    TypeFeedbackSlot(TypeFeedbackKind kind, Feedback feedback)
-        : feedback_(feedback), kind(kind) {}
-
   public:
-    TypeFeedbackSlot(ObservedCallees callees)
-        : feedback_({.callees = callees}), kind(TypeFeedbackKind::Call) {}
+    const TypeFeedbackKind kind;
 
-    TypeFeedbackSlot(ObservedTest test)
-        : feedback_({.test = test}), kind(TypeFeedbackKind::Test) {}
-
-    TypeFeedbackSlot(ObservedValues values)
-        : feedback_({.type = values}), kind(TypeFeedbackKind::Type) {}
-
-    TypeFeedbackKind kind;
+    TypeFeedbackSlot(TypeFeedbackKind kind, const Feedback&& feedback)
+        : feedback_(feedback), kind(kind) {}
 
     void print(std::ostream& out, const Function* function) const;
 
@@ -289,7 +280,8 @@ class TypeFeedback {
     Function* owner_;
     FeedbackSlots slots_;
 
-    TypeFeedback(FeedbackSlots&& slots) : owner_(nullptr), slots_(slots) {}
+    explicit TypeFeedback(FeedbackSlots&& slots)
+        : owner_(nullptr), slots_(slots) {}
 
   public:
     static TypeFeedback empty() { return TypeFeedback({}); }
@@ -300,17 +292,20 @@ class TypeFeedback {
 
       public:
         uint32_t addCallee() {
-            slots_.push_back(ObservedCallees());
+            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Call,
+                                              {.callees = ObservedCallees()}));
             return slots_.size() - 1;
         }
 
         uint32_t addTest() {
-            slots_.push_back(ObservedTest());
+            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Test,
+                                              {.test = ObservedTest()}));
             return slots_.size() - 1;
         }
 
         uint32_t addType() {
-            slots_.push_back(ObservedValues());
+            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Type,
+                                              {.type = ObservedValues()}));
             return slots_.size() - 1;
         }
 

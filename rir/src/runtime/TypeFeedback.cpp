@@ -123,10 +123,16 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
 
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto size = InInteger(inp);
+
     std::vector<TypeFeedbackSlot> slots;
     slots.reserve(size);
+
+    auto slot(TypeFeedbackSlot(TypeFeedbackKind::Call,
+                               {.callees = ObservedCallees()}));
+
     for (auto i = 0; i < size; ++i) {
-        InBytes(inp, &slots[i], sizeof(TypeFeedbackSlot));
+        InBytes(inp, &slot, sizeof(TypeFeedbackSlot));
+        slots.emplace_back(slot);
     }
 
     return new TypeFeedback(std::move(slots));
