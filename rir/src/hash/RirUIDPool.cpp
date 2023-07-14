@@ -8,6 +8,7 @@
 #include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "api.h"
+#include "compiler/parameter.h"
 #include "interpreter/serialize.h"
 #include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
@@ -20,7 +21,7 @@
 
 namespace rir {
 
-bool PIR_MEASURE_INTERNING =
+bool pir::Parameter::PIR_MEASURE_INTERNING =
     getenv("PIR_MEASURE_INTERNING") != nullptr &&
     strtol(getenv("PIR_MEASURE_INTERNING"), nullptr, 10);
 
@@ -84,7 +85,7 @@ void RirUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    return Measuring::timeEventIf<SEXP>(PIR_MEASURE_INTERNING, "specific intern", e, [&] {
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "specific intern", e, [&] {
         assert(internable(e));
         (void)expectHashToBeTheSame;
 
@@ -189,7 +190,7 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
 
 SEXP RirUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
-    return Measuring::timeEventIf<SEXP>(PIR_MEASURE_INTERNING, "intern", e, [&] {
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "intern", e, [&] {
         if (hashes.count(e) && !recursive) {
             // Already interned, don't compute hash
             if (preserve && !preserved.count(e)) {
