@@ -5,10 +5,12 @@
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
+#include "compiler/parameter.h"
 #include "hash/RirUIDPool.h"
 #include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
+#include "utils/measuring.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
 #include <llvm/Support/Errno.h>
@@ -199,58 +201,73 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     // Header
     SMALL_HASH({
-        src_pool_write_item(src, refTable, out);
-        OutInteger(out, trivialExpr != nullptr);
-        if (trivialExpr)
-            RirUIDPool::writeItem(trivialExpr, refTable, out);
-        OutInteger(out, (int)stackLength);
-        OutInteger(out, (int)localsCount);
-        OutInteger(out, (int)bindingCacheSize);
-        OutInteger(out, (int)codeSize);
-        OutInteger(out, (int)srcLength);
-        OutInteger(out, (int)extraPoolSize);
-
-        RirUIDPool::writeItem(getEntry(0), refTable, out);
-        OutInteger(out, getEntry(2) != nullptr);
-        if (getEntry(2))
-            RirUIDPool::writeItem(getEntry(2), refTable, out);
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code source", container(), [&]{
+            src_pool_write_item(src, refTable, out);
+            OutInteger(out, trivialExpr != nullptr);
+            if (trivialExpr)
+                RirUIDPool::writeItem(trivialExpr, refTable, out);
+        });
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code numbers", container(), [&]{
+            OutInteger(out, (int)stackLength);
+            OutInteger(out, (int)localsCount);
+            OutInteger(out, (int)bindingCacheSize);
+            OutInteger(out, (int)codeSize);
+            OutInteger(out, (int)srcLength);
+            OutInteger(out, (int)extraPoolSize);
+        });
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code extra pool", container(), [&]{
+            RirUIDPool::writeItem(getEntry(0), refTable, out);
+        });
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code call argument reordering metadata", container(), [&]{
+            OutInteger(out, getEntry(2) != nullptr);
+            if (getEntry(2))
+                RirUIDPool::writeItem(getEntry(2), refTable, out);
+        });
     });
-    NO_HASH({
-        if (includeFunction) {
-            RirUIDPool::writeItem(function()->container(), refTable, out);
-        }
-    });
-
-    // Bytecode
-    BC::serialize(refTable, out, code(), codeSize, this);
-
-    // Srclist
-    BIG_HASH({
-        for (unsigned i = 0; i < srcLength; i++) {
-            OutInteger(out, (int)srclist()[i].pcOffset);
-            src_pool_write_item(srclist()[i].srcIdx, refTable, out);
-        }
-    });
-
-    // Native code
-    SMALL_HASH({
-        OutInteger(out, (int)kind);
-        assert((isHashing(out) || !pendingCompilation()) &&
-               "TODO handle pending code being serialized. It's in a state we "
-               "can't really deserialize from, so we want to just not "
-               "serialize in this situation if possible (via the "
-               "DispatchTable). Otherwise idk");
-        if (kind == Kind::Native &&
-            !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
-            assert(lazyCodeHandle[0] != '\0');
-            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-            OutInteger(out, lazyCodeHandleLen);
-            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-            OutBool(out, lazyCodeModule != nullptr);
-            if (lazyCodeModule) {
-                lazyCodeModule->serialize(out);
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code outer function", container(), [&]{
+        NO_HASH({
+            if (includeFunction) {
+                RirUIDPool::writeItem(function()->container(), refTable, out);
             }
-        }
+        });
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code bytecode", container(), [&]{
+        // Bytecode
+        BC::serialize(refTable, out, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code srclist", container(), [&]{
+        // Srclist
+        BIG_HASH({
+            for (unsigned i = 0; i < srcLength; i++) {
+                OutInteger(out, (int)srclist()[i].pcOffset);
+                src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+            }
+        });
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code native", container(), [&]{
+        // Native code
+        SMALL_HASH({
+            OutInteger(out, (int)kind);
+            assert((isHashing(out) || !pendingCompilation()) &&
+                   "TODO handle pending code being serialized. It's in a state we "
+                   "can't really deserialize from, so we want to just not "
+                   "serialize in this situation if possible (via the "
+                   "DispatchTable). Otherwise idk");
+            if (kind == Kind::Native &&
+                !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
+                assert(lazyCodeHandle[0] != '\0');
+                auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+                OutInteger(out, lazyCodeHandleLen);
+                OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+                OutBool(out, lazyCodeModule != nullptr);
+                if (lazyCodeModule) {
+                    lazyCodeModule->serialize(out);
+                }
+            }
+        });
     });
 }
 

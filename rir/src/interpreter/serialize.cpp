@@ -20,7 +20,7 @@ unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
 bool pir::Parameter::DEBUG_SERIALIZE_LLVM =
     RIR_PRESERVE ||
     (getenv("DEBUG_SERIALIZE_LLVM") != nullptr && strtol(getenv("DEBUG_SERIALIZE_LLVM"), nullptr, 10));
-bool PIR_MEASURE_SERIALIZATION =
+bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
@@ -50,7 +50,7 @@ template <typename CLS>
 static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
         OutInteger(out, b->info.magic);
-        Measuring::timeEventIf(PIR_MEASURE_SERIALIZATION, "serialize", s, [&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize", s, [&]{
             b->serialize(refTable, out);
         });
         return true;

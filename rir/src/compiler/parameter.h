@@ -50,6 +50,9 @@ struct Parameter {
     /// Serialize LLVM bitcode. Enabled regardless of env var iff the compiler
     /// server is running.
     static bool DEBUG_SERIALIZE_LLVM;
+
+    static bool PIR_MEASURE_SERIALIZATION;
+    static bool PIR_MEASURE_INTERNING;
 };
 
 } // namespace pir
