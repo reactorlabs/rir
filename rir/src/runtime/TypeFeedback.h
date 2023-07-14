@@ -293,6 +293,7 @@ class TypeFeedback {
 
   public:
     static TypeFeedback empty() { return TypeFeedback({}); }
+    static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
         std::vector<TypeFeedbackSlot> slots_;
@@ -326,6 +327,7 @@ class TypeFeedback {
     TypeFeedbackSlot& record(uint32_t idx, SEXP callee);
 
     uint32_t size() const { return slots_.size(); }
+    void serialize(SEXP refTable, R_outpstream_t out) const;
 };
 
 #pragma pack(pop)

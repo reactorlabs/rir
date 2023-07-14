@@ -1,5 +1,6 @@
 #include "TypeFeedback.h"
 
+#include "R/Serialize.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "runtime/Code.h"
@@ -109,6 +110,26 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
 TypeFeedbackSlot& TypeFeedback::operator[](size_t idx) {
     assert(idx < slots_.size());
     return slots_[idx];
+}
+
+void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+    // assert(sizeof(TypeFeedbackSlot) % 4 == 0);
+
+    OutInteger(out, size());
+    for (auto& slot : slots_) {
+        OutBytes(out, &slot, sizeof(TypeFeedbackSlot));
+    }
+}
+
+TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+    auto size = InInteger(inp);
+    std::vector<TypeFeedbackSlot> slots;
+    slots.reserve(size);
+    for (auto i = 0; i < size; ++i) {
+        InBytes(inp, &slots[i], sizeof(TypeFeedbackSlot));
+    }
+
+    return new TypeFeedback(std::move(slots));
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {

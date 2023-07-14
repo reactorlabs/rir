@@ -11,7 +11,6 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
     void* payload = DATAPTR(store);
-    // FIXME: support type feedback deserialization
     Function* fun = new (payload)
         Function(functionSize, nullptr, {}, sig, as, TypeFeedback({}));
     fun->numArgs_ = InInteger(inp);
@@ -21,6 +20,9 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     }
     PROTECT(store);
     AddReadRef(refTable, store);
+    TypeFeedback* feedback = TypeFeedback::deserialize(refTable, inp);
+    feedback->owner_ = fun;
+    fun->typeFeedback_ = std::move(*feedback);
     SEXP body = Code::deserialize(refTable, inp)->container();
     fun->body(body);
     PROTECT(body);
@@ -40,12 +42,12 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
-    // FIXME: support type feedback deserialization
     OutInteger(out, size);
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
     HashAdd(container(), refTable);
+    typeFeedback_.serialize(refTable, out);
     body()->serialize(refTable, out);
     for (unsigned i = 0; i < numArgs_; i++) {
         Code* arg = defaultArg(i);
