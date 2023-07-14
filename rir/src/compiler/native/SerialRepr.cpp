@@ -295,7 +295,6 @@ static llvm::Value* patchSrcIdxMetadata(llvm::Module& mod,
     // TODO: Reuse index if it's already in the source pool
     //  (and maybe merge and refactor pools)
     auto i = src_pool_add(sexp);
-    Rf_PrintValue(sexp);
     return LowerFunctionLLVM::llvmSrcIdx(mod, i);
 }
 
