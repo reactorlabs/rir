@@ -289,7 +289,7 @@ class TypeFeedback {
     Function* owner_;
     FeedbackSlots slots_;
 
-    TypeFeedback(FeedbackSlots&& slots) : slots_(slots) {}
+    TypeFeedback(FeedbackSlots&& slots) : owner_(nullptr), slots_(slots) {}
 
   public:
     static TypeFeedback empty() { return TypeFeedback({}); }
