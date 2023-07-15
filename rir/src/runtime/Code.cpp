@@ -433,6 +433,8 @@ void Code::print(std::ostream& out, bool hashInfo) const {
     disassemble(out);
 
     if (hashInfo) {
+        out << "extra pool = \n" << Print::dumpSexp(getEntry(0), SIZE_MAX)
+            << "\n";
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
             << ", hash = " << hashAst(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
