@@ -2,6 +2,7 @@
 #include "compiler/parameter.h"
 #include "pass_definitions.h"
 
+#include <random>
 #include <regex>
 
 namespace rir {
@@ -131,11 +132,10 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
             add<CleanupFramestate>();
             add<CleanupCheckpoints>();
         }
-
-        nextPhase("Final", optLevel > 2 ? 120 : 0);
     }
 
     if (isFinal) {
+        nextPhase("Final", optLevel > 2 ? 120 : 0);
         // ==== Phase 4) Final round of default opts
         addDefaultOpt();
         add<ElideEnvSpec>();
@@ -157,5 +157,5 @@ void PassScheduler::nextPhase(const std::string& name, unsigned budget) {
     currentPhase->passes.push_back(
         std::unique_ptr<const Pass>(new PhaseMarker(name)));
 }
-}
-}
+} // namespace pir
+} // namespace rir
