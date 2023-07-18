@@ -269,10 +269,10 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             auto hash = hashSexp(e, connected);
             auto ret = internable(e) ? intern(e, hash, preserve) : e;
             while ((e = connected.pop())) {
-                assert(internable(e));
                 if (hashes.count(e)) {
                     continue;
                 }
+                assert(internable(e) && "connected object is not internable");
 
                 intern(e, hashSexp(e), preserve);
             }
@@ -430,5 +430,24 @@ void UUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
         writeItem(src, refTable, out);
     }
 }
+
+void ConnectedWorklist::insert(SEXP e) {
+    // It could get gcd before we get to it
+    R_PreserveObject(e);
+    seen.insert(e);
+}
+
+SEXP ConnectedWorklist::pop() {
+    auto it = seen.begin();
+    if (it == seen.end()) {
+        return nullptr;
+    }
+    SEXP e = *it;
+    seen.erase(it);
+    // At this point it won't get gcd before its used
+    R_ReleaseObject(e);
+    return e;
+}
+
 
 } // namespace rir

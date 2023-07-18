@@ -118,16 +118,8 @@ class ConnectedWorklist {
     std::unordered_set<SEXP> seen;
 
     friend class UUIDPool;
-    void insert(SEXP e) { seen.insert(e); }
-    SEXP pop() {
-        auto it = seen.begin();
-        if (it == seen.end()) {
-            return nullptr;
-        }
-        SEXP e = *it;
-        seen.erase(it);
-        return e;
-    }
+    void insert(SEXP e);
+    SEXP pop();
 };
 
 } // namespace rir
