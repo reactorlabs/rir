@@ -257,7 +257,7 @@ struct DispatchTable
         if (verbose) {
             auto code = baseline()->body();
             auto pc = code->code();
-            auto notified = false;
+            auto print_header = true;
 
             Opcode* prev = NULL;
             Opcode* pprev = NULL;
@@ -265,9 +265,9 @@ struct DispatchTable
             while (pc < code->endCode()) {
                 auto bc = BC::decode(pc, code);
                 if (bc.bc == Opcode::close_) {
-                    if (!notified) {
+                    if (print_header) {
                         out << "== nested closures ==\n";
-                        notified = true;
+                        print_header = false;
                     }
 
                     // prev is the push_ of srcref
@@ -275,7 +275,6 @@ struct DispatchTable
                     auto body = BC::decodeShallow(pprev).immediateConst();
                     auto dt = DispatchTable::unpack(body);
                     dt->print(std::cout, verbose);
-                    break;
                 }
                 pprev = prev;
                 prev = pc;

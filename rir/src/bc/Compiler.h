@@ -24,8 +24,6 @@ class Compiler {
 
     Preserve preserve;
 
-    TypeFeedback::Builder typeFeedbackBuilder;
-
     explicit Compiler(SEXP exp)
         : exp(exp), formals(R_NilValue), closureEnv(nullptr) {
         preserve(exp);

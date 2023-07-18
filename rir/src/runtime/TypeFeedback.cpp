@@ -127,8 +127,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     std::vector<TypeFeedbackSlot> slots;
     slots.reserve(size);
 
-    auto slot(TypeFeedbackSlot(TypeFeedbackKind::Call,
-                               {.callees = ObservedCallees()}));
+    auto slot = TypeFeedbackSlot::createCallees();
 
     for (auto i = 0; i < size; ++i) {
         InBytes(inp, &slot, sizeof(TypeFeedbackSlot));
@@ -194,7 +193,7 @@ void ObservedValues::print(std::ostream& out) const {
 
 void TypeFeedbackSlot::print(std::ostream& out,
                              const Function* function) const {
-    switch (kind) {
+    switch (kind_) {
     case TypeFeedbackKind::Call:
         feedback_.callees.print(out, function);
         break;
@@ -221,7 +220,7 @@ void TypeFeedback::print(std::ostream& out) const {
 TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
     auto& slot = slots_[idx];
 
-    switch (slots_[idx].kind) {
+    switch (slots_[idx].kind()) {
     case TypeFeedbackKind::Call:
         slot.callees().record(owner_->body(), value);
         break;
@@ -243,7 +242,28 @@ TypeFeedbackSlot* FeedbackOrigin::slot() const {
         return nullptr;
     }
 }
+
 bool FeedbackOrigin::isValid() const {
     return function_ != nullptr && function_->typeFeedback().size() > idx_;
 }
-} // namespace rir
+
+uint32_t TypeFeedback::Builder::addCallee() {
+    slots_.emplace_back(TypeFeedbackSlot::createCallees());
+    return slots_.size() - 1;
+}
+
+uint32_t TypeFeedback::Builder::addTest() {
+    slots_.emplace_back(TypeFeedbackSlot::createTest());
+    return slots_.size() - 1;
+}
+
+uint32_t TypeFeedback::Builder::addType() {
+    slots_.emplace_back(TypeFeedbackSlot::createType());
+    return slots_.size() - 1;
+}
+
+TypeFeedback TypeFeedback::Builder::build() {
+    return TypeFeedback(std::move(slots_));
+}
+
+TypeFeedback TypeFeedback::empty() { return TypeFeedback(FeedbackSlots()); }

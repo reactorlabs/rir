@@ -17,6 +17,7 @@ namespace rir {
 struct Code;
 struct Function;
 struct TypeFeedbackSlot;
+class TypeFeedback;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -237,6 +238,20 @@ static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
 
 enum class TypeFeedbackKind : uint8_t { Call, Test, Type };
 
+inline const char* kind_as_name(TypeFeedbackKind kind) {
+    switch (kind) {
+    case TypeFeedbackKind::Call:
+        return "Call";
+        break;
+    case TypeFeedbackKind::Test:
+        return "Test";
+        break;
+    case TypeFeedbackKind::Type:
+        return "Type";
+        break;
+    }
+}
+
 struct TypeFeedbackSlot {
   private:
     union Feedback {
@@ -245,30 +260,56 @@ struct TypeFeedbackSlot {
         ObservedTest test;
     };
 
+    const TypeFeedbackKind kind_;
     Feedback feedback_;
 
-  public:
-    const TypeFeedbackKind kind;
-
     TypeFeedbackSlot(TypeFeedbackKind kind, const Feedback&& feedback)
-        : feedback_(feedback), kind(kind) {}
+        : kind_(kind), feedback_(feedback) {
+        // std::cerr << "TypeFeedbackSlot   (" << kind_as_name(kind_) << ") "
+        //           << this << "\n";
+    }
 
-    void print(std::ostream& out, const Function* function) const;
+  public:
+    // TypeFeedbackSlot(const TypeFeedbackSlot& other)
+    //     : kind_(other.kind_), feedback_(other.feedback_) {
+    //     std::cerr << "TypeFeedbackSlot & (" << kind_as_name(kind_) << ") "
+    //               << this << " <- " << &other << "\n";
+    // }
+
+    // ~TypeFeedbackSlot();
+    static TypeFeedbackSlot createCallees() {
+        return TypeFeedbackSlot{TypeFeedbackKind::Call,
+                                Feedback{.callees = ObservedCallees()}};
+    }
+
+    static TypeFeedbackSlot createTest() {
+        return TypeFeedbackSlot{TypeFeedbackKind::Test,
+                                Feedback{.test = ObservedTest()}};
+    }
+
+    static TypeFeedbackSlot createType() {
+        return TypeFeedbackSlot{TypeFeedbackKind::Type,
+                                Feedback{.type = ObservedValues()}};
+    }
+
+    TypeFeedbackKind kind() { return kind_; }
 
     ObservedCallees& callees() {
-        assert(kind == TypeFeedbackKind::Call);
+        assert(kind_ == TypeFeedbackKind::Call);
         return feedback_.callees;
     }
 
     ObservedTest& test() {
-        assert(kind == TypeFeedbackKind::Test);
+        assert(kind_ == TypeFeedbackKind::Test);
         return feedback_.test;
     }
 
     ObservedValues& type() {
-        assert(kind == TypeFeedbackKind::Type);
+        assert(kind_ == TypeFeedbackKind::Type);
         return feedback_.type;
     }
+
+    void print(std::ostream& out, const Function* function) const;
 };
 
 class TypeFeedback {
@@ -281,35 +322,23 @@ class TypeFeedback {
     FeedbackSlots slots_;
 
     explicit TypeFeedback(FeedbackSlots&& slots)
-        : owner_(nullptr), slots_(slots) {}
+        : owner_(nullptr), slots_(std::move(slots)) {}
 
   public:
-    static TypeFeedback empty() { return TypeFeedback({}); }
+    static TypeFeedback empty();
     static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
         std::vector<TypeFeedbackSlot> slots_;
 
       public:
-        uint32_t addCallee() {
-            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Call,
-                                              {.callees = ObservedCallees()}));
-            return slots_.size() - 1;
-        }
+        Builder();
+        ~Builder();
 
-        uint32_t addTest() {
-            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Test,
-                                              {.test = ObservedTest()}));
-            return slots_.size() - 1;
-        }
-
-        uint32_t addType() {
-            slots_.push_back(TypeFeedbackSlot(TypeFeedbackKind::Type,
-                                              {.type = ObservedValues()}));
-            return slots_.size() - 1;
-        }
-
-        TypeFeedback build() { return TypeFeedback(std::move(slots_)); }
+        uint32_t addCallee();
+        uint32_t addTest();
+        uint32_t addType();
+        TypeFeedback build();
     };
 
     TypeFeedbackSlot& operator[](size_t idx);

@@ -2060,8 +2060,8 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    function.finalize(body, signature, Context(),
-                      ctx.typeFeedbackBuilder.build());
+    auto feedback = ctx.typeFeedbackBuilder.build();
+    function.finalize(body, signature, Context(), std::move(feedback));
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container());

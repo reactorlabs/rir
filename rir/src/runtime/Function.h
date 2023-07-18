@@ -195,10 +195,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
 
-    void typeFeedback(TypeFeedback&& typeFeedback) {
-        typeFeedback_ = std::move(typeFeedback);
-    }
-
     TypeFeedback& typeFeedback() { return typeFeedback_; }
 
   private:

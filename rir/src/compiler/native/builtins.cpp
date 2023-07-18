@@ -959,7 +959,7 @@ void recordTypefeedbackImpl(rir::TypeFeedback* typeFeedback, uint32_t idx,
                             SEXP value) {
     auto& slot = typeFeedback->record(idx, value);
 
-    if (slot.kind == TypeFeedbackKind::Type) {
+    if (slot.kind() == TypeFeedbackKind::Type) {
         auto& feedback = slot.type();
 
         if (TYPEOF(value) == PROMSXP) {
