@@ -18,6 +18,10 @@ size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY =
         ? strtol(getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
         : 1024 * 1024;
 
+bool pir::Parameter::PIR_MEASURE_CLIENT_SERVER =
+    getenv("PIR_MEASURE_CLIENT_SERVER") != nullptr &&
+    strtol(getenv("PIR_MEASURE_CLIENT_SERVER"), nullptr, 10);
+
 std::string printClosureVersionForCompilerServerComparison(pir::ClosureVersion* version) {
     std::stringstream pir;
     version->print(pir::DebugStyle::Standard, pir, false, false);
