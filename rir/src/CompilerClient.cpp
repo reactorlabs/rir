@@ -5,9 +5,8 @@
 #include "CompilerClient.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
-#include "hash/RirUID.h"
-#include "hash/RirUIDPool.h"
 #include "hash/UUID.h"
+#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
@@ -243,11 +242,11 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             std::string pirPrint;
             pirPrint.resize(pirPrintSize);
             response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            RirUID responseWhatHash;
+            UUID responseWhatHash;
             response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
             // Try to get hashed if we already have the compiled value
             // (unlikely but maybe possible)
-            SEXP responseWhat = RirUIDPool::get(responseWhatHash);
+            SEXP responseWhat = UUIDPool::get(responseWhatHash);
             if (!responseWhat) {
                 // Actually deserialize
                 responseWhat = deserialize(response, true, responseWhatHash);
@@ -258,7 +257,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
     return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
 }
 
-SEXP CompilerClient::retrieve(const rir::RirUID& hash) {
+SEXP CompilerClient::retrieve(const rir::UUID& hash) {
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {
             // Request data format =

@@ -4,7 +4,7 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
-#include "hash/RirUIDPool.h"
+#include "hash/UUIDPool.h"
 #include "utils/random.h"
 
 namespace rir {

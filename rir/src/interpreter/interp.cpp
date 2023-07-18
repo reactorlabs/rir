@@ -1016,7 +1016,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
 
-        if (fun->flags.contains(Function::DepromiseArgs)) {
+        if (fun->flags().contains(Function::DepromiseArgs)) {
             // Force arguments and depromise
             call.depromiseArgs();
         }
@@ -1897,13 +1897,13 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
         auto l = Rf_length(FRAME(env));
         auto dt = DispatchTable::check(BODY(callCtxt->callee));
         if (dt &&
-            !dt->baseline()->flags.includes(Function::Flag::NotOptimizable) &&
+            !dt->baseline()->flags().includes(Function::Flag::NotOptimizable) &&
             size <= (long)pir::ContinuationContext::MAX_STACK &&
             l <= (long)pir::ContinuationContext::MAX_ENV) {
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
             if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
                 PROTECT(fun->container());
-                dt->baseline()->flags.set(Function::Flag::MarkOpt);
+                dt->baseline()->setFlag(Function::Flag::MarkOpt);
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 auto res = nc(code, basePtr, env, callCtxt->callee);

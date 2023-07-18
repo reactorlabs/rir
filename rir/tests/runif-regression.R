@@ -16,4 +16,4 @@ for(type in c("Wichmann-Hill", "Marsaglia-Multicarry", "Super-Duper",
     s = s / runif(1)
 }
 print(s)
-# stopifnot(abs(s - 60127) < 0.1)
+stopifnot(abs(s - 60127) < 0.1)

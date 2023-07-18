@@ -486,7 +486,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
-            DispatchTable::check(dt)->baseline()->flags.set(
+            DispatchTable::check(dt)->baseline()->setFlag(
                 Function::InnerFunction);
             assert(TYPEOF(dt) == EXTERNALSXP);
             cs << BC::push(args[0]) << BC::push(dt) << BC::push(args[2])

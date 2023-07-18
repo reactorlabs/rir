@@ -41,7 +41,7 @@ bool InlineForcePromises::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (clsCallee) {
 
                     auto functionVersion = clsCallee->rirFunction();
-                    if (functionVersion->flags.contains(
+                    if (functionVersion->flags().contains(
                             rir::Function::Flag::DepromiseArgs)) {
 
                         call->eachCallArg([&](InstrArg& v) {

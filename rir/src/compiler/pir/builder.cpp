@@ -150,7 +150,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     std::vector<Value*> args(closure->nargs());
     size_t nargs = version->effectiveNArgs();
 
-    auto depromiseArgs = version->owner()->rirFunction()->flags.contains(
+    auto depromiseArgs = version->owner()->rirFunction()->flags().contains(
         rir::Function::Flag::DepromiseArgs);
 
     for (long i = nargs - 1; i >= 0; --i) {
@@ -170,7 +170,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     auto rirFun = version->owner()->rirFunction();
-    if (rirFun->flags.contains(rir::Function::NeedsFullEnv))
+    if (rirFun->flags().contains(rir::Function::NeedsFullEnv))
         mkenv->neverStub = true;
     mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirFun->body());
     add(mkenv);

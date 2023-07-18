@@ -6,7 +6,7 @@
 namespace rir {
 
 // Assumes all symbols are never freed (currently yes because they're in a pool,
-// and it makes sense since they're all AST nodes)
+// and it makes sense since they're all AST nodes that they're persistent)
 static std::unordered_map<SEXP, UUID> hashCache;
 
 inline static void serializeAstVector(UUID::Hasher& hasher, SEXP s, void (*serializeElem)(UUID::Hasher&, SEXP, int)) {

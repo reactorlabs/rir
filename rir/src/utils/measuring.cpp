@@ -69,9 +69,11 @@ struct MeasuringImpl {
         }
     }
 
-    void updateAssociatedDump(SEXP associated) {
+    void updateAssociatedDump(SEXP associated, bool associatedIsInitialized) {
         std::stringstream s;
-        if (auto d = DispatchTable::check(associated)) {
+        if (!associatedIsInitialized) {
+            s << "(not yet initialized)\n";
+        } else if (auto d = DispatchTable::check(associated)) {
             d->print(s, true);
         } else if (auto f = Function::check(associated)) {
             f->print(s, true);
@@ -305,9 +307,10 @@ Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name, SEX
     return new Measuring::TimingEvent{name, associated, start};
 }
 
-void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing) {
+void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing,
+                                bool associatedIsInitialized) {
     assert(timing);
-    m->updateAssociatedDump(timing->associated);
+    m->updateAssociatedDump(timing->associated, associatedIsInitialized);
     auto end = std::chrono::high_resolution_clock::now();
     MeasuringImpl::TimedEvent timed{timing->start, end};
     m->timedEvents[timing->name][timing->associated].push_back(timed);

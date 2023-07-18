@@ -128,50 +128,50 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
     Function* fun = dt->get(i);
     if (reopt != NA_LOGICAL) {
         if (reopt) {
-            fun->flags.set(Function::MarkOpt);
-            fun->flags.reset(Function::NotOptimizable);
+            fun->setFlag(Function::MarkOpt);
+            fun->resetFlag(Function::NotOptimizable);
         } else {
-            fun->flags.reset(Function::MarkOpt);
+            fun->resetFlag(Function::MarkOpt);
         }
     }
     if (forceInline != NA_LOGICAL) {
         if (forceInline)
-            fun->flags.set(Function::ForceInline);
+            fun->setFlag(Function::ForceInline);
         else
-            fun->flags.reset(Function::ForceInline);
+            fun->resetFlag(Function::ForceInline);
     }
     if (disableInline != NA_LOGICAL) {
         if (disableInline)
-            fun->flags.set(Function::DisableInline);
+            fun->setFlag(Function::DisableInline);
         else
-            fun->flags.reset(Function::DisableInline);
+            fun->resetFlag(Function::DisableInline);
     }
     if (disableSpecialization != NA_LOGICAL) {
         if (disableSpecialization)
-            fun->flags.set(Function::DisableAllSpecialization);
+            fun->setFlag(Function::DisableAllSpecialization);
         else
-            fun->flags.reset(Function::DisableAllSpecialization);
+            fun->resetFlag(Function::DisableAllSpecialization);
     }
     if (disableArgumentTypeSpecialization != NA_LOGICAL) {
         if (disableArgumentTypeSpecialization)
-            fun->flags.set(Function::DisableArgumentTypeSpecialization);
+            fun->setFlag(Function::DisableArgumentTypeSpecialization);
         else
-            fun->flags.reset(Function::DisableArgumentTypeSpecialization);
+            fun->resetFlag(Function::DisableArgumentTypeSpecialization);
     }
     if (disableNumArgumentSpecialization != NA_LOGICAL) {
         if (disableNumArgumentSpecialization)
-            fun->flags.set(Function::DisableNumArgumentsSpezialization);
+            fun->setFlag(Function::DisableNumArgumentsSpezialization);
         else
-            fun->flags.reset(Function::DisableNumArgumentsSpezialization);
+            fun->resetFlag(Function::DisableNumArgumentsSpezialization);
     }
 
     bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
     if (!DISABLE_ANNOTATIONS) {
         if (depromiseArgs != NA_LOGICAL) {
             if (depromiseArgs)
-                fun->flags.set(Function::DepromiseArgs);
+                fun->setFlag(Function::DepromiseArgs);
             else
-                fun->flags.reset(Function::DepromiseArgs);
+                fun->resetFlag(Function::DepromiseArgs);
         }
     }
 
@@ -639,6 +639,12 @@ REXPORT SEXP rirKillCompilerServers() {
         return R_NilValue;
     }
     CompilerClient::killServers();
+    return R_NilValue;
+}
+
+REXPORT SEXP initializeUUIDPool() {
+    UUIDPool::initialize();
+    R_Visible = (Rboolean)false;
     return R_NilValue;
 }
 

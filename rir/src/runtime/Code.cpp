@@ -6,8 +6,7 @@
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
-#include "hash/RirUIDPool.h"
-#include "hash/contextualHashing.h"
+#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
@@ -77,6 +76,7 @@ void Code::lazyCode(const std::string& handle, const SerialModuleRef& module) {
     assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
     strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH - 1);
     lazyCodeModule = module;
+    UUIDPool::reintern(container());
     if (module) {
         setLazyCodeModuleFinalizer();
     }
@@ -141,21 +141,21 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     code->src = src_pool_read_item(refTable, inp);
     bool hasTr = InInteger(inp);
     if (hasTr)
-        code->trivialExpr = RirUIDPool::readItem(refTable, inp);
+        code->trivialExpr = UUIDPool::readItem(refTable, inp);
     code->stackLength = InInteger(inp);
     *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
     *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = p(RirUIDPool::readItem(refTable, inp));
+    SEXP extraPool = p(UUIDPool::readItem(refTable, inp));
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        argReorder = p(RirUIDPool::readItem(refTable, inp));
+        argReorder = p(UUIDPool::readItem(refTable, inp));
     }
     if (!rirFunction) {
-        rirFunction = Function::unpack(p(RirUIDPool::readItem(refTable, inp)));
+        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
     }
 
     // Bytecode
@@ -194,42 +194,43 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 }
 
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
+    // We don't want to include the outer function in the hash, but we need to
+    //  add it to the connected worklist to recursively intern it. Otherwise we
+    //  will error when serializing them because we need the outer function's
+    //  hash
+    R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = isHashing(out) ? &nullOut : out;
+
     HashAdd(container(), refTable);
-    BIG_HASH({
-        OutInteger(out, (int)size());
-    });
+    OutInteger(out, (int)size());
 
     // Header
-    SMALL_HASH({
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code source", container(), [&]{
-            src_pool_write_item(src, refTable, out);
-            OutInteger(out, trivialExpr != nullptr);
-            if (trivialExpr)
-                RirUIDPool::writeItem(trivialExpr, refTable, out);
-        });
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code numbers", container(), [&]{
-            OutInteger(out, (int)stackLength);
-            OutInteger(out, (int)localsCount);
-            OutInteger(out, (int)bindingCacheSize);
-            OutInteger(out, (int)codeSize);
-            OutInteger(out, (int)srcLength);
-            OutInteger(out, (int)extraPoolSize);
-        });
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code extra pool", container(), [&]{
-            RirUIDPool::writeItem(getEntry(0), refTable, out);
-        });
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code call argument reordering metadata", container(), [&]{
-            OutInteger(out, getEntry(2) != nullptr);
-            if (getEntry(2))
-                RirUIDPool::writeItem(getEntry(2), refTable, out);
-        });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code source", container(), [&]{
+        src_pool_write_item(src, refTable, out);
+        OutInteger(out, trivialExpr != nullptr);
+        if (trivialExpr)
+            UUIDPool::writeItem(trivialExpr, refTable, out);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code numbers", container(), [&]{
+        OutInteger(out, (int)stackLength);
+        OutInteger(out, (int)localsCount);
+        OutInteger(out, (int)bindingCacheSize);
+        OutInteger(out, (int)codeSize);
+        OutInteger(out, (int)srcLength);
+        OutInteger(out, (int)extraPoolSize);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code extra pool", container(), [&]{
+        UUIDPool::writeItem(getEntry(0), refTable, out);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code call argument reordering metadata", container(), [&]{
+        OutInteger(out, getEntry(2) != nullptr);
+        if (getEntry(2))
+            UUIDPool::writeItem(getEntry(2), refTable, out);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code outer function", container(), [&]{
-        NO_HASH({
-            if (includeFunction) {
-                RirUIDPool::writeItem(function()->container(), refTable, out);
-            }
-        });
+        if (includeFunction) {
+            UUIDPool::writeItem(function()->container(), refTable, noHashOut);
+        }
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code bytecode", container(), [&]{
@@ -239,25 +240,19 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code srclist", container(), [&]{
         // Srclist
-        BIG_HASH({
-            for (unsigned i = 0; i < srcLength; i++) {
-                OutInteger(out, (int)srclist()[i].pcOffset);
-                src_pool_write_item(srclist()[i].srcIdx, refTable, out);
-            }
-        });
+        for (unsigned i = 0; i < srcLength; i++) {
+            OutInteger(out, (int)srclist()[i].pcOffset);
+            src_pool_write_item(srclist()[i].srcIdx, refTable, out);
+        }
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code native", container(), [&]{
-        // Native code
-        SMALL_HASH({
+    if (!isHashing(out)) {
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code native", container(), [&]{
+            // Native code
             OutInteger(out, (int)kind);
-            assert((isHashing(out) || !pendingCompilation()) &&
-                   "TODO handle pending code being serialized. It's in a state we "
-                   "can't really deserialize from, so we want to just not "
-                   "serialize in this situation if possible (via the "
-                   "DispatchTable). Otherwise idk");
-            if (kind == Kind::Native &&
-                !(isHashing(out) && lazyCodeHandle[0] == '\0')) {
+            assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
+                   "Code in bad pending state");
+            if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
                 assert(lazyCodeHandle[0] != '\0');
                 auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
                 OutInteger(out, lazyCodeHandleLen);
@@ -268,7 +263,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
                 }
             }
         });
-    });
+    }
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
