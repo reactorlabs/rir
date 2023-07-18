@@ -37,7 +37,7 @@ class PassesReport {
 
     void stop_pass_counter() {
         passes.back().exec_time =
-            start - std::chrono::high_resolution_clock::now();
+            std::chrono::high_resolution_clock::now() - start;
     }
 
     ~PassesReport() {
@@ -57,7 +57,7 @@ class PassesReport {
     }
 
     void dump(std::ostream& out) {
-        out << "pass,current_budget,iteration,phase,run\n";
+        out << "pass,current_budget,exec_time,iteration,phase,run\n";
         for (auto pass : passes) {
             out << pass.name << "," << pass.current_budget << ","
                 << pass.exec_time.count() << "," << pass.iteration << ","
