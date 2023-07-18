@@ -10,6 +10,7 @@
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
+#include "utils/measuring.h"
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
@@ -29,6 +30,10 @@ static int NUM_THREADS;
 thread_pool* threads;
 static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
+
+static const char* SENDING_REQUEST_TIMER_NAME = "CompilerClient.cpp: sending request";
+static const char* RECEIVING_RESPONSE_TIMER_NAME = "CompilerClient.cpp: receiving response";
+static const char* RETRIEVE_TIMER_NAME = "CompilerClient.cpp: retriving SEXP";
 
 static bool PIR_CLIENT_SKIP_DISCREPANCY_CHECK =
     getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK") != nullptr &&
@@ -129,6 +134,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
         makeRequest(request);
 
         if (request.size() >= PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY) {
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
             UUID requestHash = UUID::hash(request.data(), request.size());
             // Serialize the hash-only request
             // Request data format =
@@ -148,6 +154,8 @@ CompilerClient::Handle<T>* CompilerClient::request(
                               zmq::send_flags::none);
             auto hashOnlyRequestSize2 = hashOnlyRequest.size();
             assert(hashOnlyRequestSize == hashOnlyRequestSize2);
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
             // Wait for the response
             zmq::message_t hashOnlyResponse;
             socket->recv(hashOnlyResponse, zmq::recv_flags::none);
@@ -156,6 +164,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             //   Response::NeedsFull
             // | from makeResponse()
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
             auto hashOnlyResponseMagic = hashOnlyResponseBuffer.getLong();
             if (hashOnlyResponseMagic != Response::NeedsFull) {
                 hashOnlyResponseBuffer.setReadPos(0);
@@ -165,6 +174,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
 
         // Send the request
         std::cerr << "Socket " << index << " sending request" << std::endl;
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
         auto requestSize =
             *socket->send(zmq::message_t(
                               request.data(),
@@ -172,13 +182,16 @@ CompilerClient::Handle<T>* CompilerClient::request(
                           zmq::send_flags::none);
         auto requestSize2 = request.size();
         assert(requestSize == requestSize2);
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
         // Wait for the response
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
         zmq::message_t response;
         socket->recv(response, zmq::recv_flags::none);
         // Receive the response
         // Response data format =
         //   from makeResponse()
         ByteBuffer responseBuffer((uint8_t*)response.data(), response.size());
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
         return makeResponse(responseBuffer);
     };
 #ifdef MULTI_THREADED_COMPILER_CLIENT
@@ -194,70 +207,73 @@ CompilerClient::Handle<T>* CompilerClient::request(
 }
 
 CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    auto handle = request<CompiledResponseData>(
-        [=](ByteBuffer& request) {
-            // Request data format =
-            //   Request::Compile
-            // + sizeof(what)
-            // + serialize(what)
-            // + sizeof(assumptions) (always 8)
-            // + assumptions
-            // + sizeof(name)
-            // + name
-            // + sizeof(debug.flags) (always 4)
-            // + debug.flags
-            // + sizeof(debug.passFilterString)
-            // + debug.passFilterString
-            // + sizeof(debug.functionFilterString)
-            // + debug.functionFilterString
-            // + sizeof(debug.style) (always 4)
-            // + debug.style
-            request.putLong((uint64_t)Request::Compile);
-            serialize(what, request, false);
-            request.putLong(sizeof(Context));
-            request.putBytes((uint8_t*)&assumptions, sizeof(Context));
-            request.putLong(name.size());
-            request.putBytes((uint8_t*)name.c_str(), name.size());
-            request.putLong(sizeof(debug.flags));
-            request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
-            request.putLong(debug.passFilterString.size());
-            request.putBytes((uint8_t*)debug.passFilterString.c_str(),
-                             debug.passFilterString.size());
-            request.putLong(debug.functionFilterString.size());
-            request.putBytes((uint8_t*)debug.functionFilterString.c_str(),
-                             debug.functionFilterString.size());
-            request.putLong(sizeof(debug.style));
-            request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
-        },
-        [](ByteBuffer& response) {
-            // Response data format =
-            //   Response::Compiled
-            // + sizeof(pirPrint)
-            // + pirPrint
-            // + hashSexp(what)
-            // + serialize(what)
-            auto responseMagic = response.getLong();
-            assert(responseMagic == Response::Compiled);
-            auto pirPrintSize = response.getLong();
-            std::string pirPrint;
-            pirPrint.resize(pirPrintSize);
-            response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            UUID responseWhatHash;
-            response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
-            // Try to get hashed if we already have the compiled value
-            // (unlikely but maybe possible)
-            SEXP responseWhat = UUIDPool::get(responseWhatHash);
-            if (!responseWhat) {
-                // Actually deserialize
-                responseWhat = deserialize(response, true, responseWhatHash);
+    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
+        auto handle = request<CompiledResponseData>(
+            [=](ByteBuffer& request) {
+                // Request data format =
+                //   Request::Compile
+                // + sizeof(what)
+                // + serialize(what)
+                // + sizeof(assumptions) (always 8)
+                // + assumptions
+                // + sizeof(name)
+                // + name
+                // + sizeof(debug.flags) (always 4)
+                // + debug.flags
+                // + sizeof(debug.passFilterString)
+                // + debug.passFilterString
+                // + sizeof(debug.functionFilterString)
+                // + debug.functionFilterString
+                // + sizeof(debug.style) (always 4)
+                // + debug.style
+                request.putLong((uint64_t)Request::Compile);
+                serialize(what, request, false);
+                request.putLong(sizeof(Context));
+                request.putBytes((uint8_t*)&assumptions, sizeof(Context));
+                request.putLong(name.size());
+                request.putBytes((uint8_t*)name.c_str(), name.size());
+                request.putLong(sizeof(debug.flags));
+                request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
+                request.putLong(debug.passFilterString.size());
+                request.putBytes((uint8_t*)debug.passFilterString.c_str(),
+                                 debug.passFilterString.size());
+                request.putLong(debug.functionFilterString.size());
+                request.putBytes((uint8_t*)debug.functionFilterString.c_str(),
+                                 debug.functionFilterString.size());
+                request.putLong(sizeof(debug.style));
+                request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+            },
+            [](ByteBuffer& response) {
+                // Response data format =
+                //   Response::Compiled
+                // + sizeof(pirPrint)
+                // + pirPrint
+                // + hashSexp(what)
+                // + serialize(what)
+                auto responseMagic = response.getLong();
+                assert(responseMagic == Response::Compiled);
+                auto pirPrintSize = response.getLong();
+                std::string pirPrint;
+                pirPrint.resize(pirPrintSize);
+                response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
+                UUID responseWhatHash;
+                response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
+                // Try to get hashed if we already have the compiled value
+                // (unlikely but maybe possible)
+                SEXP responseWhat = UUIDPool::get(responseWhatHash);
+                if (!responseWhat) {
+                    // Actually deserialize
+                    responseWhat = deserialize(response, true, responseWhatHash);
+                }
+                return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
             }
-            return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
-        }
-    );
-    return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
+        );
+        return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
+    });
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {
+    Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME);
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {
             // Request data format =
@@ -282,6 +298,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             }
         }
     );
+    Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME);
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #error "TODO create closure which blocks until the response is ready"
 #else

@@ -228,7 +228,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
             // assert(false);
             Rf_warning("SEXP UUID changed. Uninterning, but unless we're"
                        "testing, semantic deviations have probably occurred and"
-                       "we will probably crash soon");
+                       "we'll probably crash soon");
             unintern(e);
         }
 

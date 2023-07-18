@@ -58,10 +58,13 @@ complete.
         1          print overall time spend in different phases in the backend
 
     PIR_MEASURE_SERIALIZATION=
-        1          print detailed report on time spend in serialization
+        1          print detailed report on time spent in serialization
 
     PIR_MEASURE_INTERNING=
-        1          print detailed report on time spend in interning
+        1          print detailed report on time spent in interning
+
+    PIR_MEASURE_CLIENT_SERVER=
+        1          print time spent in client server communication (sending and receiving requests + processing)
 
 #### Controlling compilation
 

@@ -5,12 +5,11 @@
 #include "CompilerServer.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
-#include "compiler/parameter.h"
+#include "utils/measuring.h"
 #include "hash/UUID.h"
 #include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
-#include "utils/ctpl.h"
 #include <array>
 #include <zmq.hpp>
 
@@ -23,7 +22,8 @@
 
 namespace rir {
 
-using namespace ctpl;
+static const char* PROCESSING_REQUEST_TIMER_NAME = "CompilerServer.cpp: processing request (not sending, receiving, compiling, or interning)";
+static const char* SENDING_RESPONSE_TIMER_NAME = "CompilerServer.cpp: sending response";
 
 bool CompilerServer::_isRunning = false;
 static std::unordered_map<UUID, ByteBuffer> memoizedRequests;
@@ -63,6 +63,7 @@ void CompilerServer::tryRun() {
         socket.recv(request, zmq::recv_flags::none);
         std::cerr << "Got request (" << request.size() << " bytes)" << std::endl;
 
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
         // Deserialize the request.
         // Request data format =
         // - Request
@@ -77,8 +78,11 @@ void CompilerServer::tryRun() {
             std::cerr << "Received kill request" << std::endl;
             // Send Response::Killed
             auto response = Response::Killed;
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
             socket.send(zmq::message_t(&response, sizeof(response)),
                         zmq::send_flags::none);
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
             std::cerr << "Sent kill acknowledgement, will die" << std::endl;
             _isRunning = false;
             exit(0);
@@ -93,8 +97,11 @@ void CompilerServer::tryRun() {
                           << hash << std::endl;
                 // Send the response (memoized)
                 auto result = memoizedRequests[hash];
+                Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
+                Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
                 socket.send(zmq::message_t(result.data(), result.size()),
                             zmq::send_flags::none);
+                Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
                 std::cerr << "Sent memoized result for hash (hash-only) "
                           << hash << std::endl;
             } else {
@@ -102,8 +109,11 @@ void CompilerServer::tryRun() {
                           << std::endl;
                 // Send Response::NeedsFull
                 auto response = Response::NeedsFull;
+                Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
+                Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
                 socket.send(zmq::message_t(&response, sizeof(response)),
                             zmq::send_flags::none);
+                Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
                 std::cerr << "Sent request full for hash (hash-only) " << hash
                           << std::endl;
             }
@@ -119,10 +129,13 @@ void CompilerServer::tryRun() {
             std::cerr << "Found memoized result for hash " << requestHash << std::endl;
             // Send the response (memoized)
             auto result = memoizedRequests[requestHash];
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
             socket.send(zmq::message_t(
                             result.data(),
                             result.size()),
                         zmq::send_flags::none);
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
             std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
             continue;
         } else {
@@ -203,6 +216,7 @@ void CompilerServer::tryRun() {
                 debug.style = pir::DebugOptions::DefaultDebugOptions.style;
             }
 
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
             std::string pirPrint;
             what = pirCompile(what, assumptions, name, debug, &pirPrint);
 
@@ -220,6 +234,7 @@ void CompilerServer::tryRun() {
             // + pirPrint
             // + hashSexp(what)
             // + serialize(what)
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
             response.putLong((uint64_t)Response::Compiled);
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
@@ -269,6 +284,8 @@ void CompilerServer::tryRun() {
         memoizedRequests[requestHash] = response;
 
         // Send the response;
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
         auto responseSize =
             *socket.send(zmq::message_t(
                              response.data(),
@@ -277,6 +294,7 @@ void CompilerServer::tryRun() {
         auto responseSize2 = response.size();
         SOFT_ASSERT(responseSize == responseSize2,
                     "Client didn't receive the full response");
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
 
         std::cerr << "Sent response (" << responseSize << " bytes)"
                   << std::endl;
