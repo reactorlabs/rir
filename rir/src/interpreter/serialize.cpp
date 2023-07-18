@@ -196,6 +196,7 @@ R_outpstream_st nullOutputStream() {
 }
 
 static void hashSexp(SEXP sexp, UUID::Hasher& hasher, ConnectedWorklist* connected) {
+    Protect p(sexp);
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;
@@ -238,6 +239,7 @@ UUID hashSexp(SEXP sexp) {
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
+    Protect p(sexp);
     auto oldPreserve = pir::Parameter::RIR_PRESERVE;
     auto oldUseHashes = _useHashes;
     auto oldIsHashing = _isHashing;

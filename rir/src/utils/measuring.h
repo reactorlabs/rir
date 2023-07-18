@@ -15,22 +15,22 @@ class Measuring {
     static inline void timeEvent(const std::string& name, SEXP associated,
                                  bool associatedWillBeInitialized,
                                  const std::function<void()>& code) {
+        PROTECT(associated);
         auto timing = startTimingEvent(name, associated);
         code();
         stopTimingEvent(timing, associatedWillBeInitialized);
+        UNPROTECT(1);
     }
     template<typename T> static inline T
     timeEvent(const std::string& name, SEXP associated,
               bool associatedWillBeInitialized,
               const std::function<T()>& code) {
+        PROTECT(associated);
         auto timing = startTimingEvent(name, associated);
         auto result = code();
         stopTimingEvent(timing, associatedWillBeInitialized);
+        UNPROTECT(1);
         return result;
-    }
-    static inline void timeEvent(const std::string& name, SEXP associated,
-                                 const std::function<void()>& code) {
-        timeEvent(name, associated, true, code);
     }
     template<typename T> static inline T
     timeEvent(const std::string& name, SEXP associated,
