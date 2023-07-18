@@ -3,6 +3,7 @@
 //
 
 #include "compiler/pir/closure_version.h"
+#include "compiler/parameter.h"
 #include <string>
 
 #pragma once

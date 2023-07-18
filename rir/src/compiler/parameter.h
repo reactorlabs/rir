@@ -53,6 +53,7 @@ struct Parameter {
 
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_MEASURE_INTERNING;
+    static bool PIR_MEASURE_CLIENT_SERVER;
 };
 
 } // namespace pir

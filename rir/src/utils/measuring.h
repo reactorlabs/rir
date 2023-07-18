@@ -71,6 +71,16 @@ class Measuring {
     static void startTimer(const std::string& name);
     static void countTimer(const std::string& name);
     static void addTime(const std::string& name, double time);
+    static inline void startTimerIf(bool cond, const std::string& name) {
+        if (cond) {
+            startTimer(name);
+        }
+    }
+    static inline void countTimerIf(bool cond, const std::string& name) {
+        if (cond) {
+            countTimer(name);
+        }
+    }
 
     static void setEventThreshold(size_t n);
     static void countEvent(const std::string& name, size_t n = 1);
