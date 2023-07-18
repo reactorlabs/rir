@@ -2,7 +2,7 @@
 // Created by Jakob Hain on 6/1/23.
 //
 
-#include "RirUIDPool.h"
+#include "UUIDPool.h"
 #include "CompilerClient.h"
 #include "CompilerServer.h"
 #include "R/SerialAst.h"
@@ -25,9 +25,12 @@ bool pir::Parameter::PIR_MEASURE_INTERNING =
     getenv("PIR_MEASURE_INTERNING") != nullptr &&
     strtol(getenv("PIR_MEASURE_INTERNING"), nullptr, 10);
 
-std::unordered_map<UUID, SmallSet<SEXP>> RirUIDPool::interned;
-std::unordered_map<SEXP, UUID> RirUIDPool::hashes;
-std::unordered_set<SEXP> RirUIDPool::preserved;
+bool UUIDPool::isInitialized = false;
+std::unordered_map<UUID, SEXP> UUIDPool::interned;
+std::unordered_map<SEXP, UUID> UUIDPool::hashes;
+std::unordered_map<SEXP, SEXP> UUIDPool::nextToIntern;
+std::unordered_map<SEXP, SEXP> UUIDPool::prevToIntern;
+std::unordered_set<SEXP> UUIDPool::preserved;
 
 #ifdef DEBUG_DISASSEMBLY
 static std::unordered_map<UUID, std::string> disassembly;
@@ -35,10 +38,6 @@ static std::unordered_map<UUID, std::string> disassembly;
 
 static bool internable(SEXP e) {
     return TYPEOF(e) == EXTERNALSXP;
-}
-
-static auto smallHashEq(const UUID& small) {
-    return [&](SEXP e) { return smallHashSexp(e) == small; };
 }
 
 #ifdef DO_INTERN
@@ -55,61 +54,121 @@ static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
         // can't register finalizer, assume these don't get gcd
         break;
     }
-
 }
 
-void RirUIDPool::uninternGcd(SEXP e) {
+void UUIDPool::initialize() {
+    assert(!isInitialized);
+    isInitialized = true;
+}
+
+void UUIDPool::unintern(SEXP e) {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "unintern", e, [&] {
+        assert(hashes.count(e) && "SEXP not interned");
+
+        // Remove hash
+        auto hash = hashes.at(e);
+        hashes.erase(e);
+        if (!interned.count(hash)) {
+            Rf_warning("SEXP was interned, but the corresponding UUID is empty");
+            Rf_PrintValue(e);
+            // Don't return
+        }
+
+        // Remove from the intern list for this UUID. If this is the first entry,
+        // update the interned UUID to point to the next SEXP. If there is no next,
+        // erase the interned UUID since there are no live SEXPs with that hash
+        // anymore.
+        if (prevToIntern.count(e)) {
+            // This isn't the first entry in the list with this UUID
+
+            // Linked list intermediate removal algorithm
+            auto prev = prevToIntern.at(e);
+            prevToIntern.erase(e);
+            assert(nextToIntern.count(prev) && nextToIntern.at(prev) == e);
+            if (nextToIntern.count(e)) {
+                auto next = nextToIntern.at(e);
+                nextToIntern.erase(e);
+                assert(prevToIntern.count(next) && prevToIntern.at(next) == e);
+                nextToIntern.at(prev) = next;
+                prevToIntern.at(next) = prev;
+            } else {
+                nextToIntern.erase(prev);
+            }
+            LOG(std::cout << "GC intern: " << hash << " -> " << e << "\n");
+        } else if (nextToIntern.count(e)) {
+            // This is the first entry in the list with this UUID, and there is
+            // another entry
+
+            // Linked list head removal algorithm
+            auto next = nextToIntern.at(e);
+            nextToIntern.erase(e);
+            assert(prevToIntern.count(next) && prevToIntern.at(next) == e);
+            prevToIntern.erase(next);
+
+            // Replace interned at UUID with the next SEXP
+            interned.at(hash) = next;
+            LOG(std::cout << "Switch intern: " << hash << " -> was " << e << " now " << next << "\n");
+        } else {
+            // This is the first and only entry in the list with this UUID
+
+            // Erase interned at UUID
+            interned.erase(hash);
+            LOG(std::cout << "Remove intern: " << hash << " -> " << e << "\n");
+        }
+    });
+}
+
+void UUIDPool::uninternGcd(SEXP e) {
     // There seems to be a bug somewhere where R is calls finalizer on the wrong
     // object, or calls it twice...
     if (preserved.count(e)) {
-        Rf_warning("WARNING: preserved SEXP is supposedly getting gcd");
+        Rf_warning("Preserved SEXP is supposedly getting gcd");
         Rf_PrintValue(e);
         return;
     }
     if (!hashes.count(e)) {
-        Rf_warning("WARNING: SEXP getting gcd is supposedly never interned");
+        Rf_warning("SEXP getting gcd is supposedly never interned");
         Rf_PrintValue(e);
         return;
     }
 
-    // Remove hash
-    auto hash = hashes.at(e);
-    hashes.erase(e);
-
-    auto& similar = interned[hash];
-    assert(similar.count(e) && "SEXP was interned because it has a SEXP->UUID entry, but the corresponding UUID->SEXP entry is missing");
-    similar.erase(e);
-
-    LOG(std::cout << "Remove intern: " << hash << " -> " << e << "\n");
+    unintern(e);
 }
 #endif
 
-SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "specific intern", e, [&] {
+SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "specific intern", e, expectHashToBeTheSame, [&] {
         assert(internable(e));
         (void)expectHashToBeTheSame;
 
 #ifdef DO_INTERN
         PROTECT(e);
         SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
-                   "SEXP hash isn't deterministic or `hash` in `RirUIDPool::intern(e, hash)` is wrong");
+                   "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
         UNPROTECT(1);
-        auto& similar = interned[hash.big];
-        auto existing = std::find_if(similar.begin(), similar.end(),
-                                     smallHashEq(hash.small));
-        if (existing != similar.end()) {
+        if (interned.count(hash)) {
             // Reuse interned SEXP
+            auto existing = interned.at(hash);
             if (!hashes.count(e)) {
-                // This SEXP is structurally-equivalent to the interned SEXP but not the same (different pointers), so we must still record it. Since we are using SmallSet, we can insert it after and then it will only be used if the previous SEXP changes its RirUID or gets gcd and uninterned.
-                LOG(std::cout << "Reuse intern: " << hash << " -> " << e
-                              << "\n");
-                similar.insert(e);
-                hashes[e] = hash.big;
+                // This SEXP is structurally-equivalent to the interned SEXP but not
+                // the same (different pointers), so we must still record it
+                LOG(std::cout << "Reuse intern: " << hash << " -> " << e << "\n");
+                hashes[e] = hash;
+
+                // Add to intern list for this UUID
+                auto oldLast = existing;
+                while (nextToIntern.count(oldLast)) {
+                    oldLast = nextToIntern.at(oldLast);
+                }
+                nextToIntern[oldLast] = e;
+                prevToIntern[e] = oldLast;
+
+                // And register finalizer
                 if (!preserve) {
                     registerFinalizerIfPossible(e, uninternGcd);
                 }
             }
-            e = *existing;
+            e = existing;
             if (preserve && !preserved.count(e)) {
                 // Hashing with preserve and this interned SEXP wasn't yet preserved
                 R_PreserveObject(e);
@@ -125,55 +184,58 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
                 auto dt = DispatchTable::unpack(e);
                 std::stringstream s;
                 dt->print(s, true);
-                disassembly[hash.big] = s.str();
+                disassembly[hash] = s.str();
             } else if (Function::check(e)) {
                 auto fun = Function::unpack(e);
                 if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
-                    std::cerr << "Tried to serialize function during its construction: "
-                              << e << "\n";
+                    std::cerr
+                        << "Tried to serialize function during its construction: "
+                        << e << "\n";
                     Rf_PrintValue(e);
                     assert(false);
                 }
                 std::stringstream s;
                 fun->print(s, true);
-                disassembly[hash.big] = s.str();
+                disassembly[hash] = s.str();
             } else if (Code::check(e)) {
                 auto code = Code::unpack(e);
                 std::stringstream s;
                 code->print(s, true);
-                disassembly[hash.big] = s.str();
+                disassembly[hash] = s.str();
             }
         } else {
-            disassembly[hash.big] =
-                "(recursively interned, can't debug this way)";
+            disassembly[hash] = "(recursively interned, can't debug this way)";
         }
 #endif
 
-        // Sanity check in case the big UUID changed
-        if (hashes.count(e) && hashes.at(e) != hash.big) {
+        // Sanity check in case the UUID changed
+        if (hashes.count(e)) {
             std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
-                      << hash.big << ": " << e << "\n";
+                      << hash << ": " << e << "\n";
             Rf_PrintValue(e);
 
 #ifdef DEBUG_DISASSEMBLY
             auto oldDisassembly = disassembly[hashes.at(e)];
-            auto newDisassembly = disassembly[hash.big];
+            auto newDisassembly = disassembly[hash];
             if (oldDisassembly != newDisassembly) {
-                std::cerr << "note: disassembly changed from:\n"
-                          << oldDisassembly << "\nto:\n"
-                          << newDisassembly << "\n";
+                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
+                          << "\nto:\n" << newDisassembly << "\n";
             } else {
                 std::cerr << "note: disassembly:\n" << oldDisassembly << "\n";
             }
 #endif
 
-            assert(false);
+            // assert(false);
+            Rf_warning("SEXP UUID changed. Uninterning, but unless we're"
+                       "testing, semantic deviations have probably occurred and"
+                       "we will probably crash soon");
+            unintern(e);
         }
 
         // Do intern
         LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
-        similar.insert(e);
-        hashes[e] = hash.big;
+        interned[hash] = e;
+        hashes[e] = hash;
 
         // Preserve or register finalizer
         if (preserve) {
@@ -188,7 +250,7 @@ SEXP RirUIDPool::intern(SEXP e, const RirUID& hash, bool preserve, bool expectHa
     });
 }
 
-SEXP RirUIDPool::intern(SEXP e, bool recursive, bool preserve) {
+SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
     return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "intern", e, [&] {
         if (hashes.count(e) && !recursive) {
@@ -224,50 +286,51 @@ SEXP RirUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #endif
 }
 
-SEXP RirUIDPool::get(const RirUID& hash) {
+SEXP UUIDPool::reintern(SEXP e) {
 #ifdef DO_INTERN
-    auto& similar = interned[hash.big];
-    auto existing = std::find_if(similar.begin(), similar.end(), smallHashEq(hash.small));
-    if (existing != similar.end()) {
-        return *existing;
+    // This is called before everything is initialized, so we need to ensure
+    // that isInitialized is set before we check hashes or we will crash
+    if (isInitialized && hashes.count(e)) {
+        unintern(e);
+        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "reintern", e, [&] {
+            return intern(e, false, false);
+        });
+    }
+#endif
+    return e;
+}
+
+SEXP UUIDPool::get(const UUID& hash) {
+#ifdef DO_INTERN
+    if (interned.count(hash)) {
+        return interned.at(hash);
     }
 #endif
     return nullptr;
 }
 
-SEXP RirUIDPool::getAny(const UUID& bigHash) {
-#ifdef DO_INTERN
-    auto& similar = interned[bigHash];
-    if (!similar.empty()) {
-        return *similar.begin();
-    }
-#endif
-    return nullptr;
-}
-
-RirUID RirUIDPool::getHash(SEXP sexp) {
+const UUID& UUIDPool::getHash(SEXP sexp) {
 #ifdef DO_INTERN
     if (hashes.count(sexp)) {
-        return {hashes.at(sexp), smallHashSexp(sexp)};
+        return hashes.at(sexp);
     }
 #endif
-    return {};
+    static UUID empty;
+    return empty;
 }
 
-SEXP RirUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
+SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
         // Read whether we are serializing hash
         auto isInternable = InBool(in);
         if (isInternable) {
             // Read hash instead of regular data,
             // then retrieve by hash from interned or server
-            RirUID hash;
+            UUID hash;
             InBytes(in, &hash, sizeof(hash));
-            auto& similar = interned[hash.big];
-            auto existing = std::find_if(similar.begin(), similar.end(), smallHashEq(hash.small));
-            if (existing != similar.end()) {
+            if (interned.count(hash)) {
                 LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
-                return *existing;
+                return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
                 LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
@@ -285,20 +348,18 @@ SEXP RirUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     return ReadItem(ref_table, in);
 }
 
-SEXP RirUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
+SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
         // Read whether we are serializing hash
         auto isInternable = buf.getBool();
         if (isInternable) {
             // Read hash instead of regular data,
             // then retrieve by hash from interned or server
-            RirUID hash;
+            UUID hash;
             buf.getBytes((uint8_t*)&hash, sizeof(hash));
-            auto& similar = interned[hash.big];
-            auto existing = std::find_if(similar.begin(), similar.end(), smallHashEq(hash.small));
-            if (existing != similar.end()) {
+            if (interned.count(hash)) {
                 LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
-                return *existing;
+                return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
                 LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
@@ -316,7 +377,7 @@ SEXP RirUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     return deserialize(buf, useHashes);
 }
 
-void RirUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
+void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     assert(!connected(out) || !useHashes(out));
     auto wl = connected(out);
     if (wl && internable(sexp) && !hashes.count(sexp)) {
@@ -341,7 +402,7 @@ void RirUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     WriteItem(sexp, ref_table, out);
 }
 
-void RirUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
+void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
         auto isInternable = internable(sexp);
         // Write whether we are serializing hash
@@ -361,7 +422,7 @@ void RirUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
     serialize(sexp, buf, useHashes);
 }
 
-void RirUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
+void UUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
     if (isHashing(out)) {
         auto uuid = hashAst(src);
         OutBytes(out, (const char*)&uuid, sizeof(uuid));

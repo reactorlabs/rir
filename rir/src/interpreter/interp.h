@@ -58,7 +58,7 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 inline bool RecompileHeuristic(Function* fun,
                                Function* funMaybeDisabled = nullptr) {
 
-    auto flags = fun->flags;
+    auto flags = fun->flags();
     if (flags.contains(Function::MarkOpt))
         return true;
     if (flags.contains(Function::NotOptimizable))
@@ -91,17 +91,17 @@ inline bool RecompileHeuristic(Function* fun,
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
+    return (fun->flags().contains(Function::MarkOpt) || !fun->isOptimized() ||
             (context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
-            fun->flags.contains(Function::Reoptimize));
+            fun->flags().contains(Function::Reoptimize));
 }
 
 inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {
     // We have more assumptions available, let's recompile
     // More assumptions are available than this version uses. Let's
     // try compile a better matching version.
-    auto flags = fun->flags;
+    auto flags = fun->flags();
 #ifdef DEBUG_DISPATCH
     std::cout << "Optimizing for new context " << fun->invocationCount()
               << ": ";
@@ -113,7 +113,7 @@ inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {
     if (TYPEOF(lhs) == SYMSXP)
         name = lhs;
     if (flags.contains(Function::MarkOpt))
-        fun->flags.reset(Function::MarkOpt);
+        fun->resetFlag(Function::MarkOpt);
     SET_BODY(callee, BODY(globalContext()->closureOptimizer(callee, given, name)));
 }
 

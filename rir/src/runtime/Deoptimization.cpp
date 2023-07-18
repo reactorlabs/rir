@@ -1,27 +1,27 @@
 #include "Deoptimization.h"
-#include "hash/RirUIDPool.h"
-#include "hash/UUID.h"
 #include "runtime/Code.h"
+#include "hash/UUID.h"
+#include "hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {
 
 void FrameInfo::deserialize(ByteBuffer& buf) {
-    code = Code::unpack(RirUIDPool::readItem(buf, true));
+    code = Code::unpack(UUIDPool::readItem(buf, true));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
     inPromise = (bool)buf.getInt();
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    RirUIDPool::writeItem(code->container(), buf, true);
+    UUIDPool::writeItem(code->container(), buf, true);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
 }
 
 void FrameInfo::internRecursive() const {
-    RirUIDPool::intern(code->container(), true, false);
+    UUIDPool::intern(code->container(), true, false);
 }
 
 void FrameInfo::preserve() const {

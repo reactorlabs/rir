@@ -4,11 +4,10 @@
 
 #include "CompilerServer.h"
 #include "api.h"
-#include "compiler/parameter.h"
 #include "compiler_server_client_shared_utils.h"
-#include "hash/RirUID.h"
-#include "hash/RirUIDPool.h"
+#include "compiler/parameter.h"
 #include "hash/UUID.h"
+#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/ctpl.h"
@@ -41,7 +40,6 @@ void CompilerServer::tryRun() {
 #endif
         return;
     }
-    const char* failSlow = getenv("PIR_FAIL_SLOW");
 
     // initialize the zmq context
     zmq::context_t context(
@@ -213,7 +211,7 @@ void CompilerServer::tryRun() {
             // because we want to store it in the UUID pool for Retrieve requests
             // (since we memoize requests) so that compiler client can retrieve
             // it later
-            RirUIDPool::intern(what, true, true);
+            UUIDPool::intern(what, true, true);
 
             // Serialize the response
             // Response data format =
@@ -226,7 +224,7 @@ void CompilerServer::tryRun() {
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = RirUIDPool::getHash(what);
+            auto hash = UUIDPool::getHash(what);
             response.putBytes((uint8_t*)&hash, sizeof(hash));
             serialize(what, response, true);
             break;
@@ -234,13 +232,12 @@ void CompilerServer::tryRun() {
         case Request::Retrieve: {
             std::cerr << "Received retrieve request" << std::endl;
             // ...
-            // + RirUID hash
-            RirUID hash;
-            requestBuffer.getBytes((uint8_t*)&hash, sizeof(RirUID));
+            // + UUID hash
+            UUID hash;
+            requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
 
             // Get SEXP
-            SEXP what = RirUIDPool::get(hash);
-            SEXP whatAny = what ? what : RirUIDPool::getAny(hash.big);
+            SEXP what = UUIDPool::get(hash);
 
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";
@@ -252,18 +249,6 @@ void CompilerServer::tryRun() {
                 // + serialize(what)
                 response.putLong(Response::Retrieved);
                 serialize(what, response, true);
-            } else if (whatAny && failSlow) {
-                // Client will crash if we don't return anything, so right now
-                // we pretend we found it. Although this is a bug, and the SEXP
-                // is semantically different so the client will probably crash
-                // anyways...
-                std::cerr << "!! WARNING: there was no SEXP with that hash, but we found one with the big hash" << std::endl;
-                Rf_PrintValue(whatAny);
-                // Response data format =
-                //   Response::Retrieved
-                // + serialize(whatAny)
-                response.putLong(Response::Retrieved);
-                serialize(whatAny, response, true);
             } else {
                 std::cerr << "(not found)" << std::endl;
                 // Response data format =

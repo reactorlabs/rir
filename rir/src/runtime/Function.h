@@ -145,7 +145,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         FIRST = Deopt,
         LAST = DisableNumArgumentsSpezialization
     };
-    EnumSet<Flag> flags;
+  private:
+    EnumSet<Flag> flags_;
+  public:
+    const EnumSet<Flag>& flags() const { return flags_; }
+    void setFlag(Flag f);
+    void resetFlag(Flag f);
 
     void inheritFlags(const Function* other) {
         static Flag inherited[] = {ForceInline,
@@ -154,10 +159,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                                    DisableArgumentTypeSpecialization,
                                    DisableNumArgumentsSpezialization,
                                    DepromiseArgs};
-        auto f = other->flags;
+        auto f = other->flags_;
         for (auto flag : inherited)
             if (f.contains(flag))
-                flags.set(flag);
+                setFlag(flag);
     }
 
     void clearDisabledAssumptions(Context& given) const;
@@ -168,13 +173,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const FunctionSignature& signature() const { return signature_; }
     const Context& context() const { return context_; }
 
-    bool disabled() const { return flags.contains(Flag::Deopt); }
+    bool disabled() const { return flags_.contains(Flag::Deopt); }
     bool pendingCompilation() const { return body()->pendingCompilation(); }
 
     void registerDeopt() {
         // Deopt counts are kept on the optimized versions
         assert(isOptimized());
-        flags.set(Flag::Deopt);
+        setFlag(Flag::Deopt);
         if (deoptCount_ < UINT_MAX)
             deoptCount_++;
     }
@@ -185,7 +190,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         if (r == DeoptReason::DeadCall)
             deadCallReached_++;
         if (r == DeoptReason::EnvStubMaterialized)
-            flags.set(NeedsFullEnv);
+            setFlag(NeedsFullEnv);
     }
 
     size_t deadCallReached() const {
