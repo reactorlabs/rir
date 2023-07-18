@@ -5,6 +5,7 @@
 #include "UUIDPool.h"
 #include "CompilerClient.h"
 #include "CompilerServer.h"
+#include "R/Protect.h"
 #include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "api.h"
@@ -63,6 +64,7 @@ void UUIDPool::initialize() {
 
 void UUIDPool::unintern(SEXP e) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "unintern", e, [&] {
+        Protect p(e);
         assert(hashes.count(e) && "SEXP not interned");
 
         // Remove hash
@@ -119,6 +121,8 @@ void UUIDPool::unintern(SEXP e) {
 }
 
 void UUIDPool::uninternGcd(SEXP e) {
+    Protect p(e);
+
     // There seems to be a bug somewhere where R is calls finalizer on the wrong
     // object, or calls it twice...
     if (preserved.count(e)) {
@@ -138,14 +142,13 @@ void UUIDPool::uninternGcd(SEXP e) {
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
     return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "specific intern", e, expectHashToBeTheSame, [&] {
+        Protect p(e);
         assert(internable(e));
         (void)expectHashToBeTheSame;
 
 #ifdef DO_INTERN
-        PROTECT(e);
         SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
                    "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
-        UNPROTECT(1);
         if (interned.count(hash)) {
             // Reuse interned SEXP
             auto existing = interned.at(hash);
@@ -253,6 +256,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
     return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "intern", e, [&] {
+        Protect p(e);
         if (hashes.count(e) && !recursive) {
             // Already interned, don't compute hash
             if (preserve && !preserved.count(e)) {
