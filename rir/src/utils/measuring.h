@@ -10,39 +10,62 @@ class Measuring {
     struct TimingEvent;
 
     static TimingEvent* startTimingEvent(const std::string& name, SEXP associated);
-    static void stopTimingEvent(TimingEvent* timing);
+    static void stopTimingEvent(TimingEvent* timing, bool associatedIsInitialized);
   public:
     static inline void timeEvent(const std::string& name, SEXP associated,
+                                 bool associatedWillBeInitialized,
                                  const std::function<void()>& code) {
         auto timing = startTimingEvent(name, associated);
         code();
-        stopTimingEvent(timing);
+        stopTimingEvent(timing, associatedWillBeInitialized);
+    }
+    template<typename T> static inline T
+    timeEvent(const std::string& name, SEXP associated,
+              bool associatedWillBeInitialized,
+              const std::function<T()>& code) {
+        auto timing = startTimingEvent(name, associated);
+        auto result = code();
+        stopTimingEvent(timing, associatedWillBeInitialized);
+        return result;
+    }
+    static inline void timeEvent(const std::string& name, SEXP associated,
+                                 const std::function<void()>& code) {
+        timeEvent(name, associated, true, code);
     }
     template<typename T> static inline T
     timeEvent(const std::string& name, SEXP associated,
               const std::function<T()>& code) {
-        auto timing = startTimingEvent(name, associated);
-        auto result = code();
-        stopTimingEvent(timing);
-        return result;
+        return timeEvent<T>(name, associated, true, code);
     }
     static inline void timeEventIf(bool cond, const std::string& name,
                                    SEXP associated,
+                                   bool associatedWillBeInitialized,
                                    const std::function<void()>& code) {
         if (cond) {
-            timeEvent(name, associated, code);
+            timeEvent(name, associated, associatedWillBeInitialized, code);
         } else {
             code();
         }
     }
     template<typename T> static inline T
     timeEventIf(bool cond, const std::string& name, SEXP associated,
+                bool associatedWillBeInitialized,
                 const std::function<T()>& code) {
         if (cond) {
-            return timeEvent(name, associated, code);
+            return timeEvent(name, associated, associatedWillBeInitialized, code);
         } else {
             return code();
         }
+    }
+    static inline void timeEventIf(bool cond, const std::string& name,
+                                   SEXP associated,
+                                   const std::function<void()>& code) {
+        timeEventIf(cond, name, associated, true, code);
+    }
+    template<typename T> static inline T
+    timeEventIf(bool cond, const std::string& name, SEXP associated,
+                const std::function<T()>& code) {
+        return timeEventIf<T>(cond, name, associated, true, code);
     }
 
     static void startTimer(const std::string& name);

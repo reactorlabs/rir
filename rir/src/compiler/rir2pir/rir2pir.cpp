@@ -629,7 +629,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool stableEnv = ti.stableEnv;
         if (monomorphicClosure)
             if (auto dt = DispatchTable::check(BODY(ti.monomorphic)))
-                if (dt->baseline()->flags.includes(
+                if (dt->baseline()->flags().includes(
                         Function::Flag::InnerFunction))
                     stableEnv = false;
 

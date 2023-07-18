@@ -5,9 +5,9 @@
 
 namespace rir {
 
-/// Create a UUID (immutable part of RirUID) from only the AST part of a SEXP
+/// Create a UUID from only the AST part of a SEXP
 void hashAst(UUID::Hasher& bb, SEXP s);
-/// Create a UUID (immutable part of RirUID) from only the AST part of a SEXP
+/// Create a UUID from only the AST part of a SEXP
 UUID hashAst(SEXP s);
 
 } // namespace rir

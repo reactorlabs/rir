@@ -1,5 +1,4 @@
 #include "DispatchTable.h"
-#include "hash/contextualHashing.h"
 #include "interpreter/serialize.h"
 
 namespace rir {
@@ -18,20 +17,23 @@ DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
+    // We don't want to include other entries in the hash, but we need to add
+    //  them to the connected worklist to recursively intern them. Otherwise
+    //  we will error when serializing them because we need the other entries'
+    //  hashes
+    R_outpstream_st nullOut = nullOutputStream();
+    auto noHashOut = isHashing(out) ? &nullOut : out;
+
     HashAdd(container(), refTable);
-    NO_HASH({
-        OutInteger(out, (int)size());
-    });
-    BIG_HASH({
-        assert(size() > 0);
-        WriteItem(getEntry(0), refTable, out);
-    });
-    NO_HASH({
-        for (size_t i = 1; i < size(); i++) {
-            // Only hash baseline so the hash doesn't change
-            WriteItem(getEntry(i), refTable, out);
-        }
-    });
+    OutInteger(noHashOut, (int)size());
+    assert(size() > 0);
+    // Only hash baseline so the hash doesn't change when new entries get added
+    // (since semantics won't, and other rir objects will reference optimized
+    //  versions directly when they rely on them)
+    WriteItem(getEntry(0), refTable, out);
+    for (size_t i = 1; i < size(); i++) {
+        WriteItem(getEntry(i), refTable, noHashOut);
+    }
 }
 
 void DispatchTable::print(std::ostream& out, bool hashInfo) const {

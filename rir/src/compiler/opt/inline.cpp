@@ -29,11 +29,11 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         return false;
 
     auto dontInline = [](Closure* cls) {
-        if (cls->rirFunction()->flags.contains(rir::Function::DisableInline))
+        if (cls->rirFunction()->flags().contains(rir::Function::DisableInline))
             return true;
-        if (cls->rirFunction()->flags.contains(rir::Function::ForceInline))
+        if (cls->rirFunction()->flags().contains(rir::Function::ForceInline))
             return false;
-        return cls->rirFunction()->flags.contains(rir::Function::NotInlineable);
+        return cls->rirFunction()->flags().contains(rir::Function::NotInlineable);
     };
 
     Visitor::run(code->entry, [&](BB* bb) {
@@ -220,24 +220,24 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                      inlinee->owner()->rirFunction()->body())) {
                 continue;
             } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
-                if (!inlineeCls->rirFunction()->flags.contains(
+                if (!inlineeCls->rirFunction()->flags().contains(
                         rir::Function::ForceInline) &&
                     inlinee->numNonDeoptInstrs() >
                         Parameter::INLINER_MAX_INLINEE_SIZE * 4)
-                    inlineeCls->rirFunction()->flags.set(
+                    inlineeCls->rirFunction()->setFlag(
                         rir::Function::NotInlineable);
                 continue;
             } else {
                 updateAllowInline(inlinee);
                 inlinee->eachPromise([&](Promise* p) { updateAllowInline(p); });
                 if (allowInline == SafeToInline::No) {
-                    inlineeCls->rirFunction()->flags.set(
+                    inlineeCls->rirFunction()->setFlag(
                         rir::Function::NotInlineable);
                     continue;
                 }
             }
 
-            if (!inlineeCls->rirFunction()->flags.contains(
+            if (!inlineeCls->rirFunction()->flags().contains(
                     rir::Function::ForceInline))
                 fuel--;
 
@@ -376,7 +376,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 for (auto bb : toDel)
                     delete bb;
                 bb->overrideNext(split);
-                inlineeCls->rirFunction()->flags.set(
+                inlineeCls->rirFunction()->setFlag(
                     rir::Function::NotInlineable);
             } else {
                 anyChange = true;

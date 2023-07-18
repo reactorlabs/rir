@@ -135,7 +135,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
-        closure->rirFunction()->flags.set(Function::NotOptimizable);
+        closure->rirFunction()->setFlag(Function::NotOptimizable);
         logger.warn("skipping huge function");
         return fail();
     }

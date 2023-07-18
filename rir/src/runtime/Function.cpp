@@ -3,12 +3,21 @@
 #include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
-#include "hash/RirUIDPool.h"
-#include "hash/contextualHashing.h"
+#include "hash/UUIDPool.h"
 #include "interpreter/serialize.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
+
+void Function::setFlag(rir::Function::Flag f) {
+    UUIDPool::reintern(container());
+    flags_.set(f);
+}
+
+void Function::resetFlag(rir::Function::Flag f) {
+    UUIDPool::reintern(container());
+    flags_.reset(f);
+}
 
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     Protect p;
@@ -30,49 +39,46 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (unsigned i = 0; i < fun->numArgs_ + NUM_PTRS; i++) {
         fun->setEntry(i, R_NilValue);
     }
-    auto feedback = p(RirUIDPool::readItem(refTable, inp));
+    auto feedback = p(UUIDPool::readItem(refTable, inp));
     fun->typeFeedback(TypeFeedback::unpack(feedback));
-    auto body = p(RirUIDPool::readItem(refTable, inp));
+    auto body = p(UUIDPool::readItem(refTable, inp));
     fun->body(body);
     for (unsigned i = 0; i < fun->numArgs_; i++) {
         if ((bool)InInteger(inp)) {
-            SEXP arg = p(RirUIDPool::readItem(refTable, inp));
+            SEXP arg = p(UUIDPool::readItem(refTable, inp));
             fun->setEntry(Function::NUM_PTRS + i, arg);
         } else
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
     }
-    fun->flags = EnumSet<Flag>(InInteger(inp));
+    fun->flags_ = EnumSet<Flag>(InInteger(inp));
     return fun;
 }
 
 void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
-    BIG_HASH({
-        OutInteger(out, size);
-        signature().serialize(refTable, out);
-        context_.serialize(refTable, out);
-        OutInteger(out, numArgs_);
-    });
-    RirUIDPool::writeItem(typeFeedback()->container(), refTable, noHashOut);
+    OutInteger(out, size);
+    signature().serialize(refTable, out);
+    context_.serialize(refTable, out);
+    OutInteger(out, numArgs_);
+
+    UUIDPool::writeItem(typeFeedback()->container(), refTable, noHashOut);
     // TODO: why are body and args not set sometimes when we hash
     //  deserialized value to check hash consistency? It probably has
     //  something to do with cyclic references in serialization, but why?
     //  (This is one of the reasons we use SEXP instead of unpacking Code
     //  for body and default args, also because we are going to serialize
     //  the SEXP anyways to properly handle cyclic references)
-    RirUIDPool::writeItem(getEntry(0), refTable, out);
+    UUIDPool::writeItem(getEntry(0), refTable, out);
 
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
         OutInteger(out, (int)(arg != nullptr));
         if (arg) {
             // arg->serialize(false, refTable, out);
-            RirUIDPool::writeItem(arg, refTable, out);
+            UUIDPool::writeItem(arg, refTable, out);
         }
     }
-    SMALL_HASH({
-        OutInteger(out, (int)flags.to_i());
-    });
+    OutInteger(out, (int)flags_.to_i());
 }
 
 void Function::disassemble(std::ostream& out) const {
@@ -90,7 +96,7 @@ void Function::print(std::ostream& out, bool hashInfo) const {
     out << "\n";
     out << "[flags]    ";
 #define V(F)                                                                   \
-    if (flags.includes(F))                                                     \
+    if (flags_.includes(F))                                                     \
         out << #F << " ";
     RIR_FUNCTION_FLAGS(V)
 #undef V
@@ -119,11 +125,11 @@ static int GLOBAL_SPECIALIZATION_LEVEL =
         ? atoi(getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL"))
         : 100;
 void Function::clearDisabledAssumptions(Context& given) const {
-    if (flags.contains(Function::DisableArgumentTypeSpecialization))
+    if (flags_.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
-    if (flags.contains(Function::DisableNumArgumentsSpezialization))
+    if (flags_.contains(Function::DisableNumArgumentsSpezialization))
         given.clearNargs();
-    if (flags.contains(Function::DisableAllSpecialization))
+    if (flags_.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Compiler::minimalContext);
 
     if (GLOBAL_SPECIALIZATION_LEVEL < 100)

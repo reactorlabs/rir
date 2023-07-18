@@ -23,20 +23,18 @@ We use [ZeroMQ](https://zeromq.org) for communication. See the ZeroMQ docs for a
 ### Full configuration options
 
     PIR_CLIENT_ADDR=
-        <address>            (On client) address of compiler server to connect to
-        <addresses>          (On client) comma-separated addresses of compiler servers to connect to
-        PIR_CLIENT_TIMEOUT=
-            <milliseconds>   (On client) how long to wait for a reply from the server before timing out. Default is 10000 (10 seconds)
-        PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY=
-            <bytes>          (On client) the server memoizes compile requests from all clients. If the client is going to send a request that is larger than this size, it will only hash the request and send the hash first. Then if the server has already compiled the request, it will reply with the compiled code, and if not, the server will send a response causing the client to send the full request 
-        PIR_CLIENT_DRY_RUN=
-            <0|1>            (On client) whether to actually use the server's code, or compile locally and just use it for comparison. Default is false (actually use the code)
-            PIR_CLIENT_SKIP_DISCREPANCY_CHECK=
-                <0|1>        (On client) whether to skip checking for discrepancies between local and remote compilation. Default is to not skip.
+        <address>        (on client) address of compiler server to connect to
+        <addresses>      (on client) comma-separated addresses of compiler servers to connect to
+    PIR_CLIENT_TIMEOUT=
+        <milliseconds>   (on client) how long to wait for a reply from the server before timing out. Default is 10000 (10 seconds)
+    PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY=
+        <bytes>          (on client) the server memoizes compile requests from all clients. If the client is going to send a request that is larger than this size, it will only hash the request and send the hash first. Then if the server has already compiled the request, it will reply with the compiled code, and if not, the server will send a response causing the client to send the full request 
+    PIR_CLIENT_DRY_RUN=
+        <0|1>            (on client) whether to actually use the server's code, or compile locally and just use it for comparison. Default is false (actually use the code)
+        PIR_CLIENT_SKIP_DISCREPANCY_CHECK=
+            <0|1>        (on client) whether to skip checking for discrepancies between local and remote compilation. Default is to not skip.
     PIR_SERVER_ADDR=
-        <address>            (On server) address to listen on
-        PIR_FAIL_SLOW=
-            <0|1>            (On server) if the client tries to retrieve a SEXP and we don't have it, but we do have similar SEXPs, by default the server will return nothing and the compiler will crash. Set this to 1 and the server will warn and then return a similar SEXP, which will probably also cause the client to crash but later 
+        <address>        (on server) address to listen on
 
 ## What is a compiler server?
 

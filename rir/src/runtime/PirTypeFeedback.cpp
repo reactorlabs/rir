@@ -2,9 +2,8 @@
 #include "Code.h"
 #include "R/Protect.h"
 #include "compiler/pir/instruction.h"
-#include "hash/RirUIDPool.h"
+#include "hash/UUIDPool.h"
 #include "runtime/TypeFeedback.h"
-#include <iostream>
 #include <unordered_map>
 
 namespace rir {
@@ -73,7 +72,7 @@ PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) 
     auto typeFeedback = new (DATAPTR(store)) PirTypeFeedback(numCodes);
     InBytes(inp, typeFeedback->entry, sizeof(typeFeedback->entry));
     for (int i = 0; i < numCodes; i++) {
-        typeFeedback->setEntry(i, p(RirUIDPool::readItem(refTable, inp)));
+        typeFeedback->setEntry(i, p(UUIDPool::readItem(refTable, inp)));
     }
     InBytes(inp, typeFeedback->mdEntries(), (int)sizeof(MDEntry) * numEntries);
     return typeFeedback;
@@ -87,7 +86,7 @@ void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, numEntries);
     OutBytes(out, entry, sizeof(entry));
     for (int i = 0; i < numCodes; i++) {
-        RirUIDPool::writeItem(getEntry(i), refTable, out);
+        UUIDPool::writeItem(getEntry(i), refTable, out);
     }
     OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
