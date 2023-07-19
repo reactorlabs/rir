@@ -49,7 +49,7 @@ template <typename CLS>
 static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
         OutInteger(out, b->info.magic);
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize", s, [&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", s, [&]{
             b->serialize(refTable, out);
         });
         return true;

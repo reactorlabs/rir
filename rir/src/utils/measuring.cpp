@@ -95,106 +95,6 @@ struct MeasuringImpl {
         out << "  Total lifetime: " << format(totalLifetime.count()) << "\n\n";
 
         {
-            std::map<Duration, std::tuple<std::string, size_t>>
-                timedEventSuperSumsOrderedByDuration;
-            std::map<Duration, std::tuple<std::string, SEXP, size_t>>
-                timedEventSumsOrderedByDuration;
-            std::map<TimePoint, std::tuple<std::string, SEXP, Duration>>
-                timedEventsOrderedChronologically;
-            auto totalTimedEventsDuration = Duration::zero();
-            size_t totalTimedEventsCount = 0;
-            for (auto& a : timedEvents) {
-                auto& name = a.first;
-                auto superSum = Duration::zero();
-                size_t superCount = 0;
-                for (auto& b : a.second) {
-                    auto& associated = b.first;
-                    auto sum = Duration::zero();
-                    for (auto& e : b.second) {
-                        auto duration = e.end - e.start;
-                        timedEventsOrderedChronologically.emplace(
-                            e.start,
-                            std::make_tuple(name, associated, duration));
-                        sum += duration;
-                    }
-                    timedEventSumsOrderedByDuration.emplace(
-                        sum, std::make_tuple(name, associated, b.second.size()));
-                    superSum += sum;
-                    superCount += b.second.size();
-                }
-                timedEventSuperSumsOrderedByDuration.emplace(
-                    superSum, std::make_tuple(name, superCount));
-                totalTimedEventsDuration += superSum;
-                totalTimedEventsCount += superCount;
-            }
-            if (!timedEventsOrderedChronologically.empty()) {
-                out << "  Timed events (total count = " << totalTimedEventsCount << ", time = "
-                    << format(totalTimedEventsDuration) << ", ratio to total lifetime = "
-                    << std::setprecision(2)
-                    << (totalTimedEventsDuration.count() / totalLifetime.count() * 100) << "%):\n";
-                out << "  Super sums ordered by duration:\n";
-                size_t totalCount = 0;
-                for (auto it = timedEventSuperSumsOrderedByDuration.rbegin();
-                     it != timedEventSuperSumsOrderedByDuration.rend(); ++it) {
-                    auto& t = *it;
-                    auto& name = std::get<0>(t.second);
-                    auto count = std::get<1>(t.second);
-                    auto duration = t.first;
-                    out << "    " << std::setw((int)width) << name << "\t"
-                        << count << "\t" << format(duration);
-                    out << "\n";
-                    if (totalCount++ > maxTimedEventsToPrint) {
-                        out << "    ... (omitted)\n";
-                        break;
-                    }
-                }
-                out << "  Sums ordered by duration:\n";
-                std::unordered_set<SEXP> printedAssociateds;
-                totalCount = 0;
-                for (auto it = timedEventSumsOrderedByDuration.rbegin();
-                     it != timedEventSumsOrderedByDuration.rend(); ++it) {
-                    auto& t = *it;
-                    auto& name = std::get<0>(t.second);
-                    auto& associated = std::get<1>(t.second);
-                    auto count = std::get<2>(t.second);
-                    auto duration = t.first;
-                    out << "    " << std::setw((int)width) << name << "\t"
-                        << associated << "\t" << count << "\t"
-                        << format(duration);
-                    out << "\n";
-                    printedAssociateds.insert(associated);
-                    if (totalCount++ > maxTimedEventsToPrint) {
-                        out << "    ... (omitted)\n";
-                        break;
-                    }
-                }
-                out << "  All ordered chronologically:\n";
-                totalCount = 0;
-                for (auto& t : timedEventsOrderedChronologically) {
-                    auto& name = std::get<0>(t.second);
-                    auto& associated = std::get<1>(t.second);
-                    auto duration = std::get<2>(t.second);
-                    out << "    " << std::setw(width) << name << "\t"
-                        << associated << "\t" << format(duration);
-                    out << "\n";
-                    printedAssociateds.insert(associated);
-                    if (totalCount++ > maxTimedEventsToPrint) {
-                        out << "    ... (omitted)\n";
-                        break;
-                    }
-                }
-                out << "  Associated latest dumps:\n";
-                for (auto& a : printedAssociateds) {
-                    if (associatedLatestDumps.count(a)) {
-                        out << "    " << std::setw(width) << a;
-                        out << "\n" << associatedLatestDumps.at(a) << "\n";
-                    }
-                }
-                out << "\n";
-            }
-        }
-
-        {
             std::map<double, std::tuple<std::string, size_t, size_t, double>>
                 orderedTimers;
             double totalTimers = 0;
@@ -257,6 +157,104 @@ struct MeasuringImpl {
             }
         }
 
+        {
+            std::map<Duration, std::tuple<std::string, size_t>>
+                timedEventSuperSumsOrderedByDuration;
+            std::map<Duration, std::tuple<std::string, SEXP, size_t>>
+                timedEventSumsOrderedByDuration;
+            std::map<TimePoint, std::tuple<std::string, SEXP, Duration>>
+                timedEventsOrderedChronologically;
+            auto totalTimedEventsDuration = Duration::zero();
+            size_t totalTimedEventsCount = 0;
+            for (auto& a : timedEvents) {
+                auto& name = a.first;
+                auto superSum = Duration::zero();
+                size_t superCount = 0;
+                for (auto& b : a.second) {
+                    auto& associated = b.first;
+                    auto sum = Duration::zero();
+                    for (auto& e : b.second) {
+                        auto duration = e.end - e.start;
+                        timedEventsOrderedChronologically.emplace(
+                            e.start,
+                            std::make_tuple(name, associated, duration));
+                        sum += duration;
+                    }
+                    timedEventSumsOrderedByDuration.emplace(
+                        sum, std::make_tuple(name, associated, b.second.size()));
+                    superSum += sum;
+                    superCount += b.second.size();
+                }
+                timedEventSuperSumsOrderedByDuration.emplace(
+                    superSum, std::make_tuple(name, superCount));
+                totalTimedEventsDuration += superSum;
+                totalTimedEventsCount += superCount;
+            }
+            if (!timedEventsOrderedChronologically.empty()) {
+                out << "  Timed events (total count = " << totalTimedEventsCount << ", total time (including duplicate counted) = "
+                    << format(totalTimedEventsDuration) << "):\n";
+                out << "  Super sums ordered by duration:\n";
+                size_t totalCount = 0;
+                for (auto it = timedEventSuperSumsOrderedByDuration.rbegin();
+                     it != timedEventSuperSumsOrderedByDuration.rend(); ++it) {
+                    auto& t = *it;
+                    auto& name = std::get<0>(t.second);
+                    auto count = std::get<1>(t.second);
+                    auto duration = t.first;
+                    out << "    " << std::setw((int)width) << name << "\t"
+                        << count << "\t" << format(duration);
+                    out << "\n";
+                    if (totalCount++ > maxTimedEventsToPrint) {
+                        out << "    ... (omitted)\n";
+                        break;
+                    }
+                }
+                out << "  Sums ordered by duration:\n";
+                std::unordered_set<SEXP> printedAssociateds;
+                totalCount = 0;
+                for (auto it = timedEventSumsOrderedByDuration.rbegin();
+                     it != timedEventSumsOrderedByDuration.rend(); ++it) {
+                    auto& t = *it;
+                    auto& name = std::get<0>(t.second);
+                    auto& associated = std::get<1>(t.second);
+                    auto count = std::get<2>(t.second);
+                    auto duration = t.first;
+                    out << "    " << std::setw((int)width) << name << "\t"
+                        << associated << "\t" << count << "\t"
+                        << format(duration);
+                    out << "\n";
+                    printedAssociateds.insert(associated);
+                    if (totalCount++ > maxTimedEventsToPrint) {
+                        out << "    ... (omitted)\n";
+                        break;
+                    }
+                }
+                out << "  All ordered chronologically:\n";
+                totalCount = 0;
+                for (auto& t : timedEventsOrderedChronologically) {
+                    auto& name = std::get<0>(t.second);
+                    auto& associated = std::get<1>(t.second);
+                    auto duration = std::get<2>(t.second);
+                    out << "    " << std::setw(width) << name << "\t"
+                        << associated << "\t" << format(duration);
+                    out << "\n";
+                    printedAssociateds.insert(associated);
+                    if (totalCount++ > maxTimedEventsToPrint) {
+                        out << "    ... (omitted)\n";
+                        break;
+                    }
+                }
+                out << "  Associated latest dumps:\n";
+                for (auto& a : printedAssociateds) {
+                    if (associatedLatestDumps.count(a)) {
+                        out << "    " << std::setw(width) << a;
+                        out << "\n" << associatedLatestDumps.at(a) << "\n";
+                    }
+                }
+                out << "\n";
+            }
+        }
+
         out << std::flush;
     }
 
@@ -302,6 +300,7 @@ struct MeasuringImpl {
 std::unique_ptr<MeasuringImpl> m = std::make_unique<MeasuringImpl>();
 
 Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name, SEXP associated) {
+    startTimer(name);
     m->shouldOutput = true;
     auto start = std::chrono::high_resolution_clock::now();
     return new Measuring::TimingEvent{name, associated, start};
@@ -310,6 +309,7 @@ Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name, SEX
 void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing,
                                 bool associatedIsInitialized) {
     assert(timing);
+    countTimer(timing->name);
     m->updateAssociatedDump(timing->associated, associatedIsInitialized);
     auto end = std::chrono::high_resolution_clock::now();
     MeasuringImpl::TimedEvent timed{timing->start, end};
