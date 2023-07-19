@@ -9,6 +9,7 @@ set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
 set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-12)
 set(ZEROMQ_DIR ${CMAKE_SOURCE_DIR}/external/zeromq)
+set(XXHASH_DIR ${CMAKE_SOURCE_DIR}/external/xxHash)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
@@ -33,12 +34,8 @@ else ()
     link_libraries(${ZEROMQ_DIR}/lib/libzmq.so)
 endif ()
 
-# Use OpenSSL
-if (${APPLE})
-    set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl)
-endif ()
-find_package(OpenSSL REQUIRED)
-link_libraries(OpenSSL::Crypto)
+set(XXHASH_BUILD_XXHSUM OFF)
+add_subdirectory(${XXHASH_DIR}/cmake_unofficial/ ${XXHASH_DIR}/build/ EXCLUDE_FROM_ALL)
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
@@ -172,6 +169,8 @@ if (DEFINED LLVM_PACKAGE_VERSION)
   llvm_map_components_to_libnames(LLVM_LIBS ${LLVM_COMPONENTS_USED})
   target_link_libraries(${PROJECT_NAME} ${LLVM_LIBS})
 endif(DEFINED LLVM_PACKAGE_VERSION)
+
+target_link_libraries(${PROJECT_NAME} xxHash::xxhash)
 
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")

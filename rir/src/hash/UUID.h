@@ -3,25 +3,23 @@
 #include "R/r.h"
 
 #include <string>
-#include <openssl/evp.h>
+
+typedef struct XXH3_state_s XXH3_state_t;
 
 namespace rir {
 
-/// A 256-bit UUID
+/// A 128-bit UUID
 #pragma pack(push, 1)
 class UUID {
-    uint64_t a;
-    uint64_t b;
-    uint64_t c;
-    uint64_t d;
+    uint64_t high;
+    uint64_t low;
 
-    UUID(uint64_t a, uint64_t b, uint64_t c, uint64_t d)
-        : a(a), b(b), c(c), d(d) {}
+    UUID(uint64_t a, uint64_t low) : high(a), low(low) {}
 
   public:
     class Hasher;
     /// The null UUID (0x0)
-    UUID() : a(0), b(0), c(0), d(0) {}
+    UUID() : high(0), low(0) {}
     /// Generates a UUID for the data
     static UUID hash(const void* data, size_t size);
     /// Deserialize a UUID from the R stream
@@ -33,7 +31,7 @@ class UUID {
 
     friend std::ostream& operator<<(std::ostream&, const UUID&);
     /// `false` iff this is the null UUID (0x0)
-    operator bool() const;
+    explicit operator bool() const;
     bool operator==(const UUID& other) const;
     bool operator!=(const UUID& other) const;
     friend struct std::hash<UUID>;
@@ -42,7 +40,7 @@ class UUID {
 
 /// Create a UUID for a stream of data
 class UUID::Hasher {
-    EVP_MD_CTX* ctx;
+    XXH3_state_t* state;
     bool finalized;
 
   public:
