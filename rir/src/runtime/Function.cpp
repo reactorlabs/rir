@@ -10,12 +10,12 @@
 namespace rir {
 
 void Function::setFlag(rir::Function::Flag f) {
-    UUIDPool::reintern(container());
+    // UUIDPool::reintern(container());
     flags_.set(f);
 }
 
 void Function::resetFlag(rir::Function::Flag f) {
-    UUIDPool::reintern(container());
+    // UUIDPool::reintern(container());
     flags_.reset(f);
 }
 
@@ -78,7 +78,9 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
             UUIDPool::writeItem(arg, refTable, out);
         }
     }
-    OutInteger(out, (int)flags_.to_i());
+    if (!isHashing(out)) {
+        OutInteger(out, (int)flags_.to_i());
+    }
 }
 
 void Function::disassemble(std::ostream& out) const {
