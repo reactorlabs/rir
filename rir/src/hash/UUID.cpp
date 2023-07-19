@@ -1,8 +1,9 @@
 #include "UUID.h"
 #include "R/Serialize.h"
 
-#include <sstream>
+#include <xxhash.h>
 #include <iomanip>
+#include <sstream>
 
 namespace rir {
 
@@ -14,24 +15,20 @@ UUID UUID::hash(const void* data, size_t size) {
 
 UUID UUID::deserialize(__attribute__((unused)) SEXP _refTable, R_inpstream_t inp) {
     UUID uuid;
-    InBytes(inp, &uuid.a, sizeof(uuid.a));
-    InBytes(inp, &uuid.b, sizeof(uuid.b));
-    InBytes(inp, &uuid.c, sizeof(uuid.c));
-    InBytes(inp, &uuid.d, sizeof(uuid.d));
+    InBytes(inp, &uuid.high, sizeof(uuid.high));
+    InBytes(inp, &uuid.low, sizeof(uuid.low));
     return uuid;
 }
 
 void UUID::serialize(__attribute__((unused)) SEXP _refTable, R_outpstream_t out) const {
-    OutBytes(out, &a, sizeof(a));
-    OutBytes(out, &b, sizeof(b));
-    OutBytes(out, &c, sizeof(c));
-    OutBytes(out, &d, sizeof(d));
+    OutBytes(out, &high, sizeof(high));
+    OutBytes(out, &low, sizeof(low));
 }
 
 std::string UUID::str() const {
     std::ostringstream str;
-    str << std::setfill('0') << std::setw(sizeof(a)) << std::right
-        << std::hex << a << b << c << d << std::dec;
+    str << std::setfill('0') << std::setw(sizeof(high)) << std::right
+        << std::hex << high << low << std::dec;
     return str.str();
 }
 
@@ -41,23 +38,23 @@ std::ostream& operator<<(std::ostream& stream, const UUID& uuid) {
 }
 
 UUID::operator bool() const {
-    return a || b || c || d;
+    return high || low;
 }
 
 bool UUID::operator==(const UUID& other) const {
-    return a == other.a && b == other.b && c == other.c && d == other.d;
+    return high == other.high && low == other.low;
 }
 
 bool UUID::operator!=(const UUID& other) const {
-    return a != other.a || b != other.b || c != other.c || d != other.d;
+    return high != other.high || low != other.low;
 }
 
-UUID::Hasher::Hasher() : ctx(EVP_MD_CTX_new()), finalized(false) {
-    if (!ctx) {
-        assert(false && "Failed to create EVP_MD_CTX");
-    }
-    if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1) {
-        assert(false && "Failed to initialize EVP_MD_CTX");
+UUID::Hasher::Hasher() : state(XXH3_createState()), finalized(false) {
+    assert(state && "Failed to create hash state");
+
+    if (XXH3_128bits_reset(state) == XXH_ERROR) {
+        XXH3_freeState(state);
+        assert(false && "Failed to initialize hash state as 128 bits");
     }
 }
 
@@ -66,30 +63,21 @@ UUID::Hasher::~Hasher() {
 }
 
 void UUID::Hasher::hashBytes(const void* data, size_t size) {
-    // Update the context with new data
-    if (EVP_DigestUpdate(ctx, data, size) != 1) {
-        assert(false && "Failed to update hash with new data");
+    assert(!finalized && "UUID::Hasher was already finalized");
+    
+    if (XXH3_128bits_update(state, data, size) == XXH_ERROR) {
+        XXH3_freeState(state);
+        assert(false && "Failed to update hash state");
     }
 }
 
 UUID UUID::Hasher::finalize() {
-    unsigned int len = EVP_MD_size(EVP_sha256());
-    unsigned char result[EVP_MAX_MD_SIZE];  // Holds the final hash
-
-    if (EVP_DigestFinal_ex(ctx, result, &len) != 1) {
-        assert(false && "Failed to finalize hash");
-    }
-
-    UUID uuid(
-        *(reinterpret_cast<uint64_t*>(&result[0])),
-        *(reinterpret_cast<uint64_t*>(&result[8])),
-        *(reinterpret_cast<uint64_t*>(&result[16])),
-        *(reinterpret_cast<uint64_t*>(&result[24]))
-    );
-
-    EVP_MD_CTX_free(ctx);
+    assert(!finalized && "UUID::Hasher was already finalized");
     finalized = true;
-
+    
+    auto digest = XXH3_128bits_digest(state);
+    UUID uuid{digest.high64, digest.low64};
+    XXH3_freeState(state);
     return uuid;
 }
 
@@ -97,6 +85,6 @@ UUID UUID::Hasher::finalize() {
 
 namespace std {
 std::size_t hash<rir::UUID>::operator()(const rir::UUID& v) const {
-    return v.a ^ v.b ^ v.c ^ v.d;
+    return v.high ^ v.low;
 }
 } // namespace std

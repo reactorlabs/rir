@@ -16,7 +16,7 @@ Before we can begin, we must install the dependencies.
 The optional ninja-build dependency improves the compilation time.
 For the R build-dep step you may need to enable source code repositories (deb-src) via GNOME Software or /etc/apt/sources.list.
 
-    sudo apt install build-essential cmake curl openssl libssl-dev
+    sudo apt install build-essential cmake curl
     sudo apt install ninja-build
     sudo apt build-dep r-base
 
