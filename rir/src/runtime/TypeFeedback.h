@@ -264,19 +264,9 @@ struct TypeFeedbackSlot {
     Feedback feedback_;
 
     TypeFeedbackSlot(TypeFeedbackKind kind, const Feedback&& feedback)
-        : kind_(kind), feedback_(feedback) {
-        // std::cerr << "TypeFeedbackSlot   (" << kind_as_name(kind_) << ") "
-        //           << this << "\n";
-    }
+        : kind_(kind), feedback_(feedback) {}
 
   public:
-    // TypeFeedbackSlot(const TypeFeedbackSlot& other)
-    //     : kind_(other.kind_), feedback_(other.feedback_) {
-    //     std::cerr << "TypeFeedbackSlot & (" << kind_as_name(kind_) << ") "
-    //               << this << " <- " << &other << "\n";
-    // }
-
-    // ~TypeFeedbackSlot();
     static TypeFeedbackSlot createCallees() {
         return TypeFeedbackSlot{TypeFeedbackKind::Call,
                                 Feedback{.callees = ObservedCallees()}};
@@ -332,9 +322,6 @@ class TypeFeedback {
         std::vector<TypeFeedbackSlot> slots_;
 
       public:
-        Builder();
-        ~Builder();
-
         uint32_t addCallee();
         uint32_t addTest();
         uint32_t addType();

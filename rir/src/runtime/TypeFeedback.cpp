@@ -267,3 +267,5 @@ TypeFeedback TypeFeedback::Builder::build() {
 }
 
 TypeFeedback TypeFeedback::empty() { return TypeFeedback(FeedbackSlots()); }
+
+} // namespace rir
