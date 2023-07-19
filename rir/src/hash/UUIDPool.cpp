@@ -63,7 +63,7 @@ void UUIDPool::initialize() {
 }
 
 void UUIDPool::unintern(SEXP e) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "unintern", e, [&] {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: unintern", e, [&] {
         Protect p(e);
         assert(hashes.count(e) && "SEXP not interned");
 
@@ -141,7 +141,7 @@ void UUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "specific intern", e, expectHashToBeTheSame, [&] {
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: intern specific", e, expectHashToBeTheSame, [&] {
         Protect p(e);
         assert(internable(e));
         (void)expectHashToBeTheSame;
@@ -255,7 +255,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
-    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "intern", e, [&] {
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, recursive ? "UUIDPool.cpp: intern recursive" : "UUIDPool.cpp: intern", e, [&] {
         Protect p(e);
         if (hashes.count(e) && !recursive) {
             // Already interned, don't compute hash
@@ -296,7 +296,7 @@ SEXP UUIDPool::reintern(SEXP e) {
     // that isInitialized is set before we check hashes or we will crash
     if (isInitialized && hashes.count(e)) {
         unintern(e);
-        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "reintern", e, [&] {
+        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: reintern", e, [&] {
             return intern(e, false, false);
         });
     }
