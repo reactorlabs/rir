@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "RangeSet.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
@@ -21,7 +22,7 @@ using Duration = std::chrono::duration<double>;
 
 struct Measuring::TimingEvent {
     const std::string& name;
-    SEXP associated;
+    SEXP associated = nullptr;
     TimePoint start;
 };
 
@@ -164,35 +165,40 @@ struct MeasuringImpl {
                 timedEventSumsOrderedByDuration;
             std::map<TimePoint, std::tuple<std::string, SEXP, Duration>>
                 timedEventsOrderedChronologically;
-            auto totalTimedEventsDuration = Duration::zero();
+            RangeSet<TimePoint> totalTimedEventsRange;
             size_t totalTimedEventsCount = 0;
             for (auto& a : timedEvents) {
                 auto& name = a.first;
-                auto superSum = Duration::zero();
+                RangeSet<TimePoint> superRange;
                 size_t superCount = 0;
                 for (auto& b : a.second) {
                     auto& associated = b.first;
-                    auto sum = Duration::zero();
+                    RangeSet<TimePoint> range;
                     for (auto& e : b.second) {
                         auto duration = e.end - e.start;
                         timedEventsOrderedChronologically.emplace(
                             e.start,
                             std::make_tuple(name, associated, duration));
-                        sum += duration;
+                        range.insert(e.start, e.end);
                     }
+                    auto sum = sumRangeSet(range);
                     timedEventSumsOrderedByDuration.emplace(
                         sum, std::make_tuple(name, associated, b.second.size()));
-                    superSum += sum;
+                    superRange.insert_all(range);
                     superCount += b.second.size();
                 }
+                auto superSum = sumRangeSet(superRange);
                 timedEventSuperSumsOrderedByDuration.emplace(
                     superSum, std::make_tuple(name, superCount));
-                totalTimedEventsDuration += superSum;
+                totalTimedEventsRange.insert_all(superRange);
                 totalTimedEventsCount += superCount;
             }
             if (!timedEventsOrderedChronologically.empty()) {
-                out << "  Timed events (total count = " << totalTimedEventsCount << ", total time (including duplicate counted) = "
-                    << format(totalTimedEventsDuration) << "):\n";
+                auto totalTimedEventsDuration = sumRangeSet(totalTimedEventsRange);
+                out << "  Timed events (total count = " << totalTimedEventsCount << ", time = "
+                    << format(totalTimedEventsDuration) << ", ratio to total lifetime = "
+                    << std::setprecision(2)
+                    << (totalTimedEventsDuration.count() / totalLifetime.count() * 100) << "%):\n";
                 out << "  Super sums ordered by duration:\n";
                 size_t totalCount = 0;
                 for (auto it = timedEventSuperSumsOrderedByDuration.rbegin();
@@ -292,6 +298,14 @@ struct MeasuringImpl {
         else
             ss << n;
         return ss.str();
+    }
+
+    Duration sumRangeSet(const RangeSet<TimePoint>& set) {
+        auto sum = Duration::zero();
+        for (auto& r : set) {
+            sum += r.second - r.first;
+        }
+        return sum;
     }
 };
 
