@@ -20,9 +20,9 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     }
     PROTECT(store);
     AddReadRef(refTable, store);
-    TypeFeedback* feedback = TypeFeedback::deserialize(refTable, inp);
-    feedback->owner_ = fun;
-    fun->typeFeedback_ = std::move(*feedback);
+    TypeFeedback feedback = TypeFeedback::deserialize(refTable, inp);
+    feedback.owner_ = fun;
+    fun->typeFeedback_ = std::move(feedback);
     SEXP body = Code::deserialize(refTable, inp)->container();
     fun->body(body);
     PROTECT(body);

@@ -306,17 +306,15 @@ class TypeFeedback {
   private:
     friend Function;
 
-    typedef std::vector<TypeFeedbackSlot> FeedbackSlots;
-
     Function* owner_;
-    FeedbackSlots slots_;
+    std::vector<TypeFeedbackSlot> slots_;
 
-    explicit TypeFeedback(FeedbackSlots&& slots)
+    explicit TypeFeedback(std::vector<TypeFeedbackSlot>&& slots)
         : owner_(nullptr), slots_(std::move(slots)) {}
 
   public:
     static TypeFeedback empty();
-    static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
+    static TypeFeedback deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
         std::vector<TypeFeedbackSlot> slots_;

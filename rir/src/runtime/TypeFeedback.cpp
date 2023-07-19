@@ -121,20 +121,18 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
-TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+TypeFeedback TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto size = InInteger(inp);
 
     std::vector<TypeFeedbackSlot> slots;
     slots.reserve(size);
-
-    auto slot = TypeFeedbackSlot::createCallees();
+    auto data = slots.data();
 
     for (auto i = 0; i < size; ++i) {
-        InBytes(inp, &slot, sizeof(TypeFeedbackSlot));
-        slots.emplace_back(slot);
+        InBytes(inp, &data[i], sizeof(TypeFeedbackSlot));
     }
 
-    return new TypeFeedback(std::move(slots));
+    return TypeFeedback(std::move(slots));
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -266,6 +264,6 @@ TypeFeedback TypeFeedback::Builder::build() {
     return TypeFeedback(std::move(slots_));
 }
 
-TypeFeedback TypeFeedback::empty() { return TypeFeedback(FeedbackSlots()); }
+TypeFeedback TypeFeedback::empty() { return TypeFeedback{{}}; }
 
 } // namespace rir
