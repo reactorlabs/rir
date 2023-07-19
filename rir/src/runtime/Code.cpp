@@ -205,13 +205,13 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     OutInteger(out, (int)size());
 
     // Header
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code source", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize source", container(), [&]{
         src_pool_write_item(src, refTable, out);
         OutInteger(out, trivialExpr != nullptr);
         if (trivialExpr)
             UUIDPool::writeItem(trivialExpr, refTable, out);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code numbers", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize numbers", container(), [&]{
         OutInteger(out, (int)stackLength);
         OutInteger(out, (int)localsCount);
         OutInteger(out, (int)bindingCacheSize);
@@ -219,26 +219,26 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         OutInteger(out, (int)srcLength);
         OutInteger(out, (int)extraPoolSize);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code extra pool", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
         UUIDPool::writeItem(getEntry(0), refTable, out);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code call argument reordering metadata", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize call argument reordering metadata", container(), [&]{
         OutInteger(out, getEntry(2) != nullptr);
         if (getEntry(2))
             UUIDPool::writeItem(getEntry(2), refTable, out);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code outer function", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
         if (includeFunction) {
             UUIDPool::writeItem(function()->container(), refTable, noHashOut);
         }
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code bytecode", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize bytecode", container(), [&]{
         // Bytecode
         BC::serialize(refTable, out, code(), codeSize, this);
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code srclist", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
         // Srclist
         for (unsigned i = 0; i < srcLength; i++) {
             OutInteger(out, (int)srclist()[i].pcOffset);
@@ -247,7 +247,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     });
 
     if (!isHashing(out)) {
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize code native", container(), [&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
             // Native code
             OutInteger(out, (int)kind);
             assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
