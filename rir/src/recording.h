@@ -24,6 +24,7 @@ namespace recording {
 
 class Replay;
 class Record;
+struct FunRecording;
 
 #define NO_INDEX ((size_t)-1)
 #define GLOBAL_ENV_NAME ".GlobalEnv"
@@ -56,15 +57,51 @@ struct SpeculativeContext {
 
     SpeculativeContext(ObservedValues values)
         : type{SpeculativeContextType::Values}, value{.values = values} {}
+
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const;
 };
 
 class Event {
   public:
-    friend std::ostream& operator<<(std::ostream& out, const Event& e);
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
     virtual void replay(Replay& replay, SEXP closure,
                         std::string& closure_name) const = 0;
+    virtual void print(const std::vector<FunRecording>& mapping,
+                       std::ostream& out) const = 0;
+
+    /**
+     * Returns true if the event contains a reference to a given DT index
+     */
+    virtual bool containsReference(size_t dispatchTable) const { return false; }
+};
+
+/**
+ * Notifies an update to a speculative context
+ */
+class SpeculativeContextEvent : public Event {
+  public:
+    SpeculativeContextEvent(ssize_t codeIndex, size_t offset,
+                            SpeculativeContext sc)
+        : codeIndex(codeIndex), offset(offset), sc(sc) {}
+    SpeculativeContextEvent()
+        : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+    void replay(Replay& replay, SEXP closure,
+                std::string& closure_name) const override;
+    virtual bool containsReference(size_t dispatchTable) const;
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
+
+  private:
+    // -1 for function body itself, n≥0 for promise index
+    ssize_t codeIndex;
+    size_t offset;
+    SpeculativeContext sc;
 };
 
 class CompilationEvent : public Event {
@@ -73,10 +110,17 @@ class CompilationEvent : public Event {
                      std::vector<SpeculativeContext>&& speculative_contexts)
         : dispatch_context(dispatch_context),
           speculative_contexts(speculative_contexts) {}
+    CompilationEvent() {}
+
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
     void replay(Replay& replay, SEXP closure,
                 std::string& closure_name) const override;
+    virtual bool containsReference(size_t dispatchTable) const;
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
 
   private:
     unsigned long dispatch_context;
@@ -87,34 +131,69 @@ class CompilationEvent : public Event {
 class DeoptEvent : public Event {
   public:
     DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
-               std::pair<size_t, size_t> reasonCodeIdx, uint32_t reasonCodeOff,
-               SEXP trigger);
+               std::pair<ssize_t, ssize_t> reasonCodeIdx,
+               uint32_t reasonCodeOff, SEXP trigger);
     ~DeoptEvent();
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure,
                 std::string& closure_name) const override;
+    virtual bool containsReference(size_t dispatchTable) const;
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
 
   private:
     /* 0 if it couldn't be found */
     size_t functionIdx_;
     DeoptReason::Reason reason_;
     /* negative indicates promise index, positive function index */
-    std::pair<size_t, size_t> reasonCodeIdx_;
+    std::pair<ssize_t, ssize_t> reasonCodeIdx_;
     uint32_t reasonCodeOff_;
     SEXP trigger_;
 };
 
-class DtOverwriteEvent : public Event {
+class DtInitEvent : public Event {
   public:
-    DtOverwriteEvent(size_t funIdx, size_t oldDeoptCount);
+    DtInitEvent(size_t invocations, size_t deopts)
+        : invocations(invocations), deopts(deopts){};
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure,
                 std::string& closure_name) const override;
 
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
+
   private:
-    size_t funIdx, oldDeoptCount;
+    size_t invocations, deopts;
+};
+
+class InvocationEvent : public Event {
+  public:
+    InvocationEvent(size_t dtSize, size_t funIdx, ssize_t deltaCount,
+                    size_t deltaDeopt)
+        : dtSize(dtSize), funIdx(funIdx), deltaCount(deltaCount),
+          deltaDeopt(deltaDeopt){};
+
+    InvocationEvent() : dtSize(0){};
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+    void replay(Replay& replay, SEXP closure,
+                std::string& closure_name) const override;
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
+
+  private:
+    size_t dtSize;
+    size_t funIdx = (size_t)-1;
+    ssize_t deltaCount = 0;
+    size_t deltaDeopt = 0;
 };
 
 struct FunRecording {
@@ -126,16 +205,19 @@ struct FunRecording {
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue */
     SEXP closure;
 
-    std::vector<std::unique_ptr<Event>> events;
+    // Just prints the name if the closure (or pointer if it has no name)
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const FunRecording& that);
 };
 
 class Replay {
-    SEXP recordings_;
-
-    SEXP replayClosure(size_t idx);
+    SEXP log;
 
   public:
+    std::vector<FunRecording> bodies;
     std::vector<SEXP> closures_;
+
+    SEXP replayClosure(size_t idx);
 
     void replaySpeculativeContext(
         DispatchTable* dt,
@@ -150,6 +232,9 @@ class Replay {
 
     ~Replay();
 
+    size_t getEventCount();
+    std::pair<size_t, std::unique_ptr<Event>> getEvent(size_t idx);
+
     size_t replay();
 };
 
@@ -158,11 +243,19 @@ class Record {
     std::unordered_map<std::string, size_t> recordings_index_;
     std::vector<FunRecording> fun_recordings_;
 
+    std::vector<std::pair<size_t, std::unique_ptr<Event>>> log;
+
   protected:
     size_t indexOfBaseline(const rir::Code* code) const;
 
   public:
     ~Record();
+
+    void record(const DispatchTable* dt, std::unique_ptr<Event> event);
+    void record(const SEXP cls, std::string name, std::unique_ptr<Event> event);
+    void record(const SEXP cls, std::unique_ptr<Event> event);
+
+    bool contains(const DispatchTable* dt);
 
     std::pair<size_t, FunRecording&> initOrGetRecording(const DispatchTable* dt,
                                                         std::string name = "");
@@ -178,6 +271,7 @@ class Record {
 
     std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
+    void printRecordings(std::ostream& out);
     void reset() {
         recordings_index_.clear();
         fun_recordings_.clear();
@@ -206,6 +300,11 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
                  SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
                        size_t oldDeoptCount);
+void recordInvocation(const Function* f, ssize_t deltaCount, size_t deltaDeopt);
+void prepareRecordSC(const Code* container);
+void recordSC(const ObservedCallees& type);
+void recordSC(const ObservedTest& type);
+void recordSC(const ObservedValues& type);
 
 } // namespace recording
 
@@ -216,10 +315,11 @@ REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();
 REXPORT SEXP isRecordings();
-REXPORT SEXP replayRecordings(SEXP recordings);
-REXPORT SEXP replayRecordingsFromFile(SEXP filename);
+REXPORT SEXP replayRecordings(SEXP recordings, bool startRecording);
+REXPORT SEXP replayRecordingsFromFile(SEXP filename, bool startRecording);
 REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
+REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile);
 
 #endif

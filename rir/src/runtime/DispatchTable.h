@@ -142,13 +142,13 @@ struct DispatchTable
                 if (i != 0) {
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
+                    fun->attachDispatchTable(this);
                     fun->addDeoptCount(old->deoptCount());
                     old->overridenBy = fun;
                     // recording::recordDtOverwrite(this, i, old->deoptCount());
                     old->attachDispatchTable(nullptr);
 
                     setEntry(i, fun->container());
-                    fun->attachDispatchTable(this);
                     assert(get(i) == fun);
                 }
                 return;

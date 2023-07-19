@@ -10,6 +10,16 @@
 namespace rir {
 
 struct Code;
+struct ObservedCallees;
+struct ObservedTest;
+struct ObservedValues;
+
+namespace recording {
+void prepareRecordSC(const Code* container);
+void recordSC(const ObservedCallees& type);
+void recordSC(const ObservedTest& type);
+void recordSC(const ObservedValues& type);
+} // namespace recording
 
 #pragma pack(push)
 #pragma pack(1)
@@ -56,6 +66,8 @@ struct ObservedTest {
                 seen = OnlyTrue;
             else if (seen != OnlyTrue)
                 seen = Both;
+
+            recording::recordSC(*this);
             return;
         }
         if (e == R_FalseValue) {
@@ -63,9 +75,13 @@ struct ObservedTest {
                 seen = OnlyFalse;
             else if (seen != OnlyFalse)
                 seen = Both;
+
+            recording::recordSC(*this);
             return;
         }
         seen = Both;
+
+        recording::recordSC(*this);
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
@@ -149,6 +165,8 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
+
+        rir::recording::recordSC(*this);
     }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),

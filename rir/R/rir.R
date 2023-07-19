@@ -225,11 +225,11 @@ recordings.load <- function(filename) {
     .Call("loadRecordings", filename)
 }
 
-recordings.replay <- function(from) {
+recordings.replay <- function(from, start_recording = FALSE) {
     if (is.list(from)) {
-        .Call("replayRecordings", from)
+        .Call("replayRecordings", from, start_recording)
     } else {
-        .Call("replayRecordingsFromFile", from)
+        .Call("replayRecordingsFromFile", from, start_recording)
     }
 }
 
@@ -258,4 +258,8 @@ recordings.eval <- function(expr, env=parent.frame()) {
     eval(expr, env)
     recordings.stop()
     recordings.get()
+}
+
+recordings.print <- function(filename = NULL, fromFile = NULL) {
+    .Call("printRecordings", filename, fromFile)
 }

@@ -30,6 +30,10 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+namespace recording {
+void prepareRecordSC(const Code* container);
+}
+
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
@@ -2308,6 +2312,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_call_) {
             ObservedCallees* feedback = (ObservedCallees*)pc;
             SEXP callee = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(c, callee);
             pc += sizeof(ObservedCallees);
             NEXT();
@@ -2316,6 +2321,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_test_) {
             ObservedTest* feedback = (ObservedTest*)pc;
             SEXP t = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(t);
             pc += sizeof(ObservedTest);
             NEXT();
@@ -2324,6 +2330,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(t);
             pc += sizeof(ObservedValues);
             NEXT();

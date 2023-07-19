@@ -38,11 +38,6 @@ SEXP to_sexp(
 //     return vec;
 // }
 
-template <typename T>
-SEXP to_sexp(const std::unique_ptr<T>& ptr) {
-    return to_sexp(*ptr);
-}
-
 SEXP to_sexp(const std::string& str) { return Rf_mkString(str.c_str()); }
 
 std::string string_from_sexp(SEXP sexp) {
@@ -78,24 +73,19 @@ SEXP to_sexp(uint64_t i) {
 
 uint64_t uint64_t_from_sexp(SEXP sexp) {
     assert(Rf_isString(sexp));
-    return std::stoul(CHAR(STRING_ELT(sexp, 0)));
+    return std::strtoul(CHAR(STRING_ELT(sexp, 0)), nullptr, 10);
 }
 
-SEXP to_sexp(const std::pair<int64_t, int64_t>& pair) {
-    auto sexp = PROTECT(Rf_allocVector(RAWSXP, 2 * sizeof(int64_t)));
-    memcpy(RAW(sexp) + 0, &pair.first, sizeof(int64_t));
-    memcpy(RAW(sexp) + sizeof(int64_t), &pair.second, sizeof(int64_t));
-    UNPROTECT(1);
-    return sexp;
+SEXP to_sexp(int64_t i) {
+    // R doesn't have long ints, we use strings instead
+    char i_str[21];
+    sprintf(i_str, "%ld", i);
+    return Rf_mkString(i_str);
 }
 
-std::pair<int64_t, int64_t> pair_from_sexp(SEXP sexp) {
-    assert(TYPEOF(sexp) == RAWSXP);
-    assert(Rf_length(sexp) == 2 * sizeof(int64_t));
-    std::pair<int64_t, int64_t> pair;
-    memcpy((void*)&pair.first, RAW(sexp), sizeof(int64_t));
-    memcpy((void*)&pair.second, RAW(sexp) + sizeof(int64_t), sizeof(int64_t));
-    return pair;
+int64_t int64_t_from_sexp(SEXP sexp) {
+    assert(Rf_isString(sexp));
+    return std::strtoll(CHAR(STRING_ELT(sexp, 0)), nullptr, 10);
 }
 
 SEXP to_sexp(const rir::recording::Event& obj) { return obj.toSEXP(); }
@@ -105,16 +95,17 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
 
     std::unique_ptr<rir::recording::Event> event;
     if (Rf_inherits(sexp, R_CLASS_COMPILE_EVENT)) {
-        // dummy init, overwritten later
-        event = std::make_unique<rir::recording::CompilationEvent>(
-            0, std::vector<SpeculativeContext>{});
+        event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
-        // dummy init, overwritten later
         event = std::make_unique<rir::recording::DeoptEvent>(
             0, DeoptReason::Reason::Unknown,
             std::make_pair((size_t)-1, (size_t)-1), (uint32_t)0, nullptr);
-    } else if (Rf_inherits(sexp, R_CLASS_OVERWRITE_EVENT)) {
-        event = std::make_unique<rir::recording::DtOverwriteEvent>(-1, -1);
+    } else if (Rf_inherits(sexp, R_CLASS_DT_INIT_EVENT)) {
+        event = std::make_unique<rir::recording::DtInitEvent>(-1, -1);
+    } else if (Rf_inherits(sexp, R_CLASS_INVOCATION_EVENT)) {
+        event = std::make_unique<rir::recording::InvocationEvent>();
+    } else if (Rf_inherits(sexp, R_CLASS_SC_EVENT)) {
+        event = std::make_unique<rir::recording::SpeculativeContextEvent>();
     } else {
         Rf_error("can't deserialize event of unknown class");
     }
@@ -176,28 +167,25 @@ DeoptReason::Reason deopt_reason_from_sexp(SEXP sexp) {
 }
 
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
-    const char* fields[] = {"name", "env", "closure", "events", ""};
+    const char* fields[] = {"name", "env", "closure", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
     SET_VECTOR_ELT(vec, 0, PROTECT(Rf_mkString(obj.name.c_str())));
     SET_VECTOR_ELT(vec, 1, PROTECT(Rf_mkString(obj.env.c_str())));
     SET_VECTOR_ELT(vec, 2, obj.closure);
-    SET_VECTOR_ELT(vec, 3, PROTECT(to_sexp(obj.events)));
-    UNPROTECT(4);
+    UNPROTECT(3);
     return vec;
 }
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 3);
 
     rir::recording::FunRecording recorder;
 
     recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, 0));
     recorder.env = serialization::string_from_sexp(VECTOR_ELT(sexp, 1));
     recorder.closure = VECTOR_ELT(sexp, 2);
-    assert(TYPEOF(recorder.closure) == RAWSXP);
-    recorder.events = vector_from_sexp<std::unique_ptr<Event>, event_from_sexp>(
-        VECTOR_ELT(sexp, 3));
+    assert(Rf_isNull(recorder.closure) || TYPEOF(recorder.closure) == RAWSXP);
 
     return recorder;
 }
