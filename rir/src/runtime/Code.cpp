@@ -56,7 +56,7 @@ Code* Code::NewNative(Immediate ast) {
 }
 
 void Code::setLazyCodeModuleFinalizer() {
-    makeFinalizer(Code::finalizeLazyCodeModuleFromContainer);
+    makeFinalizer(Code::finalizeLazyCodeModuleFromContainer, false);
 }
 
 void Code::finalizeLazyCodeModuleFromContainer(SEXP sexp) {
