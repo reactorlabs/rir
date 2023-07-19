@@ -2,3 +2,6 @@
 	path = external/custom-r
 	url = https://github.com/reactorlabs/gnur.git
 	ignore = untracked
+[submodule "external/xxHash"]
+	path = external/xxHash
+	url = https://github.com/Cyan4973/xxHash.git
