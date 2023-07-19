@@ -33,7 +33,6 @@ with(rec[[1]], {
 # change A to int so the speculation does not hold anymore
 A <- 1L
 
-viz(f)
 rec <- recordings.eval({
     # trigger deopt
     f(2)
