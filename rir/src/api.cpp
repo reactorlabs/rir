@@ -293,6 +293,8 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug,
                 std::string* closureVersionPirPrint) {
+    Protect p(what);
+
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -304,8 +306,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     if (!compilerServerHandle || PIR_CLIENT_DRY_RUN) {
         // Actually pirCompile on the client
-        PROTECT(what);
-
         bool dryRun = debug.includes(pir::DebugFlag::DryRun);
         // compile to pir
         pir::Module* m = new pir::Module;
@@ -325,7 +325,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 pir::Backend backend(m, logger, name);
                 auto apply = [&](SEXP body, pir::ClosureVersion* c) {
                     auto fun = backend.getOrCompile(c);
-                    Protect p(fun->container());
+                    p(fun->container());
                     DispatchTable::unpack(body)->insert(fun);
                     if (body == BODY(what))
                         done = fun;
@@ -372,7 +372,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                            },
                            {});
 
-        UNPROTECT(1);
         delete m;
     } else {
         if (debug.flags.contains(pir::DebugFlag::PrintFinalPir)) {

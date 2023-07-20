@@ -49,7 +49,7 @@ template <typename CLS>
 static bool trySerialize(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
         OutInteger(out, b->info.magic);
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", s, [&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serializeRir", s, [&]{
             b->serialize(refTable, out);
         });
         return true;
@@ -78,64 +78,76 @@ void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
 }
 
 SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
-    unsigned code = InInteger(inp);
-    switch (code) {
-    case DISPATCH_TABLE_MAGIC:
-        return DispatchTable::deserialize(refTable, inp)->container();
-    case CODE_MAGIC:
-        return Code::deserialize(refTable, inp)->container();
-    case FUNCTION_MAGIC:
-        return Function::deserialize(refTable, inp)->container();
-    case ARGLIST_ORDER_MAGIC:
-        return ArglistOrder::deserialize(refTable, inp)->container();
-    case LAZY_ARGS_MAGIC:
-        return LazyArglist::deserialize(refTable, inp)->container();
-    case LAZY_ENVIRONMENT_MAGIC:
-        return LazyEnvironment::deserialize(refTable, inp)->container();
-    case PIR_TYPE_FEEDBACK_MAGIC:
-        return PirTypeFeedback::deserialize(refTable, inp)->container();
-    default:
-        std::cerr << "couldn't deserialize EXTERNALSXP with code: 0x"
-                  << std::hex << code << "\n";
-        assert(false);
-    }
+    return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserializeRir", [&]{
+        unsigned code = InInteger(inp);
+        switch (code) {
+        case DISPATCH_TABLE_MAGIC:
+            return DispatchTable::deserialize(refTable, inp)->container();
+        case CODE_MAGIC:
+            return Code::deserialize(refTable, inp)->container();
+        case FUNCTION_MAGIC:
+            return Function::deserialize(refTable, inp)->container();
+        case ARGLIST_ORDER_MAGIC:
+            return ArglistOrder::deserialize(refTable, inp)->container();
+        case LAZY_ARGS_MAGIC:
+            return LazyArglist::deserialize(refTable, inp)->container();
+        case LAZY_ENVIRONMENT_MAGIC:
+            return LazyEnvironment::deserialize(refTable, inp)->container();
+        case PIR_TYPE_FEEDBACK_MAGIC:
+            return PirTypeFeedback::deserialize(refTable, inp)->container();
+        default:
+            std::cerr << "couldn't deserialize EXTERNALSXP with code: 0x"
+                      << std::hex << code << "\n";
+            assert(false);
+        }
+    }, [&](SEXP s){
+        // TODO: Find out why this doesn't work for some nested code objects,
+        //  and fix if possible.
+        return false;
+    });
 }
 
 SEXP copyBySerial(SEXP x) {
     if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
         return x;
 
-    Protect p;
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    pir::Parameter::RIR_PRESERVE = true;
-    SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-    SEXP copy = p(disableGc([&]{ return R_unserialize(data, R_NilValue); }));
+    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: copyBySerial", x, [&]{
+        Protect p(x);
+        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+        pir::Parameter::RIR_PRESERVE = true;
+        SEXP data =
+            p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+        SEXP copy =
+            p(disableGc([&] { return R_unserialize(data, R_NilValue); }));
 #ifdef DO_INTERN
-    copy = UUIDPool::intern(copy, true, false);
+        copy = UUIDPool::intern(copy, true, false);
 #endif
 #if defined(ENABLE_SLOWASSERT) && defined(CHECK_COPY_BY_SERIAL)
-    auto xHash = hashSexp(x);
-    auto copyHash = hashSexp(copy);
-    if (xHash != copyHash) {
-        std::stringstream ss;
-        ss << "hash mismatch after serializing: " << xHash << " != " << copyHash;
-        Rf_warning(ss.str().c_str());
-        Rf_PrintValue(x);
-        Rf_PrintValue(copy);
+        auto xHash = hashSexp(x);
+        auto copyHash = hashSexp(copy);
+        if (xHash != copyHash) {
+            std::stringstream ss;
+            ss << "hash mismatch after serializing: " << xHash
+               << " != " << copyHash;
+            Rf_warning(ss.str().c_str());
+            Rf_PrintValue(x);
+            Rf_PrintValue(copy);
 
-        SEXP data2 = p(R_serialize(copy, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        SEXP copy2 = p(R_unserialize(data2, R_NilValue));
-        auto copyHash2 = hashSexp(copy2);
-        if (copyHash != copyHash2) {
-            std::stringstream ss2;
-            ss2 << "copy hash is also different: " << copyHash2;
-            Rf_warning(ss2.str().c_str());
-            Rf_PrintValue(copy2);
+            SEXP data2 = p(R_serialize(copy, R_NilValue, R_NilValue, R_NilValue,
+                                       R_NilValue));
+            SEXP copy2 = p(R_unserialize(data2, R_NilValue));
+            auto copyHash2 = hashSexp(copy2);
+            if (copyHash != copyHash2) {
+                std::stringstream ss2;
+                ss2 << "copy hash is also different: " << copyHash2;
+                Rf_warning(ss2.str().c_str());
+                Rf_PrintValue(copy2);
+            }
         }
-    }
 #endif
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-    return copy;
+        pir::Parameter::RIR_PRESERVE = oldPreserve;
+        return copy;
+    });
 }
 
 static void rStreamDiscardChar(__attribute__((unused)) R_outpstream_t stream,
@@ -196,34 +208,29 @@ R_outpstream_st nullOutputStream() {
 }
 
 static void hashSexp(SEXP sexp, UUID::Hasher& hasher, ConnectedWorklist* connected) {
-    Protect p(sexp);
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    auto oldUseHashes = _useHashes;
-    auto oldIsHashing = _isHashing;
-    auto oldConnectedWorklist = connectedWorklist;
-    auto oldRetrieveHash = retrieveHash;
-    pir::Parameter::RIR_PRESERVE = true;
-    _useHashes = false;
-    _isHashing = true;
-    connectedWorklist = connected;
-    retrieveHash = UUID();
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&hasher,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamHashChar,
-        rStreamHashBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    retrieveHash = oldRetrieveHash;
-    connectedWorklist = oldConnectedWorklist;
-    _isHashing = oldIsHashing;
-    _useHashes = oldUseHashes;
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: hashSexp", sexp, [&]{
+        Protect p(sexp);
+        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+        auto oldUseHashes = _useHashes;
+        auto oldIsHashing = _isHashing;
+        auto oldConnectedWorklist = connectedWorklist;
+        auto oldRetrieveHash = retrieveHash;
+        pir::Parameter::RIR_PRESERVE = true;
+        _useHashes = false;
+        _isHashing = true;
+        connectedWorklist = connected;
+        retrieveHash = UUID();
+        struct R_outpstream_st out {};
+        R_InitOutPStream(&out, (R_pstream_data_t)&hasher, R_STREAM_FORMAT,
+                         R_STREAM_DEFAULT_VERSION, rStreamHashChar,
+                         rStreamHashBytes, nullptr, nullptr);
+        R_Serialize(sexp, &out);
+        retrieveHash = oldRetrieveHash;
+        connectedWorklist = oldConnectedWorklist;
+        _isHashing = oldIsHashing;
+        _useHashes = oldUseHashes;
+        pir::Parameter::RIR_PRESERVE = oldPreserve;
+    });
 }
 
 UUID hashSexp(SEXP sexp, ConnectedWorklist& connected) {
@@ -239,34 +246,29 @@ UUID hashSexp(SEXP sexp) {
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
-    Protect p(sexp);
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    auto oldUseHashes = _useHashes;
-    auto oldIsHashing = _isHashing;
-    auto oldConnectedWorklist = connectedWorklist;
-    auto oldRetrieveHash = retrieveHash;
-    pir::Parameter::RIR_PRESERVE = true;
-    _useHashes = useHashes;
-    _isHashing = false;
-    connectedWorklist = nullptr;
-    retrieveHash = UUID();
-    struct R_outpstream_st out{};
-    R_InitOutPStream(
-        &out,
-        (R_pstream_data_t)&buffer,
-        R_STREAM_FORMAT,
-        R_STREAM_DEFAULT_VERSION,
-        rStreamOutChar,
-        rStreamOutBytes,
-        nullptr,
-        nullptr
-    );
-    R_Serialize(sexp, &out);
-    retrieveHash = oldRetrieveHash;
-    connectedWorklist = oldConnectedWorklist;
-    _isHashing = oldIsHashing;
-    _useHashes = oldUseHashes;
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", sexp, [&]{
+        Protect p(sexp);
+        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+        auto oldUseHashes = _useHashes;
+        auto oldIsHashing = _isHashing;
+        auto oldConnectedWorklist = connectedWorklist;
+        auto oldRetrieveHash = retrieveHash;
+        pir::Parameter::RIR_PRESERVE = true;
+        _useHashes = useHashes;
+        _isHashing = false;
+        connectedWorklist = nullptr;
+        retrieveHash = UUID();
+        struct R_outpstream_st out {};
+        R_InitOutPStream(&out, (R_pstream_data_t)&buffer, R_STREAM_FORMAT,
+                         R_STREAM_DEFAULT_VERSION, rStreamOutChar,
+                         rStreamOutBytes, nullptr, nullptr);
+        R_Serialize(sexp, &out);
+        retrieveHash = oldRetrieveHash;
+        connectedWorklist = oldConnectedWorklist;
+        _isHashing = oldIsHashing;
+        _useHashes = oldUseHashes;
+        pir::Parameter::RIR_PRESERVE = oldPreserve;
+    });
 }
 
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
@@ -274,34 +276,33 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
 }
 
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
-    auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-    auto oldUseHashes = _useHashes;
-    auto oldIsHashing = _isHashing;
-    auto oldConnectedWorklist = connectedWorklist;
-    auto oldRetrieveHash = retrieveHash;
-    pir::Parameter::RIR_PRESERVE = true;
-    _useHashes = useHashes;
-    _isHashing = false;
-    connectedWorklist = nullptr;
-    retrieveHash = newRetrieveHash;
-    struct R_inpstream_st in{};
-    R_InitInPStream(
-        &in,
-        (R_pstream_data_t)&sexpBuffer,
-        R_STREAM_FORMAT,
-        rStreamInChar,
-        rStreamInBytes,
-        nullptr,
-        nullptr
-    );
-    SEXP sexp = disableGc([&]{ return R_Unserialize(&in); });
-    // assert(!retrieveHash && "retrieve hash not taken");
-    retrieveHash = oldRetrieveHash;
-    connectedWorklist = oldConnectedWorklist;
-    _isHashing = oldIsHashing;
-    _useHashes = oldUseHashes;
-    pir::Parameter::RIR_PRESERVE = oldPreserve;
-    return sexp;
+    return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserialize", [&]{
+        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+        auto oldUseHashes = _useHashes;
+        auto oldIsHashing = _isHashing;
+        auto oldConnectedWorklist = connectedWorklist;
+        auto oldRetrieveHash = retrieveHash;
+        pir::Parameter::RIR_PRESERVE = true;
+        _useHashes = useHashes;
+        _isHashing = false;
+        connectedWorklist = nullptr;
+        retrieveHash = newRetrieveHash;
+        struct R_inpstream_st in {};
+        R_InitInPStream(&in, (R_pstream_data_t)&sexpBuffer, R_STREAM_FORMAT,
+                        rStreamInChar, rStreamInBytes, nullptr, nullptr);
+        SEXP sexp = disableGc([&] { return R_Unserialize(&in); });
+        // assert(!retrieveHash && "retrieve hash not taken");
+        retrieveHash = oldRetrieveHash;
+        connectedWorklist = oldConnectedWorklist;
+        _isHashing = oldIsHashing;
+        _useHashes = oldUseHashes;
+        pir::Parameter::RIR_PRESERVE = oldPreserve;
+        return sexp;
+    }, [&](SEXP s){
+        // TODO: Find out why this doesn't work for some nested code objects,
+        //  and fix if possible.
+        return false;
+    });
 }
 
 bool useHashes(__attribute__((unused)) R_outpstream_t out) {
