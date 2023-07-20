@@ -316,7 +316,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     explicit TypeFeedback(std::vector<TypeFeedbackSlot>&& slots)
         : RirRuntimeObject(0, 0), owner_(nullptr), size_(slots.size()) {
-        memcpy(&slots_, slots.data(), size_ * sizeof(TypeFeedbackSlot));
+        if (size_) {
+            memcpy(&slots_, slots.data(), size_ * sizeof(TypeFeedbackSlot));
+        }
     }
 
   public:
