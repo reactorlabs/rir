@@ -22,7 +22,6 @@ using Duration = std::chrono::duration<double>;
 
 struct Measuring::TimingEvent {
     const std::string& name;
-    SEXP associated = nullptr;
     TimePoint start;
 };
 
@@ -241,7 +240,7 @@ struct MeasuringImpl {
                     auto& name = std::get<0>(t.second);
                     auto& associated = std::get<1>(t.second);
                     auto duration = std::get<2>(t.second);
-                    out << "    " << std::setw(width) << name << "\t"
+                    out << "    " << std::setw((int)width) << name << "\t"
                         << associated << "\t" << format(duration);
                     out << "\n";
                     printedAssociateds.insert(associated);
@@ -253,7 +252,7 @@ struct MeasuringImpl {
                 out << "  Associated latest dumps:\n";
                 for (auto& a : printedAssociateds) {
                     if (associatedLatestDumps.count(a)) {
-                        out << "    " << std::setw(width) << a;
+                        out << "    " << std::setw((int)width) << a;
                         out << "\n" << associatedLatestDumps.at(a) << "\n";
                     }
                 }
@@ -300,7 +299,7 @@ struct MeasuringImpl {
         return ss.str();
     }
 
-    Duration sumRangeSet(const RangeSet<TimePoint>& set) {
+    static Duration sumRangeSet(const RangeSet<TimePoint>& set) {
         auto sum = Duration::zero();
         for (auto& r : set) {
             sum += r.second - r.first;
@@ -313,21 +312,22 @@ struct MeasuringImpl {
 
 std::unique_ptr<MeasuringImpl> m = std::make_unique<MeasuringImpl>();
 
-Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name, SEXP associated) {
+Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name) {
     startTimer(name);
     m->shouldOutput = true;
     auto start = std::chrono::high_resolution_clock::now();
-    return new Measuring::TimingEvent{name, associated, start};
+    return new Measuring::TimingEvent{name, start};
 }
 
 void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing,
+                                SEXP associated,
                                 bool associatedIsInitialized) {
     assert(timing);
     countTimer(timing->name);
-    m->updateAssociatedDump(timing->associated, associatedIsInitialized);
+    m->updateAssociatedDump(associated, associatedIsInitialized);
     auto end = std::chrono::high_resolution_clock::now();
     MeasuringImpl::TimedEvent timed{timing->start, end};
-    m->timedEvents[timing->name][timing->associated].push_back(timed);
+    m->timedEvents[timing->name][associated].push_back(timed);
     delete timing;
 }
 
