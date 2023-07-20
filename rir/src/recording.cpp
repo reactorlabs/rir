@@ -134,21 +134,60 @@ void Record::recordSpeculativeContext(const Code* code,
 std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
                                                             std::string name) {
     assert(Rf_isFunction(cls));
-    auto clsAddress = stringAddressOf(cls);
-    auto r = recordings_index_.insert({clsAddress, fun_recordings_.size()});
+    auto& body = *BODY(cls);
+
+    // Primitives are stored as a special case
+    if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP) {
+        auto primIdx = cls->u.primsxp.offset;
+
+        // Do we already have it stored?
+        auto primEntry = primitive_to_body_index.find(primIdx);
+        if (primEntry != primitive_to_body_index.end()) {
+            return {primEntry->second, functions[primEntry->second]};
+        }
+
+        size_t idx = functions.size();
+        functions.push_back(FunRecording(primIdx));
+        auto& body = functions.back();
+        body.closure = PROTECT(
+            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+        R_PreserveObject(body.closure);
+        UNPROTECT(1);
+        return {idx, body};
+    }
+
+    assert(TYPEOF(cls) == CLOSXP);
+    auto dt = DispatchTable::check(&body);
+    bool inserted;
+    size_t index;
+    if (dt) {
+        // Leaking for the moment
+        R_PreserveObject(dt->container());
+        auto r = dt_to_recording_index_.insert({dt, functions.size()});
+        inserted = r.second;
+        index = r.first->second;
+    } else {
+        assert(TYPEOF(&body) == BCODESXP);
+        R_PreserveObject(&body);
+        auto r = bcode_to_body_index.insert({&body, functions.size()});
+        inserted = r.second;
+        index = r.first->second;
+    }
+
+    auto r = dt_to_recording_index_.insert({dt, functions.size()});
     FunRecording* v;
 
-    if (r.second) {
+    if (inserted) {
         // we are seeing it for the first time
-        fun_recordings_.push_back(FunRecording{});
-        v = &fun_recordings_.back();
+        functions.push_back(FunRecording{});
+        v = &functions.back();
         v->env = getEnvironmentName(CLOENV(cls));
         v->closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
         R_PreserveObject(v->closure);
         UNPROTECT(1);
     } else {
-        v = &fun_recordings_[r.first->second];
+        v = &functions[index];
         // If closure is undefined, that means this FunRecorder was created from
         // a DispatchTable, so we init it
         if (Rf_isNull(v->closure)) {
@@ -164,20 +203,12 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         v->name = name;
     }
 
-    // special functions don't have dispatch tables, let's not error here
-    if (TYPEOF(BODY(cls)) == EXTERNALSXP) {
-        auto dt = DispatchTable::unpack(BODY(cls));
-        if (r.second) {
-            assert(dt->size() == 1);
-            auto* base = dt->baseline();
-            log.push_back({r.first->second,
-                           std::make_unique<DtInitEvent>(
-                               base->invocationCount(), base->deoptCount())});
-        }
-        dt_to_recording_index_.insert({dt, r.first->second});
-    } else if (!Rf_isNull(BODY(cls))) {
-        auto type = Rf_type2char(TYPEOF(BODY(cls)));
-        std::cerr << "saw special function of type " << type << std::endl;
+    if (r.second && false) {
+        assert(dt->size() == 1);
+        auto* base = dt->baseline();
+        log.push_back({r.first->second,
+                       std::make_unique<DtInitEvent>(base->invocationCount(),
+                                                     base->deoptCount())});
     }
 
     return {r.first->second, *v};
@@ -188,19 +219,20 @@ Record::initOrGetRecording(const DispatchTable* dt, std::string name) {
     // First, we check if we can find the dt in the appropriate mapping
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
-        return {dt_index->second, fun_recordings_[dt_index->second]};
+        return {dt_index->second, functions[dt_index->second]};
     } else {
-        FunRecording dummyRecorder = {std::move(name), {}, R_NilValue};
+        FunRecording r = {};
+        r.name = name;
 
-        auto insertion_index = fun_recordings_.size();
-        fun_recordings_.push_back(std::move(dummyRecorder));
+        auto insertion_index = functions.size();
+        functions.push_back(std::move(r));
         dt_to_recording_index_.insert({dt, insertion_index});
-        return {insertion_index, fun_recordings_[insertion_index]};
+        return {insertion_index, functions[insertion_index]};
     }
 }
 
 Record::~Record() {
-    for (auto& v : fun_recordings_) {
+    for (auto& v : functions) {
         R_ReleaseObject(v.closure);
     }
 }
@@ -209,7 +241,7 @@ SEXP Record::save() {
     // Check if we have dispatch tables without an associated SEXP and remove
     // related events. Might be avoidable eventually.
     size_t recIdx = 0;
-    for (auto& recording : fun_recordings_) {
+    for (auto& recording : functions) {
         if (Rf_isNull(recording.closure)) {
             auto refersToRecording =
                 [recIdx](
@@ -225,9 +257,9 @@ SEXP Record::save() {
         recIdx++;
     }
 
-    const char* fields[] = {"bodies", "events", ""};
+    const char* fields[] = {"functions", "events", ""};
     auto recordSexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    auto bodiesSexp = PROTECT(serialization::to_sexp(fun_recordings_));
+    auto bodiesSexp = PROTECT(serialization::to_sexp(functions));
     auto eventsSexp = PROTECT(serialization::to_sexp(log));
 
     SET_VECTOR_ELT(recordSexp, 0, bodiesSexp);
@@ -242,7 +274,7 @@ SEXP Record::save() {
 
 void Record::printRecordings(std::ostream& out) {
     for (auto& eventEntry : log) {
-        auto& body = fun_recordings_[eventEntry.first];
+        auto& body = functions[eventEntry.first];
 
         const char* name = body.name.c_str();
         std::string ptr_str;
@@ -261,13 +293,21 @@ void Record::printRecordings(std::ostream& out) {
 
         Prefixer prefixed(out, name);
         prefixed << "    ";
-        eventEntry.second->print(fun_recordings_, prefixed);
+        eventEntry.second->print(functions, prefixed);
         prefixed << std::endl;
     }
 }
 
 std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
-    if (that.name.length()) {
+    if (that.primIdx >= 0) {
+        // Weird condition coming from names.c:R_Primitive
+        bool isInternal = (R_FunTab[that.primIdx].eval % 100) / 10;
+        if (isInternal) {
+            out << ".Internal(" << that.name << ")";
+        } else {
+            out << ".Primitive(" << that.name << ")";
+        }
+    } else if (that.name.length()) {
         out << that.name;
     } else if (HIDE_UNKNOWN_CLOSURE_POINTER) {
         out << "<?>";
@@ -285,12 +325,15 @@ Replay::Replay(SEXP recordings) {
 
     SEXP bodiesSexp = VECTOR_ELT(recordings, 0);
     auto n = Rf_length(bodiesSexp);
-    closures_.reserve(n);
-    bodies.reserve(n);
+    rehydrated_closures.reserve(n);
+    rehydrated_dispatch_tables.reserve(n);
+    this->functions.reserve(n);
     for (auto i = 0; i < n; i++) {
-        closures_.push_back(R_NilValue);
+        rehydrated_closures.push_back(R_NilValue);
+        rehydrated_dispatch_tables.push_back(nullptr);
         SEXP bodySexp = VECTOR_ELT(bodiesSexp, i);
-        bodies.push_back(serialization::fun_recorder_from_sexp(bodySexp));
+        this->functions.push_back(
+            serialization::fun_recorder_from_sexp(bodySexp));
     }
 
     log = VECTOR_ELT(recordings, 1);
@@ -313,13 +356,21 @@ std::pair<size_t, std::unique_ptr<Event>> Replay::getEvent(size_t idx) {
 }
 
 SEXP Replay::replayClosure(size_t idx) {
-    SEXP closure = closures_.at(idx);
+    SEXP closure = rehydrated_closures.at(idx);
     if (closure != R_NilValue) {
         return closure;
     }
 
-    const FunRecording& recording = bodies.at(idx);
+    const FunRecording& recording = functions.at(idx);
     assert(!Rf_isNull(recording.closure));
+
+    if (recording.primIdx >= 0) {
+        SEXP primitive = PROTECT(R_unserialize(recording.closure, R_NilValue));
+        assert(TYPEOF(primitive) == SPECIALSXP ||
+               TYPEOF(primitive) == BUILTINSXP);
+        UNPROTECT(1);
+        return primitive;
+    }
 
     SEXP name = R_NilValue;
     if (!recording.name.empty()) {
@@ -332,9 +383,11 @@ SEXP Replay::replayClosure(size_t idx) {
         return R_NilValue;
     }
 
+    assert(TYPEOF(closure) == CLOSXP);
+
     // TODO: the env parameter is likely not correct
     rirCompile(closure, R_GlobalEnv);
-    closures_[idx] = closure;
+    rehydrated_closures[idx] = closure;
 
     if (name != R_NilValue) {
         SEXP env = getEnvironment(recording.env);
@@ -350,6 +403,10 @@ SEXP Replay::replayClosure(size_t idx) {
         }
     }
 
+    // TODO: protect properly
+    R_PreserveObject(BODY(closure));
+    rehydrated_dispatch_tables[idx] = DispatchTable::unpack(BODY(closure));
+
     UNPROTECT(1);
 
     return closure;
@@ -361,8 +418,9 @@ size_t Replay::replay() {
     for (size_t i = 0; i < n; i++) {
         auto entry = getEvent(i);
         auto cls = PROTECT(replayClosure(entry.first));
-        const auto& body = bodies.at(entry.first);
-        entry.second->replay(*this, cls, const_cast<std::string&>(body.name));
+        const auto& function = functions.at(entry.first);
+        entry.second->replay(*this, cls,
+                             const_cast<std::string&>(function.name));
         UNPROTECT(1);
     }
 
@@ -469,19 +527,29 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
         return;
     }
     case SpeculativeContextType::Test:
-        out << "Test";
-        break;
+        out << "Test{";
+        switch (value.test.seen) {
+        case ObservedTest::None:
+            out << "None";
+            break;
+        case ObservedTest::OnlyTrue:
+            out << "OnlyTrue";
+            break;
+        case ObservedTest::OnlyFalse:
+            out << "OnlyFalse";
+            break;
+        case ObservedTest::Both:
+            out << "Both";
+            break;
+        }
+        out << "}";
+        return;
     case SpeculativeContextType::Values:
-        out << "Values";
-        break;
+        out << "Values{";
+        value.values.print(out);
+        out << "}";
+        return;
     }
-    unsigned char rawValue[sizeof(SpeculativeContext::Value)];
-    memcpy(rawValue, (void*)&value, sizeof(SpeculativeContext::Value));
-    out << "{0x";
-    for (size_t i = 0; i < sizeof(SpeculativeContext::Value); i++) {
-        out << std::hex << ((unsigned int)(uint8_t)rawValue[i]);
-    }
-    out << "}";
 }
 
 SEXP SpeculativeContextEvent::toSEXP() const {
@@ -624,7 +692,8 @@ bool CompilationEvent::containsReference(size_t dispatchTable) const {
 void CompilationEvent::print(const std::vector<FunRecording>& mapping,
                              std::ostream& out) const {
     out << "CompilationEvent{\n        dispatch_context="
-        << this->dispatch_context << ",\n        speculative_contexts=[\n";
+        << Context(this->dispatch_context)
+        << ",\n        speculative_contexts=[\n";
     for (auto& spec : this->speculative_contexts) {
         out << "            ";
         spec.print(mapping, out);
@@ -724,7 +793,7 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
 
     // Copy and set current closure's code
     Code* deoptSrcCode =
-        retrieveCodeFromIndex(replay.closures_, this->reasonCodeIdx_);
+        retrieveCodeFromIndex(replay.rehydrated_closures, this->reasonCodeIdx_);
     Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
     FeedbackOrigin origin(deoptSrcCode, deoptPc);
     DeoptReason reason(origin, this->reason_);
@@ -977,7 +1046,9 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     }
 
     if (!found) {
-        std::cerr << "not found" << std::endl;
+        if (!c->function()->overridenBy) {
+            std::cerr << "not found" << std::endl;
+        }
         funIdx = c->function()->context().toI();
     }
 
@@ -1089,7 +1160,8 @@ void recordSC(const ObservedCallees& callees) {
     auto* code = getSCCode();
 
     for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] = recorder_.initOrGetRecording(callees.getTarget(code, i)).first;
+        targets[i] =
+            recorder_.initOrGetRecording(callees.getTarget(code, i)).first;
     }
 
     nextSCcode = code;
@@ -1248,16 +1320,16 @@ REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
         auto eventCount = replay.getEventCount();
         for (size_t idx = 0; idx < eventCount; idx++) {
             const auto eventEntry = replay.getEvent(idx);
-            const auto& body = replay.bodies[eventEntry.first];
+            const auto& function = replay.functions[eventEntry.first];
 
-            const char* name = body.name.c_str();
+            const char* name = function.name.c_str();
             std::string ptr_str;
 
             // If name is empty (unknown), use a different display strategy
             if (*name == 0) {
                 if (!HIDE_UNKNOWN_CLOSURE_POINTER) {
                     std::stringstream buf;
-                    buf << (void*)body.closure;
+                    buf << (void*)function.closure;
                     ptr_str = buf.str();
                     name = ptr_str.c_str();
                 } else {
@@ -1267,7 +1339,7 @@ REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
 
             Prefixer prefixed(out, name);
             prefixed << "    ";
-            eventEntry.second->print(replay.bodies, prefixed);
+            eventEntry.second->print(replay.functions, prefixed);
             prefixed << std::endl;
         }
 

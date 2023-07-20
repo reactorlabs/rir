@@ -196,7 +196,24 @@ class InvocationEvent : public Event {
     size_t deltaDeopt = 0;
 };
 
+// From names.c
+extern "C" FUNTAB R_FunTab[];
+
+constexpr size_t R_FunTab_Len_calc() {
+    for (size_t i = 0;; i++) {
+        if (R_FunTab[i].name == nullptr) {
+            return i;
+        }
+    }
+}
+
+const size_t R_FunTab_Len = R_FunTab_Len_calc();
+
 struct FunRecording {
+    // For CLOSXP:      -1
+    // For primitives:  index into "names.c"'s array of primitive functions
+    ssize_t primIdx = -1;
+
     /* possibly empty name of the closure */
     std::string name;
     /* possibly empty name of the environment in which the name was bound to the
@@ -208,14 +225,21 @@ struct FunRecording {
     // Just prints the name if the closure (or pointer if it has no name)
     friend std::ostream& operator<<(std::ostream& out,
                                     const FunRecording& that);
+
+    FunRecording() = default;
+    FunRecording(size_t primIdx) : primIdx(primIdx) {
+        assert(primIdx < R_FunTab_Len);
+        name = R_FunTab[primIdx].name;
+    }
 };
 
 class Replay {
     SEXP log;
 
   public:
-    std::vector<FunRecording> bodies;
-    std::vector<SEXP> closures_;
+    std::vector<FunRecording> functions;
+    std::vector<DispatchTable*> rehydrated_dispatch_tables;
+    std::vector<SEXP> rehydrated_closures;
 
     SEXP replayClosure(size_t idx);
 
@@ -240,8 +264,9 @@ class Replay {
 
 class Record {
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
-    std::unordered_map<std::string, size_t> recordings_index_;
-    std::vector<FunRecording> fun_recordings_;
+    std::unordered_map<int, size_t> primitive_to_body_index;
+    std::unordered_map<SEXP, size_t> bcode_to_body_index;
+    std::vector<FunRecording> functions;
 
     std::vector<std::pair<size_t, std::unique_ptr<Event>>> log;
 
@@ -273,22 +298,13 @@ class Record {
     SEXP save();
     void printRecordings(std::ostream& out);
     void reset() {
-        recordings_index_.clear();
-        fun_recordings_.clear();
+        dt_to_recording_index_.clear();
+        functions.clear();
     }
 };
 
 // utilities
 SEXP setClassName(SEXP s, const char* className);
-template <typename Pointee>
-std::string stringAddressOf(const Pointee* s) {
-    char* caddress;
-    if (asprintf(&caddress, "%p", (void*)s) == -1) {
-        Rf_error("Getting address of pointee failed");
-    }
-
-    return caddress;
-}
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
 SEXP getEnvironment(const std::string& name);
