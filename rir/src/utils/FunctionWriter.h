@@ -41,7 +41,7 @@ class FunctionWriter {
     }
 
     void finalize(Code* body, const FunctionSignature& signature,
-                  const Context& context, TypeFeedback&& feedback) {
+                  const Context& context, TypeFeedback* feedback) {
         assert(function_ == nullptr && "Trying to finalize a second time");
 
         size_t dataSize = defaultArgs.size() * sizeof(SEXP);
@@ -51,7 +51,7 @@ class FunctionWriter {
         void* payload = INTEGER(store);
         Function* fun =
             new (payload) Function(functionSize, body->container(), defaultArgs,
-                                   signature, context, std::move(feedback));
+                                   signature, context, feedback);
         preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);

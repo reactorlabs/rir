@@ -2,7 +2,9 @@
 #define RIR_RUNTIME_FEEDBACK
 
 #include "R/r.h"
+#include "Rinternals.h"
 #include "common.h"
+#include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -302,19 +304,33 @@ struct TypeFeedbackSlot {
     void print(std::ostream& out, const Function* function) const;
 };
 
-class TypeFeedback {
+#define TYPEFEEDBACK_MAGIC (unsigned)0xfeedbac0
+
+class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
     friend Function;
 
     Function* owner_;
-    std::vector<TypeFeedbackSlot> slots_;
+    uint32_t size_;
+    TypeFeedbackSlot slots_[];
 
     explicit TypeFeedback(std::vector<TypeFeedbackSlot>&& slots)
-        : owner_(nullptr), slots_(std::move(slots)) {}
+        : RirRuntimeObject(0, 0), owner_(nullptr), size_(slots.size()) {
+        memcpy(&slots_, slots.data(), size_ * sizeof(TypeFeedbackSlot));
+    }
 
   public:
-    static TypeFeedback empty();
-    static TypeFeedback deserialize(SEXP refTable, R_inpstream_t inp);
+    static TypeFeedback* create(std::vector<TypeFeedbackSlot>&& slots) {
+        size_t dataSize = slots.size() * sizeof(TypeFeedbackSlot);
+        size_t objSize = sizeof(TypeFeedback) + dataSize;
+
+        SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
+        TypeFeedback* res = new (INTEGER(store)) TypeFeedback(std::move(slots));
+        return res;
+    }
+
+    static TypeFeedback* empty();
+    static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
         std::vector<TypeFeedbackSlot> slots_;
@@ -323,7 +339,7 @@ class TypeFeedback {
         uint32_t addCallee();
         uint32_t addTest();
         uint32_t addType();
-        TypeFeedback build();
+        TypeFeedback* build();
     };
 
     TypeFeedbackSlot& operator[](size_t idx);
@@ -335,7 +351,7 @@ class TypeFeedback {
 
     TypeFeedbackSlot& record(uint32_t idx, SEXP callee);
 
-    uint32_t size() const { return slots_.size(); }
+    uint32_t size() const { return size_; }
     void serialize(SEXP refTable, R_outpstream_t out) const;
 };
 

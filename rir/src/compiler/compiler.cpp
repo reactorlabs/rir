@@ -91,7 +91,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    auto& typeFeedback = tbl->baseline()->typeFeedback();
+    auto typeFeedback = tbl->baseline()->typeFeedback();
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
@@ -109,7 +109,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                               const Context& ctx, bool root, MaybeCls success,
                               Maybe fail,
                               std::list<PirTypeFeedback*> outerFeedback,
-                              rir::TypeFeedback& typeFeedback) {
+                              rir::TypeFeedback* typeFeedback) {
 
     if (!ctx.includes(minimalContext)) {
         for (const auto a : minimalContext) {

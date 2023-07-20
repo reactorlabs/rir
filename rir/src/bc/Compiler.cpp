@@ -3,6 +3,7 @@
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "Rinternals.h"
 #include "bc/BC.h"
 #include "bc/CodeStream.h"
 #include "bc/CodeVerifier.h"
@@ -2060,8 +2061,10 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     Code* body = ctx.pop();
-    auto feedback = ctx.typeFeedbackBuilder.build();
-    function.finalize(body, signature, Context(), std::move(feedback));
+    TypeFeedback* feedback = ctx.typeFeedbackBuilder.build();
+    PROTECT(feedback->container());
+    function.finalize(body, signature, Context(), feedback);
+    UNPROTECT(1);
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container());

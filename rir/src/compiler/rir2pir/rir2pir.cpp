@@ -146,7 +146,7 @@ namespace pir {
 Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                  const std::string& name,
                  const std::list<PirTypeFeedback*>& outerFeedback,
-                 rir::TypeFeedback& typeFeedback)
+                 rir::TypeFeedback* typeFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
       outerFeedback(outerFeedback), typeFeedback(typeFeedback) {
     if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
@@ -373,7 +373,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::record_test_: {
         uint32_t idx = bc.immediate.i;
-        auto& feedback = typeFeedback.test(idx);
+        auto& feedback = typeFeedback->test(idx);
 
         if (feedback.seen == ObservedTest::OnlyTrue ||
             feedback.seen == ObservedTest::OnlyFalse) {
@@ -400,7 +400,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::record_type_: {
         uint32_t idx = bc.immediate.i;
-        auto& feedback = typeFeedback.types(idx);
+        auto& feedback = typeFeedback->types(idx);
 
         if (auto i = Instruction::Cast(at(0))) {
             // Search for the most specific feedback for this location
@@ -440,7 +440,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         uint32_t idx = bc.immediate.i;
         Value* target = top();
 
-        auto& feedback = typeFeedback.callees(bc.immediate.i);
+        auto& feedback = typeFeedback->callees(bc.immediate.i);
 
         // If this call was never executed we might as well compile an
         // unconditional deopt.

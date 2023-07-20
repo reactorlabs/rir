@@ -14,7 +14,6 @@ struct DispatchTable;
 /**
  * Aliases for readability.
  */
-typedef SEXP FunctionSEXP;
 
 // Function magic constant is designed to help to distinguish between Function
 // objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
@@ -42,27 +41,43 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
-    static constexpr size_t NUM_PTRS = 1;
+    // In its entries, a function ows two SEXP pointers + a variable length of
+    // default arguments code:
+    static constexpr size_t NUM_PTRS = 2;
+    // 0: body (Code*)
+    static constexpr size_t BODY_IDX = 0;
+    // 1: type feedback (TypeFeedback*)
+    static constexpr size_t TYPE_FEEDBACK_IDX = 1;
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
              const FunctionSignature& signature, const Context& ctx,
-             TypeFeedback&& typeFeedback)
+             TypeFeedback* feedback)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
-              sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
+              sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx),
-          typeFeedback_(std::move(typeFeedback)) {
+          signature_(signature), context_(ctx) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
-        typeFeedback_.owner_ = this;
+        if (feedback) {
+            // FIXME: update the serialization order
+            typeFeedback(feedback);
+        }
     }
 
-    Code* body() const { return Code::unpack(getEntry(0)); }
-    void body(SEXP body) { setEntry(0, body); }
+    Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
+    void body(SEXP body) { setEntry(BODY_IDX, body); }
+
+    TypeFeedback* typeFeedback() const {
+        return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+    }
+    void typeFeedback(TypeFeedback* typeFeedback) {
+        typeFeedback->owner_ = this;
+        setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
+    }
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
@@ -195,8 +210,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
 
-    TypeFeedback& typeFeedback() { return typeFeedback_; }
-
   private:
     unsigned numArgs_;
 
@@ -211,12 +224,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
     DispatchTable* dispatchTable_;
-    TypeFeedback typeFeedback_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
-    // locals contains: body
-    CodeSEXP locals[NUM_PTRS];
-    CodeSEXP defaultArg_[];
+    // locals contains: body (BODY_IDX) and typeFeedback (TYPE_FEEDBACK_IDX)
+    SEXP locals[NUM_PTRS];
+    SEXP defaultArg_[];
 };
 
 #pragma pack(pop)

@@ -19,7 +19,7 @@ class Rir2Pir {
     Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
             const std::string& name,
             const std::list<PirTypeFeedback*>& outerFeedback,
-            rir::TypeFeedback& typeFeedback);
+            rir::TypeFeedback* typeFeedback);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
     bool tryCompileContinuation(Builder& insert, Opcode* start,
@@ -60,7 +60,7 @@ class Rir2Pir {
     ClosureLog& log;
     std::string name;
     std::list<PirTypeFeedback*> outerFeedback;
-    rir::TypeFeedback& typeFeedback;
+    rir::TypeFeedback* typeFeedback;
     std::unordered_map<SEXP, MkCls*> localFuns;
 
     std::unordered_set<SEXP> deoptedCallTargets;
@@ -91,7 +91,7 @@ class PromiseRir2Pir : public Rir2Pir {
     PromiseRir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                    const std::string& name,
                    const std::list<PirTypeFeedback*>& outerFeedback,
-                   rir::TypeFeedback& feedback, bool inlining)
+                   rir::TypeFeedback* feedback, bool inlining)
         : Rir2Pir(cmp, cls, log, name, outerFeedback, feedback),
           inlining_(inlining) {}
 

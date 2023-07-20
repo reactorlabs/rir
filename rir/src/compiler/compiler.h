@@ -59,7 +59,7 @@ class Compiler {
     void compileClosure(Closure* closure, rir::Function* optFunction,
                         const Context& ctx, bool root, MaybeCls success,
                         Maybe fail, std::list<PirTypeFeedback*> outerFeedback,
-                        rir::TypeFeedback& typeFeedback);
+                        rir::TypeFeedback* typeFeedback);
 
     Preserve preserve_;
 

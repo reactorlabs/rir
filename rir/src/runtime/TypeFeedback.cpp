@@ -51,14 +51,14 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        auto& feedback = origin.function()->typeFeedback().test(origin.idx());
+        auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback().types(origin.idx());
+        auto feedback = origin.function()->typeFeedback()->types(origin.idx());
         feedback.record(val);
         if (TYPEOF(val) == PROMSXP) {
             if (PRVALUE(val) == R_UnboundValue &&
@@ -76,7 +76,8 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback().callees(origin.idx());
+        auto feedback =
+            origin.function()->typeFeedback()->callees(origin.idx());
         feedback.record(origin.function()->body(), val, true);
         assert(feedback.taken > 0);
         break;
@@ -108,31 +109,30 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
 }
 
 TypeFeedbackSlot& TypeFeedback::operator[](size_t idx) {
-    assert(idx < slots_.size());
+    assert(idx < size_);
     return slots_[idx];
 }
 
 void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
-    // assert(sizeof(TypeFeedbackSlot) % 4 == 0);
-
-    OutInteger(out, size());
-    for (auto& slot : slots_) {
-        OutBytes(out, &slot, sizeof(TypeFeedbackSlot));
+    OutInteger(out, size_);
+    for (uint32_t i = 0; i < size_; i++) {
+        OutBytes(out, &slots_[i], sizeof(TypeFeedbackSlot));
     }
 }
 
-TypeFeedback TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto size = InInteger(inp);
 
     std::vector<TypeFeedbackSlot> slots;
     slots.reserve(size);
-    auto data = slots.data();
+    auto tmp = TypeFeedbackSlot::createCallees();
 
     for (auto i = 0; i < size; ++i) {
-        InBytes(inp, &data[i], sizeof(TypeFeedbackSlot));
+        InBytes(inp, &tmp, sizeof(TypeFeedbackSlot));
+        slots.push_back(std::move(tmp));
     }
 
-    return TypeFeedback(std::move(slots));
+    return TypeFeedback::create(std::move(slots));
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -207,10 +207,9 @@ void TypeFeedbackSlot::print(std::ostream& out,
 void TypeFeedback::print(std::ostream& out) const {
     std::cout << "== type feedback " << this << " (fun " << owner_
               << ") ==" << std::endl;
-    int i = 0;
-    for (auto& slot : slots_) {
-        out << "#" << i++ << ": ";
-        slot.print(out, owner_);
+    for (uint32_t i = 0; i < size_; i++) {
+        out << "#" << i << ": ";
+        slots_[i].print(out, owner_);
         out << std::endl;
     }
 }
@@ -235,14 +234,14 @@ TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
 
 TypeFeedbackSlot* FeedbackOrigin::slot() const {
     if (function_) {
-        return &function_->typeFeedback()[idx_];
+        return &(*function_->typeFeedback())[idx_];
     } else {
         return nullptr;
     }
 }
 
 bool FeedbackOrigin::isValid() const {
-    return function_ != nullptr && function_->typeFeedback().size() > idx_;
+    return function_ != nullptr && function_->typeFeedback()->size() > idx_;
 }
 
 uint32_t TypeFeedback::Builder::addCallee() {
@@ -260,10 +259,10 @@ uint32_t TypeFeedback::Builder::addType() {
     return slots_.size() - 1;
 }
 
-TypeFeedback TypeFeedback::Builder::build() {
-    return TypeFeedback(std::move(slots_));
+TypeFeedback* TypeFeedback::Builder::build() {
+    return TypeFeedback::create(std::move(slots_));
 }
 
-TypeFeedback TypeFeedback::empty() { return TypeFeedback{{}}; }
+TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}); }
 
 } // namespace rir
