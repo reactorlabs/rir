@@ -48,6 +48,8 @@ class UUID::Hasher {
     ~Hasher();
     /// Hash the data-structure, which should not contain any references
     template<typename T> void hashBytesOf(T c) { hashBytes(&c, sizeof(T)); }
+    /// Hash the C-string
+    void hashBytesOfCString(const char* c);
     /// Hash the data, which should not contain any references
     void hashBytes(const void* data, size_t size);
     /// Get the UUID. After calling this, you can't call hashBytes anymore.
