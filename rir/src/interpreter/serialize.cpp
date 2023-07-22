@@ -4,6 +4,7 @@
 #include "api.h"
 #include "compiler/parameter.h"
 #include "hash/UUIDPool.h"
+#include "hash/doHash.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
@@ -210,26 +211,19 @@ R_outpstream_st nullOutputStream() {
 static void hashSexp(SEXP sexp, UUID::Hasher& hasher, ConnectedWorklist* connected) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: hashSexp", sexp, [&]{
         Protect p(sexp);
-        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
         auto oldUseHashes = _useHashes;
         auto oldIsHashing = _isHashing;
         auto oldConnectedWorklist = connectedWorklist;
         auto oldRetrieveHash = retrieveHash;
-        pir::Parameter::RIR_PRESERVE = true;
         _useHashes = false;
         _isHashing = true;
         connectedWorklist = connected;
         retrieveHash = UUID();
-        struct R_outpstream_st out {};
-        R_InitOutPStream(&out, (R_pstream_data_t)&hasher, R_STREAM_FORMAT,
-                         R_STREAM_DEFAULT_VERSION, rStreamHashChar,
-                         rStreamHashBytes, nullptr, nullptr);
-        R_Serialize(sexp, &out);
+        hashRoot(sexp, hasher);
         retrieveHash = oldRetrieveHash;
         connectedWorklist = oldConnectedWorklist;
         _isHashing = oldIsHashing;
         _useHashes = oldUseHashes;
-        pir::Parameter::RIR_PRESERVE = oldPreserve;
     });
 }
 

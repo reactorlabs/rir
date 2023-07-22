@@ -62,6 +62,10 @@ UUID::Hasher::~Hasher() {
     assert(finalized && "UUID::Hasher was not finalized");
 }
 
+void UUID::Hasher::hashBytesOfCString(const char* c) {
+    hashBytes(c, strlen(c));
+}
+
 void UUID::Hasher::hashBytes(const void* data, size_t size) {
     assert(!finalized && "UUID::Hasher was already finalized");
     
