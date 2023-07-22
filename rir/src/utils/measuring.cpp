@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "R/Printing.h"
 #include "RangeSet.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
@@ -79,6 +80,8 @@ struct MeasuringImpl {
             f->print(s, true);
         } else if (auto c = Code::check(associated)) {
             c->print(s, true);
+        } else {
+            s << Print::dumpSexp(associated, SIZE_MAX) << "\n";
         }
         std::string str = s.str();
         if (!str.empty()) {
