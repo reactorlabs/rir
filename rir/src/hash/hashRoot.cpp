@@ -113,14 +113,16 @@ static inline bool tryHash(SEXP sexp, Hasher& hasher) {
 }
 
 static inline void hashRir(SEXP sexp, Hasher& hasher) {
-    if (!tryHash<DispatchTable>(sexp, hasher) &&
-        !tryHash<Function>(sexp, hasher) &&
-        !tryHash<Code>(sexp, hasher) &&
-        !tryHash<ArglistOrder>(sexp, hasher)) {
-        std::cerr << "couldn't hash EXTERNALSXP: ";
-        Rf_PrintValue(sexp);
-        assert(false);
-    }
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashRir", sexp, [&]{
+        if (!tryHash<DispatchTable>(sexp, hasher) &&
+            !tryHash<Function>(sexp, hasher) &&
+            !tryHash<Code>(sexp, hasher) &&
+            !tryHash<ArglistOrder>(sexp, hasher)) {
+            std::cerr << "couldn't hash EXTERNALSXP: ";
+            Rf_PrintValue(sexp);
+            assert(false);
+        }
+    });
 }
 
 static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
@@ -219,16 +221,18 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
             auto state = ALTREP_SERIALIZED_STATE(sexp);
             auto attrib = ATTRIB(sexp);
             if (info != nullptr && state != nullptr) {
-                auto flags = packFlags((SEXPTYPE)SpecialType::Altrep,
-                                       LEVELS(sexp), OBJECT(sexp), 0, 0);
-                PROTECT(state);
-                PROTECT(info);
-                hasher.hashBytesOf<unsigned>(flags);
-                hasher.hash(info);
-                hasher.hash(state);
-                hasher.hash(attrib);
-                UNPROTECT(2); /* state, info */
-                return;
+                Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild altrep", sexp, [&]{
+                    auto flags = packFlags((SEXPTYPE)SpecialType::Altrep,
+                                           LEVELS(sexp), OBJECT(sexp), 0, 0);
+                    PROTECT(state);
+                    PROTECT(info);
+                    hasher.hashBytesOf<unsigned>(flags);
+                    hasher.hash(info);
+                    hasher.hash(state);
+                    hasher.hash(attrib);
+                    UNPROTECT(2); /* state, info */
+                    return;
+                });
             }
             /* else fall through to standard processing */
         } else if (globalsMap.count(sexp)) {
@@ -255,7 +259,9 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         hasher.hashBytesOf<unsigned>(flags);
         hasher.hashBytesOf<bool>(hasAttr);
         if (hasAttr) {
-            hasher.hash(ATTRIB(sexp));
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild attrib", sexp, [&]{
+                hasher.hash(ATTRIB(sexp));
+            });
         }
 
         switch (type) {
@@ -271,32 +277,42 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case RAWSXP:
         case STRSXP: {
             // These can all be hashed as ASTs, which is much faster
-            auto uuid = hashAst(sexp);
-            hasher.hashBytesOf<UUID>(uuid);
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild AST", sexp, [&]{
+                auto uuid = hashAst(sexp);
+                hasher.hashBytesOf<UUID>(uuid);
+            });
             break;
         }
         case LISTSXP:
         case PROMSXP:
         case DOTSXP:
-            if (hasTag_) {
-                hasher.hash(TAG(sexp));
-            }
-            if (BNDCELL_TAG(sexp)) {
-                assert(false && "TODO R_expand_binding_value isn't public");
-            }
-            hasher.hash(CAR(sexp));
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild tag", sexp, [&]{
+                if (hasTag_) {
+                    hasher.hash(TAG(sexp));
+                }
+            });
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild list elem", sexp, [&]{
+                if (BNDCELL_TAG(sexp)) {
+                    assert(false && "TODO R_expand_binding_value isn't public");
+                }
+                hasher.hash(CAR(sexp));
+            });
             // ???: use goto tailcall like R for perf boost?
             hasher.hash(CDR(sexp));
             break;
         case CLOSXP:
-            hasher.hash(CLOENV(sexp));
-            hasher.hash(FORMALS(sexp));
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild closure sans body", sexp, [&]{
+                hasher.hash(CLOENV(sexp));
+                hasher.hash(FORMALS(sexp));
+            });
             // ???: use goto tailcall like R for perf boost?
             hasher.hash(BODY(sexp));
             break;
         case EXTPTRSXP:
-            hasher.hash(EXTPTR_PROT(sexp));
-            hasher.hash(EXTPTR_TAG(sexp));
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild external pointer", sexp, [&]{
+                hasher.hash(EXTPTR_PROT(sexp));
+                hasher.hash(EXTPTR_TAG(sexp));
+            });
             break;
         case WEAKREFSXP:
             // Currently we don't hash environment data because it's mutable
@@ -308,11 +324,13 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
             break;
         case VECSXP:
         case EXPRSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            for (int i = 0; i < n; ++i) {
-                hasher.hash(VECTOR_ELT(sexp, i));
-            }
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild expression vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                for (int i = 0; i < n; ++i) {
+                    hasher.hash(VECTOR_ELT(sexp, i));
+                }
+            });
             break;
         }
         case S4SXP:
