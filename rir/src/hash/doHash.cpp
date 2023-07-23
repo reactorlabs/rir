@@ -56,6 +56,10 @@ static bool canSelfReference(SEXPTYPE type) {
     case EXTERNALSXP:
         return true;
     case NILSXP:
+    case LISTSXP:
+    case CLOSXP:
+    case PROMSXP:
+    case LANGSXP:
     case SPECIALSXP:
     case BUILTINSXP:
     case CHARSXP:
@@ -66,7 +70,10 @@ static bool canSelfReference(SEXPTYPE type) {
     case STRSXP:
     case DOTSXP:
     case ANYSXP:
+    case VECSXP:
+    case EXPRSXP:
     case RAWSXP:
+    case S4SXP:
         return false;
     default:
         assert(false && "canSelfReference: unhandled type");
