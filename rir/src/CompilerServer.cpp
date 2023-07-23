@@ -143,6 +143,7 @@ void CompilerServer::tryRun() {
         }
 
         // Handle other request types
+        SEXP what = nullptr;
         ByteBuffer response;
         switch (magic) {
         case Request::Compile: {
@@ -167,7 +168,7 @@ void CompilerServer::tryRun() {
             // connected SEXPs like the client; the only thing duplicate SEXPs
             // may cause is wasted memory, but since we're on the server and
             // preserving everything this is less of an issue.
-            SEXP what = deserialize(requestBuffer, false);
+            what = deserialize(requestBuffer, false);
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");
@@ -252,7 +253,7 @@ void CompilerServer::tryRun() {
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
 
             // Get SEXP
-            SEXP what = UUIDPool::get(hash);
+            what = UUIDPool::get(hash);
 
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";
@@ -286,11 +287,12 @@ void CompilerServer::tryRun() {
         // Send the response;
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME);
-        auto responseSize =
-            *socket.send(zmq::message_t(
-                             response.data(),
-                             response.size()),
-                         zmq::send_flags::none);
+        auto responseSize = Measuring::timeEventIf<size_t>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER && what, "CompilerServer.cpp: sending new response with SEXP", what, [&]{
+            return *socket.send(zmq::message_t{
+                                    response.data(),
+                                    response.size()},
+                                zmq::send_flags::none);
+        });
         auto responseSize2 = response.size();
         SOFT_ASSERT(responseSize == responseSize2,
                     "Client didn't receive the full response");
