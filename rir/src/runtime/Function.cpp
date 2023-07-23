@@ -95,6 +95,15 @@ void Function::hash(Hasher& hasher) const {
     // Don't hash flags because they change
 }
 
+void Function::addConnected(ConnectedCollector& collector) const {
+    collector.add(getEntry(0));
+
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        collector.addNullable(arg);
+    }
+}
+
 void Function::disassemble(std::ostream& out) const {
     print(out);
 }

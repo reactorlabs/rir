@@ -205,6 +205,7 @@ struct DispatchTable
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
     void hash(Hasher& hasher) const;
+    void addConnected(ConnectedCollector& collector) const;
     void print(std::ostream& out, bool hashInfo) const;
 
     Context userDefinedContext() const { return userDefinedContext_; }

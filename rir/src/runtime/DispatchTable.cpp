@@ -31,8 +31,12 @@ void DispatchTable::hash(Hasher& hasher) const {
     // (since semantics won't, and other rir objects will reference optimized
     //  versions directly when they rely on them)
     hasher.hash(getEntry(0));
-    for (size_t i = 1; i < size(); i++) {
-        hasher.addConnected(getEntry(i));
+}
+
+void DispatchTable::addConnected(ConnectedCollector& collector) const {
+    assert(size() > 0);
+    for (size_t i = 0; i < size(); i++) {
+        collector.add(getEntry(i));
     }
 }
 
