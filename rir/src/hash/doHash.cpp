@@ -5,10 +5,12 @@
 #include "doHash.h"
 #include "R/Funtab.h"
 #include "R/Protect.h"
+#include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <iostream>
 #include <stack>
@@ -206,8 +208,8 @@ static void hashBc(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
     }
 }
 
-static void hashSexp(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashSexp", sexp, [&]{
+static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashChild", sexp, [&]{
         auto type = TYPEOF(sexp);
 
         if (ALTREP(sexp)) {
@@ -366,23 +368,75 @@ static void hashSexp(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
             hashRir(sexp, hasher);
             break;
         default:
-            Rf_error("hashSexp: unknown type %i", type);
+            Rf_error("hashChild: unknown type %i", type);
         }
     });
 }
 
-void hashRoot(SEXP root, UUID::Hasher& uuidHasher) {
-    HashRefTable refs;
-    std::queue<SEXP> worklist;
-    worklist.push(root);
-    Hasher hasher(uuidHasher, worklist);
-
-    while (!worklist.empty()) {
-        auto sexp = worklist.front();
-        worklist.pop();
-
-        hashSexp(sexp, hasher, refs);
+void ConnectedWorklist::insert(SEXP e) {
+    if (seen.insert(e).second) {
+        worklist.push(e);
     }
 }
+
+SEXP ConnectedWorklist::pop() {
+    if (worklist.empty()) {
+        return nullptr;
+    }
+    auto e = worklist.front();
+    worklist.pop();
+    return e;
+}
+
+void Hasher::addConnected(SEXP s) {
+    if (connected) {
+        connected->insert(s);
+    }
+}
+
+void Hasher::hash(SEXP s) {
+    worklist.push(s);
+    addConnected(s);
+}
+
+void Hasher::hashConstant(unsigned idx) {
+    hash(Pool::get(idx));
+}
+
+void Hasher::hashSrc(unsigned idx) {
+    hash(src_pool_at(idx));
+}
+
+void hashRoot(SEXP root, UUID::Hasher& uuidHasher, 
+              ConnectedWorklist* connected) {
+    disableGc([&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashRoot", root, [&]{
+            HashRefTable refs;
+            std::queue<SEXP> worklist;
+            worklist.push(root);
+            Hasher hasher{uuidHasher, worklist, connected};
+
+            while (!worklist.empty()) {
+                auto sexp = worklist.front();
+                worklist.pop();
+
+                hashChild(sexp, hasher, refs);
+            }
+        });
+    });
+}
+
+UUID hashRoot(SEXP sexp, ConnectedWorklist& connected) {
+    UUID::Hasher hasher;
+    hashRoot(sexp, hasher, &connected);
+    return hasher.finalize();
+}
+
+UUID hashRoot(SEXP sexp) {
+    UUID::Hasher hasher;
+    hashRoot(sexp, hasher, nullptr);
+    return hasher.finalize();
+}
+
 
 } // namespace rir
