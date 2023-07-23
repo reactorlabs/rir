@@ -84,17 +84,19 @@ class Measuring {
         return timeEventIf(cond, name, associated, true, code);
     }
 
-    static void startTimer(const std::string& name);
-    static void countTimer(const std::string& name);
+    static void startTimer(const std::string& name, bool canNest = false);
+    static void countTimer(const std::string& name, bool canNest = false);
     static void addTime(const std::string& name, double time);
-    static inline void startTimerIf(bool cond, const std::string& name) {
+    static inline void startTimerIf(bool cond, const std::string& name,
+                                    bool canNest = false) {
         if (cond) {
-            startTimer(name);
+            startTimer(name, canNest);
         }
     }
-    static inline void countTimerIf(bool cond, const std::string& name) {
+    static inline void countTimerIf(bool cond, const std::string& name,
+                                    bool canNest = false) {
         if (cond) {
-            countTimer(name);
+            countTimer(name, canNest);
         }
     }
 
