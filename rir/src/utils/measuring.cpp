@@ -34,6 +34,7 @@ struct MeasuringImpl {
         TimePoint end;
     };
     struct Timer {
+        bool canNest = false;
         double timer = 0;
         bool timerActive = false;
         TimePoint start;
@@ -316,7 +317,7 @@ struct MeasuringImpl {
 std::unique_ptr<MeasuringImpl> m = std::make_unique<MeasuringImpl>();
 
 Measuring::TimingEvent* Measuring::startTimingEvent(const std::string& name) {
-    startTimer(name);
+    startTimer(name, true);
     m->shouldOutput = true;
     auto start = std::chrono::high_resolution_clock::now();
     return new Measuring::TimingEvent{name, start};
@@ -326,7 +327,7 @@ void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing,
                                 SEXP associated,
                                 bool associatedIsInitialized) {
     assert(timing);
-    countTimer(timing->name);
+    countTimer(timing->name, true);
     m->updateAssociatedDump(associated, associatedIsInitialized);
     auto end = std::chrono::high_resolution_clock::now();
     MeasuringImpl::TimedEvent timed{timing->start, end};
@@ -334,9 +335,17 @@ void Measuring::stopTimingEvent(rir::Measuring::TimingEvent* timing,
     delete timing;
 }
 
-void Measuring::startTimer(const std::string& name) {
+void Measuring::startTimer(const std::string& name, bool canNest) {
     m->shouldOutput = true;
+
+    auto isNewTimer = !m->timers.count(name);
     auto& t = m->timers[name];
+    if (isNewTimer) {
+        t.canNest = canNest;
+    } else {
+        assert(t.canNest == canNest && "canNest must be consistent with timer of the same name");
+    }
+
     if (t.timerActive) {
         t.alreadyRunning++;
     } else {
@@ -345,12 +354,23 @@ void Measuring::startTimer(const std::string& name) {
     }
 }
 
-void Measuring::countTimer(const std::string& name) {
+void Measuring::countTimer(const std::string& name, bool canNest) {
     auto end = std::chrono::high_resolution_clock::now();
     m->shouldOutput = true;
+
+    auto isNewTimer = !m->timers.count(name);
     auto& t = m->timers[name];
+    if (isNewTimer) {
+        t.canNest = canNest;
+    } else {
+        assert(t.canNest == canNest &&
+               "canNest must be consistent with timer of the same name");
+    }
+
     if (!t.timerActive) {
         t.notStarted++;
+    } else if (canNest && t.alreadyRunning > 0) {
+        t.alreadyRunning--;
     } else {
         t.timerActive = false;
         std::chrono::duration<double> duration = end - t.start;

@@ -134,7 +134,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
         makeRequest(request);
 
         if (request.size() >= PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY) {
-            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
             UUID requestHash = UUID::hash(request.data(), request.size());
             // Serialize the hash-only request
             // Request data format =
@@ -154,8 +154,8 @@ CompilerClient::Handle<T>* CompilerClient::request(
                               zmq::send_flags::none);
             auto hashOnlyRequestSize2 = hashOnlyRequest.size();
             assert(hashOnlyRequestSize == hashOnlyRequestSize2);
-            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
-            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
+            Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
             // Wait for the response
             zmq::message_t hashOnlyResponse;
             socket->recv(hashOnlyResponse, zmq::recv_flags::none);
@@ -164,7 +164,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             //   Response::NeedsFull
             // | from makeResponse()
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
-            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
+            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
             auto hashOnlyResponseMagic = (Response)hashOnlyResponseBuffer.peekLong();
             if (hashOnlyResponseMagic != Response::NeedsFull) {
                 return makeResponse(hashOnlyResponseBuffer);
@@ -173,7 +173,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
 
         // Send the request
         std::cerr << "Socket " << index << " sending request" << std::endl;
-        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
         auto requestSize =
             *socket->send(zmq::message_t(
                               request.data(),
@@ -181,16 +181,16 @@ CompilerClient::Handle<T>* CompilerClient::request(
                           zmq::send_flags::none);
         auto requestSize2 = request.size();
         assert(requestSize == requestSize2);
-        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME);
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
         // Wait for the response
-        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
+        Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
         zmq::message_t response;
         socket->recv(response, zmq::recv_flags::none);
         // Receive the response
         // Response data format =
         //   from makeResponse()
         ByteBuffer responseBuffer((uint8_t*)response.data(), response.size());
-        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
+        Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
         return makeResponse(responseBuffer);
     };
 #ifdef MULTI_THREADED_COMPILER_CLIENT
@@ -272,7 +272,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {
-    Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME);
+    Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME, true);
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {
             // Request data format =
@@ -297,7 +297,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             }
         }
     );
-    Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME);
+    Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME, true);
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #error "TODO create closure which blocks until the response is ready"
 #else
