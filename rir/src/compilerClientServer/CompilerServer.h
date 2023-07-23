@@ -26,9 +26,19 @@ class CompilerServer {
   public:
     /// Is this Ř instance a compiler server?
     static bool isRunning() { return _isRunning; }
-
     /// If PIR_SERVER_ADDR is set, initializes and starts handling requests
     static void tryRun();
+
+    /// Synchronously retrieves the closure with the given hash from the client.
+    /// If in the future we make this asynchronous, should still return a
+    /// closure SEXP but make it block while we're waiting for the response.
+    ///
+    /// The SEXP is also interned. It must actually be interned before we finish
+    /// deserializing for recursive retrievals (a -> retrieve b -> retrieve a ->
+    /// ...).
+    ///
+    /// Returns `nullptr` if the client doesn't have the closure.
+    static SEXP retrieve(const UUID& hash);
 };
 
 } // namespace rir

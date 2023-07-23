@@ -17,10 +17,14 @@ enum class Request : uint64_t {
     Memoize = 0x217A25432A462D4B,
     /// Compile a function with assumptions and debug options
     Compile = 0x217A25432A462D4A,
-    /// Retrieve an SEXP on the server referenced from by an SEXP on the client
+    /// Retrieve an SEXP on the server referenced by an SEXP on the client
     Retrieve = 0x217A25432A462D4D,
     /// Kill the server
     Kill = 0x217A25432A462D4C,
+    /// Retrieved SEXP
+    Retrieved = 0x217A25432A462D4E,
+    /// SEXP isn't in client
+    RetrieveFailed = 0x217A25432A462D4F,
 };
 
 enum class Response : uint64_t {
@@ -33,7 +37,9 @@ enum class Response : uint64_t {
     /// SEXP isn't in server
     RetrieveFailed = 0x9BEEB1E5356F1A3E,
     /// Acknowledge that the server has been killed
-    Killed = 0x9BEEB1E5356F1A38
+    Killed = 0x9BEEB1E5356F1A38,
+    /// Retrieve an SEXP on the client referenced by an SEXP on the server
+    NeedsRetrieve = 0x9BEEB1E5356F1A3C,
 };
 
 /// If set, we still compile on the client and only compare the compiler server

@@ -12,8 +12,8 @@
 #include "serializeHash/serialize/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/measuring.h"
-#include "zmq.hpp"
 #include <array>
+#include <zmq.hpp>
 
 #define SOFT_ASSERT(x, msg) do {                                               \
     if (!(x)) {                                                                \
@@ -28,6 +28,7 @@ static const char* PROCESSING_REQUEST_TIMER_NAME = "CompilerServer.cpp: processi
 static const char* SENDING_RESPONSE_TIMER_NAME = "CompilerServer.cpp: sending response";
 
 bool CompilerServer::_isRunning = false;
+static zmq::socket_t socket;
 static std::unordered_map<UUID, ByteBuffer> memoizedRequests;
 
 void CompilerServer::tryRun() {
@@ -49,7 +50,7 @@ void CompilerServer::tryRun() {
         1,
         1
     );
-    zmq::socket_t socket(context, zmq::socket_type::rep);
+    socket = zmq::socket_t(context, zmq::socket_type::rep);
     socket.bind(serverAddr);
 
     _isRunning = true;
@@ -73,7 +74,7 @@ void CompilerServer::tryRun() {
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
         auto magic = (Request)requestBuffer.getLong();
 
-        // Handle Kill (not memoized) or Memoize
+        // Handle Kill, Retrieved, and RetrieveFailed (not memoized) or Memoize
         switch (magic) {
         case Request::Kill: {
             // ... (end of request)
@@ -89,6 +90,12 @@ void CompilerServer::tryRun() {
             _isRunning = false;
             exit(0);
         }
+        case Request::Retrieved:
+        case Request::RetrieveFailed:
+            std::cerr << "Unexpected client-side response (" << (uint64_t)magic
+                      << ") server shouldn't have or didn't send a request. "
+                      << "Ignoring" << std::endl;
+            continue;
         case Request::Memoize: {
             // ...
             // + UUID hash
@@ -170,9 +177,10 @@ void CompilerServer::tryRun() {
 
             // Client won't send hashed SEXPs because it doesn't necessarily
             // remember them, and because the server doesn't care about
-            // connected SEXPs like the client; the only thing duplicate SEXPs
-            // may cause is wasted memory, but since we're on the server and
-            // preserving everything this is less of an issue.
+            // connected SEXPs like the client. However, client will send hashed
+            // record_call_ SEXPs, because those are very large and we can
+            // handle the case where they are forgotten by just not speculating
+            // on them.
             what = deserialize(requestBuffer, false);
             Compiler::compileClosure(what);
             auto what2 = DispatchTable::deserializeBaselineSrc(requestBuffer);
@@ -295,7 +303,7 @@ void CompilerServer::tryRun() {
             if (what) {
                 std::cerr << what << " " << Print::dumpSexp(what) << std::endl;
 
-                // In VERY RARE cases, compiling one closure will change the
+                // In VERY RARE cases, compiling one closure might change the
                 // hash of another object which is not connected, or add a
                 // connected object to an existing RIR object which is itself
                 // not connected to the compiled object, so that the object has
@@ -303,8 +311,8 @@ void CompilerServer::tryRun() {
                 // certainly a bug in interning, probably to do with us
                 // including mutating information in the hash, but this is a
                 // workaround. Without this line, performance is improved, but
-                // the compiler server will crash in very rare cases.
-                UUIDPool::intern(what, true, true);
+                // the compiler server might crash in very rare cases.
+                // UUIDPool::intern(what, true, true);
 
                 // Response data format =
                 //   Response::Retrieved
@@ -321,6 +329,8 @@ void CompilerServer::tryRun() {
         }
         case Request::Kill:
         case Request::Memoize:
+        case Request::Retrieved:
+        case Request::RetrieveFailed:
             assert(false);
         /*default:
             std::cerr << "Invalid magic: " << (uint64_t)magic << std::endl;
@@ -347,6 +357,55 @@ void CompilerServer::tryRun() {
 
         std::cerr << "Sent response (" << responseSize << " bytes)"
                   << std::endl;
+    }
+}
+
+SEXP CompilerServer::retrieve(const rir::UUID& hash) {
+    std::cerr << "Retrieving from client " << hash << std::endl;
+    // Send the server-side request
+    // Data format =
+    //   Response::NeedsRetrieve
+    // + UUID hash
+    ByteBuffer serverRequest;
+    serverRequest.putLong((uint64_t)Response::NeedsRetrieve);
+    serverRequest.putBytes((uint8_t*)&hash, sizeof(UUID));
+    auto serverRequestSize = serverRequest.size();
+    auto serverRequestSize2 = *socket.send(zmq::message_t(
+                                               serverRequest.data(),
+                                               serverRequest.size()),
+                                           zmq::send_flags::none);
+    SOFT_ASSERT(serverRequestSize == serverRequestSize2,
+                "Client didn't receive the full request");
+
+    // Receive the client-side response
+    zmq::message_t clientResponse;
+    socket.recv(clientResponse, zmq::recv_flags::none);
+    std::cerr << "Got client-side response (" << clientResponse.size()
+              << " bytes)" << std::endl;
+
+    // Deserialize the client-side response
+    // Data format =
+    // - Response
+    // + ...
+    ByteBuffer clientResponseBuffer((uint8_t*)clientResponse.data(), clientResponse.size());
+    auto magic = (Request)clientResponseBuffer.getLong();
+    switch (magic) {
+    case Request::Retrieved: {
+        // ...
+        // + serialize(what)
+        SEXP what = deserialize(clientResponseBuffer, true);
+        UUIDPool::intern(what, true, true);
+        return what;
+    }
+    case Request::RetrieveFailed:
+        // ...
+        // (no data)
+        std::cerr << "Client doesn't have the SEXP" << std::endl;
+        return nullptr;
+    default:
+        std::cerr << "Unexpected client request or client-side response ("
+                  << (uint64_t)magic << "). Ignoring" << std::endl;
+        return nullptr;
     }
 }
 
