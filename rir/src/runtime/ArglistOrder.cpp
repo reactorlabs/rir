@@ -24,5 +24,16 @@ void ArglistOrder::serialize(__attribute__((unused)) SEXP refTable, R_outpstream
     }
 }
 
+void ArglistOrder::hash(Hasher& hasher) const {
+    int size = (int)this->size();
+    hasher.hashBytesOf(nCalls);
+    for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
+        hasher.hashBytesOf(data[i]);
+    }
+}
+
+void ArglistOrder::addConnected(__attribute__((unused)) ConnectedCollector& collector) const {
+    // No connected SEXPs in ArglistOrder
+}
 
 } // namespace rir
