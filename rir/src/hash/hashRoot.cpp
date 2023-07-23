@@ -3,10 +3,11 @@
 //
 
 #include "hashRoot.h"
-#include "hashRoot_getConnected_common.h"
 #include "R/Funtab.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
+#include "hashAst.h"
+#include "hashRoot_getConnected_common.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
@@ -122,7 +123,8 @@ static inline void hashRir(SEXP sexp, Hasher& hasher) {
     }
 }
 
-static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist) {
+static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
+                        std::stack<SEXP>& bcWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBcLang1", sexp, [&]{
         int type = TYPEOF(sexp);
         if (type == LANGSXP || type == LISTSXP) {
@@ -158,18 +160,7 @@ static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::qu
     });
 }
 
-static void hashBcLang(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
-    std::queue<SEXP> bcWorklist;
-    bcWorklist.push(sexp);
-    if (!bcWorklist.empty()) {
-        sexp = bcWorklist.front();
-        bcWorklist.pop();
-
-        hashBcLang1(sexp, hasher, bcRefs, bcWorklist);
-    }
-}
-
-static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist) {
+static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::stack<SEXP>& bcWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBc1", sexp, [&]{
         SEXP code = R_bcDecode(BCODE_CODE(sexp));
         hasher.hash(code);
@@ -186,7 +177,7 @@ static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<
                 break;
             case LANGSXP:
             case LISTSXP:
-                hashBcLang(c, hasher, bcRefs);
+                hashBcLang1(c, hasher, bcRefs, bcWorklist);
                 break;
             default:
                 hasher.hashBytesOf<SEXPTYPE>(type);
@@ -198,10 +189,10 @@ static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<
 }
 
 static void hashBc(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
-    std::queue<SEXP> bcWorklist;
+    std::stack<SEXP> bcWorklist;
     bcWorklist.push(sexp);
     while (!bcWorklist.empty()) {
-        sexp = bcWorklist.front();
+        sexp = bcWorklist.top();
         bcWorklist.pop();
 
         hashBc1(sexp, hasher, bcRefs, bcWorklist);
@@ -260,10 +251,20 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case NILSXP:
             break;
         case SYMSXP:
-            hasher.hash(PRINTNAME(sexp));
-            break;
-        case LISTSXP:
         case LANGSXP:
+        case CHARSXP:
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+        case CPLXSXP:
+        case RAWSXP:
+        case STRSXP: {
+            // These can all be hashed as ASTs, which is much faster
+            auto uuid = hashAst(sexp);
+            hasher.hashBytesOf<UUID>(uuid);
+            break;
+        }
+        case LISTSXP:
         case PROMSXP:
         case DOTSXP:
             if (hasTag_) {
@@ -294,45 +295,6 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case BUILTINSXP:
             hasher.hashBytesOf<int>(getBuiltinNr(sexp));
             break;
-        case CHARSXP: {
-            auto n = LENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            hasher.hashBytes(CHAR(sexp), n * sizeof(char));
-            break;
-        }
-        case LGLSXP:
-        case INTSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            hasher.hashBytes(INTEGER(sexp), n * sizeof(int));
-            break;
-        }
-        case REALSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            hasher.hashBytes(REAL(sexp), n * sizeof(double));
-            break;
-        }
-        case CPLXSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            hasher.hashBytes(COMPLEX(sexp), n * sizeof(Rcomplex));
-            break;
-        }
-        case RAWSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            hasher.hashBytes(RAW(sexp), n * sizeof(Rbyte));
-            break;
-        }
-        case STRSXP: {
-            auto n = XLENGTH(sexp);
-            hasher.hashBytesOf<unsigned>(n);
-            for (int i = 0; i < n; ++i) {
-                hasher.hash(STRING_ELT(sexp, i));
-            }
-            break;
-        }
         case VECSXP:
         case EXPRSXP: {
             auto n = XLENGTH(sexp);
@@ -364,23 +326,30 @@ void Hasher::hashConstant(unsigned idx) {
 }
 
 void Hasher::hashSrc(unsigned idx) {
-    hash(src_pool_at(idx));
+    hash(src_pool_at(idx), true);
 }
 
 UUID hashRoot(SEXP root) {
     return disableGc<UUID>([&]{
         return Measuring::timeEventIf<UUID>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
             UUID::Hasher uuidHasher;
-            std::queue<SEXP> worklist;
+            Hasher::Worklist worklist;
             HashRefTable refs;
-            worklist.push(root);
+            worklist.push({root, false});
             Hasher hasher{uuidHasher, worklist};
 
             while (!worklist.empty()) {
-                auto sexp = worklist.front();
+                auto& elem = worklist.top();
+                auto sexp = elem.sexp;
+                auto isAst = elem.isAst;
                 worklist.pop();
 
-                hashChild(sexp, hasher, refs);
+                if (isAst) {
+                    auto uuid = hashAst(sexp);
+                    hasher.hashBytesOf(uuid);
+                } else {
+                    hashChild(sexp, hasher, refs);
+                }
             }
             return uuidHasher.finalize();
         });

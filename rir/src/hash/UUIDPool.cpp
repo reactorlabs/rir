@@ -317,14 +317,6 @@ const UUID& UUIDPool::getHash(SEXP sexp) {
     return empty;
 }
 
-UUID UUIDPool::getOrComputeHash(SEXP sexp) {
-    auto& memoized = getHash(sexp);
-    if (memoized) {
-        return memoized;
-    }
-    return hashRoot(sexp);
-}
-
 SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
         // Read whether we are serializing hash

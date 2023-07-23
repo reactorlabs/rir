@@ -7,20 +7,28 @@
 #include "R/r_incl.h"
 #include "UUID.h"
 #include <unordered_set>
-#include <queue>
+#include <stack>
 
 namespace rir {
 
 /// SEXP->UUID hasher which is exposed to RIR objects so that they can hash
 /// themselves
 class Hasher {
+    struct Elem {
+        SEXP sexp;
+        bool isAst;
+    };
+    using Worklist = std::stack<Elem>;
+
     /// Underlying UUID hasher
     UUID::Hasher& hasher;
     /// Next SEXPs to process: instead of recursing, we add nested SEXPs to this
-    /// queue and then process them in a loop.
-    std::queue<SEXP>& worklist;
+    /// stack and then process them in a loop. This is different semantics than
+    /// actually recursing, but it doesn't matter because hashes are still the
+    /// same quality and consistent.
+    Worklist& worklist;
 
-    Hasher(UUID::Hasher& hasher, std::queue<SEXP>& worklist)
+    Hasher(UUID::Hasher& hasher, Worklist& worklist)
         : hasher(hasher), worklist(worklist) {}
 
     friend UUID hashRoot(SEXP root);
@@ -33,19 +41,19 @@ class Hasher {
     void hashBytes(const void* data, size_t size) {
         hasher.hashBytes(data, size);
     }
-    /// Hash SEXP
-    void hash(SEXP s) {
-        worklist.push(s);
+    /// Hash SEXP. ASTs hash differently and faster
+    void hash(SEXP s, bool isAst = false) {
+        worklist.push({s, isAst});
     }
     /// Hash SEXP in constant pool ([Pool])
     void hashConstant(unsigned idx);
     /// Hash SEXP in source pool ([src_pool_at])
     void hashSrc(unsigned idx);
     /// Hash SEXP which could be nullptr
-    void hashNullable(SEXP s) {
+    void hashNullable(SEXP s, bool isAst = false) {
         hashBytesOf<bool>(s != nullptr);
         if (s) {
-            hash(s);
+            hash(s, isAst);
         }
     }
 };

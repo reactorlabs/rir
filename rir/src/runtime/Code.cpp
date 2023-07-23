@@ -6,6 +6,7 @@
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
 #include "hash/UUIDPool.h"
+#include "hash/hashAst.h"
 #include "interpreter/serialize.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
@@ -465,11 +466,11 @@ void Code::print(std::ostream& out, bool hashInfo) const {
         out << "extra pool = \n" << Print::dumpSexp(getEntry(0), SIZE_MAX)
             << "\n";
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
-            << ", hash = " << UUIDPool::getOrComputeHash(src_pool_at(src)) << "\n";
+            << ", hash = " << hashAst(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
             out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
             out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
-                << ", hash = " << UUIDPool::getOrComputeHash(src_pool_at(i)) << "\n";
+                << ", hash = " << hashAst(src_pool_at(i)) << "\n";
         }
     }
 }
