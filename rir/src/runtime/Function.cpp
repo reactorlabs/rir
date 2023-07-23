@@ -47,12 +47,6 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
-    // TODO: why are body and args not set sometimes when we hash
-    //  deserialized value to check hash consistency? It probably has
-    //  something to do with cyclic references in serialization, but why?
-    //  (This is one of the reasons we use SEXP instead of unpacking Code
-    //  for body and default args, also because we are going to serialize
-    //  the SEXP anyways to properly handle cyclic references)
     UUIDPool::writeItem(getEntry(0), refTable, out);
 
     for (unsigned i = 0; i < numArgs_; i++) {
@@ -63,9 +57,27 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
             UUIDPool::writeItem(arg, refTable, out);
         }
     }
-    if (!isHashing(out)) {
-        OutInteger(out, (int)flags_.to_i());
+    OutInteger(out, (int)flags_.to_i());
+}
+
+void Function::hash(Hasher& hasher) const {
+    hasher.hashBytesOf(signature());
+    hasher.hashBytesOf(context_);
+    hasher.hashBytesOf(numArgs_);
+    // TODO: why are body and args not set sometimes when we hash
+    //  deserialized value to check hash consistency? It probably has
+    //  something to do with cyclic references in serialization, but why?
+    //  (This is one of the reasons we use SEXP instead of unpacking Code
+    //  for body and default args, also because we are going to serialize
+    //  the SEXP anyways to properly handle cyclic references)
+    hasher.hash(getEntry(0));
+
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        hasher.hashNullable(arg);
     }
+
+    // Don't hash flags because they change
 }
 
 void Function::disassemble(std::ostream& out) const {

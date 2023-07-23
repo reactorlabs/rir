@@ -6,6 +6,7 @@
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
 #include "compiler/native/SerialModule.h"
+#include "hash/doHash.h"
 
 #include <cassert>
 #include <cstdint>
@@ -229,6 +230,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void serialize(SEXP refTable, R_outpstream_t out) const {
         serialize(true, refTable, out);
     }
+
+    void hash(Hasher& hasher) const;
+
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&, bool hashInfo = false) const;
