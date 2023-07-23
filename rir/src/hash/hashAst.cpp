@@ -35,8 +35,9 @@ using Stack = std::stack<Frame>;
 
 static void hashNewAst(SEXP s, UUID::Hasher& hasher,
                        std::function<void(SEXP)> recurse) {
-    SLOWASSERT(!hashCache.count(s) &&
-               "hashCache should not contain the SEXP/hash we're about to compute");
+    // 2 fastcases below mean that every SEXP on the stack is not yet hashed,
+    // unless the symbol is a shared global, in which case it's trivial. So we
+    // don't bother checking if it's in hashCache
 
     hasher.hashBytesOf<int>(TYPEOF(s));
     switch (TYPEOF(s)) {
@@ -180,6 +181,7 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
 
 UUID hashAst(SEXP root) {
     if (hashCache.count(root)) {
+        // Fastcase
         return hashCache.at(root);
     }
 
@@ -194,7 +196,14 @@ UUID hashAst(SEXP root) {
         // Hash this SEXP, changing the hasher and pushing not-started recursive
         // calls onto the stack
         top.started = true;
-        hashNewAst(top.sexp, top.hasher, [&](SEXP next){ stack.emplace(next); });
+        hashNewAst(top.sexp, top.hasher, [&](SEXP next){
+            if (hashCache.count(next)) {
+                // Fastcase
+                top.hasher.hashBytesOf<UUID>(hashCache.at(next));
+            } else {
+                stack.emplace(next);
+            }
+        });
 
         // If this SEXP pushed not-started recursive calls we have to process
         // them. If not, we can finish this call, and then finish outer calls
