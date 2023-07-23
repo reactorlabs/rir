@@ -165,9 +165,8 @@ CompilerClient::Handle<T>* CompilerClient::request(
             // | from makeResponse()
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME);
-            auto hashOnlyResponseMagic = hashOnlyResponseBuffer.getLong();
+            auto hashOnlyResponseMagic = (Response)hashOnlyResponseBuffer.peekLong();
             if (hashOnlyResponseMagic != Response::NeedsFull) {
-                hashOnlyResponseBuffer.setReadPos(0);
                 return makeResponse(hashOnlyResponseBuffer);
             }
         }
@@ -250,7 +249,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + pirPrint
                 // + hashRoot(what)
                 // + serialize(what)
-                auto responseMagic = response.getLong();
+                auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
                 auto pirPrintSize = response.getLong();
                 std::string pirPrint;
@@ -287,7 +286,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             //   Response::Retrieved
             // + serialize(what)
             // | Response::RetrieveFailed
-            auto responseMagic = response.getLong();
+            auto responseMagic = (Response)response.getLong();
             switch (responseMagic) {
             case Response::Retrieved:
                 return deserialize(response, true, hash);

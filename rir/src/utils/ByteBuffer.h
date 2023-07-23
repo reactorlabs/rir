@@ -99,6 +99,7 @@ namespace bb {
         float getFloat(uint32_t index) const;
         uint32_t getInt() const;
         uint32_t getInt(uint32_t index) const;
+        uint64_t peekLong() const;
         uint64_t getLong() const;
         uint64_t getLong(uint32_t index) const;
         uint16_t getShort() const;
