@@ -124,7 +124,7 @@ static inline void hashRir(SEXP sexp, Hasher& hasher) {
 }
 
 static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
-                        std::stack<SEXP>& bcWorklist) {
+                        std::stack<SEXP>& bcLangWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBcLang1", sexp, [&]{
         int type = TYPEOF(sexp);
         if (type == LANGSXP || type == LISTSXP) {
@@ -152,12 +152,23 @@ static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
                 hasher.hash(attr);
             }
             hasher.hash(TAG(sexp));
-            bcWorklist.push(CAR(sexp));
-            bcWorklist.push(CDR(sexp));
+            bcLangWorklist.push(CAR(sexp));
+            bcLangWorklist.push(CDR(sexp));
         } else {
             hasher.hash(sexp);
         }
     });
+}
+
+static void hashBcLang(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
+    std::stack<SEXP> bcLangWorklist;
+    bcLangWorklist.push(sexp);
+    while (!bcLangWorklist.empty()) {
+        sexp = bcLangWorklist.top();
+        bcLangWorklist.pop();
+
+        hashBcLang1(sexp, hasher, bcRefs, bcLangWorklist);
+    }
 }
 
 static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::stack<SEXP>& bcWorklist) {
@@ -177,7 +188,7 @@ static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::stack<
                 break;
             case LANGSXP:
             case LISTSXP:
-                hashBcLang1(c, hasher, bcRefs, bcWorklist);
+                hashBcLang(c, hasher, bcRefs);
                 break;
             default:
                 hasher.hashBytesOf<SEXPTYPE>(type);
