@@ -9,6 +9,7 @@
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
+#include "compilerClientServer/CompilerServer.h"
 #include "getConnected.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
@@ -443,6 +444,13 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
                 LOG(std::cout << "Retrieving by hash from server: " << hash
                               << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
+                if (sexp) {
+                    return sexp;
+                }
+                Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+            } else if (CompilerServer::isRunning()) {
+                LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
+                auto sexp = CompilerServer::retrieve(hash);
                 if (sexp) {
                     return sexp;
                 }
