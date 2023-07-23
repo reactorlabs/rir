@@ -6,7 +6,8 @@
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
 #include "compiler/native/SerialModule.h"
-#include "hash/doHash.h"
+#include "hash/getConnected.h"
+#include "hash/hashRoot.h"
 
 #include <cassert>
 #include <cstdint>
@@ -232,6 +233,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     }
 
     void hash(Hasher& hasher) const;
+    void addConnected(ConnectedCollector& collector) const;
 
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }

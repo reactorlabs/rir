@@ -196,7 +196,6 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
 
-    // Header
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize source", container(), [&]{
         src_pool_write_item(src, refTable, out);
         OutInteger(out, trivialExpr != nullptr);
@@ -226,12 +225,10 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize bytecode", container(), [&]{
-        // Bytecode
         BC::serialize(refTable, out, code(), codeSize, this);
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
-        // Srclist
         for (unsigned i = 0; i < srcLength; i++) {
             OutInteger(out, (int)srclist()[i].pcOffset);
             src_pool_write_item(srclist()[i].srcIdx, refTable, out);
@@ -239,7 +236,6 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
-        // Native code
         OutInteger(out, (int)kind);
         assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
                "Code in bad pending state");
@@ -257,7 +253,6 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 }
 
 void Code::hash(Hasher& hasher) const {
-    // Header
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash source", container(), [&]{
         hasher.hashSrc(src);
         hasher.hashNullable(trivialExpr);
@@ -281,12 +276,10 @@ void Code::hash(Hasher& hasher) const {
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash bytecode", container(), [&]{
-        // Bytecode
         BC::hash(hasher, code(), codeSize, this);
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash srclist", container(), [&]{
-        // Srclist
         for (unsigned i = 0; i < srcLength; i++) {
             hasher.hashBytesOf<unsigned>(srclist()[i].pcOffset);
             hasher.hashSrc(srclist()[i].srcIdx);
@@ -294,6 +287,34 @@ void Code::hash(Hasher& hasher) const {
     });
 
     // Don't hash native code
+}
+
+void Code::addConnected(ConnectedCollector& collector) const {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in source", container(), [&]{
+        collector.addSrc(src);
+        collector.addNullable(trivialExpr);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in extra pool", container(), [&]{
+        collector.add(getEntry(0));
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in call argument reordering metadata", container(), [&]{
+        collector.addNullable(getEntry(2));
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in outer function", container(), [&]{
+        collector.add(function()->container());
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in bytecode", container(), [&]{
+        BC::addConnected(collector, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in srclist", container(), [&]{
+        for (unsigned i = 0; i < srcLength; i++) {
+            collector.addSrc(srclist()[i].srcIdx);
+        }
+    });
+
+    // No connected in SEXPs native code
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {

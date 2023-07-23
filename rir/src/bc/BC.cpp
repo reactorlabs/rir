@@ -314,8 +314,6 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
             assert(*code != Opcode::nop_);
             break;
         case Opcode::push_:
-            hasher.hashConstant(i.pool);
-            break;
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
@@ -344,7 +342,7 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
             hasher.hashBytesOf(i.callFixedArgs.nargs);
             hasher.hashConstant(i.callFixedArgs.ast);
             hasher.hashBytesOf(i.callFixedArgs.given);
-            // Write named arguments
+            // Hash named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
                     hasher.hashConstant(bc.callExtra().callArgumentNames[j]);
@@ -378,6 +376,88 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
             if (size != 0) {
                 hasher.hashBytes(code + 1, (int)size - 1);
             }
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = bc.size();
+#ifdef DEBUG_SERIAL
+        if (bc.bc == Opcode::deopt_) {
+            std::cout << "serialized: ";
+            bc.print(std::cout);
+        }
+#endif
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::addConnected(ConnectedCollector& collector, const Opcode* code,
+                      size_t codeSize, const Code* container) {
+    while (codeSize > 0) {
+        const BC bc = BC::decode((Opcode*)code, container);
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments i = bc.immediate;
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+            collector.addConstant(i.pool);
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+            collector.addConstant(i.poolAndCache.poolIndex);
+            break;
+        case Opcode::guard_fun_:
+            collector.addConstant(i.guard_fun_args.name);
+            collector.addConstant(i.guard_fun_args.expected);
+            break;
+        case Opcode::call_:
+        case Opcode::call_dots_:
+        case Opcode::named_call_:
+            collector.addConstant(i.callFixedArgs.ast);
+            // Add named arguments
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    collector.addConstant(bc.callExtra().callArgumentNames[j]);
+                }
+            }
+            break;
+        case Opcode::call_builtin_:
+            collector.addConstant(i.callBuiltinFixedArgs.ast);
+            collector.addConstant(i.callBuiltinFixedArgs.builtin);
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::record_test_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
             break;
         case Opcode::invalid_:
         case Opcode::num_of:
