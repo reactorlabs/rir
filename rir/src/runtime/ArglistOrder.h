@@ -2,6 +2,8 @@
 #define ARGLIST_ORDER_H
 
 #include "RirRuntimeObject.h"
+#include "hash/getConnected.h"
+#include "hash/hashRoot.h"
 
 #include <iostream>
 #include <vector>
@@ -94,6 +96,8 @@ struct ArglistOrder
 
     static ArglistOrder* deserialize(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);
     void serialize(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const;
+    void hash(Hasher& hasher) const;
+    void addConnected(ConnectedCollector& collector) const;
 
     /*
      * Layout of data[] is nCalls * (offset, length), followed by
