@@ -209,33 +209,6 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             assert(*code != Opcode::nop_);
             break;
         case Opcode::push_:
-            if (isHashing(out)) {
-                // TODO: handle this correctly because although it passes tests,
-                //  there are probably counterexamples where different hashes
-                //  are eq... (without SYMSXP we get a failure in rir_switch.r)
-                auto s = Pool::get(i.pool);
-                OutInteger(out, TYPEOF(s));
-                switch (TYPEOF(s)) {
-                case SYMSXP:
-                // ...or we may not need these cases (just SYMSXP passes rir_switch.r)
-                case INTSXP:
-                case LGLSXP:
-                case REALSXP:
-                case RAWSXP:
-                case CHARSXP:
-                case STRSXP:
-                case SPECIALSXP:
-                case BUILTINSXP:
-                    Pool::writeAst(i.pool, refTable, out);
-                    break;
-                default:
-                    Pool::writeItem(i.pool, refTable, out);
-                    break;
-                }
-            } else {
-                Pool::writeItem(i.pool, refTable, out);
-            }
-            break;
         case Opcode::ldfun_:
         case Opcode::ldddvar_:
         case Opcode::ldvar_:
@@ -245,16 +218,16 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            Pool::writeAst(i.pool, refTable, out);
+            Pool::writeItem(i.pool, refTable, out);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            Pool::writeAst(i.poolAndCache.poolIndex, refTable, out);
+            Pool::writeItem(i.poolAndCache.poolIndex, refTable, out);
             OutInteger(out, i.poolAndCache.cacheIndex);
             break;
         case Opcode::guard_fun_:
-            Pool::writeAst(i.guard_fun_args.name, refTable, out);
+            Pool::writeItem(i.guard_fun_args.name, refTable, out);
             Pool::writeItem(i.guard_fun_args.expected, refTable, out);
             OutInteger(out, i.guard_fun_args.id);
             break;
@@ -262,27 +235,23 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
         case Opcode::call_dots_:
         case Opcode::named_call_:
             OutInteger(out, i.callFixedArgs.nargs);
-            Pool::writeAst(i.callFixedArgs.ast, refTable, out);
+            Pool::writeItem(i.callFixedArgs.ast, refTable, out);
             OutBytes(out, &i.callFixedArgs.given, sizeof(Context));
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++)
-                    Pool::writeAst(bc.callExtra().callArgumentNames[j],
+                    Pool::writeItem(bc.callExtra().callArgumentNames[j],
                                    refTable, out);
             }
             break;
         case Opcode::call_builtin_:
             OutInteger(out, i.callBuiltinFixedArgs.nargs);
-            Pool::writeAst(i.callBuiltinFixedArgs.ast, refTable, out);
+            Pool::writeItem(i.callBuiltinFixedArgs.ast, refTable, out);
             Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
             break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
-            assert((size - 1) % 4 == 0);
-            if (size != 0)
-                if (!isHashing(out)) { OutBytes(out, code + 1, (int)size - 1); }
-            break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
         case Opcode::br_:
@@ -298,6 +267,103 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             assert((size - 1) % 4 == 0);
             if (size != 0)
                 OutBytes(out, code + 1, (int)size - 1);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = bc.size();
+#ifdef DEBUG_SERIAL
+        if (bc.bc == Opcode::deopt_) {
+            std::cout << "serialized: ";
+            bc.print(std::cout);
+        }
+#endif
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
+              const Code* container) {
+    while (codeSize > 0) {
+        const BC bc = BC::decode((Opcode*)code, container);
+        hasher.hashBytesOf(*code);
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments i = bc.immediate;
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::push_:
+            hasher.hashConstant(i.pool);
+            break;
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+            hasher.hashConstant(i.pool);
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+            hasher.hashConstant(i.poolAndCache.poolIndex);
+            hasher.hashBytesOf(i.poolAndCache.cacheIndex);
+            break;
+        case Opcode::guard_fun_:
+            hasher.hashConstant(i.guard_fun_args.name);
+            hasher.hashConstant(i.guard_fun_args.expected);
+            hasher.hashBytesOf(i.guard_fun_args.id);
+            break;
+        case Opcode::call_:
+        case Opcode::call_dots_:
+        case Opcode::named_call_:
+            hasher.hashBytesOf(i.callFixedArgs.nargs);
+            hasher.hashConstant(i.callFixedArgs.ast);
+            hasher.hashBytesOf(i.callFixedArgs.given);
+            // Write named arguments
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    hasher.hashConstant(bc.callExtra().callArgumentNames[j]);
+                }
+            }
+            break;
+        case Opcode::call_builtin_:
+            hasher.hashBytesOf(i.callBuiltinFixedArgs.nargs);
+            hasher.hashConstant(i.callBuiltinFixedArgs.ast);
+            hasher.hashConstant(i.callBuiltinFixedArgs.builtin);
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::record_test_:
+            assert((size - 1) % 4 == 0);
+            // Don't hash because these are recording instructions
+            break;
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+            assert((size - 1) % 4 == 0);
+            if (size != 0) {
+                hasher.hashBytes(code + 1, (int)size - 1);
+            }
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

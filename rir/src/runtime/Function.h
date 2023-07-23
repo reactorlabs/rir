@@ -5,6 +5,7 @@
 #include "FunctionSignature.h"
 #include "R/r.h"
 #include "RirRuntimeObject.h"
+#include "hash/doHash.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -80,6 +81,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
+    void hash(Hasher& hasher) const;
     void disassemble(std::ostream&) const;
     void print(std::ostream&, bool hashInfo = false) const;
 

@@ -232,7 +232,7 @@ void CompilerServer::tryRun() {
             //   Response::Compiled
             // + sizeof(pirPrint)
             // + pirPrint
-            // + hashSexp(what)
+            // + hashRoot(what)
             // + serialize(what)
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME);
             response.putLong((uint64_t)Response::Compiled);

@@ -30,7 +30,6 @@ class Pool {
 
     static BC::PoolIdx readItem(SEXP ref_table, R_inpstream_t in);
     static void writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out);
-    static void writeAst(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out);
 
     static BC::PoolIdx makeSpace() {
         size_t i = cp_pool_add(R_NilValue);

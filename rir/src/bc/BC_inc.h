@@ -5,6 +5,7 @@
 #include "bc/BC_noarg_list.h"
 #include "common.h"
 #include "compiler/pir/type.h"
+#include "hash/doHash.h"
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 
@@ -218,6 +219,8 @@ class BC {
                             size_t codeSize, Code* container);
     static void serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
                           size_t codeSize, const Code* container);
+    static void hash(Hasher& hasher, const Opcode* code, size_t codeSize,
+                     const Code* container);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;

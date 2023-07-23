@@ -1,7 +1,6 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
-#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "bc/BC_inc.h"
@@ -196,13 +195,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 }
 
 void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
-    // We don't want to include the outer function in the hash, but we need to
-    //  add it to the connected worklist to recursively intern it. Otherwise we
-    //  will error when serializing them because we need the outer function's
-    //  hash
-    R_outpstream_st nullOut = nullOutputStream();
-    auto noHashOut = isHashing(out) ? &nullOut : out;
-
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
 
@@ -231,7 +223,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
         if (includeFunction) {
-            UUIDPool::writeItem(function()->container(), refTable, noHashOut);
+            UUIDPool::writeItem(function()->container(), refTable, out);
         }
     });
 
@@ -248,24 +240,62 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         }
     });
 
-    if (!isHashing(out)) {
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
-            // Native code
-            OutInteger(out, (int)kind);
-            assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
-                   "Code in bad pending state");
-            if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
-                assert(lazyCodeHandle[0] != '\0');
-                auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-                OutInteger(out, lazyCodeHandleLen);
-                OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-                OutBool(out, lazyCodeModule != nullptr);
-                if (lazyCodeModule) {
-                    lazyCodeModule->serialize(out);
-                }
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
+        // Native code
+        OutInteger(out, (int)kind);
+        assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
+               "Code in bad pending state");
+        if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
+            assert(lazyCodeHandle[0] != '\0');
+            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
+            OutInteger(out, lazyCodeHandleLen);
+            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
+            OutBool(out, lazyCodeModule != nullptr);
+            if (lazyCodeModule) {
+                lazyCodeModule->serialize(out);
             }
-        });
-    }
+        }
+    });
+}
+
+void Code::hash(Hasher& hasher) const {
+    // Header
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash source", container(), [&]{
+        hasher.hashSrc(src);
+        hasher.hashNullable(trivialExpr);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash numbers", container(), [&]{
+        hasher.hashBytesOf<unsigned>(stackLength);
+        hasher.hashBytesOf<unsigned>(localsCount);
+        hasher.hashBytesOf<unsigned>(bindingCacheSize);
+        hasher.hashBytesOf<unsigned>(codeSize);
+        hasher.hashBytesOf<unsigned>(srcLength);
+        hasher.hashBytesOf<unsigned>(extraPoolSize);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash extra pool", container(), [&]{
+        hasher.hash(getEntry(0));
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash call argument reordering metadata", container(), [&]{
+        hasher.hashNullable(getEntry(2));
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash outer function", container(), [&]{
+        hasher.hash(function()->container());
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash bytecode", container(), [&]{
+        // Bytecode
+        BC::hash(hasher, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash srclist", container(), [&]{
+        // Srclist
+        for (unsigned i = 0; i < srcLength; i++) {
+            hasher.hashBytesOf<unsigned>(srclist()[i].pcOffset);
+            hasher.hashSrc(srclist()[i].srcIdx);
+        }
+    });
+
+    // Don't hash native code
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
@@ -431,11 +461,11 @@ void Code::print(std::ostream& out, bool hashInfo) const {
         out << "extra pool = \n" << Print::dumpSexp(getEntry(0), SIZE_MAX)
             << "\n";
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
-            << ", hash = " << hashAst(src_pool_at(src)) << "\n";
+            << ", hash = " << hashRoot(src_pool_at(src)) << "\n";
         for (unsigned i = 0; i < srcLength; i++) {
             out << "src[" << i << "] @ " << srclist()[i].pcOffset << " = \n";
             out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
-                << ", hash = " << hashAst(src_pool_at(i)) << "\n";
+                << ", hash = " << hashRoot(src_pool_at(i)) << "\n";
         }
     }
 }

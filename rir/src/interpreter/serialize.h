@@ -19,16 +19,6 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
 /// Will serialize and deserialize the SEXP, returning a deep copy.
 SEXP copyBySerial(SEXP x);
 
-/// An output stream which simply discards its output
-R_outpstream_st nullOutputStream();
-
-/// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
-/// EVP-MD hashing ("fancy XOR"-ing) the bits instead of collecting them, and
-/// add connected RIR object containers to the worklist.
-UUID hashSexp(SEXP sexp, ConnectedWorklist& connected);
-/// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
-/// EVP-MD hashing ("fancy XOR"-ing) the bits instead of collecting them.
-UUID hashSexp(SEXP sexp);
 /// Serialize a SEXP (doesn't have to be RIR) into the buffer.
 ///
 /// If useHashes is true, connected RIR objects are serialized as UUIDs
@@ -56,10 +46,6 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& retrieveHas
 bool useHashes(R_outpstream_t out);
 /// Whether to use hashes when deserializing in the current stream
 bool useHashes(R_inpstream_t in);
-/// If true we're hashing, otherwise we're actually serializing
-bool isHashing(R_outpstream_t out);
-/// Connected worklist for the current stream, or `nullptr` if there is none
-ConnectedWorklist* connected(R_outpstream_t out);
 /// If `retrieveHash` is set, interns SEXP with it and unsets it.
 void useRetrieveHashIfSet(R_inpstream_t inp, SEXP sexp);
 

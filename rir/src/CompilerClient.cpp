@@ -248,7 +248,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 //   Response::Compiled
                 // + sizeof(pirPrint)
                 // + pirPrint
-                // + hashSexp(what)
+                // + hashRoot(what)
                 // + serialize(what)
                 auto responseMagic = response.getLong();
                 assert(responseMagic == Response::Compiled);

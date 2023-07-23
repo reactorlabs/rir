@@ -6,7 +6,6 @@
 #include "CompilerClient.h"
 #include "CompilerServer.h"
 #include "R/Protect.h"
-#include "R/SerialAst.h"
 #include "R/Serialize.h"
 #include "api.h"
 #include "compiler/parameter.h"
@@ -147,7 +146,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
         (void)expectHashToBeTheSame;
 
 #ifdef DO_INTERN
-        SLOWASSERT((!expectHashToBeTheSame || hashSexp(e) == hash) &&
+        SLOWASSERT((!expectHashToBeTheSame || hashRoot(e) == hash) &&
                    "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
         if (interned.count(hash)) {
             // Reuse interned SEXP
@@ -270,19 +269,18 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             // Compute hash, whether internable or not, to add connected objects
             // which are internable to connected
             // cppcheck-suppress unreadVariable
-            auto hash = hashSexp(e, connected);
+            auto hash = hashRoot(e, connected);
             auto ret = internable(e) ? intern(e, hash, preserve) : e;
             while ((e = connected.pop())) {
-                if (hashes.count(e)) {
+                if (hashes.count(e) || !internable(e)) {
                     continue;
                 }
-                assert(internable(e) && "connected object is not internable");
 
-                intern(e, hashSexp(e), preserve);
+                intern(e, hashRoot(e), preserve);
             }
             return ret;
         } else {
-            return internable(e) ? intern(e, hashSexp(e), preserve) : e;
+            return internable(e) ? intern(e, hashRoot(e), preserve) : e;
         }
     });
 #else
@@ -382,11 +380,6 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
 }
 
 void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
-    assert(!connected(out) || !useHashes(out));
-    auto wl = connected(out);
-    if (wl && internable(sexp) && !hashes.count(sexp)) {
-        wl->insert(sexp);
-    }
     if (useHashes(out)) {
         auto isInternable = internable(sexp);
         // Write whether we are serializing hash
@@ -425,33 +418,5 @@ void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
     // Write regular data
     serialize(sexp, buf, useHashes);
 }
-
-void UUIDPool::writeAst(SEXP src, SEXP refTable, R_outpstream_t out) {
-    if (isHashing(out)) {
-        auto uuid = hashAst(src);
-        OutBytes(out, (const char*)&uuid, sizeof(uuid));
-    } else {
-        writeItem(src, refTable, out);
-    }
-}
-
-void ConnectedWorklist::insert(SEXP e) {
-    // It could get gcd before we get to it
-    R_PreserveObject(e);
-    seen.insert(e);
-}
-
-SEXP ConnectedWorklist::pop() {
-    auto it = seen.begin();
-    if (it == seen.end()) {
-        return nullptr;
-    }
-    SEXP e = *it;
-    seen.erase(it);
-    // At this point it won't get gcd before its used
-    R_ReleaseObject(e);
-    return e;
-}
-
 
 } // namespace rir
