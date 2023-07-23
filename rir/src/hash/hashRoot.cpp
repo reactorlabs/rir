@@ -113,8 +113,9 @@ static inline bool tryHash(SEXP sexp, Hasher& hasher) {
 
 static inline void hashRir(SEXP sexp, Hasher& hasher) {
     if (!tryHash<DispatchTable>(sexp, hasher) &&
+        !tryHash<Function>(sexp, hasher) &&
         !tryHash<Code>(sexp, hasher) &&
-        !tryHash<Function>(sexp, hasher)) {
+        !tryHash<ArglistOrder>(sexp, hasher)) {
         std::cerr << "couldn't hash EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);

@@ -35,8 +35,9 @@ static inline bool tryAddConnected(SEXP sexp, ConnectedCollector& collector) {
 
 static inline void addConnectedRir(SEXP sexp, ConnectedCollector& collector) {
     if (!tryAddConnected<DispatchTable>(sexp, collector) &&
+        !tryAddConnected<Function>(sexp, collector) &&
         !tryAddConnected<Code>(sexp, collector) &&
-        !tryAddConnected<Function>(sexp, collector)) {
+        !tryAddConnected<ArglistOrder>(sexp, collector)) {
         std::cerr << "couldn't add connected in EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);
