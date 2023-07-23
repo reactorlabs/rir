@@ -47,3 +47,13 @@ Both the compiler client and server are Ř processes. The server starts with `PI
 Whenever the compiler client attempts to compile a function (by default, this happens after running the function a few times), it sends a request to the compiler server containing the function's code along with context and speculation info such as runtime types. The compiler server processes the request and replies with the compiled (LLVM) code. The client inserts this into the function's **dispatch table**, and future calls trigger the compiled code. If there is a deoptimization or the function is called with a different context, the compiler client may request the server to compile the same function again, with new context and/or speculation info (there's no point in re-compiling the function with the exact same info).
 
 The compiler server also memoizes requests by hashing the request data including R bytecode and feedback, so if it's asked to recompile the same closure again, it will return the already-compiled version. 
+
+### SEXP intern pool
+
+TODO: improve writing
+
+Separate from requests, the compiler server interns SEXPs and will send SEXPs to the client with connected SEXPs as hashes. If the client doesn't have the SEXP locally, it can send a `Retrieve` request to the server to get it from the intern pool, but if it does, it can skip this request. This prevents transmitting redundant SEXPs and more importantly, creating separate SEXPs on the client; this is not just bad for performance, but can be a semantic issue.
+
+The SEXPs are interned according to a hash computed from their immutable semantic data, using [xxHash](https://xxhash.com/). Data which is mutable but doesn't affect semantics, like feedback, isn't part of the hash. Environments are also not part of the hash since they are mutable and defined behavior shouldn't rely on their changes throughout the program's execution.
+
+The client will also intern SEXPs it retrieves from the server. However, it explicitly *doesn't* send connected SEXPs as hashes, instead sending the full SEXP even if redundant, because the client's intern pool is temporary. When the server interns SEXPs it also preserves them for future clients, and the server will presumably have more memory so it can handle this. Because the server has an intern pool, even though it will receive and deserialize redundant SEXPs, it won't actually store the duplicates, they'll simply be discarded.

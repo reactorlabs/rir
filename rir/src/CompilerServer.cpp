@@ -162,7 +162,7 @@ void CompilerServer::tryRun() {
             // + sizeof(debug.style) (always 4)
             // + debug.style
 
-            // Client won't sent hashed SEXPs because it doesn't necessarily
+            // Client won't send hashed SEXPs because it doesn't necessarily
             // remember them, and because the server doesn't care about
             // connected SEXPs like the client; the only thing duplicate SEXPs
             // may cause is wasted memory, but since we're on the server and
