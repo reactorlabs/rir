@@ -235,6 +235,10 @@ namespace bb {
         return read<uint32_t>(index);
     }
 
+    uint64_t ByteBuffer::peekLong() const {
+        return read<uint64_t>(rpos);
+    }
+
     uint64_t ByteBuffer::getLong() const {
         return read<uint64_t>();
     }

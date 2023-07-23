@@ -262,13 +262,13 @@ void CompilerServer::tryRun() {
                 // Response data format =
                 //   Response::Retrieved
                 // + serialize(what)
-                response.putLong(Response::Retrieved);
+                response.putLong((uint64_t)Response::Retrieved);
                 serialize(what, response, true);
             } else {
                 std::cerr << "(not found)" << std::endl;
                 // Response data format =
                 //   Response::RetrieveFailed
-                response.putLong(Response::RetrieveFailed);
+                response.putLong((uint64_t)Response::RetrieveFailed);
             }
             break;
         }

@@ -23,7 +23,7 @@ enum class Request : uint64_t {
     Kill = 0x217A25432A462D4C,
 };
 
-enum Response : uint64_t {
+enum class Response : uint64_t {
     /// Memoized request - needs the full response
     NeedsFull = 0x9BEEB1E5356F1A37,
     /// Compiled closure
