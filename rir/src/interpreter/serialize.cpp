@@ -4,7 +4,7 @@
 #include "api.h"
 #include "compiler/parameter.h"
 #include "hash/UUIDPool.h"
-#include "hash/doHash.h"
+#include "hash/hashRoot.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
@@ -56,7 +56,7 @@ void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
             !trySerialize<LazyArglist>(s, refTable, out) &&
             !trySerialize<LazyEnvironment>(s, refTable, out) &&
             !trySerialize<PirTypeFeedback>(s, refTable, out)) {
-            std::cerr << "couldn't deserialize EXTERNALSXP: ";
+            std::cerr << "couldn't serialize EXTERNALSXP: ";
             Rf_PrintValue(s);
             assert(false);
         }
@@ -67,8 +67,8 @@ void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
 
 SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
     return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserializeRir", [&]{
-        unsigned code = InInteger(inp);
-        switch (code) {
+        unsigned magic = InInteger(inp);
+        switch (magic) {
         case DISPATCH_TABLE_MAGIC:
             return DispatchTable::deserialize(refTable, inp)->container();
         case CODE_MAGIC:
@@ -84,8 +84,8 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         case PIR_TYPE_FEEDBACK_MAGIC:
             return PirTypeFeedback::deserialize(refTable, inp)->container();
         default:
-            std::cerr << "couldn't deserialize EXTERNALSXP with code: 0x"
-                      << std::hex << code << "\n";
+            std::cerr << "couldn't deserialize EXTERNALSXP with magic code: 0x"
+                      << std::hex << magic << "\n";
             assert(false);
         }
     }, [&](SEXP s){

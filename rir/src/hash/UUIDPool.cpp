@@ -7,12 +7,13 @@
 #include "CompilerServer.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
+#include "R/disableGc.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "getConnected.h"
 #include "interpreter/serialize.h"
 #include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
-#include <queue>
 
 #define DEBUG_DISASSEMBLY
 
@@ -254,34 +255,29 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
-    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, recursive ? "UUIDPool.cpp: intern recursive" : "UUIDPool.cpp: intern", e, [&] {
-        Protect p(e);
-        if (hashes.count(e) && !recursive) {
-            // Already interned, don't compute hash
-            if (preserve && !preserved.count(e)) {
-                R_PreserveObject(e);
-                preserved.insert(e);
-            }
-            return e;
-        }
-        if (recursive) {
-            ConnectedWorklist connected;
-            // Compute hash, whether internable or not, to add connected objects
-            // which are internable to connected
-            // cppcheck-suppress unreadVariable
-            auto hash = hashRoot(e, connected);
-            auto ret = internable(e) ? intern(e, hash, preserve) : e;
-            while ((e = connected.pop())) {
-                if (hashes.count(e) || !internable(e)) {
-                    continue;
+    return disableGc<SEXP>([&]{
+        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, recursive ? "UUIDPool.cpp: intern recursive" : "UUIDPool.cpp: intern", e, [&] {
+            if (hashes.count(e) && !recursive) {
+                // Already interned, don't compute hash
+                if (preserve && !preserved.count(e)) {
+                    R_PreserveObject(e);
+                    preserved.insert(e);
                 }
+                return e;
+            }
+            auto ret = internable(e) ? intern(e, hashRoot(e), preserve) : e;
+            if (recursive) {
+                ConnectedSet connected = getConnected(e);
+                for (auto s : connected) {
+                    if (hashes.count(s) || !internable(s)) {
+                        continue;
+                    }
 
-                intern(e, hashRoot(e), preserve);
+                    intern(s, hashRoot(s), preserve);
+                }
             }
             return ret;
-        } else {
-            return internable(e) ? intern(e, hashRoot(e), preserve) : e;
-        }
+        });
     });
 #else
     return e;

@@ -2,9 +2,9 @@
 // Created by Jakob Hain on 7/21/23.
 //
 
-#include "doHash.h"
+#include "hashRoot.h"
+#include "hashRoot_getConnected_common.h"
 #include "R/Funtab.h"
-#include "R/Protect.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "runtime/Code.h"
@@ -13,7 +13,6 @@
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <iostream>
-#include <stack>
 
 namespace rir {
 
@@ -32,15 +31,9 @@ enum class SpecialType : SEXPTYPE {
     BcRef = 0x10000005,
 };
 
-static std::unordered_map<SEXP, unsigned> globals = []{
-    std::vector<SEXP> vector {
-        R_GlobalEnv, R_BaseEnv, R_BaseNamespace, R_TrueValue, R_NilValue,
-        R_FalseValue, R_UnboundValue, R_MissingArg, R_RestartToken,
-        R_LogicalNAValue, R_EmptyEnv, R_DimSymbol, R_DotsSymbol,
-        R_NamesSymbol, NA_STRING
-    };
+static std::unordered_map<SEXP, unsigned> globalsMap = []{
     std::unordered_map<SEXP, unsigned> map;
-    for (auto g : vector) {
+    for (auto g : globals) {
         map[g] = map.size();
     }
     return map;
@@ -122,14 +115,14 @@ static inline void hashRir(SEXP sexp, Hasher& hasher) {
     if (!tryHash<DispatchTable>(sexp, hasher) &&
         !tryHash<Code>(sexp, hasher) &&
         !tryHash<Function>(sexp, hasher)) {
-        std::cerr << "couldn't deserialize EXTERNALSXP: ";
+        std::cerr << "couldn't hash EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);
     }
 }
 
 static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashBcLang1", sexp, [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBcLang1", sexp, [&]{
         int type = TYPEOF(sexp);
         if (type == LANGSXP || type == LISTSXP) {
             if (bcRefs.count(sexp)) {
@@ -175,9 +168,9 @@ static void hashBcLang(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
     }
 }
 
-static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist, Protect& p) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashBc1", sexp, [&]{
-        SEXP code = p(R_bcDecode(BCODE_CODE(sexp)));
+static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist) {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBc1", sexp, [&]{
+        SEXP code = R_bcDecode(BCODE_CODE(sexp));
         hasher.hash(code);
         auto consts = BCODE_CONSTS(sexp);
         auto n = LENGTH(consts);
@@ -204,19 +197,18 @@ static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<
 }
 
 static void hashBc(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
-    Protect p;
     std::queue<SEXP> bcWorklist;
     bcWorklist.push(sexp);
     while (!bcWorklist.empty()) {
         sexp = bcWorklist.front();
         bcWorklist.pop();
 
-        hashBc1(sexp, hasher, bcRefs, bcWorklist, p);
+        hashBc1(sexp, hasher, bcRefs, bcWorklist);
     }
 }
 
 static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashChild", sexp, [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild", sexp, [&]{
         auto type = TYPEOF(sexp);
 
         if (ALTREP(sexp)) {
@@ -236,9 +228,9 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
                 return;
             }
             /* else fall through to standard processing */
-        } else if (globals.count(sexp)) {
+        } else if (globalsMap.count(sexp)) {
             hasher.hashBytesOf<SpecialType>(SpecialType::Global);
-            hasher.hashBytesOf<unsigned>(globals[sexp]);
+            hasher.hashBytesOf<unsigned>(globalsMap[sexp]);
             return;
         } else if (canSelfReference(type)) {
             if (refs.count(sexp)) {
@@ -251,26 +243,12 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         }
         hasher.hashBytesOf<SEXPTYPE>(type);
 
-        bool hasTag;
-        switch (type) {
-        case LISTSXP:
-        case LANGSXP:
-        case PROMSXP:
-        case DOTSXP:
-            hasTag = TAG(sexp) != R_NilValue;
-            break;
-        case CLOSXP:
-            hasTag = TRUE;
-            break;
-        default:
-            hasTag = FALSE;
-            break;
-        }
+        bool hasTag_ = hasTag(sexp);
         // With the CHARSXP cache chains maintained through the ATTRIB
         // field the content of that field must not be serialized, so
         // we treat it as not there.
         auto hasAttr = (type != CHARSXP && ATTRIB(sexp) != R_NilValue);
-        auto flags = packFlags(type, LEVELS(sexp), OBJECT(sexp), hasAttr, hasTag);
+        auto flags = packFlags(type, LEVELS(sexp), OBJECT(sexp), hasAttr, hasTag_);
         hasher.hashBytesOf<unsigned>(flags);
         hasher.hashBytesOf<bool>(hasAttr);
         if (hasAttr) {
@@ -287,7 +265,7 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case LANGSXP:
         case PROMSXP:
         case DOTSXP:
-            if (hasTag) {
+            if (hasTag_) {
                 hasher.hash(TAG(sexp));
             }
             if (BNDCELL_TAG(sexp)) {
@@ -380,32 +358,6 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
     });
 }
 
-void ConnectedWorklist::insert(SEXP e) {
-    if (seen.insert(e).second) {
-        worklist.push(e);
-    }
-}
-
-SEXP ConnectedWorklist::pop() {
-    if (worklist.empty()) {
-        return nullptr;
-    }
-    auto e = worklist.front();
-    worklist.pop();
-    return e;
-}
-
-void Hasher::addConnected(SEXP s) {
-    if (connected) {
-        connected->insert(s);
-    }
-}
-
-void Hasher::hash(SEXP s) {
-    worklist.push(s);
-    addConnected(s);
-}
-
 void Hasher::hashConstant(unsigned idx) {
     hash(Pool::get(idx));
 }
@@ -414,14 +366,14 @@ void Hasher::hashSrc(unsigned idx) {
     hash(src_pool_at(idx));
 }
 
-void hashRoot(SEXP root, UUID::Hasher& uuidHasher, 
-              ConnectedWorklist* connected) {
-    disableGc([&]{
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "doHash.cpp: hashRoot", root, [&]{
-            HashRefTable refs;
+UUID hashRoot(SEXP root) {
+    return disableGc<UUID>([&]{
+        return Measuring::timeEventIf<UUID>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
+            UUID::Hasher uuidHasher;
             std::queue<SEXP> worklist;
+            HashRefTable refs;
             worklist.push(root);
-            Hasher hasher{uuidHasher, worklist, connected};
+            Hasher hasher{uuidHasher, worklist};
 
             while (!worklist.empty()) {
                 auto sexp = worklist.front();
@@ -429,21 +381,9 @@ void hashRoot(SEXP root, UUID::Hasher& uuidHasher,
 
                 hashChild(sexp, hasher, refs);
             }
+            return uuidHasher.finalize();
         });
     });
 }
-
-UUID hashRoot(SEXP sexp, ConnectedWorklist& connected) {
-    UUID::Hasher hasher;
-    hashRoot(sexp, hasher, &connected);
-    return hasher.finalize();
-}
-
-UUID hashRoot(SEXP sexp) {
-    UUID::Hasher hasher;
-    hashRoot(sexp, hasher, nullptr);
-    return hasher.finalize();
-}
-
 
 } // namespace rir
