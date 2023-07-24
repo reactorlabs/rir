@@ -7,7 +7,7 @@
 #include "R/r_incl.h"
 #include "UUID.h"
 #include <unordered_set>
-#include <stack>
+#include <queue>
 
 namespace rir {
 
@@ -18,12 +18,12 @@ class Hasher {
         SEXP sexp;
         bool isAst;
     };
-    using Worklist = std::stack<Elem>;
+    using Worklist = std::queue<Elem>;
 
     /// Underlying UUID hasher
     UUID::Hasher& hasher;
     /// Next SEXPs to process: instead of recursing, we add nested SEXPs to this
-    /// stack and then process them in a loop. This is different semantics than
+    /// queue and then process them in a loop. This is different semantics than
     /// actually recursing, but it doesn't matter because hashes are still the
     /// same quality and consistent.
     Worklist& worklist;

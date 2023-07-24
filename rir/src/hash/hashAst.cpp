@@ -5,6 +5,7 @@
 #include "utils/measuring.h"
 #include <stack>
 #include <unordered_map>
+#include <vector>
 
 namespace rir {
 
@@ -14,11 +15,12 @@ static std::unordered_map<SEXP, UUID> hashCache;
 
 inline static void
 serializeAstVector(SEXP s, const std::function<void(size_t)>& serializeElem) {
+    // These haven't caused problems yet, but maybe need to be handled?
     // assert(ATTRIB(s) == R_NilValue && "unexpected attributes in AST");
     // assert(!OBJECT(s) && "unexpected object in AST");
     // assert(!IS_S4_OBJECT(s) && "unexpected S4 object in AST");
-    assert(!ALTREP(s) && "unexpected altrep in AST");
-    size_t length = STDVEC_LENGTH(s);
+    // assert(!ALTREP(s) && "unexpected altrep in AST");
+    size_t length = LENGTH(s);
     for (size_t i = 0; i < length; ++i) {
         serializeElem(i);
     }
@@ -28,10 +30,23 @@ serializeAstVector(SEXP s, const std::function<void(size_t)>& serializeElem) {
 /// SEXP and creates a UUID from hashing.
 struct Frame {
     bool started = false;
+    Frame* parent;
+    unsigned parentIdx;
     SEXP sexp;
     UUID::Hasher hasher;
+    std::vector<UUID> children;
 
-    explicit Frame(SEXP sexp) : started(false), sexp(sexp), hasher() {}
+    explicit Frame(Frame* parent, SEXP sexp)
+        : started(false), parent(parent),
+          parentIdx(parent ? parent->children.size() : 0), sexp(sexp), hasher(),
+          children() {}
+
+    UUID finalize() {
+        for (auto child : children) {
+            hasher.hashBytesOf(child);
+        }
+        return hasher.finalize();
+    }
 };
 using Stack = std::stack<Frame>;
 
@@ -185,8 +200,8 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
 
 UUID hashAst(SEXP root) {
     return Measuring::timeEventIf<UUID>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashAst", root, [&]{
+        // Fastcase
         if (hashCache.count(root)) {
-            // Fastcase
             return hashCache.at(root);
         }
 
@@ -195,7 +210,7 @@ UUID hashAst(SEXP root) {
         // regular recursion which don't affect hash quality, like putting all SEXPs
         // at the end)
         Stack stack;
-        stack.emplace(root);
+        stack.emplace(nullptr, root);
         while (true) {
             auto& top = stack.top();
             // Hash this SEXP, changing the hasher and pushing not-started recursive
@@ -204,27 +219,33 @@ UUID hashAst(SEXP root) {
             hashNewAst(top.sexp, top.hasher, [&](SEXP next){
                 if (hashCache.count(next)) {
                     // Fastcase
-                    top.hasher.hashBytesOf<UUID>(hashCache.at(next));
+                    top.children.push_back(hashCache.at(next));
                 } else {
-                    stack.emplace(next);
+                    stack.emplace(&top, next);
+                    // Push null UUID to be filled in later. Need to push after
+                    // emplace because the emplaced Frame uses the vector's size
+                    // as its parent index
+                    top.children.emplace_back();
                 }
             });
 
-            // If this SEXP pushed not-started recursive calls we have to process
-            // them. If not, we can finish this call, and then finish outer calls
-            // which also have no more not-started recursive calls.
+            // If this SEXP pushed not-started recursive calls we have to
+            // process them. If not, we can finish this call, and then finish
+            // outer calls which also have no more not-started recursive calls.
             while (stack.top().started) {
+                auto parent = stack.top().parent;
+                auto parentIdx = stack.top().parentIdx;
                 auto sexp = stack.top().sexp;
-                auto hash = stack.top().hasher.finalize();
+                auto hash = stack.top().finalize();
                 hashCache[sexp] = hash;
                 stack.pop();
-                if (stack.empty()) {
-                    // Done
-                    return hash;
+                if (parent) {
+                    // The SEXP's hash is part of the parent's hash.
+                    parent->children[parentIdx] = hash;
                 } else {
-                    // The SEXP's hash is part of the outer SEXP (whether it started
-                    // or not)
-                    stack.top().hasher.hashBytesOf<UUID>(hash);
+                    // Done
+                    assert(parentIdx == 0);
+                    return hash;
                 }
             }
         }
