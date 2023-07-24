@@ -3,7 +3,9 @@
 #include "R/Printing.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
+#include "bc/BC_inc.h"
 #include "compiler/native/pir_jit_llvm.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
@@ -197,6 +199,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
     switch (kind) {
     case Kind::Bytecode: {
+        Function* fun = function();
+        TypeFeedback* typeFeedback = fun->typeFeedback();
         Opcode* pc = code();
         size_t label = 0;
         std::map<Opcode*, size_t> targets;
@@ -257,10 +261,14 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 bc.printOpcode(out);
                 formatLabel(targets[BC::jmpTarget(pc)]);
                 out << "\n";
+            } else if (bc.isRecord()) {
+                out << "   "
+                    << "[ ";
+                (*typeFeedback)[bc.immediate.i].print(out, fun);
+                out << " ] #" << bc.immediate.i << "\n";
             } else {
                 bc.print(out);
             }
-
             pc = BC::next(pc);
         }
 

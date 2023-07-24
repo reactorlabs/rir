@@ -89,7 +89,6 @@ void DeoptReason::record(SEXP val) const {
 }
 
 void ObservedCallees::print(std::ostream& out, const Function* function) const {
-    out << "callees: ";
     if (taken == ObservedCallees::CounterOverflow)
         out << "*, <";
     else
@@ -146,7 +145,6 @@ ObservedValues& TypeFeedback::types(uint32_t idx) {
 }
 
 void ObservedTest::print(std::ostream& out) const {
-    out << "test: ";
     switch (seen) {
     case ObservedTest::None:
         out << "_";
@@ -164,7 +162,6 @@ void ObservedTest::print(std::ostream& out) const {
 }
 
 void ObservedValues::print(std::ostream& out) const {
-    out << "values: ";
     if (numTypes) {
         for (size_t i = 0; i < numTypes; ++i) {
             out << Rf_type2char(seen[i]);

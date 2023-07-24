@@ -246,8 +246,6 @@ struct DispatchTable
     void print(std::ostream& out, bool verbose) const {
         std::cout << "== dispatch table " << this << " ==\n";
 
-        baseline()->typeFeedback()->print(std::cout);
-
         for (size_t entry = 0; entry < size(); ++entry) {
             Function* f = get(entry);
             std::cout << "= version " << entry << " (" << f << ") =\n";

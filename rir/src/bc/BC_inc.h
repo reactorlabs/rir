@@ -264,6 +264,11 @@ class BC {
 
     bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
+    bool isRecord() const {
+        return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
+               bc == Opcode::record_type_;
+    }
+
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
