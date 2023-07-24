@@ -256,7 +256,6 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
 void Code::hash(Hasher& hasher) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash source", container(), [&]{
         hasher.hashSrc(src);
-        hasher.hashNullable(trivialExpr);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash numbers", container(), [&]{
         hasher.hashBytesOf<unsigned>(stackLength);
@@ -293,7 +292,6 @@ void Code::hash(Hasher& hasher) const {
 void Code::addConnected(ConnectedCollector& collector) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in source", container(), [&]{
         collector.addSrc(src);
-        collector.addNullable(trivialExpr);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in extra pool", container(), [&]{
         collector.add(getEntry(0));

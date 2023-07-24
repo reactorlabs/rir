@@ -635,7 +635,13 @@ void PirJitLLVM::addToJit(std::unique_ptr<llvm::Module>&& M) {
 std::pair<SerialModuleRef, bool> PirJitLLVM::internModule(rir::SerialModule&& module) {
     auto it = internedModules.find(module.bitcode);
     if (it != internedModules.end()) {
-        return std::make_pair(SerialModuleRef(it->second), false);
+        if (it->second.expired()) {
+            auto ptr = std::make_shared<SerialModule>(module);
+            it->second = ptr;
+            return std::make_pair(ptr, true);
+        } else {
+            return std::make_pair(SerialModuleRef(it->second), false);
+        }
     }
     auto ptr = std::make_shared<SerialModule>(module);
     internedModules.emplace(ptr->bitcode, ptr);
