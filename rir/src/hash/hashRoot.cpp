@@ -126,7 +126,7 @@ static inline void hashRir(SEXP sexp, Hasher& hasher) {
 }
 
 static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
-                        std::stack<SEXP>& bcLangWorklist) {
+                        std::queue<SEXP>& bcLangWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBcLang1", sexp, [&]{
         int type = TYPEOF(sexp);
         if (type == LANGSXP || type == LISTSXP) {
@@ -163,17 +163,17 @@ static void hashBcLang1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs,
 }
 
 static void hashBcLang(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
-    std::stack<SEXP> bcLangWorklist;
+    std::queue<SEXP> bcLangWorklist;
     bcLangWorklist.push(sexp);
     while (!bcLangWorklist.empty()) {
-        sexp = bcLangWorklist.top();
+        sexp = bcLangWorklist.front();
         bcLangWorklist.pop();
 
         hashBcLang1(sexp, hasher, bcRefs, bcLangWorklist);
     }
 }
 
-static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::stack<SEXP>& bcWorklist) {
+static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::queue<SEXP>& bcWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashBc1", sexp, [&]{
         SEXP code = R_bcDecode(BCODE_CODE(sexp));
         hasher.hash(code);
@@ -202,10 +202,10 @@ static void hashBc1(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs, std::stack<
 }
 
 static void hashBc(SEXP sexp, Hasher& hasher, HashRefTable& bcRefs) {
-    std::stack<SEXP> bcWorklist;
+    std::queue<SEXP> bcWorklist;
     bcWorklist.push(sexp);
     while (!bcWorklist.empty()) {
-        sexp = bcWorklist.top();
+        sexp = bcWorklist.front();
         bcWorklist.pop();
 
         hashBc1(sexp, hasher, bcRefs, bcWorklist);
@@ -268,22 +268,12 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case NILSXP:
             break;
         case SYMSXP:
-        case LANGSXP:
-        case CHARSXP:
-        case LGLSXP:
-        case INTSXP:
-        case REALSXP:
-        case CPLXSXP:
-        case RAWSXP:
-        case STRSXP: {
-            // These can all be hashed as ASTs, which is much faster
-            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild AST", sexp, [&]{
-                auto uuid = hashAst(sexp);
-                hasher.hashBytesOf<UUID>(uuid);
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild symbol", sexp, [&]{
+                hasher.hash(PRINTNAME(sexp));
             });
             break;
-        }
         case LISTSXP:
+        case LANGSXP:
         case PROMSXP:
         case DOTSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild tag", sexp, [&]{
@@ -322,9 +312,54 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
         case BUILTINSXP:
             hasher.hashBytesOf<int>(getBuiltinNr(sexp));
             break;
+        case CHARSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild char vector", sexp, [&]{
+                auto n = LENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                hasher.hashBytes(CHAR(sexp), n * sizeof(char));
+            });
+            break;
+        case LGLSXP:
+        case INTSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild int vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                hasher.hashBytes(INTEGER(sexp), n * sizeof(int));
+            });
+            break;
+        case REALSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild real vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                hasher.hashBytes(REAL(sexp), n * sizeof(double));
+            });
+            break;
+        case CPLXSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild complex number vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                hasher.hashBytes(COMPLEX(sexp), n * sizeof(Rcomplex));
+            });
+            break;
+        case RAWSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild byte vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                hasher.hashBytes(RAW(sexp), n * sizeof(Rbyte));
+            });
+            break;
+        case STRSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild string vector", sexp, [&]{
+                auto n = XLENGTH(sexp);
+                hasher.hashBytesOf<unsigned>(n);
+                for (int i = 0; i < n; ++i) {
+                    hasher.hash(STRING_ELT(sexp, i));
+                }
+            });
+            break;
         case VECSXP:
-        case EXPRSXP: {
-            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild expression vector", sexp, [&]{
+        case EXPRSXP:
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot.cpp: hashChild expression or vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
                 hasher.hashBytesOf<unsigned>(n);
                 for (int i = 0; i < n; ++i) {
@@ -332,7 +367,6 @@ static void hashChild(SEXP sexp, Hasher& hasher, HashRefTable& refs) {
                 }
             });
             break;
-        }
         case S4SXP:
             // Only attributes (i.e., slots) count
             break;
@@ -368,7 +402,7 @@ UUID hashRoot(SEXP root) {
             Hasher hasher{uuidHasher, worklist};
 
             while (!worklist.empty()) {
-                auto& elem = worklist.top();
+                auto& elem = worklist.front();
                 auto sexp = elem.sexp;
                 auto isAst = elem.isAst;
                 worklist.pop();

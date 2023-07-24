@@ -26,11 +26,12 @@ class Measuring {
         return associated;
     }
     static inline void timeEvent(const std::string& name, SEXP associated,
+                                 bool associatedWillBeInitialized,
                                  const std::function<void()>& code) {
         PROTECT(associated);
         auto timing = startTimingEvent(name);
         code();
-        stopTimingEvent(timing, associated, true);
+        stopTimingEvent(timing, associated, associatedWillBeInitialized);
         UNPROTECT(1);
     }
     template<typename T> static inline T
@@ -61,9 +62,10 @@ class Measuring {
     }
     static inline void timeEventIf(bool cond, const std::string& name,
                                    SEXP associated,
+                                   bool associatedWillBeInitialized,
                                    const std::function<void()>& code) {
         if (cond) {
-            timeEvent(name, associated, code);
+            timeEvent(name, associated, associatedWillBeInitialized, code);
         } else {
             code();
         }
@@ -83,6 +85,12 @@ class Measuring {
                 const std::function<T()>& code) {
         return timeEventIf(cond, name, associated, true, code);
     }
+    static inline void timeEventIf(bool cond, const std::string& name,
+                                   SEXP associated,
+                                   const std::function<void()>& code) {
+        timeEventIf(cond, name, associated, true, code);
+    }
+
 
     static void startTimer(const std::string& name, bool canNest = false);
     static void countTimer(const std::string& name, bool canNest = false);

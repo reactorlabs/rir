@@ -62,8 +62,8 @@ void UUIDPool::initialize() {
     isInitialized = true;
 }
 
-void UUIDPool::unintern(SEXP e) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: unintern", e, [&] {
+void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: unintern", e, !isGettingGcd, [&] {
         Protect p(e);
         assert(hashes.count(e) && "SEXP not interned");
 
@@ -121,22 +121,18 @@ void UUIDPool::unintern(SEXP e) {
 }
 
 void UUIDPool::uninternGcd(SEXP e) {
-    Protect p(e);
-
     // There seems to be a bug somewhere where R is calls finalizer on the wrong
     // object, or calls it twice...
     if (preserved.count(e)) {
-        Rf_warning("Preserved SEXP is supposedly getting gcd");
-        Rf_PrintValue(e);
+        std::cerr << "WARNING: preserved SEXP is supposedly getting gcd";
         return;
     }
     if (!hashes.count(e)) {
-        Rf_warning("SEXP getting gcd is supposedly never interned");
-        Rf_PrintValue(e);
+        std::cerr << "WARNING: SEXP getting gcd is supposedly never interned";
         return;
     }
 
-    unintern(e);
+    unintern(e, true);
 }
 #endif
 
