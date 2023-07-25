@@ -170,7 +170,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
             e = existing;
             if (preserve && !preserved.count(e)) {
                 // Hashing with preserve and this interned SEXP wasn't yet preserved
-                forcePreserve(e);
+                R_PreserveObject(e);
                 preserved.insert(e);
             }
             return e;
@@ -238,7 +238,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
         // Preserve or register finalizer
         if (preserve) {
-            forcePreserve(e);
+            R_PreserveObject(e);
             preserved.insert(e);
         } else {
             registerFinalizerIfPossible(e, uninternGcd);
@@ -256,7 +256,7 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             if (hashes.count(e) && !recursive) {
                 // Already interned, don't compute hash
                 if (preserve && !preserved.count(e)) {
-                    forcePreserve(e);
+                    R_PreserveObject(e);
                     preserved.insert(e);
                 }
                 return e;
