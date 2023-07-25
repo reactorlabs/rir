@@ -164,7 +164,12 @@ inline SEXP src_pool_at(unsigned index) {
 
 /// Preserve SEXPs stronger than R_PreserveObject, because in theory even
 /// preserved SEXPs will be gcd if there is a corresponding call to
-/// R_ReleaseObject. There is no way to release these preserved SEXPs
+/// R_ReleaseObject, and RIR sometimes calls R_ReleaseObject via the Preserve
+/// class.
+///
+/// TODO: make this have a refcount, and change RIR's Preserve datastructure to
+///  use this so that all RIR code uses it and there are no more
+///  R_PreserveObject-not-actually-preserving footguns.
 inline void forcePreserve(SEXP v) {
     InterpreterInstance* c = globalContext();
     rl_append(&c->precious, v, c->list, ResizeableList::CONTEXT_INDEX_PRECIOUS);

@@ -264,7 +264,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                     // Actually deserialize
                     responseWhat = deserialize(response, true, responseWhatHash);
                 }
-                return CompilerClient::CompiledResponseData{responseWhat, pirPrint};
+                return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );
         return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
