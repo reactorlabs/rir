@@ -1784,7 +1784,7 @@ bool isColonFastcase(SEXP lhs, SEXP rhs) {
     // TODO(o):
     // I don't like this part of the condition. It prevents us from constant
     // folding the colonEffects instruction. Can we do this differently?
-    if (XLENGTH(lhs) == 0 || XLENGTH(rhs) == 0)
+    if (RAW_LENGTH(lhs) == 0 || RAW_LENGTH(rhs) == 0)
         return true;
 
     switch (TYPEOF(lhs)) {
@@ -2009,7 +2009,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         } else {
             // This is a lazy loading stub, it replaces the promise with the
             // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
+            if ((s)->u.listsxp.carval == symbol::lazyLoadDBfetch)
                 state = ObservedValues::StateBeforeLastForce::value;
             else
                 state = ObservedValues::StateBeforeLastForce::promise;
@@ -3076,13 +3076,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(asbool_) {
             SEXP val = ostack_top();
             int cond = NA_LOGICAL;
-            if (XLENGTH(val) > 1)
+            if (RAW_LENGTH(val) > 1)
                 Rf_warningcall(
                     getSrcAt(c, pc - 1),
                     "the condition has length > 1 and only the first "
                     "element will be used");
 
-            if (XLENGTH(val) > 0) {
+            if (RAW_LENGTH(val) > 0) {
                 switch (TYPEOF(val)) {
                 case LGLSXP:
                     cond = LOGICAL(val)[0];
@@ -3098,7 +3098,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             if (cond == NA_LOGICAL) {
                 const char* msg =
-                    XLENGTH(val)
+                    RAW_LENGTH(val)
                         ? (Rf_isLogical(val)
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
@@ -3356,7 +3356,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 goto fallback;
             }
 
-            if (i >= XLENGTH(val) || i < 0)
+            if (i >= RAW_LENGTH(val) || i < 0)
                 goto fallback;
 
             switch (TYPEOF(val)) {
