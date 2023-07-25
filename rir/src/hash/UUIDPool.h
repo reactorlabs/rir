@@ -38,8 +38,7 @@ namespace rir {
 /// Each SEXP in the set has a WeakRef finalizer which will remove the SEXP when
 /// it's garbage collected, so the pool won't continually increase in size.
 /// Sometimes SEXPs need to be remembered (by the compiler server), in which
-/// case `UUIDPool::intern(,,true)` will preserve them using R's
-/// `R_PreserveObject`.
+/// case `UUIDPool::intern(,,true)` will preserve them so they never get freed.
 class UUIDPool {
     static bool isInitialized;
     static std::unordered_map<UUID, SEXP> interned;

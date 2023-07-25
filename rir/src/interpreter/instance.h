@@ -36,6 +36,7 @@ struct ResizeableList {
     size_t capacity;
     static const size_t CONTEXT_INDEX_CP = 0;
     static const size_t CONTEXT_INDEX_SRC = 1;
+    static const size_t CONTEXT_INDEX_PRECIOUS = 1;
     static const size_t POOL_CAPACITY = 4096;
 };
 
@@ -51,6 +52,7 @@ struct InterpreterInstance {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
+    ResizeableList precious;
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
 };
@@ -158,6 +160,14 @@ inline SEXP src_pool_at(unsigned index) {
     InterpreterInstance* c = globalContext();
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
+}
+
+/// Preserve SEXPs stronger than R_PreserveObject, because in theory even
+/// preserved SEXPs will be gcd if there is a corresponding call to
+/// R_ReleaseObject. There is no way to release these preserved SEXPs
+inline void forcePreserve(SEXP v) {
+    InterpreterInstance* c = globalContext();
+    rl_append(&c->precious, v, c->list, ResizeableList::CONTEXT_INDEX_PRECIOUS);
 }
 
 size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in);
