@@ -28,20 +28,16 @@ SEXP quoteSym;
 
 void context_init() {
     InterpreterInstance* c = globalContext();
-    c->list = Rf_allocVector(VECSXP, ResizeableList::CONTEXT_SIZE);
+    c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, ResizeableList::POOL_CAPACITY, c->list,
                              ResizeableList::CONTEXT_INDEX_CP);
     initializeResizeableList(&c->src, ResizeableList::POOL_CAPACITY, c->list,
                              ResizeableList::CONTEXT_INDEX_SRC);
-    initializeResizeableList(&c->precious, ResizeableList::POOL_CAPACITY,
-                             c->list, ResizeableList::CONTEXT_INDEX_PRECIOUS);
     // first item in source and constant pools is R_NilValue so that we can use
     // the index 0 for other purposes
     src_pool_add(R_NilValue);
     cp_pool_add(R_NilValue);
-    // Not necessary for precious pool, since we don't care about its indices,
-    // only the fact that it preserves SEXPs from GC.
     R_Subset2Sym = Rf_install("[[");
     R_SubsetSym = Rf_install("[");
     R_SubassignSym = Rf_install("[<-");

@@ -36,8 +36,6 @@ struct ResizeableList {
     size_t capacity;
     static const size_t CONTEXT_INDEX_CP = 0;
     static const size_t CONTEXT_INDEX_SRC = 1;
-    static const size_t CONTEXT_INDEX_PRECIOUS = 2;
-    static const size_t CONTEXT_SIZE = 3;
     static const size_t POOL_CAPACITY = 4096;
 };
 
@@ -53,7 +51,6 @@ struct InterpreterInstance {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
-    ResizeableList precious;
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
 };
@@ -161,19 +158,6 @@ inline SEXP src_pool_at(unsigned index) {
     InterpreterInstance* c = globalContext();
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
-}
-
-/// Preserve SEXPs stronger than R_PreserveObject, because in theory even
-/// preserved SEXPs will be gcd if there is a corresponding call to
-/// R_ReleaseObject, and RIR sometimes calls R_ReleaseObject via the Preserve
-/// class.
-///
-/// TODO: make this have a refcount, and change RIR's Preserve datastructure to
-///  use this so that all RIR code uses it and there are no more
-///  R_PreserveObject-not-actually-preserving footguns.
-inline void forcePreserve(SEXP v) {
-    InterpreterInstance* c = globalContext();
-    rl_append(&c->precious, v, c->list, ResizeableList::CONTEXT_INDEX_PRECIOUS);
 }
 
 size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in);
