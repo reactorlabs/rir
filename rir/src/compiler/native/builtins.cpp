@@ -767,13 +767,13 @@ int asSwitchIdxImpl(SEXP val) {
 
 int checkTrueFalseImpl(SEXP val) {
     int cond = NA_LOGICAL;
-    if (XLENGTH(val) > 1)
+    if (RAW_LENGTH(val) > 1)
         Rf_warningcall(
             // TODO: pass srcid
             R_NilValue, "the condition has length > 1 and only the first "
                         "element will be used");
 
-    if (XLENGTH(val) > 0) {
+    if (RAW_LENGTH(val) > 0) {
         switch (TYPEOF(val)) {
         case LGLSXP:
             cond = LOGICAL(val)[0];
@@ -788,7 +788,7 @@ int checkTrueFalseImpl(SEXP val) {
 
     if (cond == NA_LOGICAL) {
         const char* msg =
-            XLENGTH(val) ? (Rf_isLogical(val)
+            RAW_LENGTH(val) ? (Rf_isLogical(val)
                                 ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                          : ("argument is of length zero");

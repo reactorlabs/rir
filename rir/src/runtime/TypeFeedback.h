@@ -124,7 +124,6 @@ struct ObservedValues {
     }
 
     inline void record(SEXP e) {
-
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
@@ -134,7 +133,7 @@ struct ObservedValues {
         //     > .Internal(inspect(mf[["x"]]))
         //     @56546cb06390 14 REALSXP g0c3 [OBJ,NAM(2)] (len=3, tl=0) 41,42,43
 
-        notScalar = notScalar || XLENGTH(e) != 1;
+        notScalar = notScalar || RAW_LENGTH(e) != 1;
         object = object || Rf_isObject(e);
         attribs = attribs || object || ATTRIB(e) != R_NilValue;
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
