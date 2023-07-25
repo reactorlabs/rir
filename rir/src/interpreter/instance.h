@@ -36,7 +36,8 @@ struct ResizeableList {
     size_t capacity;
     static const size_t CONTEXT_INDEX_CP = 0;
     static const size_t CONTEXT_INDEX_SRC = 1;
-    static const size_t CONTEXT_INDEX_PRECIOUS = 1;
+    static const size_t CONTEXT_INDEX_PRECIOUS = 2;
+    static const size_t CONTEXT_SIZE = 3;
     static const size_t POOL_CAPACITY = 4096;
 };
 

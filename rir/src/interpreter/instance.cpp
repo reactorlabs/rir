@@ -28,7 +28,7 @@ SEXP quoteSym;
 
 void context_init() {
     InterpreterInstance* c = globalContext();
-    c->list = Rf_allocVector(VECSXP, 2);
+    c->list = Rf_allocVector(VECSXP, ResizeableList::CONTEXT_SIZE);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, ResizeableList::POOL_CAPACITY, c->list,
                              ResizeableList::CONTEXT_INDEX_CP);
