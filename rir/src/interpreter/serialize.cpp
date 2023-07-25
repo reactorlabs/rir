@@ -4,7 +4,6 @@
 #include "api.h"
 #include "compiler/parameter.h"
 #include "hash/UUIDPool.h"
-#include "hash/hashRoot.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
@@ -162,22 +161,23 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", sexp, [&]{
-        Protect p(sexp);
-        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-        auto oldUseHashes = _useHashes;
-        auto oldRetrieveHash = retrieveHash;
-        pir::Parameter::RIR_PRESERVE = true;
-        _useHashes = useHashes;
-        retrieveHash = UUID();
-        struct R_outpstream_st out {};
-        R_InitOutPStream(&out, (R_pstream_data_t)&buffer, R_STREAM_FORMAT,
-                         R_STREAM_DEFAULT_VERSION, rStreamOutChar,
-                         rStreamOutBytes, nullptr, nullptr);
-        disableGc([&]{ R_Serialize(sexp, &out); });
-        retrieveHash = oldRetrieveHash;
-        _useHashes = oldUseHashes;
-        pir::Parameter::RIR_PRESERVE = oldPreserve;
+    disableGc([&] {
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", sexp, [&]{
+            auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+            auto oldUseHashes = _useHashes;
+            auto oldRetrieveHash = retrieveHash;
+            pir::Parameter::RIR_PRESERVE = true;
+            _useHashes = useHashes;
+            retrieveHash = UUID();
+            struct R_outpstream_st out{};
+            R_InitOutPStream(&out, (R_pstream_data_t)&buffer, R_STREAM_FORMAT,
+                             R_STREAM_DEFAULT_VERSION, rStreamOutChar,
+                             rStreamOutBytes, nullptr, nullptr);
+            R_Serialize(sexp, &out);
+            retrieveHash = oldRetrieveHash;
+            _useHashes = oldUseHashes;
+            pir::Parameter::RIR_PRESERVE = oldPreserve;
+        });
     });
 }
 
@@ -186,26 +186,28 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
 }
 
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
-    return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserialize", [&]{
-        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-        auto oldUseHashes = _useHashes;
-        auto oldRetrieveHash = retrieveHash;
-        pir::Parameter::RIR_PRESERVE = true;
-        _useHashes = useHashes;
-        retrieveHash = newRetrieveHash;
-        struct R_inpstream_st in {};
-        R_InitInPStream(&in, (R_pstream_data_t)&sexpBuffer, R_STREAM_FORMAT,
-                        rStreamInChar, rStreamInBytes, nullptr, nullptr);
-        SEXP sexp = disableGc<SEXP>([&] { return R_Unserialize(&in); });
-        // assert(!retrieveHash && "retrieve hash not taken");
-        retrieveHash = oldRetrieveHash;
-        _useHashes = oldUseHashes;
-        pir::Parameter::RIR_PRESERVE = oldPreserve;
-        return sexp;
-    }, [&](SEXP s){
-        // TODO: Find out why this doesn't work for some nested code objects,
-        //  and fix if possible.
-        return false;
+    return disableGc<SEXP>([&] {
+        return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserialize", [&]{
+            auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+            auto oldUseHashes = _useHashes;
+            auto oldRetrieveHash = retrieveHash;
+            pir::Parameter::RIR_PRESERVE = true;
+            _useHashes = useHashes;
+            retrieveHash = newRetrieveHash;
+            struct R_inpstream_st in{};
+            R_InitInPStream(&in, (R_pstream_data_t)&sexpBuffer, R_STREAM_FORMAT,
+                            rStreamInChar, rStreamInBytes, nullptr, nullptr);
+            SEXP sexp = R_Unserialize(&in);
+            // assert(!retrieveHash && "retrieve hash not taken");
+            retrieveHash = oldRetrieveHash;
+            _useHashes = oldUseHashes;
+            pir::Parameter::RIR_PRESERVE = oldPreserve;
+            return sexp;
+        }, [&](SEXP s){
+            // TODO: Find out why this doesn't work for some nested code objects,
+            //  and fix if possible.
+            return false;
+        });
     });
 }
 
