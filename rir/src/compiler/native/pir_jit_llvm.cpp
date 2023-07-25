@@ -638,7 +638,7 @@ std::pair<SerialModuleRef, bool> PirJitLLVM::internModule(rir::SerialModule&& mo
         if (it->second.expired()) {
             auto ptr = std::make_shared<SerialModule>(module);
             it->second = ptr;
-            return std::make_pair(ptr, true);
+            return std::make_pair(ptr, false);
         } else {
             return std::make_pair(SerialModuleRef(it->second), false);
         }
