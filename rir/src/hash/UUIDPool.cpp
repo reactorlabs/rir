@@ -12,10 +12,10 @@
 #include "compiler/parameter.h"
 #include "getConnected.h"
 #include "interpreter/serialize.h"
+#ifdef DEBUG_DISASSEMBLY
 #include "runtime/DispatchTable.h"
+#endif
 #include "utils/measuring.h"
-
-#define DEBUG_DISASSEMBLY
 
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt

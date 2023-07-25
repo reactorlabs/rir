@@ -72,6 +72,7 @@ struct MeasuringImpl {
     }
 
     void updateAssociatedDump(SEXP associated, bool associatedIsInitialized) {
+#ifdef DUMP_MEASURE_ASSOCIATEDS
         std::stringstream s;
         if (!associatedIsInitialized) {
             s << "(not yet initialized)\n";
@@ -88,6 +89,7 @@ struct MeasuringImpl {
         if (!str.empty()) {
             associatedLatestDumps[associated] = str;
         }
+#endif
     }
 
     void dump(std::ostream& out) {
