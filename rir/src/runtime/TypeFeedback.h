@@ -150,7 +150,7 @@ struct FeedbackOrigin {
   private:
     // it has to be uint32_t as it it being used in the LLVM lowring code
     // which relies on it being 32bit
-    uint32_t idx_ = 0;
+    uint32_t idx_ = -1;
     Function* function_ = nullptr;
 
   public:
