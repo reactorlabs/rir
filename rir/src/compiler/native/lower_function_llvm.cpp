@@ -6137,14 +6137,12 @@ void LowerFunctionLLVM::compile() {
                 }
                 if (i->hasCallFeedback()) {
                     auto& origin = i->callFeedback().feedbackOrigin;
-                    if (origin.isValid()) {
-                        call(
-                            NativeBuiltins::get(
-                                NativeBuiltins::Id::recordTypefeedback),
-                            {convertToPointer(origin.function()->typeFeedback(),
-                                              t::i8, true),
-                             c(origin.idx()), load(i)});
-                    }
+                    assert(origin.isValid());
+                    call(NativeBuiltins::get(
+                             NativeBuiltins::Id::recordTypefeedback),
+                         {convertToPointer(origin.function()->typeFeedback(),
+                                           t::i8, true),
+                          c(origin.idx()), load(i)});
                 }
             }
 
