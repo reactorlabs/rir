@@ -823,6 +823,8 @@ const unsigned pir::Parameter::PIR_REOPT_TIME =
     getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
+const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
+    getenv("PIR_OPT_BC_SIZE") ? atoi(getenv("PIR_OPT_BC_SIZE")) : 20;
 
 static unsigned serializeCounter = 0;
 
@@ -1002,7 +1004,8 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize < 20) {
+                        fun->body()->codeSize <
+                            pir::Parameter::PIR_OPT_BC_SIZE) {
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
