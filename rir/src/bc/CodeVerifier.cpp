@@ -174,7 +174,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp) {
         if (f->defaultArg(i))
             objs.push_back(f->defaultArg(i));
 
-    if (f->size > XLENGTH(sexp))
+    if (f->size > RAW_LENGTH(sexp))
         Rf_error("RIR Verifier: Reported size must be smaller than the size of "
                  "the vector");
 
