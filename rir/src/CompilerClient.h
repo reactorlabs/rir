@@ -11,6 +11,7 @@
 #include "compiler/pir/closure_version.h"
 #include "runtime/Context.h"
 #include <future>
+#include <utility>
 
 class ByteBuffer;
 
@@ -29,6 +30,15 @@ class CompilerClient {
     struct CompiledResponseData {
         SEXP sexp;
         std::string finalPir;
+
+        CompiledResponseData(SEXP sexp, const std::string&& finalPir)
+            : sexp(sexp), finalPir(finalPir) {
+            R_PreserveObject(sexp);
+        }
+
+        ~CompiledResponseData() {
+            R_ReleaseObject(sexp);
+        }
     };
     template<typename T>
     class Handle {
