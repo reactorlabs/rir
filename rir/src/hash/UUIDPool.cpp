@@ -148,12 +148,12 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
             // Reuse interned SEXP
             auto existing = interned.at(hash);
             assert(TYPEOF(e) == TYPEOF(existing) && "obvious hash collision (different types)");
-            assert(TYPEOF(e) != EXTERNALSXP ||
-                   ((Code::check(e) != nullptr) == (Code::check(existing) != nullptr) &&
-                    (DispatchTable::check(e) != nullptr) == (DispatchTable::check(existing) != nullptr) &&
-                    (Function::check(e) != nullptr) == (Function::check(existing) != nullptr) &&
-                    (ArglistOrder::check(e) != nullptr) == (ArglistOrder::check(existing) != nullptr) &&
-                    "obvious hash collision (different RIR types)"));
+            assert((TYPEOF(e) != EXTERNALSXP ||
+                    ((Code::check(e) != nullptr) == (Code::check(existing) != nullptr) &&
+                     (DispatchTable::check(e) != nullptr) == (DispatchTable::check(existing) != nullptr) &&
+                     (Function::check(e) != nullptr) == (Function::check(existing) != nullptr) &&
+                     (ArglistOrder::check(e) != nullptr) == (ArglistOrder::check(existing) != nullptr))) &&
+                   "obvious hash collision (different RIR types)");
             if (!hashes.count(e)) {
                 // This SEXP is structurally-equivalent to the interned SEXP but not
                 // the same (different pointers), so we must still record it
@@ -401,12 +401,12 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
             // cppcheck-suppress unreadVariable
             auto hash = hashes.at(sexp);
             // Not necessarily true: sexp == interned[hash]. But the following are true...
-            assert(sexp == interned[hash] ||
-                   ((Code::check(sexp) != nullptr) == (Code::check(interned[hash]) != nullptr) &&
-                    (DispatchTable::check(sexp) != nullptr) == (DispatchTable::check(interned[hash]) != nullptr) &&
-                    (Function::check(sexp) != nullptr) == (Function::check(interned[hash]) != nullptr) &&
-                    (ArglistOrder::check(sexp) != nullptr) == (ArglistOrder::check(interned[hash]) != nullptr) &&
-                    "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP"));
+            assert((sexp == interned[hash] ||
+                    ((Code::check(sexp) != nullptr) == (Code::check(interned[hash]) != nullptr) &&
+                     (DispatchTable::check(sexp) != nullptr) == (DispatchTable::check(interned[hash]) != nullptr) &&
+                     (Function::check(sexp) != nullptr) == (Function::check(interned[hash]) != nullptr) &&
+                     (ArglistOrder::check(sexp) != nullptr) == (ArglistOrder::check(interned[hash]) != nullptr))) &&
+                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP");
             assert(hashes[interned[hash]] == hash && "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
             assert(interned[hashes[interned[hash]]] == interned[hash] && "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
             OutBytes(out, &hash, sizeof(hash));
