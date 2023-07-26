@@ -3,8 +3,8 @@
 #include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
-#include "hash/UUIDPool.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -111,8 +111,13 @@ void Function::disassemble(std::ostream& out) const {
     print(out);
 }
 
-void Function::print(std::ostream& out, bool hashInfo) const {
-    if (hashInfo) {
+void Function::print(std::ostream& out, RirObjectPrintStyle style) const {
+    assert((style == RirObjectPrintStyle::Default ||
+            style == RirObjectPrintStyle::Detailed) &&
+           "Unknown print style");
+    auto isDetailed = style == RirObjectPrintStyle::Detailed;
+
+    if (isDetailed) {
         out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
     }
     out << "[signature] ";
@@ -132,13 +137,13 @@ void Function::print(std::ostream& out, bool hashInfo) const {
         << ", time: " << ((double)invocationTime() / 1e6)
         << "ms, deopt: " << deoptCount();
     out << "\n";
-    if (hashInfo) {
-        body()->print(out, true);
+    if (isDetailed) {
+        body()->print(out, style);
         for (unsigned i = 0; i < numArgs_; i++) {
             CodeSEXP arg = defaultArg_[i];
             if (arg) {
                 out << "[default arg " << i << "]\n";
-                Code::unpack(arg)->print(out, true);
+                Code::unpack(arg)->print(out, style);
             }
         }
     } else {

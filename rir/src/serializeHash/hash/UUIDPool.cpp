@@ -3,17 +3,18 @@
 //
 
 #include "UUIDPool.h"
-#include "CompilerClient.h"
-#include "CompilerServer.h"
 #include "R/Printing.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "R/disableGc.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "compilerClientServer/CompilerClient.h"
+#include "compilerClientServer/CompilerServer.h"
 #include "getConnected.h"
-#include "interpreter/serialize.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/log/printRirObject.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
 
 // Can change this to log interned and uninterned hashes and pointers
@@ -193,33 +194,9 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
         // Intern new SEXP
 #ifdef DEBUG_DISASSEMBLY
-        if (expectHashToBeTheSame) {
-            if (DispatchTable::check(e)) {
-                auto dt = DispatchTable::unpack(e);
-                std::stringstream s;
-                dt->print(s, true);
-                disassembly[hash] = s.str();
-            } else if (Function::check(e)) {
-                auto fun = Function::unpack(e);
-                if (!Code::check(EXTERNALSXP_ENTRY(fun->container(), 0))) {
-                    std::cerr
-                        << "Tried to serialize function during its construction: "
-                        << e << "\n";
-                    Rf_PrintValue(e);
-                    assert(false);
-                }
-                std::stringstream s;
-                fun->print(s, true);
-                disassembly[hash] = s.str();
-            } else if (Code::check(e)) {
-                auto code = Code::unpack(e);
-                std::stringstream s;
-                code->print(s, true);
-                disassembly[hash] = s.str();
-            }
-        } else {
-            disassembly[hash] = "(recursively interned, can't debug this way)";
-        }
+        disassembly[hash] = expectHashToBeTheSame
+            ? printRirObject(e, RirObjectPrintStyle::Detailed)
+            : "(recursively interned, can't debug this way)";
 #endif
 
         // Sanity check in case the UUID changed
@@ -437,5 +414,22 @@ void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
     // Write regular data
     serialize(sexp, buf, useHashes);
 }
+
+void UUIDPool::writeNullableItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
+    OutBool(out, sexp != nullptr);
+    if (sexp) {
+        writeItem(sexp, ref_table, out);
+    }
+}
+
+SEXP UUIDPool::readNullableItem(SEXP ref_table, R_inpstream_t in) {
+    auto isNotNull = InBool(in);
+    if (isNotNull) {
+        return readItem(ref_table, in);
+    } else {
+        return nullptr;
+    }
+}
+
 
 } // namespace rir

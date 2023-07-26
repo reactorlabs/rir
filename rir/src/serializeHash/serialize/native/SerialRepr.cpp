@@ -6,7 +6,7 @@
 #include "R/Funtab.h"
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/types_llvm.h"
-#include "hash/UUIDPool.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Metadata.h>

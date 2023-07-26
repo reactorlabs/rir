@@ -45,6 +45,11 @@ graphical representation of the code choose the GraphViz debug style.
         GraphViz   print pir in GraphViz, displaying all instructions within BBs
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
 
+    RIR_DEBUG_STYLE=
+        Standard    print basic information in rir objects in human-readable format
+        Detailed    print very detailed information in rir objects, useful for debugging or explaining unexpected semantic differences
+        PrettyGraph print in an even more human-readable format and for GraphViz
+
 The following flags can be useful for profiling and finding out which passes take how much time to
 complete.
 

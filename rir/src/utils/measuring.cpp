@@ -76,14 +76,8 @@ struct MeasuringImpl {
         std::stringstream s;
         if (!associatedIsInitialized) {
             s << "(not yet initialized)\n";
-        } else if (auto d = DispatchTable::check(associated)) {
-            d->print(s, true);
-        } else if (auto f = Function::check(associated)) {
-            f->print(s, true);
-        } else if (auto c = Code::check(associated)) {
-            c->print(s, true);
         } else {
-            s << Print::dumpSexp(associated, SIZE_MAX) << "\n";
+            printRirObject(associated, s);
         }
         std::string str = s.str();
         if (!str.empty()) {

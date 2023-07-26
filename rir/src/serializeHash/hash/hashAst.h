@@ -1,7 +1,7 @@
 #pragma once
 
 #include "R/r.h"
-#include "hash/UUID.h"
+#include "UUID.h"
 
 namespace rir {
 

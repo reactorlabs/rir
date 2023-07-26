@@ -4,7 +4,7 @@
 
 #include "SerialModule.h"
 #include "R/Serialize.h"
-#include "compiler/native/SerialRepr.h"
+#include "SerialRepr.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>

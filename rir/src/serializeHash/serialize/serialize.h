@@ -5,7 +5,7 @@
 #pragma once
 
 #include "R/r_incl.h"
-#include "hash/UUID.h"
+#include "serializeHash/hash/UUID.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {

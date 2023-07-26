@@ -1,7 +1,7 @@
 #include "UUID.h"
 #include "R/Serialize.h"
 
-#include <xxhash.h>
+#include "xxhash.h"
 #include <iomanip>
 #include <sstream>
 
