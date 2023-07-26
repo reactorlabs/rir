@@ -33,9 +33,11 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     for (unsigned i = 0; i < fun->numArgs_; i++) {
         if ((bool)InInteger(inp)) {
             SEXP arg = p(UUIDPool::readItem(refTable, inp));
+            assert(Code::check(arg));
             fun->setEntry(Function::NUM_PTRS + i, arg);
-        } else
+        } else {
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
+        }
     }
     fun->flags_ = EnumSet<Flag>(InInteger(inp));
     return fun;
@@ -53,6 +55,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
         CodeSEXP arg = defaultArg_[i];
         OutInteger(out, (int)(arg != nullptr));
         if (arg) {
+            assert(Code::check(arg));
             // arg->serialize(false, refTable, out);
             UUIDPool::writeItem(arg, refTable, out);
         }

@@ -39,11 +39,14 @@ DeoptMetadata* DeoptMetadata::deserialize(ByteBuffer& buf) {
     auto numFrames = (size_t)buf.getInt();
     auto size = sizeof(DeoptMetadata) + numFrames * sizeof(FrameInfo);
     SEXP store = Rf_allocVector(RAWSXP, (int)size);
+    PROTECT(store);
     auto m = new (DATAPTR(store)) DeoptMetadata;
     m->numFrames = numFrames;
     for (size_t i = 0; i < numFrames; ++i) {
         m->frames[i].deserialize(buf);
+        PROTECT(m->frames[i].code->container());
     }
+    UNPROTECT(1 + m->numFrames);
     return m;
 }
 

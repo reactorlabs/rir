@@ -1,6 +1,7 @@
 #include "ArglistOrder.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
+#include "interpreter/serialize.h"
 
 namespace rir {
 
@@ -8,6 +9,7 @@ ArglistOrder* ArglistOrder::deserialize(__attribute__((unused)) SEXP refTable, R
     Protect p;
     int size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    useRetrieveHashIfSet(inp, store);
     auto arglistOrder = new (DATAPTR(store)) ArglistOrder(InInteger(inp));
     for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
         arglistOrder->data[i] = (ArglistOrder::ArgIdx)InInteger(inp);
