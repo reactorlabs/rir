@@ -201,71 +201,88 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
     return llvm::MDTuple::get(ctx, args);
 }
 
-static void* getMetadataPtr_Global(const llvm::MDNode& meta) {
+static void* getMetadataPtr_Global(const llvm::MDNode& meta,
+                                   __attribute__((unused)) rir::Code* outer) {
     auto name = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     return (void*)globals.at(name.str());
 }
 
-static void* getMetadataPtr_Builtin(const llvm::MDNode& meta) {
+static void* getMetadataPtr_Builtin(const llvm::MDNode& meta,
+                                    __attribute__((unused)) rir::Code* outer) {
     auto name = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     return (void*)getBuiltinFun(name.str().c_str());
 }
 
-static void* getMetadataPtr_SEXP(const llvm::MDNode& meta) {
+static void* getMetadataPtr_SEXP(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto sexp = UUIDPool::readItem(buffer, true);
-    // TODO: Don't permanently preserve SEXP, instead attach it to the Code
-    //  object so that it gets freed when the Code object is freed
-    R_PreserveObject(sexp);
+    if (outer) {
+        outer->addExtraPoolEntry(sexp);
+    }
     return (void*)sexp;
 }
 
-static void* getMetadataPtr_String(const llvm::MDNode& meta) {
+static void* getMetadataPtr_String(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
-    // TODO: This will also need to be gc-attached to the Code object
-    return (void*)(new std::string(data))->c_str();
+    auto dataSexp = Rf_install(data.str().c_str());
+    if (outer) {
+        outer->addExtraPoolEntry(dataSexp);
+    }
+    return (void*)CHAR(PRINTNAME(dataSexp));
 }
 
-static void* getMetadataPtr_Code(const llvm::MDNode& meta) {
+static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto sexp = UUIDPool::readItem(buffer, true);
-    // TODO: This will also need to be gc-attached to the Code object
-    R_PreserveObject(sexp);
+    if (outer) {
+        outer->addExtraPoolEntry(sexp);
+    }
     return (void*)rir::Code::unpack(sexp);
 }
 
-static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta) {
+static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto m = DeoptMetadata::deserialize(buffer);
-    // TODO: This will also need to be gc-attached to the Code object
-    m->preserve();
+    if (outer) {
+        m->gcAttach(outer);
+    }
     return (void*)m;
 }
 
-static void* getMetadataPtr_OpaqueTrue(__attribute__((unused)) const llvm::MDNode& meta) {
+static void*
+getMetadataPtr_OpaqueTrue(__attribute__((unused)) const llvm::MDNode& meta,
+                          __attribute__((unused)) rir::Code* outer) {
     return (void*)OpaqueTrue::instance();
 }
 
-static void* getMetadataPtr_R_Visible(__attribute__((unused)) const llvm::MDNode& meta) {
+static void*
+getMetadataPtr_R_Visible(__attribute__((unused)) const llvm::MDNode& meta,
+                         __attribute__((unused)) rir::Code* outer) {
     return (void*)&R_Visible;
 }
 
-static void* getMetadataPtr_R_BCNodeStackTop(__attribute__((unused)) const llvm::MDNode& meta) {
+static void*
+getMetadataPtr_R_BCNodeStackTop(__attribute__((unused)) const llvm::MDNode& meta,
+                                __attribute__((unused)) rir::Code* outer) {
     return (void*)&R_BCNodeStackTop;
 }
 
-static void* getMetadataPtr_R_GlobalContext(__attribute__((unused)) const llvm::MDNode& meta) {
+static void*
+getMetadataPtr_R_GlobalContext(__attribute__((unused)) const llvm::MDNode& meta,
+                               __attribute__((unused)) rir::Code* outer) {
     return (void*)&R_GlobalContext;
 }
 
-static void* getMetadataPtr_R_ReturnedValue(__attribute__((unused)) const llvm::MDNode& meta) {
+static void*
+getMetadataPtr_R_ReturnedValue(__attribute__((unused)) const llvm::MDNode& meta,
+                               __attribute__((unused)) rir::Code* outer) {
     return (void*)&R_ReturnedValue;
 }
 
-typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta);
+typedef void* (*GetMetadataPtr)(const llvm::MDNode& meta, rir::Code* outer);
 static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
     {"Global", getMetadataPtr_Global},
     {"Builtin", getMetadataPtr_Builtin},
@@ -282,11 +299,11 @@ static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
 
 static llvm::Value* patchPointerMetadata(llvm::Module& mod,
                                          llvm::GlobalVariable& inst,
-                                         llvm::MDNode* ptrMeta) {
+                                         llvm::MDNode* ptrMeta, rir::Code* outer) {
     auto type = ((llvm::MDString&)*ptrMeta->getOperand(0)).getString();
     auto llvmType = inst.getValueType();
     auto isConstant = inst.isConstant();
-    auto ptr = getMetadataPtr[type.str()](*ptrMeta);
+    auto ptr = getMetadataPtr[type.str()](*ptrMeta, outer);
     return LowerFunctionLLVM::convertToPointer(mod, ptr, llvmType, isConstant, ptrMeta);
 }
 
@@ -361,7 +378,7 @@ static llvm::Value* patchNamesMetadata(llvm::Module& mod,
     return LowerFunctionLLVM::llvmNames(mod, names);
 }
 
-static void patchGlobalMetadatas(llvm::Module& mod) {
+static void patchGlobalMetadatas(llvm::Module& mod, rir::Code* outer) {
     // Need to store globals first, because otherwise we'll replace already-
     // added values and cause an infinite loop. We also defer replacements
     // although that probably isn't necessary
@@ -378,7 +395,7 @@ static void patchGlobalMetadatas(llvm::Module& mod) {
 
         llvm::Value* replacement = nullptr;
         if (ptrMeta) {
-            replacement = patchPointerMetadata(mod, *global, ptrMeta);
+            replacement = patchPointerMetadata(mod, *global, ptrMeta, outer);
         }
         if (srcIdxMeta) {
             assert(!replacement);
@@ -431,8 +448,8 @@ static void patchFunctionMetadatas(llvm::Module& mod) {
     }
 }
 
-void SerialRepr::patch(llvm::Module& mod) {
-    patchGlobalMetadatas(mod);
+void SerialRepr::patch(llvm::Module& mod, rir::Code* outer) {
+    patchGlobalMetadatas(mod, outer);
     patchFunctionMetadatas(mod);
 }
 

@@ -467,11 +467,12 @@ llvm::LLVMContext& PirJitLLVM::getContext() {
     return *TSC.getContext();
 }
 
-SerialModuleRef PirJitLLVM::deserializeModule(R_inpstream_t inp) {
+SerialModuleRef PirJitLLVM::deserializeModule(R_inpstream_t inp,
+                                              rir::Code* outer) {
     auto serialModuleAndIsNew = internModule(SerialModule::deserialize(inp));
     auto serialModule = serialModuleAndIsNew.first;
     if (serialModuleAndIsNew.second) {
-        addToJit(serialModule->decode());
+        addToJit(serialModule->decode(outer));
     }
     return serialModule;
 }

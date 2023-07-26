@@ -22,8 +22,9 @@ struct FrameInfo {
     void deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
     void internRecursive() const;
-    /// Preserves the code object's container
-    void preserve() const;
+    /// Adds the code object's container to the code's extra pool, so it gets
+    /// gc-collected when the SEXP does
+    void gcAttach(Code* outer) const;
 };
 
 struct DeoptMetadata {
@@ -31,8 +32,9 @@ struct DeoptMetadata {
     static DeoptMetadata* deserialize(ByteBuffer& buf);
     void serialize(ByteBuffer& buf) const;
     void internRecursive() const;
-    /// Preserves the container and the frame code objects' containers
-    void preserve() const;
+    /// Adds the container and the frame code objects' containers to the code's
+    /// extra pool, so it gets gc-collected when the SEXP does
+    void gcAttach(Code* outer) const;
     void print(std::ostream& out) const;
     size_t numFrames;
     FrameInfo frames[];
