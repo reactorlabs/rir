@@ -218,6 +218,8 @@ static void* getMetadataPtr_SEXP(const llvm::MDNode& meta, rir::Code* outer) {
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto sexp = UUIDPool::readItem(buffer, true);
     if (outer) {
+        // TODO: why is gcAttach not enough?
+        R_PreserveObject(sexp);
         outer->addExtraPoolEntry(sexp);
     }
     return (void*)sexp;
@@ -227,6 +229,8 @@ static void* getMetadataPtr_String(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     auto dataSexp = Rf_install(data.str().c_str());
     if (outer) {
+        // TODO: why is gcAttach not enough?
+        R_PreserveObject(dataSexp);
         outer->addExtraPoolEntry(dataSexp);
     }
     return (void*)CHAR(PRINTNAME(dataSexp));
@@ -237,6 +241,8 @@ static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto sexp = UUIDPool::readItem(buffer, true);
     if (outer) {
+        // TODO: why is gcAttach not enough?
+        R_PreserveObject(sexp);
         outer->addExtraPoolEntry(sexp);
     }
     assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Code SEXP is not actually an EXTERNALSXP");
@@ -249,7 +255,7 @@ static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta, rir::Code* o
     auto m = DeoptMetadata::deserialize(buffer);
     assert(m->numFrames < 65536 && "deserialized obviously corrupt DeoptMetadata");
     if (outer) {
-        // TODO remove: testing why DeoptMetadata gets GCd
+        // TODO: why is gcAttach not enough?
         R_PreserveObject(m->container());
         for (int i = 0; i < (int)m->numFrames; i++) {
             R_PreserveObject(m->frames[i].code->container());
