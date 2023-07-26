@@ -9,6 +9,8 @@
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 
@@ -37,7 +39,10 @@ static inline void addConnectedRir(SEXP sexp, ConnectedCollector& collector) {
     if (!tryAddConnected<DispatchTable>(sexp, collector) &&
         !tryAddConnected<Function>(sexp, collector) &&
         !tryAddConnected<Code>(sexp, collector) &&
-        !tryAddConnected<ArglistOrder>(sexp, collector)) {
+        !tryAddConnected<ArglistOrder>(sexp, collector) &&
+        !tryAddConnected<LazyArglist>(sexp, collector) &&
+        !tryAddConnected<LazyEnvironment>(sexp, collector) &&
+        !tryAddConnected<PirTypeFeedback>(sexp, collector)) {
         std::cerr << "couldn't add connected in EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);
