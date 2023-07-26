@@ -5,6 +5,7 @@
 #include "UUIDPool.h"
 #include "CompilerClient.h"
 #include "CompilerServer.h"
+#include "R/Printing.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "R/disableGc.h"
@@ -12,9 +13,7 @@
 #include "compiler/parameter.h"
 #include "getConnected.h"
 #include "interpreter/serialize.h"
-#ifdef DEBUG_DISASSEMBLY
 #include "runtime/DispatchTable.h"
-#endif
 #include "utils/measuring.h"
 
 // Can change this to log interned and uninterned hashes and pointers
@@ -71,8 +70,8 @@ void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
         auto hash = hashes.at(e);
         hashes.erase(e);
         if (!interned.count(hash)) {
-            Rf_warning("SEXP was interned, but the corresponding UUID is empty");
-            Rf_PrintValue(e);
+            std::cerr << "WARNING: SEXP was interned, but the corresponding UUID is empty:\n"
+                      << Print::dumpSexp(e) << "\n";
             // Don't return
         }
 
@@ -148,10 +147,17 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
         if (interned.count(hash)) {
             // Reuse interned SEXP
             auto existing = interned.at(hash);
+            assert(TYPEOF(e) == TYPEOF(existing) && "obvious hash collision (different types)");
+            assert(TYPEOF(e) != EXTERNALSXP ||
+                   ((Code::check(e) != nullptr) == (Code::check(existing) != nullptr) &&
+                    (DispatchTable::check(e) != nullptr) == (DispatchTable::check(existing) != nullptr) &&
+                    (Function::check(e) != nullptr) == (Function::check(existing) != nullptr) &&
+                    (ArglistOrder::check(e) != nullptr) == (ArglistOrder::check(existing) != nullptr) &&
+                    "obvious hash collision (different RIR types)"));
             if (!hashes.count(e)) {
                 // This SEXP is structurally-equivalent to the interned SEXP but not
                 // the same (different pointers), so we must still record it
-                LOG(std::cout << "Reuse intern: " << hash << " -> " << e << "\n");
+                LOG(std::cout << "Reuse intern: " << hash << " -> " << e << (expectHashToBeTheSame ? "\n" : " (recursive)\n"));
                 hashes[e] = hash;
 
                 // Add to intern list for this UUID
@@ -167,9 +173,18 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
                     registerFinalizerIfPossible(e, uninternGcd);
                 }
             }
+            // If preserve = true, we want to preserve both this SEXP and the
+            // interned one, because we could later fetch either. In the future,
+            // we can probably switch e to be existing so we don't need to
+            // preserve redundant SEXPs like this.
+            if (preserve && !preserved.count(e)) {
+                // Preserve this SEXP
+                R_PreserveObject(e);
+                preserved.insert(e);
+            }
             e = existing;
             if (preserve && !preserved.count(e)) {
-                // Hashing with preserve and this interned SEXP wasn't yet preserved
+                // Preserve the interned SEXP
                 R_PreserveObject(e);
                 preserved.insert(e);
             }
@@ -210,8 +225,8 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
         // Sanity check in case the UUID changed
         if (hashes.count(e)) {
             std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
-                      << hash << ": " << e << "\n";
-            Rf_PrintValue(e);
+                      << hash << ": " << e << "\n" << Print::dumpSexp(e)
+                      << "\n";
 
 #ifdef DEBUG_DISASSEMBLY
             auto oldDisassembly = disassembly[hashes.at(e)];
@@ -233,6 +248,9 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
         // Do intern
         LOG(std::cout << "New intern: " << hash << " -> " << e << "\n");
+#ifdef DEBUG_DISASSEMBLY
+        LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
+#endif
         interned[hash] = e;
         hashes[e] = hash;
 
@@ -323,7 +341,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
             UUID hash;
             InBytes(in, &hash, sizeof(hash));
             if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
+                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> " << interned.at(hash) << "\n");
                 return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
@@ -352,7 +370,7 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
             UUID hash;
             buf.getBytes((uint8_t*)&hash, sizeof(hash));
             if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << "\n");
+                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> " << interned.at(hash) << "\n");
                 return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
@@ -382,6 +400,15 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
             // Why does cppcheck think this is unused?
             // cppcheck-suppress unreadVariable
             auto hash = hashes.at(sexp);
+            // Not necessarily true: sexp == interned[hash]. But the following are true...
+            assert(sexp == interned[hash] ||
+                   ((Code::check(sexp) != nullptr) == (Code::check(interned[hash]) != nullptr) &&
+                    (DispatchTable::check(sexp) != nullptr) == (DispatchTable::check(interned[hash]) != nullptr) &&
+                    (Function::check(sexp) != nullptr) == (Function::check(interned[hash]) != nullptr) &&
+                    (ArglistOrder::check(sexp) != nullptr) == (ArglistOrder::check(interned[hash]) != nullptr) &&
+                    "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP"));
+            assert(hashes[interned[hash]] == hash && "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
+            assert(interned[hashes[interned[hash]]] == interned[hash] && "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
             OutBytes(out, &hash, sizeof(hash));
             return;
         }

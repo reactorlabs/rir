@@ -1100,7 +1100,7 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
         builder.CreateOr(builder.CreateICmpULE(type, c(EXTERNALSXP)),
                          builder.CreateICmpEQ(type, c(FUNSXP)));
     strings.push_back(std::string("invalid sexptype ") + msg);
-    insn_assert(validType, strings.back().c_str());
+    insn_assert(validType, strings.back().c_str(), type);
     checking = false;
 #endif
 }
@@ -3713,7 +3713,10 @@ void LowerFunctionLLVM::compile() {
                 withCallFrame(args, [&]() {
                     return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
                                 {paramCode(), paramClosure(),
-                                 convertToPointer(m, t::i8, SerialRepr::DeoptMetadata{m}, true), paramArgs(),
+                                 convertToPointer(m, t::i8,
+                                                  SerialRepr::DeoptMetadata{m},
+                                                  true),
+                                 paramArgs(),
                                  c(deopt->escapedEnv, 1),
                                  load(deopt->deoptReason()),
                                  loadSxp(deopt->deoptTrigger())});
