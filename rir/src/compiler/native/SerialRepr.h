@@ -51,8 +51,12 @@ class SerialRepr {
 
     /// Replace pointers with the serialized encodings, fetching from the
     /// compiler server if necessary. See lower_function_llvm.cpp for where
-    /// exactly we store the metadata
-    static void patch(llvm::Module& mod);
+    /// exactly we store the metadata.
+    ///
+    /// `outer` is the code which the module resides in. It's needed because we
+    /// add stuff to its extra pool. It can be nullptr if we only create the
+    /// objects for a short period of time (when printing).
+    static void patch(llvm::Module& mod, rir::Code* outer);
 };
 
 class SerialRepr::SEXP : public SerialRepr {
