@@ -66,7 +66,13 @@ class PirJitLLVM {
 
     /// Deserialize and the module. Then if interned, return the interned
     /// version, otherwise intern AND add to LLJIT.
-    static SerialModuleRef deserializeModule(R_inpstream_t inp);
+    ///
+    /// `outer` is the code object which will contain the module, needed because
+    /// we add stuff to its extra pool so that it remains alive while being used
+    /// by the code. It can be nullptr if we only create the objects for a short
+    /// period of time (when printing).
+    static SerialModuleRef deserializeModule(R_inpstream_t inp,
+                                             rir::Code* outer);
 
   private:
     std::string name;

@@ -16,10 +16,7 @@ class Module;
 
 namespace rir {
 
-namespace pir {
-class PirJitLLVM;
-}
-
+struct Code;
 class SerialModule;
 /// Serialized module bitcode. We store these in smart pointers these because
 /// multiple `Code`s may share the same module.
@@ -28,6 +25,10 @@ class SerialModule;
 /// determine and give them the same shared_ptr at creation. But [PirJitLLVM] is
 /// where we intern.
 typedef std::shared_ptr<SerialModule> SerialModuleRef;
+
+namespace pir {
+class PirJitLLVM;
+}
 
 /// Serialized module bitcode
 class SerialModule {
@@ -40,7 +41,7 @@ class SerialModule {
     // LLJit and currently we always want to add them to LLJIT.
     friend class pir::PirJitLLVM;
     explicit SerialModule(const llvm::Module& module);
-    std::unique_ptr<llvm::Module> decode() const;
+    std::unique_ptr<llvm::Module> decode(Code* outer) const;
     static SerialModule deserialize(R_inpstream_t inp);
   public:
     void serialize(R_outpstream_t out) const;

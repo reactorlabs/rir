@@ -24,11 +24,11 @@ SerialModule::SerialModule(const llvm::Module& module) {
     os.flush();
 }
 
-std::unique_ptr<llvm::Module> SerialModule::decode() const {
+std::unique_ptr<llvm::Module> SerialModule::decode(Code* outer) const {
     llvm::StringRef data(bitcode);
     llvm::MemoryBufferRef buffer(data, "rir::SerialModule");
     auto mod = ExitOnErr(llvm::parseBitcodeFile(buffer, pir::PirJitLLVM::getContext()));
-    pir::SerialRepr::patch(*mod);
+    pir::SerialRepr::patch(*mod, outer);
     return mod;
 }
 
@@ -45,7 +45,7 @@ void SerialModule::serialize(R_outpstream_t out) const {
 }
 
 std::ostream& operator<<(std::ostream& out, const SerialModule& m) {
-    auto mod = m.decode();
+    auto mod = m.decode(nullptr);
     llvm::raw_os_ostream ro(out);
     mod->print(ro, nullptr, true, true);
     return out;

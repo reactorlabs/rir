@@ -183,7 +183,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
         code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
         if (InBool(inp)) {
-            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp);
+            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp, code);
             code->setLazyCodeModuleFinalizer();
         }
     }

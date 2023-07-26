@@ -24,8 +24,8 @@ void FrameInfo::internRecursive() const {
     UUIDPool::intern(code->container(), true, false);
 }
 
-void FrameInfo::preserve() const {
-    R_PreserveObject(code->container());
+void FrameInfo::gcAttach(Code* outer) const {
+    outer->addExtraPoolEntry(code->container());
 }
 
 SEXP DeoptMetadata::container() const {
@@ -60,10 +60,10 @@ void DeoptMetadata::internRecursive() const {
     }
 }
 
-void DeoptMetadata::preserve() const {
-    R_PreserveObject(this->container());
+void DeoptMetadata::gcAttach(Code* outer) const {
+    outer->addExtraPoolEntry(this->container());
     for (size_t i = 0; i < numFrames; ++i) {
-        frames[i].preserve();
+        frames[i].gcAttach(outer);
     }
 }
 
