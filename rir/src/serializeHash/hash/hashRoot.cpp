@@ -11,6 +11,8 @@
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "runtime/LazyArglist.h"
+#include "runtime/LazyEnvironment.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <iostream>
@@ -117,7 +119,10 @@ static inline void hashRir(SEXP sexp, Hasher& hasher) {
         if (!tryHash<DispatchTable>(sexp, hasher) &&
             !tryHash<Function>(sexp, hasher) &&
             !tryHash<Code>(sexp, hasher) &&
-            !tryHash<ArglistOrder>(sexp, hasher)) {
+            !tryHash<ArglistOrder>(sexp, hasher) &&
+            !tryHash<LazyArglist>(sexp, hasher) &&
+            !tryHash<LazyEnvironment>(sexp, hasher) &&
+            !tryHash<PirTypeFeedback>(sexp, hasher)) {
             std::cerr << "couldn't hash EXTERNALSXP: ";
             Rf_PrintValue(sexp);
             assert(false);

@@ -2,7 +2,7 @@
 #include "Code.h"
 #include "R/Protect.h"
 #include "compiler/pir/instruction.h"
-#include "hash/UUIDPool.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "runtime/TypeFeedback.h"
 #include <unordered_map>
 
@@ -89,6 +89,25 @@ void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
         UUIDPool::writeItem(getEntry(i), refTable, out);
     }
     OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
+}
+
+void PirTypeFeedback::hash(Hasher& hasher) const {
+    auto numCodes = this->numCodes();
+    auto numEntries = this->numEntries();
+    hasher.hashBytesOf(numCodes);
+    hasher.hashBytesOf(numEntries);
+    hasher.hashBytes(entry, sizeof(entry));
+    for (int i = 0; i < numCodes; i++) {
+        hasher.hash(getEntry(i));
+    }
+    hasher.hashBytes(mdEntries(), (int)sizeof(MDEntry) * numEntries);
+}
+
+void PirTypeFeedback::addConnected(ConnectedCollector& collector) const {
+    auto numCodes = this->numCodes();
+    for (int i = 0; i < numCodes; i++) {
+        collector.add(getEntry(i));
+    }
 }
 
 int PirTypeFeedback::numCodes() const {
