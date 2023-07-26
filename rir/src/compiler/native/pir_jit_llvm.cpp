@@ -4,7 +4,7 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
-#include "compiler/native/SerialModule.h"
+#include "serializeHash/serialize/native/SerialModule.h"
 #include "utils/filesystem.h"
 
 #include "compiler/parameter.h"

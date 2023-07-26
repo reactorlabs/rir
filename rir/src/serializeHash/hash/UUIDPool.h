@@ -104,6 +104,10 @@ class UUIDPool {
     ///
     /// Otherwise, calls `rir::serialize` to write the SEXP as usual.
     static void writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes);
+    /// `writeItem`, but writes an extra bool to handle nullptr.
+    static void writeNullableItem(SEXP sexp, SEXP ref_table, R_outpstream_t out);
+    /// `readItem`, but reads an extra bool to handle nullptr.
+    static SEXP readNullableItem(SEXP ref_table, R_inpstream_t in);
 };
 
 } // namespace rir

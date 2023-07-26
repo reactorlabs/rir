@@ -1,7 +1,7 @@
 #include "module.h"
 
+#include "compilerClientServer/CompilerServer.h"
 #include "pir_impl.h"
-#include "CompilerServer.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 #include "values.h"

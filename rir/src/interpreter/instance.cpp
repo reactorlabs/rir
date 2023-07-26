@@ -1,7 +1,7 @@
 #include "instance.h"
 #include "api.h"
 #include "compiler/parameter.h"
-#include "hash/UUIDPool.h"
+#include "serializeHash/hash/UUIDPool.h"
 
 namespace rir {
 

@@ -4,7 +4,9 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
-#include "hash/UUIDPool.h"
+#include "runtime/log/RirObjectPrintStyle.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
 #include "utils/random.h"
 
 namespace rir {
@@ -198,7 +200,7 @@ struct DispatchTable
     void serialize(SEXP refTable, R_outpstream_t out) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
-    void print(std::ostream& out, bool hashInfo) const;
+    void print(std::ostream& out, RirObjectPrintStyle style = RIR_DEBUG_STYLE) const;
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {

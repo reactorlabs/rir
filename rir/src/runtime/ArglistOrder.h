@@ -2,8 +2,8 @@
 #define ARGLIST_ORDER_H
 
 #include "RirRuntimeObject.h"
-#include "hash/getConnected.h"
-#include "hash/hashRoot.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
 
 #include <iostream>
 #include <vector>

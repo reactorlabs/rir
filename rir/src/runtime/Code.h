@@ -5,9 +5,10 @@
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
-#include "compiler/native/SerialModule.h"
-#include "hash/getConnected.h"
-#include "hash/hashRoot.h"
+#include "runtime/log/RirObjectPrintStyle.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/serialize/native/SerialModule.h"
 
 #include <cassert>
 #include <cstdint>
@@ -237,7 +238,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
-    void print(std::ostream&, bool hashInfo = false) const;
+    void print(std::ostream&, RirObjectPrintStyle style = RIR_DEBUG_STYLE) const;
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

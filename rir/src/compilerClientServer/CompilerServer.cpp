@@ -5,13 +5,13 @@
 #include "CompilerServer.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
-#include "utils/measuring.h"
-#include "hash/UUID.h"
-#include "hash/UUIDPool.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/hash/UUID.h"
+#include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/ByteBuffer.h"
+#include "utils/measuring.h"
+#include "zmq.hpp"
 #include <array>
-#include <zmq.hpp>
 
 #define SOFT_ASSERT(x, msg) do {                                               \
     if (!(x)) {                                                                \

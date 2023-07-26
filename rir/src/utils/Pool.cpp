@@ -1,6 +1,6 @@
 #include "utils/Pool.h"
 #include "R/Protect.h"
-#include "hash/UUIDPool.h"
+#include "serializeHash/hash/UUIDPool.h"
 
 namespace rir {
 
