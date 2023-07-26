@@ -5,9 +5,9 @@
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
-#include "hash/UUIDPool.h"
-#include "hash/hashAst.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/hash/hashAst.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 
@@ -438,7 +438,12 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
 }
 
-void Code::print(std::ostream& out, bool hashInfo) const {
+void Code::print(std::ostream& out, RirObjectPrintStyle style) const {
+    assert((style == RirObjectPrintStyle::Default ||
+            style == RirObjectPrintStyle::Detailed) &&
+           "Unknown print style");
+    auto isDetailed = style == RirObjectPrintStyle::Detailed;
+
     out << "Code object\n";
     out << std::left << std::setw(20) << "   Source: " << src
         << " (index into src pool)\n";
@@ -448,7 +453,7 @@ void Code::print(std::ostream& out, bool hashInfo) const {
         << "\n";
     out << std::left << std::setw(20) << "   Code size: " << codeSize
         << "[B]\n";
-    if (hashInfo) {
+    if (isDetailed) {
         out << std::left << std::setw(20) << "   Size: " << size() << "[B]\n";
     }
 
@@ -460,7 +465,7 @@ void Code::print(std::ostream& out, bool hashInfo) const {
     out << "\n";
     disassemble(out);
 
-    if (hashInfo) {
+    if (isDetailed) {
         out << "extra pool = \n" << Print::dumpSexp(getEntry(0), SIZE_MAX)
             << "\n";
         out << "src = \n" << Print::dumpSexp(src_pool_at(src), SIZE_MAX)

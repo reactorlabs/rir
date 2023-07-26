@@ -1,5 +1,5 @@
 #include "DispatchTable.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/serialize/serialize.h"
 
 namespace rir {
 
@@ -40,11 +40,15 @@ void DispatchTable::addConnected(ConnectedCollector& collector) const {
     }
 }
 
-void DispatchTable::print(std::ostream& out, bool hashInfo) const {
+void DispatchTable::print(std::ostream& out, RirObjectPrintStyle style) const {
+    assert((style == RirObjectPrintStyle::Default ||
+            style == RirObjectPrintStyle::Detailed) &&
+           "Unknown print style");
+
     out << "DispatchTable(size = " << size() << "):\n";
     for (size_t i = 0; i < size(); i++) {
         out << "Entry " << i << ":\n";
-        get(i)->print(out, hashInfo);
+        get(i)->print(out, style);
     }
 }
 

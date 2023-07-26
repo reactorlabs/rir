@@ -3,7 +3,7 @@
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "bc/CodeStream.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/Pool.h"
 
 #include <iomanip>

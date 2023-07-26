@@ -1,9 +1,9 @@
 #include "api.h"
 #include "interp.h"
 #include "profiler.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/serialize/serialize.h"
 
-#include "CompilerClient.h"
+#include "compilerClientServer/CompilerClient.h"
 
 namespace rir {
 

@@ -1,7 +1,7 @@
 #include "Deoptimization.h"
 #include "runtime/Code.h"
-#include "hash/UUID.h"
-#include "hash/UUIDPool.h"
+#include "serializeHash/hash/UUID.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {

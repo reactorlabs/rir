@@ -5,17 +5,17 @@
 #include "CompilerClient.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
-#include "hash/UUID.h"
-#include "hash/UUIDPool.h"
-#include "interpreter/serialize.h"
+#include "serializeHash/hash/UUID.h"
+#include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/Terminal.h"
 #include "utils/measuring.h"
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
+#include "zmq.hpp"
 #include <array>
-#include <zmq.hpp>
 
 namespace rir {
 

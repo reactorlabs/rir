@@ -7,9 +7,9 @@
 #include "compiler/native/builtins.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/native/types_llvm.h"
-#include "compiler/native/SerialRepr.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
+#include "serializeHash/serialize/native/SerialRepr.h"
 #include <llvm/IR/Instructions.h>
 
 #include "llvm/IR/DIBuilder.h"

@@ -5,8 +5,8 @@
 #include "bc/BC_noarg_list.h"
 #include "common.h"
 #include "compiler/pir/type.h"
-#include "hash/getConnected.h"
-#include "hash/hashRoot.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 

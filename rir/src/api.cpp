@@ -3,8 +3,6 @@
  */
 
 #include "api.h"
-#include "CompilerClient.h"
-#include "CompilerServer.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"
@@ -16,8 +14,11 @@
 #include "compiler/pir/type.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
-#include "compiler_server_client_shared_utils.h"
+#include "compilerClientServer/CompilerClient.h"
+#include "compilerClientServer/CompilerServer.h"
+#include "compilerClientServer/compiler_server_client_shared_utils.h"
 #include "interpreter/interp_incl.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
 #include "utils/measuring.h"
 
