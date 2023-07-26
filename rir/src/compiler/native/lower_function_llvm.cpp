@@ -1100,7 +1100,7 @@ void LowerFunctionLLVM::checkIsSexp(llvm::Value* v, const std::string& msg) {
         builder.CreateOr(builder.CreateICmpULE(type, c(EXTERNALSXP)),
                          builder.CreateICmpEQ(type, c(FUNSXP)));
     strings.push_back(std::string("invalid sexptype ") + msg);
-    insn_assert(validType, strings.back().c_str(), type);
+    insn_assert(validType, strings.back().c_str());
     checking = false;
 #endif
 }
