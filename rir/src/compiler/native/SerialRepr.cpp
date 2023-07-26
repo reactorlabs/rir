@@ -239,6 +239,7 @@ static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
     if (outer) {
         outer->addExtraPoolEntry(sexp);
     }
+    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Code SEXP is not actually an EXTERNALSXP");
     return (void*)rir::Code::unpack(sexp);
 }
 
@@ -246,7 +247,13 @@ static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta, rir::Code* o
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto m = DeoptMetadata::deserialize(buffer);
+    assert(m->numFrames < 65536 && "deserialized obviously corrupt DeoptMetadata");
     if (outer) {
+        // TODO remove: testing why DeoptMetadata gets GCd
+        R_PreserveObject(m->container());
+        for (int i = 0; i < (int)m->numFrames; i++) {
+            R_PreserveObject(m->frames[i].code->container());
+        }
         m->gcAttach(outer);
     }
     return (void*)m;

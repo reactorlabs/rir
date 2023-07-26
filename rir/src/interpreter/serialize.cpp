@@ -161,20 +161,18 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
+    assert(!retrieveHash && "bad state: should start deserializing SEXP with retrieve hash or deserialize a non-RIR SEXP before serializing another SEXP");
     disableGc([&] {
         Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: serialize", sexp, [&]{
             auto oldPreserve = pir::Parameter::RIR_PRESERVE;
             auto oldUseHashes = _useHashes;
-            auto oldRetrieveHash = retrieveHash;
             pir::Parameter::RIR_PRESERVE = true;
             _useHashes = useHashes;
-            retrieveHash = UUID();
             struct R_outpstream_st out{};
             R_InitOutPStream(&out, (R_pstream_data_t)&buffer, R_STREAM_FORMAT,
                              R_STREAM_DEFAULT_VERSION, rStreamOutChar,
                              rStreamOutBytes, nullptr, nullptr);
             R_Serialize(sexp, &out);
-            retrieveHash = oldRetrieveHash;
             _useHashes = oldUseHashes;
             pir::Parameter::RIR_PRESERVE = oldPreserve;
         });
@@ -186,11 +184,11 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes) {
 }
 
 SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
+    assert(!retrieveHash && "bad state: should start deserializing SEXP with retrieve hash or deserialize a non-RIR SEXP before deserializing another SEXP");
     return disableGc<SEXP>([&] {
         return Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serialize.cpp: deserialize", [&]{
             auto oldPreserve = pir::Parameter::RIR_PRESERVE;
             auto oldUseHashes = _useHashes;
-            auto oldRetrieveHash = retrieveHash;
             pir::Parameter::RIR_PRESERVE = true;
             _useHashes = useHashes;
             retrieveHash = newRetrieveHash;
@@ -198,8 +196,10 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieve
             R_InitInPStream(&in, (R_pstream_data_t)&sexpBuffer, R_STREAM_FORMAT,
                             rStreamInChar, rStreamInBytes, nullptr, nullptr);
             SEXP sexp = R_Unserialize(&in);
-            // assert(!retrieveHash && "retrieve hash not taken");
-            retrieveHash = oldRetrieveHash;
+            assert(!retrieveHash && "retrieve hash not filled");
+            assert(!newRetrieveHash ||
+                   (UUIDPool::get(newRetrieveHash) == sexp &&
+                    "retrieve hash not filled with deserialized SEXP"));
             _useHashes = oldUseHashes;
             pir::Parameter::RIR_PRESERVE = oldPreserve;
             return sexp;
@@ -227,6 +227,5 @@ void useRetrieveHashIfSet(__attribute__((unused)) R_inpstream_t inp, SEXP sexp) 
         retrieveHash = UUID();
     }
 }
-
 
 } // namespace rir
