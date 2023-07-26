@@ -107,7 +107,7 @@ struct ArglistOrder
     ArgIdx data[];
 
   private:
-    // cppcheck-suppress uninitMemberVar
+    // cppcheck-suppress uninitMemberVarPrivate
     explicit ArglistOrder(size_t nCalls)
         : RirRuntimeObject(0, 0), nCalls(nCalls) {}
 };
