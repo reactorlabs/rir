@@ -1,6 +1,7 @@
 #include "LazyEnvironment.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "utils/Pool.h"
 
 namespace rir {
@@ -49,14 +50,14 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
     for (int i = 0; i < nargs; i++) {
         names[i] = Pool::readItem(refTable, inp);
     }
-    SEXP materialized = p.nullable(ReadNullableItem(refTable, inp));
-    SEXP parent = p.nullable(ReadNullableItem(refTable, inp));
+    SEXP materialized = p.nullable(UUIDPool::readNullableItem(refTable, inp));
+    SEXP parent = p.nullable(UUIDPool::readNullableItem(refTable, inp));
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     auto le = new (DATAPTR(store)) LazyEnvironment(parent, nargs, names);
     le->materialized(materialized);
     for (int i = 0; i < nargs; i++) {
         le->missing[i] = missing[i];
-        le->setArg(i, ReadNullableItem(refTable, inp), false);
+        le->setArg(i, UUIDPool::readNullableItem(refTable, inp), false);
     }
     delete[] missing;
     // names won't get deleted because its now owned by LazyEnvironment,
@@ -73,11 +74,39 @@ void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
     for (int i = 0; i < (int)nargs; i++) {
         Pool::writeItem(names[i], refTable, out);
     }
-    WriteNullableItem(materialized(), refTable, out);
+    UUIDPool::writeNullableItem(materialized(), refTable, out);
     // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
-    WriteNullableItem(getParent(), refTable, out);
+    UUIDPool::writeNullableItem(getParent(), refTable, out);
     for (int i = 0; i < (int)nargs; i++) {
-        WriteNullableItem(getArg((size_t)i), refTable, out);
+        UUIDPool::writeNullableItem(getArg((size_t)i), refTable, out);
+    }
+}
+
+void LazyEnvironment::hash(Hasher& hasher) const {
+    hasher.hashBytesOf(nargs);
+    for (int i = 0; i < (int)nargs; i++) {
+        hasher.hashBytesOf(missing[i]);
+    }
+    for (int i = 0; i < (int)nargs; i++) {
+        hasher.hashConstant(names[i]);
+    }
+    hasher.hashNullable(materialized());
+    // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
+    hasher.hashNullable(getParent());
+    for (int i = 0; i < (int)nargs; i++) {
+        hasher.hashNullable(getArg((size_t)i));
+    }
+}
+
+void LazyEnvironment::addConnected(ConnectedCollector& collector) const {
+    for (int i = 0; i < (int)nargs; i++) {
+        collector.addConstant(names[i]);
+    }
+    collector.addNullable(materialized());
+    // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
+    collector.addNullable(getParent());
+    for (int i = 0; i < (int)nargs; i++) {
+        collector.addNullable(getArg((size_t)i));
     }
 }
 

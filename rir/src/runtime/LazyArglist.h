@@ -74,6 +74,8 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
 
     static LazyArglist* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
+    void hash(Hasher& hasher) const;
+    void addConnected(ConnectedCollector& collector) const;
 
   private:
     // cppcheck-suppress uninitMemberVarPrivate
