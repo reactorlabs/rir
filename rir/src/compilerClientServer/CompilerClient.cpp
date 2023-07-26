@@ -42,9 +42,15 @@ static bool PIR_CLIENT_SKIP_DISCREPANCY_CHECK =
 
 bool CompilerClient::_isRunning = false;
 static zmq::context_t* context;
-static std::vector<std::string> serverAddrs;
-static std::vector<zmq::socket_t*> sockets;
-static std::vector<bool> socketsConnected;
+// TODO: static std::vector without the * breaks in some cases.
+//  Why? I thought initializing static C++ classes was *not* UB.
+//  CompilerClient.cpp should only be included once.
+//  Can this affect other global C++ classes? (hasn't so far)
+//  It happened after moving the file, so maybe it was just a gcc bug, even
+//  though I cleaned and rebuilt...
+static std::vector<std::string>* serverAddrs;
+static std::vector<zmq::socket_t*>* sockets;
+static std::vector<bool>* socketsConnected;
 
 void CompilerClient::tryInit() {
     // get the server address from the environment
@@ -68,7 +74,7 @@ void CompilerClient::tryInit() {
         std::getline(serverAddrReader, serverAddr, ',');
         if (serverAddr.empty())
             continue;
-        serverAddrs.push_back(serverAddr);
+        serverAddrs->push_back(serverAddr);
     }
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     PIR_CLIENT_TIMEOUT = std::chrono::milliseconds(
@@ -76,7 +82,7 @@ void CompilerClient::tryInit() {
             ? 10000
             : strtol(getenv("PIR_CLIENT_TIMEOUT"), nullptr, 10)
     );
-    NUM_THREADS = (int)serverAddrs.size();
+    NUM_THREADS = (int)serverAddrs->size();
     // initialize the thread pool
     threads = new thread_pool(NUM_THREADS);
     // initialize the zmq context
@@ -90,17 +96,21 @@ void CompilerClient::tryInit() {
         NUM_THREADS
     );
 #else
-    assert(serverAddrs.size() == 1 &&
+    assert(serverAddrs->size() == 1 &&
            "can't have multiple servers without multi-threaded client");
     context = new zmq::context_t(1, 1);
 #endif
 
+    serverAddrs = new std::vector<std::string>();
+    sockets = new std::vector<zmq::socket_t*>();
+    socketsConnected = new std::vector<bool>();
+
     // initialize the zmq sockets and connect to the servers
-    for (const auto& serverAddr : serverAddrs) {
+    for (const auto& serverAddr : *serverAddrs) {
         auto socket = new zmq::socket_t(*context, zmq::socket_type::req);
         socket->connect(serverAddr);
-        sockets.push_back(socket);
-        socketsConnected.push_back(true);
+        sockets->push_back(socket);
+        socketsConnected->push_back(true);
     }
 }
 
@@ -112,19 +122,19 @@ CompilerClient::Handle<T>* CompilerClient::request(
         return nullptr;
     }
     auto getResponse = [=](int index) {
-        auto socket = sockets[index];
-        auto socketConnected = socketsConnected[index];
+        auto socket = (*sockets)[index];
+        auto socketConnected = (*socketsConnected)[index];
         if (!socket->handle()) {
             std::cerr << "CompilerClient: socket closed" << std::endl;
             *socket = zmq::socket_t(*context, zmq::socket_type::req);
             socketConnected = false;
         }
         if (!socketConnected) {
-            const auto& serverAddr = serverAddrs[index];
+            const auto& serverAddr = (*serverAddrs)[index];
             std::cerr << "CompilerClient: reconnecting to " << serverAddr
                       << std::endl;
             socket->connect(serverAddr);
-            socketsConnected[index] = true;
+            (*socketsConnected)[index] = true;
         }
 
         // Serialize the request
@@ -316,8 +326,8 @@ void CompilerClient::killServers() {
     std::cerr << "Killing connected servers" << std::endl;
     // Send the request PIR_COMPILE_KILL_MAGIC to all servers, and check the
     // acknowledgement (we do this synchronously)
-    for (size_t i = 0; i < sockets.size(); i++) {
-      auto& socket = sockets[i];
+    for (size_t i = 0; i < sockets->size(); i++) {
+      auto& socket = (*sockets)[i];
       // Send the request
       auto request = Request::Kill;
       socket->send(zmq::message_t(&request, sizeof(request)),
@@ -332,10 +342,10 @@ void CompilerClient::killServers() {
       }
     }
     // Close all sockets
-    for (auto& socket : sockets) {
+    for (auto& socket : *sockets) {
         socket->close();
     }
-    std::fill(socketsConnected.begin(), socketsConnected.end(), false);
+    std::fill(socketsConnected->begin(), socketsConnected->end(), false);
     // Mark that we've stopped running
     _isRunning = false;
     std::cerr << "Done killing connected servers, client is no longer running" << std::endl;
@@ -359,10 +369,10 @@ const CompiledResponseData& CompilerClient::CompiledHandle::getResponse() {
         auto socketIndex = *socketIndexRef;
         if (socketIndex != -1) {
             std::cerr << "Disconnecting " << socketIndex << ", will reconnect on next request" << std::endl;
-            auto socket = sockets[socketIndex];
-            auto socketAddr = serverAddrs[socketIndex];
+            auto socket = (*sockets)[socketIndex];
+            auto socketAddr = (*serverAddrs)[socketIndex];
             socket->disconnect(socketAddr);
-            socketsConnected[socketIndex] = false;
+            (*socketsConnected)[socketIndex] = false;
         }
         return;
         }
