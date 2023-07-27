@@ -3,6 +3,29 @@
 
 namespace rir {
 
+DispatchTable* DispatchTable::onlyBaseline(Function* baseline,
+                                           const Context& userDefinedContext,
+                                           size_t capacity) {
+    auto dt = create(capacity);
+    dt->setEntry(0, baseline->container());
+    dt->size_ = 1;
+    dt->userDefinedContext_ = userDefinedContext;
+    return dt;
+}
+
+SEXP DispatchTable::onlyBaselineClosure(Function* baseline,
+                                        const Context& userDefinedContext,
+                                        size_t capacity) {
+    PROTECT(baseline->container());
+    auto dt = onlyBaseline(baseline, userDefinedContext, capacity);
+    auto what = Rf_allocSExp(CLOSXP);
+    SET_FORMALS(what, R_NilValue);
+    SET_BODY(what, dt->container());
+    SET_CLOENV(what, R_GlobalEnv);
+    UNPROTECT(1);
+    return what;
+}
+
 DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
     DispatchTable* table = create();
     PROTECT(table->container());

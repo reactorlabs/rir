@@ -18,7 +18,8 @@ REXPORT SEXP pirCheck(SEXP f, SEXP check, SEXP env);
 REXPORT SEXP pirSetDebugFlags(SEXP debugFlags);
 SEXP pirCompile(SEXP closure, const rir::Context& assumptions,
                 const std::string& name, const rir::pir::DebugOptions& debug,
-                std::string* closureVersionPirPrint = nullptr);
+                std::string* closureVersionPirPrint = nullptr,
+                rir::Function** optFunctionRef = nullptr);
 extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Context&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);

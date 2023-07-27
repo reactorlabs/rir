@@ -194,6 +194,19 @@ struct DispatchTable
         return new (INTEGER(s)) DispatchTable(capacity);
     }
 
+  private:
+    /// Create a DispatchTable with just 1 version, the baseline, and a limited
+    /// alternate capacity.
+    static DispatchTable* onlyBaseline(Function* baseline,
+                                       const Context& userDefinedContext,
+                                       size_t capacity);
+  public:
+    /// Create a CLOSXP which has a DispatchTable with just 1 version, the
+    /// baseline
+    static SEXP onlyBaselineClosure(Function* baseline,
+                                    const Context& userDefinedContext,
+                                    size_t capacity);
+
     size_t capacity() const { return info.gc_area_length; }
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp);
