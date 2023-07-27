@@ -3,6 +3,7 @@
 #include "R/Protect.h"
 #include "compiler/pir/instruction.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 #include "runtime/TypeFeedback.h"
 #include <unordered_map>
 
@@ -66,9 +67,12 @@ FeedbackIndex PirTypeFeedback::rirIdx(size_t slot) {
 PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     int size = InInteger(inp);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    AddReadRef(refTable, store);
+    useRetrieveHashIfSet(inp, store);
+
     int numCodes = InInteger(inp);
     int numEntries = InInteger(inp);
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     auto typeFeedback = new (DATAPTR(store)) PirTypeFeedback(numCodes);
     InBytes(inp, typeFeedback->entry, sizeof(typeFeedback->entry));
     for (int i = 0; i < numCodes; i++) {
@@ -79,6 +83,7 @@ PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) 
 }
 
 void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+    HashAdd(container(), refTable);
     OutInteger(out, (int)size());
     auto numCodes = this->numCodes();
     auto numEntries = this->numEntries();

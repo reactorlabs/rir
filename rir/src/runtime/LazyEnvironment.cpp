@@ -2,6 +2,7 @@
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/Pool.h"
 
 namespace rir {
@@ -41,6 +42,10 @@ bool LazyEnvironment::isMissing(size_t i) const {
 LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     int size = InInteger(inp);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    AddReadRef(refTable, store);
+    useRetrieveHashIfSet(inp, store);
+
     int nargs = InInteger(inp);
     auto missing = new char[nargs];
     auto names = new Immediate[nargs];
@@ -52,7 +57,6 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
     }
     SEXP materialized = p.nullable(UUIDPool::readNullableItem(refTable, inp));
     SEXP parent = p.nullable(UUIDPool::readNullableItem(refTable, inp));
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     auto le = new (DATAPTR(store)) LazyEnvironment(parent, nargs, names);
     le->materialized(materialized);
     for (int i = 0; i < nargs; i++) {
@@ -66,6 +70,7 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
 }
 
 void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
+    HashAdd(container(), refTable);
     OutInteger(out, (int)size());
     OutInteger(out, (int)nargs);
     for (int i = 0; i < (int)nargs; i++) {
