@@ -28,16 +28,17 @@ class UUID;
  */
 class CompilerClient {
     struct CompiledResponseData {
-        SEXP sexp;
+        Function* optFunction;
         std::string finalPir;
 
-        CompiledResponseData(SEXP sexp, const std::string&& finalPir)
-            : sexp(sexp), finalPir(finalPir) {
-            R_PreserveObject(sexp);
+        CompiledResponseData(Function* optFunction,
+                             const std::string&& finalPir)
+            : optFunction(optFunction), finalPir(finalPir) {
+            R_PreserveObject(optFunction->container());
         }
 
         ~CompiledResponseData() {
-            R_ReleaseObject(sexp);
+            R_ReleaseObject(optFunction->container());
         }
     };
     template<typename T>
@@ -75,8 +76,8 @@ class CompilerClient {
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
         void compare(pir::ClosureVersion* version) const;
-        /// Block and get the SEXP
-        SEXP getSexp() const;
+        /// Block and get the compiled (optimized) function
+        Function* getOptFunction() const;
         /// Block and get the final PIR debug print
         const std::string& getFinalPir() const;
     };
@@ -86,11 +87,20 @@ class CompilerClient {
 
     /// Initializes if PIR_CLIENT_ADDR is set
     static void tryInit();
-    /// Asynchronously sends the closure to the compile server and returns a
-    /// handle to use the result. Automatically interns the result,
+    /// "Asynchronously" (not currently, maybe in the future) sends the closure
+    /// to the compile server and returns a handle to use the result.
+    /// Automatically interns the result,
     static CompiledHandle* pirCompile(SEXP what, const Context& assumptions,
-                              const std::string& name,
-                              const pir::DebugOptions& debug);
+                                      const std::string& name,
+                                      const pir::DebugOptions& debug);
+    /// "Asynchronously" (not currently, maybe in the future) sends the closure
+    /// to the compile server and returns a handle to use the result.
+    /// Automatically interns the result,
+    static CompiledHandle* pirCompile(Function* baseline,
+                                      const Context& userDefinedContext,
+                                      const Context& assumptions,
+                                      const std::string& name,
+                                      const pir::DebugOptions& debug);
     /// Synchronously retrieves the closure with the given hash from the server.
     /// If in the future we make this asynchronous, should still return a
     /// closure SEXP but make it block while we're waiting for the response.

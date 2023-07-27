@@ -5,6 +5,7 @@
 #include "CompilerServer.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
+#include "runtime/DispatchTable.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
@@ -149,7 +150,7 @@ void CompilerServer::tryRun() {
         case Request::Compile: {
             std::cerr << "Received compile request" << std::endl;
             // ...
-            // + serialize(what)
+            // + serialize(baseline->container())
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -168,7 +169,16 @@ void CompilerServer::tryRun() {
             // connected SEXPs like the client; the only thing duplicate SEXPs
             // may cause is wasted memory, but since we're on the server and
             // preserving everything this is less of an issue.
-            what = deserialize(requestBuffer, false);
+            auto baseline = Function::check(deserialize(requestBuffer, false));
+            SOFT_ASSERT(baseline, "received SEXP is not a Function");
+            auto userDefinedContextSize = requestBuffer.getLong();
+            SOFT_ASSERT(userDefinedContextSize == sizeof(Context),
+                        "Invalid user-defined context size");
+            Context userDefinedContext;
+            requestBuffer.getBytes((uint8_t*)&userDefinedContext, userDefinedContextSize);
+
+            what = DispatchTable::onlyBaselineClosure(baseline, userDefinedContext, 2);
+
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");
@@ -219,7 +229,8 @@ void CompilerServer::tryRun() {
 
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             std::string pirPrint;
-            what = pirCompile(what, assumptions, name, debug, &pirPrint);
+            Function* optFunction;
+            what = pirCompile(what, assumptions, name, debug, &pirPrint, &optFunction);
 
             // Intern, not because we'll have reused it (highly unlikely since
             // we memoize requests, and it doesn't affect anything anyways), but
@@ -227,22 +238,30 @@ void CompilerServer::tryRun() {
             // (since we memoize requests) so that compiler client can retrieve
             // it later
             UUIDPool::intern(what, true, true);
+            // After intern we don't actually care about what, we care about
+            // optFunction->container() (want to intern the other versions in
+            // case they get retrieved somehow, which I think is probable
+            // because RIR likes to reference unexpected SEXPs in unexpected
+            // places). We set what to optFunction->container() so it gets
+            // printed when we time sending the response (which is
+            // optFunction->container())
+            what = optFunction->container();
 
             // Serialize the response
             // Response data format =
             //   Response::Compiled
             // + sizeof(pirPrint)
             // + pirPrint
-            // + hashRoot(what)
-            // + serialize(what)
+            // + hashRoot(optFunction->container())
+            // + serialize(optFunction->container())
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             response.putLong((uint64_t)Response::Compiled);
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = UUIDPool::getHash(what);
+            auto hash = UUIDPool::getHash(optFunction->container());
             response.putBytes((uint8_t*)&hash, sizeof(hash));
-            serialize(what, response, true);
+            serialize(optFunction->container(), response, true);
             break;
         }
         case Request::Retrieve: {
