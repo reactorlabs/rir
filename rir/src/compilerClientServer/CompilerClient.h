@@ -28,17 +28,17 @@ class UUID;
  */
 class CompilerClient {
     struct CompiledResponseData {
-        Function* optFunction;
+        Function* newOptFunction;
         std::string finalPir;
 
-        CompiledResponseData(Function* optFunction,
+        CompiledResponseData(Function* newOptFunction,
                              const std::string&& finalPir)
-            : optFunction(optFunction), finalPir(finalPir) {
-            R_PreserveObject(optFunction->container());
+            : newOptFunction(newOptFunction), finalPir(finalPir) {
+            R_PreserveObject(newOptFunction->container());
         }
 
         ~CompiledResponseData() {
-            R_ReleaseObject(optFunction->container());
+            R_ReleaseObject(newOptFunction->container());
         }
     };
     template<typename T>
@@ -95,9 +95,14 @@ class CompilerClient {
                                       const pir::DebugOptions& debug);
     /// "Asynchronously" (not currently, maybe in the future) sends the closure
     /// to the compile server and returns a handle to use the result.
-    /// Automatically interns the result,
+    /// Automatically interns the result.
+    ///
+    /// oldOptFunction is the old closure in the DispatchTable with the
+    /// corrected assumptions. I'm honestly not completely sure how PIR uses
+    /// this, and by default, passing the baseline again should be OK.
     static CompiledHandle* pirCompile(Function* baseline,
                                       const Context& userDefinedContext,
+                                      Function* oldOptFunction,
                                       const Context& assumptions,
                                       const std::string& name,
                                       const pir::DebugOptions& debug);

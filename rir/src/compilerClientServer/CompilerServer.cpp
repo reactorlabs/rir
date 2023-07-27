@@ -151,6 +151,8 @@ void CompilerServer::tryRun() {
             std::cerr << "Received compile request" << std::endl;
             // ...
             // + serialize(baseline->container())
+            // + oldOptFunction != baseline
+            // ? + serialize(oldOptFunction->container())
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -170,14 +172,22 @@ void CompilerServer::tryRun() {
             // may cause is wasted memory, but since we're on the server and
             // preserving everything this is less of an issue.
             auto baseline = Function::check(deserialize(requestBuffer, false));
-            SOFT_ASSERT(baseline, "received SEXP is not a Function");
+            SOFT_ASSERT(baseline, "received SEXP (baseline) is not a Function");
+            auto oldOptFunctionIsDifferent = (bool)requestBuffer.getBool();
+            auto oldOptFunction = oldOptFunctionIsDifferent
+                ? Function::check(deserialize(requestBuffer, false))
+                : baseline;
+            SOFT_ASSERT(oldOptFunction, "received SEXP (oldOptFunction) is not a Function");
             auto userDefinedContextSize = requestBuffer.getLong();
             SOFT_ASSERT(userDefinedContextSize == sizeof(Context),
                         "Invalid user-defined context size");
             Context userDefinedContext;
             requestBuffer.getBytes((uint8_t*)&userDefinedContext, userDefinedContextSize);
 
-            what = DispatchTable::onlyBaselineClosure(baseline, userDefinedContext, 2);
+            what = DispatchTable::onlyBaselineClosure(baseline, userDefinedContext, oldOptFunctionIsDifferent ? 3 : 2);
+            if (oldOptFunctionIsDifferent) {
+                DispatchTable::unpack(BODY(what))->insert(oldOptFunction);
+            }
 
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
@@ -229,8 +239,8 @@ void CompilerServer::tryRun() {
 
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             std::string pirPrint;
-            Function* optFunction;
-            what = pirCompile(what, assumptions, name, debug, &pirPrint, &optFunction);
+            Function* newOptFunction;
+            what = pirCompile(what, assumptions, name, debug, &pirPrint, &newOptFunction);
 
             // Intern, not because we'll have reused it (highly unlikely since
             // we memoize requests, and it doesn't affect anything anyways), but
@@ -239,29 +249,29 @@ void CompilerServer::tryRun() {
             // it later
             UUIDPool::intern(what, true, true);
             // After intern we don't actually care about what, we care about
-            // optFunction->container() (want to intern the other versions in
+            // newOptFunction->container() (want to intern the other versions in
             // case they get retrieved somehow, which I think is probable
             // because RIR likes to reference unexpected SEXPs in unexpected
-            // places). We set what to optFunction->container() so it gets
+            // places). We set what to newOptFunction->container() so it gets
             // printed when we time sending the response (which is
-            // optFunction->container())
-            what = optFunction->container();
+            // newOptFunction->container())
+            what = newOptFunction->container();
 
             // Serialize the response
             // Response data format =
             //   Response::Compiled
             // + sizeof(pirPrint)
             // + pirPrint
-            // + hashRoot(optFunction->container())
-            // + serialize(optFunction->container())
+            // + hashRoot(newOptFunction->container())
+            // + serialize(newOptFunction->container())
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             response.putLong((uint64_t)Response::Compiled);
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = UUIDPool::getHash(optFunction->container());
+            auto hash = UUIDPool::getHash(newOptFunction->container());
             response.putBytes((uint8_t*)&hash, sizeof(hash));
-            serialize(optFunction->container(), response, true);
+            serialize(newOptFunction->container(), response, true);
             break;
         }
         case Request::Retrieve: {
