@@ -2,6 +2,7 @@
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/serialize.h"
 
 namespace rir {
 
@@ -56,6 +57,10 @@ void addConnectedStackArg(const R_bcstack_t& stackArg, ConnectedCollector& colle
 LazyArglist* LazyArglist::deserialize(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     int size = InInteger(inp);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    AddReadRef(refTable, store);
+    useRetrieveHashIfSet(inp, store);
+
     auto callId = InSize(inp);
     auto length = InUInt(inp);
     auto onStack = InBool(inp);
@@ -72,7 +77,6 @@ LazyArglist* LazyArglist::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto ast = p(UUIDPool::readItem(refTable, inp));
     auto reordering = p(UUIDPool::readItem(refTable, inp));
 
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
     auto arglist = new (DATAPTR(store)) LazyArglist(callId, reordering, length, args, ast, onStack);
 
     // Otherwise it's owned by LazyArglist. But is this a leak?
@@ -84,6 +88,7 @@ LazyArglist* LazyArglist::deserialize(SEXP refTable, R_inpstream_t inp) {
 }
 
 void LazyArglist::serialize(SEXP refTable, R_outpstream_t out) const {
+    HashAdd(container(), refTable);
     OutInteger(out, (int)size());
     OutSize(out, callId);
     OutUInt(out, length);

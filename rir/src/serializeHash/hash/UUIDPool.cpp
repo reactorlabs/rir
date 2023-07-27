@@ -12,7 +12,7 @@
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "getConnected.h"
-#include "runtime/DispatchTable.h"
+#include "runtime/rirObjectMagic.h"
 #include "runtime/log/printRirObject.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
@@ -149,11 +149,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
             // Reuse interned SEXP
             auto existing = interned.at(hash);
             assert(TYPEOF(e) == TYPEOF(existing) && "obvious hash collision (different types)");
-            assert((TYPEOF(e) != EXTERNALSXP ||
-                    ((Code::check(e) != nullptr) == (Code::check(existing) != nullptr) &&
-                     (DispatchTable::check(e) != nullptr) == (DispatchTable::check(existing) != nullptr) &&
-                     (Function::check(e) != nullptr) == (Function::check(existing) != nullptr) &&
-                     (ArglistOrder::check(e) != nullptr) == (ArglistOrder::check(existing) != nullptr))) &&
+            assert((TYPEOF(e) != EXTERNALSXP || rirObjectMagic(e) == rirObjectMagic(existing)) &&
                    "obvious hash collision (different RIR types)");
             if (!hashes.count(e)) {
                 // This SEXP is structurally-equivalent to the interned SEXP but not
@@ -378,12 +374,11 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
             // cppcheck-suppress unreadVariable
             auto hash = hashes.at(sexp);
             // Not necessarily true: sexp == interned[hash]. But the following are true...
-            assert((sexp == interned[hash] ||
-                    ((Code::check(sexp) != nullptr) == (Code::check(interned[hash]) != nullptr) &&
-                     (DispatchTable::check(sexp) != nullptr) == (DispatchTable::check(interned[hash]) != nullptr) &&
-                     (Function::check(sexp) != nullptr) == (Function::check(interned[hash]) != nullptr) &&
-                     (ArglistOrder::check(sexp) != nullptr) == (ArglistOrder::check(interned[hash]) != nullptr))) &&
-                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP");
+            assert(interned.count(hash) && "SEXP interned with hash but the there's no \"main\" SEXP with that hash");
+            assert((sexp == interned[hash] || TYPEOF(sexp) != TYPEOF(interned[hash])) &&
+                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different SEXP types)");
+            assert((sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP || rirObjectMagic(sexp) != rirObjectMagic(interned[hash])) &&
+                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different RIR types)");
             assert(hashes[interned[hash]] == hash && "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
             assert(interned[hashes[interned[hash]]] == interned[hash] && "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
             OutBytes(out, &hash, sizeof(hash));
