@@ -294,7 +294,7 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug,
                 std::string* closureVersionPirPrint,
-                rir::Function** optFunctionRef) {
+                rir::Function** newOptFunctionRef) {
     Protect p(what);
 
     if (!isValidClosureSEXP(what)) {
@@ -365,8 +365,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // Compare compiled version with remote for discrepancies
                 compilerServerHandle->compare(c);
             }
-            if (optFunctionRef) {
-                *optFunctionRef = done;
+            if (newOptFunctionRef) {
+                *newOptFunctionRef = done;
             }
         };
 
