@@ -14,6 +14,8 @@
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
+#include "runtime/DispatchTable.h"
+#include "runtime/RirRuntimeObject.h"
 #include "zmq.hpp"
 #include <array>
 
@@ -68,6 +70,7 @@ void CompilerClient::tryInit() {
     assert(!isRunning());
     _isRunning = true;
 
+    serverAddrs = new std::vector<std::string>();
     std::istringstream serverAddrReader(serverAddrStr);
     while (!serverAddrReader.fail()) {
         std::string serverAddr;
@@ -101,11 +104,9 @@ void CompilerClient::tryInit() {
     context = new zmq::context_t(1, 1);
 #endif
 
-    serverAddrs = new std::vector<std::string>();
+    // initialize the zmq sockets and connect to the servers
     sockets = new std::vector<zmq::socket_t*>();
     socketsConnected = new std::vector<bool>();
-
-    // initialize the zmq sockets and connect to the servers
     for (const auto& serverAddr : *serverAddrs) {
         auto socket = new zmq::socket_t(*context, zmq::socket_type::req);
         socket->connect(serverAddr);
@@ -215,14 +216,28 @@ CompilerClient::Handle<T>* CompilerClient::request(
 #endif
 }
 
-CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
+CompilerClient::CompiledHandle*
+CompilerClient::pirCompile(SEXP what, const Context& assumptions,
+                           const std::string& name,
+                           const pir::DebugOptions& debug) {
+    auto dt = DispatchTable::unpack(BODY(what));
+    return pirCompile(dt->baseline(), dt->userDefinedContext(),
+                      assumptions, name, debug);
+}
+
+CompilerClient::CompiledHandle*
+CompilerClient::pirCompile(Function* baseline,
+                           const Context& userDefinedContext,
+                           const Context& assumptions, const std::string& name,
+                           const pir::DebugOptions& debug) {
+    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", baseline->container(), [&]{
         auto handle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + sizeof(what)
-                // + serialize(what)
+                // + serialize(baseline->container())
+                // + sizeof(userDefinedContext) (always 8)
+                // + userDefinedContext
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -236,7 +251,10 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
                 request.putLong((uint64_t)Request::Compile);
-                serialize(what, request, false);
+                serialize(baseline->container(), request, false);
+                request.putLong(sizeof(Context));
+                request.putBytes((uint8_t*)&userDefinedContext,
+                                 sizeof(userDefinedContext));
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());
@@ -257,24 +275,25 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 //   Response::Compiled
                 // + sizeof(pirPrint)
                 // + pirPrint
-                // + hashRoot(what)
-                // + serialize(what)
+                // + hashRoot(optFunction->container())
+                // + serialize(optFunction->container())
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
                 auto pirPrintSize = response.getLong();
                 std::string pirPrint;
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-                UUID responseWhatHash;
-                response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
+                UUID responseFunctionContainerHash;
+                response.getBytes((uint8_t*)&responseFunctionContainerHash, sizeof(responseFunctionContainerHash));
                 // Try to get hashed if we already have the compiled value
                 // (unlikely but maybe possible)
-                SEXP responseWhat = UUIDPool::get(responseWhatHash);
-                if (!responseWhat) {
+                auto responseFunctionContainer = UUIDPool::get(responseFunctionContainerHash);
+                if (!responseFunctionContainer) {
                     // Actually deserialize
-                    responseWhat = deserialize(response, true, responseWhatHash);
+                    responseFunctionContainer = deserialize(response, true, responseFunctionContainerHash);
                 }
-                return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
+                auto responseFunction = Function::unpack(responseFunctionContainer);
+                return CompilerClient::CompiledResponseData{responseFunction, std::move(pirPrint)};
             }
         );
         return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
@@ -447,13 +466,13 @@ void CompilerClient::CompiledHandle::compare(pir::ClosureVersion* version) const
 }
 
 /// Block and get the SEXP
-SEXP CompilerClient::CompiledHandle::getSexp() const {
+Function* CompilerClient::CompiledHandle::getOptFunction() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     auto& response = inner->getResponse();
 #else
     const auto& response = inner->response;
 #endif
-    return response.sexp;
+    return response.optFunction;
 }
 
 const std::string& CompilerClient::CompiledHandle::getFinalPir() const {

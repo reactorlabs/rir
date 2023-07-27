@@ -291,7 +291,8 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug,
-                std::string* closureVersionPirPrint) {
+                std::string* closureVersionPirPrint,
+                rir::Function** optFunctionRef) {
     Protect p(what);
 
     if (!isValidClosureSEXP(what)) {
@@ -362,6 +363,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // Compare compiled version with remote for discrepancies
                 compilerServerHandle->compare(c);
             }
+            if (optFunctionRef) {
+                *optFunctionRef = done;
+            }
         };
 
         cmp.compileClosure(what, name, assumptions, true, compile,
@@ -378,15 +382,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             std::cerr << "Final PIR of '" << name << "':\n" << finalPir << "\n";
         }
 
-        // replace with the compiler server's version
-        auto newWhat = compilerServerHandle->getSexp();
-        // Formals etc. are the same, we don't touch them during compilation.
-        // We should even be able to just send and receive BODY(what) instead of
-        // what, something to look at in the future...
-        SET_BODY(what, BODY(newWhat));
-        // gc should cleanup the original BODY(what) since nothing points to it
-        // anymore, though it would be nice if there's a way to do so
-        // explicitly...
+        // insert the compiler server's version
+        auto newOptFunction = compilerServerHandle->getOptFunction();
+        DispatchTable::unpack(BODY(what))->insert(newOptFunction);
     }
     delete compilerServerHandle;
     return what;
