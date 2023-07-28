@@ -371,7 +371,7 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
         size = bc.size();
 #ifdef DEBUG_SERIAL
         if (bc.bc == Opcode::deopt_) {
-            std::cout << "serialized: ";
+            std::cout << "hashed: ";
             bc.print(std::cout);
         }
 #endif
@@ -453,10 +453,125 @@ void BC::addConnected(ConnectedCollector& collector, const Opcode* code,
         size = bc.size();
 #ifdef DEBUG_SERIAL
         if (bc.bc == Opcode::deopt_) {
-            std::cout << "serialized: ";
+            std::cout << "added connected in: ";
             bc.print(std::cout);
         }
 #endif
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::addToPrettyGraph(PrettyGraphInnerPrinter& p,
+                          std::vector<bool>& addedExtraPoolEntries,
+                          const rir::Opcode* code, size_t codeSize,
+                          const rir::Code* container) {
+    auto addEntry = [&](SEXP sexp, const char* type, PrettyGraphContentPrinter description){
+        bool isInPool = false;
+        for (unsigned i = 0; i < container->extraPoolSize; i++) {
+            if (sexp == container->getExtraPoolEntry(i)) {
+                addedExtraPoolEntries[i] = true;
+                isInPool = true;
+            }
+        }
+        if (TYPEOF(sexp) == EXTERNALSXP) {
+            p.addEdgeTo(container->container(), false, type, description,
+                        !isInPool);
+        }
+    };
+    auto addConstant = [&](PoolIdx idx, const char* type, PrettyGraphContentPrinter description){
+        addEntry(Pool::get(idx), type, description);
+    };
+
+    while (codeSize > 0) {
+        const BC bc = BC::decode((Opcode*)code, container);
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments i = bc.immediate;
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+#define CONSTANT_CASE(op, accessor, type) case Opcode::op##_:                  \
+            addConstant(i.accessor, type, [&](std::ostream& s){ s << #op; });  \
+            break;
+        CONSTANT_CASE(push, pool, "push")
+        CONSTANT_CASE(ldfun, pool, "name")
+        CONSTANT_CASE(ldddvar, pool, "name")
+        CONSTANT_CASE(ldvar, pool, "name")
+        CONSTANT_CASE(ldvar_noforce, pool, "name")
+        CONSTANT_CASE(ldvar_for_update, pool, "name")
+        CONSTANT_CASE(ldvar_super, pool, "name")
+        CONSTANT_CASE(stvar, pool, "name")
+        CONSTANT_CASE(stvar_super, pool, "name")
+        CONSTANT_CASE(missing, pool, "name")
+        CONSTANT_CASE(ldvar_cached, poolAndCache.poolIndex, "name")
+        CONSTANT_CASE(ldvar_for_update_cache, poolAndCache.poolIndex, "name")
+        CONSTANT_CASE(stvar_cached, poolAndCache.poolIndex, "name")
+        case Opcode::guard_fun_:
+            addConstant(i.guard_fun_args.name, "name", [&](std::ostream& s){
+                s << "guard_fun name";
+            });
+            addConstant(i.guard_fun_args.expected, "guard", [&](std::ostream& s){
+                s << "guard_fun expected";
+            });
+            break;
+        case Opcode::call_:
+        case Opcode::call_dots_:
+        case Opcode::named_call_: {
+            auto callType =
+                *code == Opcode::call_ ? "call" :
+                *code == Opcode::call_dots_ ? "call_dots" :
+                "named_call";
+            addConstant(i.callFixedArgs.ast, "ast", [&](std::ostream& s){
+                s << callType << " ast";
+            });
+            // Add named arguments
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    addConstant(bc.callExtra().callArgumentNames[j], "name", [&](std::ostream& s){
+                        s << callType << " argument name";
+                    });
+                }
+            }
+            break;
+        }
+        case Opcode::call_builtin_:
+            addConstant(i.callBuiltinFixedArgs.ast, "ast", [&](std::ostream& s){
+                s << "call_builtin ast";
+            });
+            addConstant(i.callBuiltinFixedArgs.builtin, "builtin", [&](std::ostream& s){
+                s << "call_builtin builtin";
+            });
+            break;
+        case Opcode::record_call_:
+            // TODO: mark extra pool entry and add edge for static call
+        case Opcode::record_type_:
+        case Opcode::record_test_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+            // TODO: mark extra pool entry and add edge for promise
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            // TODO: mark extra pool entry and add edge for any other bytecodes
+            //   which reference extra pool entries
+            assert(false);
+            break;
+        }
+        size = bc.size();
         assert(codeSize >= size);
         code += size;
         codeSize -= size;

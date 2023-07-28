@@ -5,10 +5,11 @@
 #include "bc/BC_noarg_list.h"
 #include "common.h"
 #include "compiler/pir/type.h"
-#include "serializeHash/hash/getConnected.h"
-#include "serializeHash/hash/hashRoot.h"
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
+#include "runtime/log/printPrettyGraph.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
 
 #include <array>
 #include <cassert>
@@ -224,6 +225,10 @@ class BC {
                      const Code* container);
     static void addConnected(ConnectedCollector& collector, const Opcode* code,
                              size_t codeSize, const Code* container);
+    static void addToPrettyGraph(PrettyGraphInnerPrinter& p,
+                                 std::vector<bool>& addedExtraPoolEntries,
+                                 const Opcode* code, size_t codeSize,
+                                 const Code* container);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;

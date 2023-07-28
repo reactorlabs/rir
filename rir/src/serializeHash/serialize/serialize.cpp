@@ -83,8 +83,8 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         case PIR_TYPE_FEEDBACK_MAGIC:
             return PirTypeFeedback::deserialize(refTable, inp)->container();
         default:
-            std::cerr << "couldn't deserialize EXTERNALSXP with magic code: 0x"
-                      << std::hex << magic << "\n";
+            std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
+                      << "\n";
             assert(false);
         }
     }, [&](SEXP s){
