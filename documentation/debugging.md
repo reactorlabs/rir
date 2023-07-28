@@ -48,7 +48,11 @@ graphical representation of the code choose the GraphViz debug style.
     RIR_DEBUG_STYLE=
         Standard    print basic information in rir objects in human-readable format
         Detailed    print very detailed information in rir objects, useful for debugging or explaining unexpected semantic differences
-        PrettyGraph print in an even more human-readable format and for GraphViz
+        PrettyGraph print in HTML which can be loaded with `tools/rirPrettyGraph` in the same location to display an interactive graph
+
+    PIR_PRINT_INTERNED_RIR_OBJECTS=
+        <0|1|path>  if set, folder to print pretty graphs of RIR objects which get interned. If set to 1, prints HTML to stdout. If set to 0 or unset (default), won't print.
+                    Interning doesn't occur in normal RIR execution, it will get triggered if RIR_SERIALIZE_CHAOS, DEBUG_SERIALIZE_LLVM, PIR_CLIENT_ADDR, or PIR_SERVER_ADDR is set.
 
 The following flags can be useful for profiling and finding out which passes take how much time to
 complete.
