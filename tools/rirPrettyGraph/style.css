@@ -1,0 +1,43 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+}
+
+.cy {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.sidebar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 25vw;
+    padding: 1em;
+    background: #3338;
+    backdrop-filter: blur(10px);
+    color: #fff;
+    max-height: 100%;
+    overflow: scroll;
+}
+
+.sidebar .name {
+    font-size: 2em;
+    font-weight: bold;
+    margin: 0.5em 0;
+}
+
+.sidebar .body {
+    margin: 1em 0;
+}
+
+.sidebar .body p {
+    margin: 0.5em 0;
+}
