@@ -55,6 +55,7 @@ class UUIDPool {
     static std::unordered_set<SEXP> preserved;
 
 #ifdef DO_INTERN
+    static void printInternedIfNecessary(SEXP sexp, const UUID& hash);
     static void unintern(SEXP e, bool isGettingGcd = false);
     static void uninternGcd(SEXP e);
 #endif

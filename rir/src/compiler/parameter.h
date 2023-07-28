@@ -51,6 +51,9 @@ struct Parameter {
     /// server is running.
     static bool DEBUG_SERIALIZE_LLVM;
 
+    static bool PIR_PRINT_INTERNED_RIR_OBJECTS;
+    static const char* PIR_PRINT_INTERNED_RIR_OBJECTS_PATH;
+
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_MEASURE_INTERNING;
     static bool PIR_MEASURE_CLIENT_SERVER;
