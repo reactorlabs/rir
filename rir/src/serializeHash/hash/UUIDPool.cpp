@@ -12,10 +12,12 @@
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "getConnected.h"
-#include "runtime/rirObjectMagic.h"
 #include "runtime/log/printRirObject.h"
+#include "runtime/rirObjectMagic.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
+#include <libc.h>
+#include <sys/stat.h>
 
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt
@@ -25,6 +27,21 @@ namespace rir {
 bool pir::Parameter::PIR_MEASURE_INTERNING =
     getenv("PIR_MEASURE_INTERNING") != nullptr &&
     strtol(getenv("PIR_MEASURE_INTERNING"), nullptr, 10);
+
+
+bool pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS =
+    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") != nullptr &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "0") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "false") != 0;
+const char* pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH =
+    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") != nullptr &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "0") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "false") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "1") != 0 &&
+    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "true") != 0 ?
+        getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") : nullptr;
 
 bool UUIDPool::isInitialized = false;
 std::unordered_map<UUID, SEXP> UUIDPool::interned;
@@ -60,6 +77,45 @@ static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
 void UUIDPool::initialize() {
     assert(!isInitialized);
     isInitialized = true;
+    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
+        // Create folder (not recursively) if it doesn't exist
+        auto code = mkdir(pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH, 0777);
+        if (code != 0 && errno != EEXIST) {
+            std::cerr << "Could not create folder for PIR_PRINT_INTERNED_RIR_OBJECTS: "
+                      << strerror(errno) << std::endl;
+            std::abort();
+        }
+        // Also softlink rirPrettyGraph (HTML dependency) in the folder.
+        // We do this even if the folder already exists, because the user may
+        // have corrupted it.
+        auto linkSource = getenv("PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION");
+        assert(linkSource && "PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION should be set by the R executable, we need it to softlink rirPrettyGraph for the HTML prints");
+        std::stringstream linkTarget;
+        linkTarget << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/rirPrettyGraph";
+        code = symlink(linkSource, linkTarget.str().c_str());
+    }
+}
+
+void UUIDPool::printInternedIfNecessary(SEXP sexp, const UUID& hash) {
+    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS) {
+        if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
+            // Create new file which is denoted by the current date and hash
+            std::stringstream filePath;
+            filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << hash.str() << "-" << time(nullptr) << ".html";
+            std::ofstream file(filePath.str());
+            if (!file.is_open()) {
+                std::cerr << "Could not open file for PIR_PRINT_INTERNED_RIR_OBJECTS: "
+                          << strerror(errno) << std::endl;
+                std::abort();
+            }
+            // Print HTML pretty graph to file
+            printRirObject(sexp, file, RirObjectPrintStyle::PrettyGraph);
+            // File closes automatically (RAII)
+        } else {
+            // Just print HTML pretty graph to stdout
+            printRirObject(sexp, std::cout, RirObjectPrintStyle::PrettyGraph);
+        }
+    }
 }
 
 void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
@@ -224,6 +280,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #ifdef DEBUG_DISASSEMBLY
         LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif
+        printInternedIfNecessary(e, hash);
         interned[hash] = e;
         hashes[e] = hash;
 
