@@ -36,7 +36,7 @@ for (const child of input.children) {
         data: {
             id: child.id,
             name,
-            label: child.id in name ? name : `${name}\n(${child.id})`,
+            label: child.id in name ? name : name.length === 0 ? child.id : `${name}\n(${child.id})`,
             body: child.getElementsByClassName("body")[0]?.innerHTML,
         },
         classes: child.className,

@@ -17,9 +17,6 @@ enum class RirObjectPrintStyle {
 #define V(name) name,
     LIST_OF_RIR_PRINT_STYLES(V)
 #undef V
-    // UNDOCUMENTED: Can't be selected by user
-    /// Prints an object within another `PrettyGraph`.
-    PrettyGraphInner
 };
 
 extern RirObjectPrintStyle RIR_DEBUG_STYLE;

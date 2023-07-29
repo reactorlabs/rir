@@ -225,7 +225,7 @@ class BC {
                      const Code* container);
     static void addConnected(ConnectedCollector& collector, const Opcode* code,
                              size_t codeSize, const Code* container);
-    static void addToPrettyGraph(PrettyGraphInnerPrinter& p,
+    static void addToPrettyGraph(const PrettyGraphInnerPrinter& p,
                                  std::vector<bool>& addedExtraPoolEntries,
                                  const Opcode* code, size_t codeSize,
                                  const Code* container);

@@ -15,7 +15,6 @@
 #include "utils/measuring.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
-#include <llvm/Support/Errno.h>
 
 #include <iomanip>
 #include <sstream>
@@ -458,105 +457,93 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
 }
 
-void Code::print(std::ostream& out, RirObjectPrintStyle style) const {
-    switch (style) {
-    case RirObjectPrintStyle::Default:
-    case RirObjectPrintStyle::Detailed: {
-        auto isDetailed = style == RirObjectPrintStyle::Detailed;
-
-        out << "Code object\n";
-        out << std::left << std::setw(20) << "   Source: " << src
-            << " (index into src pool)\n";
-        out << std::left << std::setw(20) << "   Magic: " << std::hex
-            << info.magic << std::dec << " (hex)\n";
-        out << std::left << std::setw(20) << "   Stack (o): " << stackLength
-            << "\n";
-        out << std::left << std::setw(20) << "   Code size: " << codeSize
+void Code::print(std::ostream& out, bool isDetailed) const {
+    out << "Code object\n";
+    out << std::left << std::setw(20) << "   Source: " << src
+        << " (index into src pool)\n";
+    out << std::left << std::setw(20) << "   Magic: " << std::hex
+        << info.magic << std::dec << " (hex)\n";
+    out << std::left << std::setw(20) << "   Stack (o): " << stackLength
+        << "\n";
+    out << std::left << std::setw(20) << "   Code size: " << codeSize
+        << "[B]\n";
+    if (isDetailed) {
+        out << std::left << std::setw(20) << "   Size: " << size()
             << "[B]\n";
-        if (isDetailed) {
-            out << std::left << std::setw(20) << "   Size: " << size()
-                << "[B]\n";
-        }
-
-        if (info.magic != CODE_MAGIC) {
-            out << "Wrong magic number -- corrupted IR bytecode";
-            Rf_error("Wrong magic number -- corrupted IR bytecode");
-        }
-
-        out << "\n";
-        disassemble(out);
-
-        if (isDetailed) {
-            out << "extra pool = \n"
-                << Print::dumpSexp(getEntry(0), SIZE_MAX) << "\n";
-            out << "src = \n"
-                << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
-                << ", hash = " << hashAst(src_pool_at(src)) << "\n";
-            for (unsigned i = 0; i < srcLength; i++) {
-                out << "src[" << i << "] @ " << srclist()[i].pcOffset
-                    << " = \n";
-                out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
-                    << ", hash = " << hashAst(src_pool_at(i)) << "\n";
-            }
-        }
-        break;
     }
-    case RirObjectPrintStyle::PrettyGraph:
-    case RirObjectPrintStyle::PrettyGraphInner:
-        printPrettyGraph(container(), out, style, [&](PrettyGraphInnerPrinter print) {
-            auto srcPrint = Print::dumpSexp(src_pool_at(src), SIZE_MAX);
-            print.addName([&](std::ostream& s) {
-                if (srcPrint.length() < PRETTY_GRAPH_CODE_NAME_MAX_LENGTH) {
-                    s << srcPrint;
-                } else {
-                    s << srcPrint.substr(0, PRETTY_GRAPH_CODE_NAME_MAX_LENGTH)
-                      << "...";
+
+    if (info.magic != CODE_MAGIC) {
+        out << "Wrong magic number -- corrupted IR bytecode";
+        Rf_error("Wrong magic number -- corrupted IR bytecode");
+    }
+
+    out << "\n";
+    disassemble(out);
+
+    if (isDetailed) {
+        out << "extra pool = \n"
+            << Print::dumpSexp(getEntry(0), SIZE_MAX) << "\n";
+        out << "src = \n"
+            << Print::dumpSexp(src_pool_at(src), SIZE_MAX)
+            << ", hash = " << hashAst(src_pool_at(src)) << "\n";
+        for (unsigned i = 0; i < srcLength; i++) {
+            out << "src[" << i << "] @ " << srclist()[i].pcOffset
+                << " = \n";
+            out << Print::dumpSexp(src_pool_at(i), SIZE_MAX)
+                << ", hash = " << hashAst(src_pool_at(i)) << "\n";
+        }
+    }
+}
+
+void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
+    auto srcPrint = Print::dumpSexp(src_pool_at(src), SIZE_MAX);
+    print.addName([&](std::ostream& s) {
+        if (srcPrint.length() < PRETTY_GRAPH_CODE_NAME_MAX_LENGTH) {
+            s << srcPrint;
+        } else {
+            s << srcPrint.substr(0, PRETTY_GRAPH_CODE_NAME_MAX_LENGTH)
+              << "...";
+        }
+    });
+    print.addBody([&](std::ostream& s) {
+        // TODO: improve? (Print only bytecodes which reference other SEXPs)
+        disassemble(s);
+    });
+    auto addEdgeIfRir = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
+        if (sexp && TYPEOF(sexp) == EXTERNALSXP) {
+            print.addEdgeTo(sexp, false, "unexpected", [&](std::ostream& s){
+                s << type;
+                if (index != SIZE_T_MAX) {
+                    s << " " << index;
                 }
+                s << " is a RIR object!";
             });
-            print.addBody([&](std::ostream& s) {
-                // TODO: improve? (Print only bytecodes which reference other SEXPs)
-                disassemble(s);
-            });
-            auto addEdgeIfRir = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
-                if (sexp && TYPEOF(sexp) == EXTERNALSXP) {
-                    print.addEdgeTo(sexp, false, "unexpected", [&](std::ostream& s){
-                        s << type;
-                        if (index != SIZE_T_MAX) {
-                            s << " " << index;
-                        }
-                        s << " is a RIR object!";
-                    });
-                }
-            };
-            addEdgeIfRir(src_pool_at(src), "source");
-            addEdgeIfRir(trivialExpr, "trivial-expr");
-            for (unsigned i = 0; i < srcLength; i++) {
-                addEdgeIfRir(src_pool_at(i), "src-pool entry", i);
-            }
-            if (arglistOrderContainer()) {
-                print.addEdgeTo(arglistOrderContainer(), true, "arglist-order", [&](std::ostream& s) {
-                    s << "arglist order";
-                });
-            }
-            if (function()->body() != this) {
-                print.addEdgeTo(function()->container(), true, "unexpected", [&](std::ostream& s) {
-                    s << "function, its body isn't this!";
-                });
-            }
-            std::vector<bool> addedExtraPoolEntries;
-            addedExtraPoolEntries.resize(extraPoolSize);
-            BC::addToPrettyGraph(print, addedExtraPoolEntries, code(), codeSize, this);
-            for (unsigned i = 0; i < extraPoolSize; i++) {
-                if (!addedExtraPoolEntries[i]) {
-                    print.addEdgeTo(getExtraPoolEntry(i), false, "unknown-extra-pool", [&](std::ostream& s) {
-                        s << "extra pool entry " << i;
-                    });
-                }
-            }
+        }
+    };
+    addEdgeIfRir(src_pool_at(src), "source");
+    addEdgeIfRir(trivialExpr, "trivial-expr");
+    for (unsigned i = 0; i < srcLength; i++) {
+        addEdgeIfRir(src_pool_at(i), "src-pool entry", i);
+    }
+    if (arglistOrderContainer()) {
+        print.addEdgeTo(arglistOrderContainer(), true, "arglist-order", [&](std::ostream& s) {
+            s << "arglist order";
         });
-        break;
-    default:
-        assert(false && "unhandled print style");
+    }
+    if (function()->body() != this) {
+        print.addEdgeTo(function()->container(), true, "unexpected", [&](std::ostream& s) {
+            s << "function, its body isn't this!";
+        });
+    }
+    std::vector<bool> addedExtraPoolEntries;
+    addedExtraPoolEntries.resize(extraPoolSize);
+    BC::addToPrettyGraph(print, addedExtraPoolEntries, code(), codeSize, this);
+    for (unsigned i = 0; i < extraPoolSize; i++) {
+        if (!addedExtraPoolEntries[i]) {
+            print.addEdgeTo(getExtraPoolEntry(i), false, "unknown-extra-pool", [&](std::ostream& s) {
+                s << "extra pool entry " << i;
+            });
+        }
     }
 }
 

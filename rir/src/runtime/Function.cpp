@@ -112,97 +112,85 @@ void Function::disassemble(std::ostream& out) const {
     print(out);
 }
 
-void Function::print(std::ostream& out, RirObjectPrintStyle style) const {
-    switch (style) {
-    case RirObjectPrintStyle::Default:
-    case RirObjectPrintStyle::Detailed: {
-        auto isDetailed = style == RirObjectPrintStyle::Detailed;
-
-        if (isDetailed) {
-            out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
-        }
-        out << "[signature] ";
-        signature().print(out);
-        if (!context_.empty())
-            out << "| context: [" << context_ << "]";
-        out << "\n";
-        out << "[flags]    ";
-#define V(F)                                                                   \
-    if (flags_.includes(F))                                                    \
-        out << #F << " ";
-        RIR_FUNCTION_FLAGS(V)
-#undef V
-        out << "\n";
-        out << "[stats]    ";
-        out << "invoked: " << invocationCount()
-            << ", time: " << ((double)invocationTime() / 1e6)
-            << "ms, deopt: " << deoptCount();
-        out << "\n";
-        if (isDetailed) {
-            body()->print(out, style);
-            for (unsigned i = 0; i < numArgs_; i++) {
-                CodeSEXP arg = defaultArg_[i];
-                if (arg) {
-                    out << "[default arg " << i << "]\n";
-                    Code::unpack(arg)->print(out, style);
-                }
-            }
-        } else {
-            body()->disassemble(out);
-        }
-        break;
+void Function::print(std::ostream& out, bool isDetailed) const {
+    if (isDetailed) {
+        out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
     }
-    case RirObjectPrintStyle::PrettyGraph:
-    case RirObjectPrintStyle::PrettyGraphInner:
-        printPrettyGraph(container(), out, style, [&](PrettyGraphInnerPrinter print) {
-            print.addName([&](std::ostream& s) {
-                auto ast = CAR(src_pool_at(body()->src));
-                if (TYPEOF(ast) == SYMSXP) {
-                    s << CHAR(PRINTNAME(ast));
-                } else {
-                    s << "<anon size=" << size << " numArgs=" << numArgs_ << ">";
-                }
-            });
-            print.addBody([&](std::ostream& s) {
-                s << "<p class=\"function-signature\">(";
-                signature().print(s);
-                s << ")</p>";
-                if (!context_.empty()) {
-                    s << "<p class=\"function-context\">[" << context_
-                      << "]</p>";
-                }
-                if (!flags_.empty()) {
-                    s << "<p class=\"function-flags\">{";
-                }
+    out << "[signature] ";
+    signature().print(out);
+    if (!context_.empty())
+        out << "| context: [" << context_ << "]";
+    out << "\n";
+    out << "[flags]    ";
 #define V(F)                                                                   \
-                if (flags_.includes(F))                                        \
-                    s << #F << " ";
-                    RIR_FUNCTION_FLAGS(V)
+if (flags_.includes(F))                                                    \
+    out << #F << " ";
+    RIR_FUNCTION_FLAGS(V)
 #undef V
-                if (!flags_.empty()) {
-                    s << "}</p>";
-                }
-                s << "<p class=\"function-stats\">"
-                  << "invoked: " << invocationCount()
-                  << ", time: " << ((double)invocationTime() / 1e6)
-                  << "ms, deopt: " << deoptCount()
-                  << "</p>";
-            });
-            print.addEdgeTo(body()->container(), true, "body", [&](std::ostream& s) {
-                s << "body";
-            });
-            for (unsigned i = 0; i < numArgs_; i++) {
-                CodeSEXP arg = defaultArg_[i];
-                if (arg) {
-                    print.addEdgeTo(arg, true, "default-arg", [&](std::ostream& s) {
-                        s << "arg " << i << " default";
-                    });
-                }
+    out << "\n";
+    out << "[stats]    ";
+    out << "invoked: " << invocationCount()
+        << ", time: " << ((double)invocationTime() / 1e6)
+        << "ms, deopt: " << deoptCount();
+    out << "\n";
+    if (isDetailed) {
+        body()->print(out, isDetailed);
+        for (unsigned i = 0; i < numArgs_; i++) {
+            CodeSEXP arg = defaultArg_[i];
+            if (arg) {
+                out << "[default arg " << i << "]\n";
+                Code::unpack(arg)->print(out, isDetailed);
             }
-        });
-        break;
-    default:
-        assert(false && "unhandled print style");
+        }
+    } else {
+        body()->disassemble(out);
+    }
+}
+
+void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
+    print.addName([&](std::ostream& s) {
+        auto ast = CAR(src_pool_at(body()->src));
+        if (TYPEOF(ast) == SYMSXP) {
+            s << CHAR(PRINTNAME(ast));
+        } else {
+            s << "<anon size=" << size << " numArgs=" << numArgs_ << ">";
+        }
+    });
+    print.addBody([&](std::ostream& s) {
+        s << "<p class=\"function-signature\">(";
+        signature().print(s);
+        s << ")</p>";
+        if (!context_.empty()) {
+            s << "<p class=\"function-context\">[" << context_
+              << "]</p>";
+        }
+        if (!flags_.empty()) {
+            s << "<p class=\"function-flags\">{";
+        }
+#define V(F)                                                                   \
+        if (flags_.includes(F))                                        \
+            s << #F << " ";
+            RIR_FUNCTION_FLAGS(V)
+#undef V
+        if (!flags_.empty()) {
+            s << "}</p>";
+        }
+        s << "<p class=\"function-stats\">"
+          << "invoked: " << invocationCount()
+          << ", time: " << ((double)invocationTime() / 1e6)
+          << "ms, deopt: " << deoptCount()
+          << "</p>";
+    });
+    print.addEdgeTo(body()->container(), true, "body", [&](std::ostream& s) {
+        s << "body";
+    });
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        if (arg) {
+            print.addEdgeTo(arg, true, "default-arg", [&](std::ostream& s) {
+                s << "arg " << i << " default";
+            });
+        }
     }
 }
 
