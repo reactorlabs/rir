@@ -13,10 +13,6 @@ namespace rir {
 using PrettyGraphContentPrinter = const std::function<void(std::ostream&)>&;
 
 class PrettyGraphInnerPrinter {
-    friend void
-    printPrettyGraph(SEXP sexp, std::ostream& s, RirObjectPrintStyle style,
-                     const std::function<void(PrettyGraphInnerPrinter)>& printInner);
-
     const std::function<void(PrettyGraphContentPrinter name)>& addName_;
     const std::function<void(PrettyGraphContentPrinter body)>& addBody_;
     const std::function<void(SEXP connected, bool isChild, const char* type, PrettyGraphContentPrinter description, bool isFarAway)>& addEdgeTo_;
@@ -27,22 +23,33 @@ class PrettyGraphInnerPrinter {
         : addName_(addName), addBody_(addBody), addEdgeTo_(addEdgeTo) {}
 
   public:
-    void addName(PrettyGraphContentPrinter name) {
+    /// Given a function which prints an SEXP's node content and adds connected
+    /// nodes via the inner printer, this function prints an HTML graph
+    /// containing the node and all its connected nodes. i.e. this function
+    /// maintains the SEXP worklist and prints the header and footer, as well
+    /// as constructing an PrettyGraphInnerPrinter which lets you print the
+    /// content.
+    ///
+    /// This should generally not be called. It's used by
+    /// `printRirObject(,,RirObjectPrintStyle::PrettyGraph)` which you probably
+    /// want to use instead.
+    static void
+    printUsingImpl(SEXP root, std::ostream& out,
+                   std::function<void(SEXP sexp, const PrettyGraphInnerPrinter& print)> printImpl);
+
+    void addName(PrettyGraphContentPrinter name) const {
         addName_(name);
     }
 
-    void addBody(PrettyGraphContentPrinter body) {
+    void addBody(PrettyGraphContentPrinter body) const {
         addBody_(body);
     }
 
     void addEdgeTo(SEXP connected, bool isChild, const char* type,
                    PrettyGraphContentPrinter description,
-                   bool isFarAway = false) {
+                   bool isFarAway = false) const {
         addEdgeTo_(connected, isChild, type, description, isFarAway);
     }
 };
-
-void printPrettyGraph(SEXP sexp, std::ostream& s, RirObjectPrintStyle style,
-                      const std::function<void(PrettyGraphInnerPrinter)>& printInner);
 
 } // namespace rir

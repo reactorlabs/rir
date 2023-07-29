@@ -64,29 +64,20 @@ void DispatchTable::addConnected(ConnectedCollector& collector) const {
     }
 }
 
-void DispatchTable::print(std::ostream& out, RirObjectPrintStyle style) const {
-    switch (style) {
-    case RirObjectPrintStyle::Default:
-    case RirObjectPrintStyle::Detailed:
-        out << "DispatchTable(size = " << size() << "):\n";
-        for (size_t i = 0; i < size(); i++) {
-            out << "Entry " << i << ":\n";
-            get(i)->print(out, style);
-        }
-        break;
-    case RirObjectPrintStyle::PrettyGraph:
-    case RirObjectPrintStyle::PrettyGraphInner:
-        printPrettyGraph(container(), out, style, [&](PrettyGraphInnerPrinter print) {
-            print.addName([&](std::ostream& s) { s << "DispatchTable(" << size() << ")"; });
-            for (size_t i = 0; i < size(); i++) {
-                print.addEdgeTo(getEntry(i), true, "entry", [&](std::ostream& s) {
-                    s << "Entry " << i;
-                });
-            }
+void DispatchTable::print(std::ostream& out, bool isDetailed) const {
+    out << "DispatchTable(size = " << size() << "):\n";
+    for (size_t i = 0; i < size(); i++) {
+        out << "Entry " << i << ":\n";
+        get(i)->print(out, isDetailed);
+    }
+}
+
+void DispatchTable::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
+    print.addName([&](std::ostream& s) { s << "DispatchTable(" << size() << ")"; });
+    for (size_t i = 0; i < size(); i++) {
+        print.addEdgeTo(getEntry(i), true, "entry", [&](std::ostream& s) {
+            s << "Entry " << i;
         });
-        break;
-    default:
-        assert(false && "unhandled print style");
     }
 }
 

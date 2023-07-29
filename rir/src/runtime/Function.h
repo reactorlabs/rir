@@ -65,7 +65,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
     void disassemble(std::ostream&) const;
-    void print(std::ostream&, RirObjectPrintStyle style = RIR_DEBUG_STYLE) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
 
     bool isOptimized() const {
         return signature_.optimization !=

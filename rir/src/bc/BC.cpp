@@ -477,7 +477,7 @@ void BC::addConnected(ConnectedCollector& collector, const Opcode* code,
     }
 }
 
-void BC::addToPrettyGraph(PrettyGraphInnerPrinter& p,
+void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
                           std::vector<bool>& addedExtraPoolEntries,
                           const rir::Opcode* code, size_t codeSize,
                           const rir::Code* container) {
