@@ -5,7 +5,14 @@ let selectedNode = undefined;
 const focus = function (node) {
     focusedNode = node;
     sidebar.style.display = "";
-    nameDiv.textContent = node.data("name");
+    const name = node.data("name");
+    if (name) {
+        nameDiv.display = ""
+        nameDiv.textContent = name;
+    } else {
+        nameDiv.display = "none";
+        nameDiv.textContent = "";
+    }
     const body = node.data("body");
     if (body) {
         bodyDiv.style.display = "";
