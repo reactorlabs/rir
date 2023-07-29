@@ -524,18 +524,27 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
     });
     auto addSourceEdge = [&](SEXP sexp, const char* type, size_t index = SIZE_MAX){
         if (sexp && sexp != R_NilValue && TYPEOF(sexp) != SYMSXP &&
-            TYPEOF(sexp) != INTSXP && TYPEOF(sexp) != LGLSXP &&
-            TYPEOF(sexp) != REALSXP && TYPEOF(sexp) != CPLXSXP &&
-            TYPEOF(sexp) != CHARSXP && TYPEOF(sexp) != STRSXP &&
-            TYPEOF(sexp) != LANGSXP) {
-            print.addEdgeTo(sexp, false, "unexpected", [&](std::ostream& s){
+            TYPEOF(sexp) != LANGSXP && TYPEOF(sexp) != INTSXP &&
+            TYPEOF(sexp) != LGLSXP && TYPEOF(sexp) != REALSXP &&
+            TYPEOF(sexp) != CPLXSXP && TYPEOF(sexp) != CHARSXP &&
+            TYPEOF(sexp) != STRSXP) {
+            print.addEdgeTo(sexp, false, "unexpected-ast", [&](std::ostream& s){
                 s << type;
                 if (index != SIZE_MAX) {
                     s << " " << index;
                 }
                 s << " isn't a source type!";
             });
+        } else if (sexp && TYPEOF(sexp) != SYMSXP && TYPEOF(sexp) != LANGSXP) {
+            print.addEdgeTo(sexp, true, "ast", [&](std::ostream& s){
+                s << type;
+                if (index != SIZE_MAX) {
+                    s << " " << index;
+                }
+                s << " (weird AST)";
+            });
         }
+
     };
     addSourceEdge(src_pool_at(src), "source");
     addSourceEdge(trivialExpr, "trivial-expr");
