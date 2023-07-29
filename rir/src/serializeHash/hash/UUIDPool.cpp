@@ -16,8 +16,8 @@
 #include "runtime/rirObjectMagic.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
-#include <libc.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt
