@@ -29,6 +29,7 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
                                         std::function<void(SEXP sexp, const PrettyGraphInnerPrinter& print)> printImpl) {
     std::unordered_set<SEXP> seen;
     std::queue<SEXP> worklist;
+    seen.insert(root);
     worklist.push(root);
 
     auto printItem = [&](SEXP sexp){
@@ -73,16 +74,13 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
     };
 
     // Print header
-    out << "<DOCTYPE html><html><head>"
-           "<title>RIR</title>"
-           "<link rel=\"stylesheet\" href=\"rirPrettyGraph/style.css\">"
-           "<script type=\"text/javascript\" src=\"rirPrettyGraph/cytoscape.min.js\"></script>"
-           "<script type=\"text/javascript\" src=\"rirPrettyGraph/cytoscape-style.js\"></script>"
-           "<script type=\"text/javascript\" src=\"rirPrettyGraph/main.js\"></script>"
-           "<script type=\"text/javascript\" src=\"rirPrettyGraph/interaction.js\"></script>"
-           "</head><body>"
-           "<h1 id=\"sources-needed\">Needs the <code>rirPrettyGraph</code> folder (located in <code>tools</code>) to be in the same location</h1>"
-           "<div id=\"js-input\" style=\"display: none\">";
+    out << "<!DOCTYPE html><html><head>\n"
+           "<title>RIR</title>\n"
+           "<link rel=\"stylesheet\" href=\"rirPrettyGraph/style.css\">\n"
+           "<script type=\"text/javascript\" src=\"rirPrettyGraph/cytoscape.min.js\"></script>\n"
+           "</head><body>\n"
+           "<h1 id=\"sources-needed\">Needs the <code>rirPrettyGraph</code> folder (located in <code>tools</code>) to be in the same location</h1>\n"
+           "<div id=\"js-input\" style=\"display: none\">\n";
 
     // Print items
     while (!worklist.empty()) {
@@ -91,7 +89,11 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
     }
 
     // Print footer
-    out << "</div></body></html>";
+    out << "</div>\n"
+           "<script type=\"text/javascript\" src=\"rirPrettyGraph/cytoscape-style.js\"></script>\n"
+           "<script type=\"text/javascript\" src=\"rirPrettyGraph/main.js\"></script>\n"
+           "<script type=\"text/javascript\" src=\"rirPrettyGraph/interaction.js\"></script>\n"
+           "</body></html>";
 }
 
 } // namespace rir

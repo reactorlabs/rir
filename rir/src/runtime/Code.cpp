@@ -9,6 +9,7 @@
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "serializeHash/serialize/serialize.h"
+#include "utils/HTMLBuilder/escapeHtml.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 
@@ -490,7 +491,9 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
     });
     print.addBody([&](std::ostream& s) {
         // TODO: improve? (Print only bytecodes which reference other SEXPs)
-        disassemble(s);
+        std::stringstream str;
+        disassemble(str);
+        s << "<pre>" << escapeHtml(str.str()) << "</pre>";
     });
     auto addEdgeIfRir = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
         if (sexp && TYPEOF(sexp) == EXTERNALSXP) {
