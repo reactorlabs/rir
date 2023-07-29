@@ -544,7 +544,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
     for (unsigned i = 0; i < extraPoolSize; i++) {
         if (!addedExtraPoolEntries[i]) {
             print.addEdgeTo(getExtraPoolEntry(i), false, "unknown-extra-pool", [&](std::ostream& s) {
-                s << "extra pool entry " << i;
+                s << "pool " << i;
             });
         }
     }

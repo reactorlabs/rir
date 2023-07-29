@@ -54,6 +54,7 @@ struct Parameter {
 
     static bool PIR_PRINT_INTERNED_RIR_OBJECTS;
     static const char* PIR_PRINT_INTERNED_RIR_OBJECTS_PATH;
+    static unsigned PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY;
 
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_MEASURE_INTERNING;
