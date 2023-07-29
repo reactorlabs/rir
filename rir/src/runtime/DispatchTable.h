@@ -213,7 +213,8 @@ struct DispatchTable
     void serialize(SEXP refTable, R_outpstream_t out) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
-    void print(std::ostream& out, RirObjectPrintStyle style = RIR_DEBUG_STYLE) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {

@@ -12,31 +12,62 @@
 
 namespace rir {
 
-static void defaultPrintRirObject(SEXP sexp, std::ostream& s, RirObjectPrintStyle& style) {
-    switch (style) {
-    case RirObjectPrintStyle::Default:
-        s << Print::dumpSexp(sexp) << "\n";
-        break;
-    case RirObjectPrintStyle::Detailed:
+static void defaultPrintRirObject(SEXP sexp, std::ostream& s, bool isDetailed) {
+    if (isDetailed) {
         s << Print::dumpSexp(sexp, SIZE_MAX) << "\n";
-        break;
-    case RirObjectPrintStyle::PrettyGraph:
-    case RirObjectPrintStyle::PrettyGraphInner:
-        printPrettyGraph(sexp, s, style, [&](PrettyGraphInnerPrinter print){
-            print.addBody([&](std::ostream& s){ s << Print::dumpSexp(sexp); });
-        });
+    } else {
+        s << Print::dumpSexp(sexp) << "\n";
     }
 }
 
-void printRirObject(SEXP sexp, std::ostream& s, RirObjectPrintStyle style) {
+static void
+defaultPrintRirObjectPrettyGraphContent(SEXP sexp,
+                                        const PrettyGraphInnerPrinter& print) {
+    print.addBody([&](std::ostream& s){
+        s << Print::dumpSexp(sexp);
+    });
+}
+
+static void printRirObject(SEXP sexp, std::ostream& s, bool isDetailed) {
     if (auto d = DispatchTable::check(sexp)) {
-        d->print(s, style);
+        d->print(s, isDetailed);
     } else if (auto f = Function::check(sexp)) {
-        f->print(s, style);
+        f->print(s, isDetailed);
     } else if (auto c = Code::check(sexp)) {
-        c->print(s, style);
+        c->print(s, isDetailed);
     } else {
-        defaultPrintRirObject(sexp, s, style);
+        defaultPrintRirObject(sexp, s, isDetailed);
+    }
+}
+
+static void printRirObjectPrettyGraphContent(SEXP sexp,
+                                             const PrettyGraphInnerPrinter& print) {
+    if (auto d = DispatchTable::check(sexp)) {
+        d->printPrettyGraphContent(print);
+    } else if (auto f = Function::check(sexp)) {
+        f->printPrettyGraphContent(print);
+    } else if (auto c = Code::check(sexp)) {
+        c->printPrettyGraphContent(print);
+    } else {
+        defaultPrintRirObjectPrettyGraphContent(sexp, print);
+    }
+}
+
+void prettyGraphPrintRirObject(SEXP sexp, std::ostream& s) {
+    PrettyGraphInnerPrinter::printUsingImpl(sexp, s, printRirObjectPrettyGraphContent);
+}
+
+void printRirObject(SEXP sexp, std::ostream& s, RirObjectPrintStyle style) {
+    switch (style) {
+    case RirObjectPrintStyle::Default:
+        printRirObject(sexp, s, false);
+        break;
+    case RirObjectPrintStyle::Detailed:
+        printRirObject(sexp, s, true);
+        break;
+    case RirObjectPrintStyle::PrettyGraph:
+        prettyGraphPrintRirObject(sexp, s);
+        break;
     }
 }
 

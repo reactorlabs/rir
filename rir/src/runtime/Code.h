@@ -238,7 +238,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
-    void print(std::ostream&, RirObjectPrintStyle style = RIR_DEBUG_STYLE) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));
