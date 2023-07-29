@@ -5,14 +5,7 @@ let selectedNode = undefined;
 const focus = function (node) {
     focusedNode = node;
     sidebar.style.display = "";
-    const name = node.data("name");
-    if (name) {
-        nameDiv.display = ""
-        nameDiv.textContent = name;
-    } else {
-        nameDiv.display = "none";
-        nameDiv.textContent = "";
-    }
+    addrDiv.textContent = node.data("id");
     const body = node.data("body");
     if (body) {
         bodyDiv.style.display = "";
@@ -27,7 +20,7 @@ const focus = function (node) {
 const defocus = function () {
     focusedNode = undefined;
     sidebar.style.display = "none";
-    nameDiv.innerHTML = "";
+    addrDiv.innerHTML = "";
     bodyDiv.innerHTML = "";
 }
 

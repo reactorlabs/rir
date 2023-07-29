@@ -42,6 +42,11 @@ const char* pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH =
     strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "1") != 0 &&
     strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "true") != 0 ?
         getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") : nullptr;
+unsigned pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY =
+    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY") != nullptr
+        ? strtol(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY"), nullptr, 10)
+        : 10;
+
 
 bool UUIDPool::isInitialized = false;
 std::unordered_map<UUID, SEXP> UUIDPool::interned;
@@ -49,6 +54,7 @@ std::unordered_map<SEXP, UUID> UUIDPool::hashes;
 std::unordered_map<SEXP, SEXP> UUIDPool::nextToIntern;
 std::unordered_map<SEXP, SEXP> UUIDPool::prevToIntern;
 std::unordered_set<SEXP> UUIDPool::preserved;
+static unsigned prettyPrintCount = 0;
 
 #ifdef DEBUG_DISASSEMBLY
 static std::unordered_map<UUID, std::string> disassembly;
@@ -96,24 +102,32 @@ void UUIDPool::initialize() {
     }
 }
 
+static void printInterned(SEXP sexp, const UUID& hash) {
+    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
+        // Create new file which is denoted by the current date and hash
+        std::stringstream filePath;
+        filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << time(nullptr) << "-" << hash.str() << ".html";
+        std::ofstream file(filePath.str());
+        if (!file.is_open()) {
+            std::cerr << "Could not open file for PIR_PRINT_INTERNED_RIR_OBJECTS: "
+                      << strerror(errno) << std::endl;
+            std::abort();
+        }
+        // Print HTML pretty graph to file
+        printRirObject(sexp, file, RirObjectPrintStyle::PrettyGraph);
+        // File closes automatically (RAII)
+    } else {
+        // Just print HTML pretty graph to stdout
+        printRirObject(sexp, std::cout, RirObjectPrintStyle::PrettyGraph);
+    }
+}
+
 void UUIDPool::printInternedIfNecessary(SEXP sexp, const UUID& hash) {
     if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS) {
-        if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
-            // Create new file which is denoted by the current date and hash
-            std::stringstream filePath;
-            filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << time(nullptr) << "-" << hash.str() << ".html";
-            std::ofstream file(filePath.str());
-            if (!file.is_open()) {
-                std::cerr << "Could not open file for PIR_PRINT_INTERNED_RIR_OBJECTS: "
-                          << strerror(errno) << std::endl;
-                std::abort();
-            }
-            // Print HTML pretty graph to file
-            printRirObject(sexp, file, RirObjectPrintStyle::PrettyGraph);
-            // File closes automatically (RAII)
-        } else {
-            // Just print HTML pretty graph to stdout
-            printRirObject(sexp, std::cout, RirObjectPrintStyle::PrettyGraph);
+        prettyPrintCount++;
+        if (prettyPrintCount == pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY) {
+            printInterned(sexp, hash);
+            prettyPrintCount = 0;
         }
     }
 }

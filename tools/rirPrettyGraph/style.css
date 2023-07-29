@@ -30,10 +30,10 @@ body {
     overflow: scroll;
 }
 
-#sidebar #name {
+#sidebar #addr {
     font-size: 2em;
     font-weight: bold;
-    margin: 0.5em 0;
+    margin-bottom: 0.5em;
 }
 
 #sidebar #body {
