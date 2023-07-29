@@ -16,6 +16,10 @@ node {
 node.node-Code {
     shape: rectangle;
     background-color: #D7983A;
+    border-width: 2px;
+    border-style: solid;
+    border-color: #422006;
+    border-opacity: 0.5;
 }
 
 node.node-DispatchTable {
@@ -38,42 +42,50 @@ edge {
     curve-style: bezier;
     target-arrow-shape: triangle;
     text-rotation: autorotate;
+    /* margin-x in case the arrow is vertical, if horizontal it will barely be noticed */
+    text-margin-x: -10px;
     text-margin-y: -10px;
     font-size: 10px;
 }
 
 edge.arrow-DispatchTable-entry {
     line-color: #422006;
+    target-arrow-color: #422006;
     color: #422006;
     width: 4px;
 }
 
 edge.arrow-Function-body {
     line-color: #422006;
+    target-arrow-color: #422006;
     color: #422006;
     width: 4px;
 }
 
 edge.arrow-Code-arglist-order {
     line-color: #422006;
+    target-arrow-color: #422006;
     color: #422006;
     width: 2px;
 }
 
 edge.arrow-Function-default-arg {
     line-color: #3f6212;
+    target-arrow-color: #3f6212;
     color: #3f6212;
     width: 2px;
 }
 
 edge.arrow-Code-promise {
     line-color: #3f6212;
+    target-arrow-color: #3f6212;
     color: #3f6212;
     width: 2px;
 }
 
 edge.arrow-Code-push, edge.arrow-Code-guard, edge.arrow-Code-call {
     line-color: #075985;
+    target-arrow-color: #075985;
     color: #075985;
     /** solid for parent-child relationships, 
       * dotted for "far away" (e.g. globals), 
@@ -84,6 +96,7 @@ edge.arrow-Code-push, edge.arrow-Code-guard, edge.arrow-Code-call {
 
 edge.arrow-Code-unknown-extra-pool {
     line-color: #701a75;
+    target-arrow-color: #701a75;
     color: #701a75;
     line-style: dashed;
     width: 4px;
@@ -91,6 +104,7 @@ edge.arrow-Code-unknown-extra-pool {
 
 edge.arrow-Code-name, edge.arrow-Code-ast, edge.arrow-Code-builtin, edge.arrow-Code-unexpected {
     line-color: #dc2626;
+    target-arrow-color: #dc2626;
     color: #dc2626;
     line-style: dashed;
     width: 8px;

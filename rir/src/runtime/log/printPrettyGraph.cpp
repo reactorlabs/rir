@@ -6,15 +6,20 @@
 #include "R/r.h"
 #include "runtime/rirObjectMagic.h"
 #include "utils/HTMLBuilder/HTML.h"
-#include <unordered_set>
+#include "utils/HTMLBuilder/escapeHtml.h"
 #include <queue>
+#include <unordered_set>
 
 namespace rir {
 
-static inline HTML::Text makeText(PrettyGraphContentPrinter content) {
+static inline HTML::Text makeText(PrettyGraphContentPrinter content, bool escape = true) {
     std::stringstream s;
     content(s);
-    return HTML::Text(s.str());
+    if (escape) {
+        return HTML::Text(escapeHtml(s.str()));
+    } else {
+        return HTML::Text(s.str());
+    }
 }
 
 static inline std::string sexpId(SEXP sexp) {
@@ -43,7 +48,7 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
                 node << (HTML::Div("name") << makeText(name));
             },
             [&](auto body) {
-                node << (HTML::Div("body") << makeText(body));
+                node << (HTML::Div("body") << makeText(body, false));
             },
             [&](auto connected, auto isChild, auto type, auto description, auto isFarArway) {
                 // Add item to worklist to be printed, unless it was already
