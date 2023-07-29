@@ -101,7 +101,7 @@ void UUIDPool::printInternedIfNecessary(SEXP sexp, const UUID& hash) {
         if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
             // Create new file which is denoted by the current date and hash
             std::stringstream filePath;
-            filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << hash.str() << "-" << time(nullptr) << ".html";
+            filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << time(nullptr) << "-" << hash.str() << ".html";
             std::ofstream file(filePath.str());
             if (!file.is_open()) {
                 std::cerr << "Could not open file for PIR_PRINT_INTERNED_RIR_OBJECTS: "

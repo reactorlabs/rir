@@ -5,7 +5,7 @@
 
 // Get fallback and input
 const sourcesNeeded = document.getElementById("sources-needed");
-const input = document.getElementsByName("main")[0];
+const input = document.getElementById("js-input");
 
 // Create Cytoscape container and sidebar
 const container = document.createElement("main");
@@ -26,18 +26,23 @@ sidebar.appendChild(bodyDiv);
 const output = {
     container,
     elements: [],
-    style
+    style,
+    layout: {
+        name: "cose",
+        idealEdgeLength: 100,
+        componentSpacing: 100,
+    },
 };
 const elementsWithParents = new Map();
 for (const child of input.children) {
-    let name = child.getElementsByClassName("name")[0].innerHTML;
+    let name = child.getElementsByClassName("name").item(0)?.innerHTML;
     output.elements.push({
         group: "nodes",
         data: {
             id: child.id,
             name,
-            label: child.id in name ? name : name.length === 0 ? child.id : `${name}\n(${child.id})`,
-            body: child.getElementsByClassName("body")[0]?.innerHTML,
+            label: !name || name.length === 0 ? child.id : name.includes(child.id) ? name : `${name}\n(${child.id})`,
+            body: child.getElementsByClassName("body").item(0)?.innerHTML,
         },
         classes: child.className,
     });
@@ -67,10 +72,11 @@ for (const [element, parent] of elementsWithParents.entries()) {
 }
 
 // Remove fallback and input, add container and sidebar
-document.removeChild(sourcesNeeded);
-document.removeChild(input);
-document.appendChild(container);
-document.appendChild(sidebar)
+document.body.removeChild(sourcesNeeded);
+// Don't actually remove so we can inspect the source, just hide
+input.display = "none";
+document.body.appendChild(container);
+document.body.appendChild(sidebar)
 
 // Create cytoscape graph
 // noinspection JSUnresolvedReference

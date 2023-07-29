@@ -13,13 +13,13 @@ namespace rir {
 using PrettyGraphContentPrinter = const std::function<void(std::ostream&)>&;
 
 class PrettyGraphInnerPrinter {
-    const std::function<void(PrettyGraphContentPrinter name)>& addName_;
-    const std::function<void(PrettyGraphContentPrinter body)>& addBody_;
-    const std::function<void(SEXP connected, bool isChild, const char* type, PrettyGraphContentPrinter description, bool isFarAway)>& addEdgeTo_;
+    std::function<void(PrettyGraphContentPrinter name)> addName_;
+    std::function<void(PrettyGraphContentPrinter body)> addBody_;
+    std::function<void(SEXP connected, bool isChild, const char* type, PrettyGraphContentPrinter description, bool isFarAway)> addEdgeTo_;
     PrettyGraphInnerPrinter(
-        const std::function<void(PrettyGraphContentPrinter name)>& addName,
-        const std::function<void(PrettyGraphContentPrinter body)>& addBody,
-        const std::function<void(SEXP connected, bool isChild, const char* type, PrettyGraphContentPrinter description, bool isFarAway)>& addEdgeTo)
+        const std::function<void(PrettyGraphContentPrinter name)>&& addName,
+        const std::function<void(PrettyGraphContentPrinter body)>&& addBody,
+        const std::function<void(SEXP connected, bool isChild, const char* type, PrettyGraphContentPrinter description, bool isFarAway)>&& addEdgeTo)
         : addName_(addName), addBody_(addBody), addEdgeTo_(addEdgeTo) {}
 
   public:

@@ -8,6 +8,7 @@
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "utils/HTMLBuilder/escapeHtml.h"
 #include <sstream>
 
 namespace rir {
@@ -24,7 +25,7 @@ static void
 defaultPrintRirObjectPrettyGraphContent(SEXP sexp,
                                         const PrettyGraphInnerPrinter& print) {
     print.addBody([&](std::ostream& s){
-        s << Print::dumpSexp(sexp);
+        s << "<pre>" << escapeHtml(Print::dumpSexp(sexp)) << "</pre>";
     });
 }
 
