@@ -33,6 +33,12 @@ body {
 #sidebar #addr {
     font-size: 2em;
     font-weight: bold;
+    margin: 0;
+}
+
+#sidebar #name {
+    font-size: 1.5em;
+    font-weight: bold;
     margin-bottom: 0.5em;
 }
 

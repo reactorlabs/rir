@@ -46,7 +46,7 @@ class PrettyGraphInnerPrinter {
     }
 
     void addEdgeTo(SEXP connected, bool isChild, const char* type,
-                   PrettyGraphContentPrinter description,
+                   PrettyGraphContentPrinter description = [](std::ostream& s){},
                    bool isFarAway = false) const {
         addEdgeTo_(connected, isChild, type, description, isFarAway);
     }

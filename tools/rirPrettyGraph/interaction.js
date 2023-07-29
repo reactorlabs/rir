@@ -6,6 +6,14 @@ const focus = function (node) {
     focusedNode = node;
     sidebar.style.display = "";
     addrDiv.textContent = node.data("id");
+    const name = node.data("name");
+    if (name) {
+        nameDiv.style.display = "";
+        nameDiv.textContent = name;
+    } else {
+        nameDiv.style.display = "none";
+        nameDiv.textContent = "";
+    }
     const body = node.data("body");
     if (body) {
         bodyDiv.style.display = "";

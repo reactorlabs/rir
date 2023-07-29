@@ -476,12 +476,17 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             }
         }
         if (TYPEOF(sexp) == EXTERNALSXP) {
-            p.addEdgeTo(container->container(), false, type, description,
+            p.addEdgeTo(sexp, false, type, description,
                         !isInPool);
         }
     };
-    auto addConstant = [&](PoolIdx idx, const char* type, PrettyGraphContentPrinter description){
+    auto addConstant = [&](PoolIdx idx, const char* type, PrettyGraphContentPrinter description = [](std::ostream& s){}){
         addEntry(Pool::get(idx), type, description);
+    };
+    auto addExtraPoolEntry = [&](PoolIdx idx, bool isChild, const char* type, PrettyGraphContentPrinter description = [](std::ostream& s){}){
+        auto sexp = container->getExtraPoolEntry(idx);
+        addedExtraPoolEntries[idx] = true;
+        p.addEdgeTo(sexp, isChild, type, description);
     };
 
     while (codeSize > 0) {
@@ -495,7 +500,7 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             assert(*code != Opcode::nop_);
             break;
 #define CONSTANT_CASE(op, accessor, type) case Opcode::op##_:                  \
-            addConstant(i.accessor, type, [&](std::ostream& s){ s << #op; });  \
+            addConstant(i.accessor, type);  \
             break;
         CONSTANT_CASE(push, pool, "push")
         CONSTANT_CASE(ldfun, pool, "name")
@@ -512,11 +517,9 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
         CONSTANT_CASE(stvar_cached, poolAndCache.poolIndex, "name")
         case Opcode::guard_fun_:
             addConstant(i.guard_fun_args.name, "name", [&](std::ostream& s){
-                s << "guard_fun name";
+                s << "guard_fun";
             });
-            addConstant(i.guard_fun_args.expected, "guard", [&](std::ostream& s){
-                s << "guard_fun expected";
-            });
+            addConstant(i.guard_fun_args.expected, "guard");
             break;
         case Opcode::call_:
         case Opcode::call_dots_:
@@ -532,27 +535,30 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
                     addConstant(bc.callExtra().callArgumentNames[j], "name", [&](std::ostream& s){
-                        s << callType << " argument name";
+                        s << callType << " argument";
                     });
                 }
             }
             break;
         }
         case Opcode::call_builtin_:
-            addConstant(i.callBuiltinFixedArgs.ast, "ast", [&](std::ostream& s){
-                s << "call_builtin ast";
-            });
-            addConstant(i.callBuiltinFixedArgs.builtin, "builtin", [&](std::ostream& s){
-                s << "call_builtin builtin";
-            });
+            addConstant(i.callBuiltinFixedArgs.ast, "ast");
+            addConstant(i.callBuiltinFixedArgs.builtin, "builtin");
             break;
         case Opcode::record_call_:
-            // TODO: mark extra pool entry and add edge for static call
+            for (auto j = 0; j < i.callFeedback.numTargets; j++) {
+                addExtraPoolEntry(i.callFeedback.targets[j], false, "target", [&](std::ostream& s){
+                    s << "record_call " << j;
+                });
+            }
+            break;
         case Opcode::record_type_:
         case Opcode::record_test_:
+            break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
-            // TODO: mark extra pool entry and add edge for promise
+            addExtraPoolEntry(i.fun, true, "promise");
+            break;
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:
