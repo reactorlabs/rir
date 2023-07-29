@@ -14,9 +14,12 @@ const sidebar = document.createElement("aside");
 sidebar.id = "sidebar";
 const addrDiv = document.createElement("div");
 addrDiv.id = "addr";
+const nameDiv = document.createElement("div");
+nameDiv.id = "name";
 const bodyDiv = document.createElement("div");
 bodyDiv.id = "body";
 sidebar.appendChild(addrDiv);
+sidebar.appendChild(nameDiv);
 sidebar.appendChild(bodyDiv);
 
 // Translate input into output
@@ -30,7 +33,7 @@ const output = {
     layout: {
         name: "fcose",
         nodeRepulsion: 100000,
-        idealEdgeLength: 300,
+        idealEdgeLength: 100,
     },
 };
 const elementsWithParents = new Map();
@@ -67,7 +70,12 @@ for (const child of input.children) {
     }
 }
 for (const [element, parent] of elementsWithParents.entries()) {
-    output.elements.find(e => e.data.id === element).data.parent = parent;
+    const child = output.elements.find(e => e.data.id === element);
+    if (child) {
+        child.data.parent = parent;
+    } else {
+        console.error("Parent " + parent + " not found for " + element + "!");
+    }
 }
 
 // Remove fallback and input, add container and sidebar

@@ -479,6 +479,33 @@ void Code::print(std::ostream& out, bool isDetailed) const {
     }
 }
 
+
+static bool isEqualOrInExtraPool(const Code* outer, const Code* inner) { // NOLINT(*-no-recursion)
+    if (outer == inner) {
+        return true;
+    }
+    for (unsigned i = 0; i < outer->extraPoolSize; ++i) {
+        auto codeEntry = Code::check(outer->getExtraPoolEntry(i));
+        if (codeEntry && isEqualOrInExtraPool(codeEntry, inner)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool isInFunction(const Function* outer, const Code* inner) {
+    if (isEqualOrInExtraPool(outer->body(), inner)) {
+        return true;
+    }
+    for (unsigned i = 0; i < outer->nargs(); ++i) {
+        auto arg = outer->defaultArg(i);
+        if (arg && isEqualOrInExtraPool(arg, inner)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
     auto srcPrint = Print::dumpSexp(src_pool_at(src), SIZE_MAX);
     print.addName([&](std::ostream& s) {
@@ -516,9 +543,9 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
             s << "arglist order";
         });
     }
-    if (function()->body() != this) {
-        print.addEdgeTo(function()->container(), true, "unexpected", [&](std::ostream& s) {
-            s << "function, its body isn't this!";
+    if (!isInFunction(function(), this)) {
+        print.addEdgeTo(function()->container(), false, "unexpected", [&](std::ostream& s) {
+            s << "function, its not this code's parent!";
         });
     }
     std::vector<bool> addedExtraPoolEntries;
