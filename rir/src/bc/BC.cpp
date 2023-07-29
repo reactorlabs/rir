@@ -503,20 +503,20 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             addConstant(i.accessor, type);  \
             break;
         CONSTANT_CASE(push, pool, "push")
-        CONSTANT_CASE(ldfun, pool, "name")
-        CONSTANT_CASE(ldddvar, pool, "name")
-        CONSTANT_CASE(ldvar, pool, "name")
-        CONSTANT_CASE(ldvar_noforce, pool, "name")
-        CONSTANT_CASE(ldvar_for_update, pool, "name")
-        CONSTANT_CASE(ldvar_super, pool, "name")
-        CONSTANT_CASE(stvar, pool, "name")
-        CONSTANT_CASE(stvar_super, pool, "name")
-        CONSTANT_CASE(missing, pool, "name")
-        CONSTANT_CASE(ldvar_cached, poolAndCache.poolIndex, "name")
-        CONSTANT_CASE(ldvar_for_update_cache, poolAndCache.poolIndex, "name")
-        CONSTANT_CASE(stvar_cached, poolAndCache.poolIndex, "name")
+        CONSTANT_CASE(ldfun, pool, "unexpected-name")
+        CONSTANT_CASE(ldddvar, pool, "unexpected-name")
+        CONSTANT_CASE(ldvar, pool, "unexpected-name")
+        CONSTANT_CASE(ldvar_noforce, pool, "unexpected-name")
+        CONSTANT_CASE(ldvar_for_update, pool, "unexpected-name")
+        CONSTANT_CASE(ldvar_super, pool, "unexpected-name")
+        CONSTANT_CASE(stvar, pool, "unexpected-name")
+        CONSTANT_CASE(stvar_super, pool, "unexpected-name")
+        CONSTANT_CASE(missing, pool, "unexpected-name")
+        CONSTANT_CASE(ldvar_cached, poolAndCache.poolIndex, "unexpected-name")
+        CONSTANT_CASE(ldvar_for_update_cache, poolAndCache.poolIndex, "unexpected-name")
+        CONSTANT_CASE(stvar_cached, poolAndCache.poolIndex, "unexpected-name")
         case Opcode::guard_fun_:
-            addConstant(i.guard_fun_args.name, "name", [&](std::ostream& s){
+            addConstant(i.guard_fun_args.name, "unexpected-name", [&](std::ostream& s){
                 s << "guard_fun";
             });
             addConstant(i.guard_fun_args.expected, "guard");
@@ -528,13 +528,13 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
                 *code == Opcode::call_ ? "call" :
                 *code == Opcode::call_dots_ ? "call_dots" :
                 "named_call";
-            addConstant(i.callFixedArgs.ast, "ast", [&](std::ostream& s){
+            addConstant(i.callFixedArgs.ast, "unexpected-ast", [&](std::ostream& s){
                 s << callType << " ast";
             });
             // Add named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
-                    addConstant(bc.callExtra().callArgumentNames[j], "name", [&](std::ostream& s){
+                    addConstant(bc.callExtra().callArgumentNames[j], "unexpected-name", [&](std::ostream& s){
                         s << callType << " argument";
                     });
                 }
@@ -542,8 +542,8 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             break;
         }
         case Opcode::call_builtin_:
-            addConstant(i.callBuiltinFixedArgs.ast, "ast");
-            addConstant(i.callBuiltinFixedArgs.builtin, "builtin");
+            addConstant(i.callBuiltinFixedArgs.ast, "unexpected-ast");
+            addConstant(i.callBuiltinFixedArgs.builtin, "unexpected-builtin");
             break;
         case Opcode::record_call_:
             for (auto j = 0; j < i.callFeedback.numTargets; j++) {

@@ -102,7 +102,7 @@ edge.arrow-Code-unknown-extra-pool {
     width: 4px;
 }
 
-edge.arrow-Code-name, edge.arrow-Code-ast, edge.arrow-Code-builtin, edge.arrow-Code-unexpected {
+edge.arrow-Code-unexpected-name, edge.arrow-Code-unexpected-ast, edge.arrow-Code-unexpected-builtin, edge.arrow-Code-unexpected {
     line-color: #dc2626;
     target-arrow-color: #dc2626;
     color: #dc2626;
