@@ -446,9 +446,9 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
             auto hash = hashes.at(sexp);
             // Not necessarily true: sexp == interned[hash]. But the following are true...
             assert(interned.count(hash) && "SEXP interned with hash but the there's no \"main\" SEXP with that hash");
-            assert((sexp == interned[hash] || TYPEOF(sexp) != TYPEOF(interned[hash])) &&
+            assert((sexp == interned[hash] || TYPEOF(sexp) == TYPEOF(interned[hash])) &&
                    "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different SEXP types)");
-            assert((sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP || rirObjectMagic(sexp) != rirObjectMagic(interned[hash])) &&
+            assert((sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP || rirObjectMagic(sexp) == rirObjectMagic(interned[hash])) &&
                    "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different RIR types)");
             assert(hashes[interned[hash]] == hash && "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
             assert(interned[hashes[interned[hash]]] == interned[hash] && "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
