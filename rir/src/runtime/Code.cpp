@@ -539,21 +539,25 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
         disassemble(str);
         s << "<pre>" << escapeHtml(str.str()) << "</pre>";
     });
-    auto addEdgeIfRir = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
-        if (sexp && TYPEOF(sexp) == EXTERNALSXP) {
+    auto addSourceEdge = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
+        if (sexp && sexp != R_NilValue && TYPEOF(sexp) != SYMSXP &&
+            TYPEOF(sexp) != INTSXP && TYPEOF(sexp) != LGLSXP &&
+            TYPEOF(sexp) != REALSXP && TYPEOF(sexp) != CPLXSXP &&
+            TYPEOF(sexp) != CHARSXP && TYPEOF(sexp) != STRSXP &&
+            TYPEOF(sexp) != LANGSXP) {
             print.addEdgeTo(sexp, false, "unexpected", [&](std::ostream& s){
                 s << type;
                 if (index != SIZE_T_MAX) {
                     s << " " << index;
                 }
-                s << " is a RIR object!";
+                s << " isn't a source type!";
             });
         }
     };
-    addEdgeIfRir(src_pool_at(src), "source");
-    addEdgeIfRir(trivialExpr, "trivial-expr");
+    addSourceEdge(src_pool_at(src), "source");
+    addSourceEdge(trivialExpr, "trivial-expr");
     for (unsigned i = 0; i < srcLength; i++) {
-        addEdgeIfRir(src_pool_at(i), "src-pool entry", i);
+        addSourceEdge(src_pool_at(i), "src-pool entry", i);
     }
     if (arglistOrderContainer()) {
         print.addEdgeTo(arglistOrderContainer(), true, "arglist-order", [&](std::ostream& s) {

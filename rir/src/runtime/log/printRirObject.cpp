@@ -24,6 +24,9 @@ static void defaultPrintRirObject(SEXP sexp, std::ostream& s, bool isDetailed) {
 static void
 defaultPrintRirObjectPrettyGraphContent(SEXP sexp,
                                         const PrettyGraphInnerPrinter& print) {
+    print.addName([&](std::ostream& s){
+        s << Rf_type2char(TYPEOF(sexp));
+    });
     print.addBody([&](std::ostream& s){
         s << "<pre>" << escapeHtml(Print::dumpSexp(sexp)) << "</pre>";
     });
