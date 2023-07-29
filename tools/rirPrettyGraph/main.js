@@ -12,11 +12,11 @@ const container = document.createElement("main");
 container.id = "cy";
 const sidebar = document.createElement("aside");
 sidebar.id = "sidebar";
-const nameDiv = document.createElement("div");
-nameDiv.id = "name";
+const addrDiv = document.createElement("div");
+addrDiv.id = "addr";
 const bodyDiv = document.createElement("div");
 bodyDiv.id = "body";
-sidebar.appendChild(nameDiv);
+sidebar.appendChild(addrDiv);
 sidebar.appendChild(bodyDiv);
 
 // Translate input into output
@@ -28,35 +28,24 @@ const output = {
     elements: [],
     style,
     layout: {
-        name: "cose",
-        idealEdgeLength: 100,
-        componentSpacing: 100,
+        name: "fcose",
+        nodeRepulsion: 100000,
+        idealEdgeLength: 300,
     },
 };
 const elementsWithParents = new Map();
 for (const child of input.children) {
-    let name = child.getElementsByClassName("name").item(0)?.innerHTML;
     output.elements.push({
         group: "nodes",
         data: {
             id: child.id,
-            name,
-            label: !name || name.length === 0 ? child.id : name.includes(child.id) ? name : `${name}\n(${child.id})`,
+            name: child.getElementsByClassName("name").item(0)?.innerHTML,
             body: child.getElementsByClassName("body").item(0)?.innerHTML,
         },
         classes: child.className,
     });
     for (const connected of child.getElementsByClassName("arrow")) {
         const target = connected.getAttribute("data-connected");
-        output.elements.push({
-            group: "edges",
-            data: {
-                label: connected.innerHTML,
-                source: child.id,
-                target
-            },
-            classes: connected.className,
-        })
         if (connected.hasAttribute("data-is-child")) {
             if (target in elementsWithParents) {
                 console.warn("Multiple parents for " + target + "!");
@@ -64,6 +53,16 @@ for (const child of input.children) {
             // A bit confusing: child is actually the parent here, and target is its child
             // `child` refers to input.children
             elementsWithParents.set(target, child.id);
+        } else {
+            output.elements.push({
+                group: "edges",
+                data: {
+                    label: connected.innerHTML,
+                    source: child.id,
+                    target
+                },
+                classes: connected.className,
+            })
         }
     }
 }

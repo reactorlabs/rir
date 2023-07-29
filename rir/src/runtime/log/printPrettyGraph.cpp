@@ -74,10 +74,14 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
     };
 
     // Print header
-    out << "<!DOCTYPE html><html><head>\n"
+    out << "<!DOCTYPE html><html lang=\"en\"><head>\n"
            "<title>RIR</title>\n"
            "<link rel=\"stylesheet\" href=\"rirPrettyGraph/style.css\">\n"
-           "<script type=\"text/javascript\" src=\"rirPrettyGraph/cytoscape.min.js\"></script>\n"
+           "<script src=\"rirPrettyGraph/cytoscape.min.js\"></script>\n"
+           "<script src=\"https://unpkg.com/layout-base/layout-base.js\"></script>\n"
+           "<script src=\"https://unpkg.com/cose-base/cose-base.js\"></script>\n"
+           "<script src=\"https://unpkg.com/cytoscape-fcose/cytoscape-fcose.js\"></script>\n"
+           "<script src=\"https://unpkg.com/cytoscape-lasso@1.1.4/dist/cytoscape-lasso.min.js\"></script>\n"
            "</head><body>\n"
            "<h1 id=\"sources-needed\">Needs the <code>rirPrettyGraph</code> folder (located in <code>tools</code>) to be in the same location</h1>\n"
            "<div id=\"js-input\" style=\"display: none\">\n";

@@ -57,6 +57,28 @@ class Element {
        mAttributes.push_back({apName, aValue});
        return std::move(*this);
    }
+   Element&& addOrAppendAttribute(const char* apName, const char* apValue) {
+       if (apName && apValue) {
+           for (auto& attribute : mAttributes) {
+               if (attribute.Name == apName) {
+                   attribute.Value += " ";
+                   attribute.Value += apValue;
+                   return std::move(*this);
+               }
+           }
+       }
+       return addAttribute(apName, apValue);
+   }
+   Element&& addOrAppendAttribute(const char* apName, const std::string& aValue) {
+       for (auto& attribute : mAttributes) {
+           if (attribute.Name == apName) {
+               attribute.Value += " ";
+               attribute.Value += aValue;
+               return std::move(*this);
+           }
+       }
+       return addAttribute(apName, aValue);
+   }
    Element&& addAttribute(const char* apName, const unsigned int aValue) {
        mAttributes.push_back({apName, std::to_string(aValue)});
        return std::move(*this);
@@ -84,10 +106,10 @@ class Element {
    }
 
    Element&& cls(const char* apValue) {
-       return addAttribute("class", apValue);
+       return addOrAppendAttribute("class", apValue);
    }
    Element&& cls(const std::string& aValue) {
-       return addAttribute("class", aValue);
+       return addOrAppendAttribute("class", aValue);
    }
 
    Element&& title(const char* apValue) {
@@ -465,7 +487,7 @@ class ListItem : public Element {
    }
 
    ListItem&& cls(const std::string& aValue) {
-       addAttribute("class", aValue);
+       addOrAppendAttribute("class", aValue);
        return std::move(*this);
    }
 };
@@ -528,7 +550,8 @@ class Input : public Element {
        return addAttribute("id", aValue);
    }
    Input&& cls(const std::string& aValue) {
-       return addAttribute("class", aValue);
+       addOrAppendAttribute("class", aValue);
+       return std::move(*this);
    }
    Input&& title(const std::string& aValue) {
        return addAttribute("title", aValue);
@@ -807,7 +830,7 @@ class Div : public Element {
    }
 
    Div&& cls(const std::string& aValue) {
-       addAttribute("class", aValue);
+       addOrAppendAttribute("class", aValue);
        return std::move(*this);
    }
 };
