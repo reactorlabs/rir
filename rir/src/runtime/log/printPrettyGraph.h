@@ -7,10 +7,11 @@
 #include "R/r_incl.h"
 #include "runtime/log/RirObjectPrintStyle.h"
 #include <ostream>
+#include <functional>
 
 namespace rir {
 
-using PrettyGraphContentPrinter = const std::function<void(std::ostream&)>&;
+typedef const std::function<void(std::ostream&)>& PrettyGraphContentPrinter;
 
 class PrettyGraphInnerPrinter {
     std::function<void(PrettyGraphContentPrinter name)> addName_;
