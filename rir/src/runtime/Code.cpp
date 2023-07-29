@@ -522,7 +522,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
         disassemble(str);
         s << "<pre>" << escapeHtml(str.str()) << "</pre>";
     });
-    auto addSourceEdge = [&](SEXP sexp, const char* type, size_t index = SIZE_T_MAX){
+    auto addSourceEdge = [&](SEXP sexp, const char* type, size_t index = SIZE_MAX){
         if (sexp && sexp != R_NilValue && TYPEOF(sexp) != SYMSXP &&
             TYPEOF(sexp) != INTSXP && TYPEOF(sexp) != LGLSXP &&
             TYPEOF(sexp) != REALSXP && TYPEOF(sexp) != CPLXSXP &&
@@ -530,7 +530,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
             TYPEOF(sexp) != LANGSXP) {
             print.addEdgeTo(sexp, false, "unexpected", [&](std::ostream& s){
                 s << type;
-                if (index != SIZE_T_MAX) {
+                if (index != SIZE_MAX) {
                     s << " " << index;
                 }
                 s << " isn't a source type!";
