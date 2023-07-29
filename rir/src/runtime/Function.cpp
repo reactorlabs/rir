@@ -134,9 +134,10 @@ if (flags_.includes(F))                                                    \
 
 void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
     print.addName([&](std::ostream& s) {
-        auto ast = CAR(src_pool_at(body()->src));
-        if (TYPEOF(ast) == SYMSXP) {
-            s << CHAR(PRINTNAME(ast));
+        auto ast = src_pool_at(body()->src);
+        auto headAst = TYPEOF(ast) == LANGSXP ? CAR(ast) : R_NilValue;
+        if (TYPEOF(headAst) == SYMSXP) {
+            s << CHAR(PRINTNAME(headAst));
         } else {
             s << "<anon size=" << size << " numArgs=" << numArgs_ << ">";
         }
