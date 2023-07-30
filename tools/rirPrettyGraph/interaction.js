@@ -9,10 +9,11 @@ const focus = function (node) {
     const name = node.data("name");
     if (name) {
         nameDiv.style.display = "";
-        nameDiv.textContent = name;
+        // We *want* to render HTML because the name is already escaped
+        nameDiv.innerHTML = name;
     } else {
         nameDiv.style.display = "none";
-        nameDiv.textContent = "";
+        nameDiv.innerHTML = "";
     }
     const body = node.data("body");
     if (body) {
