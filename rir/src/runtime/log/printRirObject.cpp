@@ -29,7 +29,7 @@ defaultPrintRirObjectPrettyGraphContent(SEXP sexp,
         s << Rf_type2char(TYPEOF(sexp));
     });
     print.addBody([&](std::ostream& s){
-        s << "<pre>" << escapeHtml(Print::dumpSexp(sexp)) << "</pre>";
+        s << "<pre>" << escapeHtml(Print::dumpSexp(sexp, SIZE_MAX)) << "</pre>";
     });
     if (isValidClosureSEXP(sexp)) {
         print.addEdgeTo(BODY(sexp), true, "body");
