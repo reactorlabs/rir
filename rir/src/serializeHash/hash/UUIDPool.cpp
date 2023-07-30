@@ -294,7 +294,9 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #ifdef DEBUG_DISASSEMBLY
         LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif
-        printInternedIfNecessary(e, hash);
+        if (expectHashToBeTheSame) {
+            printInternedIfNecessary(e, hash);
+        }
         interned[hash] = e;
         hashes[e] = hash;
 
