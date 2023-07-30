@@ -14,8 +14,6 @@
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
-#include "runtime/DispatchTable.h"
-#include "runtime/RirRuntimeObject.h"
 #include "zmq.hpp"
 #include <array>
 
@@ -216,40 +214,14 @@ CompilerClient::Handle<T>* CompilerClient::request(
 #endif
 }
 
-CompilerClient::CompiledHandle*
-CompilerClient::pirCompile(SEXP what, const Context& assumptions,
-                           const std::string& name,
-                           const pir::DebugOptions& debug) {
-    auto dt = DispatchTable::unpack(BODY(what));
-    auto baseline = dt->baseline();
-
-    // Get old optimized version we will replace if necessary, which requires
-    // that we get actual assumptions
-    auto realAssumptions = assumptions;
-    baseline->clearDisabledAssumptions(realAssumptions);
-    realAssumptions = dt->combineContextWith(realAssumptions);
-    auto oldOptFunction = dt->dispatch(realAssumptions);
-
-    return pirCompile(dt->baseline(), dt->userDefinedContext(),
-                      oldOptFunction, assumptions, name, debug);
-}
-
-CompilerClient::CompiledHandle*
-CompilerClient::pirCompile(Function* baseline,
-                           const Context& userDefinedContext,
-                           Function* oldOptFunction, const Context& assumptions,
-                           const std::string& name,
-                           const pir::DebugOptions& debug) {
-    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", baseline->container(), [&]{
+CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
+    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
         auto handle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + serialize(baseline->container())
-                // + oldOptFunction != baseline
-                // ? + serialize(oldOptFunction->container())
-                // + sizeof(userDefinedContext) (always 8)
-                // + userDefinedContext
+                // + sizeof(what)
+                // + serialize(what)
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -263,14 +235,7 @@ CompilerClient::pirCompile(Function* baseline,
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
                 request.putLong((uint64_t)Request::Compile);
-                serialize(baseline->container(), request, false);
-                request.putBool(oldOptFunction != baseline);
-                if (oldOptFunction != baseline) {
-                    serialize(oldOptFunction->container(), request, false);
-                }
-                request.putLong(sizeof(Context));
-                request.putBytes((uint8_t*)&userDefinedContext,
-                                 sizeof(userDefinedContext));
+                serialize(what, request, false);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());
@@ -291,34 +256,24 @@ CompilerClient::pirCompile(Function* baseline,
                 //   Response::Compiled
                 // + sizeof(pirPrint)
                 // + pirPrint
-                // + hashRoot(newOptFunction->container())
-                // + serialize(newOptFunction->container())
+                // + hashRoot(what)
+                // + serialize(what)
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
                 auto pirPrintSize = response.getLong();
                 std::string pirPrint;
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-                auto numNewOptFunctions = response.getLong();
-                std::vector<Function*> newOptFunctions(numNewOptFunctions);
-                for (unsigned i = 0; i < numNewOptFunctions; i++) {
-                    UUID newOptFunctionContainerHash;
-                    response.getBytes((uint8_t*)&newOptFunctionContainerHash,
-                                      sizeof(newOptFunctionContainerHash));
-                    // Try to get hashed if we already have the compiled value
-                    // (unlikely but maybe possible)
-                    auto newOptFunctionContainer =
-                        UUIDPool::get(newOptFunctionContainerHash);
-                    // Still have to deserialize to advance buffer
-                    auto deserialized =
-                        deserialize(response, true,
-                                    newOptFunctionContainerHash);
-                    if (!newOptFunctionContainer) {
-                        newOptFunctionContainer = deserialized;
-                    }
-                    newOptFunctions[i] = Function::unpack(newOptFunctionContainer);
+                UUID responseWhatHash;
+                response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
+                // Try to get hashed if we already have the compiled value
+                // (unlikely but maybe possible)
+                SEXP responseWhat = UUIDPool::get(responseWhatHash);
+                if (!responseWhat) {
+                    // Actually deserialize
+                    responseWhat = deserialize(response, true, responseWhatHash);
                 }
-                return CompilerClient::CompiledResponseData{std::move(newOptFunctions), std::move(pirPrint)};
+                return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );
         return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
@@ -490,13 +445,13 @@ void CompilerClient::CompiledHandle::compare(pir::ClosureVersion* version) const
 #endif
 }
 
-const std::vector<Function*>& CompilerClient::CompiledHandle::getOptFunctions() const {
+SEXP CompilerClient::CompiledHandle::getSexp() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     auto& response = inner->getResponse();
 #else
     const auto& response = inner->response;
 #endif
-    return response.newOptFunctions;
+    return response.sexp;
 }
 
 const std::string& CompilerClient::CompiledHandle::getFinalPir() const {

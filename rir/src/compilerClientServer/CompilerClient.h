@@ -28,21 +28,16 @@ class UUID;
  */
 class CompilerClient {
     struct CompiledResponseData {
-        std::vector<Function*> newOptFunctions;
+        SEXP sexp;
         std::string finalPir;
 
-        CompiledResponseData(const std::vector<Function*>&& newOptFunctions,
-                             const std::string&& finalPir)
-            : newOptFunctions(newOptFunctions), finalPir(finalPir) {
-            for (auto newOptFunction : newOptFunctions) {
-                R_PreserveObject(newOptFunction->container());
-            }
+        CompiledResponseData(SEXP sexp, const std::string&& finalPir)
+            : sexp(sexp), finalPir(finalPir) {
+            R_PreserveObject(sexp);
         }
 
         ~CompiledResponseData() {
-            for (auto newOptFunction : newOptFunctions) {
-                R_ReleaseObject(newOptFunction->container());
-            }
+            R_ReleaseObject(sexp);
         }
     };
     template<typename T>
@@ -80,8 +75,8 @@ class CompilerClient {
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
         void compare(pir::ClosureVersion* version) const;
-        /// Block and get the compiled (optimized) functions
-        const std::vector<Function*>& getOptFunctions() const;
+        /// Block and get the SEXP
+        SEXP getSexp() const;
         /// Block and get the final PIR debug print
         const std::string& getFinalPir() const;
     };
@@ -93,21 +88,8 @@ class CompilerClient {
     static void tryInit();
     /// "Asynchronously" (not currently, maybe in the future) sends the closure
     /// to the compile server and returns a handle to use the result.
-    /// Automatically interns the result,
+    /// Then interns the result,
     static CompiledHandle* pirCompile(SEXP what, const Context& assumptions,
-                                      const std::string& name,
-                                      const pir::DebugOptions& debug);
-    /// "Asynchronously" (not currently, maybe in the future) sends the closure
-    /// to the compile server and returns a handle to use the result.
-    /// Automatically interns the result.
-    ///
-    /// oldOptFunction is the old closure in the DispatchTable with the
-    /// corrected assumptions. I'm honestly not completely sure how PIR uses
-    /// this, and by default, passing the baseline again should be OK.
-    static CompiledHandle* pirCompile(Function* baseline,
-                                      const Context& userDefinedContext,
-                                      Function* oldOptFunction,
-                                      const Context& assumptions,
                                       const std::string& name,
                                       const pir::DebugOptions& debug);
     /// Synchronously retrieves the closure with the given hash from the server.

@@ -4,7 +4,6 @@
 
 #include "compiler_server_client_shared_utils.h"
 #include "compiler/log/debug.h"
-#include "runtime/log/printRirObject.h"
 #include "zmq.h"
 
 namespace rir {
