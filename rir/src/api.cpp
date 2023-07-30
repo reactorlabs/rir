@@ -382,13 +382,15 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
         // replace with the compiler server's version
         auto newWhat = compilerServerHandle->getSexp();
-        // Formals etc. are the same, we don't touch them during compilation.
-        // We should even be able to just send and receive BODY(what) instead of
-        // what, something to look at in the future...
-        SET_BODY(what, BODY(newWhat));
-        // gc should cleanup the original BODY(what) since nothing points to it
-        // anymore, though it would be nice if there's a way to do so
-        // explicitly...
+        auto dt = DispatchTable::unpack(BODY(what));
+        auto newDt = DispatchTable::unpack(BODY(newWhat));
+        for (unsigned i = 0; i < newDt->size(); ++i) {
+            if (i == 0) {
+                dt->baseline(newDt->baseline());
+            } else {
+                dt->insert(newDt->get(i));
+            }
+        }
     }
     delete compilerServerHandle;
     return what;
