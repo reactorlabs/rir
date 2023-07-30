@@ -28,17 +28,21 @@ class UUID;
  */
 class CompilerClient {
     struct CompiledResponseData {
-        Function* newOptFunction;
+        std::vector<Function*> newOptFunctions;
         std::string finalPir;
 
-        CompiledResponseData(Function* newOptFunction,
+        CompiledResponseData(const std::vector<Function*>&& newOptFunctions,
                              const std::string&& finalPir)
-            : newOptFunction(newOptFunction), finalPir(finalPir) {
-            R_PreserveObject(newOptFunction->container());
+            : newOptFunctions(newOptFunctions), finalPir(finalPir) {
+            for (auto newOptFunction : newOptFunctions) {
+                R_PreserveObject(newOptFunction->container());
+            }
         }
 
         ~CompiledResponseData() {
-            R_ReleaseObject(newOptFunction->container());
+            for (auto newOptFunction : newOptFunctions) {
+                R_ReleaseObject(newOptFunction->container());
+            }
         }
     };
     template<typename T>
@@ -76,8 +80,8 @@ class CompilerClient {
         /// When we get response PIR, compares it with given locally-compiled
         /// closure PIR and logs any discrepancies.
         void compare(pir::ClosureVersion* version) const;
-        /// Block and get the compiled (optimized) function
-        Function* getOptFunction() const;
+        /// Block and get the compiled (optimized) functions
+        const std::vector<Function*>& getOptFunctions() const;
         /// Block and get the final PIR debug print
         const std::string& getFinalPir() const;
     };

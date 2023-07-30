@@ -299,17 +299,25 @@ CompilerClient::pirCompile(Function* baseline,
                 std::string pirPrint;
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-                UUID newOptFunctionContainerHash;
-                response.getBytes((uint8_t*)&newOptFunctionContainerHash, sizeof(newOptFunctionContainerHash));
-                // Try to get hashed if we already have the compiled value
-                // (unlikely but maybe possible)
-                auto newOptFunctionContainer = UUIDPool::get(newOptFunctionContainerHash);
-                if (!newOptFunctionContainer) {
-                    // Actually deserialize
-                    newOptFunctionContainer = deserialize(response, true, newOptFunctionContainerHash);
+                auto numNewOptFunctions = response.getLong();
+                std::vector<Function*> newOptFunctions(numNewOptFunctions);
+                for (unsigned i = 0; i < numNewOptFunctions; i++) {
+                    UUID newOptFunctionContainerHash;
+                    response.getBytes((uint8_t*)&newOptFunctionContainerHash,
+                                      sizeof(newOptFunctionContainerHash));
+                    // Try to get hashed if we already have the compiled value
+                    // (unlikely but maybe possible)
+                    auto newOptFunctionContainer =
+                            UUIDPool::get(newOptFunctionContainerHash);
+                    if (!newOptFunctionContainer) {
+                            // Actually deserialize
+                            newOptFunctionContainer =
+                            deserialize(response, true,
+                                             newOptFunctionContainerHash);
+                    }
+                    newOptFunctions[i] = Function::unpack(newOptFunctionContainer);
                 }
-                auto newOptFunction = Function::unpack(newOptFunctionContainer);
-                return CompilerClient::CompiledResponseData{newOptFunction, std::move(pirPrint)};
+                return CompilerClient::CompiledResponseData{std::move(newOptFunctions), std::move(pirPrint)};
             }
         );
         return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
@@ -481,13 +489,13 @@ void CompilerClient::CompiledHandle::compare(pir::ClosureVersion* version) const
 #endif
 }
 
-Function* CompilerClient::CompiledHandle::getOptFunction() const {
+const std::vector<Function*>& CompilerClient::CompiledHandle::getOptFunctions() const {
 #ifdef MULTI_THREADED_COMPILER_CLIENT
     auto& response = inner->getResponse();
 #else
     const auto& response = inner->response;
 #endif
-    return response.newOptFunction;
+    return response.newOptFunctions;
 }
 
 const std::string& CompilerClient::CompiledHandle::getFinalPir() const {
