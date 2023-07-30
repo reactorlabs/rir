@@ -380,14 +380,15 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             std::cerr << "Final PIR of '" << name << "':\n" << finalPir << "\n";
         }
 
-        // insert the compiler server's version and associated
-        for (auto newOptFunction : compilerServerHandle->getOptFunctions()) {
-            if (!newOptFunction->isOptimized()) {
-                DispatchTable::unpack(BODY(what))->baseline(newOptFunction);
-            } else {
-                DispatchTable::unpack(BODY(what))->insert(newOptFunction);
-            }
-        }
+        // replace with the compiler server's version
+        auto newWhat = compilerServerHandle->getSexp();
+        // Formals etc. are the same, we don't touch them during compilation.
+        // We should even be able to just send and receive BODY(what) instead of
+        // what, something to look at in the future...
+        SET_BODY(what, BODY(newWhat));
+        // gc should cleanup the original BODY(what) since nothing points to it
+        // anymore, though it would be nice if there's a way to do so
+        // explicitly...
     }
     delete compilerServerHandle;
     return what;
