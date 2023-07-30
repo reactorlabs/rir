@@ -219,7 +219,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
             // Reuse interned SEXP
             auto existing = interned.at(hash);
             assert(TYPEOF(e) == TYPEOF(existing) && "obvious hash collision (different types)");
-            assert((TYPEOF(e) != EXTERNALSXP || rirObjectMagic(e) == rirObjectMagic(existing)) &&
+            assert((TYPEOF(e) != EXTERNALSXP || rirObjectMagic(e) == rirObjectMagic(existing) || !expectHashToBeTheSame) &&
                    "obvious hash collision (different RIR types)");
             if (!hashes.count(e)) {
                 // This SEXP is structurally-equivalent to the interned SEXP but not
