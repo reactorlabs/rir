@@ -291,8 +291,7 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug,
-                std::string* closureVersionPirPrint,
-                rir::Function** newOptFunctionRef) {
+                std::string* closureVersionPirPrint) {
     Protect p(what);
 
     if (!isValidClosureSEXP(what)) {
@@ -363,9 +362,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 // Compare compiled version with remote for discrepancies
                 compilerServerHandle->compare(c);
             }
-            if (newOptFunctionRef) {
-                *newOptFunctionRef = done;
-            }
         };
 
         cmp.compileClosure(what, name, assumptions, true, compile,
@@ -382,9 +378,10 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             std::cerr << "Final PIR of '" << name << "':\n" << finalPir << "\n";
         }
 
-        // insert the compiler server's version
-        auto newOptFunction = compilerServerHandle->getOptFunction();
-        DispatchTable::unpack(BODY(what))->insert(newOptFunction);
+        // insert the compiler server's version and associated
+        for (auto newOptFunction : compilerServerHandle->getOptFunctions()) {
+            DispatchTable::unpack(BODY(what))->insert(newOptFunction);
+        }
     }
     delete compilerServerHandle;
     return what;
