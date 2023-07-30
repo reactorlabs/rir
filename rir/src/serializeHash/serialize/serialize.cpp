@@ -197,8 +197,8 @@ SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieve
                             rStreamInChar, rStreamInBytes, nullptr, nullptr);
             SEXP sexp = R_Unserialize(&in);
             assert(!retrieveHash && "retrieve hash not filled");
-            assert((!newRetrieveHash || UUIDPool::get(newRetrieveHash) == sexp) &&
-                   "retrieve hash not filled with deserialized SEXP");
+            assert((!newRetrieveHash || UUIDPool::getHash(sexp) == newRetrieveHash) &&
+                   "deserialized SEXP not given retrieve hash");
             _useHashes = oldUseHashes;
             pir::Parameter::RIR_PRESERVE = oldPreserve;
             return sexp;
