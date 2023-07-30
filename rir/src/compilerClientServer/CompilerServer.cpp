@@ -239,8 +239,7 @@ void CompilerServer::tryRun() {
 
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             std::string pirPrint;
-            Function* newOptFunction;
-            what = pirCompile(what, assumptions, name, debug, &pirPrint, &newOptFunction);
+            what = pirCompile(what, assumptions, name, debug, &pirPrint);
 
             // Intern, not because we'll have reused it (highly unlikely since
             // we memoize requests, and it doesn't affect anything anyways), but
@@ -248,6 +247,13 @@ void CompilerServer::tryRun() {
             // (since we memoize requests) so that compiler client can retrieve
             // it later
             UUIDPool::intern(what, true, true);
+
+            assert(DispatchTable::unpack(BODY(what))->size() > 1);
+            std::vector<Function*> newOptFunctions;
+            for (unsigned i = 1; i < DispatchTable::unpack(BODY(what))->size(); ++i) {
+                newOptFunctions.push_back(DispatchTable::unpack(BODY(what))->get(i));
+            }
+
             // After intern we don't actually care about what, we care about
             // newOptFunction->container() (want to intern the other versions in
             // case they get retrieved somehow, which I think is probable
@@ -255,7 +261,7 @@ void CompilerServer::tryRun() {
             // places). We set what to newOptFunction->container() so it gets
             // printed when we time sending the response (which is
             // newOptFunction->container())
-            what = newOptFunction->container();
+            what = newOptFunctions[0]->container();
 
             // Serialize the response
             // Response data format =
@@ -269,9 +275,12 @@ void CompilerServer::tryRun() {
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = UUIDPool::getHash(newOptFunction->container());
-            response.putBytes((uint8_t*)&hash, sizeof(hash));
-            serialize(newOptFunction->container(), response, true);
+            response.putLong(newOptFunctions.size());
+            for (auto newOptFunction : newOptFunctions) {
+                auto hash = UUIDPool::getHash(newOptFunction->container());
+                response.putBytes((uint8_t*)&hash, sizeof(hash));
+                serialize(newOptFunction->container(), response, true);
+            }
             break;
         }
         case Request::Retrieve: {
