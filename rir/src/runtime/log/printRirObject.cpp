@@ -4,6 +4,7 @@
 
 #include "printRirObject.h"
 #include "R/Printing.h"
+#include "interpreter/interp_incl.h"
 #include "printPrettyGraph.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
@@ -30,6 +31,21 @@ defaultPrintRirObjectPrettyGraphContent(SEXP sexp,
     print.addBody([&](std::ostream& s){
         s << "<pre>" << escapeHtml(Print::dumpSexp(sexp)) << "</pre>";
     });
+    if (isValidClosureSEXP(sexp)) {
+        print.addEdgeTo(BODY(sexp), true, "body");
+    } else if (TYPEOF(sexp) == VECSXP) {
+        for (R_xlen_t i = 0; i < XLENGTH(sexp); i++) {
+            print.addEdgeTo(VECTOR_ELT(sexp, i), true, "elem", [&](std::ostream& s){
+                s << i;
+            });
+        }
+    } else if (TYPEOF(sexp) == LISTSXP) {
+        for (unsigned i = 0; sexp != R_NilValue; i++, sexp = CDR(sexp)) {
+            print.addEdgeTo(CAR(sexp), true, "elem", [&](std::ostream& s){
+                s << i;
+            });
+        }
+    }
 }
 
 static void printRirObject(SEXP sexp, std::ostream& s, bool isDetailed) {
