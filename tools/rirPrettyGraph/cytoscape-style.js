@@ -25,16 +25,19 @@ node.node-Code {
 node.node-DispatchTable {
     shape: hexagon;
     background-color: #F6DB95;
+    border-color: #422006;
 }
 
 node.node-Function {
     shape: pentagon;
     background-color: #F7B46F;
+    border-color: #422006;
 }
 
 node.node-other {
     shape: ellipse;
     background-color: #528A74;
+    border-color: #082f49;
 }
 
 edge {

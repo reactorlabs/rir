@@ -517,7 +517,9 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
         }
     });
     print.addBody([&](std::ostream& s) {
-        // TODO: improve? (Print only bytecodes which reference other SEXPs)
+        if (srcPrint.length() >= PRETTY_GRAPH_CODE_NAME_MAX_LENGTH) {
+            s << "<pre>" << escapeHtml(srcPrint) << "</pre>\n";
+        }
         std::stringstream str;
         disassemble(str);
         s << "<pre>" << escapeHtml(str.str()) << "</pre>";
@@ -535,7 +537,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
                 }
                 s << " isn't a source type!";
             });
-        } else if (sexp && TYPEOF(sexp) != SYMSXP && TYPEOF(sexp) != LANGSXP) {
+        } else if (sexp != R_NilValue && sexp && TYPEOF(sexp) != SYMSXP && TYPEOF(sexp) != LANGSXP) {
             print.addEdgeTo(sexp, true, "ast", [&](std::ostream& s){
                 s << type;
                 if (index != SIZE_MAX) {
