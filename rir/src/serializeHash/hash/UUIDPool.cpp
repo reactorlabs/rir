@@ -192,13 +192,13 @@ void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
 
 void UUIDPool::uninternGcd(SEXP e) {
     // There seems to be a bug somewhere where R is calls finalizer on the wrong
-    // object, or calls it twice...
+    // object, or calls it twice. Or maybe it's in our code...
     if (preserved.count(e)) {
-        std::cerr << "WARNING: preserved SEXP is supposedly getting gcd";
+        std::cerr << "WARNING: preserved SEXP is supposedly getting gcd" << std::endl;
         return;
     }
     if (!hashes.count(e)) {
-        std::cerr << "WARNING: SEXP getting gcd is supposedly never interned";
+        // Can happen if we manually unintern, since we can't remove the finalizer
         return;
     }
 
