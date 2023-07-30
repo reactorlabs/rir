@@ -308,12 +308,13 @@ CompilerClient::pirCompile(Function* baseline,
                     // Try to get hashed if we already have the compiled value
                     // (unlikely but maybe possible)
                     auto newOptFunctionContainer =
-                            UUIDPool::get(newOptFunctionContainerHash);
+                        UUIDPool::get(newOptFunctionContainerHash);
+                    // Still have to deserialize to advance buffer
+                    auto deserialized =
+                        deserialize(response, true,
+                                    newOptFunctionContainerHash);
                     if (!newOptFunctionContainer) {
-                            // Actually deserialize
-                            newOptFunctionContainer =
-                            deserialize(response, true,
-                                             newOptFunctionContainerHash);
+                        newOptFunctionContainer = deserialized;
                     }
                     newOptFunctions[i] = Function::unpack(newOptFunctionContainer);
                 }

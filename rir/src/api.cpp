@@ -382,7 +382,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
         // insert the compiler server's version and associated
         for (auto newOptFunction : compilerServerHandle->getOptFunctions()) {
-            DispatchTable::unpack(BODY(what))->insert(newOptFunction);
+            if (!newOptFunction->isOptimized()) {
+                DispatchTable::unpack(BODY(what))->baseline(newOptFunction);
+            } else {
+                DispatchTable::unpack(BODY(what))->insert(newOptFunction);
+            }
         }
     }
     delete compilerServerHandle;

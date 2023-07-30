@@ -250,7 +250,7 @@ void CompilerServer::tryRun() {
 
             assert(DispatchTable::unpack(BODY(what))->size() > 1);
             std::vector<Function*> newOptFunctions;
-            for (unsigned i = 1; i < DispatchTable::unpack(BODY(what))->size(); ++i) {
+            for (unsigned i = 0; i < DispatchTable::unpack(BODY(what))->size(); ++i) {
                 newOptFunctions.push_back(DispatchTable::unpack(BODY(what))->get(i));
             }
 
