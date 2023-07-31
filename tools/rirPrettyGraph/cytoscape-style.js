@@ -13,28 +13,28 @@ node {
     background-color: #41485A;
 }
 
-node.node-Code {
+node.Code, node.DispatchTable, node.Function {
+    border-color: #422006;
+}
+
+node.Code {
     shape: rectangle;
     background-color: #D7983A;
     border-width: 2px;
-    border-style: solid;
-    border-color: #422006;
     border-opacity: 0.5;
 }
 
-node.node-DispatchTable {
+node.DispatchTable {
     shape: hexagon;
     background-color: #F6DB95;
-    border-color: #422006;
 }
 
-node.node-Function {
+node.Function {
     shape: pentagon;
     background-color: #F7B46F;
-    border-color: #422006;
 }
 
-node.node-other {
+node.other {
     shape: ellipse;
     background-color: #528A74;
     border-color: #082f49;
@@ -51,42 +51,21 @@ edge {
     font-size: 10px;
 }
 
-edge.arrow-DispatchTable-entry {
+edge.other-body, edge.DispatchTable-entry, edge.Function-body, edge.Code-arglist-order {
     line-color: #422006;
     target-arrow-color: #422006;
     color: #422006;
     width: 4px;
 }
 
-edge.arrow-Function-body {
-    line-color: #422006;
-    target-arrow-color: #422006;
-    color: #422006;
+edge.Function-default-arg, edge.Code-promise {
+    line-color: #3f6212;
+    target-arrow-color: #3f6212;
+    color: #3f6212;
     width: 4px;
 }
 
-edge.arrow-Code-arglist-order {
-    line-color: #422006;
-    target-arrow-color: #422006;
-    color: #422006;
-    width: 2px;
-}
-
-edge.arrow-Function-default-arg {
-    line-color: #3f6212;
-    target-arrow-color: #3f6212;
-    color: #3f6212;
-    width: 2px;
-}
-
-edge.arrow-Code-promise {
-    line-color: #3f6212;
-    target-arrow-color: #3f6212;
-    color: #3f6212;
-    width: 2px;
-}
-
-edge.arrow-Code-push, edge.arrow-Code-guard, edge.arrow-Code-call {
+edge.Code-push, edge.Code-guard, edge.Code-call {
     line-color: #075985;
     target-arrow-color: #075985;
     color: #075985;
@@ -97,23 +76,34 @@ edge.arrow-Code-push, edge.arrow-Code-guard, edge.arrow-Code-call {
     width: 2px;
 }
 
-edge.arrow-Code-unknown-extra-pool {
+edge.Code-target {
     line-color: #701a75;
     target-arrow-color: #701a75;
     color: #701a75;
+    /** solid for parent-child relationships, 
+      * dotted for "far away" (e.g. globals), 
+      * dashed for everything else */
     line-style: dashed;
-    width: 4px;
+    width: 2px;
 }
 
-edge.arrow-Code-unexpected-name, edge.arrow-Code-unexpected-ast, edge.arrow-Code-unexpected-builtin, edge.arrow-Code-unexpected {
+edge.Code-unknown-extra-pool {
+    line-color: #52525b;
+    target-arrow-color: #52525b;
+    color: #52525b;
+    line-style: dashed;
+    width: 2px;
+}
+
+edge.Code-unexpected-name, edge.Code-unexpected-ast, edge.Code-unexpected-builtin, edge.Code-unexpected {
     line-color: #dc2626;
     target-arrow-color: #dc2626;
     color: #dc2626;
     line-style: dashed;
-    width: 8px;
+    width: 4px;
 }
 
-edge.arrow-far-away {
+edge.far-away {
     line-style: dotted;
     target-arrow-shape: vee;
 }

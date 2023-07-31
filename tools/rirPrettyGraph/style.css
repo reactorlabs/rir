@@ -17,11 +17,9 @@ body {
     height: 100%;
 }
 
-#sidebar {
-    position: absolute;
-    right: 0;
+#options, #details {
     top: 0;
-    width: 25%;
+    position: absolute;
     padding: 1em;
     background: #3338;
     backdrop-filter: blur(10px);
@@ -30,22 +28,35 @@ body {
     overflow: scroll;
 }
 
-#sidebar #addr {
+#options {
+    left: 0;
+}
+
+#options .tip {
+    width: 300px;
+}
+
+#details {
+    right: 0;
+    width: 25%;
+}
+
+#details #addr {
     font-size: 2em;
     font-weight: bold;
     margin: 0;
 }
 
-#sidebar #name {
+#details #name {
     font-size: 1.5em;
     font-weight: bold;
     margin-bottom: 0.5em;
 }
 
-#sidebar #body {
+#details #body {
     margin: 1em 0;
 }
 
-#sidebar #body p {
+#details #body p {
     margin: 0.5em 0;
 }

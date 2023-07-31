@@ -167,9 +167,7 @@ void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) con
           << "ms, deopt: " << deoptCount()
           << "</p>";
     });
-    print.addEdgeTo(body()->container(), true, "body", [&](std::ostream& s) {
-        s << "body";
-    });
+    print.addEdgeTo(body()->container(), true, "body");
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
         if (arg) {

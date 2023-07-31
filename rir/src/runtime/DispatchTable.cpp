@@ -77,7 +77,7 @@ void DispatchTable::printPrettyGraphContent(const PrettyGraphInnerPrinter& print
     print.addName([&](std::ostream& s) { s << "DispatchTable(" << size() << ")"; });
     for (size_t i = 0; i < size(); i++) {
         print.addEdgeTo(getEntry(i), true, "entry", [&](std::ostream& s) {
-            s << "Entry " << i;
+            s << "entry " << i;
         });
     }
 }
