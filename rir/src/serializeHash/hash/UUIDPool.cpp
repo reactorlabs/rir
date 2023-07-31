@@ -283,9 +283,9 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #endif
 
             // assert(false);
-            Rf_warning("SEXP UUID changed. Uninterning, but unless we're"
-                       "testing, semantic deviations have probably occurred and"
-                       "we'll probably crash soon");
+            std::cerr << "WARNING: SEXP UUID changed. Uninterning, but unless"
+                         "we're testing, semantic deviations have probably"
+                         "occurred and we'll probably crash soon\n";
             unintern(e);
         }
 
@@ -313,6 +313,17 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
     });
 }
 
+static bool isRecursivelySerializable(SEXP sexp) {
+    if (auto c = Code::check(sexp)) {
+        // Native code may be pending compilation, and if so, it can't yet be
+        // serialized. Even if it's not pending, we need hashes to be consistent
+        if (c->kind == Code::Kind::Native) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
     return disableGc<SEXP>([&]{
@@ -328,12 +339,13 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             auto ret = internable(e) ? intern(e, hashRoot(e), preserve) : e;
             if (recursive) {
                 ConnectedSet connected = getConnected(e);
-                for (auto s : connected) {
-                    if (hashes.count(s) || !internable(s)) {
+                for (auto& s : connected) {
+                    if (hashes.count(s.sexp) || !internable(s.sexp) ||
+                        (s.isChild && isRecursivelySerializable(s.sexp))) {
                         continue;
                     }
 
-                    intern(s, hashRoot(s), preserve);
+                    intern(s.sexp, hashRoot(s.sexp), preserve);
                 }
             }
             return ret;
@@ -380,18 +392,20 @@ const UUID& UUIDPool::getHash(SEXP sexp) {
 SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
         // Read whether we are serializing hash
-        auto isInternable = InBool(in);
-        if (isInternable) {
+        auto writeHashInstead = InBool(in);
+        if (writeHashInstead) {
             // Read hash instead of regular data,
             // then retrieve by hash from interned or server
             UUID hash;
             InBytes(in, &hash, sizeof(hash));
             if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> " << interned.at(hash) << "\n");
+                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
+                              << interned.at(hash) << "\n");
                 return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
-                LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
+                LOG(std::cout << "Retrieving by hash from server: " << hash
+                              << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
                     return sexp;
@@ -409,18 +423,20 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
 SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
         // Read whether we are serializing hash
-        auto isInternable = buf.getBool();
-        if (isInternable) {
+        auto writeHashInstead = buf.getBool();
+        if (writeHashInstead) {
             // Read hash instead of regular data,
             // then retrieve by hash from interned or server
             UUID hash;
             buf.getBytes((uint8_t*)&hash, sizeof(hash));
             if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> " << interned.at(hash) << "\n");
+                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
+                              << interned.at(hash) << "\n");
                 return interned.at(hash);
             }
             if (CompilerClient::isRunning()) {
-                LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
+                LOG(std::cout << "Retrieving by hash from server: " << hash
+                              << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
                     return sexp;
@@ -435,25 +451,33 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     return deserialize(buf, useHashes);
 }
 
-void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
+void UUIDPool::writeItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {
     if (useHashes(out)) {
-        auto isInternable = internable(sexp);
+        auto writeHashInstead = internable(sexp) && (!isChild ||
+                                                     // TODO: Refactor and mention?
+                                                     !isRecursivelySerializable(sexp));
         // Write whether we are serializing hash
-        OutBool(out, isInternable);
-        if (isInternable) {
+        OutBool(out, writeHashInstead);
+        if (writeHashInstead) {
             // Write hash instead of regular data
             assert(hashes.count(sexp) && "SEXP not interned");
             // Why does cppcheck think this is unused?
             // cppcheck-suppress unreadVariable
             auto hash = hashes.at(sexp);
             // Not necessarily true: sexp == interned[hash]. But the following are true...
-            assert(interned.count(hash) && "SEXP interned with hash but the there's no \"main\" SEXP with that hash");
-            assert((sexp == interned[hash] || TYPEOF(sexp) == TYPEOF(interned[hash])) &&
+            assert(interned.count(hash) &&
+                   "SEXP interned with hash but the there's no \"main\" SEXP with that hash");
+            assert((sexp == interned[hash] ||
+                    TYPEOF(sexp) == TYPEOF(interned[hash])) &&
                    "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different SEXP types)");
-            assert((sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP || rirObjectMagic(sexp) == rirObjectMagic(interned[hash])) &&
-                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different RIR types)");
-            assert(hashes[interned[hash]] == hash && "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
-            assert(interned[hashes[interned[hash]]] == interned[hash] && "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
+            assert(
+                (sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP ||
+                 rirObjectMagic(sexp) == rirObjectMagic(interned[hash])) &&
+                "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different RIR types)");
+            assert(hashes[interned[hash]] == hash &&
+                   "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
+            assert(interned[hashes[interned[hash]]] == interned[hash] &&
+                   "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
             OutBytes(out, &hash, sizeof(hash));
             return;
         }
@@ -463,12 +487,12 @@ void UUIDPool::writeItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
     WriteItem(sexp, ref_table, out);
 }
 
-void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
+void UUIDPool::writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
-        auto isInternable = internable(sexp);
+        auto writeHashInstead = !isChild && internable(sexp);
         // Write whether we are serializing hash
-        buf.putBool(isInternable);
-        if (isInternable) {
+        buf.putBool(writeHashInstead);
+        if (writeHashInstead) {
             // Write hash instead of regular data
             assert(hashes.count(sexp) && "SEXP not interned");
             // Why does cppcheck think this is unused?
@@ -483,10 +507,10 @@ void UUIDPool::writeItem(SEXP sexp, ByteBuffer& buf, bool useHashes) {
     serialize(sexp, buf, useHashes);
 }
 
-void UUIDPool::writeNullableItem(SEXP sexp, SEXP ref_table, R_outpstream_t out) {
+void UUIDPool::writeNullableItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {
     OutBool(out, sexp != nullptr);
     if (sexp) {
-        writeItem(sexp, ref_table, out);
+        writeItem(sexp, isChild, ref_table, out);
     }
 }
 

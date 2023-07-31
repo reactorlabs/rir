@@ -1,5 +1,6 @@
 #include "module.h"
 
+#include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "pir_impl.h"
 #include "runtime/TypeFeedback.h"
@@ -37,8 +38,11 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
                    : getEnv(CLOENV(closure));
     if (!closures.count(id))
         closures[id] = new Closure(name, closure, f, env, userContext);
-    // If the compiler server is running sometimes this false. TODO: Investigate
-    assert(closures.at(id)->rirClosure() == closure || CompilerServer::isRunning());
+    // If the compiler server is running sometimes this false.
+    // Or client, but only if we're not calling hashRoot on children.
+    // Thus it probably means closures.at(id) is an equivalent duplicate.
+    // TODO: Investigate
+    assert(closures.at(id)->rirClosure() == closure || CompilerServer::isRunning() || CompilerClient::isRunning());
     return closures.at(id);
 }
 

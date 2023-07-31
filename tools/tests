@@ -30,6 +30,7 @@ fi
 . "${SCRIPTPATH}/script_include.sh"
 
 export ROOT_DIR="${SCRIPTPATH}/.."
+export PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION="$SCRIPTPATH/rirPrettyGraph"
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
