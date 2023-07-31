@@ -43,13 +43,13 @@ static bool isPlayingCompile = false;
 
 void Record::record(const DispatchTable* dt, std::unique_ptr<Event> event) {
     auto entry = initOrGetRecording(dt);
-    log.push_back({entry.first, std::move(event)});
+    log.emplace_back(entry.first, std::move(event));
 }
 
 void Record::record(const SEXP cls, std::string name,
                     std::unique_ptr<Event> event) {
     auto entry = initOrGetRecording(cls, name);
-    log.push_back({entry.first, std::move(event)});
+    log.emplace_back(entry.first, std::move(event));
 }
 
 void Record::record(const SEXP cls, std::unique_ptr<Event> event) {
@@ -147,7 +147,7 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         }
 
         size_t idx = functions.size();
-        functions.push_back(FunRecording(primIdx));
+        functions.emplace_back<FunRecording>(primIdx);
         auto& body = functions.back();
         body.closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
@@ -163,23 +163,22 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
     if (dt) {
         // Leaking for the moment
         R_PreserveObject(dt->container());
-        auto r = dt_to_recording_index_.insert({dt, functions.size()});
+        auto r = dt_to_recording_index_.emplace(dt, functions.size());
         inserted = r.second;
         index = r.first->second;
     } else {
-        assert(TYPEOF(&body) == BCODESXP);
         R_PreserveObject(&body);
-        auto r = bcode_to_body_index.insert({&body, functions.size()});
+        auto r = bcode_to_body_index.emplace(&body, functions.size());
         inserted = r.second;
         index = r.first->second;
     }
 
-    auto r = dt_to_recording_index_.insert({dt, functions.size()});
+    auto r = dt_to_recording_index_.emplace(dt, functions.size());
     FunRecording* v;
 
     if (inserted) {
         // we are seeing it for the first time
-        functions.push_back(FunRecording{});
+        functions.emplace_back();
         v = &functions.back();
         v->env = getEnvironmentName(CLOENV(cls));
         v->closure = PROTECT(
@@ -206,9 +205,9 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
     if (r.second && false) {
         assert(dt->size() == 1);
         auto* base = dt->baseline();
-        log.push_back({r.first->second,
-                       std::make_unique<DtInitEvent>(base->invocationCount(),
-                                                     base->deoptCount())});
+        log.emplace_back(r.first->second,
+                         std::make_unique<DtInitEvent>(base->invocationCount(),
+                                                       base->deoptCount()));
     }
 
     return {r.first->second, *v};
@@ -221,12 +220,10 @@ Record::initOrGetRecording(const DispatchTable* dt, std::string name) {
     if (dt_index != dt_to_recording_index_.end()) {
         return {dt_index->second, functions[dt_index->second]};
     } else {
-        FunRecording r = {};
-        r.name = name;
-
         auto insertion_index = functions.size();
-        functions.push_back(std::move(r));
-        dt_to_recording_index_.insert({dt, insertion_index});
+        functions.emplace_back();
+        functions.back().name = name;
+        dt_to_recording_index_.emplace(dt, insertion_index);
         return {insertion_index, functions[insertion_index]};
     }
 }
@@ -731,7 +728,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     for (auto i = 0; i < Rf_length(speculative_contexts_sexp); i++) {
         auto speculative_context = serialization::speculative_context_from_sexp(
             VECTOR_ELT(speculative_contexts_sexp, i));
-        this->speculative_contexts.push_back(speculative_context);
+        this->speculative_contexts.push_back(std::move(speculative_context));
     }
 }
 
@@ -811,8 +808,8 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
 }
 
 bool DeoptEvent::containsReference(size_t dispatchTable) const {
-    return reasonCodeIdx_.first >= 0 &&
-           (size_t)reasonCodeIdx_.first == dispatchTable;
+    return (size_t)reasonCodeIdx_.first == dispatchTable ||
+           (size_t)triggerClosure_ == dispatchTable;
 }
 
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
@@ -983,9 +980,9 @@ void recordCompile(SEXP const cls, const std::string& name,
     recorder_.recordSpeculativeContext(dt, sc);
 
     auto dispatch_context = assumptions.toI();
-    auto event = CompilationEvent(dispatch_context, std::move(sc));
-    recorder_.record(cls, name,
-                     std::make_unique<CompilationEvent>(std::move(event)));
+    recorder_.record(
+        cls, name,
+        std::make_unique<CompilationEvent>(dispatch_context, std::move(sc)));
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) const {
@@ -1058,9 +1055,9 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     assert(reasonCodeIdx.first >= 0 &&
            "Could not locate deopt reason location");
 
-    DeoptEvent event(funIdx, reason.reason, reasonCodeIdx,
-                     reason.origin.offset(), trigger);
-    recorder_.record(cls, std::make_unique<DeoptEvent>(std::move(event)));
+    recorder_.record(
+        cls, std::make_unique<DeoptEvent>(funIdx, reason.reason, reasonCodeIdx,
+                                          reason.origin.offset(), trigger));
 }
 
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
@@ -1069,8 +1066,7 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
         return;
     }
 
-    DtInitEvent event(funIdx, oldDeoptCount);
-    recorder_.record(dt, std::make_unique<DtInitEvent>(std::move(event)));
+    recorder_.record(dt, std::make_unique<DtInitEvent>(funIdx, oldDeoptCount));
 }
 
 void recordInvocation(const Function* f, ssize_t deltaCount,
@@ -1093,8 +1089,8 @@ void recordInvocation(const Function* f, ssize_t deltaCount,
         return;
     }
 
-    InvocationEvent event(dt->size(), funIdx, deltaCount, previousCount);
-    recorder_.record(dt, std::make_unique<InvocationEvent>(std::move(event)));
+    recorder_.record(dt, std::make_unique<InvocationEvent>(
+                             dt->size(), funIdx, deltaCount, previousCount));
 }
 
 #define RECORD_SC_GUARD()                                                      \
@@ -1147,9 +1143,8 @@ void recordSC(const Opcode* immediate, SpeculativeContext sc) {
         return;
     }
 
-    SpeculativeContextEvent event(codeIndex, offset, sc);
     recorder_.record(
-        dt, std::make_unique<SpeculativeContextEvent>(std::move(event)));
+        dt, std::make_unique<SpeculativeContextEvent>(codeIndex, offset, sc));
 }
 
 void recordSC(const ObservedCallees& callees) {
@@ -1241,6 +1236,7 @@ void printRecordings(std::ostream& out) { recorder_.printRecordings(out); }
 
 REXPORT SEXP startRecordings() {
     rir::recording::is_recording_ = true;
+    rir::recording::recorder_.reset();
     return R_NilValue;
 }
 

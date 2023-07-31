@@ -130,6 +130,8 @@ class CompilationEvent : public Event {
 
 class DeoptEvent : public Event {
   public:
+    DeoptEvent(const DeoptEvent&) = delete;
+    DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
                std::pair<ssize_t, ssize_t> reasonCodeIdx,
                uint32_t reasonCodeOff, SEXP trigger);
@@ -220,7 +222,7 @@ struct FunRecording {
      * closure */
     std::string env;
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue */
-    SEXP closure;
+    SEXP closure = R_NilValue;
 
     // Just prints the name if the closure (or pointer if it has no name)
     friend std::ostream& operator<<(std::ostream& out,
@@ -263,6 +265,9 @@ class Replay {
 };
 
 class Record {
+    Record(const Record&) = delete;
+    Record& operator=(const Record&) = delete;
+
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
@@ -274,6 +279,7 @@ class Record {
     size_t indexOfBaseline(const rir::Code* code) const;
 
   public:
+    Record() = default;
     ~Record();
 
     void record(const DispatchTable* dt, std::unique_ptr<Event> event);
