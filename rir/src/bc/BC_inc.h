@@ -219,11 +219,13 @@ class BC {
 
     static void deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
                             size_t codeSize, Code* container);
-    static void serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
+    static void serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
+                          R_outpstream_t out, const Opcode* code,
                           size_t codeSize, const Code* container);
     static void hash(Hasher& hasher, const Opcode* code, size_t codeSize,
                      const Code* container);
-    static void addConnected(ConnectedCollector& collector, const Opcode* code,
+    static void addConnected(std::vector<bool>& extraPoolChildren,
+                             ConnectedCollector& collector, const Opcode* code,
                              size_t codeSize, const Code* container);
     static void addToPrettyGraph(const PrettyGraphInnerPrinter& p,
                                  std::vector<bool>& addedExtraPoolEntries,

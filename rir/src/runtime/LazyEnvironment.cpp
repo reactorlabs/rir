@@ -79,11 +79,11 @@ void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
     for (int i = 0; i < (int)nargs; i++) {
         Pool::writeItem(names[i], refTable, out);
     }
-    UUIDPool::writeNullableItem(materialized(), refTable, out);
+    UUIDPool::writeNullableItem(materialized(), false, refTable, out);
     // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
-    UUIDPool::writeNullableItem(getParent(), refTable, out);
+    UUIDPool::writeNullableItem(getParent(), false, refTable, out);
     for (int i = 0; i < (int)nargs; i++) {
-        UUIDPool::writeNullableItem(getArg((size_t)i), refTable, out);
+        UUIDPool::writeNullableItem(getArg((size_t)i), false, refTable, out);
     }
 }
 
@@ -107,11 +107,11 @@ void LazyEnvironment::addConnected(ConnectedCollector& collector) const {
     for (int i = 0; i < (int)nargs; i++) {
         collector.addConstant(names[i]);
     }
-    collector.addNullable(materialized());
+    collector.addNullable(materialized(), false);
     // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
-    collector.addNullable(getParent());
+    collector.addNullable(getParent(), false);
     for (int i = 0; i < (int)nargs; i++) {
-        collector.addNullable(getArg((size_t)i));
+        collector.addNullable(getArg((size_t)i), false);
     }
 }
 

@@ -91,7 +91,7 @@ void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, numEntries);
     OutBytes(out, entry, sizeof(entry));
     for (int i = 0; i < numCodes; i++) {
-        UUIDPool::writeItem(getEntry(i), refTable, out);
+        UUIDPool::writeItem(getEntry(i), false, refTable, out);
     }
     OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
@@ -111,7 +111,7 @@ void PirTypeFeedback::hash(Hasher& hasher) const {
 void PirTypeFeedback::addConnected(ConnectedCollector& collector) const {
     auto numCodes = this->numCodes();
     for (int i = 0; i < numCodes; i++) {
-        collector.add(getEntry(i));
+        collector.add(getEntry(i), false);
     }
 }
 

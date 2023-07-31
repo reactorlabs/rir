@@ -56,7 +56,7 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
     }
     ByteBuffer buf;
     UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    UUIDPool::writeItem(what, false, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "SEXP"),
@@ -76,7 +76,7 @@ llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     auto sexp = code->container();
     UUIDPool::intern(sexp, true, false);
-    UUIDPool::writeItem(sexp, buf, true);
+    UUIDPool::writeItem(sexp, false, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "Code"),
@@ -143,7 +143,7 @@ llvm::MDNode* SerialRepr::srcIdxMetadata(llvm::LLVMContext& ctx, Immediate i) {
     auto what = src_pool_at(i);
     ByteBuffer buf;
     UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    UUIDPool::writeItem(what, false, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -157,7 +157,7 @@ llvm::MDNode* SerialRepr::poolIdxMetadata(llvm::LLVMContext& ctx, BC::PoolIdx i)
     auto what = Pool::get(i);
     ByteBuffer buf;
     UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, buf, true);
+    UUIDPool::writeItem(what, false, buf, true);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -432,23 +432,26 @@ static void patchGlobalMetadatas(llvm::Module& mod, rir::Code* outer) {
     }
 }
 
-static void patchFunctionMetadata(llvm::Module& mod,
-                                  const llvm::MDNode* operand) {
+static std::pair<llvm::GlobalValue*, llvm::Value*>
+patchFunctionMetadata(llvm::Module& mod, const llvm::MDNode* operand) {
     auto& meta = *(const llvm::MDTuple*)operand;
     auto llvmValueName = ((llvm::MDString*)meta.getOperand(0).get())->getString();
     auto builtinId = (int)((llvm::ConstantInt*)((llvm::ConstantAsMetadata*)meta.getOperand(1).get())->getValue())->getZExtValue();
     auto llvmValue = mod.getNamedValue(llvmValueName);
 
     auto builtin = getBuiltin(getBuiltinFun(builtinId));
-    auto replacement = LowerFunctionLLVM::convertToFunction(
-        mod, (void*)builtin, t::builtinFunction, builtinId);
+    auto replacingValue = LowerFunctionLLVM::convertToFunction(
+                              mod,
+                              (void*)builtin,
+                              t::builtinFunction,
+                              builtinId).getCallee();
 
     // I don't know why the types are different, but they shouldn't be
     // (every builtin has the same type, but the same types in the old module
     //  are different from those of the new one. Maybe that will be an issue
     //  later on...)
-    replacement.getCallee()->mutateType(llvmValue->getType());
-    llvmValue->replaceAllUsesWith(replacement.getCallee());
+    replacingValue->mutateType(llvmValue->getType());
+    return {llvmValue, replacingValue};
 }
 
 static void patchFunctionMetadatas(llvm::Module& mod) {
@@ -456,8 +459,12 @@ static void patchFunctionMetadatas(llvm::Module& mod) {
     if (!meta) {
         return;
     }
+    std::vector<std::pair<llvm::GlobalValue*, llvm::Value*>> replacements;
     for (auto operand : meta->operands()) {
-        patchFunctionMetadata(mod, operand);
+        replacements.push_back(patchFunctionMetadata(mod, operand));
+    }
+    for (auto replacement : replacements) {
+        replacement.first->replaceAllUsesWith(replacement.second);
     }
 }
 

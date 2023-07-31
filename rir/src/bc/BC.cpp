@@ -158,11 +158,13 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             i.callBuiltinFixedArgs.builtin =
                 Pool::readItem(refTable, inp);
             break;
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+            i.fun = InInteger(inp);
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
-        case Opcode::mk_promise_:
-        case Opcode::mk_eager_promise_:
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:
@@ -195,8 +197,9 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
     }
 }
 
-void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
-                   size_t codeSize, const Code* container) {
+void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
+                   R_outpstream_t out, const Opcode* code, size_t codeSize,
+                   const Code* container) {
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
         OutChar(out, (int)*code);
@@ -249,11 +252,15 @@ void BC::serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
             Pool::writeItem(i.callBuiltinFixedArgs.ast, refTable, out);
             Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
             break;
+            break;
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+            OutInteger(out, i.fun);
+            extraPoolChildren[i.fun] = true;
+            break;
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
-        case Opcode::mk_promise_:
-        case Opcode::mk_eager_promise_:
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:
@@ -381,7 +388,8 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
     }
 }
 
-void BC::addConnected(ConnectedCollector& collector, const Opcode* code,
+void BC::addConnected(std::vector<bool>& extraPoolChildren,
+                      ConnectedCollector& collector, const Opcode* code,
                       size_t codeSize, const Code* container) {
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
@@ -432,8 +440,11 @@ void BC::addConnected(ConnectedCollector& collector, const Opcode* code,
         case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
+            break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
+            extraPoolChildren[i.fun] = true;
+            break;
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::beginloop_:

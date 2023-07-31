@@ -19,6 +19,7 @@ fi
 
 . "${SCRIPTPATH}/script_include.sh"
 RIR_EXE="${RIR_BUILD}/bin/R"
+export PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION="$SCRIPTPATH/rirPrettyGraph"
 # endregion
 
 export PIR_SERVER_ADDR="${PIR_SERVER_ADDR=tcp://*:${PORT=5555}}"
