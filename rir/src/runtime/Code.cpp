@@ -151,7 +151,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     code->codeSize = InInteger(inp);
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
-    SEXP extraPool = p(UUIDPool::readItem(refTable, inp));
     auto hasArgReorder = InInteger(inp);
     SEXP argReorder = nullptr;
     if (hasArgReorder) {
@@ -163,6 +162,12 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 
     // Bytecode
     BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
+
+    // Extra pool
+    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
+    for (unsigned i = 0; i < code->extraPoolSize; ++i) {
+        SET_VECTOR_ELT(extraPool, i, UUIDPool::readItem(refTable, inp));
+    }
 
     // Srclist
     for (unsigned i = 0; i < code->srcLength; i++) {
@@ -204,7 +209,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         src_pool_write_item(src, refTable, out);
         OutInteger(out, trivialExpr != nullptr);
         if (trivialExpr)
-            UUIDPool::writeItem(trivialExpr, refTable, out);
+            UUIDPool::writeItem(trivialExpr, false, refTable, out);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize numbers", container(), [&]{
         OutInteger(out, (int)stackLength);
@@ -214,22 +219,28 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         OutInteger(out, (int)srcLength);
         OutInteger(out, (int)extraPoolSize);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
-        UUIDPool::writeItem(getEntry(0), refTable, out);
-    });
+
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize call argument reordering metadata", container(), [&]{
         OutInteger(out, getEntry(2) != nullptr);
         if (getEntry(2))
-            UUIDPool::writeItem(getEntry(2), refTable, out);
+            UUIDPool::writeItem(getEntry(2), true, refTable, out);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
         if (includeFunction) {
-            UUIDPool::writeItem(function()->container(), refTable, out);
+            UUIDPool::writeItem(function()->container(), false, refTable, out);
         }
     });
 
+    std::vector<bool> extraPoolChildren;
+    extraPoolChildren.resize(extraPoolSize);
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize bytecode", container(), [&]{
-        BC::serialize(refTable, out, code(), codeSize, this);
+        BC::serialize(extraPoolChildren, refTable, out, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
+        for (unsigned i = 0; i < extraPoolSize; ++i) {
+            UUIDPool::writeItem(getExtraPoolEntry(i), extraPoolChildren[i], refTable, out);
+        }
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
@@ -296,18 +307,23 @@ void Code::addConnected(ConnectedCollector& collector) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in source", container(), [&]{
         collector.addSrc(src);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in extra pool", container(), [&]{
-        collector.add(getEntry(0));
-    });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in call argument reordering metadata", container(), [&]{
-        collector.addNullable(getEntry(2));
+        collector.addNullable(getEntry(2), true);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in outer function", container(), [&]{
-        collector.add(function()->container());
+        collector.add(function()->container(), false);
     });
 
+    std::vector<bool> extraPoolChildren;
+    extraPoolChildren.resize(extraPoolSize);
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in bytecode", container(), [&]{
-        BC::addConnected(collector, code(), codeSize, this);
+        BC::addConnected(extraPoolChildren, collector, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in extra pool", container(), [&]{
+        for (unsigned i = 0; i < extraPoolSize; ++i) {
+            collector.add(getExtraPoolEntry(i), extraPoolChildren[i]);
+        }
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in srclist", container(), [&]{

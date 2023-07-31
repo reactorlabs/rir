@@ -29,7 +29,7 @@ void serializeStackArg(const R_bcstack_t& stackArg, SEXP refTable, R_outpstream_
     OutInteger(out, stackArg.flags);
     OutBool(out, isSexpArg);
     if (isSexpArg) {
-        UUIDPool::writeItem(stackArg.u.sxpval, refTable, out);
+        UUIDPool::writeItem(stackArg.u.sxpval, false, refTable, out);
     } else {
         OutBytes(out, &stackArg.u, sizeof(stackArg.u));
     }
@@ -50,7 +50,7 @@ void hashStackArg(const R_bcstack_t& stackArg, Hasher& hasher) {
 void addConnectedStackArg(const R_bcstack_t& stackArg, ConnectedCollector& collector) {
     auto isSexpArg = stackArg.tag == 0;
     if (isSexpArg) {
-        collector.add(stackArg.u.sxpval);
+        collector.add(stackArg.u.sxpval, false);
     }
 }
 
@@ -104,10 +104,10 @@ void LazyArglist::serialize(SEXP refTable, R_outpstream_t out) const {
             auto heapArg = heapArgs[i];
             // This invariant isn't clear but it holds
             SLOWASSERT(heapArg == getEntry(i + 1));
-            UUIDPool::writeItem(heapArg, refTable, out);
+            UUIDPool::writeItem(heapArg, false, refTable, out);
         }
-        UUIDPool::writeItem(ast, refTable, out);
-        UUIDPool::writeItem(reordering, refTable, out);
+        UUIDPool::writeItem(ast, false, refTable, out);
+        UUIDPool::writeItem(reordering, true, refTable, out);
     }
 }
 
@@ -128,7 +128,7 @@ void LazyArglist::hash(Hasher& hasher) const {
             SLOWASSERT(heapArg == getEntry(i + 1));
             hasher.hash(heapArg);
         }
-        hasher.hash(ast, true);
+        hasher.hash(ast, false);
         hasher.hash(reordering);
     }
 }
@@ -143,10 +143,10 @@ void LazyArglist::addConnected(ConnectedCollector& collector) const {
             auto heapArg = heapArgs[i];
             // This invariant isn't clear but it holds
             SLOWASSERT(heapArg == getEntry(i + 1));
-            collector.add(heapArg);
+            collector.add(heapArg, false);
         }
-        collector.add(ast);
-        collector.add(reordering);
+        collector.add(ast, false);
+        collector.add(reordering, true);
     }
 }
 

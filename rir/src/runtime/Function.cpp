@@ -50,7 +50,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
-    UUIDPool::writeItem(getEntry(0), refTable, out);
+    UUIDPool::writeItem(getEntry(0), true, refTable, out);
 
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
@@ -58,7 +58,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
         if (arg) {
             assert(Code::check(arg));
             // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(arg, refTable, out);
+            UUIDPool::writeItem(arg, true, refTable, out);
         }
     }
     OutInteger(out, (int)flags_.to_i());
@@ -85,11 +85,11 @@ void Function::hash(Hasher& hasher) const {
 }
 
 void Function::addConnected(ConnectedCollector& collector) const {
-    collector.add(getEntry(0));
+    collector.add(getEntry(0), true);
 
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
-        collector.addNullable(arg);
+        collector.addNullable(arg, true);
     }
 }
 
@@ -154,7 +154,7 @@ void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) con
             s << "<p class=\"function-flags\">{";
         }
 #define V(F)                                                                   \
-        if (flags_.includes(F))                                        \
+        if (flags_.includes(F))                                                \
             s << #F << " ";
             RIR_FUNCTION_FLAGS(V)
 #undef V

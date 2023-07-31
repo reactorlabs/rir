@@ -52,8 +52,6 @@ static inline void addConnectedRir(SEXP sexp, ConnectedCollector& collector) {
 static void addConnectedBc1(SEXP sexp, ConnectedCollector& collector,
                             std::queue<SEXP>& bcWorklist) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected.cpp: addConnectedBc1", sexp, [&] {
-       SEXP code = R_bcDecode(BCODE_CODE(sexp));
-       collector.add(code);
        auto consts = BCODE_CONSTS(sexp);
        auto n = LENGTH(consts);
        for (auto i = 0; i < n; i++) {
@@ -63,7 +61,7 @@ static void addConnectedBc1(SEXP sexp, ConnectedCollector& collector,
            if (TYPEOF(c) == BCODESXP) {
                bcWorklist.push(c);
            } else {
-               collector.add(c);
+               collector.add(c, false);
            }
        }
    });
@@ -80,7 +78,7 @@ static void addConnectedBc(SEXP sexp, ConnectedCollector& collector) {
     }
 }
 
-static void addConnected(SEXP sexp, ConnectedCollector& collector) {
+static void addConnected(SEXP sexp, bool isChild, ConnectedCollector& collector) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected.cpp: addConnected", sexp, [&] {
         auto type = TYPEOF(sexp);
         if (ALTREP(sexp)) {
@@ -88,9 +86,9 @@ static void addConnected(SEXP sexp, ConnectedCollector& collector) {
             auto state = ALTREP_SERIALIZED_STATE(sexp);
             auto attrib = ATTRIB(sexp);
             if (info != nullptr && state != nullptr) {
-                collector.add(info);
-                collector.add(state);
-                collector.add(attrib);
+                collector.add(info, false);
+                collector.add(state, false);
+                collector.add(attrib, false);
                 return;
             }
             /* else fall through to standard processing */
@@ -103,7 +101,7 @@ static void addConnected(SEXP sexp, ConnectedCollector& collector) {
         // we treat it as not there.
         auto hasAttr = (type != CHARSXP && ATTRIB(sexp) != R_NilValue);
         if (hasAttr) {
-            collector.add(ATTRIB(sexp));
+            collector.add(ATTRIB(sexp), false);
         }
 
         switch (type) {
@@ -111,37 +109,38 @@ static void addConnected(SEXP sexp, ConnectedCollector& collector) {
         case SYMSXP:
             break;
         case LISTSXP:
+        // LANGSXP can contain RIR objects (perhaps in its tag)
         case LANGSXP:
         case PROMSXP:
         case DOTSXP:
             if (hasTag(sexp)) {
-                collector.add(TAG(sexp));
+                collector.add(TAG(sexp), false);
             }
             if (BNDCELL_TAG(sexp)) {
                 assert(false && "TODO R_expand_binding_value isn't public");
             }
-            collector.add(CAR(sexp));
+            collector.add(CAR(sexp), isChild);
             // ???: use goto tailcall like R for perf boost?
-            collector.add(CDR(sexp));
+            collector.add(CDR(sexp), isChild);
             break;
         case CLOSXP:
-            collector.add(CLOENV(sexp));
-            collector.add(FORMALS(sexp));
+            collector.add(CLOENV(sexp), false);
+            collector.add(FORMALS(sexp), isChild);
             // ???: use goto tailcall like R for perf boost?
-            collector.add(BODY(sexp));
+            collector.add(BODY(sexp), isChild);
             break;
         case EXTPTRSXP:
-            collector.add(EXTPTR_PROT(sexp));
-            collector.add(EXTPTR_TAG(sexp));
+            collector.add(EXTPTR_PROT(sexp), false);
+            collector.add(EXTPTR_TAG(sexp), false);
             break;
         case WEAKREFSXP:
             break;
         case ENVSXP:
             if (!R_IsPackageEnv(sexp) && !R_IsNamespaceEnv(sexp)) {
-                collector.add(ENCLOS(sexp));
-                collector.add(FRAME(sexp));
-                collector.add(HASHTAB(sexp));
-                collector.add(ATTRIB(sexp));
+                collector.add(ENCLOS(sexp), false);
+                collector.add(FRAME(sexp), false);
+                collector.add(HASHTAB(sexp), false);
+                collector.add(ATTRIB(sexp), false);
             }
             break;
         case SPECIALSXP:
@@ -154,11 +153,11 @@ static void addConnected(SEXP sexp, ConnectedCollector& collector) {
         case RAWSXP:
         case STRSXP:
             break;
-        case VECSXP:
-        case EXPRSXP: {
+        case EXPRSXP:
+        case VECSXP: {
             auto n = XLENGTH(sexp);
             for (int i = 0; i < n; ++i) {
-                collector.add(VECTOR_ELT(sexp, i));
+                collector.add(VECTOR_ELT(sexp, i), isChild);
             }
             break;
         }
@@ -178,25 +177,25 @@ static void addConnected(SEXP sexp, ConnectedCollector& collector) {
 }
 
 void ConnectedCollector::addConstant(unsigned idx) {
-    add(Pool::get(idx));
+    add(Pool::get(idx), false);
 }
 
 void ConnectedCollector::addSrc(unsigned idx) {
-    add(src_pool_at(idx));
+    add(src_pool_at(idx), false);
 }
 
 ConnectedSet getConnected(SEXP root) {
     return Measuring::timeEventIf<ConnectedSet>(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected", root, [&] {
         ConnectedSet set;
-        std::queue<SEXP> worklist;
-        worklist.push(root);
+        std::queue<ConnectedElem> worklist;
+        worklist.push({root, false});
         ConnectedCollector collector{set, worklist};
 
         while (!worklist.empty()) {
-            auto sexp = worklist.front();
+            auto elem = worklist.front();
             worklist.pop();
 
-            addConnected(sexp, collector);
+            addConnected(elem.sexp, elem.isChild, collector);
         }
         return set;
     });

@@ -46,7 +46,7 @@ void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, (int)size());
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
-        UUIDPool::writeItem(getEntry(i), refTable, out);
+        UUIDPool::writeItem(getEntry(i), true, refTable, out);
     }
 }
 

@@ -14,7 +14,7 @@ void FrameInfo::deserialize(ByteBuffer& buf) {
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    UUIDPool::writeItem(code->container(), buf, true);
+    UUIDPool::writeItem(code->container(), false, buf, true);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
