@@ -1,5 +1,6 @@
 #include "DispatchTable.h"
 #include "runtime/log/printPrettyGraph.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
 
 namespace rir {
@@ -34,7 +35,7 @@ DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
     useRetrieveHashIfSet(inp, table->container());
     table->size_ = InInteger(inp);
     for (size_t i = 0; i < table->size(); i++) {
-        table->setEntry(i,ReadItem(refTable, inp));
+        table->setEntry(i,UUIDPool::readItem(refTable, inp));
     }
     UNPROTECT(1);
     return table;
@@ -45,7 +46,7 @@ void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, (int)size());
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
-        WriteItem(getEntry(i), refTable, out);
+        UUIDPool::writeItem(getEntry(i), refTable, out);
     }
 }
 
@@ -60,7 +61,7 @@ void DispatchTable::hash(Hasher& hasher) const {
 void DispatchTable::addConnected(ConnectedCollector& collector) const {
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
-        collector.add(getEntry(i));
+        collector.add(getEntry(i), true);
     }
 }
 
