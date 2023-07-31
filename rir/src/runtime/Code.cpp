@@ -537,16 +537,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
                 }
                 s << " isn't a source type!";
             });
-        } else if (sexp != R_NilValue && sexp && TYPEOF(sexp) != SYMSXP && TYPEOF(sexp) != LANGSXP) {
-            print.addEdgeTo(sexp, true, "ast", [&](std::ostream& s){
-                s << type;
-                if (index != SIZE_MAX) {
-                    s << " " << index;
-                }
-                s << " (weird AST)";
-            });
         }
-
     };
     addSourceEdge(src_pool_at(src), "source");
     addSourceEdge(trivialExpr, "trivial-expr");
