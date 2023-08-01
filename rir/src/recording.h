@@ -286,6 +286,18 @@ class Record {
     Record() = default;
     ~Record();
 
+    struct {
+        bool compile : 1;
+        bool deopt : 1;
+        bool typeFeedback : 1;
+        bool invoke : 1;
+    } filter = {
+        .compile = true,
+        .deopt = true,
+        .typeFeedback = false,
+        .invoke = false,
+    };
+
     void record(const DispatchTable* dt, std::unique_ptr<Event> event);
     void record(const SEXP cls, std::string name, std::unique_ptr<Event> event);
     void record(const SEXP cls, std::unique_ptr<Event> event);

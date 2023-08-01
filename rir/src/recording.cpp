@@ -1003,11 +1003,13 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
     out << " }";
 }
 
+#define RECORDER_FILTER_GUARD(field_name)                                      \
+    if (!is_recording_ || !recorder_.filter.field_name)                        \
+        return;
+
 void recordCompile(SEXP const cls, const std::string& name,
                    const Context& assumptions) {
-    if (!is_recording_) {
-        return;
-    }
+    RECORDER_FILTER_GUARD(compile);
 
     recorder_.initOrGetRecording(cls, name);
 
@@ -1048,9 +1050,7 @@ std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
 
 void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
                  SEXP trigger) {
-    if (!is_recording_) {
-        return;
-    }
+    RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
     size_t funIdx = 0;
@@ -1101,6 +1101,7 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
 
 void recordInvocation(const Function* f, ssize_t deltaCount,
                       size_t previousCount) {
+    RECORDER_FILTER_GUARD(invoke);
     if (!is_recording_ || isPlayingCompile)
         return;
 
@@ -1131,6 +1132,7 @@ const Code* nextSCcode = nullptr;
 
 int test = 0;
 void prepareRecordSC(const Code* container) {
+    RECORDER_FILTER_GUARD(typeFeedback);
     RECORD_SC_GUARD();
     test++;
     if (nextSCcode) {
@@ -1149,6 +1151,7 @@ inline const Code* getSCCode() {
 }
 
 void recordSC(const Opcode* immediate, SpeculativeContext sc) {
+    RECORDER_FILTER_GUARD(typeFeedback);
     auto* c = getSCCode();
     ptrdiff_t offset = immediate - c->code();
     assert(offset > 0 && offset < (ptrdiff_t)c->size());
@@ -1178,6 +1181,7 @@ void recordSC(const Opcode* immediate, SpeculativeContext sc) {
 }
 
 void recordSC(const ObservedCallees& callees) {
+    RECORDER_FILTER_GUARD(typeFeedback);
     RECORD_SC_GUARD();
     decltype(SpeculativeContext::Value::callees) targets;
     targets.fill(-1);
@@ -1195,11 +1199,13 @@ void recordSC(const ObservedCallees& callees) {
 }
 
 void recordSC(const ObservedTest& test) {
+    RECORDER_FILTER_GUARD(typeFeedback);
     RECORD_SC_GUARD();
     recordSC((Opcode*)&test, SpeculativeContext(test));
 }
 
 void recordSC(const ObservedValues& type) {
+    RECORDER_FILTER_GUARD(typeFeedback);
     RECORD_SC_GUARD();
     recordSC((Opcode*)&type, SpeculativeContext(type));
 }
@@ -1263,6 +1269,18 @@ void printRecordings(std::ostream& out) { recorder_.printRecordings(out); }
 
 } // namespace recording
 } // namespace rir
+
+REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
+                              SEXP invocation) {
+    rir::recording::recorder_.filter = {
+        .compile = (bool)Rf_asLogical(compile),
+        .deopt = (bool)Rf_asLogical(deoptimize),
+        .typeFeedback = (bool)Rf_asLogical(typeFeedback),
+        .invoke = (bool)Rf_asLogical(invocation),
+    };
+
+    return R_NilValue;
+}
 
 REXPORT SEXP startRecordings() {
     rir::recording::is_recording_ = true;

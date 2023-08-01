@@ -217,6 +217,13 @@ rir.annotateDepromised <- function(closure) {
     copy
 }
 
+recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE) {
+    if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation), is.logical)))) {
+        warning("ambiguous non-logical given")
+    }
+    .Call("filterRecordings", compile, deoptimize, type_feedback, invocation)
+}
+
 recordings.save <- function(filename) {
     .Call("saveRecordings", filename)
 }
