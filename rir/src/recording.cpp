@@ -736,17 +736,39 @@ DeoptEvent::DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
                        std::pair<ssize_t, ssize_t> reasonCodeIdx,
                        uint32_t reasonCodeOff, SEXP trigger)
     : functionIdx_(functionIdx), reason_(reason),
-      reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff),
-      trigger_(trigger) {
-    if (this->trigger_) {
-        R_PreserveObject(trigger_);
-    }
+      reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff) {
+    setTrigger(trigger);
 }
 
 DeoptEvent::~DeoptEvent() {
-    if (this->trigger_) {
-        R_ReleaseObject(this->trigger_);
+    if (trigger_) {
+        setTrigger(nullptr);
     }
+}
+
+void DeoptEvent::setTrigger(SEXP newTrigger) {
+    if (trigger_) {
+        R_ReleaseObject(trigger_);
+    }
+
+    trigger_ = nullptr;
+    triggerClosure_ = -1;
+
+    if (newTrigger == nullptr) {
+        return;
+    }
+
+    if (TYPEOF(newTrigger) == CLOSXP) {
+        auto rec = recorder_.initOrGetRecording(newTrigger);
+        triggerClosure_ = (ssize_t)rec.first;
+        return;
+    }
+
+    if (newTrigger) {
+        R_PreserveObject(newTrigger);
+    }
+
+    trigger_ = newTrigger;
 }
 
 Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
@@ -794,11 +816,12 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
     FeedbackOrigin origin(deoptSrcCode, deoptPc);
     DeoptReason reason(origin, this->reason_);
+    auto trigger = trigger_ ? trigger_ : replay.replayClosure(triggerClosure_);
 
-    recordDeopt(code, closure, reason, this->trigger_);
+    recordDeopt(code, closure, reason, trigger);
 
     isReplayingSC++;
-    reason.record(this->trigger_);
+    reason.record(trigger);
     isReplayingSC--;
     if (fun) {
         // We're doing fun->registerDeopt(), but without the incrementation
@@ -824,8 +847,13 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP DeoptEvent::toSEXP() const {
-    const char* fields[] = {"functionIdx",     "reason",  "reason_code_idx",
-                            "reason_code_off", "trigger", ""};
+    const char* fields[] = {"functionIdx",
+                            "reason",
+                            "reason_code_idx",
+                            "reason_code_off",
+                            "trigger",
+                            "triggerClosure",
+                            ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
@@ -834,14 +862,15 @@ SEXP DeoptEvent::toSEXP() const {
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reason_));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeOff_));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeIdx_));
-    SET_VECTOR_ELT(sexp, i++, this->trigger_);
+    SET_VECTOR_ELT(sexp, i++, this->trigger_ ? this->trigger_ : R_NilValue);
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->triggerClosure_));
     UNPROTECT(1);
     return sexp;
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 5);
+    assert(Rf_length(sexp) == 6);
 
     int i = 0;
     this->functionIdx_ =
@@ -855,8 +884,15 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
                                       serialization::int64_t_from_sexp,
                                       serialization::int64_t_from_sexp>(
             VECTOR_ELT(sexp, i++));
-    this->trigger_ = VECTOR_ELT(sexp, i++);
-    R_PreserveObject(this->trigger_);
+    SEXP trigger = VECTOR_ELT(sexp, i++);
+    ssize_t triggerClosure =
+        serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    if (triggerClosure >= 0) {
+        triggerClosure_ = triggerClosure;
+    } else {
+        assert(trigger);
+        setTrigger(trigger);
+    }
 }
 
 void DtInitEvent::replay(Replay& replay, SEXP closure,
@@ -985,15 +1021,9 @@ void recordCompile(SEXP const cls, const std::string& name,
         std::make_unique<CompilationEvent>(dispatch_context, std::move(sc)));
 }
 
-size_t Record::indexOfBaseline(const rir::Code* code) const {
-    auto entry = dt_to_recording_index_.find(code->function()->dispatchTable());
-    if (entry != dt_to_recording_index_.end()) {
-        return entry->second;
-    }
-
-    Rf_error(
-        "baseline code %p not found in current DispatchTable->FunRecorder map",
-        code);
+size_t Record::indexOfBaseline(const rir::Code* code) {
+    DispatchTable* dt = code->function()->dispatchTable();
+    return initOrGetRecording(const_cast<DispatchTable*>(dt)).first;
 }
 
 std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,

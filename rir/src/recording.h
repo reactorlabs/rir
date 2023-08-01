@@ -136,6 +136,7 @@ class DeoptEvent : public Event {
                std::pair<ssize_t, ssize_t> reasonCodeIdx,
                uint32_t reasonCodeOff, SEXP trigger);
     ~DeoptEvent();
+    void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
     void replay(Replay& replay, SEXP closure,
@@ -153,7 +154,10 @@ class DeoptEvent : public Event {
     /* negative indicates promise index, positive function index */
     std::pair<ssize_t, ssize_t> reasonCodeIdx_;
     uint32_t reasonCodeOff_;
-    SEXP trigger_;
+
+    // These 2 fields are mutually exclusive
+    SEXP trigger_ = nullptr;
+    ssize_t triggerClosure_ = -1; // References a FunRecorder index
 };
 
 class DtInitEvent : public Event {
@@ -276,7 +280,7 @@ class Record {
     std::vector<std::pair<size_t, std::unique_ptr<Event>>> log;
 
   protected:
-    size_t indexOfBaseline(const rir::Code* code) const;
+    size_t indexOfBaseline(const rir::Code* code);
 
   public:
     Record() = default;
