@@ -211,7 +211,8 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
     }
 }
 
-void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
+void BC::serialize(std::vector<bool>& extraPoolChildren,
+                   std::vector<bool>& extraPoolIgnored, SEXP refTable,
                    R_outpstream_t out, const Opcode* code, size_t codeSize,
                    const Code* container) {
     while (codeSize > 0) {
@@ -272,7 +273,16 @@ void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
             OutInteger(out, i.fun);
             extraPoolChildren[i.fun] = true;
             break;
-        case Opcode::record_call_:
+        case Opcode::record_call_: {
+            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                extraPoolIgnored[i.callFeedback.targets[j]] = true;
+            }
+            auto recordedCallFeedback = i.callFeedback;
+            recordedCallFeedback.numTargets = 0;
+            recordedCallFeedback.taken = 0;
+            OutBytes(out, (const char*)&recordedCallFeedback, sizeof(ObservedCallees));
+            break;
+        }
         case Opcode::record_type_:
         case Opcode::record_test_:
         case Opcode::br_:
@@ -403,6 +413,7 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
 }
 
 void BC::addConnected(std::vector<bool>& extraPoolChildren,
+                      std::vector<bool>& extraPoolIgnored,
                       ConnectedCollector& collector, const Opcode* code,
                       size_t codeSize, const Code* container) {
     while (codeSize > 0) {
@@ -452,6 +463,10 @@ void BC::addConnected(std::vector<bool>& extraPoolChildren,
             collector.addConstant(i.callBuiltinFixedArgs.builtin);
             break;
         case Opcode::record_call_:
+            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                extraPoolIgnored[i.callFeedback.targets[j]] = true;
+            }
+            break;
         case Opcode::record_type_:
         case Opcode::record_test_:
             break;
