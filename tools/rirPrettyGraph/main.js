@@ -46,6 +46,7 @@ function makeTip(text) {
     tip.textContent = text;
     options.appendChild(tip);
 }
+const showRecordedCallsCheckmark = makeCheckmark("showRecordedCalls", "Show recorded calls");
 const childrenInsideParentsCheckmark = makeCheckmark("childrenInsideParents", "Children inside parents");
 const lassoSelectionCheckmark = makeCheckmark("lassoSelection", "Lasso selection");
 makeTip("Hold Z before drag to also drag nodes from incoming edges, hold X to also drag outgoing");
@@ -68,6 +69,7 @@ function translate() {
 
     const elements = [];
     const elementsWithParents = new Map();
+    let isFirst = true;
     for (const child of input.children) {
         elements.push({
             group: "nodes",
@@ -75,8 +77,9 @@ function translate() {
                 id: child.id,
                 name: child.getElementsByClassName("name").item(0)?.innerHTML,
                 body: child.getElementsByClassName("body").item(0)?.innerHTML,
+                isMain: isFirst,
             },
-            classes: child.className.replaceAll("node-", ""),
+            classes: child.className.replaceAll("node-", "") + (isFirst ? " main" : ""),
         });
         for (const connected of child.getElementsByClassName("arrow")) {
             const target = connected.getAttribute("data-connected");
@@ -95,12 +98,14 @@ function translate() {
                         label: connected.innerHTML,
                         source: child.id,
                         target,
-                        isChild
+                        isChild,
+                        isRecordedCall: connected.className.includes("arrow-Code-target"),
                     },
                     classes: connected.className.replaceAll("arrow-", ""),
                 })
             }
         }
+        isFirst = false;
     }
     for (const [element, parent] of elementsWithParents.entries()) {
         const child = elements.find(e => e.data.id === element);
@@ -146,3 +151,34 @@ function regenerate() {
         graph.layout(layout).run();
     });
 }
+
+const mainNode = graph.$("[?isMain]");
+// Defer selecting until after we register handlers in interaction.js
+document.addEventListener("load", () => {
+    mainNode.select();
+});
+const recordedCallElems = (() => {
+    const connected = mainNode;
+    let oldSize;
+    do {
+        oldSize = connected.size();
+        const newConnectedEdges = connected.connectedEdges("[!isRecordedCall]");
+        const newConnectedNodes = newConnectedEdges.connectedNodes();
+        const childNodes = connected.children();
+        const parentNodes = connected.parent();
+        connected.merge(newConnectedEdges);
+        connected.merge(newConnectedNodes);
+        connected.merge(childNodes);
+        connected.merge(parentNodes);
+    } while (connected.size() > oldSize);
+    return graph.elements().difference(connected);
+})();
+function updateRecordedCallVisibility() {
+    const showRecordedCalls = showRecordedCallsCheckmark.checked;
+    if (!showRecordedCalls) {
+        recordedCallElems.remove();
+    } else {
+        recordedCallElems.restore();
+    }
+}
+updateRecordedCallVisibility();

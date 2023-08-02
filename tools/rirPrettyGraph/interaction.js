@@ -1,5 +1,8 @@
 // Add option event handlers which affect the graph
 
+showRecordedCallsCheckmark.addEventListener("change", function () {
+    updateRecordedCallVisibility();
+});
 childrenInsideParentsCheckmark.addEventListener("change", function () {
     regenerate();
 });
