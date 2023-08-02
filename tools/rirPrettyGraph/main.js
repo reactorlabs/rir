@@ -47,7 +47,6 @@ function makeTip(text) {
     options.appendChild(tip);
 }
 const showRecordedCallsCheckmark = makeCheckmark("showRecordedCalls", "Show recorded calls");
-const showUnknownExtraPoolEntriesCheckmark = makeCheckmark("showUnknownExtraPoolEntries", "Show unknown pool entries");
 const childrenInsideParentsCheckmark = makeCheckmark("childrenInsideParents", "Children inside parents");
 const lassoSelectionCheckmark = makeCheckmark("lassoSelection", "Lasso selection");
 makeTip("Hold Z before drag to also drag nodes from incoming edges, hold X to also drag outgoing");
@@ -101,7 +100,6 @@ function translate() {
                         target,
                         isChild,
                         isRecordedCall: connected.className.includes("arrow-Code-target"),
-                        isUnknownExtraPoolEntry: connected.className.includes("arrow-Code-unknown-extra-pool"),
                     },
                     classes: connected.className.replaceAll("arrow-", ""),
                 })
@@ -159,13 +157,12 @@ const mainNode = graph.$("[?isMain]");
 document.addEventListener("load", () => {
     mainNode.select();
 });
-
-function getElementsOnlyConnectedBy(selector) {
+const recordedCallElems = (() => {
     const connected = mainNode;
     let oldSize;
     do {
         oldSize = connected.size();
-        const newConnectedEdges = connected.connectedEdges(selector);
+        const newConnectedEdges = connected.connectedEdges("[!isRecordedCall]");
         const newConnectedNodes = newConnectedEdges.connectedNodes();
         const childNodes = connected.children();
         const parentNodes = connected.parent();
@@ -175,42 +172,13 @@ function getElementsOnlyConnectedBy(selector) {
         connected.merge(parentNodes);
     } while (connected.size() > oldSize);
     return graph.elements().difference(connected);
-
-}
-const recordedCallElems = getElementsOnlyConnectedBy("[!isRecordedCall]")
-const recordCallAndUnknownExtraPoolElems = getElementsOnlyConnectedBy("[!isRecordedCall][!isUnknownExtraPoolEntry]");
-let prevHideOnlyRecordedCalls = false;
-let prevHideRecordedCallsAndUnknownExtraPoolEntries = false;
-function updateCheckmarksEnabledAndElemVisibility() {
-    showUnknownExtraPoolEntriesCheckmark.disabled = showRecordedCallsCheckmark.checked;
-    if (showRecordedCallsCheckmark.checked && !showUnknownExtraPoolEntriesCheckmark.checked) {
-        showUnknownExtraPoolEntriesCheckmark.checked = true;
-    }
-
-    const hideOnlyRecordedCalls = !showRecordedCallsCheckmark.checked;
-    const hideRecordedCallsAndUnknownExtraPoolEntries = !showUnknownExtraPoolEntriesCheckmark.checked;
-    if (!prevHideRecordedCallsAndUnknownExtraPoolEntries && hideRecordedCallsAndUnknownExtraPoolEntries) {
-        // assert(!hideOnlyRecordedCalls)
-        if (prevHideOnlyRecordedCalls) {
-            recordedCallElems.restore();
-        }
-        recordCallAndUnknownExtraPoolElems.remove();
-    } else if (prevHideRecordedCallsAndUnknownExtraPoolEntries && !hideRecordedCallsAndUnknownExtraPoolEntries) {
-        // assert(!prevHideOnlyRecordedCalls)
-        recordCallAndUnknownExtraPoolElems.restore();
-        if (hideOnlyRecordedCalls) {
-            recordedCallElems.remove();
-        }
-    } else if (!prevHideOnlyRecordedCalls && hideOnlyRecordedCalls) {
-        // assert(!hideRecordedCallsAndUnknownExtraPoolEntries)
-        // assert(!prevHideRecordedCallsAndUnknownExtraPoolEntries)
+})();
+function updateRecordedCallVisibility() {
+    const showRecordedCalls = showRecordedCallsCheckmark.checked;
+    if (!showRecordedCalls) {
         recordedCallElems.remove();
-    } else if (prevHideOnlyRecordedCalls && !hideOnlyRecordedCalls) {
-        // assert(!prevHideRecordedCallsAndUnknownExtraPoolEntries)
-        // assert(!hideRecordedCallsAndUnknownExtraPoolEntries)
+    } else {
         recordedCallElems.restore();
     }
-    prevHideOnlyRecordedCalls = hideOnlyRecordedCalls;
-    prevHideRecordedCallsAndUnknownExtraPoolEntries = hideRecordedCallsAndUnknownExtraPoolEntries;
 }
-updateCheckmarksEnabledAndElemVisibility();
+updateRecordedCallVisibility();
