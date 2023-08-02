@@ -19,12 +19,13 @@ class PassesReport {
         PassReport(const std::string& name, unsigned current_budget,
                    int iteration, const std::string& phase, unsigned run)
             : name(name), current_budget(current_budget), phase(phase),
-              iteration(iteration), run_k(run) {}
+              iteration(iteration), run_k(run), changed(false) {}
         std::string name;
         unsigned current_budget;
         std::string phase;
         int iteration;
         unsigned run_k;
+        bool changed;
         std::chrono::duration<double> exec_time;
     };
 
@@ -35,9 +36,10 @@ class PassesReport {
         start = std::chrono::high_resolution_clock::now();
     }
 
-    void stop_pass_counter() {
+    void stop_pass_counter(bool changed) {
         passes.back().exec_time =
             std::chrono::high_resolution_clock::now() - start;
+        passes.back().changed = changed;
     }
 
     ~PassesReport() {
@@ -57,11 +59,12 @@ class PassesReport {
     }
 
     void dump(std::ostream& out) {
-        out << "pass,current_budget,exec_time,iteration,phase,run\n";
+        out << "pass,changed,current_budget,exec_time,iteration,phase,run\n";
         for (auto pass : passes) {
-            out << pass.name << "," << pass.current_budget << ","
-                << pass.exec_time.count() << "," << pass.iteration << ","
-                << pass.phase << "," << pass.run_k << "\n";
+            out << pass.name << "," << pass.changed << ","
+                << pass.current_budget << "," << pass.exec_time.count() << ","
+                << pass.iteration << "," << pass.phase << "," << pass.run_k
+                << "\n";
         }
 
         out << std::flush;
@@ -108,8 +111,8 @@ class PassScheduler {
                     }
                     passes_report.add(PassesReport::PassReport(
                         pass->getName(), budget, iteration, phase.name, run_k));
-                    changed = apply(pass.get(), iteration);
-                    passes_report.stop_pass_counter();
+                    changed = apply(pass.get(), iteration) || changed;
+                    passes_report.stop_pass_counter(changed);
                 }
                 iteration++;
             } while (changed && budget && !phase.once);
