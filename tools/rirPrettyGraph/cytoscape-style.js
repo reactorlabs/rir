@@ -40,6 +40,11 @@ node.other {
     border-color: #082f49;
 }
 
+node.main {
+    border-width: 16px;
+    border-style: double;
+}
+
 edge {
     label: data(label);
     curve-style: bezier;
