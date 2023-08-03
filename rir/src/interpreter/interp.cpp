@@ -3887,7 +3887,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
-            advanceOpcode();
+            (void)advanceOpcode();
             NEXT();
         }
 

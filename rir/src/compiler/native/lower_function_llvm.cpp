@@ -4720,6 +4720,8 @@ void LowerFunctionLLVM::compile() {
                                        {loadSxp(arg)});
                         }
                         break;
+                    default:
+                        assert(false);
                     }
                 } else {
                     assert(i->type.isA(RType::integer) ||
