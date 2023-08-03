@@ -128,15 +128,15 @@ def main():
   if opts.verbose >= 1:
     ignored_files.difference_update(changed_lines)
     if ignored_files:
-      print 'Ignoring changes in the following files (wrong extension):'
+      print('Ignoring changes in the following files (wrong extension):')
       for filename in ignored_files:
-        print '   ', filename
+        print('   ', filename)
     if changed_lines:
-      print 'Running clang-format on the following files:'
+      print('Running clang-format on the following files:')
       for filename in changed_lines:
-        print '   ', filename
+        print('   ', filename)
   if not changed_lines:
-    print 'no modified files to format'
+    print('no modified files to format')
     return
   # The computed diff outputs absolute paths, so we must cd before accessing
   # those files.
@@ -146,20 +146,20 @@ def main():
                                                binary=opts.binary,
                                                style=opts.style)
   if opts.verbose >= 1:
-    print 'old tree:', old_tree
-    print 'new tree:', new_tree
+    print('old tree:', old_tree)
+    print('new tree:', new_tree)
   if old_tree == new_tree:
     if opts.verbose >= 0:
-      print 'clang-format did not modify any files'
+      print('clang-format did not modify any files')
   elif opts.diff:
     print_diff(old_tree, new_tree)
   else:
     changed_files = apply_changes(old_tree, new_tree, force=opts.force,
                                   patch_mode=opts.patch)
     if (opts.verbose >= 0 and not opts.patch) or opts.verbose >= 1:
-      print 'changed files:'
+      print('changed files:')
       for filename in changed_files:
-        print '   ', filename
+        print('   ', filename)
 
 
 def load_git_config(non_string_options=None):
@@ -235,7 +235,7 @@ def get_object_type(value):
   """Returns a string description of an object's type, or None if it is not
   a valid git object."""
   cmd = ['git', 'cat-file', '-t', value]
-  p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  p = popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   stdout, stderr = p.communicate()
   if p.returncode != 0:
     return None
@@ -262,7 +262,7 @@ def compute_diff(commit, files):
   (if non-empty).  Zero context lines are used in the patch."""
   cmd = ['git', 'diff-index', '-p', '-U0', commit, '--']
   cmd.extend(files)
-  p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+  p = popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
   p.stdin.close()
   return p
 
@@ -298,7 +298,7 @@ def filter_by_extension(dictionary, allowed_extensions):
   `allowed_extensions` must be a collection of lowercase file extensions,
   excluding the period."""
   allowed_extensions = frozenset(allowed_extensions)
-  for filename in dictionary.keys():
+  for filename in list(dictionary.keys()):
     base_ext = filename.rsplit('.', 1)
     if len(base_ext) == 1 or base_ext[1].lower() not in allowed_extensions:
       del dictionary[filename]
@@ -323,7 +323,7 @@ def run_clang_format_and_save_to_tree(changed_lines, binary='clang-format',
 
   Returns the object ID (SHA-1) of the created tree."""
   def index_info_generator():
-    for filename, line_ranges in changed_lines.iteritems():
+    for filename, line_ranges in changed_lines.items():
       mode = oct(os.stat(filename).st_mode)
       blob_id = clang_format_to_blob(filename, line_ranges, binary=binary,
                                      style=style)
@@ -341,7 +341,7 @@ def create_tree(input_lines, mode):
   assert mode in ('--stdin', '--index-info')
   cmd = ['git', 'update-index', '--add', '-z', mode]
   with temporary_index_file():
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    p = popen(cmd, stdin=subprocess.PIPE)
     for line in input_lines:
       p.stdin.write('%s\0' % line)
     p.stdin.close()
@@ -363,8 +363,7 @@ def clang_format_to_blob(filename, line_ranges, binary='clang-format',
       '-lines=%s:%s' % (start_line, start_line+line_count-1)
       for start_line, line_count in line_ranges])
   try:
-    clang_format = subprocess.Popen(clang_format_cmd, stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
+    clang_format = popen(clang_format_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
   except OSError as e:
     if e.errno == errno.ENOENT:
       die('cannot find executable "%s"' % binary)
@@ -372,8 +371,7 @@ def clang_format_to_blob(filename, line_ranges, binary='clang-format',
       raise
   clang_format.stdin.close()
   hash_object_cmd = ['git', 'hash-object', '-w', '--path='+filename, '--stdin']
-  hash_object = subprocess.Popen(hash_object_cmd, stdin=clang_format.stdout,
-                                 stdout=subprocess.PIPE)
+  hash_object = popen(hash_object_cmd, stdin=clang_format.stdout, stdout=subprocess.PIPE)
   clang_format.stdout.close()
   stdout = hash_object.communicate()[0]
   if hash_object.returncode != 0:
@@ -431,10 +429,9 @@ def apply_changes(old_tree, new_tree, force=False, patch_mode=False):
   if not force:
     unstaged_files = run('git', 'diff-files', '--name-status', *changed_files)
     if unstaged_files:
-      print >>sys.stderr, ('The following files would be modified but '
-                           'have unstaged changes:')
-      print >>sys.stderr, unstaged_files
-      print >>sys.stderr, 'Please commit, stage, or stash them first.'
+      eprint('The following files would be modified but have unstaged changes:')
+      eprint(unstaged_files)
+      eprint('Please commit, stage, or stash them first.')
       sys.exit(2)
   if patch_mode:
     # In patch mode, we could just as well create an index from the new tree
@@ -452,32 +449,40 @@ def apply_changes(old_tree, new_tree, force=False, patch_mode=False):
   return changed_files
 
 
+def popen(*args, **kwargs):
+    return subprocess.Popen(*args, encoding='utf-8', **kwargs)
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+
+
 def run(*args, **kwargs):
   stdin = kwargs.pop('stdin', '')
   verbose = kwargs.pop('verbose', True)
   strip = kwargs.pop('strip', True)
   for name in kwargs:
     raise TypeError("run() got an unexpected keyword argument '%s'" % name)
-  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       stdin=subprocess.PIPE)
+  p = popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE)
   stdout, stderr = p.communicate(input=stdin)
   if p.returncode == 0:
     if stderr:
       if verbose:
-        print >>sys.stderr, '`%s` printed to stderr:' % ' '.join(args)
-      print >>sys.stderr, stderr.rstrip()
+        eprint('`%s` printed to stderr:' % ' '.join(args))
+      eprint(stderr.rstrip())
     if strip:
       stdout = stdout.rstrip('\r\n')
     return stdout
   if verbose:
-    print >>sys.stderr, '`%s` returned %s' % (' '.join(args), p.returncode)
+    eprint('`%s` returned %s' % (' '.join(args), p.returncode))
   if stderr:
-    print >>sys.stderr, stderr.rstrip()
+    eprint(stderr.rstrip())
   sys.exit(2)
 
 
 def die(message):
-  print >>sys.stderr, 'error:', message
+  eprint('error:', message)
   sys.exit(2)
 
 
