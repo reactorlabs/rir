@@ -27,8 +27,8 @@ void UUID::serialize(__attribute__((unused)) SEXP _refTable, R_outpstream_t out)
 
 std::string UUID::str() const {
     std::ostringstream str;
-    str << std::setfill('0') << std::setw(sizeof(high)) << std::right
-        << std::hex << high << low << std::dec;
+    str << std::setfill('0') << std::setw(sizeof(high) + sizeof(low))
+        << std::right << std::hex << high << low << std::dec;
     return str.str();
 }
 
