@@ -281,9 +281,6 @@ void Code::hash(Hasher& hasher) const {
         hasher.hashBytesOf<unsigned>(srcLength);
         hasher.hashBytesOf<unsigned>(extraPoolSize);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash extra pool", container(), [&]{
-        hasher.hash(getEntry(0));
-    });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash call argument reordering metadata", container(), [&]{
         hasher.hashNullable(getEntry(2));
     });
@@ -291,8 +288,19 @@ void Code::hash(Hasher& hasher) const {
         hasher.hash(function()->container());
     });
 
+    std::vector<bool> extraPoolIgnored;
+    extraPoolIgnored.resize(extraPoolSize);
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash bytecode", container(), [&]{
-        BC::hash(hasher, code(), codeSize, this);
+        BC::hash(hasher, extraPoolIgnored, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash extra pool", container(), [&]{
+        hasher.hashBytesOf(extraPoolSize);
+        for (unsigned i = 0; i < extraPoolSize; ++i) {
+            if (!extraPoolIgnored[i]) {
+                hasher.hash(getExtraPoolEntry(i));
+            }
+        }
     });
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash srclist", container(), [&]{
