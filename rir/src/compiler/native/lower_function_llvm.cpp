@@ -178,7 +178,7 @@ llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
     char name[29];
     // We need the name to be module-unique because we need to distinguish
-    // patched co-idxs (which will be in a different module). This assumes we
+    // patched cp-idxs (which will be in a different module). This assumes we
     // don't get a module pointer collision, so we should make more stable
     // later.
     sprintf(name, "cp_%08x_%lx", i, (uintptr_t)&mod);
@@ -206,17 +206,29 @@ llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
 }
 
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
-    std::vector<llvm::Constant*> constVector;
-    for (const auto& e : names)
-        constVector.push_back(c(e));
-    auto ty = llvm::ArrayType::get(t::Int, names.size());
-    auto vectorConst = llvm::ConstantArray::get(ty, constVector);
-    auto vectorStore = globalConst(mod, vectorConst);
-    if (Parameter::DEBUG_SERIALIZE_LLVM) {
-        vectorStore->setMetadata(SerialRepr::NAMES_METADATA_NAME,
-                                 SerialRepr::namesMetadata(mod.getContext(), names));
+    std::stringstream llvmNameStr;
+    for (const auto& e : names) {
+        llvmNameStr << std::hex << std::setw(8) << e << "_";
     }
-    return vectorStore;
+    llvmNameStr << std::hex << std::setw(16) << (uintptr_t)&mod;
+    auto llvmName = llvmNameStr.str();
+    auto ty = llvm::ArrayType::get(t::Int, names.size());
+    return mod.getOrInsertGlobal(llvmName, ty, [&, llvmName]() {
+        std::vector<llvm::Constant*> constVector;
+        for (const auto& e : names) {
+            constVector.push_back(c(e));
+        }
+        auto vectorConst = llvm::ConstantArray::get(ty, constVector);
+        auto vectorStore =
+            new llvm::GlobalVariable(mod, ty, true,
+                                     llvm::GlobalValue::PrivateLinkage,
+                                     vectorConst, llvmName);
+        if (Parameter::DEBUG_SERIALIZE_LLVM) {
+            vectorStore->setMetadata(SerialRepr::NAMES_METADATA_NAME,
+                                     SerialRepr::namesMetadata(mod.getContext(), names));
+        }
+        return vectorStore;
+    });
 }
 
 llvm::Value* LowerFunctionLLVM::llvmNames(const std::vector<BC::PoolIdx>& names) {
