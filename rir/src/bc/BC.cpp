@@ -258,13 +258,7 @@ void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
             OutInteger(out, i.fun);
             extraPoolChildren[i.fun] = true;
             break;
-        case Opcode::record_call_: {
-            auto recordedCallFeedback = i.callFeedback;
-            recordedCallFeedback.numTargets = 0;
-            recordedCallFeedback.taken = 0;
-            OutBytes(out, (const char*)&recordedCallFeedback, sizeof(ObservedCallees));
-            break;
-        }
+        case Opcode::record_call_:
         case Opcode::record_type_:
         case Opcode::record_test_:
         case Opcode::br_:
