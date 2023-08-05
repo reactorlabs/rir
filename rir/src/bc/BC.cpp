@@ -313,8 +313,8 @@ void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
     }
 }
 
-void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
-              const Code* container) {
+void BC::hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
+              const Opcode* code, size_t codeSize, const Code* container) {
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
         hasher.hashBytesOf(*code);
@@ -368,6 +368,12 @@ void BC::hash(Hasher& hasher, const Opcode* code, size_t codeSize,
             hasher.hashConstant(i.callBuiltinFixedArgs.builtin);
             break;
         case Opcode::record_call_:
+            // Don't hash because this is a recording instruction,
+            // but we also want to skip hashing recorded extra pool entries
+            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                extraPoolIgnored[i.callFeedback.targets[j]] = true;
+            }
+            break;
         case Opcode::record_type_:
         case Opcode::record_test_:
             assert((size - 1) % 4 == 0);
