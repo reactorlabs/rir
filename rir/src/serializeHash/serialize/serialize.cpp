@@ -17,9 +17,9 @@ bool pir::Parameter::RIR_PRESERVE =
     getenv("RIR_PRESERVE") != nullptr && strtol(getenv("RIR_PRESERVE"), nullptr, 10);
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
-bool pir::Parameter::DEBUG_SERIALIZE_LLVM =
+bool pir::Parameter::SERIALIZE_LLVM =
     RIR_PRESERVE ||
-    (getenv("DEBUG_SERIALIZE_LLVM") != nullptr && strtol(getenv("DEBUG_SERIALIZE_LLVM"), nullptr, 10));
+    (getenv("PIR_DEBUG_SERIALIZE_LLVM") != nullptr && strtol(getenv("PIR_DEBUG_SERIALIZE_LLVM"), nullptr, 10));
 bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);

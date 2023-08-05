@@ -317,7 +317,7 @@ void PirJitLLVM::finalize() {
     assert(!finalized);
     if (M) {
         auto serialModule =
-            Parameter::DEBUG_SERIALIZE_LLVM ?
+            Parameter::SERIALIZE_LLVM ?
             internModule(SerialModule(*M)).first :
             nullptr;
         // Should this happen before finalize or after?

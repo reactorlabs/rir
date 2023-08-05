@@ -49,8 +49,8 @@ struct Parameter {
     static bool FORCE_ENABLE_OSR;
 
     /// Serialize LLVM bitcode. Enabled regardless of env var iff the compiler
-    /// server is running.
-    static bool DEBUG_SERIALIZE_LLVM;
+    /// server is running, otherwise enabled if PIR_PIR_DEBUG_SERIALIZE_LLVM is set
+    static bool SERIALIZE_LLVM;
 
     static bool PIR_PRINT_INTERNED_RIR_OBJECTS;
     static const char* PIR_PRINT_INTERNED_RIR_OBJECTS_PATH;
