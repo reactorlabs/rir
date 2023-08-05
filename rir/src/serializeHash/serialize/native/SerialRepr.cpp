@@ -312,7 +312,8 @@ static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
 
 static llvm::Value* patchPointerMetadata(llvm::Module& mod,
                                          llvm::GlobalVariable& inst,
-                                         llvm::MDNode* ptrMeta, rir::Code* outer) {
+                                         llvm::MDNode* ptrMeta,
+                                         rir::Code* outer) {
     auto type = ((llvm::MDString&)*ptrMeta->getOperand(0)).getString();
     auto llvmType = inst.getValueType();
     auto isConstant = inst.isConstant();
