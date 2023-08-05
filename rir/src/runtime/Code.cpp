@@ -299,9 +299,10 @@ void Code::hash(Hasher& hasher) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash extra pool", container(), [&]{
         hasher.hashBytesOf(extraPoolSize);
         for (unsigned i = 0; i < extraPoolSize; ++i) {
-            if (!extraPoolIgnored[i]) {
+            // We can't even skip hashing entries which are just recorded calls...
+            // if (!extraPoolIgnored[i]) {
                 hasher.hash(getExtraPoolEntry(i));
-            }
+            // }
         }
     });
 
