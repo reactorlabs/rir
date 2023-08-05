@@ -213,7 +213,7 @@ llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<B
     llvmNameStr << std::hex << std::setw(16) << (uintptr_t)&mod;
     auto llvmName = llvmNameStr.str();
     auto ty = llvm::ArrayType::get(t::Int, names.size());
-    return mod.getOrInsertGlobal(llvmName, ty, [&, llvmName]() {
+    return mod.getOrInsertGlobal(llvmName, ty, [&]() {
         std::vector<llvm::Constant*> constVector;
         for (const auto& e : names) {
             constVector.push_back(c(e));
