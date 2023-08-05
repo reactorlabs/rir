@@ -222,7 +222,8 @@ class BC {
     static void serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
                           R_outpstream_t out, const Opcode* code,
                           size_t codeSize, const Code* container);
-    static void hash(Hasher& hasher, const Opcode* code, size_t codeSize,
+    static void hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
+                     const Opcode* code, size_t codeSize,
                      const Code* container);
     static void addConnected(std::vector<bool>& extraPoolChildren,
                              ConnectedCollector& collector, const Opcode* code,
