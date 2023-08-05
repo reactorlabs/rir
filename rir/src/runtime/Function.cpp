@@ -50,7 +50,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
-    UUIDPool::writeItem(getEntry(0), true, refTable, out);
+    UUIDPool::writeItem(getEntry(0), false, refTable, out);
 
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
@@ -58,7 +58,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
         if (arg) {
             assert(Code::check(arg));
             // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(arg, true, refTable, out);
+            UUIDPool::writeItem(arg, false, refTable, out);
         }
     }
     OutInteger(out, (int)flags_.to_i());
@@ -85,11 +85,11 @@ void Function::hash(Hasher& hasher) const {
 }
 
 void Function::addConnected(ConnectedCollector& collector) const {
-    collector.add(getEntry(0), true);
+    collector.add(getEntry(0), false);
 
     for (unsigned i = 0; i < numArgs_; i++) {
         CodeSEXP arg = defaultArg_[i];
-        collector.addNullable(arg, true);
+        collector.addNullable(arg, false);
     }
 }
 
