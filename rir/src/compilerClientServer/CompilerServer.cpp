@@ -51,7 +51,7 @@ void CompilerServer::tryRun() {
     socket.bind(serverAddr);
 
     _isRunning = true;
-    pir::Parameter::DEBUG_SERIALIZE_LLVM = true;
+    pir::Parameter::SERIALIZE_LLVM = true;
     // _isRunning is used because of nested calls in the for loop, but CLion
     // doesn't see
     (void)_isRunning;

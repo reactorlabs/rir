@@ -52,7 +52,7 @@ graphical representation of the code choose the GraphViz debug style.
 
     PIR_PRINT_INTERNED_RIR_OBJECTS=
         <0|1|path>  if set, folder to print pretty graphs of RIR objects which get interned. If set to 1, prints HTML to stdout. If set to 0 or unset (default), won't print.
-                    Interning doesn't occur in normal RIR execution, it will get triggered if RIR_SERIALIZE_CHAOS, DEBUG_SERIALIZE_LLVM, PIR_CLIENT_ADDR, or PIR_SERVER_ADDR is set.
+                    Interning doesn't occur in normal RIR execution, it will get triggered if RIR_SERIALIZE_CHAOS, PIR_DEBUG_SERIALIZE_LLVM, PIR_CLIENT_ADDR, or PIR_SERVER_ADDR is set.
 
     PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY=
         n           print pretty graphs of RIR objects which get interned every n-th time, defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
@@ -125,7 +125,7 @@ For more flags see compiler/parameter.h.
         n          serialize and deserialize the dispatch table on every `n`th
                    RIR call. WARNING: This sometimes prevents optimization
 
-    DEBUG_SERIALIZE_LLVM=
+    PIR_DEBUG_SERIALIZE_LLVM=
         1          serialize LLVM IR, and add metadata to make it patchable on
                    different sessions. This will be set regardless of the env
                    var if RIR_PRESERVE is set or the compiler server is running,
