@@ -46,7 +46,7 @@ void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, (int)size());
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
-        UUIDPool::writeItem(getEntry(i), true, refTable, out);
+        UUIDPool::writeItem(getEntry(i), false, refTable, out);
     }
 }
 
@@ -61,7 +61,7 @@ void DispatchTable::hash(Hasher& hasher) const {
 void DispatchTable::addConnected(ConnectedCollector& collector) const {
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
-        collector.add(getEntry(i), true);
+        collector.add(getEntry(i), false);
     }
 }
 

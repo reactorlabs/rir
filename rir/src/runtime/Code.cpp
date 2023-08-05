@@ -223,7 +223,7 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize call argument reordering metadata", container(), [&]{
         OutInteger(out, getEntry(2) != nullptr);
         if (getEntry(2))
-            UUIDPool::writeItem(getEntry(2), true, refTable, out);
+            UUIDPool::writeItem(getEntry(2), false, refTable, out);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
         if (includeFunction) {
@@ -318,7 +318,7 @@ void Code::addConnected(ConnectedCollector& collector) const {
         collector.addSrc(src);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in call argument reordering metadata", container(), [&]{
-        collector.addNullable(getEntry(2), true);
+        collector.addNullable(getEntry(2), false);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in outer function", container(), [&]{
         collector.add(function()->container(), false);
