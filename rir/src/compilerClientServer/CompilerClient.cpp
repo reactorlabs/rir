@@ -222,8 +222,6 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + sizeof(what)
-                // + serialize(what)
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -236,8 +234,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + debug.functionFilterString
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
+                // + hashRoot(what)
+                // + serialize(what)
                 request.putLong((uint64_t)Request::Compile);
-                serialize(what, request, false);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());
@@ -252,6 +251,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                                  debug.functionFilterString.size());
                 request.putLong(sizeof(debug.style));
                 request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+                UUID hash = hashRoot(what);
+                request.putBytes((uint8_t*)&hash, sizeof(hash));
+                serialize(what, request, false);
             },
             [](ByteBuffer& response) {
                 // Response data format =

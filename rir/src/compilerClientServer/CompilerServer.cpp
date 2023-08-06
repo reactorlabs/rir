@@ -25,8 +25,14 @@ namespace rir {
 static const char* PROCESSING_REQUEST_TIMER_NAME = "CompilerServer.cpp: processing request (not sending, receiving, compiling, or interning)";
 static const char* SENDING_RESPONSE_TIMER_NAME = "CompilerServer.cpp: sending response";
 
+struct CompileResponse {
+    SEXP sexp = nullptr;
+    std::string pirPrint;
+};
+
 bool CompilerServer::_isRunning = false;
 static std::unordered_map<UUID, ByteBuffer> memoizedRequests;
+static std::unordered_map<std::string, CompileResponse> memoizedCompileRequests;
 
 void CompilerServer::tryRun() {
     // get the server address from the environment
@@ -149,7 +155,6 @@ void CompilerServer::tryRun() {
         case Request::Compile: {
             std::cerr << "Received compile request" << std::endl;
             // ...
-            // + serialize(what)
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -162,13 +167,9 @@ void CompilerServer::tryRun() {
             // + debug.functionFilterString
             // + sizeof(debug.style) (always 4)
             // + debug.style
+            // + hashRoot(what)
+            // + serialize(what)
 
-            // Client won't send hashed SEXPs because it doesn't necessarily
-            // remember them, and because the server doesn't care about
-            // connected SEXPs like the client; the only thing duplicate SEXPs
-            // may cause is wasted memory, but since we're on the server and
-            // preserving everything this is less of an issue.
-            what = deserialize(requestBuffer, false);
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");
@@ -216,17 +217,39 @@ void CompilerServer::tryRun() {
             if (pir::DebugOptions::DefaultDebugOptions.style != pir::DebugStyle::Standard) {
                 debug.style = pir::DebugOptions::DefaultDebugOptions.style;
             }
+            UUID requestSexpHash;
+            requestBuffer.getBytes((uint8_t*)&requestSexpHash, sizeof(UUID));
 
-            Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
+            std::string compileRequestId((char*)requestBuffer.data(), requestBuffer.getReadPos());
             std::string pirPrint;
-            what = pirCompile(what, assumptions, name, debug, &pirPrint);
-
-            // Intern, not because we'll have reused it (highly unlikely since
-            // we memoize requests, and it doesn't affect anything anyways), but
-            // because we want to store it in the UUID pool for Retrieve requests
-            // (since we memoize requests) so that compiler client can retrieve
-            // it later
-            UUIDPool::intern(what, true, true);
+            if (memoizedCompileRequests.count(compileRequestId)) {
+                auto& memoized = memoizedCompileRequests.at(compileRequestId);
+                what = memoized.sexp;
+                pirPrint = memoized.pirPrint;
+                std::cout << "Memoized compile request: <assumptions+flags>+"
+                          << requestSexpHash << " -> " << what << std::endl;
+            } else {
+                // Client won't send hashed SEXPs because it doesn't necessarily
+                // remember them, and because the server doesn't care about
+                // connected SEXPs like the client; the only thing duplicate SEXPs
+                // may cause is wasted memory, but since we're on the server and
+                // preserving everything this is less of an issue.
+                what = deserialize(requestBuffer, false);
+    
+    
+                Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
+                what = pirCompile(what, assumptions, name, debug, &pirPrint);
+    
+                // Intern, not because we'll have reused it (highly unlikely
+                // since we memoize requests, and it doesn't affect anything
+                // anyways), but because we want to store it in the UUID pool
+                // for Retrieve requests (since we memoize requests) so that
+                // compiler client can retrieve it later
+                UUIDPool::intern(what, true, true);
+                
+                // Also memoize the entire compile request
+                memoizedCompileRequests[compileRequestId] = {what, pirPrint};
+            }
 
             // Serialize the response
             // Response data format =
