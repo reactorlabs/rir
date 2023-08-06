@@ -81,12 +81,26 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
             break;
         }
 
-        case LISTSXP: {
+        case LISTSXP:
+        case LANGSXP: {
             hasher.hashBytesOf<int>(Rf_length(s));
             for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
                 recurse(CAR(cur));
+                auto tag = TAG(cur);
+                hasher.hashBytesOf(tag != R_NilValue);
+                if (tag) {
+                    recurse(tag);
+                }
             }
             break;
+        }
+
+        case PROMSXP: {
+            assert(false && "unexpected PROMSXP in AST");
+        }
+
+        case DOTSXP: {
+            assert(false && "unexpected DOTSXP in AST");
         }
 
         case CLOSXP: {
@@ -95,18 +109,6 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
 
         case ENVSXP: {
             assert(false && "unexpected ENVSXP in AST");
-        }
-
-        case PROMSXP: {
-            assert(false && "unexpected PROMSXP in AST");
-        }
-
-        case LANGSXP: {
-            hasher.hashBytesOf<int>(Rf_length(s));
-            for (SEXP cur = s; cur != R_NilValue; cur = CDR(cur)) {
-                recurse(CAR(cur));
-            }
-            break;
         }
 
         case SPECIALSXP:
@@ -182,7 +184,6 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
             assert(false && "unexpected RIR object in AST");
         }
 
-        case DOTSXP:
         case ANYSXP:
         case EXPRSXP:
         case BCODESXP:
