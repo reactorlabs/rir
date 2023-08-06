@@ -43,6 +43,8 @@ static std::unordered_map<SEXP, std::string> globalsRev = []{
 }();
 
 llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
+    // Hashing handles globals and builtins but not serialization, since we use
+    // R's serializer. Handling these cases here is ugly though...
     if (globalsRev.count(what)) {
         return llvm::MDTuple::get(
             ctx,
@@ -171,32 +173,11 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
     args.reserve(names.size());
     for (auto i : names) {
         auto sexp = Pool::get(i);
-        switch (TYPEOF(sexp)) {
-        case SYMSXP:
-            args.push_back(llvm::MDString::get(ctx, CHAR(PRINTNAME(sexp))));
-            break;
-        case LISTSXP:
-            if (TYPEOF(CAR(sexp)) != SYMSXP || CDR(sexp) != R_NilValue) {
-                std::cerr << "List name is expected to be CONS(actual_name, R_NilValue)\n";
-                Rf_PrintValue(sexp);
-                assert(false);
-            }
-            args.push_back(llvm::MDTuple::get(ctx, {llvm::MDString::get(ctx, CHAR(PRINTNAME(CAR(sexp))))}));
-            break;
-        case NILSXP:
-            args.push_back(llvm::MDTuple::get(ctx, {}));
-            break;
-        // TODO: Do we need INTSXP?
-        case INTSXP:
-            args.push_back(llvm::ConstantAsMetadata::get(
-                llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx),
-                                       INTEGER(sexp)[0])));
-            break;
-        default:
-            std::cerr << "Unhandled name type: " << TYPEOF(sexp) << "\n";
-            Rf_PrintValue(sexp);
-            assert(false);
-        }
+        ByteBuffer buf;
+        UUIDPool::intern(sexp, true, false);
+        UUIDPool::writeItem(sexp, false, buf, true);
+        args.push_back(llvm::MDString::get(
+            ctx, llvm::StringRef((const char*)buf.data(), buf.size())));
     }
     return llvm::MDTuple::get(ctx, args);
 }
@@ -347,52 +328,17 @@ static void patchPoolIdxMetadata(llvm::GlobalVariable& inst,
 }
 
 static void patchNamesMetadata(llvm::GlobalVariable& inst,
-                               llvm::MDNode* namesMeta) {
+                               llvm::MDNode* namesMeta, rir::Code* outer) {
     std::stringstream llvmName;
     llvmName << "names";
     for (auto& nameOperand : namesMeta->operands()) {
-        auto nameNode = nameOperand.get();
-        auto nameTuple = llvm::dyn_cast_or_null<llvm::MDTuple>(nameNode);
-        auto nameStr =
-            llvm::dyn_cast_or_null<llvm::MDString>(nameNode);
-        auto nameInt =
-            llvm::dyn_cast_or_null<llvm::ValueAsMetadata>(nameNode);
-        BC::PoolIdx nextName;
-        if (nameTuple) {
-            switch (nameTuple->getNumOperands()) {
-            case 0: {
-                // We should probably ensure that we only have one R_NilValue in
-                // the pool...
-                nextName = Pool::insert(R_NilValue);
-                break;
-            }
-            case 1: {
-                // This is a "cons name" AKA CONS_NR(actualName, R_NilValue). These are used to distinguish missing values.
-                nameNode = nameTuple->getOperand(0).get();
-                nameStr = llvm::dyn_cast<llvm::MDString>(nameNode);
-                auto sexp = CONS_NR(
-                    Rf_install(nameStr->getString().str().c_str()), R_NilValue);
-                // Presumably Rf_install interns, but we inserting a lot of redundant names in the pool. Does it make sense to have a hashmap of inserted SEXPs?
-                nextName = Pool::insert(sexp);
-                break;
-            }
-            default:
-                assert(false && "Unexpected name operand tuple size");
-            }
-        } else if (nameStr) {
-            auto sexp = Rf_install(nameStr->getString().str().c_str());
-            // Presumably Rf_install interns, but we inserting a lot of redundant
-            // names in the pool. Does it make sense to have a hashmap of inserted
-            // SEXPs?
-            nextName = Pool::insert(sexp);
-        } else if (nameInt) {
-            auto value = (int)((llvm::ConstantInt*)nameInt->getValue())->getZExtValue();
-            // Pool::getInt does intern
-            nextName = Pool::getInt(value);
-        } else {
-            assert(false && "Unexpected name operand type");
-        }
-
+        auto nameMetadata = nameOperand.get();
+        auto data = llvm::dyn_cast<llvm::MDString>(nameMetadata)->getString();
+        ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+        auto sexp = UUIDPool::readItem(buffer, true);
+        // TODO: Reuse index if it's already in the constant pool
+        //  (and maybe merge and refactor pools)
+        BC::PoolIdx nextName = Pool::insert(sexp);
         llvmName << "_" << nextName;
     }
 
@@ -426,8 +372,8 @@ static void patchGlobalMetadatas(llvm::Module& mod, rir::Code* outer) {
         }
         if (namesMeta) {
             assert(!replaced);
-            patchNamesMetadata(global, namesMeta);
-            replaced = true;
+            patchNamesMetadata(global, namesMeta, outer);
+            // replaced = true;
         }
     }
 }
