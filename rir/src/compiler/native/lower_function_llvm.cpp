@@ -199,7 +199,7 @@ llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<B
     std::stringstream llvmNameStr;
     llvmNameStr << "names";
     for (const auto& e : names) {
-        llvmNameStr << "_" << std::hex << std::setw(8) << e;
+        llvmNameStr << "_" << std::hex << e;
     }
     auto llvmName = llvmNameStr.str();
     auto ty = llvm::ArrayType::get(t::Int, names.size());
