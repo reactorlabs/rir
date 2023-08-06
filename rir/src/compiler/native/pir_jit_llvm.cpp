@@ -570,12 +570,16 @@ void PirJitLLVM::initializeLLVM() {
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
 
-    // TODO this is a bit of a hack but it works: the address is stored in the
-    // name. symbols starting with "ept_" are external pointers, the ones
-    // starting with "efn_" are external function pointers. these must exist in
-    // the host process.
-    // NEW: On macOS/clang/ARM (which one? idk) the symbols start with _ept_ and
-    // _efn_
+    // The address or pool index is stored in the name:
+    // - symbols starting with "ept_" are external pointers
+    // - symbols starting with "efn_" are external function pointers
+    // - symbols starting with "src_" are source pool entries
+    // - symbols starting with "cp_" are constant pool entries
+    // - symbols starting with "names_" are vectors of names (constant pool entries)
+    // These all must exist in the host process.
+    //
+    // On macOS/clang/ARM (which one? idk) the symbols sometimes start with '_'
+    // before everything else, so we trim that.
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
@@ -585,13 +589,19 @@ void PirJitLLVM::initializeLLVM() {
             for (auto s : LookupSet) {
                 auto& Name = s.first;
                 auto n = (*Name).str();
-                auto ept = n.substr(0, 4) == "ept_" || n.substr(0, 5) == "_ept_";
-                auto efn = n.substr(0, 4) == "efn_" || n.substr(0, 5) == "_efn_";
+                if (n[0] == '_') {
+                    n = n.substr(1);
+                }
+
+                auto ept = n.substr(0, 4) == "ept_";
+                auto efn = n.substr(0, 4) == "efn_";
+                auto src = n.substr(0, 4) == "src_";
+                auto cp = n.substr(0, 3) == "cp_";
+                auto names = n.substr(0, 6) == "names_";
 
                 if (ept || efn) {
-                    auto isUnderscoreVariant = n.substr(0, 1) == "_";
                     // 16 = sizeof(uintptr_t)
-                    auto addrStr = n.substr(isUnderscoreVariant ? 5 : 4, 16);
+                    auto addrStr = n.substr(4, 16);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
@@ -599,6 +609,34 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported |
                             (efn ? JITSymbolFlags::Callable
                                  : JITSymbolFlags::None));
+                } else if (src || cp) {
+                    auto idxStr = n.substr(src ? 4 : 3, 8);
+                    auto idx = std::strtoul(idxStr.c_str(), nullptr, 16);
+
+                    // TODO: Don't leak memory, cleanup somehow
+                    auto addr = (uint32_t*)malloc(sizeof(uint32_t));
+                    *addr = idx;
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                            static_cast<JITTargetAddress>(
+                                reinterpret_cast<uintptr_t>(addr)),
+                            JITSymbolFlags::Exported);
+                } else if (names) {
+                    // TODO: Don't leak memory, cleanup somehow
+                    auto numNames = (size_t)std::count(n.begin(), n.end(), '_');
+                    auto namesArray = (uint32_t*)malloc(sizeof(uint32_t) * numNames);
+                    size_t idx = 6;
+                    for (size_t i = 0; i < numNames; ++i) {
+                        auto nextIdx = n.find('_', idx);
+                        auto idxStr = n.substr(idx, nextIdx - idx);
+                        namesArray[i] = std::strtoul(idxStr.c_str(), nullptr, 10);
+                        idx = nextIdx + 1;
+                    }
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                            static_cast<JITTargetAddress>(
+                                reinterpret_cast<uintptr_t>(namesArray)),
+                            JITSymbolFlags::Exported);
                 } else {
                     std::cout << "unknown symbol " << n << "\n";
                 }
