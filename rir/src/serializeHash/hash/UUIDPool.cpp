@@ -20,7 +20,7 @@
 #include <unistd.h>
 
 // Can change this to log interned and uninterned hashes and pointers
-#define LOG(stmt) if (CompilerClient::isRunning() || CompilerServer::isRunning()) stmt
+#define LOG(stmt) if (CompilerServer::isRunning()) stmt
 
 namespace rir {
 
