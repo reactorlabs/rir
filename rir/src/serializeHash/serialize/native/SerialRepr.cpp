@@ -362,7 +362,7 @@ static void patchNamesMetadata(llvm::GlobalVariable& inst,
         // TODO: Reuse index if it's already in the constant pool
         //  (and maybe merge and refactor pools)
         BC::PoolIdx nextName = Pool::insert(sexp);
-        llvmName << "_" << nextName;
+        llvmName << "_" << std::hex << nextName;
     }
 
     inst.setName(llvmName.str());

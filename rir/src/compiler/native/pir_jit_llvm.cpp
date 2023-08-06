@@ -629,7 +629,7 @@ void PirJitLLVM::initializeLLVM() {
                     for (size_t i = 0; i < numNames; ++i) {
                         auto nextIdx = n.find('_', idx);
                         auto idxStr = n.substr(idx, nextIdx - idx);
-                        namesArray[i] = std::strtoul(idxStr.c_str(), nullptr, 10);
+                        namesArray[i] = std::strtoul(idxStr.c_str(), nullptr, 16);
                         idx = nextIdx + 1;
                     }
 
