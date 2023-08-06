@@ -91,12 +91,8 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(llvm::Module& mod,
                                                  bool constant,
                                                  llvm::MDNode* reprMeta) {
     assert(what);
-    // We need the name to be module-unique because we need to distinguish
-    // patched pointers (which will be in a different module). This assumes we
-    // don't get a module pointer collision, so we should make more stable
-    // later.
-    char name[38];
-    sprintf(name, "ept_%lx_%lx", (uintptr_t)what, (uintptr_t)&mod);
+    char name[21];
+    sprintf(name, "ept_%lx", (uintptr_t)what);
     return mod.getOrInsertGlobal(name, ty, [&]() {
         auto var = new llvm::GlobalVariable(
             mod, ty, constant,
@@ -124,12 +120,8 @@ llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(llvm::Module& mod, const void* what,
                                      llvm::FunctionType* ty, int builtinId) {
     assert(what);
-    // We need the name to be module-unique because we need to distinguish
-    // patched functions (which will be in a different module). This assumes we
-    // don't get a module pointer collision, so we should make more stable
-    // later.
-    char name[38];
-    sprintf(name, "efn_%lx_%lx", (uintptr_t)what, (uintptr_t)&mod);
+    char name[21];
+    sprintf(name, "efn_%lx", (uintptr_t)what);
     auto llvmFn = mod.getOrInsertFunction(name, ty);
     if (Parameter::SERIALIZE_LLVM) {
         mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)
@@ -146,16 +138,15 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
 }
 
 llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i) {
-    char name[30];
-    // We need the name to be module-unique because we need to distinguish
-    // patched src-idxs (which will be in a different module). This assumes we
-    // don't get a module pointer collision, so we should make more stable
-    // later.
-    sprintf(name, "src_%08x_%lx", i, (uintptr_t)&mod);
+    char name[13];
+    sprintf(name, "src_%08x", i);
     return mod.getOrInsertGlobal(name, t::i32, [&]() {
-        auto value = new llvm::GlobalVariable(mod, t::i32, true,
-                                              llvm::GlobalValue::PrivateLinkage,
-                                              c(i), name);
+        auto value =
+            new llvm::GlobalVariable(mod, t::i32, true,
+                                     llvm::GlobalValue::AvailableExternallyLinkage,
+                                     nullptr, name, nullptr,
+                                     llvm::GlobalValue::ThreadLocalMode::NotThreadLocal,
+                                     0, true);
         if (Parameter::SERIALIZE_LLVM) {
             value->setMetadata(SerialRepr::SRC_IDX_METADATA_NAME,
                                SerialRepr::srcIdxMetadata(mod.getContext(), i));
@@ -176,16 +167,15 @@ llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
 }
 
 llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
-    char name[29];
-    // We need the name to be module-unique because we need to distinguish
-    // patched cp-idxs (which will be in a different module). This assumes we
-    // don't get a module pointer collision, so we should make more stable
-    // later.
-    sprintf(name, "cp_%08x_%lx", i, (uintptr_t)&mod);
+    char name[12];
+    sprintf(name, "cp_%08x", i);
     return mod.getOrInsertGlobal(name, t::i32, [&]() {
-        auto value = new llvm::GlobalVariable(mod, t::i32, true,
-                                              llvm::GlobalValue::PrivateLinkage,
-                                              c(i), name);
+        auto value =
+            new llvm::GlobalVariable(mod, t::i32, true,
+                                     llvm::GlobalValue::AvailableExternallyLinkage,
+                                     nullptr, name, nullptr,
+                                     llvm::GlobalValue::ThreadLocalMode::NotThreadLocal,
+                                     0, true);
         if (Parameter::SERIALIZE_LLVM) {
             value->setMetadata(SerialRepr::POOL_IDX_METADATA_NAME,
                                SerialRepr::poolIdxMetadata(mod.getContext(), i));
@@ -207,22 +197,19 @@ llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
 
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
     std::stringstream llvmNameStr;
+    llvmNameStr << "names";
     for (const auto& e : names) {
-        llvmNameStr << std::hex << std::setw(8) << e << "_";
+        llvmNameStr << "_" << std::hex << std::setw(8) << e;
     }
-    llvmNameStr << std::hex << std::setw(16) << (uintptr_t)&mod;
     auto llvmName = llvmNameStr.str();
     auto ty = llvm::ArrayType::get(t::Int, names.size());
     return mod.getOrInsertGlobal(llvmName, ty, [&]() {
-        std::vector<llvm::Constant*> constVector;
-        for (const auto& e : names) {
-            constVector.push_back(c(e));
-        }
-        auto vectorConst = llvm::ConstantArray::get(ty, constVector);
         auto vectorStore =
             new llvm::GlobalVariable(mod, ty, true,
-                                     llvm::GlobalValue::PrivateLinkage,
-                                     vectorConst, llvmName);
+                                     llvm::GlobalValue::AvailableExternallyLinkage,
+                                     nullptr, llvmName, nullptr,
+                                     llvm::GlobalValue::ThreadLocalMode::NotThreadLocal,
+                                     0, true);
         if (Parameter::SERIALIZE_LLVM) {
             vectorStore->setMetadata(SerialRepr::NAMES_METADATA_NAME,
                                      SerialRepr::namesMetadata(mod.getContext(), names));
