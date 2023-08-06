@@ -17,39 +17,41 @@ namespace pir {
 
 // Some of these would serialize fine regardless, thanks to
 // serialize.c:SaveSpecialHook
-static std::unordered_map<std::string, SEXP> globals = {
-    {"R_GlobalEnv", R_GlobalEnv},
-    {"R_BaseEnv", R_BaseEnv},
-    {"R_BaseNamespace", R_BaseNamespace},
-    {"R_TrueValue", R_TrueValue},
-    {"R_NilValue", R_NilValue},
-    {"R_FalseValue", R_FalseValue},
-    {"R_UnboundValue", R_UnboundValue},
-    {"R_MissingArg", R_MissingArg},
-    {"R_RestartToken", R_RestartToken},
-    {"R_LogicalNAValue", R_LogicalNAValue},
-    {"R_EmptyEnv", R_EmptyEnv},
-    {"R_DimSymbol", R_DimSymbol},
-    {"R_DotsSymbol", R_DotsSymbol},
-    {"R_NamesSymbol", R_NamesSymbol},
-};
+static std::unordered_map<std::string, SEXP> *globals;
+static std::unordered_map<SEXP, std::string> *globalsRev;
 
-static std::unordered_map<SEXP, std::string> globalsRev = []{
-    std::unordered_map<SEXP, std::string> res;
-    for (auto& e : globals) {
-        res[e.second] = e.first;
+void SerialRepr::initGlobals() {
+    globals = new std::unordered_map<std::string, ::SEXP>();
+    globals->emplace("R_GlobalEnv", R_GlobalEnv);
+    globals->emplace("R_BaseEnv", R_BaseEnv);
+    globals->emplace("R_BaseNamespace", R_BaseNamespace);
+    globals->emplace("R_TrueValue", R_TrueValue);
+    globals->emplace("R_NilValue", R_NilValue);
+    globals->emplace("R_FalseValue", R_FalseValue);
+    globals->emplace("R_UnboundValue", R_UnboundValue);
+    globals->emplace("R_MissingArg", R_MissingArg);
+    globals->emplace("R_RestartToken", R_RestartToken);
+    globals->emplace("R_LogicalNAValue", R_LogicalNAValue);
+    globals->emplace("R_EmptyEnv", R_EmptyEnv);
+    globals->emplace("R_DimSymbol", R_DimSymbol);
+    globals->emplace("R_DotsSymbol", R_DotsSymbol);
+    globals->emplace("R_NamesSymbol", R_NamesSymbol);
+    globals->emplace("expandDotsTrigger", symbol::expandDotsTrigger);
+
+    globalsRev = new std::unordered_map<::SEXP, std::string>();
+    for (auto& e : *globals) {
+        globalsRev->emplace(e.second, e.first);
     }
-    return res;
-}();
+}
 
 llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
     // Hashing handles globals and builtins but not serialization, since we use
     // R's serializer. Handling these cases here is ugly though...
-    if (globalsRev.count(what)) {
+    if (globalsRev->count(what)) {
         return llvm::MDTuple::get(
             ctx,
             {llvm::MDString::get(ctx, "Global"),
-             llvm::MDString::get(ctx, globalsRev.at(what))});
+             llvm::MDString::get(ctx, globalsRev->at(what))});
     } else if (TYPEOF(what) == BUILTINSXP || TYPEOF(what) == SPECIALSXP) {
         return llvm::MDTuple::get(
             ctx,
@@ -173,11 +175,23 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
     args.reserve(names.size());
     for (auto i : names) {
         auto sexp = Pool::get(i);
-        ByteBuffer buf;
-        UUIDPool::intern(sexp, true, false);
-        UUIDPool::writeItem(sexp, false, buf, true);
-        args.push_back(llvm::MDString::get(
-            ctx, llvm::StringRef((const char*)buf.data(), buf.size())));
+        if (globalsRev->count(sexp)) {
+            args.push_back(
+                llvm::MDTuple::get(
+                    ctx,
+                    {llvm::MDString::get(ctx, "Global"),
+                     llvm::MDString::get(ctx, globalsRev->at(sexp))}));
+        } else {
+            ByteBuffer buf;
+            UUIDPool::intern(sexp, true, false);
+            UUIDPool::writeItem(sexp, false, buf, true);
+            args.push_back(
+                llvm::MDTuple::get(
+                    ctx,
+                    {llvm::MDString::get(ctx, "SEXP"),
+                        llvm::MDString::get(ctx,
+                            llvm::StringRef((const char*)buf.data(), buf.size()))}));
+        }
     }
     return llvm::MDTuple::get(ctx, args);
 }
@@ -185,7 +199,7 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
 static void* getMetadataPtr_Global(const llvm::MDNode& meta,
                                    __attribute__((unused)) rir::Code* outer) {
     auto name = ((llvm::MDString*)meta.getOperand(1).get())->getString();
-    return (void*)globals.at(name.str());
+    return (void*)globals->at(name.str());
 }
 
 static void* getMetadataPtr_Builtin(const llvm::MDNode& meta,
@@ -328,14 +342,23 @@ static void patchPoolIdxMetadata(llvm::GlobalVariable& inst,
 }
 
 static void patchNamesMetadata(llvm::GlobalVariable& inst,
-                               llvm::MDNode* namesMeta, rir::Code* outer) {
+                               llvm::MDNode* namesMeta) {
     std::stringstream llvmName;
     llvmName << "names";
     for (auto& nameOperand : namesMeta->operands()) {
-        auto nameMetadata = nameOperand.get();
-        auto data = llvm::dyn_cast<llvm::MDString>(nameMetadata)->getString();
-        ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-        auto sexp = UUIDPool::readItem(buffer, true);
+        auto nameMetadata = llvm::dyn_cast<llvm::MDTuple>(nameOperand.get());
+        auto type = llvm::dyn_cast<llvm::MDString>(nameMetadata->getOperand(0))->getString();
+        auto data = llvm::dyn_cast<llvm::MDString>(nameMetadata->getOperand(1))->getString();
+        SEXP sexp;
+        if (type.equals("Global")) {
+            assert(globals->count(data.str()) && "Invalid global");
+            sexp = globals->at(data.str());
+        } else if (type.equals("SEXP")) {
+            ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+            sexp = UUIDPool::readItem(buffer, true);
+        } else {
+            assert(false && "Invalid name type (not \"Global\" or \"SEXP\")");
+        }
         // TODO: Reuse index if it's already in the constant pool
         //  (and maybe merge and refactor pools)
         BC::PoolIdx nextName = Pool::insert(sexp);
@@ -372,7 +395,7 @@ static void patchGlobalMetadatas(llvm::Module& mod, rir::Code* outer) {
         }
         if (namesMeta) {
             assert(!replaced);
-            patchNamesMetadata(global, namesMeta, outer);
+            patchNamesMetadata(global, namesMeta);
             // replaced = true;
         }
     }
