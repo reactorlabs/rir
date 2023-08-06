@@ -2,6 +2,7 @@
 #include "interp.h"
 #include "profiler.h"
 #include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/native/SerialRepr.h"
 
 #include "compilerClientServer/CompilerClient.h"
 
@@ -31,6 +32,7 @@ void initializeRuntime() {
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
                          rirDecompile, rirPrint, deserializeRir, serializeRir,
                          materialize);
+    pir::SerialRepr::initGlobals();
     RuntimeProfiler::initProfiler();
     CompilerClient::tryInit();
 }
