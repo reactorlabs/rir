@@ -346,9 +346,9 @@ static void patchNamesMetadata(llvm::GlobalVariable& inst,
     std::stringstream llvmName;
     llvmName << "names";
     for (auto& nameOperand : namesMeta->operands()) {
-        auto nameMetadata = llvm::dyn_cast<llvm::MDTuple>(nameOperand.get());
-        auto type = llvm::dyn_cast<llvm::MDString>(nameMetadata->getOperand(0))->getString();
-        auto data = llvm::dyn_cast<llvm::MDString>(nameMetadata->getOperand(1))->getString();
+        auto nameMetadata = (llvm::MDTuple*)nameOperand.get();
+        auto type = ((llvm::MDString*)(nameMetadata->getOperand(0)).get())->getString();
+        auto data = ((llvm::MDString*)(nameMetadata->getOperand(1)).get())->getString();
         SEXP sexp;
         if (type.equals("Global")) {
             assert(globals->count(data.str()) && "Invalid global");
@@ -401,17 +401,22 @@ static void patchGlobalMetadatas(llvm::Module& mod, rir::Code* outer) {
     }
 }
 
-static void patchFunctionMetadata(llvm::Module& mod,
-                                  const llvm::MDNode* operand) {
+static llvm::MDNode* patchFunctionMetadata(llvm::Module& mod,
+                                           const llvm::MDNode* operand) {
     auto& meta = *(const llvm::MDTuple*)operand;
     auto llvmValueName = ((llvm::MDString*)meta.getOperand(0).get())->getString();
     auto llvmValue = mod.getNamedValue(llvmValueName);
     auto builtinId = (int)((llvm::ConstantInt*)((llvm::ConstantAsMetadata*)meta.getOperand(1).get())->getValue())->getZExtValue();
     auto builtin = getBuiltin(getBuiltinFun(builtinId));
+    if (!llvmValue) {
+        return nullptr;
+    }
 
     char name[21];
     sprintf(name, "efn_%lx", (uintptr_t)builtin);
     llvmValue->setName(name);
+
+    return SerialRepr::functionMetadata(llvmValue->getContext(), name, builtinId);
 }
 
 static void patchFunctionMetadatas(llvm::Module& mod) {
@@ -419,8 +424,16 @@ static void patchFunctionMetadatas(llvm::Module& mod) {
     if (!meta) {
         return;
     }
+    std::vector<llvm::MDNode*> newOperands;
     for (auto operand : meta->operands()) {
-        patchFunctionMetadata(mod, operand);
+        auto newOperand = patchFunctionMetadata(mod, operand);
+        if (newOperand) {
+            newOperands.push_back(newOperand);
+        }
+    }
+    meta->clearOperands();
+    for (auto newOperand : newOperands) {
+        meta->addOperand(newOperand);
     }
 }
 
