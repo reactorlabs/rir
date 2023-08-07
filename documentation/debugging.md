@@ -57,6 +57,9 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY=
         n           print pretty graphs of RIR objects which get interned every n-th time, defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
 
+    PIR_LOG_INTERNING=
+        1           log every new intern, reused intern, unintern, and other intern related events.
+
 The following flags can be useful for profiling and finding out which passes take how much time to
 complete.
 

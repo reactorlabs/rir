@@ -20,9 +20,15 @@
 #include <unistd.h>
 
 // Can change this to log interned and uninterned hashes and pointers
-#define LOG(stmt) if (CompilerServer::isRunning()) stmt
+#define LOG(stmt) if (pir::Parameter::PIR_LOG_INTERNING) stmt
 
 namespace rir {
+
+bool pir::Parameter::PIR_LOG_INTERNING =
+    getenv("PIR_LOG_INTERNING") != nullptr &&
+    strcmp(getenv("PIR_LOG_INTERNING"), "") != 0 &&
+    strcmp(getenv("PIR_LOG_INTERNING"), "0") != 0 &&
+    strcmp(getenv("PIR_LOG_INTERNING"), "false") != 0;
 
 bool pir::Parameter::PIR_MEASURE_INTERNING =
     getenv("PIR_MEASURE_INTERNING") != nullptr &&
