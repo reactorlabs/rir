@@ -505,6 +505,17 @@ void Replay::replaySpeculativeContext(
     }
 }
 
+Function* VersionEvent::functionVersion(const DispatchTable* dt) const {
+    for (size_t i = 0; i < dt->size(); i++) {
+        auto* fi = dt->get(i);
+        if (fi->context() == version) {
+            return fi;
+        }
+    }
+
+    return nullptr;
+}
+
 void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
                                std::ostream& out) const {
     switch (type) {
@@ -732,10 +743,10 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-DeoptEvent::DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
+DeoptEvent::DeoptEvent(Context version, DeoptReason::Reason reason,
                        std::pair<ssize_t, ssize_t> reasonCodeIdx,
                        uint32_t reasonCodeOff, SEXP trigger)
-    : functionIdx_(functionIdx), reason_(reason),
+    : VersionEvent(version), reason_(reason),
       reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff) {
     setTrigger(trigger);
 }
@@ -794,14 +805,8 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     // have to store the broken invariants. Nothing else.
 
     auto dt = DispatchTable::unpack(BODY(closure));
-    Function* fun = nullptr;
+    Function* fun = functionVersion(dt);
     Code* code = nullptr;
-    for (size_t i = 0; i < dt->size(); i++) {
-        auto* fi = dt->get(i);
-        if (fi->context().toI() == functionIdx_) {
-            fun = fi;
-        }
-    }
 
     if (fun) {
         code = fun->body();
@@ -839,7 +844,7 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const {
     auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_.first];
 
-    out << "DeoptEvent{ [funIdx=" << this->functionIdx_;
+    out << "DeoptEvent{ [version=" << this->version;
     out << "]\n        reason=" << this->reason_;
     out << ",\n        reasonCodeIdx=(" << reasonRec << ","
         << this->reasonCodeIdx_.second << ")";
@@ -847,7 +852,7 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP DeoptEvent::toSEXP() const {
-    const char* fields[] = {"functionIdx",
+    const char* fields[] = {"version",
                             "reason",
                             "reason_code_idx",
                             "reason_code_off",
@@ -858,7 +863,7 @@ SEXP DeoptEvent::toSEXP() const {
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
     int i = 0;
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->functionIdx_));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->version));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reason_));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeOff_));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeIdx_));
@@ -873,8 +878,7 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_length(sexp) == 6);
 
     int i = 0;
-    this->functionIdx_ =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     this->reason_ =
         serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, i++));
     this->reasonCodeOff_ =
@@ -909,7 +913,7 @@ void DtInitEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP DtInitEvent::toSEXP() const {
-    const char* fields[] = {"version_index", "old_deopt_count", ""};
+    const char* fields[] = {"invocations", "deopts", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DT_INIT_EVENT);
 
@@ -931,13 +935,11 @@ void DtInitEvent::fromSEXP(SEXP sexp) {
 }
 
 SEXP InvocationEvent::toSEXP() const {
-    const char* fields[] = {"oldDtSize", "context", "deltaCount", "deltaDeopt",
-                            ""};
+    const char* fields[] = {"context", "deltaCount", "deltaDeopt", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_INVOCATION_EVENT);
     int i = 0;
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(dtSize)));
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(funIdx)));
+    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(version)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaCount)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaDeopt)));
     UNPROTECT(i + 1);
@@ -946,10 +948,9 @@ SEXP InvocationEvent::toSEXP() const {
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
     assert(TYPEOF(sexp) == VECSXP);
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 3);
     int i = 0;
-    dtSize = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    funIdx = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     deltaCount = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
 }
@@ -958,18 +959,12 @@ void InvocationEvent::replay(Replay& replay, SEXP closure,
                              std::string& closure_name) const {
     auto* dt = DispatchTable::unpack(BODY(closure));
 
-    Function* f = nullptr;
-    for (size_t i = 0; i < dt->size(); i++) {
-        auto fi = dt->get(i);
-        if (fi->context() == Context(funIdx)) {
-            f = fi;
-        }
-    }
+    Function* f = functionVersion(dt);
 
     if (!f) {
-        std::cerr << "couldn't find\n  " << Context(funIdx) << "  in [\n";
+        std::cerr << "couldn't find\n  " << version << "  in [\n";
         for (size_t i = 0; i < dt->size(); i++) {
-            std::cerr << "  " << Context(dt->get(i)->context()) << "\n";
+            std::cerr << "  " << dt->get(i)->context() << "\n";
         }
         std::cerr << "]" << std::endl;
         return;
@@ -992,7 +987,7 @@ void InvocationEvent::replay(Replay& replay, SEXP closure,
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,
                             std::ostream& out) const {
-    out << std::dec << "Invocation{ [funIdx=" << funIdx << "] ";
+    out << std::dec << "Invocation{ [version=" << version << "] ";
     if (deltaCount > 0) {
         out << "invocations += " << deltaCount;
     } else if (deltaCount < 0) {
@@ -1053,20 +1048,20 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
-    size_t funIdx = 0;
+    Context version;
     bool found = false;
     auto dt = DispatchTable::unpack(BODY(cls));
     // it deopts from native so it cannot be the baseline RIR
     for (size_t i = 1; i < dt->size(); i++) {
         auto* fi = dt->get(i);
         if (fi->body() == c) {
-            funIdx = fi->context().toI();
+            version = fi->context();
             found = true;
             break;
         } else if (fi->overridenBy && fi->overridenBy->body() == c) {
             std::cerr << "found in override" << std::endl;
             assert(fi->context() == fi->overridenBy->context());
-            funIdx = fi->context().toI();
+            version = fi->context();
             found = true;
             break;
         }
@@ -1076,7 +1071,7 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
         if (!c->function()->overridenBy) {
             std::cerr << "not found" << std::endl;
         }
-        funIdx = c->function()->context().toI();
+        version = c->function()->context();
     }
 
     auto reasonCodeIdx =
@@ -1086,7 +1081,7 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
            "Could not locate deopt reason location");
 
     recorder_.record(
-        cls, std::make_unique<DeoptEvent>(funIdx, reason.reason, reasonCodeIdx,
+        cls, std::make_unique<DeoptEvent>(version, reason.reason, reasonCodeIdx,
                                           reason.origin.offset(), trigger));
 }
 
@@ -1105,7 +1100,7 @@ void recordInvocation(const Function* f, ssize_t deltaCount,
     if (!is_recording_ || isPlayingCompile)
         return;
 
-    size_t funIdx = f->context().toI();
+    Context version = f->context();
     auto* dt = f->dispatchTable(false);
     if (!dt) {
         if (f->overridenBy) {
@@ -1120,8 +1115,8 @@ void recordInvocation(const Function* f, ssize_t deltaCount,
         return;
     }
 
-    recorder_.record(dt, std::make_unique<InvocationEvent>(
-                             dt->size(), funIdx, deltaCount, previousCount));
+    recorder_.record(dt, std::make_unique<InvocationEvent>(version, deltaCount,
+                                                           previousCount));
 }
 
 #define RECORD_SC_GUARD()                                                      \

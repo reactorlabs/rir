@@ -88,6 +88,12 @@ int64_t int64_t_from_sexp(SEXP sexp) {
     return std::strtoll(CHAR(STRING_ELT(sexp, 0)), nullptr, 10);
 }
 
+SEXP to_sexp(const rir::Context ctx) { return to_sexp(ctx.toI()); }
+
+Context context_from_sexp(SEXP sexp) {
+    return Context(uint64_t_from_sexp(sexp));
+}
+
 SEXP to_sexp(const rir::recording::Event& obj) { return obj.toSEXP(); }
 
 std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
@@ -98,7 +104,7 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
         event = std::make_unique<rir::recording::DeoptEvent>(
-            0, DeoptReason::Reason::Unknown,
+            Context(0UL), DeoptReason::Reason::Unknown,
             std::make_pair((size_t)-1, (size_t)-1), (uint32_t)0, nullptr);
     } else if (Rf_inherits(sexp, R_CLASS_DT_INIT_EVENT)) {
         event = std::make_unique<rir::recording::DtInitEvent>(-1, -1);

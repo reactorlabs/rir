@@ -39,6 +39,10 @@ SEXP to_sexp(int64_t i);
 
 int64_t int64_t_from_sexp(SEXP sexp);
 
+SEXP to_sexp(const rir::Context);
+
+Context context_from_sexp(SEXP sexp);
+
 SEXP to_sexp(const rir::recording::Event& obj);
 
 std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp);

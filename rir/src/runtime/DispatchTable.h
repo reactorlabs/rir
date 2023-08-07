@@ -10,7 +10,7 @@ namespace rir {
 
 struct DispatchTable;
 namespace recording {
-void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
+void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
 }
 

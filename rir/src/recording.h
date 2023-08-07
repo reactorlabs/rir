@@ -62,6 +62,16 @@ struct SpeculativeContext {
                std::ostream& out) const;
 };
 
+/**
+ * Recorded event that is implicitly attached to a function (closure, builtin or
+ * special)
+ *
+ * In the case of a closure, the "identity" of two closures is defined by the
+ * BODY() component of the closures being equal or not. For primitives, their
+ * identity is trivial.
+ *
+ * `Event` is an abstract class.
+ */
 class Event {
   public:
     virtual SEXP toSEXP() const = 0;
@@ -72,9 +82,38 @@ class Event {
                        std::ostream& out) const = 0;
 
     /**
-     * Returns true if the event contains a reference to a given DT index
+     * Returns `true` if the Event directly or indirectly stores the index of a
+     * given function recording
+     *
+     * For instance, a CompilationEvent would return `true` if its stored
+     * speculative contexts contained an ObservedCallee refering to the given
+     * `recordingIdx`.
+     *
+     * Function recordings that are never refered may be removed.
      */
-    virtual bool containsReference(size_t dispatchTable) const { return false; }
+    virtual bool containsReference(size_t recordingIdx) const { return false; }
+};
+
+/**
+ * `FunctionEvent`s are `Event`s that relate to a closure (instead of any of the
+ * 3 function kinds), but also to a specific function version inside its
+ * DispatchTable.
+ *
+ * `VersionEvent` is an abstract class.
+ */
+class VersionEvent : public Event {
+  public:
+    /**
+     * Returns the Function that this event refers to, given the enclosing
+     * DispatchTable
+     */
+    Function* functionVersion(const DispatchTable* in) const;
+
+  protected:
+    VersionEvent() = default;
+    VersionEvent(Context version) : version(version){};
+
+    Context version = Context(0UL);
 };
 
 /**
@@ -128,11 +167,11 @@ class CompilationEvent : public Event {
     std::vector<SpeculativeContext> speculative_contexts;
 };
 
-class DeoptEvent : public Event {
+class DeoptEvent : public VersionEvent {
   public:
     DeoptEvent(const DeoptEvent&) = delete;
     DeoptEvent& operator=(DeoptEvent const&);
-    DeoptEvent(size_t functionIdx, DeoptReason::Reason reason,
+    DeoptEvent(Context version, DeoptReason::Reason reason,
                std::pair<ssize_t, ssize_t> reasonCodeIdx,
                uint32_t reasonCodeOff, SEXP trigger);
     ~DeoptEvent();
@@ -148,8 +187,6 @@ class DeoptEvent : public Event {
                std::ostream& out) const override;
 
   private:
-    /* 0 if it couldn't be found */
-    size_t functionIdx_;
     DeoptReason::Reason reason_;
     /* negative indicates promise index, positive function index */
     std::pair<ssize_t, ssize_t> reasonCodeIdx_;
@@ -177,14 +214,13 @@ class DtInitEvent : public Event {
     size_t invocations, deopts;
 };
 
-class InvocationEvent : public Event {
+class InvocationEvent : public VersionEvent {
   public:
-    InvocationEvent(size_t dtSize, size_t funIdx, ssize_t deltaCount,
-                    size_t deltaDeopt)
-        : dtSize(dtSize), funIdx(funIdx), deltaCount(deltaCount),
+    InvocationEvent(Context version, ssize_t deltaCount, size_t deltaDeopt)
+        : VersionEvent(version), deltaCount(deltaCount),
           deltaDeopt(deltaDeopt){};
 
-    InvocationEvent() : dtSize(0){};
+    InvocationEvent() : VersionEvent(){};
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
@@ -196,8 +232,6 @@ class InvocationEvent : public Event {
                std::ostream& out) const override;
 
   private:
-    size_t dtSize;
-    size_t funIdx = (size_t)-1;
     ssize_t deltaCount = 0;
     size_t deltaDeopt = 0;
 };
@@ -215,6 +249,14 @@ constexpr size_t R_FunTab_Len_calc() {
 
 const size_t R_FunTab_Len = R_FunTab_Len_calc();
 
+/**
+ * R function (closure, builtin or special) to be persisted outside of the R
+ * session
+ *
+ * A FunRecording that refers to a closure only really stores its BODY(). In
+ * other words, two closures with the same BODY() (but different environments)
+ * would share the same FunRecording.
+ */
 struct FunRecording {
     // For CLOSXP:      -1
     // For primitives:  index into "names.c"'s array of primitive functions
@@ -243,10 +285,30 @@ class Replay {
     SEXP log;
 
   public:
+    /**
+     * Recorded function metadata to find it back in the current session
+     *
+     * This is directly deserialized from the saved data, with no additional
+     * processing. These will be lazily rehydrated into
+     * Replay::rehydrated_dispatch_tables and Replay::rehydrated_closures.
+     */
     std::vector<FunRecording> functions;
+
+    /**
+     * Mapping of function index (from Replay::functions) to a real
+     * DispatchTable* in the current R session
+     */
     std::vector<DispatchTable*> rehydrated_dispatch_tables;
+
+    /**
+     * Mapping of function index (from Replay::functions) to a real function in
+     * the current R session
+     */
     std::vector<SEXP> rehydrated_closures;
 
+    /**
+     * Replays a closure from Replay::functions given its index and memoizes it
+     */
     SEXP replayClosure(size_t idx);
 
     void replaySpeculativeContext(
@@ -286,6 +348,9 @@ class Record {
     Record() = default;
     ~Record();
 
+    /**
+     * Bitmask filter of events to record
+     */
     struct {
         bool compile : 1;
         bool deopt : 1;
@@ -302,6 +367,10 @@ class Record {
     void record(const SEXP cls, std::string name, std::unique_ptr<Event> event);
     void record(const SEXP cls, std::unique_ptr<Event> event);
 
+    /**
+     * Returns `true` if the list of recorded functions contains a closure whose
+     * DispatchTable is the one given
+     */
     bool contains(const DispatchTable* dt);
 
     std::pair<size_t, FunRecording&> initOrGetRecording(const DispatchTable* dt,
@@ -336,7 +405,7 @@ void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
                  SEXP trigger);
-void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
+void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
 void recordInvocation(const Function* f, ssize_t deltaCount, size_t deltaDeopt);
 void prepareRecordSC(const Code* container);
