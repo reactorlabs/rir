@@ -63,7 +63,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
 
-    enum class Kind { Bytecode, Native } kind;
+    enum class Kind { Bytecode, Native, Deserializing } kind;
 
     // extra pool, pir type feedback, arg reordering info, rir function
     static constexpr size_t NumLocals = 4;
@@ -73,7 +73,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
          size_t bindingsCacheSize);
 
   private:
-    Code() : Code(Kind::Bytecode, nullptr, 0, 0, 0, 0, 0, 0) {}
+    Code() : Code(Kind::Deserializing, nullptr, 0, 0, 0, 0, 0, 0) {}
     static Code* New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
                      size_t locals, size_t bindingCache);
     /*
