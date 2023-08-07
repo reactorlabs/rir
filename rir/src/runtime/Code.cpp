@@ -91,6 +91,9 @@ void Code::function(Function* fun) { setEntry(3, fun->container()); }
 
 rir::Function* Code::function() const {
     auto f = getEntry(3);
+    if (!f && kind == Kind::Deserializing) {
+        assert(false && "can't access function of code while it's being deserialized");
+    }
     assert(f);
     return rir::Function::unpack(f);
 }

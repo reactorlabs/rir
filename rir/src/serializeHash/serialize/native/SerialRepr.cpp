@@ -241,8 +241,6 @@ static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
         outer->addExtraPoolEntry(sexp);
     }
     assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Code SEXP is not actually an EXTERNALSXP");
-    // This assertion won't fail, instead the call to function() will error itself
-    assert(rir::Code::unpack(sexp)->function());
     return (void*)rir::Code::unpack(sexp);
 }
 
