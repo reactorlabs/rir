@@ -12,13 +12,14 @@
 
 namespace rir {
 
-void ObservedCallees::record(Code* caller, SEXP callee,
+void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
 
     if (numTargets < MaxTargets) {
         int i = 0;
+        auto caller = function->body();
         for (; i < numTargets; ++i)
             if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
@@ -80,7 +81,7 @@ void DeoptReason::record(SEXP val) const {
             break;
         auto feedback =
             origin.function()->typeFeedback()->callees(origin.idx());
-        feedback.record(origin.function()->body(), val, true);
+        feedback.record(origin.function(), val, true);
         assert(feedback.taken > 0);
         break;
     }
@@ -218,7 +219,7 @@ TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
 
     switch (slots_[idx].kind()) {
     case TypeFeedbackKind::Call:
-        slot.callees().record(owner_->body(), value);
+        slot.callees().record(owner_, value);
         break;
     case TypeFeedbackKind::Test:
         slot.test().record(value);

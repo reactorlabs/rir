@@ -40,7 +40,8 @@ struct ObservedCallees {
     uint32_t invalid : 1;
     std::array<unsigned, MaxTargets> targets;
 
-    void record(Code* caller, SEXP callee, bool invalidateWhenFull = false);
+    void record(Function* function, SEXP callee,
+                bool invalidateWhenFull = false);
     SEXP getTarget(const Function* function, size_t pos) const;
     void print(std::ostream& out, const Function* function) const;
 };

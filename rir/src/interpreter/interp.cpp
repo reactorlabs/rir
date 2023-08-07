@@ -2005,6 +2005,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             feedback.stateBeforeLastForce = state;
     };
 
+    // TODO: move above
+    auto function = c->function();
+    auto typeFeedback = function->typeFeedback();
+
     // main loop
     BEGIN_MACHINE {
 
@@ -2313,7 +2317,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
-            c->function()->typeFeedback()->record(idx, callee);
+            typeFeedback->callees(idx).record(function, callee);
             NEXT();
         }
 
@@ -2321,7 +2325,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            c->function()->typeFeedback()->record(idx, t);
+            typeFeedback->test(idx).record(t);
             NEXT();
         }
 
@@ -2329,7 +2333,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            c->function()->typeFeedback()->record(idx, t);
+            typeFeedback->types(idx).record(t);
             NEXT();
         }
 
