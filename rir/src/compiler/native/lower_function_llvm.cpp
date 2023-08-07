@@ -536,7 +536,8 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
         auto dr = (DeoptReasonWrapper*)val;
-        auto srcCode = llvm::cast<Constant>(convertToPointer(dr->reason.srcCode(), true));
+        auto srcCode = llvm::cast<Constant>(
+            convertToPointer(dr->reason.srcCode(), true));
         auto drs = llvm::ConstantStruct::get(
             t::DeoptReason, {c(dr->reason.reason, 32),
                              c(dr->reason.origin.offset(), 32), srcCode});
