@@ -205,7 +205,7 @@ static void* getMetadataPtr_Global(const llvm::MDNode& meta,
 static void* getMetadataPtr_Builtin(const llvm::MDNode& meta,
                                     __attribute__((unused)) rir::Code* outer) {
     auto name = ((llvm::MDString*)meta.getOperand(1).get())->getString();
-    return (void*)getBuiltinFun(name.str().c_str());
+    return (void*)getBuiltinOrSpecialFun(name.str().c_str());
 }
 
 static void* getMetadataPtr_SEXP(const llvm::MDNode& meta, rir::Code* outer) {
