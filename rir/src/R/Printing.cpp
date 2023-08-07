@@ -316,6 +316,9 @@ std::string Print::dumpEXTERNALSXP(SEXP s, size_t length) {
         case Code::Kind::Native:
             ss << "n ";
             break;
+        case Code::Kind::Deserializing:
+            ss << "ds ";
+            break;
         }
         ss << "(rir::Code*)" << p;
         if (p->pendingCompilation())
