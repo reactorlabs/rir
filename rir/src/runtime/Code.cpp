@@ -152,11 +152,12 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     code->srcLength = InInteger(inp);
     code->extraPoolSize = InInteger(inp);
     auto hasArgReorder = InInteger(inp);
+    SEXP argReorder = nullptr;
     if (hasArgReorder) {
-        code->setEntry(2, p(UUIDPool::readItem(refTable, inp)));
+        argReorder = p(UUIDPool::readItem(refTable, inp));
     }
     if (!rirFunction) {
-        code->function(Function::unpack(p(UUIDPool::readItem(refTable, inp))));
+        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
     }
 
     // Bytecode
@@ -164,7 +165,6 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
 
     // Extra pool
     SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
-    code->setEntry(0, extraPool);
     for (unsigned i = 0; i < code->extraPoolSize; ++i) {
         SET_VECTOR_ELT(extraPool, i, UUIDPool::readItem(refTable, inp));
     }
@@ -175,10 +175,14 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         // TODO: Intern
         code->srclist()[i].srcIdx = src_pool_read_item(refTable, inp);
     }
-
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   NumLocals, CODE_MAGIC};
+    code->setEntry(0, extraPool);
+    code->function(rirFunction);
+    if (hasArgReorder) {
+        code->setEntry(2, argReorder);
+    }
 
     // Native code
     code->kind = (Kind)InInteger(inp);
