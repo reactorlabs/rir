@@ -35,10 +35,10 @@ class TypeTest {
                 return failed();
         }
 
-        if (!feedback.feedbackOrigin.isValid())
+        if (!feedback.feedbackOrigin.hasSlot())
             return failed();
 
-        assert(feedback.feedbackOrigin.isValid());
+        assert(feedback.feedbackOrigin.hasSlot());
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||

@@ -6126,7 +6126,7 @@ void LowerFunctionLLVM::compile() {
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback()) {
                     auto& origin = i->typeFeedback().feedbackOrigin;
-                    if (origin.isValid()) {
+                    if (origin.hasSlot()) {
                         call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::recordTypefeedback),
@@ -6137,7 +6137,7 @@ void LowerFunctionLLVM::compile() {
                 }
                 if (i->hasCallFeedback()) {
                     auto& origin = i->callFeedback().feedbackOrigin;
-                    assert(origin.isValid());
+                    assert(origin.hasSlot());
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordTypefeedback),
                          {convertToPointer(origin.function()->typeFeedback(),
@@ -6248,7 +6248,7 @@ void LowerFunctionLLVM::compile() {
             auto i = var.first;
             if (Rep::Of(i) != Rep::SEXP)
                 continue;
-            if (!i->typeFeedback().feedbackOrigin.isValid())
+            if (!i->typeFeedback().feedbackOrigin.hasSlot())
                 continue;
             if (!var.second.initialized)
                 continue;

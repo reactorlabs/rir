@@ -38,7 +38,9 @@ SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
 }
 
 FeedbackOrigin::FeedbackOrigin(rir::Function* function, uint32_t idx)
-    : idx_(idx), function_(function) {}
+    : idx_(idx), function_(function) {
+    assert(idx < function->typeFeedback()->size());
+}
 
 DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                          DeoptReason::Reason reason)
@@ -230,16 +232,14 @@ TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
 }
 
 TypeFeedbackSlot* FeedbackOrigin::slot() const {
-    if (function_) {
+    if (function_ && hasSlot()) {
         return &(*function_->typeFeedback())[idx_];
     } else {
         return nullptr;
     }
 }
 
-bool FeedbackOrigin::isValid() const {
-    return function_ != nullptr && function_->typeFeedback()->size() > idx_;
-}
+bool FeedbackOrigin::hasSlot() const { return idx_ != UINT32_MAX; }
 
 uint32_t TypeFeedback::Builder::addCallee() {
     slots_.emplace_back(TypeFeedbackSlot::createCallees());
@@ -262,4 +262,8 @@ TypeFeedback* TypeFeedback::Builder::build() {
 
 TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}); }
 
+void FeedbackOrigin::function(Function* fun) {
+    assert(!hasSlot() || idx_ < fun->typeFeedback()->size());
+    function_ = fun;
+}
 } // namespace rir

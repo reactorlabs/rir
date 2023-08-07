@@ -148,20 +148,21 @@ enum class Opcode : uint8_t;
 // FIXME: rename to FeedbackPosition
 struct FeedbackOrigin {
   private:
-    // it has to be uint32_t as it it being used in the LLVM lowring code
-    // which relies on it being 32bit
-    uint32_t idx_ = -1;
+    // It has to be uint32_t as it it being used in the LLVM lowring code
+    // which relies on it being 32bit.
+    // TODO: move to optional<uint32_t> once we upgrade
+    uint32_t idx_ = UINT32_MAX;
     Function* function_ = nullptr;
 
   public:
     FeedbackOrigin() {}
     FeedbackOrigin(rir::Function* fun, uint32_t idx);
 
-    bool isValid() const;
+    bool hasSlot() const;
     TypeFeedbackSlot* slot() const;
     uint32_t idx() const { return idx_; }
     Function* function() const { return function_; }
-    void function(Function* fun) { function_ = fun; }
+    void function(Function* fun);
 
     bool operator==(const FeedbackOrigin& other) const {
         return idx_ == other.idx_ && function_ == other.function_;
@@ -224,9 +225,7 @@ struct DeoptReason {
         return out;
     }
 
-    static DeoptReason unknown() {
-        return DeoptReason(FeedbackOrigin(0, 0), Unknown);
-    }
+    static DeoptReason unknown() { return DeoptReason({}, Unknown); }
 
     void record(SEXP val) const;
 

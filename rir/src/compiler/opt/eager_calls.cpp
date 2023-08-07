@@ -26,7 +26,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         Speculation() {}
         Speculation(SEXP builtin, Checkpoint* cp, const FeedbackOrigin& origin)
             : builtin(builtin), cp(cp), origin(origin) {
-            assert(origin.isValid());
+            assert(origin.hasSlot());
         }
     };
 
@@ -211,7 +211,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                             }
                                             if (!inBase &&
                                                 ldfun->typeFeedback()
-                                                    .feedbackOrigin.isValid())
+                                                    .feedbackOrigin.hasSlot())
                                                 needsGuard[ldfun] = {
                                                     builtin, cp,
                                                     ldfun->typeFeedback()
