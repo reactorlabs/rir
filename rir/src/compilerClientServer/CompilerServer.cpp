@@ -3,6 +3,7 @@
 //
 
 #include "CompilerServer.h"
+#include "R/Printing.h"
 #include "api.h"
 #include "compiler_server_client_shared_utils.h"
 #include "serializeHash/hash/UUID.h"
@@ -258,8 +259,19 @@ void CompilerServer::tryRun() {
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";
             if (what) {
-                std::cerr << what << std::endl;
-                Rf_PrintValue(what);
+                std::cerr << what << " " << Print::dumpSexp(what) << std::endl;
+
+                // In VERY RARE cases, compiling one closure will change the
+                // hash of another object which is not connected, or add a
+                // connected object to an existing RIR object which is itself
+                // not connected to the compiled object, so that the object has
+                // a hash which isn't in the intern pool. This is almost
+                // certainly a bug in interning, probably to do with us
+                // including mutating information in the hash, but this is a
+                // workaround. Without this line, performance is improved, but
+                // the compiler server will crash in very rare cases.
+                UUIDPool::intern(what, true, true);
+
                 // Response data format =
                 //   Response::Retrieved
                 // + serialize(what)
