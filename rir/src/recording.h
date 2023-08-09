@@ -66,18 +66,13 @@ struct SpeculativeContext {
  * Recorded event that is implicitly attached to a function (closure, builtin or
  * special)
  *
- * In the case of a closure, the "identity" of two closures is defined by the
- * BODY() component of the closures being equal or not. For primitives, their
- * identity is trivial.
- *
  * `Event` is an abstract class.
  */
 class Event {
   public:
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
-    virtual void replay(Replay& replay, SEXP closure,
-                        std::string& closure_name) const = 0;
+    virtual void replay(Replay& replay, SEXP closure) const = 0;
     virtual void print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const = 0;
 
@@ -128,8 +123,7 @@ class SpeculativeContextEvent : public Event {
         : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replay(Replay& replay, SEXP closure,
-                std::string& closure_name) const override;
+    void replay(Replay& replay, SEXP closure) const override;
     virtual bool containsReference(size_t dispatchTable) const;
 
   protected:
@@ -145,16 +139,15 @@ class SpeculativeContextEvent : public Event {
 
 class CompilationEvent : public Event {
   public:
-    CompilationEvent(unsigned long dispatch_context,
+    CompilationEvent(unsigned long dispatch_context, std::string compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts)
-        : dispatch_context(dispatch_context),
+        : dispatch_context(dispatch_context), compileName(compileName),
           speculative_contexts(speculative_contexts) {}
     CompilationEvent() {}
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replay(Replay& replay, SEXP closure,
-                std::string& closure_name) const override;
+    void replay(Replay& replay, SEXP closure) const override;
     virtual bool containsReference(size_t dispatchTable) const;
 
   protected:
@@ -163,6 +156,9 @@ class CompilationEvent : public Event {
 
   private:
     unsigned long dispatch_context;
+
+    // Name under which the closure was compiled, to be passed to pirCompile()
+    std::string compileName;
 
     std::vector<SpeculativeContext> speculative_contexts;
 };
@@ -178,8 +174,7 @@ class DeoptEvent : public VersionEvent {
     void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
-    void replay(Replay& replay, SEXP closure,
-                std::string& closure_name) const override;
+    void replay(Replay& replay, SEXP closure) const override;
     virtual bool containsReference(size_t dispatchTable) const;
 
   protected:
@@ -203,8 +198,7 @@ class DtInitEvent : public Event {
         : invocations(invocations), deopts(deopts){};
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
-    void replay(Replay& replay, SEXP closure,
-                std::string& closure_name) const override;
+    void replay(Replay& replay, SEXP closure) const override;
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -224,8 +218,7 @@ class InvocationEvent : public VersionEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replay(Replay& replay, SEXP closure,
-                std::string& closure_name) const override;
+    void replay(Replay& replay, SEXP closure) const override;
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -252,10 +245,6 @@ const size_t R_FunTab_Len = R_FunTab_Len_calc();
 /**
  * R function (closure, builtin or special) to be persisted outside of the R
  * session
- *
- * A FunRecording that refers to a closure only really stores its BODY(). In
- * other words, two closures with the same BODY() (but different environments)
- * would share the same FunRecording.
  */
 struct FunRecording {
     // For CLOSXP:      -1

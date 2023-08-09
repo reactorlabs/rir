@@ -415,9 +415,7 @@ size_t Replay::replay() {
     for (size_t i = 0; i < n; i++) {
         auto entry = getEvent(i);
         auto cls = PROTECT(replayClosure(entry.first));
-        const auto& function = functions.at(entry.first);
-        entry.second->replay(*this, cls,
-                             const_cast<std::string&>(function.name));
+        entry.second->replay(*this, cls);
         UNPROTECT(1);
     }
 
@@ -582,8 +580,7 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     sc = serialization::speculative_context_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
-void SpeculativeContextEvent::replay(Replay& replay, SEXP closure,
-                                     std::string& closure_name) const {
+void SpeculativeContextEvent::replay(Replay& replay, SEXP closure) const {
     auto& baseline = *DispatchTable::unpack(BODY(closure))->baseline();
     Code* c = nullptr;
     if (codeIndex == -1) {
@@ -640,11 +637,11 @@ void SpeculativeContextEvent::replay(Replay& replay, SEXP closure,
     }
 }
 
-bool SpeculativeContextEvent::containsReference(size_t dispatchTable) const {
+bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
     if (sc.type == SpeculativeContextType::Callees) {
         const auto& callees = sc.value.callees;
         const size_t* found =
-            std::find(callees.begin(), callees.end(), dispatchTable);
+            std::find(callees.begin(), callees.end(), recordingIdx);
 
         if (found != callees.end())
             return true;
@@ -668,26 +665,25 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
     out << "\n    }";
 }
 
-void CompilationEvent::replay(Replay& replay, SEXP closure,
-                              std::string& closure_name) const {
+void CompilationEvent::replay(Replay& replay, SEXP closure) const {
     isPlayingCompile = true;
     isReplayingSC++;
     auto start = speculative_contexts.begin();
     auto end = speculative_contexts.end();
     auto dt = DispatchTable::unpack(BODY(closure));
     replay.replaySpeculativeContext(dt, start, end);
-    pirCompile(closure, Context(this->dispatch_context), closure_name,
+    pirCompile(closure, Context(this->dispatch_context), compileName,
                pir::DebugOptions::DefaultDebugOptions);
     isReplayingSC--;
     isPlayingCompile = false;
 }
 
-bool CompilationEvent::containsReference(size_t dispatchTable) const {
+bool CompilationEvent::containsReference(size_t recordingIdx) const {
     for (auto& sc : speculative_contexts) {
         if (sc.type == SpeculativeContextType::Callees) {
             const auto& callees = sc.value.callees;
             const size_t* found =
-                std::find(callees.begin(), callees.end(), dispatchTable);
+                std::find(callees.begin(), callees.end(), recordingIdx);
 
             if (found != callees.end())
                 return true;
@@ -700,7 +696,7 @@ bool CompilationEvent::containsReference(size_t dispatchTable) const {
 void CompilationEvent::print(const std::vector<FunRecording>& mapping,
                              std::ostream& out) const {
     out << "CompilationEvent{\n        dispatch_context="
-        << Context(this->dispatch_context)
+        << Context(this->dispatch_context) << ",\n        name=" << compileName
         << ",\n        speculative_contexts=[\n";
     for (auto& spec : this->speculative_contexts) {
         out << "            ";
@@ -711,13 +707,15 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP CompilationEvent::toSEXP() const {
-    const char* fields[] = {"dispatch_context", "speculative_contexts", ""};
+    const char* fields[] = {"dispatch_context", "name", "speculative_contexts",
+                            ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
     SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->dispatch_context));
+    SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->compileName));
     auto speculative_contexts_sexp =
         Rf_allocVector(VECSXP, (int)this->speculative_contexts.size());
-    SET_VECTOR_ELT(sexp, 1, speculative_contexts_sexp);
+    SET_VECTOR_ELT(sexp, 2, speculative_contexts_sexp);
 
     int i = 0;
     for (auto& speculative_context : this->speculative_contexts) {
@@ -730,11 +728,11 @@ SEXP CompilationEvent::toSEXP() const {
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 2);
+    assert(Rf_length(sexp) == 3);
     this->dispatch_context =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
-
-    auto speculative_contexts_sexp = VECTOR_ELT(sexp, 1);
+    this->compileName = serialization::string_from_sexp(VECTOR_ELT(sexp, 1));
+    auto speculative_contexts_sexp = VECTOR_ELT(sexp, 2);
     assert(Rf_isVector(speculative_contexts_sexp));
     for (auto i = 0; i < Rf_length(speculative_contexts_sexp); i++) {
         auto speculative_context = serialization::speculative_context_from_sexp(
@@ -796,8 +794,7 @@ Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
     }
 }
 
-void DeoptEvent::replay(Replay& replay, SEXP closure,
-                        std::string& closure_name) const {
+void DeoptEvent::replay(Replay& replay, SEXP closure) const {
     // A deopt normally occurs _while executing_ a function, and partly consists
     // in converting the native stack frame into an interpreted stack frame,
     // while keeping note of the broken invariants that led to the function
@@ -835,9 +832,9 @@ void DeoptEvent::replay(Replay& replay, SEXP closure,
     }
 }
 
-bool DeoptEvent::containsReference(size_t dispatchTable) const {
-    return (size_t)reasonCodeIdx_.first == dispatchTable ||
-           (size_t)triggerClosure_ == dispatchTable;
+bool DeoptEvent::containsReference(size_t recordingIdx) const {
+    return (size_t)reasonCodeIdx_.first == recordingIdx ||
+           (size_t)triggerClosure_ == recordingIdx;
 }
 
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
@@ -899,8 +896,7 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-void DtInitEvent::replay(Replay& replay, SEXP closure,
-                         std::string& closure_name) const {
+void DtInitEvent::replay(Replay& replay, SEXP closure) const {
     DispatchTable* dt = DispatchTable::unpack(BODY(closure));
     dt->baseline()->init(invocations, deopts);
     recordDtOverwrite(dt, invocations, deopts);
@@ -955,8 +951,7 @@ void InvocationEvent::fromSEXP(SEXP sexp) {
     deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
-void InvocationEvent::replay(Replay& replay, SEXP closure,
-                             std::string& closure_name) const {
+void InvocationEvent::replay(Replay& replay, SEXP closure) const {
     auto* dt = DispatchTable::unpack(BODY(closure));
 
     Function* f = functionVersion(dt);
@@ -1013,9 +1008,9 @@ void recordCompile(SEXP const cls, const std::string& name,
     recorder_.recordSpeculativeContext(dt, sc);
 
     auto dispatch_context = assumptions.toI();
-    recorder_.record(
-        cls, name,
-        std::make_unique<CompilationEvent>(dispatch_context, std::move(sc)));
+    recorder_.record(cls, name,
+                     std::make_unique<CompilationEvent>(dispatch_context, name,
+                                                        std::move(sc)));
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
