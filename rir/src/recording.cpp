@@ -41,21 +41,6 @@ static int isReplayingSC = 0;
 // Don't record invocations while replaying compile events
 static bool isPlayingCompile = false;
 
-void Record::record(const DispatchTable* dt, std::unique_ptr<Event> event) {
-    auto entry = initOrGetRecording(dt);
-    log.emplace_back(entry.first, std::move(event));
-}
-
-void Record::record(const SEXP cls, std::string name,
-                    std::unique_ptr<Event> event) {
-    auto entry = initOrGetRecording(cls, name);
-    log.emplace_back(entry.first, std::move(event));
-}
-
-void Record::record(const SEXP cls, std::unique_ptr<Event> event) {
-    record(cls, "", std::move(event));
-}
-
 bool Record::contains(const DispatchTable* dt) {
     return dt_to_recording_index_.count(dt);
 }
@@ -205,9 +190,8 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
     if (r.second && false) {
         assert(dt->size() == 1);
         auto* base = dt->baseline();
-        log.emplace_back(r.first->second,
-                         std::make_unique<DtInitEvent>(base->invocationCount(),
-                                                       base->deoptCount()));
+        log.emplace_back(std::make_unique<DtInitEvent>(
+            r.first->second, base->invocationCount(), base->deoptCount()));
     }
 
     return {r.first->second, *v};
@@ -241,11 +225,8 @@ SEXP Record::save() {
     for (auto& recording : functions) {
         if (Rf_isNull(recording.closure)) {
             auto refersToRecording =
-                [recIdx](
-                    std::pair<size_t, std::unique_ptr<rir::recording::Event>>&
-                        entry) {
-                    return entry.first == recIdx ||
-                           entry.second->containsReference(recIdx);
+                [recIdx](std::unique_ptr<rir::recording::Event>& event) {
+                    return event->containsReference(recIdx);
                 };
 
             log.erase(std::remove_if(log.begin(), log.end(), refersToRecording),
@@ -271,26 +252,17 @@ SEXP Record::save() {
 
 void Record::printRecordings(std::ostream& out) {
     for (auto& eventEntry : log) {
-        auto& body = functions[eventEntry.first];
-
-        const char* name = body.name.c_str();
+        const char* name = eventEntry->targetName(functions);
         std::string ptr_str;
 
         // If name is empty (unknown), use a different display strategy
         if (*name == 0) {
-            if (!HIDE_UNKNOWN_CLOSURE_POINTER) {
-                std::stringstream buf;
-                buf << (void*)body.closure;
-                ptr_str = buf.str();
-                name = ptr_str.c_str();
-            } else {
-                name = "<?>";
-            }
+            name = "<?>";
         }
 
         Prefixer prefixed(out, name);
         prefixed << "    ";
-        eventEntry.second->print(functions, prefixed);
+        eventEntry->print(functions, prefixed);
         prefixed << std::endl;
     }
 }
@@ -343,13 +315,10 @@ Replay::~Replay() { R_ReleaseObject(log); }
 
 size_t Replay::getEventCount() { return (size_t)Rf_length(log); }
 
-std::pair<size_t, std::unique_ptr<Event>> Replay::getEvent(size_t idx) {
+std::unique_ptr<Event> Replay::getEvent(size_t idx) {
     assert(idx < getEventCount());
     SEXP rawEventEntry = VECTOR_ELT(log, idx);
-    return serialization::pair_from_sexp<size_t, std::unique_ptr<Event>,
-                                         serialization::uint64_t_from_sexp,
-                                         serialization::event_from_sexp>(
-        rawEventEntry);
+    return serialization::event_from_sexp(rawEventEntry);
 }
 
 SEXP Replay::replayClosure(size_t idx) {
@@ -414,9 +383,7 @@ size_t Replay::replay() {
 
     for (size_t i = 0; i < n; i++) {
         auto entry = getEvent(i);
-        auto cls = PROTECT(replayClosure(entry.first));
-        entry.second->replay(*this, cls);
-        UNPROTECT(1);
+        entry->replay(*this);
     }
 
     return n;
@@ -503,9 +470,49 @@ void Replay::replaySpeculativeContext(
     }
 }
 
-Function* VersionEvent::functionVersion(const DispatchTable* dt) const {
-    for (size_t i = 0; i < dt->size(); i++) {
-        auto* fi = dt->get(i);
+void ClosureEvent::replay(Replay& replay) const {
+    SEXP cls = PROTECT(replay.replayClosure(closureIndex));
+    if (Rf_isFunction(cls)) {
+        replayOnClosure(replay, cls);
+    } else {
+        std::cerr << "replaying closure wasn't initialized yet at index "
+                  << closureIndex << std::endl;
+    }
+    UNPROTECT(1);
+}
+
+const char* ClosureEvent::targetName(std::vector<FunRecording>& mapping) const {
+    return mapping[closureIndex].name.c_str();
+}
+
+void DtEvent::replay(Replay& replay) const {
+    SEXP body =
+        PROTECT(BODY(PROTECT(replay.replayClosure(dispatchTableIndex))));
+    if (auto dt = DispatchTable::check(body)) {
+        replayOnDt(replay, *dt);
+    } else {
+        std::cerr << "replaying dispatch table wasn't initialized yet at index "
+                  << dispatchTableIndex << std::endl;
+    }
+    UNPROTECT(2);
+}
+
+const char* DtEvent::targetName(std::vector<FunRecording>& mapping) const {
+    return mapping[dispatchTableIndex].name.c_str();
+}
+
+void VersionEvent::replayOnDt(Replay& replay, DispatchTable& dt) const {
+    if (auto fun = functionVersion(dt)) {
+        replayOnFunctionVersion(replay, dt, *fun);
+    } else {
+        std::cerr << "function version with context " << version
+                  << " wasn't found in DispatchTable " << &dt << std::endl;
+    }
+}
+
+Function* VersionEvent::functionVersion(const DispatchTable& dt) const {
+    for (size_t i = 0; i < dt.size(); i++) {
+        auto* fi = dt.get(i);
         if (fi->context() == version) {
             return fi;
         }
@@ -559,10 +566,11 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP SpeculativeContextEvent::toSEXP() const {
-    SEXP sexp = PROTECT(Rf_allocVector(VECSXP, 3));
+    SEXP sexp = PROTECT(Rf_allocVector(VECSXP, 4));
     setClassName(sexp, R_CLASS_SC_EVENT);
     size_t i = 0;
     assert(codeIndex != -2);
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(codeIndex));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(offset));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(sc));
@@ -572,16 +580,19 @@ SEXP SpeculativeContextEvent::toSEXP() const {
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 3);
+    assert(Rf_length(sexp) == 4);
     size_t i = 0;
+    dispatchTableIndex =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     codeIndex = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     assert(codeIndex >= -1);
     offset = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     sc = serialization::speculative_context_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
-void SpeculativeContextEvent::replay(Replay& replay, SEXP closure) const {
-    auto& baseline = *DispatchTable::unpack(BODY(closure))->baseline();
+void SpeculativeContextEvent::replayOnDt(Replay& replay,
+                                         DispatchTable& dt) const {
+    auto& baseline = *dt.baseline();
     Code* c = nullptr;
     if (codeIndex == -1) {
         c = baseline.body();
@@ -647,7 +658,7 @@ bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
             return true;
     }
 
-    return false;
+    return DtEvent::containsReference(recordingIdx);
 }
 
 void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
@@ -665,7 +676,7 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
     out << "\n    }";
 }
 
-void CompilationEvent::replay(Replay& replay, SEXP closure) const {
+void CompilationEvent::replayOnClosure(Replay& replay, SEXP closure) const {
     isPlayingCompile = true;
     isReplayingSC++;
     auto start = speculative_contexts.begin();
@@ -690,7 +701,7 @@ bool CompilationEvent::containsReference(size_t recordingIdx) const {
         }
     }
 
-    return false;
+    return ClosureEvent::containsReference(recordingIdx);
 }
 
 void CompilationEvent::print(const std::vector<FunRecording>& mapping,
@@ -707,19 +718,21 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP CompilationEvent::toSEXP() const {
-    const char* fields[] = {"dispatch_context", "name", "speculative_contexts",
-                            ""};
+    const char* fields[] = {"closure", "dispatch_context", "name",
+                            "speculative_contexts", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
-    SET_VECTOR_ELT(sexp, 0, serialization::to_sexp(this->dispatch_context));
-    SET_VECTOR_ELT(sexp, 1, serialization::to_sexp(this->compileName));
+    size_t i = 0;
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(closureIndex));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->dispatch_context));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->compileName));
     auto speculative_contexts_sexp =
         Rf_allocVector(VECSXP, (int)this->speculative_contexts.size());
-    SET_VECTOR_ELT(sexp, 2, speculative_contexts_sexp);
+    SET_VECTOR_ELT(sexp, i++, speculative_contexts_sexp);
 
-    int i = 0;
+    size_t scI = 0;
     for (auto& speculative_context : this->speculative_contexts) {
-        SET_VECTOR_ELT(speculative_contexts_sexp, i++,
+        SET_VECTOR_ELT(speculative_contexts_sexp, scI++,
                        serialization::to_sexp(speculative_context));
     }
 
@@ -728,11 +741,12 @@ SEXP CompilationEvent::toSEXP() const {
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 3);
+    assert(Rf_length(sexp) == 4);
+    this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
-    this->compileName = serialization::string_from_sexp(VECTOR_ELT(sexp, 1));
-    auto speculative_contexts_sexp = VECTOR_ELT(sexp, 2);
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
+    this->compileName = serialization::string_from_sexp(VECTOR_ELT(sexp, 2));
+    auto speculative_contexts_sexp = VECTOR_ELT(sexp, 3);
     assert(Rf_isVector(speculative_contexts_sexp));
     for (auto i = 0; i < Rf_length(speculative_contexts_sexp); i++) {
         auto speculative_context = serialization::speculative_context_from_sexp(
@@ -741,10 +755,11 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-DeoptEvent::DeoptEvent(Context version, DeoptReason::Reason reason,
+DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
+                       DeoptReason::Reason reason,
                        std::pair<ssize_t, ssize_t> reasonCodeIdx,
                        uint32_t reasonCodeOff, SEXP trigger)
-    : VersionEvent(version), reason_(reason),
+    : VersionEvent(dispatchTableIndex, version), reason_(reason),
       reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff) {
     setTrigger(trigger);
 }
@@ -794,23 +809,15 @@ Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
     }
 }
 
-void DeoptEvent::replay(Replay& replay, SEXP closure) const {
+void DeoptEvent::replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
+                                         Function& fun) const {
     // A deopt normally occurs _while executing_ a function, and partly consists
     // in converting the native stack frame into an interpreted stack frame,
     // while keeping note of the broken invariants that led to the function
     // being deoptimized in the first place. To replay a deoptimization, we only
     // have to store the broken invariants. Nothing else.
 
-    auto dt = DispatchTable::unpack(BODY(closure));
-    Function* fun = functionVersion(dt);
-    Code* code = nullptr;
-
-    if (fun) {
-        code = fun->body();
-    } else {
-        std::cerr << "didn't find code" << std::endl;
-        return;
-    }
+    Code* code = fun.body();
 
     // Copy and set current closure's code
     Code* deoptSrcCode =
@@ -820,21 +827,19 @@ void DeoptEvent::replay(Replay& replay, SEXP closure) const {
     DeoptReason reason(origin, this->reason_);
     auto trigger = trigger_ ? trigger_ : replay.replayClosure(triggerClosure_);
 
-    recordDeopt(code, closure, reason, trigger);
+    recordDeopt(code, &dt, reason, trigger);
 
     isReplayingSC++;
     reason.record(trigger);
     isReplayingSC--;
-    if (fun) {
-        // We're doing fun->registerDeopt(), but without the incrementation
-        assert(fun->isOptimized());
-        fun->flags.set(Function::Flag::Deopt);
-    }
+    assert(fun.isOptimized());
+    fun.flags.set(Function::Flag::Deopt);
 }
 
 bool DeoptEvent::containsReference(size_t recordingIdx) const {
     return (size_t)reasonCodeIdx_.first == recordingIdx ||
-           (size_t)triggerClosure_ == recordingIdx;
+           (size_t)triggerClosure_ == recordingIdx ||
+           VersionEvent::containsReference(recordingIdx);
 }
 
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
@@ -849,17 +854,14 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP DeoptEvent::toSEXP() const {
-    const char* fields[] = {"version",
-                            "reason",
-                            "reason_code_idx",
-                            "reason_code_off",
-                            "trigger",
-                            "triggerClosure",
-                            ""};
+    const char* fields[] = {
+        "dispatchTable",   "version", "reason",         "reason_code_idx",
+        "reason_code_off", "trigger", "triggerClosure", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DEOPT_EVENT);
 
     int i = 0;
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->version));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reason_));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeOff_));
@@ -872,9 +874,11 @@ SEXP DeoptEvent::toSEXP() const {
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 6);
+    assert(Rf_length(sexp) == 7);
 
     int i = 0;
+    this->dispatchTableIndex =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     this->version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     this->reason_ =
         serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, i++));
@@ -896,10 +900,9 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-void DtInitEvent::replay(Replay& replay, SEXP closure) const {
-    DispatchTable* dt = DispatchTable::unpack(BODY(closure));
-    dt->baseline()->init(invocations, deopts);
-    recordDtOverwrite(dt, invocations, deopts);
+void DtInitEvent::replayOnDt(Replay& replay, DispatchTable& dt) const {
+    dt.baseline()->init(invocations, deopts);
+    recordDtOverwrite(&dt, invocations, deopts);
 }
 
 void DtInitEvent::print(const std::vector<FunRecording>& mapping,
@@ -909,11 +912,12 @@ void DtInitEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP DtInitEvent::toSEXP() const {
-    const char* fields[] = {"invocations", "deopts", ""};
+    const char* fields[] = {"dispatchTable", "invocations", "deopts", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_DT_INIT_EVENT);
 
     int i = 0;
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->invocations));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->deopts));
     UNPROTECT(1);
@@ -922,19 +926,24 @@ SEXP DtInitEvent::toSEXP() const {
 
 void DtInitEvent::fromSEXP(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 2);
+    assert(Rf_length(sexp) == 3);
 
     int i = 0;
+    this->dispatchTableIndex =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     this->invocations =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     this->deopts = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
 SEXP InvocationEvent::toSEXP() const {
-    const char* fields[] = {"context", "deltaCount", "deltaDeopt", ""};
+    const char* fields[] = {"dispatchTable", "context", "deltaCount",
+                            "deltaDeopt", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_INVOCATION_EVENT);
     int i = 0;
+    SET_VECTOR_ELT(sexp, i++,
+                   PROTECT(serialization::to_sexp(dispatchTableIndex)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(version)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaCount)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaDeopt)));
@@ -944,39 +953,29 @@ SEXP InvocationEvent::toSEXP() const {
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
     assert(TYPEOF(sexp) == VECSXP);
-    assert(Rf_length(sexp) == 3);
+    assert(Rf_length(sexp) == 4);
     int i = 0;
+    dispatchTableIndex =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     deltaCount = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
-void InvocationEvent::replay(Replay& replay, SEXP closure) const {
-    auto* dt = DispatchTable::unpack(BODY(closure));
-
-    Function* f = functionVersion(dt);
-
-    if (!f) {
-        std::cerr << "couldn't find\n  " << version << "  in [\n";
-        for (size_t i = 0; i < dt->size(); i++) {
-            std::cerr << "  " << dt->get(i)->context() << "\n";
-        }
-        std::cerr << "]" << std::endl;
-        return;
-    }
-
+void InvocationEvent::replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
+                                              Function& fun) const {
     if (deltaCount > 0) {
         for (ssize_t i = 0; i < deltaCount; i++) {
-            f->registerInvocation();
-            f->registerEndInvocation();
+            fun.registerInvocation();
+            fun.registerEndInvocation();
         }
     } else if (deltaCount < 0) {
         auto remaining = -deltaCount;
         for (ssize_t i = 0; i < remaining; i++) {
-            f->unregisterInvocation();
+            fun.unregisterInvocation();
         }
     } else {
-        f->addDeoptCount(deltaDeopt);
+        fun.addDeoptCount(deltaDeopt);
     }
 }
 
@@ -997,7 +996,7 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
     if (!is_recording_ || !recorder_.filter.field_name)                        \
         return;
 
-void recordCompile(SEXP const cls, const std::string& name,
+void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
 
@@ -1008,9 +1007,9 @@ void recordCompile(SEXP const cls, const std::string& name,
     recorder_.recordSpeculativeContext(dt, sc);
 
     auto dispatch_context = assumptions.toI();
-    recorder_.record(cls, name,
-                     std::make_unique<CompilationEvent>(dispatch_context, name,
-                                                        std::move(sc)));
+
+    recorder_.record<CompilationEvent>(cls, name, dispatch_context, name,
+                                       std::move(sc));
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
@@ -1038,14 +1037,13 @@ std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
     return {indexOfBaseline(needle), -1};
 }
 
-void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
+void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger) {
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
     Context version;
     bool found = false;
-    auto dt = DispatchTable::unpack(BODY(cls));
     // it deopts from native so it cannot be the baseline RIR
     for (size_t i = 1; i < dt->size(); i++) {
         auto* fi = dt->get(i);
@@ -1075,9 +1073,8 @@ void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
     assert(reasonCodeIdx.first >= 0 &&
            "Could not locate deopt reason location");
 
-    recorder_.record(
-        cls, std::make_unique<DeoptEvent>(version, reason.reason, reasonCodeIdx,
-                                          reason.origin.offset(), trigger));
+    recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx,
+                                 reason.origin.offset(), trigger);
 }
 
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
@@ -1086,7 +1083,7 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
         return;
     }
 
-    recorder_.record(dt, std::make_unique<DtInitEvent>(funIdx, oldDeoptCount));
+    recorder_.record<DtInitEvent>(dt, funIdx, oldDeoptCount);
 }
 
 void recordInvocation(const Function* f, ssize_t deltaCount,
@@ -1110,8 +1107,7 @@ void recordInvocation(const Function* f, ssize_t deltaCount,
         return;
     }
 
-    recorder_.record(dt, std::make_unique<InvocationEvent>(version, deltaCount,
-                                                           previousCount));
+    recorder_.record<InvocationEvent>(dt, version, deltaCount, previousCount);
 }
 
 #define RECORD_SC_GUARD()                                                      \
@@ -1166,8 +1162,8 @@ void recordSC(const Opcode* immediate, SpeculativeContext sc) {
         return;
     }
 
-    recorder_.record(
-        dt, std::make_unique<SpeculativeContextEvent>(codeIndex, offset, sc));
+    recorder_.record<SpeculativeContextEvent>(dt, codeIndex, (size_t &&) offset,
+                                              sc);
 }
 
 void recordSC(const ObservedCallees& callees) {
@@ -1354,26 +1350,18 @@ REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
         auto eventCount = replay.getEventCount();
         for (size_t idx = 0; idx < eventCount; idx++) {
             const auto eventEntry = replay.getEvent(idx);
-            const auto& function = replay.functions[eventEntry.first];
 
-            const char* name = function.name.c_str();
+            const char* name = eventEntry->targetName(replay.functions);
             std::string ptr_str;
 
             // If name is empty (unknown), use a different display strategy
             if (*name == 0) {
-                if (!HIDE_UNKNOWN_CLOSURE_POINTER) {
-                    std::stringstream buf;
-                    buf << (void*)function.closure;
-                    ptr_str = buf.str();
-                    name = ptr_str.c_str();
-                } else {
-                    name = "<?>";
-                }
+                name = "<?>";
             }
 
             Prefixer prefixed(out, name);
             prefixed << "    ";
-            eventEntry.second->print(replay.functions, prefixed);
+            eventEntry->print(replay.functions, prefixed);
             prefixed << std::endl;
         }
 

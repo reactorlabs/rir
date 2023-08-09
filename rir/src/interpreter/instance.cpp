@@ -1,6 +1,8 @@
 #include "instance.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "recording.h"
+#include <cstdlib>
 
 namespace rir {
 
@@ -64,6 +66,23 @@ void context_init() {
         };
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
+    }
+
+    bool shouldRecord = std::getenv("RIR_RECORD") != nullptr;
+    const char* replayPath = std::getenv("RIR_REPLAY");
+    bool shouldReplay = replayPath != nullptr;
+
+    if (shouldRecord && !shouldReplay) {
+        std::cerr << "Starting recording (environment variable)" << std::endl;
+        startRecordings();
+    }
+
+    if (shouldReplay) {
+        std::cerr << "Starting replaying (environment variable)" << std::endl;
+        SEXP filename = Rf_mkString(replayPath);
+        R_PreserveObject(filename);
+        replayRecordingsFromFile(filename, shouldRecord);
+        R_ReleaseObject(filename);
     }
 }
 

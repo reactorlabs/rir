@@ -104,10 +104,10 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
         event = std::make_unique<rir::recording::DeoptEvent>(
-            Context(0UL), DeoptReason::Reason::Unknown,
+            0, Context(0UL), DeoptReason::Reason::Unknown,
             std::make_pair((size_t)-1, (size_t)-1), (uint32_t)0, nullptr);
     } else if (Rf_inherits(sexp, R_CLASS_DT_INIT_EVENT)) {
-        event = std::make_unique<rir::recording::DtInitEvent>(-1, -1);
+        event = std::make_unique<rir::recording::DtInitEvent>(0, -1, -1);
     } else if (Rf_inherits(sexp, R_CLASS_INVOCATION_EVENT)) {
         event = std::make_unique<rir::recording::InvocationEvent>();
     } else if (Rf_inherits(sexp, R_CLASS_SC_EVENT)) {
