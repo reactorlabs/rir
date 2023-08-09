@@ -105,6 +105,9 @@ complete.
     PIR_DEBUG_DEOPTS=
         1          show failing assumption when a deopt happens
 
+    R_DISABLE_GC=
+        1          disable the garbage collector
+
 #### Optimization heuristics
 
 For more flags see compiler/parameter.h.

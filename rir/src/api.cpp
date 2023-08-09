@@ -662,6 +662,13 @@ REXPORT SEXP playground() {
 }
 
 bool startup() {
+    if (getenv("R_DISABLE_GC") &&
+        strcmp(getenv("R_DISABLE_GC"), "") != 0 &&
+        strcmp(getenv("R_DISABLE_GC"), "0") != 0 &&
+        strcmp(getenv("R_DISABLE_GC"), "false") != 0) {
+        Rf_warning("R GC is disabled");
+        R_GCEnabled = false;
+    }
     initializeRuntime();
     return true;
 }
