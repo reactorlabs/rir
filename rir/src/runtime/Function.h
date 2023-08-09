@@ -63,14 +63,23 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
           signature_(signature), context_(ctx) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
-        body(body_);
+        if (body_) {
+            body(body_);
+        } else {
+            // Happens when we create a function in deserialization
+            assert(functionSize == 0);
+        }
         if (feedback) {
             typeFeedback(feedback);
         }
     }
 
     Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
-    void body(SEXP body) { setEntry(BODY_IDX, body); }
+    void body(SEXP body) {
+        assert(body);
+        assert(Code::check(body));
+        setEntry(BODY_IDX, body);
+    }
 
     TypeFeedback* typeFeedback() const {
         return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
