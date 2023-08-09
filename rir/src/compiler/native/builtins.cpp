@@ -5,7 +5,7 @@
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
-#include "recording.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/GenericDispatchTable.h"
 #include "runtime/LazyArglist.h"

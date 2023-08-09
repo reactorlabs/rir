@@ -3,23 +3,12 @@
 
 #include "R/r.h"
 #include "common.h"
+#include "recording_hooks.h"
 #include <array>
 #include <cstdint>
 #include <iostream>
 
 namespace rir {
-
-struct Code;
-struct ObservedCallees;
-struct ObservedTest;
-struct ObservedValues;
-
-namespace recording {
-void prepareRecordSC(const Code* container);
-void recordSC(const ObservedCallees& type);
-void recordSC(const ObservedTest& type);
-void recordSC(const ObservedValues& type);
-} // namespace recording
 
 #pragma pack(push)
 #pragma pack(1)

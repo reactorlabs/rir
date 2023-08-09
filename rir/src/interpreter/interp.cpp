@@ -9,6 +9,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -29,10 +30,6 @@ extern Rboolean R_Visible;
 }
 
 namespace rir {
-
-namespace recording {
-void prepareRecordSC(const Code* container);
-}
 
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,

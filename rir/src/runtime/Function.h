@@ -5,13 +5,9 @@
 #include "FunctionSignature.h"
 #include "R/r.h"
 #include "RirRuntimeObject.h"
+#include "recording_hooks.h"
 
 namespace rir {
-
-namespace recording {
-void recordInvocation(const Function* f, ssize_t deltaCount,
-                      size_t previousCount);
-}
 
 class DispatchTable;
 

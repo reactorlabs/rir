@@ -7,6 +7,7 @@
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
+#include "recording_hooks.h"
 #include <R/r.h>
 #include <array>
 #include <cstddef>
@@ -388,19 +389,6 @@ SEXP setClassName(SEXP s, const char* className);
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
 SEXP getEnvironment(const std::string& name);
-
-// C++ API
-void recordCompile(const SEXP cls, const std::string& name,
-                   const Context& assumptions);
-void recordDeopt(rir::Code* c, const SEXP cls, DeoptReason& reason,
-                 SEXP trigger);
-void recordDtOverwrite(const DispatchTable* dt, size_t version,
-                       size_t oldDeoptCount);
-void recordInvocation(const Function* f, ssize_t deltaCount, size_t deltaDeopt);
-void prepareRecordSC(const Code* container);
-void recordSC(const ObservedCallees& type);
-void recordSC(const ObservedTest& type);
-void recordSC(const ObservedValues& type);
 
 } // namespace recording
 
