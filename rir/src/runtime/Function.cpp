@@ -63,6 +63,8 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     signature().serialize(refTable, out);
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
+    assert(getEntry(0) && "tried to serialize function without a body. "
+                          "Is the function corrupted or being constructed?");
 
     UUIDPool::writeItem(typeFeedback()->container(), false, refTable, out);
     UUIDPool::writeItem(getEntry(0), false, refTable, out);
