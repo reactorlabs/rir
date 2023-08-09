@@ -10,7 +10,8 @@ namespace pir {
 static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
-        return std::regex(filter);
+        return std::regex(
+            "DelayEnv"); // Filtering out DelayEnv from all opt pipelines
     return std::regex("");
 }
 
@@ -157,5 +158,5 @@ void PassScheduler::nextPhase(const std::string& name, unsigned budget) {
     currentPhase->passes.push_back(
         std::unique_ptr<const Pass>(new PhaseMarker(name)));
 }
-}
-}
+} // namespace pir
+} // namespace rir
