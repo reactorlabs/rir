@@ -54,11 +54,20 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
           signature_(signature), context_(ctx) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
-        body(body_);
+        if (body_) {
+            body(body_);
+        } else {
+            // Happens when we create a function in deserialization
+            assert(functionSize == 0);
+        }
     }
 
     Code* body() const { return Code::unpack(getEntry(0)); }
-    void body(SEXP body) { setEntry(0, body); }
+    void body(SEXP body) {
+        assert(body);
+        assert(Code::check(body));
+        setEntry(0, body);
+    }
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;

@@ -26,7 +26,11 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
     AddReadRef(refTable, store);
     useRetrieveHashIfSet(inp, store);
-    auto fun = new (DATAPTR(store)) Function(functionSize, nullptr, {}, sig, as);
+    // Set size to 0 in constructor so we can call with null body, and have an
+    // assertion which checks for null body if we call without size == 0 (any
+    // time when we're not deserializing)
+    auto fun = new (DATAPTR(store)) Function(0, nullptr, {}, sig, as);
+    fun->size = functionSize;
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
     SEXP body = p(UUIDPool::readItem(refTable, inp));
