@@ -2258,7 +2258,7 @@ void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
     pir::PirType typ(type);
     if (!typ.isInstance(val)) {
         std::cerr << "type assert failed\n";
-        std::cerr << "got " << pir::PirType(val) << " but expexted a " << typ
+        std::cerr << "got " << pir::PirType(val) << " but expected a " << typ
                   << ":\n";
         Rf_PrintValue(val);
         std::cout << (PRVALUE(val) == R_UnboundValue) << " / "
