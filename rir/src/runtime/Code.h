@@ -103,6 +103,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void setLazyCodeModuleFinalizer();
     static void finalizeLazyCodeModuleFromContainer(SEXP sexp);
     void finalizeLazyCodeModule();
+
   public:
     void lazyCode(const std::string& handle, const SerialModuleRef& module);
     NativeCode nativeCode() {
@@ -224,12 +225,18 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp);
+    static Code* deserializeUni(SEXP outer, Serializer& serializer);
+    static void serializeUni(bool includeFunction,
+                             Serializer& serializer) const;
+
+    static Code* deserialize(Function* rirFunction, SEXP refTable,
+                             R_inpstream_t inp);
     static Code* deserialize(SEXP refTable, R_inpstream_t inp) {
         return deserialize(nullptr, refTable, inp);
     }
 
-    void serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const;
+    void serialize(bool includeFunction, SEXP refTable,
+                   R_outpstream_t out) const;
     void serialize(SEXP refTable, R_outpstream_t out) const {
         serialize(true, refTable, out);
     }
