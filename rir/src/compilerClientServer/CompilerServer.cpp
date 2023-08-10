@@ -5,6 +5,7 @@
 #include "CompilerServer.h"
 #include "R/Printing.h"
 #include "api.h"
+#include "bc/Compiler.h"
 #include "compiler_server_client_shared_utils.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/hash/UUIDPool.h"
@@ -150,7 +151,10 @@ void CompilerServer::tryRun() {
         case Request::Compile: {
             std::cerr << "Received compile request" << std::endl;
             // ...
-            // + serialize(what)
+            // + serialize(decompiledClosure(what))
+            // + serializeSrc(what)
+            // + what->baseline()->recordedFeedback()
+            // + what->baseline()->recordedFeedback()
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -170,6 +174,36 @@ void CompilerServer::tryRun() {
             // may cause is wasted memory, but since we're on the server and
             // preserving everything this is less of an issue.
             what = deserialize(requestBuffer, false);
+            Compiler::compileClosure(what);
+            auto what2 = DispatchTable::deserializeBaselineSrc(requestBuffer);
+
+            std::stringstream differencesStream;
+            Function::debugCompare(
+                DispatchTable::unpack(what)->baseline(),
+                DispatchTable::unpack(what2)->baseline(),
+                differencesStream
+            );
+            auto differences = differencesStream.str();
+            if (!differences.empty()) {
+                std::cerr << "Warning: differences when we encode code via AST and bytecode without recorded calls:"
+                          << std::endl << differences << std::endl;
+            }
+
+            DispatchTable::unpack(what)->baseline()->deserializeFeedback(requestBuffer);
+            DispatchTable::unpack(what2)->baseline()->deserializeFeedback(requestBuffer);
+
+            std::stringstream differencesAfterFeedbackStream;
+            Function::debugCompare(
+                DispatchTable::unpack(what)->baseline(),
+                DispatchTable::unpack(what2)->baseline(),
+                differencesAfterFeedbackStream
+            );
+            auto differencesAfterFeedback = differencesAfterFeedbackStream.str();
+            if (differences.empty() && !differencesAfterFeedback.empty()) {
+                std::cerr << "Warning: differences between AST and bytecode AFTER FEEDBACK:"
+                          << std::endl << differencesAfterFeedback << std::endl;
+            }
+
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");

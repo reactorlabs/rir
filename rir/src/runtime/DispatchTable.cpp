@@ -20,11 +20,13 @@ SEXP DispatchTable::onlyBaselineClosure(Function* baseline,
                                         size_t capacity) {
     PROTECT(baseline->container());
     auto dt = onlyBaseline(baseline, userDefinedContext, capacity);
+    PROTECT(dt->container());
     auto what = Rf_allocSExp(CLOSXP);
+    PROTECT(what);
     SET_FORMALS(what, R_NilValue);
     SET_BODY(what, dt->container());
     SET_CLOENV(what, R_GlobalEnv);
-    UNPROTECT(1);
+    UNPROTECT(3);
     return what;
 }
 
@@ -48,6 +50,18 @@ void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
     for (size_t i = 0; i < size(); i++) {
         UUIDPool::writeItem(getEntry(i), false, refTable, out);
     }
+}
+
+SEXP DispatchTable::deserializeBaselineSrc(ByteBuffer& buffer) {
+    Context userDefinedContext;
+    buffer.getBytes((uint8_t*)&userDefinedContext, sizeof(Context));
+    return onlyBaselineClosure(Function::deserializeSrc(buffer),
+                               userDefinedContext, 2);
+}
+
+void DispatchTable::serializeBaselineSrc(ByteBuffer& buffer) const {
+    buffer.putBytes((uint8_t*)&userDefinedContext_, sizeof(Context));
+    baseline()->serializeSrc(buffer);
 }
 
 void DispatchTable::hash(Hasher& hasher) const {

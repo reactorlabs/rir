@@ -6,16 +6,6 @@
 
 namespace rir {
 
-Context Context::deserialize(SEXP refTable, R_inpstream_t inp) {
-    Context as;
-    InBytes(inp, &as, sizeof(Context));
-    return as;
-}
-
-void Context::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutBytes(out, this, sizeof(Context));
-}
-
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
     case Assumption::NoExplicitlyMissingArgs:

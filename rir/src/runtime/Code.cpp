@@ -274,6 +274,119 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
     });
 }
 
+Code* Code::deserializeSrc(SEXP outer, ByteBuffer& buffer) {
+    Protect p;
+    R_xlen_t size = buffer.getInt();
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    Code* code = new (DATAPTR(store)) Code;
+
+    // Header
+    code->src = src_pool_add(p(rir::deserialize(buffer, false)));
+    if (buffer.getBool()) {
+        code->trivialExpr = p(rir::deserialize(buffer, false));
+    }
+    code->stackLength = buffer.getInt();
+    *const_cast<unsigned*>(&code->localsCount) = buffer.getInt();
+    *const_cast<unsigned*>(&code->bindingCacheSize) = buffer.getInt();
+    code->codeSize = buffer.getInt();
+    code->srcLength = buffer.getInt();
+    if (buffer.getBool()) {
+        code->arglistOrder(ArglistOrder::unpack(p(rir::deserialize(buffer, false))));
+    }
+    code->setEntry(3, outer);
+
+    // Bytecode
+    BC::deserializeSrc(buffer, code->code(), code->codeSize, code);
+
+    // Extra pool
+    code->extraPoolSize = buffer.getInt();
+    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
+    for (unsigned i = 0; i < code->extraPoolSize; ++i) {
+        SEXP entrySexp;
+        switch ((ExtraPoolEntryRefInSrc::Type)buffer.getInt()) {
+        case ExtraPoolEntryRefInSrc::Promise:
+            entrySexp = p(Code::deserializeSrc(outer, buffer)->container());
+            break;
+        case ExtraPoolEntryRefInSrc::ArbitrarySexp:
+            entrySexp = p(rir::deserialize(buffer, false));
+            break;
+        default:
+            assert(false && "corrupt deserialization data (corrupt extra pool ref type)");
+        }
+        SET_VECTOR_ELT(extraPool, i, entrySexp);
+    }
+    code->setEntry(0, extraPool);
+
+    // Srclist
+    for (unsigned i = 0; i < code->srcLength; i++) {
+        code->srclist()[i].pcOffset = buffer.getInt();
+        // TODO: Intern
+        code->srclist()[i].srcIdx = src_pool_add(p(rir::deserialize(buffer, false)));
+    }
+    code->info = {// GC area starts just after the header
+                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
+                  NumLocals, CODE_MAGIC};
+
+    // Src codes are always bytecode
+    code->kind = Kind::Bytecode;
+    code->nativeCode_ = nullptr;
+
+    return code;
+}
+
+void Code::serializeSrc(ByteBuffer& buffer) const {
+    // Header
+    rir::serialize(src_pool_at(src), buffer, false);
+    buffer.putBool(trivialExpr);
+    if (trivialExpr) {
+        rir::serialize(trivialExpr, buffer, false);
+    }
+    buffer.putInt(stackLength);
+    buffer.putInt(localsCount);
+    buffer.putInt(bindingCacheSize);
+    buffer.putInt(codeSize);
+    buffer.putInt(srcLength);
+    buffer.putBool(arglistOrder());
+    if (arglistOrder()) {
+        rir::serialize(arglistOrder()->container(), buffer, false);
+    }
+
+    // Bytecode
+    std::vector<ExtraPoolEntryRefInSrc> extraPoolEntries;
+    BC::serializeSrc(buffer, extraPoolEntries, code(), codeSize, this);
+
+    // Extra pool
+    buffer.putInt(extraPoolEntries.size());
+    for (auto& entry : extraPoolEntries) {
+        auto entrySexp = getExtraPoolEntry(entry.idx);
+        buffer.putInt((unsigned)entry.type);
+        switch (entry.type) {
+        case ExtraPoolEntryRefInSrc::Promise:
+            Code::unpack(entrySexp)->serializeSrc(buffer);
+            break;
+        case ExtraPoolEntryRefInSrc::ArbitrarySexp:
+            rir::serialize(entrySexp, buffer, false);
+            break;
+        default:
+            assert(false);
+        }
+    }
+
+    // Srclist
+    for (unsigned i = 0; i < srcLength; i++) {
+        buffer.putInt(srclist()[i].pcOffset);
+        rir::serialize(src_pool_at(srclist()[i].srcIdx), buffer, false);
+    }
+}
+
+void Code::deserializeFeedback(ByteBuffer& buffer) {
+    BC::deserializeFeedback(buffer, code(), codeSize, this);
+}
+
+void Code::serializeFeedback(ByteBuffer& buffer) const {
+    BC::serializeFeedback(buffer, code(), codeSize, this);
+}
+
 void Code::hash(Hasher& hasher) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash source", container(), [&]{
         hasher.hashSrc(src);
@@ -610,6 +723,67 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
             });
         }
     }
+}
+
+static void compareAsts(SEXP ast1, SEXP ast2,
+                        const char* prefix, const char* srcPrefix,
+                        std::stringstream& differences) {
+    // Asts can be compared via printing
+    auto print1 = Print::dumpSexp(ast1, SIZE_MAX);
+    auto print2 = Print::dumpSexp(ast2, SIZE_MAX);
+    if (print1 != Print::dumpSexp(ast2, SIZE_MAX)) {
+        differences << prefix << " " << srcPrefix << " asts differ:\n";
+        differences << prefix << "  " << srcPrefix << "1: " << print1 << "\n";
+        differences << prefix << "  " << srcPrefix << "2: " << print2 << "\n";
+    }
+}
+
+static void compareSrcs(unsigned src1, unsigned src2,
+                        const char* prefix, const char* srcPrefix,
+                        std::stringstream& differences) {
+    compareAsts(src_pool_at(src1), src_pool_at(src2), prefix,
+                srcPrefix, differences);
+}
+
+void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
+                        std::stringstream& differences) {
+    compareSrcs(c1->src, c2->src, prefix, "src", differences);
+    compareAsts(c1->trivialExpr, c2->trivialExpr, prefix, "trivialExpr", differences);
+    if (c1->srcLength != c2->srcLength) {
+        differences << prefix << " srcLengths differ: " << c1->srcLength
+                    << " vs " << c2->srcLength << "\n";
+    }
+    if (c1->codeSize != c2->codeSize) {
+        differences << prefix << " codeSizes differ: " << c1->codeSize << " vs "
+                    << c2->codeSize << "\n";
+    }
+    if (c1->stackLength != c2->stackLength) {
+        differences << prefix << " stackLengths differ: " << c1->stackLength
+                    << " vs " << c2->stackLength << "\n";
+    }
+    if (c1->extraPoolSize != c2->extraPoolSize) {
+        differences << prefix << " extraPoolSizes differ: " << c1->extraPoolSize
+                    << " vs " << c2->extraPoolSize << "\n";
+    }
+    if (c1->bindingCacheSize != c2->bindingCacheSize) {
+        differences << prefix << " bindingCacheSizes differ: "
+                    << c1->bindingCacheSize << " vs " << c2->bindingCacheSize
+                    << "\n";
+    }
+    for (unsigned i = 0; i < std::min(c1->srcLength, c2->srcLength); i++) {
+        auto src1 = c1->srclist()[i];
+        auto src2 = c2->srclist()[i];
+        if (src1.pcOffset != src2.pcOffset) {
+            differences << prefix << " src " << i << " pcOffsets differ: "
+                        << src1.pcOffset << " vs " << src2.pcOffset << "\n";
+        }
+        char srcPrefix[100];
+        sprintf(srcPrefix, "src %d", i);
+        compareSrcs(src1.srcIdx, src2.srcIdx, prefix,
+                    srcPrefix, differences);
+    }
+    BC::debugCompare(c1->code(), c2->code(), c1->codeSize, c2->codeSize, c1, c2,
+                     prefix, differences);
 }
 
 unsigned Code::addExtraPoolEntry(SEXP v) {

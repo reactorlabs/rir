@@ -3,6 +3,7 @@
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "bc/CodeStream.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/Pool.h"
 
@@ -97,7 +98,6 @@ SEXP BC::immediateConst() const {
         return Pool::get(immediate.pool);
 }
 
-// #define DEBUG_SERIAL
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
@@ -184,13 +184,6 @@ void BC::deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
             break;
         }
         size = BC::size(code);
-#ifdef DEBUG_SERIAL
-        if (*code == Opcode::deopt_) {
-            BC aBc = BC::decode(code, container);
-            std::cout << "deserialized: ";
-            aBc.print(std::cout);
-        }
-#endif
         assert(codeSize >= size);
         code += size;
         codeSize -= size;
@@ -252,7 +245,6 @@ void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
             Pool::writeItem(i.callBuiltinFixedArgs.ast, refTable, out);
             Pool::writeItem(i.callBuiltinFixedArgs.builtin, refTable, out);
             break;
-            break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
             OutInteger(out, i.fun);
@@ -281,12 +273,342 @@ void BC::serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
             break;
         }
         size = bc.size();
-#ifdef DEBUG_SERIAL
-        if (bc.bc == Opcode::deopt_) {
-            std::cout << "serialized: ";
-            bc.print(std::cout);
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::deserializeSrc(ByteBuffer& buffer, rir::Opcode* code, size_t codeSize,
+                        rir::Code* container) {
+    size_t poolIdx = 0;
+    while (codeSize > 0) {
+        *code = (Opcode)buffer.getChar();
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+            i.pool = Pool::insert(rir::deserialize(buffer, false));
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+            i.poolAndCache.poolIndex = Pool::insert(rir::deserialize(buffer, false));
+            i.poolAndCache.cacheIndex = buffer.getInt();
+            break;
+        case Opcode::guard_fun_:
+            i.guard_fun_args.name = Pool::insert(rir::deserialize(buffer, false));
+            i.guard_fun_args.expected = Pool::insert(rir::deserialize(buffer, false));
+            i.guard_fun_args.id = buffer.getInt();
+            break;
+        case Opcode::call_:
+        case Opcode::named_call_:
+        case Opcode::call_dots_: {
+            i.callFixedArgs.nargs = buffer.getInt();
+            i.callFixedArgs.ast = Pool::insert(rir::deserialize(buffer, false));
+            buffer.getBytes((uint8_t*)&i.callFixedArgs.given, sizeof(Context));
+            Opcode* c = code + 1 + sizeof(CallFixedArgs);
+            // Read implicit promise argument offsets
+            // Read named arguments
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
+                auto names = (PoolIdx*)c;
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    names[j] = Pool::insert(rir::deserialize(buffer, false));
+                }
+            }
+            break;
         }
-#endif
+        case Opcode::call_builtin_:
+            i.callBuiltinFixedArgs.nargs = buffer.getInt();
+            i.callBuiltinFixedArgs.ast = Pool::insert(rir::deserialize(buffer, false));
+            i.callBuiltinFixedArgs.builtin = Pool::insert(rir::deserialize(buffer, false));
+            break;
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+            i.fun = poolIdx++;
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::record_test_:
+            // This is recording information
+            break;
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+            assert((size - 1) % 4 == 0);
+            buffer.getBytes((uint8_t*)(code + 1), size - 1);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = BC::size(code);
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::serializeSrc(ByteBuffer& buffer,
+                      std::vector<ExtraPoolEntryRefInSrc>& entries,
+                      const rir::Opcode* code, size_t codeSize,
+                      const rir::Code* container) {
+    while (codeSize > 0) {
+        const BC bc = BC::decode((Opcode*)code, container);
+        buffer.putChar((char)*code);
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments i = bc.immediate;
+        switch (*code) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+            rir::serialize(Pool::get(i.pool), buffer, false);
+            break;
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+            rir::serialize(Pool::get(i.poolAndCache.poolIndex), buffer, false);
+            buffer.putInt(i.poolAndCache.cacheIndex);
+            break;
+        case Opcode::guard_fun_:
+            rir::serialize(Pool::get(i.guard_fun_args.name), buffer, false);
+            rir::serialize(Pool::get(i.guard_fun_args.expected), buffer, false);
+            buffer.putInt(i.guard_fun_args.id);
+            break;
+        case Opcode::call_:
+        case Opcode::call_dots_:
+        case Opcode::named_call_:
+            buffer.putInt(i.callFixedArgs.nargs);
+            rir::serialize(Pool::get(i.callFixedArgs.ast), buffer, false);
+            buffer.putBytes((uint8_t*)&i.callFixedArgs.given, sizeof(Context));
+            // Write named arguments
+            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
+                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                    rir::serialize(Pool::get(bc.callExtra().callArgumentNames[j]), buffer, false);
+                }
+            }
+            break;
+        case Opcode::call_builtin_:
+            buffer.putInt(i.callBuiltinFixedArgs.nargs);
+            rir::serialize(Pool::get(i.callBuiltinFixedArgs.ast), buffer, false);
+            rir::serialize(Pool::get(i.callBuiltinFixedArgs.builtin), buffer, false);
+            break;
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+            entries.push_back({i.fun, ExtraPoolEntryRefInSrc::Promise});
+            break;
+        case Opcode::record_call_:
+        case Opcode::record_type_:
+        case Opcode::record_test_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+            assert((size - 1) % 4 == 0);
+            if (size != 0) {
+                buffer.putBytes((uint8_t*)(code + 1), (int)size - 1);
+            }
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = bc.size();
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+
+void BC::deserializeFeedback(ByteBuffer& buffer, rir::Opcode* code,
+                             size_t codeSize, rir::Code* container) {
+    while (codeSize > 0) {
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
+        switch (*code) {
+        // Feedback codes
+        case Opcode::record_call_:
+            i.callFeedback.numTargets = buffer.getInt();
+            i.callFeedback.taken = buffer.getInt();
+            i.callFeedback.invalid = buffer.getInt();
+            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                UUID targetUuid;
+                buffer.getBytes((uint8_t*)&targetUuid, sizeof(UUID));
+                auto target = UUIDPool::get(targetUuid);
+                // TODO: Try to retrieve from client if not found?
+                if (target) {
+                    std::cerr << "Found target: " << targetUuid << " -> " << target << "\n";
+                } else {
+                    std::cerr << "Target not found: " << targetUuid << "\n";
+                }
+                i.callFeedback.targets[j] = target ? Pool::insert(target) : 0;
+            }
+            break;
+        case Opcode::record_type_:
+            buffer.getBytes((uint8_t*)&i.typeFeedback, sizeof(ObservedValues));
+            break;
+        case Opcode::record_test_:
+            buffer.getBytes((uint8_t*)&i.testFeedback, sizeof(ObservedTest));
+            break;
+        // Everything else (not feedback, skipped)
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::guard_fun_:
+        case Opcode::call_:
+        case Opcode::named_call_:
+        case Opcode::call_dots_:
+        case Opcode::call_builtin_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = BC::size(code);
+        assert(codeSize >= size);
+        code += size;
+        codeSize -= size;
+    }
+}
+
+void BC::serializeFeedback(ByteBuffer& buffer, const rir::Opcode* code,
+                           size_t codeSize, const rir::Code* container) {
+    while (codeSize > 0) {
+        const BC bc = BC::decode((Opcode*)code, container);
+        unsigned size = BC::fixedSize(*code);
+        ImmediateArguments i = bc.immediate;
+        switch (*code) {
+        // Feedback codes
+        case Opcode::record_call_:
+            buffer.putInt(i.callFeedback.numTargets);
+            buffer.putInt(i.callFeedback.taken);
+            buffer.putInt(i.callFeedback.invalid);
+            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                auto target = Pool::get(i.callFeedback.targets[j]);
+                auto targetUuid = UUIDPool::getHash(target);
+                if (!targetUuid) {
+                    targetUuid = hashRoot(target);
+                }
+                buffer.putBytes((uint8_t*)&targetUuid, sizeof(UUID));
+            }
+            break;
+        case Opcode::record_type_:
+            buffer.putBytes((uint8_t*)&i.typeFeedback, sizeof(ObservedValues));
+            break;
+        case Opcode::record_test_:
+            buffer.putBytes((uint8_t*)&i.testFeedback, sizeof(ObservedTest));
+            break;
+        // Everything else (not feedback, skipped)
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldddvar_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_for_update_:
+        case Opcode::ldvar_super_:
+        case Opcode::stvar_:
+        case Opcode::stvar_super_:
+        case Opcode::missing_:
+        case Opcode::ldvar_cached_:
+        case Opcode::ldvar_for_update_cache_:
+        case Opcode::stvar_cached_:
+        case Opcode::guard_fun_:
+        case Opcode::call_:
+        case Opcode::call_dots_:
+        case Opcode::named_call_:
+        case Opcode::call_builtin_:
+        case Opcode::mk_promise_:
+        case Opcode::mk_eager_promise_:
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::beginloop_:
+        case Opcode::brfalse_:
+        case Opcode::popn_:
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::clear_binding_cache_:
+#define V(NESTED, name, name_) case Opcode::name_##_:
+            BC_NOARGS(V, _)
+#undef V
+            assert(*code != Opcode::nop_);
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        size = bc.size();
         assert(codeSize >= size);
         code += size;
         codeSize -= size;
@@ -382,12 +704,6 @@ void BC::hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
             break;
         }
         size = bc.size();
-#ifdef DEBUG_SERIAL
-        if (bc.bc == Opcode::deopt_) {
-            std::cout << "hashed: ";
-            bc.print(std::cout);
-        }
-#endif
         assert(codeSize >= size);
         code += size;
         codeSize -= size;
@@ -468,12 +784,6 @@ void BC::addConnected(std::vector<bool>& extraPoolChildren,
             break;
         }
         size = bc.size();
-#ifdef DEBUG_SERIAL
-        if (bc.bc == Opcode::deopt_) {
-            std::cout << "added connected in: ";
-            bc.print(std::cout);
-        }
-#endif
         assert(codeSize >= size);
         code += size;
         codeSize -= size;
@@ -601,6 +911,57 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
     }
 }
 
+/// Compare bytecodes and print differences.
+void BC::debugCompare(const Opcode* code1, const Opcode* code2,
+                      size_t codeSize1, size_t codeSize2,
+                      const Code* container1, const Code* container2,
+                      const char* prefix, std::stringstream& differences) {
+    auto loggedDifferences = false;
+    auto initialCodeSize1 = codeSize1;
+    while (codeSize1 > 0 && codeSize2 > 0) {
+        auto pc1 = (Opcode*)code1;
+        auto pc2 = (Opcode*)code2;
+        auto opcode1 = *pc1;
+        auto opcode2 = *pc2;
+        const BC bc1 = BC::decode(pc1, container1);
+        const BC bc2 = BC::decode(pc2, container2);
+        auto size1 = BC::fixedSize(opcode1);
+        auto size2 = BC::fixedSize(opcode2);
+        if (opcode1 != opcode2 || size1 != size2 ||
+            memcmp(pc1, pc2, size1) != 0) {
+            if (!loggedDifferences) {
+                differences << prefix << " bytecode differs, first at "
+                            << initialCodeSize1 - codeSize1 << "\n" << prefix
+                            << " bytecode:";
+                loggedDifferences = true;
+            }
+            differences << " ";
+            if (opcode1 == opcode2) {
+                bc1.printOpcode(differences);
+                differences << "(";
+                bc1.printAssociatedData(differences);
+                differences << ")|(";
+                bc2.printAssociatedData(differences);
+                differences << ")";
+            } else {
+                bc1.printOpcode(differences);
+                differences << "|";
+                bc2.printOpcode(differences);
+            }
+            loggedDifferences = true;
+        }
+        size1 = bc1.size();
+        size2 = bc2.size();
+        code1 += size1;
+        code2 += size2;
+        codeSize1 -= size1;
+        codeSize2 -= size2;
+    }
+    if (loggedDifferences) {
+        differences << "\n";
+    }
+}
+
 #pragma GCC diagnostic pop
 
 void BC::printImmediateArgs(std::ostream& out) const {
@@ -632,6 +993,11 @@ void BC::print(std::ostream& out) const {
     out << "   ";
     printOpcode(out);
 
+    printAssociatedData(out);
+    out << "\n";
+}
+
+void BC::printAssociatedData(std::ostream& out) const {
     switch (bc) {
     case Opcode::invalid_:
     case Opcode::num_of:
@@ -723,7 +1089,6 @@ void BC::print(std::ostream& out) const {
         out << immediate.cacheIdx.start << " " << immediate.cacheIdx.size;
         break;
     }
-    out << "\n";
 }
 
 std::ostream& operator<<(std::ostream& out, BC::RirTypecheck t) {

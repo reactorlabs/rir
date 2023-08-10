@@ -10,6 +10,7 @@
 #include "runtime/log/printPrettyGraph.h"
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
+#include "utils/ByteBuffer.h"
 
 #include <array>
 #include <cassert>
@@ -60,6 +61,16 @@ enum class Opcode : uint8_t {
 #include "insns.h"
 
     num_of
+};
+
+struct ExtraPoolEntryRefInSrc {
+    enum Type : unsigned {
+        Promise,
+        ArbitrarySexp
+    };
+
+    unsigned idx;
+    Type type;
 };
 
 // ============================================================
@@ -222,6 +233,23 @@ class BC {
     static void serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
                           R_outpstream_t out, const Opcode* code,
                           size_t codeSize, const Code* container);
+    /// Read bytecodes from data where only the part compiled from source was
+    /// serialized (i.e. bytecode instructions, but not feedback)
+    static void deserializeSrc(ByteBuffer& buffer, Opcode* code,
+                               size_t codeSize, Code* container);
+    /// Write bytecodes and mark entries which are inside the source (promises,
+    /// but not recorded calls or any other information)
+    static void serializeSrc(ByteBuffer& buffer,
+                             std::vector<ExtraPoolEntryRefInSrc>& entries,
+                             const Opcode* code, size_t codeSize,
+                             const Code* container);
+    /// Insert feedback into record instructions
+    static void deserializeFeedback(ByteBuffer& buffer, Opcode* code,
+                                    size_t codeSize, Code* container);
+    /// Serialize feedback from record instructions
+    static void serializeFeedback(ByteBuffer& buffer,
+                                  const Opcode* code, size_t codeSize,
+                                  const Code* container);
     static void hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
                      const Opcode* code, size_t codeSize,
                      const Code* container);
@@ -232,9 +260,16 @@ class BC {
                                  std::vector<bool>& addedExtraPoolEntries,
                                  const Opcode* code, size_t codeSize,
                                  const Code* container);
+    /// Compare bytecodes and print differences.
+    static void debugCompare(const Opcode* code1, const Opcode* code2,
+                             size_t codeSize1, size_t codeSize2,
+                             const Code* container1, const Code* container2,
+                             const char* prefix,
+                             std::stringstream& differences);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
+    void printAssociatedData(std::ostream& out) const;
     void printImmediateArgs(std::ostream& out) const;
     void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;

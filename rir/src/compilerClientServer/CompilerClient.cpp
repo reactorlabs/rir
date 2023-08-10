@@ -14,6 +14,7 @@
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
+#include "bc/Compiler.h"
 #include "zmq.hpp"
 #include <array>
 
@@ -222,8 +223,10 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + sizeof(what)
-                // + serialize(what)
+                // + serialize(decompiledClosure(what))
+                // + serializeSrc(what)
+                // + what->baseline()->recordedFeedback()
+                // + what->baseline()->recordedFeedback()
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -237,7 +240,10 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
                 request.putLong((uint64_t)Request::Compile);
-                serialize(what, request, false);
+                serialize(Compiler::decompiledClosure(what), request, false);
+                DispatchTable::unpack(what)->serializeBaselineSrc(request);
+                DispatchTable::unpack(what)->baseline()->serializeFeedback(request);
+                DispatchTable::unpack(what)->baseline()->serializeFeedback(request);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());
