@@ -22,7 +22,8 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     size_t functionSize = InInteger(inp);
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
-    const Context as = Context::deserialize(refTable, inp);
+    Context as;
+    InBytes(inp, &as, sizeof(Context));
     SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
     AddReadRef(refTable, store);
     useRetrieveHashIfSet(inp, store);
@@ -44,7 +45,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
             fun->setEntry(Function::NUM_PTRS + i, nullptr);
         }
     }
-    fun->flags_ = EnumSet<Flag>(InInteger(inp));
+    fun->flags_ = EnumSet<Flag>(InU64(inp));
     return fun;
 }
 
@@ -52,7 +53,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, size);
     signature().serialize(refTable, out);
-    context_.serialize(refTable, out);
+    OutBytes(out, &context_, sizeof(Context));
     OutInteger(out, numArgs_);
     assert(getEntry(0) && "tried to serialize function without a body. "
                           "Is the function corrupted or being constructed?");
@@ -67,7 +68,62 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
             UUIDPool::writeItem(arg, false, refTable, out);
         }
     }
-    OutInteger(out, (int)flags_.to_i());
+    OutU64(out, flags_.to_i());
+}
+
+Function* Function::deserializeSrc(ByteBuffer& buffer) {
+    Protect p;
+    R_xlen_t funSize = buffer.getInt();
+    FunctionSignature sig = FunctionSignature::deserialize(buffer);
+    Context ctx;
+    buffer.getBytes((uint8_t*)&ctx, sizeof(Context));
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+    auto flags = EnumSet<Flag>(buffer.getLong());
+    auto body = p(Code::deserializeSrc(store, buffer)->container());
+    std::vector<SEXP> defaultArgs;
+    defaultArgs.resize(sig.numArguments);
+    for (unsigned i = 0; i < sig.numArguments; i++) {
+        if (buffer.getBool()) {
+            defaultArgs[i] = p(Code::deserializeSrc(store, buffer)->container());
+        }
+    }
+
+    auto fun = new (DATAPTR(store))
+        Function(funSize, body, defaultArgs, sig, ctx);
+    fun->flags_ = flags;
+    return fun;
+}
+
+void Function::serializeSrc(ByteBuffer& buffer) const {
+    buffer.putInt(size);
+    signature().serialize(buffer);
+    buffer.putBytes((uint8_t*)&context_, sizeof(Context));
+    buffer.putLong(flags_.to_i());
+    body()->serializeSrc(buffer);
+    for (unsigned i = 0; i < numArgs_; i++) {
+        buffer.putBool(defaultArg_[i] != nullptr);
+        if (defaultArg_[i]) {
+            Code::unpack(defaultArg_[i])->serializeSrc(buffer);
+        }
+    }
+}
+
+void Function::deserializeFeedback(ByteBuffer& buffer) {
+    body()->deserializeFeedback(buffer);
+    for (unsigned i = 0; i < numArgs_; i++) {
+        if (defaultArg_[i]) {
+            Code::unpack(defaultArg_[i])->deserializeFeedback(buffer);
+        }
+    }
+}
+
+void Function::serializeFeedback(ByteBuffer& buffer) const {
+    body()->serializeFeedback(buffer);
+    for (unsigned i = 0; i < numArgs_; i++) {
+        if (defaultArg_[i]) {
+            Code::unpack(defaultArg_[i])->serializeFeedback(buffer);
+        }
+    }
 }
 
 void Function::hash(Hasher& hasher) const {
@@ -180,6 +236,66 @@ void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) con
             print.addEdgeTo(arg, true, "default-arg", [&](std::ostream& s) {
                 s << "arg " << i << " default";
             });
+        }
+    }
+}
+
+void Function::debugCompare(const Function* f1, const Function* f2,
+                            std::stringstream& differences) {
+    FunctionSignature::debugCompare(f1->signature(), f2->signature(), differences);
+    if (f1->context() != f2->context()) {
+        differences << "context: " << f1->context() << " != " << f2->context()
+                    << "\n";
+    }
+    if (f1->flags() != f2->flags()) {
+        differences << "flags: ";
+#define V(F)                                                                   \
+        if (f1->flags_.includes(F))                                                \
+            differences << #F << " ";
+        RIR_FUNCTION_FLAGS(V)
+#undef V
+        differences << " != ";
+#define V(F)                                                                   \
+        if (f2->flags_.includes(F))                                                \
+            differences << #F << " ";
+        RIR_FUNCTION_FLAGS(V)
+#undef V
+        differences << "\n";
+    }
+    if (f1->size != f2->size) {
+        differences << "size: " << f1->size << " != " << f2->size << "\n";
+    }
+    if (f1->numArgs_ != f2->numArgs_) {
+        differences << "numArgs: " << f1->numArgs_ << " != " << f2->numArgs_
+                    << "(note: signature also has numArgs)\n";
+    }
+    if (f1->invocationCount() != f2->invocationCount()) {
+        differences << "invocationCount: " << f1->invocationCount() << " != "
+                    << f2->invocationCount() << "\n";
+    }
+    if (f1->invocationTime() != f2->invocationTime()) {
+        differences << "invocationTime: " << f1->invocationTime() << " != "
+                    << f2->invocationTime() << "\n";
+    }
+    if (f1->deoptCount() != f2->deoptCount()) {
+        differences << "deoptCount: " << f1->deoptCount() << " != "
+                    << f2->deoptCount() << "\n";
+    }
+    Code::debugCompare(f1->body(), f2->body(), "body", differences);
+    for (unsigned i = 0; i < std::min(f1->numArgs_, f2->numArgs_); i++) {
+        auto arg1 = f1->defaultArg_[i];
+        auto arg2 = f2->defaultArg_[i];
+        auto hasArg1 = (arg1 != nullptr);
+        auto hasArg2 = (arg2 != nullptr);
+        if (hasArg1 != hasArg2) {
+            differences << "defaultArg[" << i << "] != nullptr: " << hasArg1
+                        << " != " << hasArg2 << "\n";
+        }
+        if (hasArg1 && hasArg2) {
+            char prefix[100];
+            sprintf(prefix, "defaultArg[%d]", i);
+            Code::debugCompare(Code::unpack(arg1), Code::unpack(arg2),
+                               prefix, differences);
         }
     }
 }

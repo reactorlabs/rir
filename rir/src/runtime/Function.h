@@ -7,6 +7,7 @@
 #include "RirRuntimeObject.h"
 #include "runtime/log/RirObjectPrintStyle.h"
 #include "serializeHash/hash/hashRoot.h"
+#include "utils/ByteBuffer.h"
 
 namespace rir {
 
@@ -71,11 +72,28 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
+    /// Deserialize from only source information. This is used to deserialize
+    /// functions from the compiler client.
+    static Function* deserializeSrc(ByteBuffer& buffer);
+    /// Serialize only source information. This is used to serialize functions
+    /// for the compiler server.
+    void serializeSrc(ByteBuffer& buffer) const;
+    /// Deserialize from only feedback information. This is used to deserialize
+    /// functions from the compiler client.
+    void deserializeFeedback(ByteBuffer& buffer);
+    /// Serialize only feedback information. This is used to serialize functions
+    /// for the compiler server.
+    void serializeFeedback(ByteBuffer& buffer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
     void disassemble(std::ostream&) const;
     void print(std::ostream&, bool isDetailed = false) const;
     void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+    /// Check if 2 functions are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences.
+    static void debugCompare(const Function* f1, const Function* f2,
+                             std::stringstream& differences);
 
     bool isOptimized() const {
         return signature_.optimization !=

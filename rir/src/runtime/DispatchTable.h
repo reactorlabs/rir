@@ -7,6 +7,7 @@
 #include "runtime/log/RirObjectPrintStyle.h"
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
+#include "utils/ByteBuffer.h"
 #include "utils/random.h"
 
 namespace rir {
@@ -211,6 +212,13 @@ struct DispatchTable
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
+    /// Returns an SEXP containing a DispatchTable with a baseline deserialized
+    /// via only its source code. This is how we receive objects from the
+    /// compiler client.
+    static SEXP deserializeBaselineSrc(ByteBuffer& buffer);
+    /// Serialize the baseline, serializing only its source code. This is how we
+    /// send objects to the compiler server.
+    void serializeBaselineSrc(ByteBuffer& buffer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
     void print(std::ostream&, bool isDetailed = false) const;
@@ -239,6 +247,19 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
+    SEXP originalBody() {
+        if (originalBodyPoolIdx == 0) {
+            return nullptr;
+        } else {
+            return baseline()->body()->getExtraPoolEntry(originalBodyPoolIdx);
+        }
+    }
+
+    void setOriginalBody(SEXP originalBody) {
+        assert(size() > 0 && "need to set baseline first");
+        originalBodyPoolIdx = baseline()->body()->addExtraPoolEntry(originalBody);
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t cap)
@@ -249,6 +270,7 @@ struct DispatchTable
               cap) {}
 
     size_t size_ = 0;
+    unsigned originalBodyPoolIdx;
     Context userDefinedContext_;
 };
 

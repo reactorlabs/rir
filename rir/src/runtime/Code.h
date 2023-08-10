@@ -9,6 +9,7 @@
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
 #include "serializeHash/serialize/native/SerialModule.h"
+#include "utils/ByteBuffer.h"
 
 #include <cassert>
 #include <cstdint>
@@ -233,6 +234,19 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         serialize(true, refTable, out);
     }
 
+    /// See `Function::deserializeSrc`. Generally you will call that and that is
+    /// the only function which calls this.
+    static Code* deserializeSrc(SEXP outer, ByteBuffer& buffer);
+    /// See `Function::serializeSrc`. Generally you will call that and that is
+    /// the only function which calls this.
+    void serializeSrc(ByteBuffer& buffer) const;
+    /// See `Function::deserializeFeedback`. Generally you will call that and
+    /// that is the only function which calls this.
+    void deserializeFeedback(ByteBuffer& buffer);
+    /// See `Function::serializeFeedback`. Generally you will call that and that
+    /// is the only function which calls this.
+    void serializeFeedback(ByteBuffer& buffer) const;
+
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
 
@@ -240,6 +254,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&, bool isDetailed = false) const;
     void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+
+    /// Check if 2 code objects are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences, prefixing with `prefix`
+    /// (the code type, either body or default arg).
+    static void debugCompare(const Code* c1, const Code* c2, const char* prefix,
+                             std::stringstream& differences);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));
