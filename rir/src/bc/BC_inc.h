@@ -10,6 +10,7 @@
 #include "runtime/log/printPrettyGraph.h"
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/serializeUni.h"
 #include "utils/ByteBuffer.h"
 
 #include <array>
@@ -231,11 +232,18 @@ class BC {
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
-    static void deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
-                            size_t codeSize, Code* container);
-    static void serialize(std::vector<bool>& extraPoolChildren, SEXP refTable,
-                          R_outpstream_t out, const Opcode* code,
-                          size_t codeSize, const Code* container);
+    static void deserializeR(SEXP refTable, R_inpstream_t inp, Opcode* code,
+                             size_t codeSize, Code* container);
+    static void serializeR(std::vector<bool>& extraPoolChildren, SEXP refTable,
+                           R_outpstream_t out, const Opcode* code,
+                           size_t codeSize, const Code* container);
+    static void deserialize(AbstractDeserializer& deserializer,
+                            std::vector<SerialFlags>& extraPoolFlags,
+                            Opcode* code, size_t codeSize, Code* container);
+    static void serialize(AbstractSerializer& serializer,
+                          std::vector<SerialFlags>& extraPoolFlags,
+                          const Opcode* code, size_t codeSize,
+                          const Code* container);
     /// Read bytecodes from data where only the part compiled from source was
     /// serialized (i.e. bytecode instructions, but not feedback)
     static void deserializeSrc(ByteBuffer& buffer, Opcode* code,

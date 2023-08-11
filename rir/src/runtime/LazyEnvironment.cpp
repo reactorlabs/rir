@@ -2,7 +2,7 @@
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "utils/Pool.h"
 
 namespace rir {
@@ -39,7 +39,7 @@ bool LazyEnvironment::isMissing(size_t i) const {
     return missing[i] || getArg(i) == R_MissingArg;
 }
 
-LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) {
+LazyEnvironment* LazyEnvironment::deserializeR(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     int size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
@@ -69,7 +69,7 @@ LazyEnvironment* LazyEnvironment::deserialize(SEXP refTable, R_inpstream_t inp) 
     return le;
 }
 
-void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
+void LazyEnvironment::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
     OutInteger(out, (int)nargs);
@@ -84,6 +84,53 @@ void LazyEnvironment::serialize(SEXP refTable, R_outpstream_t out) const {
     UUIDPool::writeNullableItem(getParent(), false, refTable, out);
     for (int i = 0; i < (int)nargs; i++) {
         UUIDPool::writeNullableItem(getArg((size_t)i), false, refTable, out);
+    }
+}
+
+
+LazyEnvironment* LazyEnvironment::deserialize(AbstractDeserializer& deserializer) {
+    Protect p;
+    auto size = deserializer.readBytesOf<R_xlen_t>();
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    deserializer.addRef(store);
+
+    auto nargs = deserializer.readBytesOf<int>();
+    auto missing = new char[nargs];
+    auto names = new Immediate[nargs];
+    for (int i = 0; i < nargs; i++) {
+        missing[i] = deserializer.readBytesOf<char>();
+    }
+    for (int i = 0; i < nargs; i++) {
+        names[i] = deserializer.readConst();
+    }
+    SEXP materialized = p.nullable(deserializer.readNullable());
+    SEXP parent = p.nullable(deserializer.readNullable());
+    auto le = new (DATAPTR(store)) LazyEnvironment(parent, nargs, names);
+    le->materialized(materialized);
+    for (int i = 0; i < nargs; i++) {
+        le->missing[i] = missing[i];
+        le->setArg(i, deserializer.readNullable(), false);
+    }
+    delete[] missing;
+    // names won't get deleted because its now owned by LazyEnvironment,
+    // but does LazyEnvironment free when destroyed?
+    return le;
+}
+
+void LazyEnvironment::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf((R_xlen_t)size());
+    serializer.writeBytesOf((int)nargs);
+    for (int i = 0; i < (int)nargs; i++) {
+        serializer.writeBytesOf(missing[i]);
+    }
+    for (int i = 0; i < (int)nargs; i++) {
+        serializer.writeConst(names[i]);
+    }
+    serializer.writeNullable(materialized());
+    // TODO: Why are getParent() and getArg(i) null after deopt in pir_regression_check_code.R?
+    serializer.writeNullable(getParent());
+    for (int i = 0; i < (int)nargs; i++) {
+        serializer.writeNullable(getArg((size_t)i));
     }
 }
 

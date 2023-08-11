@@ -1,7 +1,7 @@
 #include "DispatchTable.h"
 #include "runtime/log/printPrettyGraph.h"
 #include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 
 namespace rir {
 
@@ -30,11 +30,12 @@ SEXP DispatchTable::onlyBaselineClosure(Function* baseline,
     return what;
 }
 
-DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
+DispatchTable* DispatchTable::deserializeR(SEXP refTable, R_inpstream_t inp) {
     DispatchTable* table = create();
     PROTECT(table->container());
     AddReadRef(refTable, table->container());
     useRetrieveHashIfSet(inp, table->container());
+    InBytes(inp, (void*)&table->userDefinedContext_, sizeof(table->userDefinedContext_));
     table->size_ = InInteger(inp);
     for (size_t i = 0; i < table->size(); i++) {
         table->setEntry(i,UUIDPool::readItem(refTable, inp));
@@ -43,12 +44,34 @@ DispatchTable* DispatchTable::deserialize(SEXP refTable, R_inpstream_t inp) {
     return table;
 }
 
-void DispatchTable::serialize(SEXP refTable, R_outpstream_t out) const {
+void DispatchTable::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
+    OutBytes(out, (void*)&userDefinedContext_, sizeof(userDefinedContext_));
     OutInteger(out, (int)size());
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
         UUIDPool::writeItem(getEntry(i), false, refTable, out);
+    }
+}
+
+DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
+    DispatchTable* table = create();
+    PROTECT(table->container());
+    deserializer.addRef(table->container());
+    table->userDefinedContext_ = deserializer.readBytesOf<Context>(SerialFlags::DtContext);
+    table->size_ = deserializer.readBytesOf<int>(SerialFlags::DtOptimized);
+    for (size_t i = 0; i < table->size(); i++) {
+        table->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
+    }
+    UNPROTECT(1);
+    return table;
+}
+
+void DispatchTable::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf(userDefinedContext_, SerialFlags::DtContext);
+    serializer.writeBytesOf((int)size(), SerialFlags::DtOptimized);
+    for (size_t i = 0; i < size(); i++) {
+        serializer.write(getEntry(i), i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized);
     }
 }
 
@@ -93,6 +116,26 @@ void DispatchTable::printPrettyGraphContent(const PrettyGraphInnerPrinter& print
         print.addEdgeTo(getEntry(i), true, "entry", [&](std::ostream& s) {
             s << "entry " << i;
         });
+    }
+}
+
+void DispatchTable::debugCompare(const rir::DispatchTable* dt1,
+                                 const rir::DispatchTable* dt2,
+                                 std::stringstream& differences) {
+    if (dt1->size() != dt2->size()) {
+        differences << "DispatchTable size differs: " << dt1->size() << " vs " << dt2->size() << "\n";
+    }
+    for (size_t i = 0; i < dt1->size() && i < dt2->size(); i++) {
+        std::stringstream funDifferencesStream;
+        Function::debugCompare(
+            Function::unpack(dt1->getEntry(i)),
+            Function::unpack(dt2->getEntry(i)),
+            funDifferencesStream
+        );
+        std::string funDifferences = funDifferencesStream.str();
+        if (!funDifferences.empty()) {
+            differences << "DispatchTable entry " << i << " differs:\n" << funDifferences;
+        }
     }
 }
 

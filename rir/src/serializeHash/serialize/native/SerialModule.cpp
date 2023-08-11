@@ -32,16 +32,28 @@ std::unique_ptr<llvm::Module> SerialModule::decode(Code* outer) const {
     return mod;
 }
 
-SerialModule SerialModule::deserialize(R_inpstream_t inp) {
+SerialModule SerialModule::deserializeR(R_inpstream_t inp) {
     size_t size = InInteger(inp);
     std::string bitcode(size, '\0');
     InBytes(inp, (uint8_t*)bitcode.data(), (int)size);
     return SerialModule(std::move(bitcode));
 }
 
-void SerialModule::serialize(R_outpstream_t out) const {
+void SerialModule::serializeR(R_outpstream_t out) const {
     OutInteger(out, (int)bitcode.size());
     OutBytes(out, (const uint8_t*)bitcode.data(), (int)bitcode.size());
+}
+
+SerialModule SerialModule::deserialize(AbstractDeserializer& deserializer) {
+    auto size = deserializer.readBytesOf<size_t>();
+    std::string bitcode(size, '\0');
+    deserializer.readBytes((void*)bitcode.data(), size);
+    return SerialModule(std::move(bitcode));
+}
+
+void SerialModule::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf(bitcode.size());
+    serializer.writeBytes((const void*)bitcode.data(), bitcode.size());
 }
 
 std::ostream& operator<<(std::ostream& out, const SerialModule& m) {

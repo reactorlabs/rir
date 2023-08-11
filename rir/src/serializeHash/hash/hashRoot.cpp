@@ -398,8 +398,9 @@ void Hasher::hashSrc(unsigned idx) {
 }
 
 UUID hashRoot(SEXP root) {
-    return disableGc<UUID>([&]{
-        return Measuring::timeEventIf<UUID>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
+    return disableGc3([&]{
+        UUID result;
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
             UUID::Hasher uuidHasher;
             Hasher::Worklist worklist;
             HashRefTable refs;
@@ -419,8 +420,9 @@ UUID hashRoot(SEXP root) {
                     hashChild(sexp, hasher, refs);
                 }
             }
-            return uuidHasher.finalize();
+            result = uuidHasher.finalize();
         });
+        return result;
     });
 }
 

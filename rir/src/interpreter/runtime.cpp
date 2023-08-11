@@ -1,7 +1,7 @@
 #include "api.h"
 #include "interp.h"
 #include "profiler.h"
-#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "serializeHash/serialize/native/SerialRepr.h"
 
 #include "compilerClientServer/CompilerClient.h"
@@ -30,7 +30,7 @@ void initializeRuntime() {
     globalContext_ = new InterpreterInstance;
     context_init();
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
-                         rirDecompile, rirPrint, deserializeRir, serializeRir,
+                         rirDecompile, rirPrint, rirDeserializeHook, rirSerializeHook,
                          materialize);
     pir::SerialRepr::initGlobals();
     RuntimeProfiler::initProfiler();

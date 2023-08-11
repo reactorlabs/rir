@@ -4,6 +4,7 @@
 #include "RirRuntimeObject.h"
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/serializeUni.h"
 
 #include <iostream>
 #include <vector>
@@ -94,8 +95,10 @@ struct ArglistOrder
         return data[callId * 2 + 1];
     }
 
-    static ArglistOrder* deserialize(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);
-    void serialize(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const;
+    static ArglistOrder* deserializeR(__attribute__((unused)) SEXP refTable, R_inpstream_t inp);
+    void serializeR(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const;
+    static ArglistOrder* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
 

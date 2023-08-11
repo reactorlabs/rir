@@ -333,11 +333,12 @@ void CompilerServer::tryRun() {
         // Send the response;
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
-        auto responseSize = Measuring::timeEventIf<size_t>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER && what, "CompilerServer.cpp: sending new response with SEXP", what, [&]{
-            return *socket.send(zmq::message_t{
-                                    response.data(),
-                                    response.size()},
-                                zmq::send_flags::none);
+        size_t responseSize;
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER && what, "CompilerServer.cpp: sending new response with SEXP", what, [&]{
+            responseSize = *socket.send(zmq::message_t{
+                                            response.data(),
+                                            response.size()},
+                                        zmq::send_flags::none);
         });
         auto responseSize2 = response.size();
         SOFT_ASSERT(responseSize == responseSize2,

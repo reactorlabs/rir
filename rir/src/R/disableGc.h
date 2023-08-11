@@ -7,15 +7,22 @@
 #include "R/r_incl.h"
 #include <functional>
 
-static inline void disableGc(const std::function<void()>&& f) {
+template<typename F> static ALWAYS_INLINE void disableGc(F f) {
     auto gcEnabled = R_GCEnabled;
     R_GCEnabled = 0;
     f();
     R_GCEnabled = gcEnabled;
 }
 
+template<typename F> static ALWAYS_INLINE SEXP disableGc2(F f) {
+    auto gcEnabled = R_GCEnabled;
+    R_GCEnabled = 0;
+    auto res = f();
+    R_GCEnabled = gcEnabled;
+    return res;
+}
 
-template<typename T> static inline T disableGc(const std::function<T()>&& f) {
+template<typename F> static ALWAYS_INLINE rir::UUID disableGc3(F f) {
     auto gcEnabled = R_GCEnabled;
     R_GCEnabled = 0;
     auto res = f();

@@ -9,6 +9,7 @@
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "utils/HTMLBuilder/escapeHtml.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
@@ -135,7 +136,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     return sidx;
 }
 
-Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp) {
+Code* Code::deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp) {
     Protect p;
     auto size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
@@ -159,12 +160,13 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     if (hasArgReorder) {
         argReorder = p(UUIDPool::readItem(refTable, inp));
     }
-    if (!rirFunction) {
-        rirFunction = Function::unpack(p(UUIDPool::readItem(refTable, inp)));
+    if (!outer) {
+        outer = p(UUIDPool::readItem(refTable, inp));
     }
+    assert(Function::check(outer));
 
     // Bytecode
-    BC::deserialize(refTable, inp, code->code(), code->codeSize, code);
+    BC::deserializeR(refTable, inp, code->code(), code->codeSize, code);
 
     // Extra pool
     SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
@@ -182,7 +184,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   NumLocals, CODE_MAGIC};
     code->setEntry(0, extraPool);
-    code->function(rirFunction);
+    code->setEntry(3, outer);
     if (hasArgReorder) {
         code->setEntry(2, argReorder);
     }
@@ -194,7 +196,7 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
         InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
         code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
         if (InBool(inp)) {
-            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(inp, code);
+            code->lazyCodeModule = pir::PirJitLLVM::deserializeModuleR(inp, code);
             code->setLazyCodeModuleFinalizer();
         }
     }
@@ -204,17 +206,17 @@ Code* Code::deserialize(Function* rirFunction, SEXP refTable, R_inpstream_t inp)
     return code;
 }
 
-void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) const {
+void Code::serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize source", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR source", container(), [&]{
         src_pool_write_item(src, refTable, out);
         OutInteger(out, trivialExpr != nullptr);
         if (trivialExpr)
             UUIDPool::writeItem(trivialExpr, false, refTable, out);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize numbers", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR numbers", container(), [&]{
         OutInteger(out, (int)stackLength);
         OutInteger(out, (int)localsCount);
         OutInteger(out, (int)bindingCacheSize);
@@ -223,39 +225,39 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
         OutInteger(out, (int)extraPoolSize);
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize call argument reordering metadata", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR call argument reordering metadata", container(), [&]{
         OutInteger(out, getEntry(2) != nullptr);
         if (getEntry(2))
             UUIDPool::writeItem(getEntry(2), false, refTable, out);
     });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
-        if (includeFunction) {
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR outer function", container(), [&]{
+        if (includeOuter) {
             UUIDPool::writeItem(function()->container(), false, refTable, out);
         }
     });
 
     std::vector<bool> extraPoolChildren;
     extraPoolChildren.resize(extraPoolSize);
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize bytecode", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR bytecode", container(), [&]{
         // One might think we can skip serializing entries which are just
         // recorded calls, but it breaks semantics and causes a test failure
-        BC::serialize(extraPoolChildren, refTable, out, code(), codeSize, this);
+        BC::serializeR(extraPoolChildren, refTable, out, code(), codeSize, this);
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR extra pool", container(), [&]{
         for (unsigned i = 0; i < extraPoolSize; ++i) {
             UUIDPool::writeItem(getExtraPoolEntry(i), extraPoolChildren[i], refTable, out);
         }
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR srclist", container(), [&]{
         for (unsigned i = 0; i < srcLength; i++) {
             OutInteger(out, (int)srclist()[i].pcOffset);
             src_pool_write_item(srclist()[i].srcIdx, refTable, out);
         }
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR native", container(), [&]{
         OutInteger(out, (int)kind);
         assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
                "Code in bad pending state");
@@ -266,7 +268,132 @@ void Code::serialize(bool includeFunction, SEXP refTable, R_outpstream_t out) co
             OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
             OutBool(out, lazyCodeModule != nullptr);
             if (lazyCodeModule) {
-                lazyCodeModule->serialize(out);
+                lazyCodeModule->serializeR(out);
+            }
+        }
+    });
+}
+
+Code* Code::deserialize(SEXP outer, AbstractDeserializer& deserializer) {
+    Protect p;
+    auto size = deserializer.readBytesOf<R_xlen_t>(SerialFlags::CodeMisc);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    deserializer.addRef(store);
+    Code* code = new (DATAPTR(store)) Code;
+
+    // Header
+    code->src = deserializer.readSrc(SerialFlags::CodeAst);
+    code->trivialExpr = deserializer.readNullable(SerialFlags::CodeAst);
+    code->stackLength = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    *const_cast<unsigned*>(&code->localsCount) = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    *const_cast<unsigned*>(&code->bindingCacheSize) = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    code->codeSize = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    code->srcLength = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    code->extraPoolSize = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    auto argReorder = deserializer.readNullable(SerialFlags::CodeArglistOrder);
+    if (!outer) {
+        outer = p(deserializer.read(SerialFlags::CodeOuterFun));
+    }
+    assert(Function::check(outer));
+
+    // Bytecode
+    std::vector<SerialFlags> extraPoolFlags(code->extraPoolSize, SerialFlags::CodePoolUnknown);
+    BC::deserialize(deserializer, extraPoolFlags, code->code(), code->codeSize, code);
+
+    // Extra pool
+    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
+    for (unsigned i = 0; i < code->extraPoolSize; ++i) {
+        SET_VECTOR_ELT(extraPool, i, deserializer.read(extraPoolFlags[i]));
+    }
+
+    // Srclist
+    for (unsigned i = 0; i < code->srcLength; i++) {
+        code->srclist()[i].pcOffset = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeMisc);
+        code->srclist()[i].srcIdx = deserializer.readSrc(SerialFlags::CodeAst);
+    }
+    code->info = {// GC area starts just after the header
+                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
+                  NumLocals, CODE_MAGIC};
+    code->setEntry(0, extraPool);
+    code->setEntry(3, outer);
+    if (argReorder) {
+        code->setEntry(2, argReorder);
+    }
+
+    // Native code
+    code->kind = deserializer.readBytesOf<Kind>(SerialFlags::CodeNative);
+    if (code->kind == Kind::Native) {
+        auto lazyCodeHandleLen = deserializer.readBytesOf<unsigned>(SerialFlags::CodeNative);
+        deserializer.readBytes(code->lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
+        code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
+        if (deserializer.readBytesOf<bool>(SerialFlags::CodeNative)) {
+            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(deserializer, code);
+            code->setLazyCodeModuleFinalizer();
+        }
+    }
+    // Native code is always null here because it's lazy
+    code->nativeCode_ = nullptr;
+
+    return code;
+}
+
+void Code::serialize(bool includeOuter, AbstractSerializer& serializer) const {
+    serializer.writeBytesOf((R_xlen_t)size(), SerialFlags::CodeMisc);
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize source", container(), [&]{
+        serializer.writeSrc(src, SerialFlags::CodeAst);
+        serializer.writeNullable(trivialExpr, SerialFlags::CodeAst);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize numbers", container(), [&]{
+        serializer.writeBytesOf((unsigned)stackLength, SerialFlags::CodeMisc);
+        serializer.writeBytesOf((unsigned)localsCount, SerialFlags::CodeMisc);
+        serializer.writeBytesOf((unsigned)bindingCacheSize, SerialFlags::CodeMisc);
+        serializer.writeBytesOf((unsigned)codeSize, SerialFlags::CodeMisc);
+        serializer.writeBytesOf((unsigned)srcLength, SerialFlags::CodeMisc);
+        serializer.writeBytesOf((unsigned)extraPoolSize, SerialFlags::CodeMisc);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize call argument reordering metadata", container(), [&]{
+        serializer.writeNullable(getEntry(2), SerialFlags::CodeArglistOrder);
+    });
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
+        if (includeOuter) {
+            serializer.write(getEntry(3), SerialFlags::CodeOuterFun);
+        }
+    });
+
+    std::vector<SerialFlags> extraPoolFlags(extraPoolSize, SerialFlags::CodePoolUnknown);
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize bytecode", container(), [&]{
+        // One might think we can skip serializing entries which are just
+        // recorded calls, but it breaks semantics and causes a test failure
+        BC::serialize(serializer, extraPoolFlags, code(), codeSize, this);
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
+        for (unsigned i = 0; i < extraPoolSize; ++i) {
+            serializer.write(getExtraPoolEntry(i), extraPoolFlags[i]);
+        }
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
+        for (unsigned i = 0; i < srcLength; i++) {
+            serializer.writeBytesOf(srclist()[i].pcOffset, SerialFlags::CodeMisc);
+            serializer.writeSrc(srclist()[i].srcIdx, SerialFlags::CodeAst);
+        }
+    });
+
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
+        serializer.writeBytesOf(kind, SerialFlags::CodeNative);
+        assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
+               "Code in bad pending state");
+        if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
+            assert(lazyCodeHandle[0] != '\0');
+            auto lazyCodeHandleLen = (unsigned)strlen(lazyCodeHandle);
+            serializer.writeBytesOf(lazyCodeHandleLen, SerialFlags::CodeNative);
+            serializer.writeBytes(lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
+            serializer.writeBytesOf(lazyCodeModule != nullptr, SerialFlags::CodeNative);
+            if (lazyCodeModule) {
+                lazyCodeModule->serialize(serializer);
             }
         }
     });

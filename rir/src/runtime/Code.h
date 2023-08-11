@@ -225,20 +225,25 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserializeUni(SEXP outer, Serializer& serializer);
-    static void serializeUni(bool includeFunction,
-                             Serializer& serializer) const;
+    static Code* deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp);
+    void serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) const;
+    static Code* deserialize(SEXP outer, AbstractDeserializer& deserializer);
+    void serialize(bool includeOuter, AbstractSerializer& deserializer) const;
 
-    static Code* deserialize(Function* rirFunction, SEXP refTable,
-                             R_inpstream_t inp);
-    static Code* deserialize(SEXP refTable, R_inpstream_t inp) {
-        return deserialize(nullptr, refTable, inp);
+    static Code* deserializeR(SEXP refTable, R_inpstream_t inp) {
+        return deserializeR(nullptr, refTable, inp);
     }
 
-    void serialize(bool includeFunction, SEXP refTable,
-                   R_outpstream_t out) const;
-    void serialize(SEXP refTable, R_outpstream_t out) const {
-        serialize(true, refTable, out);
+    void serializeR(SEXP refTable, R_outpstream_t out) const {
+        serializeR(true, refTable, out);
+    }
+
+    static Code* deserialize(AbstractDeserializer& deserializer) {
+        return deserialize(nullptr, deserializer);
+    }
+
+    void serialize(AbstractSerializer& serializer) const {
+        serialize(true, serializer);
     }
 
     /// See `Function::deserializeSrc`. Generally you will call that and that is

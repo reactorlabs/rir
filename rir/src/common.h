@@ -16,6 +16,7 @@ extern void printBacktrace();
 #endif
 
 #define REXPORT extern "C"
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
 
 // from boost
 #include <functional>

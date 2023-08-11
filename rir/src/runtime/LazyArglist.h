@@ -5,6 +5,7 @@
 #include "runtime/RirRuntimeObject.h"
 
 #include "interpreter/interp_incl.h"
+#include "serializeHash/serializeUni.h"
 
 #include <cassert>
 #include <cstdint>
@@ -72,8 +73,10 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             true);
     }
 
-    static LazyArglist* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static LazyArglist* deserializeR(SEXP refTable, R_inpstream_t inp);
+    void serializeR(SEXP refTable, R_outpstream_t out) const;
+    static LazyArglist* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
 

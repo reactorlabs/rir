@@ -7,14 +7,13 @@
 #include "R/Protect.h"
 #include "R/Serialize.h"
 #include "R/disableGc.h"
-#include "api.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
-#include "compilerClientServer/CompilerServer.h"
 #include "getConnected.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
 #include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "utils/measuring.h"
 #include <sys/stat.h>
 #include <unistd.h>
@@ -213,7 +212,7 @@ void UUIDPool::uninternGcd(SEXP e) {
 #endif
 
 SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: intern specific", e, expectHashToBeTheSame, [&] {
+    return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: intern specific", e, expectHashToBeTheSame, [&] {
         Protect p(e);
         assert(internable(e));
         (void)expectHashToBeTheSame;
@@ -332,8 +331,8 @@ static bool isRecursivelySerializable(SEXP sexp) {
 
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
-    return disableGc<SEXP>([&]{
-        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, recursive ? "UUIDPool.cpp: intern recursive" : "UUIDPool.cpp: intern", e, [&] {
+    return disableGc2([&]{
+        return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_INTERNING, recursive ? "UUIDPool.cpp: intern recursive" : "UUIDPool.cpp: intern", e, [&] {
             if (hashes.count(e) && !recursive) {
                 // Already interned, don't compute hash
                 if (preserve && !preserved.count(e)) {
@@ -368,7 +367,7 @@ SEXP UUIDPool::reintern(SEXP e) {
     // that isInitialized is set before we check hashes or we will crash
     if (isInitialized && hashes.count(e)) {
         unintern(e);
-        return Measuring::timeEventIf<SEXP>(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: reintern", e, [&] {
+        return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: reintern", e, [&] {
             return intern(e, false, false);
         });
     }
