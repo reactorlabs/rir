@@ -17,6 +17,7 @@
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
 #include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 
@@ -975,7 +976,19 @@ SEXP doCall(CallContext& call, bool popArgs) {
         if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
             serializeCounter++;
             if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
+                auto body2 = copyBySerialR(body);
                 body = copyBySerial(body);
+                std::stringstream differencesStream;
+                DispatchTable::debugCompare(
+                    DispatchTable::unpack(body),
+                    DispatchTable::unpack(body2),
+                    differencesStream
+                );
+                auto differences = differencesStream.str();
+                if (!differences.empty()) {
+                    std::cout << "WARNING: Serialization differences:\n"
+                              << differences << "\n";
+                }
                 serializeCounter = 0;
             }
             PROTECT(body);

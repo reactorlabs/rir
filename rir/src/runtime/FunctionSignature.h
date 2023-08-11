@@ -2,12 +2,13 @@
 
 #include "R/Serialize.h"
 #include "R/r.h"
+#include "serializeHash/serializeUni.h"
 #include "utils/ByteBuffer.h"
 
 #include <iomanip>
 #include <iostream>
-#include <vector>
 #include <sstream>
+#include <vector>
 
 namespace rir {
 
@@ -23,13 +24,13 @@ struct FunctionSignature {
         Contextual,
     };
 
-    static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
-        Environment envc = (Environment)InInteger(inp);
-        OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
-        unsigned numArgs = InInteger(inp);
+    static FunctionSignature deserialize(__attribute__((unused)) SEXP refTable,
+                                         R_inpstream_t inp) {
+        auto envc = (Environment)InInteger(inp);
+        auto opt = (OptimizationLevel)InInteger(inp);
         FunctionSignature sig(envc, opt);
-        sig.numArguments = numArgs;
-        sig.dotsPosition = InInteger(inp);
+        sig.numArguments = InUInt(inp);
+        sig.dotsPosition = InUInt(inp);
         sig.hasDotsFormals = InInteger(inp);
         sig.hasDefaultArgs = InInteger(inp);
         return sig;
@@ -38,10 +39,30 @@ struct FunctionSignature {
     void serialize(SEXP refTable, R_outpstream_t out) const {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
-        OutInteger(out, numArguments);
-        OutInteger(out, dotsPosition);
+        OutUInt(out, numArguments);
+        OutUInt(out, dotsPosition);
         OutInteger(out, hasDotsFormals);
         OutInteger(out, hasDefaultArgs);
+    }
+
+    static FunctionSignature deserialize(AbstractDeserializer& deserializer) {
+        auto envc = (Environment)deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        auto opt = (OptimizationLevel)deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        FunctionSignature sig(envc, opt);
+        sig.numArguments = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+        sig.dotsPosition = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+        sig.hasDotsFormals = deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        sig.hasDefaultArgs = deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        return sig;
+    }
+
+    void serialize(AbstractSerializer& serializer) const {
+        serializer.writeBytesOf<int>((int)envCreation, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<int>((int)optimization, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<unsigned>(numArguments, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<unsigned>(dotsPosition, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<int>(hasDotsFormals, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<int>(hasDefaultArgs, SerialFlags::FunMiscBytes);
     }
 
     static FunctionSignature deserialize(ByteBuffer& buffer) {

@@ -200,10 +200,12 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
 }
 
 UUID hashAst(SEXP root) {
-    return Measuring::timeEventIf<UUID>(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashAst", root, [&]{
+    UUID result;
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashAst", root, [&]{
         // Fastcase
         if (hashCache.count(root)) {
-            return hashCache.at(root);
+            result = hashCache.at(root);
+            return;
         }
 
         // Simulate a recursive call chain. Is this better or even as good letting
@@ -246,11 +248,13 @@ UUID hashAst(SEXP root) {
                 } else {
                     // Done
                     assert(parentIdx == 0);
-                    return hash;
+                    result = hash;
+                    return;
                 }
             }
         }
     });
+    return result;
 }
 
 } // namespace rir

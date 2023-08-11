@@ -13,10 +13,17 @@ class Measuring {
     static void stopTimingEvent(TimingEvent* timing, SEXP associated,
                                 bool associatedIsInitialized);
   public:
-    static inline SEXP timeEvent(const std::string& name,
-                                 const std::function<SEXP()>& code,
-                                 const std::function<bool(SEXP associated)>&
-                                     associatedIsInitialized) {
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEvent3(const std::string& name, F code) {
+        auto timing = startTimingEvent(name);
+        auto associated = code();
+        PROTECT(associated);
+        stopTimingEvent(timing, associated, true);
+        UNPROTECT(1);
+        return associated;
+    }
+    template<class F, class F2> static ALWAYS_INLINE SEXP
+    timeEvent3(const std::string& name, F code, F2 associatedIsInitialized) {
         auto timing = startTimingEvent(name);
         auto associated = code();
         PROTECT(associated);
@@ -25,19 +32,18 @@ class Measuring {
         UNPROTECT(1);
         return associated;
     }
-    static inline void timeEvent(const std::string& name, SEXP associated,
-                                 bool associatedWillBeInitialized,
-                                 const std::function<void()>& code) {
+    template<class F> static ALWAYS_INLINE void
+    timeEvent(const std::string& name, SEXP associated,
+              bool associatedWillBeInitialized, F code) {
         PROTECT(associated);
         auto timing = startTimingEvent(name);
         code();
         stopTimingEvent(timing, associated, associatedWillBeInitialized);
         UNPROTECT(1);
     }
-    template<typename T> static inline T
-    timeEvent(const std::string& name, SEXP associated,
-              bool associatedWillBeInitialized,
-              const std::function<T()>& code) {
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEvent2(const std::string& name, SEXP associated,
+               bool associatedWillBeInitialized, F code) {
         PROTECT(associated);
         auto timing = startTimingEvent(name);
         auto result = code();
@@ -45,49 +51,51 @@ class Measuring {
         UNPROTECT(1);
         return result;
     }
-    template<typename T> static inline T
-    timeEvent(const std::string& name, SEXP associated,
-              const std::function<T()>& code) {
-        return timeEvent(name, associated, true, code);
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEvent2(const std::string& name, SEXP associated, F code) {
+        return timeEvent2(name, associated, true, code);
     }
-    static inline SEXP timeEventIf(bool cond, const std::string& name,
-                                   const std::function<SEXP()>& code,
-                                   const std::function<bool(SEXP associated)>&
-                                       associatedIsInitialized = [](SEXP _s){ return true; }) {
+    template<class F, class F2> static ALWAYS_INLINE SEXP
+    timeEventIf3(bool cond, const std::string& name, F code,
+                 F2 associatedIsInitialized) {
         if (cond) {
-            return timeEvent(name, code, associatedIsInitialized);
+            return timeEvent3(name, code, associatedIsInitialized);
         } else {
             return code();
         }
     }
-    static inline void timeEventIf(bool cond, const std::string& name,
-                                   SEXP associated,
-                                   bool associatedWillBeInitialized,
-                                   const std::function<void()>& code) {
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEventIf3(bool cond, const std::string& name, F code) {
+        if (cond) {
+            return timeEvent3(name, code);
+        } else {
+            return code();
+        }
+    }
+    template<class F> static ALWAYS_INLINE void
+    timeEventIf(bool cond, const std::string& name, SEXP associated,
+                bool associatedWillBeInitialized, F code) {
         if (cond) {
             timeEvent(name, associated, associatedWillBeInitialized, code);
         } else {
             code();
         }
     }
-    template<typename T> static inline T
-    timeEventIf(bool cond, const std::string& name, SEXP associated,
-                bool associatedWillBeInitialized,
-                const std::function<T()>& code) {
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEventIf2(bool cond, const std::string& name, SEXP associated,
+                 bool associatedWillBeInitialized, F code) {
         if (cond) {
-            return timeEvent(name, associated, associatedWillBeInitialized, code);
+            return timeEvent2(name, associated, associatedWillBeInitialized, code);
         } else {
             return code();
         }
     }
-    template<typename T> static inline T
-    timeEventIf(bool cond, const std::string& name, SEXP associated,
-                const std::function<T()>& code) {
-        return timeEventIf(cond, name, associated, true, code);
+    template<class F> static ALWAYS_INLINE SEXP
+    timeEventIf2(bool cond, const std::string& name, SEXP associated, F code) {
+        return timeEventIf2(cond, name, associated, true, code);
     }
-    static inline void timeEventIf(bool cond, const std::string& name,
-                                   SEXP associated,
-                                   const std::function<void()>& code) {
+    template<class F> static ALWAYS_INLINE void
+    timeEventIf(bool cond, const std::string& name, SEXP associated, F code) {
         timeEventIf(cond, name, associated, true, code);
     }
 

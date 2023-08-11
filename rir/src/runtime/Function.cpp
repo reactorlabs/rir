@@ -5,7 +5,7 @@
 #include "compiler/compiler.h"
 #include "runtime/log/printPrettyGraph.h"
 #include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -20,7 +20,7 @@ void Function::resetFlag(rir::Function::Flag f) {
     flags_.reset(f);
 }
 
-Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
+Function* Function::deserializeR(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     size_t functionSize = InInteger(inp);
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
@@ -60,7 +60,7 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     return fun;
 }
 
-void Function::serialize(SEXP refTable, R_outpstream_t out) const {
+void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, size);
     signature().serialize(refTable, out);
@@ -84,10 +84,46 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     OutU64(out, flags_.to_i());
 }
 
+Function* Function::deserialize(AbstractDeserializer& deserializer) {
+    Protect p;
+    auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
+    auto sig = FunctionSignature::deserialize(deserializer);
+    auto ctx = deserializer.readBytesOf<Context>(SerialFlags::FunMiscBytes);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+    auto flags = deserializer.readBytesOf<EnumSet<Flag>>(SerialFlags::FunMiscBytes);
+    auto body = p(deserializer.read(SerialFlags::FunBody));
+    std::vector<SEXP> defaultArgs;
+    defaultArgs.resize(sig.numArguments);
+    for (unsigned i = 0; i < sig.numArguments; i++) {
+        if (deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes)) {
+            defaultArgs[i] = p(deserializer.read(SerialFlags::FunDefaultArg));
+        }
+    }
+
+    auto fun = new (DATAPTR(store))
+        Function(funSize, body, defaultArgs, sig, ctx);
+    fun->flags_ = flags;
+    return fun;
+}
+
+void Function::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf((R_xlen_t)size, SerialFlags::FunMiscBytes);
+    signature().serialize(serializer);
+    serializer.writeBytesOf(context_, SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf(flags_, SerialFlags::FunMiscBytes);
+    serializer.write(body()->container(), SerialFlags::FunBody);
+    for (unsigned i = 0; i < numArgs_; i++) {
+        serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunMiscBytes);
+        if (defaultArg_[i]) {
+            serializer.write(defaultArg_[i], SerialFlags::FunBody);
+        }
+    }
+}
+
 Function* Function::deserializeSrc(ByteBuffer& buffer) {
     Protect p;
     R_xlen_t funSize = buffer.getInt();
-    FunctionSignature sig = FunctionSignature::deserialize(buffer);
+    auto sig = FunctionSignature::deserialize(buffer);
     Context ctx;
     buffer.getBytes((uint8_t*)&ctx, sizeof(Context));
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));

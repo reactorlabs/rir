@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include <string>
 #include "R/r_incl.h"
+#include "serializeHash/serializeUni.h"
 #include <memory>
+#include <string>
 
 namespace llvm {
 
@@ -42,9 +43,11 @@ class SerialModule {
     friend class pir::PirJitLLVM;
     explicit SerialModule(const llvm::Module& module);
     std::unique_ptr<llvm::Module> decode(Code* outer) const;
-    static SerialModule deserialize(R_inpstream_t inp);
+    static SerialModule deserializeR(R_inpstream_t inp);
+    static SerialModule deserialize(AbstractDeserializer& deserializer);
   public:
-    void serialize(R_outpstream_t out) const;
+    void serializeR(R_outpstream_t out) const;
+    void serialize(AbstractSerializer& serializer) const;
     friend std::ostream& operator<<(std::ostream&, const SerialModule&);
 };
 

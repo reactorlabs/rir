@@ -218,8 +218,9 @@ CompilerClient::Handle<T>* CompilerClient::request(
 }
 
 CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
-    return Measuring::timeEventIf<CompilerClient::CompiledHandle*>(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
-        auto handle = request<CompiledResponseData>(
+    CompilerClient::CompiledHandle* handle = nullptr;
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
+        auto innerHandle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
@@ -284,8 +285,11 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );
-        return handle ? new CompilerClient::CompiledHandle{handle} : nullptr;
+        if (innerHandle) {
+            handle = new CompilerClient::CompiledHandle{innerHandle};
+        }
     });
+    return handle;
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {

@@ -467,14 +467,27 @@ llvm::LLVMContext& PirJitLLVM::getContext() {
     return *TSC.getContext();
 }
 
-SerialModuleRef PirJitLLVM::deserializeModule(R_inpstream_t inp,
-                                              rir::Code* outer) {
-    auto serialModuleAndIsNew = internModule(SerialModule::deserialize(inp));
+SerialModuleRef PirJitLLVM::finishDeserializingModule(SerialModule&& module,
+                                                      rir::Code* outer) {
+    auto serialModuleAndIsNew = internModule(std::move(module));
     auto serialModule = serialModuleAndIsNew.first;
     if (serialModuleAndIsNew.second) {
         addToJit(serialModule->decode(outer));
     }
     return serialModule;
+
+}
+
+SerialModuleRef PirJitLLVM::deserializeModuleR(R_inpstream_t inp,
+                                               rir::Code* outer) {
+    return finishDeserializingModule(SerialModule::deserializeR(inp), outer);
+}
+
+SerialModuleRef
+PirJitLLVM::deserializeModule(AbstractDeserializer& deserializer,
+                              rir::Code* outer) {
+    return finishDeserializingModule(SerialModule::deserialize(deserializer),
+                                     outer);
 }
 
 void PirJitLLVM::initializeLLVM() {

@@ -90,8 +90,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
     }
 
-    static Function* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static Function* deserializeR(SEXP refTable, R_inpstream_t inp);
+    void serializeR(SEXP refTable, R_outpstream_t out) const;
+    static Function* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
     /// Deserialize from only source information. This is used to deserialize
     /// functions from the compiler client.
     static Function* deserializeSrc(ByteBuffer& buffer);

@@ -3,7 +3,7 @@
 #include "R/Protect.h"
 #include "compiler/pir/instruction.h"
 #include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "runtime/TypeFeedback.h"
 #include <unordered_map>
 
@@ -64,7 +64,7 @@ FeedbackIndex PirTypeFeedback::rirIdx(size_t slot) {
     return getMDEntryOfSlot(slot).rirIdx;
 }
 
-PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+PirTypeFeedback* PirTypeFeedback::deserializeR(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     int size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
@@ -82,7 +82,7 @@ PirTypeFeedback* PirTypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) 
     return typeFeedback;
 }
 
-void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+void PirTypeFeedback::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
     auto numCodes = this->numCodes();
@@ -94,6 +94,36 @@ void PirTypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
         UUIDPool::writeItem(getEntry(i), false, refTable, out);
     }
     OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
+}
+
+PirTypeFeedback* PirTypeFeedback::deserialize(AbstractDeserializer& deserializer) {
+    Protect p;
+    auto size = deserializer.readBytesOf<R_xlen_t>();
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    deserializer.addRef(store);
+
+    auto numCodes = deserializer.readBytesOf<int>();
+    auto numEntries = deserializer.readBytesOf<int>();
+    auto typeFeedback = new (DATAPTR(store)) PirTypeFeedback(numCodes);
+    deserializer.readBytes(typeFeedback->entry, sizeof(typeFeedback->entry));
+    for (int i = 0; i < numCodes; i++) {
+        typeFeedback->setEntry(i, p(deserializer.read()));
+    }
+    deserializer.readBytes(typeFeedback->mdEntries(), (int)sizeof(MDEntry) * numEntries);
+    return typeFeedback;
+}
+
+void PirTypeFeedback::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf((R_xlen_t)size());
+    auto numCodes = this->numCodes();
+        auto numEntries = this->numEntries();
+    serializer.writeBytesOf(numCodes);
+    serializer.writeBytesOf(numEntries);
+    serializer.writeBytes(entry, sizeof(entry));
+    for (int i = 0; i < numCodes; i++) {
+        serializer.write(getEntry(i));
+    }
+    serializer.writeBytes(mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
 
 void PirTypeFeedback::hash(Hasher& hasher) const {

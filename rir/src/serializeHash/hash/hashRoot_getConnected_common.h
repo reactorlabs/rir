@@ -13,7 +13,7 @@ static std::vector<SEXP> globals{
     R_RestartToken, R_LogicalNAValue, R_EmptyEnv,      R_DimSymbol,
     R_DotsSymbol,   R_NamesSymbol,    NA_STRING};
 
-static bool hasTag(SEXP sexp) {
+__attribute__((unused)) static bool hasTag(SEXP sexp) {
     switch (TYPEOF(sexp)) {
     case LISTSXP:
     case LANGSXP:

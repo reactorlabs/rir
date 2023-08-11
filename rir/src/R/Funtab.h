@@ -32,7 +32,6 @@ static inline SEXP getBuiltinFun(int id) {
     } else {
         return Rf_install(getBuiltinName(id))->u.symsxp.internal;
     }
-
 }
 
 static inline SEXP getBuiltinFun(char const* name) {
@@ -44,11 +43,20 @@ static inline SEXP getBuiltinFun(char const* name) {
         return Rf_install(name)->u.symsxp.internal;
 }
 
+static inline SEXP getBuiltinOrSpecialFun(int id) {
+    if (R_FunTab[id].eval % 100 / 10 == 0) {
+        return Rf_install(getBuiltinName(id))->u.symsxp.value;
+    } else {
+        return Rf_install(getBuiltinName(id))->u.symsxp.internal;
+    }
+}
+
 static inline SEXP getBuiltinOrSpecialFun(char const* name) {
-    if (R_FunTab[rir::blt(name)].eval % 100 / 10 == 0)
+    if (R_FunTab[rir::blt(name)].eval % 100 / 10 == 0) {
         return Rf_install(name)->u.symsxp.value;
-    else
+    } else {
         return Rf_install(name)->u.symsxp.internal;
+    }
 }
 
 #endif

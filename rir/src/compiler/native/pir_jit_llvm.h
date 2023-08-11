@@ -64,6 +64,10 @@ class PirJitLLVM {
 
     static llvm::LLVMContext& getContext();
 
+  private:
+    static SerialModuleRef finishDeserializingModule(SerialModule&& module,
+                                                     rir::Code* outer);
+  public:
     /// Deserialize and the module. Then if interned, return the interned
     /// version, otherwise intern AND add to LLJIT.
     ///
@@ -71,9 +75,17 @@ class PirJitLLVM {
     /// we add stuff to its extra pool so that it remains alive while being used
     /// by the code. It can be nullptr if we only create the objects for a short
     /// period of time (when printing).
-    static SerialModuleRef deserializeModule(R_inpstream_t inp,
+    static SerialModuleRef deserializeModuleR(R_inpstream_t inp,
+                                              rir::Code* outer);
+    /// Deserialize and the module. Then if interned, return the interned
+    /// version, otherwise intern AND add to LLJIT.
+    ///
+    /// `outer` is the code object which will contain the module, needed because
+    /// we add stuff to its extra pool so that it remains alive while being used
+    /// by the code. It can be nullptr if we only create the objects for a short
+    /// period of time (when printing).
+    static SerialModuleRef deserializeModule(AbstractDeserializer& deserializer,
                                              rir::Code* outer);
-
   private:
     std::string name;
 

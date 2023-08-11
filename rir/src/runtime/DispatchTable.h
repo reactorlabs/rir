@@ -218,8 +218,10 @@ struct DispatchTable
 
     size_t capacity() const { return info.gc_area_length; }
 
-    static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static DispatchTable* deserializeR(SEXP refTable, R_inpstream_t inp);
+    void serializeR(SEXP refTable, R_outpstream_t out) const;
+    static DispatchTable* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
     /// Returns an SEXP containing a DispatchTable with a baseline deserialized
     /// via only its source code. This is how we receive objects from the
     /// compiler client.
@@ -231,6 +233,12 @@ struct DispatchTable
     void addConnected(ConnectedCollector& collector) const;
     void print(std::ostream&, bool isDetailed = false) const;
     void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+    /// Check if 2 dispatch tables are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences.
+    static void debugCompare(const DispatchTable* dt1, const DispatchTable* dt2,
+                             std::stringstream& differences);
+
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {

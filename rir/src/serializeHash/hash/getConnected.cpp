@@ -185,8 +185,8 @@ void ConnectedCollector::addSrc(unsigned idx) {
 }
 
 ConnectedSet getConnected(SEXP root) {
-    return Measuring::timeEventIf<ConnectedSet>(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected", root, [&] {
-        ConnectedSet set;
+    ConnectedSet set;
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected", root, [&] {
         std::queue<ConnectedElem> worklist;
         worklist.push({root, false});
         ConnectedCollector collector{set, worklist};
@@ -197,8 +197,8 @@ ConnectedSet getConnected(SEXP root) {
 
             addConnected(elem.sexp, elem.isChild, collector);
         }
-        return set;
     });
+    return set;
 }
 
 } // namespace rir

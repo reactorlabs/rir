@@ -5,6 +5,7 @@
 #include "interpreter/instance.h"
 #include "interpreter/interp_incl.h"
 #include "runtime/RirRuntimeObject.h"
+#include "serializeHash/serializeUni.h"
 
 #include <cassert>
 #include <cstdint>
@@ -82,8 +83,10 @@ struct LazyEnvironment
         return le;
     }
 
-    static LazyEnvironment* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static LazyEnvironment* deserializeR(SEXP refTable, R_inpstream_t inp);
+    void serializeR(SEXP refTable, R_outpstream_t out) const;
+    static LazyEnvironment* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
 
