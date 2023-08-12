@@ -65,6 +65,8 @@ class SerialFlags {
     static SerialFlags FunBody;
     /// Not an AST, guaranteed rir, hashed, in source, in feedback
     static SerialFlags FunDefaultArg;
+    /// Not an SEXP, not hashed, not in source, in feedback
+    static SerialFlags FunStats;
     /// Not an SEXP, hashed, in source, not in feedback
     static SerialFlags FunMiscBytes;
     /// Not an AST, guaranteed rir, hashed, in source, not in feedback
