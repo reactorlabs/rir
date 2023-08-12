@@ -398,32 +398,34 @@ void Hasher::hashSrc(unsigned idx) {
 }
 
 UUID hashRoot(SEXP root) {
-    return disableGc3([&]{
-        UUID result;
-        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
-            UUID::Hasher uuidHasher;
-            Hasher::Worklist worklist;
-            HashRefTable refs;
-            worklist.push({root, false});
-            Hasher hasher{uuidHasher, worklist};
+    UUID result;
+    disableInterpreter([&]{
+        disableGc([&]{
+            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashRoot", root, [&]{
+                UUID::Hasher uuidHasher;
+                Hasher::Worklist worklist;
+                HashRefTable refs;
+                worklist.push({root, false});
+                Hasher hasher{uuidHasher, worklist};
 
-            while (!worklist.empty()) {
-                auto& elem = worklist.front();
-                auto sexp = elem.sexp;
-                auto isAst = elem.isAst;
-                worklist.pop();
+                while (!worklist.empty()) {
+                    auto& elem = worklist.front();
+                    auto sexp = elem.sexp;
+                    auto isAst = elem.isAst;
+                    worklist.pop();
 
-                if (isAst) {
-                    auto uuid = hashAst(sexp);
-                    hasher.hashBytesOf(uuid);
-                } else {
-                    hashChild(sexp, hasher, refs);
+                    if (isAst) {
+                        auto uuid = hashAst(sexp);
+                        hasher.hashBytesOf(uuid);
+                    } else {
+                        hashChild(sexp, hasher, refs);
+                    }
                 }
-            }
-            result = uuidHasher.finalize();
+                result = uuidHasher.finalize();
+            });
         });
-        return result;
     });
+    return result;
 }
 
 } // namespace rir

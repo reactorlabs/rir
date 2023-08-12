@@ -59,9 +59,11 @@ void Deserializer::addRef(SEXP sexp) {
 }
 
 void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
-    disableGc([&] {
-        Serializer serializer(buffer, useHashes);
-        serializer.AbstractSerializer::write(sexp);
+    disableInterpreter([&]{
+        disableGc([&] {
+            Serializer serializer(buffer, useHashes);
+            serializer.AbstractSerializer::write(sexp);
+        });
     });
 }
 
@@ -70,10 +72,14 @@ SEXP deserialize(ByteBuffer& buffer, bool useHashes) {
 }
 
 SEXP deserialize(ByteBuffer& buffer, bool useHashes, const UUID& retrieveHash) {
-    return disableGc2([&] {
-        Deserializer deserializer(buffer, useHashes, retrieveHash);
-        return deserializer.AbstractDeserializer::read();
+    SEXP result;
+    disableInterpreter([&]{
+        disableGc([&] {
+            Deserializer deserializer(buffer, useHashes, retrieveHash);
+            result = deserializer.AbstractDeserializer::read();
+        });
     });
+    return result;
 }
 
 SEXP copyBySerial(SEXP x) {
