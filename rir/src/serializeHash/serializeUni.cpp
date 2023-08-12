@@ -178,11 +178,11 @@ static SEXP findNamespace(SEXP info) {
 #define CACHED_MASK (1<<5)
 #define HASHASH_MASK 1
 
-static int packFlags(SEXPTYPE type, int levs, bool isobj, bool hasattr,
-                     bool hastag) {
-    int val;
+static unsigned packFlags(SEXPTYPE type, int levs, bool isobj, bool hasattr,
+                          bool hastag) {
+    unsigned val;
     if (type == CHARSXP) levs &= (~(CACHED_MASK | HASHASH_MASK));
-    val = (int)type | ENCODE_LEVELS(levs);
+    val = type | ENCODE_LEVELS(levs);
     if (isobj) val |= IS_OBJECT_BIT_MASK;
     if (hasattr) val |= HAS_ATTR_BIT_MASK;
     if (hastag) val |= HAS_TAG_BIT_MASK;
@@ -190,7 +190,7 @@ static int packFlags(SEXPTYPE type, int levs, bool isobj, bool hasattr,
 }
 
 
-static void unpackFlags(int flags, SEXPTYPE& ptype, int& plevs,
+static void unpackFlags(unsigned flags, SEXPTYPE& ptype, int& plevs,
                         bool& pisobj, bool& phasattr, bool& phastag) {
     ptype = DECODE_TYPE(flags);
     plevs = DECODE_LEVELS(flags);
@@ -620,7 +620,7 @@ SEXP AbstractDeserializer::readInline() {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline", [&]{
         auto refs = this->refs();
 
-        auto rFlags = readBytesOf<int>();
+        auto rFlags = readBytesOf<unsigned>();
         SEXPTYPE type;
         int levels;
         bool object, hasAttr, hasTag_;
@@ -897,6 +897,12 @@ SEXP AbstractDeserializer::readInline() {
         }
         UNPROTECT(1);
 
+        assert(
+            (type == (SEXPTYPE)SpecialType::Altrep ||
+             type == (SEXPTYPE)SpecialType::Global ||
+             type == (SEXPTYPE)SpecialType::Ref || type == TYPEOF(result)) &&
+            "sanity check failed: result deserialized into a different type"
+        );
         SLOWASSERT(
             (type == (SEXPTYPE)SpecialType::Altrep ||
              type == (SEXPTYPE)SpecialType::Global ||

@@ -11,6 +11,7 @@ namespace rir {
 
 #if DEBUG_SERIALIZE_CONSISTENCY
 static const uint64_t sexpBound = 0x123456789abcdef0;
+static const uint64_t sexpEndBound = 0x123456789abcdef1;
 static const uint64_t dataBound = 0xfedcba9876543210;
 static const uint64_t intBound = 0xfedcba9876543211;
 #endif
@@ -42,6 +43,8 @@ void Serializer::write(SEXP s, rir::SerialFlags flags) {
 #if DEBUG_SERIALIZE_CONSISTENCY
     buffer.putLong(sexpBound);
     buffer.putLong(flags.to_i());
+    auto type = TYPEOF(s);
+    buffer.putInt(type);
 #endif
     if (useHashes) {
         // TODO: Refactor UUIDPool methods into this (or somewhere else in
@@ -50,6 +53,10 @@ void Serializer::write(SEXP s, rir::SerialFlags flags) {
     } else {
         writeInline(s);
     }
+#if DEBUG_SERIALIZE_CONSISTENCY
+    buffer.putLong(sexpEndBound);
+    assert(type == TYPEOF(s) && "sanity check failed, SEXP changed type after serialization?");
+#endif
 }
 
 void Deserializer::readBytes(void* data, size_t size, SerialFlags flags) {
@@ -74,7 +81,19 @@ SEXP Deserializer::read(SerialFlags flags) {
 #if DEBUG_SERIALIZE_CONSISTENCY
     assert(buffer.getLong() == sexpBound && "serialize/deserialize sexp boundary mismatch");
     assert(buffer.getLong() == flags.to_i() && "serialize/deserialize sexp flags mismatch");
-#endif
+    auto expectedType = buffer.getInt();
+    SEXP result;
+    if (useHashes) {
+        // TODO: Refactor UUIDPool methods into this (or somewhere else in
+        //  serializeUni)
+        result = UUIDPool::readItem(buffer, true);
+    } else {
+        result = readInline();
+    }
+    assert(buffer.getLong() == sexpEndBound && "serialize/deserialize sexp end boundary mismatch");
+    assert(expectedType == TYPEOF(result) && "serialize/deserialize sexp type mismatch");
+    return result;
+#else
     if (useHashes) {
         // TODO: Refactor UUIDPool methods into this (or somewhere else in
         //  serializeUni)
@@ -82,6 +101,7 @@ SEXP Deserializer::read(SerialFlags flags) {
     } else {
         return readInline();
     }
+#endif
 }
 
 void Deserializer::addRef(SEXP sexp) {

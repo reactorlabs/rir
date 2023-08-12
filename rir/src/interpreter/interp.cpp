@@ -976,24 +976,36 @@ SEXP doCall(CallContext& call, bool popArgs) {
         if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
             serializeCounter++;
             if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
+                auto body0 = body;
                 auto body1 = copyBySerial(body);
                 auto body2 = copyBySerialR(body);
-                auto body3 = copyBySerialR(body1);
-                auto body4 = copyBySerial(body2);
+                // auto body3 = copyBySerialR(body1);
+                // auto body4 = copyBySerial(body2);
                 body = body1;
                 disableInterpreter([&]{
                     std::stringstream differencesStream;
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body0),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    auto differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 0 and 1:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
                     DispatchTable::debugCompare(
                         DispatchTable::unpack(body1),
                         DispatchTable::unpack(body2),
                         differencesStream
                     );
-                    auto differences = differencesStream.str();
+                    differences = differencesStream.str();
                     if (!differences.empty()) {
                         std::cout << "WARNING: Serialization differences between 1 and 2:\n"
                                   << differences << "\n";
                     }
-                    differencesStream = std::stringstream();
+                    /* differencesStream = std::stringstream();
                     DispatchTable::debugCompare(
                         DispatchTable::unpack(body2),
                         DispatchTable::unpack(body3),
@@ -1036,7 +1048,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                     if (!differences.empty()) {
                         std::cout << "!!! WARNING: Serialization differences between 1 and 1:\n"
                                   << differences << "\n";
-                    }
+                    } */
                 });
                 serializeCounter = 0;
             }
