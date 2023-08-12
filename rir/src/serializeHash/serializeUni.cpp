@@ -30,6 +30,8 @@ SerialFlags SerialFlags::DtOptimized(SerialFlag::MaybeNotAst, SerialFlag::MaybeS
 SerialFlags SerialFlags::FunBody(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
 /// Not an AST, guaranteed rir, hashed, in source, in feedback
 SerialFlags SerialFlags::FunDefaultArg(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
+/// Not an SEXP, not hashed, not in source, in feedback
+SerialFlags SerialFlags::FunStats(SerialFlag::InFeedback);
 /// Not an SEXP, hashed, in source, not in feedback
 SerialFlags SerialFlags::FunMiscBytes(SerialFlag::Hashed, SerialFlag::InSource);
 /// Not an AST, guaranteed rir, hashed, not in source, not in feedback

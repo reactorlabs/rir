@@ -20,7 +20,7 @@ void Function::resetFlag(rir::Function::Flag f) {
 
 Function* Function::deserializeR(SEXP refTable, R_inpstream_t inp) {
     Protect p;
-    size_t functionSize = InInteger(inp);
+    R_xlen_t functionSize = InInteger(inp);
     const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
     Context as;
     InBytes(inp, &as, sizeof(Context));
@@ -46,15 +46,20 @@ Function* Function::deserializeR(SEXP refTable, R_inpstream_t inp) {
         }
     }
     fun->flags_ = EnumSet<Flag>(InU64(inp));
+    fun->invocationCount_ = InUInt(inp);
+    fun->deoptCount_ = InUInt(inp);
+    fun->deadCallReached_ = InUInt(inp);
+    fun->invoked = InU64(inp);
+    fun->execTime = InU64(inp);
     return fun;
 }
 
 void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
-    OutInteger(out, size);
+    OutInteger(out, (int)size);
     signature().serialize(refTable, out);
     OutBytes(out, &context_, sizeof(Context));
-    OutInteger(out, numArgs_);
+    OutInteger(out, (int)numArgs_);
     assert(getEntry(0) && "tried to serialize function without a body. "
                           "Is the function corrupted or being constructed?");
     UUIDPool::writeItem(getEntry(0), false, refTable, out);
@@ -69,6 +74,11 @@ void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
         }
     }
     OutU64(out, flags_.to_i());
+    OutUInt(out, invocationCount_);
+    OutUInt(out, deoptCount_);
+    OutUInt(out, deadCallReached_);
+    OutU64(out, invoked);
+    OutU64(out, execTime);
 }
 
 Function* Function::deserialize(AbstractDeserializer& deserializer) {
@@ -76,6 +86,11 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
     auto sig = FunctionSignature::deserialize(deserializer);
     auto ctx = deserializer.readBytesOf<Context>(SerialFlags::FunMiscBytes);
+    auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+    auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+    auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+    auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
+    auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
@@ -92,6 +107,11 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto fun = new (DATAPTR(store))
         Function(funSize, body, defaultArgs, sig, ctx);
     fun->flags_ = flags;
+    fun->invocationCount_ = invocationCount_;
+    fun->deoptCount_ = deoptCount_;
+    fun->deadCallReached_ = deadCallReached_;
+    fun->invoked = invoked;
+    fun->execTime = execTime;
     return fun;
 }
 
@@ -100,6 +120,11 @@ void Function::serialize(AbstractSerializer& serializer) const {
     signature().serialize(serializer);
     serializer.writeBytesOf(context_, SerialFlags::FunMiscBytes);
     serializer.writeBytesOf(flags_, SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf(invocationCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf(deoptCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf(deadCallReached_, SerialFlags::FunStats);
+    serializer.writeBytesOf(invoked, SerialFlags::FunStats);
+    serializer.writeBytesOf(execTime, SerialFlags::FunStats);
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
         serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunMiscBytes);
