@@ -180,13 +180,6 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
             break;
         }
 
-        case EXTPTRSXP:
-            // TODO: Almost certainly not an AST type, check and try to remove after fixing
-            //  bugs in serializeUni which may be causing this
-            recurse(EXTPTR_PROT(s));
-            recurse(EXTPTR_TAG(s));
-            break;
-
         case EXTERNALSXP: {
             assert(false && "unexpected RIR object in AST");
         }
@@ -195,6 +188,7 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
         case EXPRSXP:
         case BCODESXP:
         case WEAKREFSXP:
+        case EXTPTRSXP:
         case S4SXP:
         case NEWSXP:
         case FREESXP:

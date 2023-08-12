@@ -5,7 +5,15 @@
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
 
+#define DEBUG_SERIALIZE_CONSISTENCY 1
+
 namespace rir {
+
+#if DEBUG_SERIALIZE_CONSISTENCY
+static const uint64_t sexpBound = 0x123456789abcdef0;
+static const uint64_t dataBound = 0xfedcba9876543210;
+static const uint64_t intBound = 0xfedcba9876543211;
+#endif
 
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
@@ -14,14 +22,27 @@ bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
 void Serializer::writeBytes(const void* data, size_t size, SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    buffer.putLong(dataBound);
+    buffer.putLong(size);
+    buffer.putLong(flags.to_i());
+#endif
     buffer.putBytes((uint8_t*)data, size);
 }
 
 void Serializer::writeInt(int data, rir::SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    buffer.putLong(intBound);
+    buffer.putLong(flags.to_i());
+#endif
     buffer.putInt(*reinterpret_cast<unsigned*>(&data));
 }
 
 void Serializer::write(SEXP s, rir::SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    buffer.putLong(sexpBound);
+    buffer.putLong(flags.to_i());
+#endif
     if (useHashes) {
         // TODO: Refactor UUIDPool methods into this (or somewhere else in
         //  serializeUni)
@@ -32,15 +53,28 @@ void Serializer::write(SEXP s, rir::SerialFlags flags) {
 }
 
 void Deserializer::readBytes(void* data, size_t size, SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    assert(buffer.getLong() == dataBound && "serialize/deserialize data boundary mismatch");
+    assert(buffer.getLong() == size && "serialize/deserialize data size mismatch");
+    assert(buffer.getLong() == flags.to_i() && "serialize/deserialize data flags mismatch");
+#endif
     buffer.getBytes((uint8_t*)data, size);
 }
 
 int Deserializer::readInt(rir::SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    assert(buffer.getLong() == intBound && "serialize/deserialize int boundary mismatch");
+    assert(buffer.getLong() == flags.to_i() && "serialize/deserialize int flags mismatch");
+#endif
     auto result = buffer.getInt();
     return *reinterpret_cast<int*>(&result);
 }
 
 SEXP Deserializer::read(SerialFlags flags) {
+#if DEBUG_SERIALIZE_CONSISTENCY
+    assert(buffer.getLong() == sexpBound && "serialize/deserialize sexp boundary mismatch");
+    assert(buffer.getLong() == flags.to_i() && "serialize/deserialize sexp flags mismatch");
+#endif
     if (useHashes) {
         // TODO: Refactor UUIDPool methods into this (or somewhere else in
         //  serializeUni)

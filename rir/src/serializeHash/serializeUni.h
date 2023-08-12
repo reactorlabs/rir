@@ -50,6 +50,7 @@ class SerialFlags {
 
   public:
     bool contains(SerialFlag f) const { return inner.contains(f); }
+    uint64_t to_i() const { return inner.to_i(); }
 
     /// All flags are set. Flags are only unset in children.
     static SerialFlags Inherit;

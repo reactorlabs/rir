@@ -976,19 +976,68 @@ SEXP doCall(CallContext& call, bool popArgs) {
         if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
             serializeCounter++;
             if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
+                auto body1 = copyBySerial(body);
                 auto body2 = copyBySerialR(body);
-                body = copyBySerial(body);
-                std::stringstream differencesStream;
-                DispatchTable::debugCompare(
-                    DispatchTable::unpack(body),
-                    DispatchTable::unpack(body2),
-                    differencesStream
-                );
-                auto differences = differencesStream.str();
-                if (!differences.empty()) {
-                    std::cout << "WARNING: Serialization differences:\n"
-                              << differences << "\n";
-                }
+                auto body3 = copyBySerialR(body1);
+                auto body4 = copyBySerial(body2);
+                body = body1;
+                disableInterpreter([&]{
+                    std::stringstream differencesStream;
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body1),
+                        DispatchTable::unpack(body2),
+                        differencesStream
+                    );
+                    auto differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 1 and 2:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body2),
+                        DispatchTable::unpack(body3),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 2 and 3:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body3),
+                        DispatchTable::unpack(body4),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 3 and 4:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body4),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 4 and 1:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body1),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "!!! WARNING: Serialization differences between 1 and 1:\n"
+                                  << differences << "\n";
+                    }
+                });
                 serializeCounter = 0;
             }
             PROTECT(body);

@@ -192,7 +192,7 @@ void BC::deserializeR(SEXP refTable, R_inpstream_t inp, Opcode* code,
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
             if (size > 1) {
-                InBytes(inp, code + 1, size - 1);
+                InBytes(inp, code + 1, (int)size - 1);
             }
             break;
         case Opcode::invalid_:
@@ -1157,7 +1157,12 @@ void BC::debugCompare(const Opcode* code1, const Opcode* code2,
         auto size1 = BC::fixedSize(opcode1);
         auto size2 = BC::fixedSize(opcode2);
         if (opcode1 != opcode2 || size1 != size2 ||
-            memcmp(pc1, pc2, size1) != 0) {
+            (memcmp(pc1, pc2, size1) != 0 &&
+             // For non-trivial SEXPs like environments, calls will push
+             // different values
+             opcode1 != Opcode::push_ &&
+             // Calls will have different closures
+             opcode1 != Opcode::record_call_)) {
             // Even if the bytecode data is different, it could just be different pool
             // entries for equivalent SEXPs. So we check by printing the bytecode (not
             // perfect, there's a slim chance of true negative, but good enough)
