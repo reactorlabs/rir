@@ -30,7 +30,7 @@ struct FunctionSignature {
         auto opt = (OptimizationLevel)InInteger(inp);
         FunctionSignature sig(envc, opt);
         sig.numArguments = InUInt(inp);
-        sig.dotsPosition = InUInt(inp);
+        sig.dotsPosition = InU64(inp);
         sig.hasDotsFormals = InInteger(inp);
         sig.hasDefaultArgs = InInteger(inp);
         return sig;
@@ -40,29 +40,29 @@ struct FunctionSignature {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
         OutUInt(out, numArguments);
-        OutUInt(out, dotsPosition);
+        OutU64(out, dotsPosition);
         OutInteger(out, hasDotsFormals);
         OutInteger(out, hasDefaultArgs);
     }
 
     static FunctionSignature deserialize(AbstractDeserializer& deserializer) {
-        auto envc = (Environment)deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
-        auto opt = (OptimizationLevel)deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        auto envc = deserializer.readBytesOf<Environment>(SerialFlags::FunMiscBytes);
+        auto opt = deserializer.readBytesOf<OptimizationLevel>(SerialFlags::FunMiscBytes);
         FunctionSignature sig(envc, opt);
         sig.numArguments = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
-        sig.dotsPosition = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
-        sig.hasDotsFormals = deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
-        sig.hasDefaultArgs = deserializer.readBytesOf<int>(SerialFlags::FunMiscBytes);
+        sig.dotsPosition = deserializer.readBytesOf<size_t>(SerialFlags::FunMiscBytes);
+        sig.hasDotsFormals = deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes);
+        sig.hasDefaultArgs = deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes);
         return sig;
     }
 
     void serialize(AbstractSerializer& serializer) const {
-        serializer.writeBytesOf<int>((int)envCreation, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf<int>((int)optimization, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf<unsigned>(numArguments, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf<unsigned>(dotsPosition, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf<int>(hasDotsFormals, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf<int>(hasDefaultArgs, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(envCreation, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(optimization, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(numArguments, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(dotsPosition, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(hasDotsFormals, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(hasDefaultArgs, SerialFlags::FunMiscBytes);
     }
 
     static FunctionSignature deserialize(ByteBuffer& buffer) {
@@ -70,9 +70,9 @@ struct FunctionSignature {
         auto opt = (OptimizationLevel)buffer.getInt();
         FunctionSignature sig(envc, opt);
         sig.numArguments = buffer.getInt();
-        sig.dotsPosition = buffer.getInt();
-        sig.hasDotsFormals = buffer.getInt();
-        sig.hasDefaultArgs = buffer.getInt();
+        sig.dotsPosition = buffer.getLong();
+        sig.hasDotsFormals = buffer.getBool();
+        sig.hasDefaultArgs = buffer.getBool();
         return sig;
     }
 
@@ -80,9 +80,9 @@ struct FunctionSignature {
         buffer.putInt((uint32_t)envCreation);
         buffer.putInt((uint32_t)optimization);
         buffer.putInt(numArguments);
-        buffer.putInt(dotsPosition);
-        buffer.putInt(hasDotsFormals);
-        buffer.putInt(hasDefaultArgs);
+        buffer.putLong(dotsPosition);
+        buffer.putBool(hasDotsFormals);
+        buffer.putBool(hasDefaultArgs);
     }
 
     void pushFormal(SEXP arg, SEXP name) {
