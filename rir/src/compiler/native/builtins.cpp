@@ -1306,6 +1306,10 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
+    if (!INTERPRETER_IS_ACTIVE) {
+        assert(false && "TODO");
+    }
+
     auto fun = Function::unpack(Pool::get(target));
 
     CallContext call(callId, c, callee, nargs, astP,

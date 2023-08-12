@@ -6,6 +6,7 @@
 #include "bc/BC_inc.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
+#include "rirObjectMagic.h"
 #include "runtime/log/printPrettyGraph.h"
 #include "runtime/TypeFeedback.h"
 #include "serializeHash/hash/UUIDPool.h"
@@ -866,6 +867,82 @@ static void compareAsts(SEXP ast1, SEXP ast2,
     }
 }
 
+// Can probably be compared for equivalency by comparing the debug prints (no
+// pointers in debug prints). This is used for debugging so doesn't have to be
+// 100% accurate
+static bool isProbablyDirectlyComparable[] = {
+    /* NILSXP */      true,
+    /* SYMSXP */      true,
+    /* LISTSXP */     true,
+    /* CLOSXP */      false,
+    /* ENVSXP */      false,
+    /* PROMSXP */     false,
+    /* LANGSXP */     true,
+    /* SPECIALSXP */  true,
+    /* BUILTINSXP */  true,
+    /* CHARSXP */     true,
+    /* LGLSXP */      true,
+    /* unused */      false,
+    /* unused */      false,
+    /* INTSXP */      true,
+    /* REALSXP */     true,
+    /* CPLXSXP */     true,
+    /* STRSXP */      true,
+    /* DOTSXP */      true,
+    /* ANYSXP */      false,
+    /* VECSXP */      true,
+    /* EXPRSXP */     true,
+    /* BCODESXP */    false,
+    /* EXTPTRSXP */   false,
+    /* WEAKREFSXP */  false,
+    /* RAWSXP */      false,
+    /* S4SXP */       false,
+    /* EXTERNALSXP */ false
+};
+
+static void compareSexps(SEXP sexp1, SEXP sexp2,
+                         const char* prefix, const char* srcPrefix,
+                         std::stringstream& differences) {
+    if (TYPEOF(sexp1) != TYPEOF(sexp2)) {
+        differences << prefix << " " << srcPrefix << " types differ: "
+                    << Rf_type2char(TYPEOF(sexp1)) << " vs "
+                    << Rf_type2char(TYPEOF(sexp2)) << "\n";
+        return;
+    }
+    if (TYPEOF(sexp1) == EXTERNALSXP &&
+        rirObjectMagic(sexp1) != rirObjectMagic(sexp2)) {
+        differences << prefix << " " << srcPrefix << " rir types differ: "
+                    << rirObjectMagic(sexp1) << " vs "
+                    << rirObjectMagic(sexp2) << "\n";
+        return;
+    }
+
+    if (Code::check(sexp1)) {
+        auto poolPrefix = std::string(prefix) + " " + srcPrefix;
+
+        Code::debugCompare(
+            Code::unpack(sexp1),
+            Code::unpack(sexp2),
+            poolPrefix.c_str(),
+            differences
+        );
+    } else if (TYPEOF(sexp1) == RAWSXP) {
+        auto raw1 = RAW(sexp1);
+        auto raw2 = RAW(sexp2);
+        auto len1 = XLENGTH(sexp1);
+        auto len2 = XLENGTH(sexp2);
+        if (len1 != len2) {
+            differences << prefix << " " << srcPrefix << " raw lengths differ: "
+                        << len1 << " vs " << len2 << "\n";
+        }
+        if (memcmp(raw1, raw2, len1) != 0) {
+            differences << prefix << " " << srcPrefix << " raws differ\n";
+        }
+    } else if (isProbablyDirectlyComparable[TYPEOF(sexp1)]) {
+        compareAsts(sexp1, sexp2, prefix, srcPrefix, differences);
+    }
+}
+
 static void compareSrcs(unsigned src1, unsigned src2,
                         const char* prefix, const char* srcPrefix,
                         std::stringstream& differences) {
@@ -912,6 +989,14 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
     }
     BC::debugCompare(c1->code(), c2->code(), c1->codeSize, c2->codeSize, c1, c2,
                      prefix, differences);
+    for (unsigned i = 0; i < std::min(c1->extraPoolSize, c2->extraPoolSize); i++) {
+        auto pool1 = c1->getExtraPoolEntry(i);
+        auto pool2 = c2->getExtraPoolEntry(i);
+
+        char poolPrefix[100];
+        sprintf(poolPrefix, "entry %d", i);
+        compareSexps(pool1, pool2, prefix, poolPrefix, differences);
+    }
 }
 
 unsigned Code::addExtraPoolEntry(SEXP v) {

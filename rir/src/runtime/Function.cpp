@@ -99,6 +99,7 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
     auto sig = FunctionSignature::deserialize(deserializer);
     auto ctx = deserializer.readBytesOf<Context>(SerialFlags::FunMiscBytes);
+    auto flags = deserializer.readBytesOf<EnumSet<Flag>>(SerialFlags::FunMiscBytes);
     auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
@@ -107,7 +108,6 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
-    auto flags = deserializer.readBytesOf<EnumSet<Flag>>(SerialFlags::FunMiscBytes);
     auto body = p(deserializer.read(SerialFlags::FunBody));
     std::vector<SEXP> defaultArgs;
     defaultArgs.resize(sig.numArguments);
