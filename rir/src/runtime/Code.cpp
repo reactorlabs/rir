@@ -294,7 +294,8 @@ Code* Code::deserialize(SEXP outer, AbstractDeserializer& deserializer) {
     if (!outer) {
         outer = p(deserializer.read(SerialFlags::CodeOuterFun));
     }
-    assert(Function::check(outer));
+    // Can't check magic because it may not be assigned yet
+    assert(TYPEOF(outer) == EXTERNALSXP);
 
     // Bytecode
     std::vector<SerialFlags> extraPoolFlags(code->extraPoolSize, SerialFlags::CodePoolUnknown);
@@ -839,9 +840,9 @@ static void compareAsts(SEXP ast1, SEXP ast2,
                         const char* prefix, const char* srcPrefix,
                         std::stringstream& differences) {
     // Asts can be compared via printing
-    auto print1 = Print::dumpSexp(ast1, SIZE_MAX);
-    auto print2 = Print::dumpSexp(ast2, SIZE_MAX);
-    if (print1 != Print::dumpSexp(ast2, SIZE_MAX)) {
+    auto print1 = ast1 ? Print::dumpSexp(ast1, SIZE_MAX) : "(null)";
+    auto print2 = ast1 ? Print::dumpSexp(ast2, SIZE_MAX) : "(null)";
+    if (print1 != print2) {
         differences << prefix << " " << srcPrefix << " asts differ:\n";
         differences << prefix << "  " << srcPrefix << "1: " << print1 << "\n";
         differences << prefix << "  " << srcPrefix << "2: " << print2 << "\n";

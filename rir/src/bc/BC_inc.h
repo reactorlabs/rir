@@ -280,7 +280,7 @@ class BC {
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
-    void printAssociatedData(std::ostream& out) const;
+    void printAssociatedData(std::ostream& out, bool printDetailed = false) const;
     void printImmediateArgs(std::ostream& out) const;
     void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;
