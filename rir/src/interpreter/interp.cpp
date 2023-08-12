@@ -34,6 +34,8 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+bool INTERPRETER_IS_ACTIVE = true;
+
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
@@ -1932,6 +1934,10 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                  Opcode* initialPC, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
+
+    if (!INTERPRETER_IS_ACTIVE) {
+        assert(false && "unhandled entrypoint");
+    }
 
     checkUserInterrupt();
     auto native = c->nativeCode();
@@ -3983,6 +3989,10 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
 
 SEXP rirEval(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
+
+    if (!INTERPRETER_IS_ACTIVE) {
+        assert(false && "TODO");
+    }
 
     // TODO: do we not need an RCNTXT here?
 
