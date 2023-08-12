@@ -22,6 +22,8 @@ __attribute__((unused)) static bool hasTag(SEXP sexp) {
         return TAG(sexp) != R_NilValue;
     case CLOSXP:
         return true;
+    // External pointers have tags but they are handled differently.
+    // Some other SEXPs have tags in bytecodes, also handled differently.
     default:
         return false;
     }

@@ -3,6 +3,7 @@
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "bc/CodeStream.h"
+#include "runtime/log/printRirObject.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/Pool.h"
@@ -1143,26 +1144,34 @@ void BC::debugCompare(const Opcode* code1, const Opcode* code2,
         auto size2 = BC::fixedSize(opcode2);
         if (opcode1 != opcode2 || size1 != size2 ||
             memcmp(pc1, pc2, size1) != 0) {
-            if (!loggedDifferences) {
-                differences << prefix << " bytecode differs, first at "
-                            << initialCodeSize1 - codeSize1 << "\n" << prefix
-                            << " bytecode:";
+            // Even if the bytecode data is different, it could just be different pool
+            // entries for equivalent SEXPs. So we check by printing the bytecode (not
+            // perfect, there's a slim chance of true negative, but good enough)
+            std::string associated1;
+            std::string associated2;
+            if (opcode1 == opcode2) {
+                std::stringstream associated1Stream;
+                bc1.printAssociatedData(associated1Stream, true);
+                std::stringstream associated2Stream;
+                bc2.printAssociatedData(associated2Stream, true);
+                associated1 = associated1Stream.str();
+                associated2 = associated2Stream.str();
+            }
+            if (opcode1 != opcode2 || associated1 != associated2) {
+                if (!loggedDifferences) {
+                    differences << prefix << " bytecode differs, first at "
+                                << initialCodeSize1 - codeSize1 << "\n"
+                                << prefix << " bytecode:";
+                    loggedDifferences = true;
+                }
+                differences << " ";
+                if (opcode1 == opcode2) {
+                    differences << name(opcode1) << "(" << associated1 << ")|(" << associated2 << ")";
+                } else {
+                    differences << name(opcode1) << "|" << name(opcode2);
+                }
                 loggedDifferences = true;
             }
-            differences << " ";
-            if (opcode1 == opcode2) {
-                bc1.printOpcode(differences);
-                differences << "(";
-                bc1.printAssociatedData(differences);
-                differences << ")|(";
-                bc2.printAssociatedData(differences);
-                differences << ")";
-            } else {
-                bc1.printOpcode(differences);
-                differences << "|";
-                bc2.printOpcode(differences);
-            }
-            loggedDifferences = true;
         }
         size1 = bc1.size();
         size2 = bc2.size();
@@ -1211,7 +1220,14 @@ void BC::print(std::ostream& out) const {
     out << "\n";
 }
 
-void BC::printAssociatedData(std::ostream& out) const {
+void BC::printAssociatedData(std::ostream& out, bool printDetailed) const {
+    auto printSexp = [&](SEXP s) {
+        if (printDetailed) {
+            printRirObject(s, out);
+        } else {
+            out << Print::dumpSexp(s);
+        }
+    };
     switch (bc) {
     case Opcode::invalid_:
     case Opcode::num_of:
@@ -1241,11 +1257,12 @@ void BC::printAssociatedData(std::ostream& out) const {
         auto args = immediate.callBuiltinFixedArgs;
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.builtin);
-        out << nargs << " : " << Print::dumpSexp(target);
+        out << nargs << " : ";
+        printSexp(target);
         break;
     }
     case Opcode::push_:
-        out << Print::dumpSexp(immediateConst());
+        printSexp(immediateConst());
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:

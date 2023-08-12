@@ -79,11 +79,13 @@ unsigned AbstractDeserializer::readSrc(SerialFlags flags) {
 ///
 /// This has the same size as TYPEOF (unsigned)
 enum class SpecialType : SEXPTYPE {
-    Global = 0x1000000,
-    Ref = 0x1000001,
-    Altrep = 0x1000002,
+    // Starts at 128, assuming regular SEXPTYPEs only go up to 127, and we
+    // remove bytes after 255
+    Global = 128,
+    Ref = 129,
+    Altrep = 130,
     // Only used in writeBc and readBc (when reading and writing bytecode)
-    BcRef = 0x1000005
+    BcRef = 131
 };
 
 enum class EnvType {
@@ -170,7 +172,7 @@ static SEXP findNamespace(SEXP info) {
 #define HAS_TAG_BIT_MASK (1 << 10)
 #define ENCODE_LEVELS(v) ((v) << 12)
 #define DECODE_LEVELS(v) ((v) >> 12)
-#define DECODE_TYPE(v) ((v) & ((1 << 8) - 1))
+#define DECODE_TYPE(v) ((v) & 255)
 #define CACHED_MASK (1<<5)
 #define HASHASH_MASK 1
 
@@ -297,9 +299,10 @@ static void writeBcLang(AbstractSerializer& serializer, SerializedRefs& bcRefs,
         if (type == LANGSXP || type == LISTSXP) {
             if (bcRefs.count(sexp)) {
                 serializer.writeBytesOf(SpecialType::BcRef);
-                serializer.writeBytesOf(bcRefs.at(sexp));
+                serializer.writeBytesOf((unsigned)bcRefs.at(sexp));
                 return;
             } else {
+                serializer.writeBytesOf(type);
                 bcRefs[sexp] = bcRefs.size();
             }
 
@@ -312,6 +315,7 @@ static void writeBcLang(AbstractSerializer& serializer, SerializedRefs& bcRefs,
             writeBcLang(serializer, bcRefs, CAR(sexp));
             writeBcLang(serializer, bcRefs, CDR(sexp));
         } else {
+            serializer.writeBytesOf(type);
             serializer.write(sexp);
         }
     });
@@ -323,7 +327,7 @@ static SEXP readBcLang(AbstractDeserializer& deserializer,
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: readBcLang1", [&]{
         switch (type) {
         case (SEXPTYPE)SpecialType::BcRef:
-            return bcRefs.at(deserializer.readBytesOf<size_t>());
+            return bcRefs.at(deserializer.readBytesOf<unsigned>());
         case LISTSXP:
         case LANGSXP: {
             auto result = Rf_allocSExp(type);
@@ -373,18 +377,18 @@ static void writeBc(AbstractSerializer& serializer, SerializedRefs& bcRefs,
     });
 }
 
-static SEXP readBc(AbstractDeserializer& deserializer,
+static SEXP readBc(AbstractDeserializer& deserializer, DeserializedRefs* refs,
                    DeserializedRefs& bcRefs) {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: readBc1", [&]{
         auto result = Rf_allocSExp(BCODESXP);
+        if (refs) {
+            refs->push_back(result);
+        }
         PROTECT(result);
-        auto code = deserializer.read();
-        // Temporarily protect? (This is what R does) We override CAR later
-        SETCAR(result, code);
-        auto bytes = CAR(code);
+        auto bytes = deserializer.read();
         PROTECT(bytes);
         SETCAR(result, R_bcEncode(bytes));
-        auto n = deserializer.readBytesOf<int>();
+        auto n = deserializer.readBytesOf<R_len_t>();
         auto consts = Rf_allocVector(VECSXP, n);
         PROTECT(consts);
         for (auto i = 0; i < n; i++) {
@@ -392,10 +396,11 @@ static SEXP readBc(AbstractDeserializer& deserializer,
             SEXP elem;
             switch (type) {
             case BCODESXP:
-                elem = readBc(deserializer, bcRefs);
+                // Don't add this element to refs
+                elem = readBc(deserializer, nullptr, bcRefs);
                 break;
             case (SEXPTYPE)SpecialType::BcRef:
-                elem = bcRefs.at(deserializer.readBytesOf<size_t>());
+                elem = bcRefs.at(deserializer.readBytesOf<unsigned>());
                 break;
             case LISTSXP:
             case LANGSXP:
@@ -430,15 +435,22 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             type = TYPEOF(sexp);
         }
 
-        if (canSelfReference(type) && refs && !refs->count(sexp)) {
+        if (type == TYPEOF(sexp) && canSelfReference(type) && refs &&
+            !refs->count(sexp)) {
             (*refs)[sexp] = refs->size();
         }
 
-        bool hasTag_ = type != (SEXPTYPE)SpecialType::Altrep && hasTag(sexp);
+        bool hasTag_ = type != (SEXPTYPE)SpecialType::Global &&
+                       type != (SEXPTYPE)SpecialType::Ref &&
+                       type != (SEXPTYPE)SpecialType::Altrep && hasTag(sexp);
         // With the CHARSXP cache chains maintained through the ATTRIB
         // field the content of that field must not be serialized, so
         // we treat it as not there.
-        auto hasAttr = type == (SEXPTYPE)SpecialType::Altrep || (type != CHARSXP && ATTRIB(sexp) != R_NilValue);
+        auto hasAttr = type != (SEXPTYPE)SpecialType::Global &&
+                       type != (SEXPTYPE)SpecialType::Ref &&
+                       type != CHARSXP &&
+                       (type == (SEXPTYPE)SpecialType::Altrep ||
+                            ATTRIB(sexp) != R_NilValue);
         auto rFlags = packFlags(type, LEVELS(sexp), OBJECT(sexp), hasAttr, hasTag_);
         writeBytesOf(rFlags);
 
@@ -469,7 +481,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             writeBytesOf(globalsMap.at(sexp));
             break;
         case (SEXPTYPE)SpecialType::Ref:
-            writeBytesOf(refs->at(sexp));
+            writeBytesOf((unsigned)refs->at(sexp));
             break;
         case NILSXP:
             break;
@@ -520,7 +532,6 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 write(ENCLOS(sexp));
                 write(FRAME(sexp));
                 write(HASHTAB(sexp));
-                write(ATTRIB(sexp));
             }
             break;
         case SPECIALSXP:
@@ -691,9 +702,16 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case EXTPTRSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline external pointer", [&]{
-                auto prot = PROTECT(read());
-                auto tag = PROTECT(read());
-                return R_MakeExternalPtr(nullptr, tag, prot);
+                auto result = Rf_allocSExp(type);
+                PROTECT(result);
+                if (refs) {
+                    refs->push_back(result);
+                }
+                R_SetExternalPtrAddr(result, nullptr);
+                R_SetExternalPtrProtected(result, read());
+                R_SetExternalPtrTag(result, read());
+                UNPROTECT(1);
+                return result;
             });
             break;
         case WEAKREFSXP:
@@ -708,6 +726,9 @@ SEXP AbstractDeserializer::readInline() {
                 auto name = readInline();
                 PROTECT(name);
                 result = R_FindPackageEnv(name);
+                if (refs) {
+                    refs->push_back(result);
+                }
                 UNPROTECT(1);
                 break;
             }
@@ -715,6 +736,9 @@ SEXP AbstractDeserializer::readInline() {
                 auto name = readInline();
                 PROTECT(name);
                 result = findNamespace(name);
+                if (refs) {
+                    refs->push_back(result);
+                }
                 UNPROTECT(1);
                 break;
             }
@@ -725,15 +749,11 @@ SEXP AbstractDeserializer::readInline() {
                 if (refs) {
                     refs->push_back(result);
                 }
+
                 SET_ENCLOS(result, read());
                 SET_FRAME(result, read());
                 SET_HASHTAB(result, read());
-                SET_ATTRIB(result, read());
-                if (ATTRIB(result) != R_NilValue && Rf_getAttrib(result, R_ClassSymbol) != R_NilValue) {
-                    // We don't write out the object bit for environments, so
-                    // reconstruct it here if needed
-                    SET_OBJECT(result, TRUE);
-                }
+
                 R_RestoreHashCount(result);
                 if (isLocked) {
                     R_LockEnvironment(result, FALSE);
@@ -755,10 +775,23 @@ SEXP AbstractDeserializer::readInline() {
                 auto length = readBytesOf<R_len_t>();
                 if (length == -1) {
                     return NA_STRING;
+                } else if (length < 8192) {
+                    // Store data on stack
+                    // R doesn't allow allocVector because it interns strings
+                    char data[8192];
+                    readBytes(data, length);
+                    data[length] = '\0';
+                    return Rf_mkCharLenCE(data, length, CE_NATIVE);
                 } else {
-                    auto sexp = Rf_allocVector(type, length);
-                    readBytes((void*)CHAR(sexp), length * sizeof(char));
-                    return sexp;
+                    // Too large, store data on heap
+                    // R doesn't allow allocVector(CHARSXP) because it interns
+                    // strings
+                    char* data = (char*)malloc(length + 1);
+                    readBytes(data, length);
+                    data[length] = '\0';
+                    auto result = Rf_mkCharLenCE(data, length, CE_NATIVE);
+                    free(data);
+                    return result;
                 }
             });
             break;
@@ -826,7 +859,7 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case BCODESXP: {
             DeserializedRefs bcRefs;
-            result = readBc(*this, bcRefs);
+            result = readBc(*this, refs, bcRefs);
             break;
         }
         case EXTERNALSXP:
@@ -843,6 +876,13 @@ SEXP AbstractDeserializer::readInline() {
         SET_OBJECT(result, object);
         if (attrib) {
             SET_ATTRIB(result, attrib);
+            if (TYPEOF(result) == ENVSXP &&
+                Rf_getAttrib(result, R_ClassSymbol) != R_NilValue) {
+                // TODO: This is what R's serialization does, it it needed for RIR's serialization
+                // We don't write out the object bit for environments, so
+                // reconstruct it here if needed
+                SET_OBJECT(result, TRUE);
+            }
         }
         if (tag) {
             SET_TAG(result, tag);
@@ -856,7 +896,10 @@ SEXP AbstractDeserializer::readInline() {
         UNPROTECT(1);
 
         SLOWASSERT(
-            (!canSelfReference(type) || !refs ||
+            (type == (SEXPTYPE)SpecialType::Altrep ||
+             type == (SEXPTYPE)SpecialType::Global ||
+             type == (SEXPTYPE)SpecialType::Ref || !canSelfReference(type) ||
+             !refs ||
              std::find(refs->begin(), refs->end(), result) != refs->end()) &&
             "sanity check failed: type can self reference but wasn't inserted "
             "into ref table"

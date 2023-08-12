@@ -90,6 +90,8 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto sig = FunctionSignature::deserialize(deserializer);
     auto ctx = deserializer.readBytesOf<Context>(SerialFlags::FunMiscBytes);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+    deserializer.addRef(store);
+
     auto flags = deserializer.readBytesOf<EnumSet<Flag>>(SerialFlags::FunMiscBytes);
     auto body = p(deserializer.read(SerialFlags::FunBody));
     std::vector<SEXP> defaultArgs;
