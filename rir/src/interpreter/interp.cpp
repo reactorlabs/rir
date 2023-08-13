@@ -977,10 +977,15 @@ SEXP doCall(CallContext& call, bool popArgs) {
             serializeCounter++;
             if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
                 auto body0 = body;
+                PROTECT(body0);
                 auto body1 = copyBySerial(body);
+                PROTECT(body1);
                 auto body2 = copyBySerialR(body);
+                PROTECT(body2);
                 // auto body3 = copyBySerialR(body1);
+                // PROTECT(body3);
                 // auto body4 = copyBySerial(body2);
+                // PROTECT(body4);
                 body = body1;
                 disableInterpreter([&]{
                     std::stringstream differencesStream;
@@ -1050,6 +1055,8 @@ SEXP doCall(CallContext& call, bool popArgs) {
                                   << differences << "\n";
                     } */
                 });
+                UNPROTECT(3);
+                // UNPROTECT(2);
                 serializeCounter = 0;
             }
             PROTECT(body);
