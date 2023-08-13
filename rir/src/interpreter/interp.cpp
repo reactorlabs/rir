@@ -2018,7 +2018,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
     if (!INTERPRETER_IS_ACTIVE) {
-        assert(false && "unhandled entrypoint");
+        std::cerr << "TODO: Interpreting code during serialization or comparison\n";
     }
 
     checkUserInterrupt();
@@ -4076,10 +4076,6 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
 
 SEXP rirEval(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
-
-    if (!INTERPRETER_IS_ACTIVE) {
-        assert(false && "TODO");
-    }
 
     // TODO: do we not need an RCNTXT here?
 
