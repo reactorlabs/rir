@@ -699,10 +699,10 @@ SEXP AbstractDeserializer::readInline() {
         case (SEXPTYPE)SpecialType::Altrep: {
             auto info = PROTECT(read());
             auto state = PROTECT(read());
-            result = ALTREP_UNSERIALIZE_EX(info, state, attrib, object, levels);
-            UNPROTECT(2);
             readAttr();
             // No tag
+            result = ALTREP_UNSERIALIZE_EX(info, state, attrib, object, levels);
+            UNPROTECT(2);
             break;
         }
         case (SEXPTYPE)SpecialType::Global:
