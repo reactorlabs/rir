@@ -437,11 +437,6 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             type = TYPEOF(sexp);
         }
 
-        if (type == TYPEOF(sexp) && canSelfReference(type) && refs &&
-            !refs->count(sexp)) {
-            (*refs)[sexp] = refs->size();
-        }
-
         bool hasTag_ = type != (SEXPTYPE)SpecialType::Global &&
                        type != (SEXPTYPE)SpecialType::Ref &&
                        type != (SEXPTYPE)SpecialType::Altrep && hasTag(sexp);
@@ -456,15 +451,27 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         auto rFlags = packFlags(type, LEVELS(sexp), OBJECT(sexp), hasAttr, hasTag_);
         writeBytesOf(rFlags);
 
-        if (hasAttr) {
-            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline attribute", sexp, [&]{
-                write(ATTRIB(sexp));
-            });
-        }
-        if (hasTag_) {
-            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline tag", sexp, [&]{
-                write(TAG(sexp));
-            });
+        // Write attrs and tag at the beginning if we (maybe) tail call, at the
+        // end if we self-reference, and otherwise at the end (otherwise doesn't
+        // matter as long as we read at the same position)
+        auto writeAttr = [&]{
+            if (hasAttr) {
+                Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline attribute", sexp, [&]{
+                    write(ATTRIB(sexp));
+                });
+            }
+        };
+        auto writeTag = [&]{
+            if (hasTag_) {
+                Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline tag", sexp, [&]{
+                    write(TAG(sexp));
+                });
+            }
+        };
+
+        if (type == TYPEOF(sexp) && canSelfReference(type) && refs &&
+            !refs->count(sexp)) {
+            (*refs)[sexp] = refs->size();
         }
 
         switch (type) {
@@ -477,23 +484,32 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 write(info);
                 write(state);
                 UNPROTECT(2);
+                writeAttr();
+                // No tag
             });
             break;
         case (SEXPTYPE)SpecialType::Global:
             writeBytesOf(globalsMap.at(sexp));
+            // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:
             writeBytesOf((unsigned)refs->at(sexp));
+            // Attr and tag already present
             break;
         case NILSXP:
+            // No attr or tag
             break;
         case SYMSXP:
             writeInline(PRINTNAME(sexp));
+            writeAttr();
+            // No tag
             break;
         case LISTSXP:
         case LANGSXP:
         case PROMSXP:
         case DOTSXP:
+            writeAttr();
+            writeTag();
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline list elem", sexp, [&]{
                 if (BNDCELL_TAG(sexp)) {
                     R_expand_binding_value(sexp);
@@ -503,6 +519,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             writeInline(CDR(sexp));
             break;
         case CLOSXP:
+            writeAttr();
+            writeTag();
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline closure sans body", sexp, [&]{
                 write(CLOENV(sexp));
                 write(FORMALS(sexp));
@@ -514,9 +532,13 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 write(EXTPTR_PROT(sexp));
                 write(EXTPTR_TAG(sexp));
             });
+            writeAttr();
+            // No tag
             break;
         case WEAKREFSXP:
             // Only exists as a reference
+            writeAttr();
+            // No tag
             break;
         case ENVSXP:
             // TODO: Don't hash (don't write when hashing)
@@ -535,10 +557,14 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 write(FRAME(sexp));
                 write(HASHTAB(sexp));
             }
+            writeAttr();
+            // No tag
             break;
         case SPECIALSXP:
         case BUILTINSXP:
             writeBytesOf(getBuiltinNr(sexp));
+            writeAttr();
+            // No tag
             break;
         case CHARSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline char vector", sexp, [&]{
@@ -550,6 +576,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                     writeBytes(CHAR(sexp), n * sizeof(char));
                 }
             });
+            writeAttr();
+            // No tag
             break;
         case LGLSXP:
         case INTSXP:
@@ -558,6 +586,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 writeBytesOf<R_xlen_t>(n);
                 writeBytes(INTEGER(sexp), n * sizeof(int));
             });
+            writeAttr();
+            // No tag
             break;
         case REALSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline real vector", sexp, [&]{
@@ -565,6 +595,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 writeBytesOf<R_xlen_t>(n);
                 writeBytes(REAL(sexp), n * sizeof(double));
             });
+            writeAttr();
+            // No tag
             break;
         case CPLXSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline complex number vector", sexp, [&]{
@@ -572,6 +604,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 writeBytesOf<R_xlen_t>(n);
                 writeBytes(COMPLEX(sexp), n * sizeof(Rcomplex));
             });
+            writeAttr();
+            // No tag
             break;
         case RAWSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline byte vector", sexp, [&]{
@@ -579,6 +613,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 writeBytesOf<R_xlen_t>(n);
                 writeBytes(RAW(sexp), n * sizeof(Rbyte));
             });
+            writeAttr();
+            // No tag
             break;
         case STRSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline string vector", sexp, [&]{
@@ -588,6 +624,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                     write(STRING_ELT(sexp, i));
                 }
             });
+            writeAttr();
+            // No tag
             break;
         case VECSXP:
         case EXPRSXP:
@@ -598,17 +636,25 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                     write(VECTOR_ELT(sexp, i));
                 }
             });
+            writeAttr();
+            // No tag
             break;
         case S4SXP:
             // Only attributes (i.e., slots) count
+            writeAttr();
+            // No tag
             break;
         case BCODESXP: {
             SerializedRefs bcRefs;
             writeBc(*this, bcRefs, sexp);
+            writeAttr();
+            // No tag
             break;
         }
         case EXTERNALSXP:
             writeRir(*this, sexp);
+            writeAttr();
+            // No tag
             break;
         default:
             Rf_error("hashChild: unknown type %i", type);
@@ -626,20 +672,27 @@ SEXP AbstractDeserializer::readInline() {
         bool object, hasAttr, hasTag_;
         unpackFlags(rFlags, type, levels, object, hasAttr, hasTag_);
 
+        // Read attrs and tag at the beginning if we (maybe) tail call, at the
+        // end if we self-reference, and otherwise at the end (otherwise doesn't
+        // matter as long as we wrote at the same position)
         SEXP attrib = nullptr;
         SEXP tag = nullptr;
-        if (hasAttr) {
-            attrib = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline attribute", [&]{
-                return read();
-            });
-            PROTECT(attrib);
-        }
-        if (hasTag_) {
-            tag = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline tag", [&]{
-                return read();
-            });
-            PROTECT(tag);
-        }
+        auto readAttr = [&]{
+            if (hasAttr) {
+                attrib = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline attribute", [&]{
+                    return read();
+                });
+                PROTECT(attrib);
+            }
+        };
+        auto readTag = [&]{
+            if (hasTag_) {
+                tag = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline tag", [&]{
+                    return read();
+                });
+                PROTECT(tag);
+            }
+        };
 
         SEXP result;
         switch (type) {
@@ -648,16 +701,21 @@ SEXP AbstractDeserializer::readInline() {
             auto state = PROTECT(read());
             result = ALTREP_UNSERIALIZE_EX(info, state, attrib, object, levels);
             UNPROTECT(2);
+            readAttr();
+            // No tag
             break;
         }
         case (SEXPTYPE)SpecialType::Global:
             result = globals[readBytesOf<unsigned>()];
+            // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:
             result = refs->at(readBytesOf<unsigned>());
+            // Attr and tag already present
             break;
         case NILSXP:
             result = R_NilValue;
+            // No attr or tag
             break;
         case SYMSXP:
             result = Rf_installTrChar(readInline());
@@ -666,11 +724,15 @@ SEXP AbstractDeserializer::readInline() {
             if (refs) {
                 refs->push_back(result);
             }
+            readAttr();
+            // No tag
             break;
         case LISTSXP:
         case LANGSXP:
         case PROMSXP:
         case DOTSXP:
+            readAttr();
+            readTag();
             result = Rf_allocSExp(type);
             PROTECT(result);
             if (tag && Rf_isSymbol(tag)) {
@@ -690,6 +752,8 @@ SEXP AbstractDeserializer::readInline() {
             UNPROTECT(1);
             break;
         case CLOSXP:
+            readAttr();
+            readTag();
             result = Rf_allocSExp(type);
             PROTECT(result);
             Measuring::timeEventIf(
@@ -715,12 +779,16 @@ SEXP AbstractDeserializer::readInline() {
                 UNPROTECT(1);
                 return result;
             });
+            readAttr();
+            // No tag
             break;
         case WEAKREFSXP:
             result = R_MakeWeakRef(R_NilValue, R_NilValue, R_NilValue, FALSE);
             if (refs) {
                 refs->push_back(result);
             }
+            readAttr();
+            // No tag
             break;
         case ENVSXP:
             switch (readBytesOf<EnvType>()) {
@@ -767,10 +835,14 @@ SEXP AbstractDeserializer::readInline() {
                 break;
             }
             }
+            readAttr();
+            // No tag
             break;
         case SPECIALSXP:
         case BUILTINSXP:
             result = getBuiltinOrSpecialFun(readBytesOf<int>());
+            readAttr();
+            // No tag
             break;
         case CHARSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline char vector", [&]{
@@ -796,6 +868,8 @@ SEXP AbstractDeserializer::readInline() {
                     return result;
                 }
             });
+            readAttr();
+            // No tag
             break;
         case LGLSXP:
         case INTSXP:
@@ -805,6 +879,8 @@ SEXP AbstractDeserializer::readInline() {
                 readBytes((void*)INTEGER(sexp), length * sizeof(int));
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case REALSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline real vector", [&]{
@@ -813,6 +889,8 @@ SEXP AbstractDeserializer::readInline() {
                 readBytes((void*)REAL(sexp), length * sizeof(double));
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case CPLXSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline complex number vector sexp", [&]{
@@ -821,6 +899,8 @@ SEXP AbstractDeserializer::readInline() {
                 readBytes((void*)COMPLEX(sexp), length * sizeof(Rcomplex));
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case RAWSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline byte vector", [&]{
@@ -829,6 +909,8 @@ SEXP AbstractDeserializer::readInline() {
                 readBytes((void*)RAW(sexp), length * sizeof(Rbyte));
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case STRSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline string vector", [&]{
@@ -841,6 +923,8 @@ SEXP AbstractDeserializer::readInline() {
                 UNPROTECT(1);
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case VECSXP:
         case EXPRSXP:
@@ -854,18 +938,26 @@ SEXP AbstractDeserializer::readInline() {
                 UNPROTECT(1);
                 return sexp;
             });
+            readAttr();
+            // No tag
             break;
         case S4SXP:
             // Only attributes (i.e., slots) count
             result = Rf_allocSExp(type);
+            readAttr();
+            // No tag
             break;
         case BCODESXP: {
             DeserializedRefs bcRefs;
             result = readBc(*this, refs, bcRefs);
+            readAttr();
+            // No tag
             break;
         }
         case EXTERNALSXP:
             result = readRir(*this);
+            readAttr();
+            // No tag
             break;
         default:
             Rf_error("hashChild: unknown type %i", type);
