@@ -1319,7 +1319,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                env == R_NilValue || LazyEnvironment::check(env));
 
     if (!INTERPRETER_IS_ACTIVE) {
-        assert(false && "TODO");
+        std::cerr << "TODO: Interpreting code during serialization or comparison\n";
     }
 
     auto fun = Function::unpack(Pool::get(target));
