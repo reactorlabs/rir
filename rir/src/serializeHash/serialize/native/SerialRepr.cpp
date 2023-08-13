@@ -6,6 +6,7 @@
 #include "R/Funtab.h"
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include "serializeHash/globals.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
 #include <llvm/IR/Constants.h>
@@ -15,43 +16,17 @@
 namespace rir {
 namespace pir {
 
-// Some of these would serialize fine regardless, thanks to
-// serialize.c:SaveSpecialHook
-static std::unordered_map<std::string, SEXP> *globals;
-static std::unordered_map<SEXP, std::string> *globalsRev;
-
-void SerialRepr::initGlobals() {
-    globals = new std::unordered_map<std::string, ::SEXP>();
-    globals->emplace("R_GlobalEnv", R_GlobalEnv);
-    globals->emplace("R_BaseEnv", R_BaseEnv);
-    globals->emplace("R_BaseNamespace", R_BaseNamespace);
-    globals->emplace("R_TrueValue", R_TrueValue);
-    globals->emplace("R_NilValue", R_NilValue);
-    globals->emplace("R_FalseValue", R_FalseValue);
-    globals->emplace("R_UnboundValue", R_UnboundValue);
-    globals->emplace("R_MissingArg", R_MissingArg);
-    globals->emplace("R_RestartToken", R_RestartToken);
-    globals->emplace("R_LogicalNAValue", R_LogicalNAValue);
-    globals->emplace("R_EmptyEnv", R_EmptyEnv);
-    globals->emplace("R_DimSymbol", R_DimSymbol);
-    globals->emplace("R_DotsSymbol", R_DotsSymbol);
-    globals->emplace("R_NamesSymbol", R_NamesSymbol);
-    globals->emplace("expandDotsTrigger", symbol::expandDotsTrigger);
-
-    globalsRev = new std::unordered_map<::SEXP, std::string>();
-    for (auto& e : *globals) {
-        globalsRev->emplace(e.second, e.first);
-    }
-}
 
 llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
-    // Hashing handles globals and builtins but not serialization, since we use
-    // R's serializer. Handling these cases here is ugly though...
-    if (globalsRev->count(what)) {
+    // Some of these would serialize fine regardless, thanks to
+    // serialize.c:SaveSpecialHook
+    // Also, hashing handles all globals and builtins already, and serialization
+    // will once we migrate from R's serializer to RIR's
+    if (global2CppId.count(what)) {
         return llvm::MDTuple::get(
             ctx,
             {llvm::MDString::get(ctx, "Global"),
-             llvm::MDString::get(ctx, globalsRev->at(what))});
+             llvm::MDString::get(ctx, global2CppId.at(what))});
     } else if (TYPEOF(what) == BUILTINSXP || TYPEOF(what) == SPECIALSXP) {
         return llvm::MDTuple::get(
             ctx,
@@ -175,12 +150,12 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
     args.reserve(names.size());
     for (auto i : names) {
         auto sexp = Pool::get(i);
-        if (globalsRev->count(sexp)) {
+        if (global2CppId.count(sexp)) {
             args.push_back(
                 llvm::MDTuple::get(
                     ctx,
                     {llvm::MDString::get(ctx, "Global"),
-                     llvm::MDString::get(ctx, globalsRev->at(sexp))}));
+                     llvm::MDString::get(ctx, global2CppId.at(sexp))}));
         } else {
             ByteBuffer buf;
             UUIDPool::intern(sexp, true, false);
@@ -199,7 +174,7 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
 static void* getMetadataPtr_Global(const llvm::MDNode& meta,
                                    __attribute__((unused)) rir::Code* outer) {
     auto name = ((llvm::MDString*)meta.getOperand(1).get())->getString();
-    return (void*)globals->at(name.str());
+    return (void*)cppId2Global.at(name.str());
 }
 
 static void* getMetadataPtr_Builtin(const llvm::MDNode& meta,
@@ -351,8 +326,8 @@ static void patchNamesMetadata(llvm::GlobalVariable& inst,
         auto data = ((llvm::MDString*)(nameMetadata->getOperand(1)).get())->getString();
         SEXP sexp;
         if (type.equals("Global")) {
-            assert(globals->count(data.str()) && "Invalid global");
-            sexp = globals->at(data.str());
+            assert(cppId2Global.count(data.str()) && "Invalid global");
+            sexp = cppId2Global.at(data.str());
         } else if (type.equals("SEXP")) {
             ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
             sexp = UUIDPool::readItem(buffer, true);

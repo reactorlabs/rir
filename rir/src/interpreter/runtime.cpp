@@ -1,6 +1,7 @@
 #include "api.h"
 #include "interp.h"
 #include "profiler.h"
+#include "serializeHash/globals.h"
 #include "serializeHash/serialize/serializeR.h"
 #include "serializeHash/serialize/native/SerialRepr.h"
 
@@ -32,7 +33,7 @@ void initializeRuntime() {
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
                          rirDecompile, rirPrint, rirDeserializeHook, rirSerializeHook,
                          materialize);
-    pir::SerialRepr::initGlobals();
+    initGlobals();
     RuntimeProfiler::initProfiler();
     CompilerClient::tryInit();
 }
