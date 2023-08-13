@@ -10,6 +10,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "serializeHash/hash/hashRoot_getConnected_common.h"
+#include "serializeHash/globals.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <algorithm>

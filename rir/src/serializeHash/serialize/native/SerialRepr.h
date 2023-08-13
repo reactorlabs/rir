@@ -38,7 +38,6 @@ class SerialRepr {
     class R_GlobalContext;
     class R_ReturnedValue;
 
-    static void initGlobals();
     virtual llvm::MDNode* metadata(llvm::LLVMContext& ctx) const = 0;
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
                                           const char* llvmValueName,
