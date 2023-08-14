@@ -63,7 +63,8 @@ DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
     deserializer.addRef(dt->container());
     DESERIALIZE(dt->userDefinedContext_, readBytesOf<Context>, SerialFlags::DtContext);
     DESERIALIZE(dt->size_, readBytesOf<int>, SerialFlags::DtOptimized);
-    for (size_t i = 0; i < dt->size(); i++) {
+    size_t n = deserializer.willRead(SerialFlags::DtOptimized) ? dt->size() : 1;
+    for (size_t i = 0; i < n; i++) {
         dt->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
     }
     return dt;
@@ -72,7 +73,8 @@ DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
 void DispatchTable::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf(userDefinedContext_, SerialFlags::DtContext);
     serializer.writeBytesOf((int)size(), SerialFlags::DtOptimized);
-    for (size_t i = 0; i < size(); i++) {
+    size_t n = serializer.willWrite(SerialFlags::DtOptimized) ? size() : 1;
+    for (size_t i = 0; i < n; i++) {
         serializer.write(getEntry(i), i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized);
     }
 }
