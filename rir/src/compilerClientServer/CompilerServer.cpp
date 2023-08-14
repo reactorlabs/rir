@@ -158,11 +158,8 @@ void CompilerServer::tryRun() {
         case Request::Compile: {
             std::cerr << "Received compile request" << std::endl;
             // ...
-            // + serialize(decompiledClosure(what))
-            // + serializeBaselineSrc(what)
-            // + serializeBaselineFeedback(what)
-            // + serialize(decompiledClosure(what))
-            // + serializeBaselineFeedback(what)
+            // + serialize(what, CompilerClientSourceAndFeedback)
+            // + serialize(decompiledClosure(what), CompilerClientSource)
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -182,8 +179,8 @@ void CompilerServer::tryRun() {
             // record_call_ SEXPs, because those are very large and we can
             // handle the case where they are forgotten by just not speculating
             // on them.
-            what = DispatchTable::deserializeBaselineSrc(requestBuffer);
-            auto what2 = deserialize(requestBuffer, false);
+            what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
+            auto what2 = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
             Compiler::compileClosure(what2);
 
             std::stringstream differencesStream;
@@ -197,8 +194,6 @@ void CompilerServer::tryRun() {
                 std::cerr << "Warning: differences when we encode code via AST and bytecode without recorded calls:"
                           << std::endl << differences << std::endl;
             }
-
-            DispatchTable::unpack(what)->deserializeBaselineFeedback(requestBuffer);
 
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
@@ -265,7 +260,7 @@ void CompilerServer::tryRun() {
             // + sizeof(pirPrint)
             // + pirPrint
             // + hashRoot(what)
-            // + serialize(what)
+            // + serialize(what, CompilerServer)
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             response.putLong((uint64_t)Response::Compiled);
             auto pirPrintSize = pirPrint.size();
@@ -273,7 +268,7 @@ void CompilerServer::tryRun() {
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
             auto hash = UUIDPool::getHash(what);
             response.putBytes((uint8_t*)&hash, sizeof(hash));
-            serialize(what, response, true);
+            serialize(what, response, SerialOptions::CompilerServer);
             break;
         }
         case Request::Retrieve: {
@@ -304,9 +299,9 @@ void CompilerServer::tryRun() {
 
                 // Response data format =
                 //   Response::Retrieved
-                // + serialize(what)
+                // + serialize(what, CompilerServer)
                 response.putLong((uint64_t)Response::Retrieved);
-                serialize(what, response, true);
+                serialize(what, response, SerialOptions::CompilerServer);
             } else {
                 std::cerr << "(not found)" << std::endl;
                 // Response data format =
@@ -380,8 +375,8 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
     switch (magic) {
     case Request::Retrieved: {
         // ...
-        // + serialize(what)
-        SEXP what = deserialize(clientResponseBuffer, true);
+        // + serialize(what, CompilerClientRetrieve)
+        SEXP what = deserialize(clientResponseBuffer, SerialOptions::CompilerClientRetrieve);
         UUIDPool::intern(what, true, true);
         return what;
     }

@@ -20,16 +20,29 @@ struct SerialOptions {
     bool useHashes;
     /// Whether to only serialize source (no optimized code or feedback).
     bool onlySource;
-    /// Whether to only serialized feedback (no optimized code or source).
+    /// Whether to only serialize feedback (no optimized code or source).
     bool onlyFeedback;
+    /// Whether to only serialize source and feedback (no optimized code). This
+    /// is different than passing onlySource and onlyFeedback, because that
+    /// would serialize data which is both source and feedback, this serializes
+    /// data which is either source or feedback (negated "and" confusion). Of
+    /// course, if onlySource or onlyFeedback it set, that makes
+    /// onlySourceAndFeedback irrelevant.
+    bool onlySourceAndFeedback;
 
-    /// Serialize everything without hashes
+    /// Serialize everything, without hashes
     static SerialOptions DeepCopy;
-    /// Serialize everything with hashes
+    /// Serialize everything, with hashes
     static SerialOptions CompilerServer;
-    /// Serialize only source without hashes
+    /// Serialize everything, without hashes
+    /// TODO: use hashes or something because this is probably too much
+    ///  unnecessary data again
+    static SerialOptions CompilerClientRetrieve;
+    /// Serialize only source and feedback, without hashes
+    static SerialOptions CompilerClientSourceAndFeedback;
+    /// Serialize only source, without hashes
     static SerialOptions CompilerClientSource;
-    /// Serialize only feedback without hashes
+    /// Serialize only feedback, without hashes
     static SerialOptions CompilerClientFeedback;
 };
 

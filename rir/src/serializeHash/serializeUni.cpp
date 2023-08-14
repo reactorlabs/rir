@@ -17,6 +17,8 @@
 
 namespace rir {
 
+unsigned SerialFlags::nextId = 0;
+
 // Inlay hints are needed to understand the below code
 SerialFlags SerialFlags::Inherit(
     true,
@@ -491,6 +493,46 @@ static SEXP readBc(AbstractDeserializer& deserializer, DeserializedRefs* refs,
     });
 }
 
+static void writeString(AbstractSerializer& serializer, SEXP sexp) {
+    assert(TYPEOF(sexp) == CHARSXP);
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline char vector", sexp, [&]{
+        if (sexp == NA_STRING) {
+            serializer.writeBytesOf<R_len_t>(-1);
+        } else {
+            auto n = LENGTH(sexp);
+            serializer.writeBytesOf<R_len_t>(n);
+            serializer.writeBytes(CHAR(sexp), n * sizeof(char));
+        }
+    });
+}
+
+static SEXP readString(AbstractDeserializer& deserializer) {
+    return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline char vector", [&]{
+        auto length = deserializer.readBytesOf<R_len_t>();
+        if (length == -1) {
+            return NA_STRING;
+        } else if (length < 8192) {
+            // Store data on stack
+            // R doesn't allow allocVector(SEXP) because it interns
+            // strings
+            char data[8192];
+            deserializer.readBytes(data, length);
+            data[length] = '\0';
+            return Rf_mkCharLenCE(data, length, CE_NATIVE);
+        } else {
+            // Too large, store data on heap
+            // R doesn't allow allocVector(CHARSXP) because it interns
+            // strings
+            char* data = (char*)malloc(length + 1);
+            deserializer.readBytes(data, length);
+            data[length] = '\0';
+            auto result = Rf_mkCharLenCE(data, length, CE_NATIVE);
+            free(data);
+            return result;
+        }
+    });
+}
+
 void AbstractSerializer::writeInline(SEXP sexp) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline", sexp, [&]{
         auto refs = this->refs();
@@ -568,11 +610,15 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case NILSXP:
             // No attr or tag
             break;
-        case SYMSXP:
-            writeInline(PRINTNAME(sexp));
+        case SYMSXP: {
+            auto name = PRINTNAME(sexp);
+            assert(LENGTH(name) > 0 &&
+                   "Empty symbol name, sexp should be a global");
+            writeString(*this, name);
             writeAttr();
             // No tag
             break;
+        }
         case LISTSXP:
         case LANGSXP:
         case PROMSXP:
@@ -636,15 +682,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             // No tag
             break;
         case CHARSXP:
-            Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline char vector", sexp, [&]{
-                if (sexp == NA_STRING) {
-                    writeBytesOf<R_len_t>(-1);
-                } else {
-                    auto n = LENGTH(sexp);
-                    writeBytesOf<R_len_t>(n);
-                    writeBytes(CHAR(sexp), n * sizeof(char));
-                }
-            });
+            writeString(*this, sexp);
             writeAttr();
             // No tag
             break;
@@ -786,8 +824,9 @@ SEXP AbstractDeserializer::readInline() {
             result = R_NilValue;
             // No attr or tag
             break;
-        case SYMSXP:
-            result = Rf_installTrChar(readInline());
+        case SYMSXP: {
+            auto name = readString(*this);
+            result = Rf_installTrChar(name);
             // Symbols have read refs (same symbol can be serialized and
             // we want it to point to the same SEXP when deserializing)
             if (refs) {
@@ -796,6 +835,7 @@ SEXP AbstractDeserializer::readInline() {
             readAttr();
             // No tag
             break;
+        }
         case LISTSXP:
         case LANGSXP:
         case PROMSXP:
@@ -914,29 +954,7 @@ SEXP AbstractDeserializer::readInline() {
             // No tag
             break;
         case CHARSXP:
-            result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline char vector", [&]{
-                auto length = readBytesOf<R_len_t>();
-                if (length == -1) {
-                    return NA_STRING;
-                } else if (length < 8192) {
-                    // Store data on stack
-                    // R doesn't allow allocVector because it interns strings
-                    char data[8192];
-                    readBytes(data, length);
-                    data[length] = '\0';
-                    return Rf_mkCharLenCE(data, length, CE_NATIVE);
-                } else {
-                    // Too large, store data on heap
-                    // R doesn't allow allocVector(CHARSXP) because it interns
-                    // strings
-                    char* data = (char*)malloc(length + 1);
-                    readBytes(data, length);
-                    data[length] = '\0';
-                    auto result = Rf_mkCharLenCE(data, length, CE_NATIVE);
-                    free(data);
-                    return result;
-                }
-            });
+            result = readString(*this);
             readAttr();
             // No tag
             break;
