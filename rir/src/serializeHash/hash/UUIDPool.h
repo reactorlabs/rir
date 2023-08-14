@@ -127,6 +127,16 @@ class UUIDPool {
     ///
     /// @see readItem(bool, SEXP, R_inpstream_t)
     static SEXP readNullableItem(SEXP ref_table, R_inpstream_t in);
+    /// If the SEXP is internable, writes `true`, writes its hash, then returns
+    /// `true`. Otherwise, writes `false`, then returns `false`.
+    ///
+    /// This will intern the SEXP if it's not already interned, unlike
+    /// `writeItem` which will error.
+    static bool tryWriteHash(SEXP sexp, ByteBuffer& buf);
+    /// Reads a boolean. If `true`, reads a hash and returns the interned SEXP,
+    /// fetching from the compiler peer if necessary. If `false`, returns
+    /// `nullptr`.
+    static SEXP tryReadHash(ByteBuffer& buf);
 };
 
 } // namespace rir

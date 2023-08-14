@@ -95,6 +95,19 @@ class Compiler {
         // Set the closure fields.
         SET_BODY(inClosure, dt->container());
     }
+
+    /// Takes a closure with a RIR body and returns a copy with same formals and
+    /// environment, but decompiled (AST) body
+    static SEXP decompileClosure(SEXP closure) {
+        assert(TYPEOF(closure) == CLOSXP && "not a closure");
+        auto dt = DispatchTable::check(BODY(closure));
+        assert(dt && "closure's body isn't a RIR dispatch table");
+        auto result = Rf_allocSExp(CLOSXP);
+        SET_FORMALS(result, FORMALS(closure));
+        SET_BODY(result, rirDecompile(BODY(closure)));
+        SET_CLOENV(result, CLOENV(closure));
+        return result;
+    }
 };
 
 } // namespace rir

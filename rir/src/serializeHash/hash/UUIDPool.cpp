@@ -398,10 +398,10 @@ const UUID& UUIDPool::getHash(SEXP sexp) {
 SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
     if (useHashes(in)) {
         // Read whether we are serializing hash
-        auto writeHashInstead = InBool(in);
-        if (writeHashInstead) {
+        auto readHashInstead = InBool(in);
+        if (readHashInstead) {
             // Read hash instead of regular data,
-            // then retrieve by hash from interned or server
+            // then retrieve by hash from interned or peer
             UUID hash;
             InBytes(in, &hash, sizeof(hash));
             if (interned.count(hash)) {
@@ -414,6 +414,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
                               << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
+                    intern(sexp, hash, false);
                     return sexp;
                 }
                 Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
@@ -428,36 +429,8 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
 
 SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
-        // Read whether we are serializing hash
-        auto writeHashInstead = buf.getBool();
-        if (writeHashInstead) {
-            // Read hash instead of regular data,
-            // then retrieve by hash from interned or server
-            UUID hash;
-            buf.getBytes((uint8_t*)&hash, sizeof(hash));
-            if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
-                              << interned.at(hash) << "\n");
-                return interned.at(hash);
-            }
-            if (CompilerClient::isRunning()) {
-                LOG(std::cout << "Retrieving by hash from server: " << hash
-                              << "\n");
-                auto sexp = CompilerClient::retrieve(hash);
-                if (sexp) {
-                    return sexp;
-                }
-                Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
-            } else if (CompilerServer::isRunning()) {
-                LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
-                auto sexp = CompilerServer::retrieve(hash);
-                if (sexp) {
-                    return sexp;
-                }
-                LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
-                return nullptr;
-            }
-            Rf_error("SEXP deserialized from hash which we don't have, and no server");
+        if (auto result = tryReadHash(buf)) {
+            return result;
         }
     }
 
@@ -501,18 +474,10 @@ void UUIDPool::writeItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t
     WriteItem(sexp, ref_table, out);
 }
 
-void UUIDPool::writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashes) {
+void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
+                         ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
-        auto writeHashInstead = !isChild && internable(sexp);
-        // Write whether we are serializing hash
-        buf.putBool(writeHashInstead);
-        if (writeHashInstead) {
-            // Write hash instead of regular data
-            assert(hashes.count(sexp) && "SEXP not interned");
-            // Why does cppcheck think this is unused?
-            // cppcheck-suppress unreadVariable
-            auto hash = hashes.at(sexp);
-            buf.putBytes((uint8_t*)&hash, sizeof(hash));
+        if (tryWriteHash(sexp, buf)) {
             return;
         }
     }
@@ -537,5 +502,59 @@ SEXP UUIDPool::readNullableItem(SEXP ref_table, R_inpstream_t in) {
     }
 }
 
+// TODO: Some refactoring (see TODO in serialize.cpp as well), lots of duplicate
+//  code and we probably shouldn't just return nullptr iff we're on server, but
+//  instead use a separate function.
+bool UUIDPool::tryWriteHash(SEXP sexp, ByteBuffer& buf) {
+    auto writeHash = internable(sexp);
+    // Write whether we are serializing hash
+    buf.putBool(writeHash);
+    if (writeHash) {
+        // Write hash instead of regular data
+        if (!hashes.count(sexp)) {
+            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
+            intern(sexp, hashRoot(sexp), false);
+        }
+        auto hash = hashes.at(sexp);
+        buf.putBytes((uint8_t*)&hash, sizeof(hash));
+    }
+    return writeHash;
+}
+
+SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
+    auto readHashInstead = buf.getBool();
+    if (readHashInstead) {
+        // Read hash instead of regular data,
+        // then retrieve by hash from interned or peer
+        UUID hash;
+        buf.getBytes((uint8_t*)&hash, sizeof(hash));
+        if (interned.count(hash)) {
+            LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
+                          << interned.at(hash) << "\n");
+            return interned.at(hash);
+        }
+        if (CompilerClient::isRunning()) {
+            LOG(std::cout << "Retrieving by hash from server: " << hash
+                          << "\n");
+            auto sexp = CompilerClient::retrieve(hash);
+            if (sexp) {
+                intern(sexp, hash, false);
+                return sexp;
+            }
+            Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+        } else if (CompilerServer::isRunning()) {
+            LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
+            auto sexp = CompilerServer::retrieve(hash);
+            if (sexp) {
+                intern(sexp, hash, true);
+                return sexp;
+            }
+            LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
+            return nullptr;
+        }
+        Rf_error("SEXP deserialized from hash which we don't have, and no server");
+    }
+    return nullptr;
+}
 
 } // namespace rir

@@ -85,11 +85,29 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     buffer.putInt(type);
 #endif
 
-    if (options.useHashes || !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
-        // TODO: Refactor UUIDPool methods into this (or somewhere else in
-        //  serializeUni) and use separate readItem for recorded calls which
-        //  may be null instead of just allowing null on the compiler server
-        UUIDPool::writeItem(s, false, buffer, true);
+    // If `useHashes` or this is a recorded call, either serialize via hash or
+    // (if this can't be serialized via hash) serialize children via hash.
+    // Otherwise serialize children regularly. If this is a recorded call and
+    // `useHashes` is false, we have to construct a different serializer where
+    // `useHashes` is true, but if `useHashes` is true we can use this one.
+    // Either way we must call `writeInline` if we didn't write the hash
+    // directly to not infinitely recurse.
+    // TODO: Refactor UUIDPool methods into this (or somewhere else in
+    //  serialize or serializeUni) and use separate readItem for recorded calls
+    //  which may be may be null instead of just allowing null on the compiler
+    //  server
+    if (options.useHashes) {
+        if (!UUIDPool::tryWriteHash(s, buffer)) {
+            writeInline(s);
+        }
+    } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+        if (!UUIDPool::tryWriteHash(s, buffer)) {
+            // Still serialize children via hashes
+            auto innerOptions = options;
+            innerOptions.useHashes = true;
+            Serializer innerSerializer(buffer, innerOptions);
+            innerSerializer.writeInline(s);
+        }
     } else {
         writeInline(s);
     }
@@ -150,14 +168,34 @@ SEXP Deserializer::read(const SerialFlags& flags) {
            "serialize/deserialize sexp boundary mismatch");
     assert(buffer.getInt() == flags.id() &&
            "serialize/deserialize sexp flags mismatch");
+    auto expectedType = buffer.getInt();
 #endif
 
-    auto expectedType = buffer.getInt();
-    if (options.useHashes || !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
-        // TODO: Refactor UUIDPool methods into this (or somewhere else in
-        //  serializeUni) and use separate readItem for recorded calls which
-        //  may be null instead of just allowing null on the compiler server
-        result = UUIDPool::readItem(buffer, true);
+    // If `useHashes` or this is a recorded call, either deserialize via hash or
+    // (if this wasn't serialized via hash) deserialize children via hash.
+    // Otherwise deserialize children regularly. If this is a recorded call and
+    // `useHashes` is false, we have to construct a different deserializer where
+    // `useHashes` is true, but if `useHashes` is true we can use this one.
+    // Either way we must call `readInline` if we didn't read the hash directly
+    // to not infinitely recurse.
+    // TODO: Refactor UUIDPool methods into this (or somewhere else in
+    //  serialize or serializeUni) and use separate readItem for recorded calls
+    //  which may be may be null instead of just allowing null on the compiler
+    //  server
+    if (options.useHashes) {
+        result = UUIDPool::tryReadHash(buffer);
+        if (!result) {
+            result = readInline();
+        }
+    } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+        result = UUIDPool::tryReadHash(buffer);
+        if (!result) {
+            // Still deserialize children via hashes
+            auto innerOptions = options;
+            innerOptions.useHashes = true;
+            Deserializer innerDeserializer(buffer, innerOptions);
+            result = innerDeserializer.readInline();
+        }
     } else {
         result = readInline();
     }
