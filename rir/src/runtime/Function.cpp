@@ -81,7 +81,8 @@ void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
     OutU64(out, execTime);
 }
 
-Function* Function::deserialize(AbstractDeserializer& deserializer) {
+Function* Function::deserialize(AbstractDeserializer& deserializer,
+                                Function* fun) {
     Protect p;
     auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
     auto sig = FunctionSignature::deserialize(deserializer);
@@ -92,26 +93,53 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+    SEXP store = fun ? fun->container() : p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
-    auto body = p(deserializer.read(SerialFlags::FunBody));
+    // This assertion could be statically checked
+    assert(deserializer.willRead(SerialFlags::FunBody) &&
+           deserializer.willRead(SerialFlags::FunDefaultArg) &&
+           "must deserialize function body and default args when we deserialize"
+           "function");
+    TODO: Handle refs when we deserialize with existing
+    auto body = Code::deserialize(deserializer,
+                                  fun ? fun->body() : nullptr);
+    if (!fun) {
+        p(body->container());
+    }
     std::vector<SEXP> defaultArgs;
-    defaultArgs.resize(sig.numArguments);
+    if (!fun) {
+        defaultArgs.resize(sig.numArguments);
+    }
     for (unsigned i = 0; i < sig.numArguments; i++) {
-        if (deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes)) {
-            defaultArgs[i] = p(deserializer.read(SerialFlags::FunDefaultArg));
+        if (deserializer.readBytesOf<bool>(SerialFlags::FunDefaultArg)) {
+            auto defaultArg = Code::deserialize(deserializer, fun ? fun->defaultArg(i) : nullptr);
+            if (!fun) {
+                defaultArgs[i] = p(defaultArg->container());
+            }
         }
     }
 
-    auto fun = new (DATAPTR(store))
-        Function(funSize, body, defaultArgs, sig, ctx);
-    fun->flags_ = flags;
-    fun->invocationCount_ = invocationCount_;
-    fun->deoptCount_ = deoptCount_;
-    fun->deadCallReached_ = deadCallReached_;
-    fun->invoked = invoked;
-    fun->execTime = execTime;
+    if (!fun) {
+        fun = new (DATAPTR(store)) Function(funSize, body->container(), defaultArgs, sig, ctx);
+    } else if (deserializer.willRead(SerialFlags::FunMiscBytes)) {
+        // Assignment is implicitly deleted because of constant, but the
+        // constant value doesn't apply here (this entire else-if is actually
+        // never used as of now, because we only have existing fun when we are
+        // deserializing feedback)
+        memcpy(&fun->signature_, &sig, sizeof(FunctionSignature));
+        fun->context_ = ctx;
+    }
+    if (deserializer.willRead(SerialFlags::FunMiscBytes)) {
+        fun->flags_ = flags;
+    }
+    if (deserializer.willRead(SerialFlags::FunStats)) {
+        fun->invocationCount_ = invocationCount_;
+        fun->deoptCount_ = deoptCount_;
+        fun->deadCallReached_ = deadCallReached_;
+        fun->invoked = invoked;
+        fun->execTime = execTime;
+    }
     return fun;
 }
 

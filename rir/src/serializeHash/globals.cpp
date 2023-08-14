@@ -8,6 +8,7 @@
 namespace rir {
 
 std::vector<SEXP> globals;
+std::unordered_map<SEXP, unsigned> global2Index;
 std::unordered_map<std::string, SEXP> cppId2Global;
 std::unordered_map<SEXP, std::string> global2CppId;
 
@@ -34,6 +35,10 @@ void initGlobals() {
     for (auto& e : cppId2Global) {
         globals.push_back(e.second);
         global2CppId.emplace(e.second, e.first);
+    }
+    global2Index = std::unordered_map<SEXP, unsigned>();
+    for (unsigned i = 0; i < globals.size(); ++i) {
+        global2Index.emplace(globals[i], i);
     }
 }
 

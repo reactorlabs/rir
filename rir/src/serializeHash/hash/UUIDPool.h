@@ -93,7 +93,9 @@ class UUIDPool {
     /// `useHashInstead`. If true, instead of reading an SEXP, reads a hash,
     /// then looks it up in the intern pool. If the SEXP isn't in the intern
     /// pool, fetches it from the compiler peer. If the compiler peer isn't
-    /// connected or doesn't have the SEXP, `Rf_error`s.
+    /// connected or doesn't have the SEXP, `Rf_error`s on the client and
+    /// returns `nullptr` on the server (server must handle reading null SEXPs
+    /// with hashes, client assumes the server always has them)
     ///
     /// Otherwise, Calls `rir::deserialize` to read the SEXP as usual.
     static SEXP readItem(ByteBuffer& buf, bool useHashes);

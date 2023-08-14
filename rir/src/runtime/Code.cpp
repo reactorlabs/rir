@@ -137,7 +137,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     return sidx;
 }
 
-Code* Code::deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp) {
+Code* Code::deserializeR(SEXP refTable, R_inpstream_t inp) {
     Protect p;
     auto size = InInteger(inp);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
@@ -161,10 +161,9 @@ Code* Code::deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp) {
     if (hasArgReorder) {
         argReorder = p(UUIDPool::readItem(refTable, inp));
     }
-    if (!outer) {
-        outer = p(UUIDPool::readItem(refTable, inp));
-    }
-    assert(Function::check(outer));
+    auto outer = p(UUIDPool::readItem(refTable, inp));
+    assert(Function::check(outer) &&
+           "sanity check failed: code's outer is not a function");
 
     // Bytecode
     BC::deserializeR(refTable, inp, code->code(), code->codeSize, code);
@@ -207,7 +206,7 @@ Code* Code::deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp) {
     return code;
 }
 
-void Code::serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) const {
+void Code::serializeR(SEXP refTable, R_outpstream_t out) const {
     HashAdd(container(), refTable);
     OutInteger(out, (int)size());
 
@@ -232,9 +231,7 @@ void Code::serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) cons
             UUIDPool::writeItem(getEntry(2), false, refTable, out);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR outer function", container(), [&]{
-        if (includeOuter) {
-            UUIDPool::writeItem(function()->container(), false, refTable, out);
-        }
+        UUIDPool::writeItem(function()->container(), false, refTable, out);
     });
 
     std::vector<bool> extraPoolChildren;
@@ -275,36 +272,39 @@ void Code::serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) cons
     });
 }
 
-Code* Code::deserialize(SEXP outer, AbstractDeserializer& deserializer) {
+Code* Code::deserialize(AbstractDeserializer& deserializer, Code* code) {
     Protect p;
+    bool codeIsNew = !code;
     auto size = deserializer.readBytesOf<R_xlen_t>(SerialFlags::CodeMisc);
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    auto store = code ? code->container() : p(Rf_allocVector(EXTERNALSXP, size));
     deserializer.addRef(store);
-    Code* code = new (DATAPTR(store)) Code;
+    if (!code) {
+        code = new (DATAPTR(store)) Code;
+    }
 
     // Header
-    code->src = deserializer.readSrc(SerialFlags::CodeAst);
-    code->trivialExpr = deserializer.readNullable(SerialFlags::CodeAst);
-    code->stackLength = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
-    *const_cast<unsigned*>(&code->localsCount) = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
-    *const_cast<unsigned*>(&code->bindingCacheSize) = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
-    code->codeSize = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
-    code->srcLength = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
-    code->extraPoolSize = deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc);
+    DESERIALIZE(code->src, readSrc, SerialFlags::CodeAst);
+    DESERIALIZE(code->trivialExpr, readNullable, SerialFlags::CodeAst);
+    DESERIALIZE(code->stackLength, readBytesOf<unsigned>, SerialFlags::CodeMisc);
+    DESERIALIZE(*const_cast<unsigned*>(&code->localsCount), readBytesOf<unsigned>, SerialFlags::CodeMisc);
+    DESERIALIZE(*const_cast<unsigned*>(&code->bindingCacheSize), readBytesOf<unsigned>, SerialFlags::CodeMisc);
+    DESERIALIZE(code->codeSize, readBytesOf<unsigned>, SerialFlags::CodeMisc);
+    DESERIALIZE(code->srcLength, readBytesOf<unsigned>, SerialFlags::CodeMisc);
+    DESERIALIZE(code->extraPoolSize, readBytesOf<unsigned>, SerialFlags::CodeMisc);
     auto argReorder = deserializer.readNullable(SerialFlags::CodeArglistOrder);
-    if (!outer) {
-        outer = p(deserializer.read(SerialFlags::CodeOuterFun));
-    }
+    auto outer = p.nullable(deserializer.read(SerialFlags::CodeOuterFun));
     // Can't check magic because it may not be assigned yet
-    assert(TYPEOF(outer) == EXTERNALSXP);
+    assert((!outer || TYPEOF(outer) == EXTERNALSXP) &&
+           "sanity check failed: code's outer is not a Function");
 
     // Bytecode
     std::vector<SerialFlags> extraPoolFlags(code->extraPoolSize, SerialFlags::CodePoolUnknown);
     BC::deserialize(deserializer, extraPoolFlags, code->code(), code->codeSize, code);
 
     // Extra pool
-    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
+    SEXP extraPool = codeIsNew ? Rf_allocVector(VECSXP, code->extraPoolSize) : code->getEntry(0);
     for (unsigned i = 0; i < code->extraPoolSize; ++i) {
+        TODO: Handle existing feedback in extra pool promises
         SET_VECTOR_ELT(extraPool, i, deserializer.read(extraPoolFlags[i]));
     }
 
@@ -316,21 +316,30 @@ Code* Code::deserialize(SEXP outer, AbstractDeserializer& deserializer) {
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   NumLocals, CODE_MAGIC};
-    code->setEntry(0, extraPool);
-    code->setEntry(3, outer);
+    if (codeIsNew) {
+        code->setEntry(0, extraPool);
+    }
+    if (outer) {
+        code->setEntry(3, outer);
+    }
     if (argReorder) {
         code->setEntry(2, argReorder);
     }
 
     // Native code
-    code->kind = deserializer.readBytesOf<Kind>(SerialFlags::CodeNative);
-    if (code->kind == Kind::Native) {
-        auto lazyCodeHandleLen = deserializer.readBytesOf<unsigned>(SerialFlags::CodeNative);
-        deserializer.readBytes(code->lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
-        code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
-        if (deserializer.readBytesOf<bool>(SerialFlags::CodeNative)) {
-            code->lazyCodeModule = pir::PirJitLLVM::deserializeModule(deserializer, code);
-            code->setLazyCodeModuleFinalizer();
+    if (deserializer.willRead(SerialFlags::CodeNative)) {
+        code->kind = deserializer.readBytesOf<Kind>(SerialFlags::CodeNative);
+        if (code->kind == Kind::Native) {
+            auto lazyCodeHandleLen =
+                deserializer.readBytesOf<unsigned>(SerialFlags::CodeNative);
+            deserializer.readBytes(code->lazyCodeHandle, lazyCodeHandleLen,
+                                   SerialFlags::CodeNative);
+            code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
+            if (deserializer.readBytesOf<bool>(SerialFlags::CodeNative)) {
+                code->lazyCodeModule =
+                    pir::PirJitLLVM::deserializeModule(deserializer, code);
+                code->setLazyCodeModuleFinalizer();
+            }
         }
     }
     // Native code is always null here because it's lazy
@@ -339,7 +348,7 @@ Code* Code::deserialize(SEXP outer, AbstractDeserializer& deserializer) {
     return code;
 }
 
-void Code::serialize(bool includeOuter, AbstractSerializer& serializer) const {
+void Code::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf((R_xlen_t)size(), SerialFlags::CodeMisc);
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize source", container(), [&]{
@@ -359,9 +368,7 @@ void Code::serialize(bool includeOuter, AbstractSerializer& serializer) const {
         serializer.writeNullable(getEntry(2), SerialFlags::CodeArglistOrder);
     });
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize outer function", container(), [&]{
-        if (includeOuter) {
-            serializer.write(getEntry(3), SerialFlags::CodeOuterFun);
-        }
+        serializer.write(getEntry(3), SerialFlags::CodeOuterFun);
     });
 
     std::vector<SerialFlags> extraPoolFlags(extraPoolSize, SerialFlags::CodePoolUnknown);
