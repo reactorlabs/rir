@@ -98,8 +98,8 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
     auto sig = FunctionSignature::deserialize(deserializer);
-    auto ctx = deserializer.readBytesOf<Context>(SerialFlags::FunMiscBytes);
-    auto flags = deserializer.readBytesOf<EnumSet<Flag>>(SerialFlags::FunMiscBytes);
+    auto ctx = Context(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
+    auto flags = EnumSet<Flag>(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
     auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
@@ -129,8 +129,8 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
 void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf((R_xlen_t)size, SerialFlags::FunMiscBytes);
     signature().serialize(serializer);
-    serializer.writeBytesOf(context_, SerialFlags::FunMiscBytes);
-    serializer.writeBytesOf(flags_, SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf(context_.toI(), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf(flags_.to_i(), SerialFlags::FunMiscBytes);
     serializer.writeBytesOf(invocationCount_, SerialFlags::FunStats);
     serializer.writeBytesOf(deoptCount_, SerialFlags::FunStats);
     serializer.writeBytesOf(deadCallReached_, SerialFlags::FunStats);

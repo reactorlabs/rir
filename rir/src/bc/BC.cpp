@@ -286,7 +286,9 @@ void BC::deserialize(AbstractDeserializer& deserializer,
                      std::vector<SerialFlags>& extraPoolFlags, Opcode* code,
                      size_t codeSize, Code* container) {
     while (codeSize > 0) {
-        *code = deserializer.readBytesOf<Opcode>(SerialFlags::CodeMisc);
+        if (deserializer.willRead(SerialFlags::CodeMisc)) {
+            *code = deserializer.readBytesOf<Opcode>(SerialFlags::CodeMisc);
+        }
         unsigned size = BC::fixedSize(*code);
         ImmediateArguments& i = *(ImmediateArguments*)(code + 1);
         switch (*code) {
@@ -305,61 +307,82 @@ void BC::deserialize(AbstractDeserializer& deserializer,
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            i.pool = deserializer.readConst(SerialFlags::CodeMisc);
+            DESERIALIZE(i.pool, readConst, SerialFlags::CodeMisc);
             break;
         case Opcode::ldvar_cached_:
         case Opcode::ldvar_for_update_cache_:
         case Opcode::stvar_cached_:
-            i.poolAndCache.poolIndex = deserializer.readConst(SerialFlags::CodeMisc);
-            i.poolAndCache.cacheIndex = deserializer.readBytesOf<CacheIdx>(SerialFlags::CodeMisc);
+            DESERIALIZE(i.poolAndCache.poolIndex, readConst, SerialFlags::CodeMisc);
+            DESERIALIZE(i.poolAndCache.cacheIndex, readBytesOf<CacheIdx>, SerialFlags::CodeMisc);
             break;
         case Opcode::guard_fun_:
-            i.guard_fun_args.name = deserializer.readConst(SerialFlags::CodeMisc);
-            i.guard_fun_args.expected = deserializer.readConst(SerialFlags::CodeMisc);
-            i.guard_fun_args.id = deserializer.readBytesOf<Immediate>(SerialFlags::CodeMisc);
+            DESERIALIZE(i.guard_fun_args.name, readConst, SerialFlags::CodeMisc);
+            DESERIALIZE(i.guard_fun_args.expected, readConst, SerialFlags::CodeMisc);
+            DESERIALIZE(i.guard_fun_args.id, readBytesOf<Immediate>, SerialFlags::CodeMisc);
             break;
         case Opcode::call_:
         case Opcode::named_call_:
-        case Opcode::call_dots_: {
-            i.callFixedArgs.nargs = deserializer.readBytesOf<NumArgs>(SerialFlags::CodeMisc);
-            i.callFixedArgs.ast = deserializer.readConst(SerialFlags::CodeMisc);
-            i.callFixedArgs.given = deserializer.readBytesOf<Context>(SerialFlags::CodeMisc);
-            Opcode* c = code + 1 + sizeof(CallFixedArgs);
-            // Read implicit promise argument offsets
-            // Read named arguments
-            if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
-                auto names = (PoolIdx*)c;
-                for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
-                    names[j] = deserializer.readConst(SerialFlags::CodeMisc);
+        case Opcode::call_dots_:
+            if (deserializer.willRead(SerialFlags::CodeMisc)) {
+                i.callFixedArgs.nargs =
+                    deserializer.readBytesOf<NumArgs>(SerialFlags::CodeMisc);
+                i.callFixedArgs.ast =
+                    deserializer.readConst(SerialFlags::CodeMisc);
+                i.callFixedArgs.given =
+                    Context(deserializer.readBytesOf<unsigned long>(
+                        SerialFlags::CodeMisc));
+                Opcode* c = code + 1 + sizeof(CallFixedArgs);
+                // Read implicit promise argument offsets
+                // Read named arguments
+                if (*code == Opcode::named_call_ ||
+                    *code == Opcode::call_dots_) {
+                    auto names = (PoolIdx*)c;
+                    for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
+                        names[j] =
+                            deserializer.readConst(SerialFlags::CodeMisc);
+                    }
                 }
             }
             break;
-        }
         case Opcode::call_builtin_:
-            i.callBuiltinFixedArgs.nargs = deserializer.readBytesOf<NumArgs>(SerialFlags::CodeMisc);
-            i.callBuiltinFixedArgs.ast = deserializer.readConst(SerialFlags::CodeMisc);
-            i.callBuiltinFixedArgs.builtin = deserializer.readConst(SerialFlags::CodeMisc);
+            DESERIALIZE(i.callBuiltinFixedArgs.nargs, readBytesOf<NumArgs>, SerialFlags::CodeMisc);
+            DESERIALIZE(i.callBuiltinFixedArgs.ast, readConst, SerialFlags::CodeMisc);
+            DESERIALIZE(i.callBuiltinFixedArgs.builtin, readConst, SerialFlags::CodeMisc);
             break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
-            i.fun = deserializer.readBytesOf<FunIdx>(SerialFlags::CodeMisc);
-            extraPoolFlags[i.fun] = SerialFlags::CodePromise;
+            if (deserializer.willRead(SerialFlags::CodeMisc)) {
+                i.fun = deserializer.readBytesOf<FunIdx>(SerialFlags::CodeMisc);
+                extraPoolFlags[i.fun] = SerialFlags::CodePromise;
+            }
             break;
         case Opcode::record_call_:
-            i.callFeedback.numTargets = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-            i.callFeedback.taken = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-            i.callFeedback.invalid = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
-                auto targetIdx = deserializer.readBytesOf<unsigned>(SerialFlags::CodeFeedback);
-                extraPoolFlags[targetIdx] = SerialFlags::CodeFeedback;
-                i.callFeedback.targets[j] = targetIdx;
+            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
+                i.callFeedback.numTargets = deserializer.readBytesOf<uint32_t>(
+                    SerialFlags::CodeFeedback);
+                i.callFeedback.taken = deserializer.readBytesOf<uint32_t>(
+                    SerialFlags::CodeFeedback);
+                i.callFeedback.invalid = deserializer.readBytesOf<uint32_t>(
+                    SerialFlags::CodeFeedback);
+                for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
+                    auto targetIdx = deserializer.readBytesOf<unsigned>(
+                        SerialFlags::CodeFeedback);
+                    extraPoolFlags[targetIdx] = SerialFlags::CodeFeedback;
+                    i.callFeedback.targets[j] = targetIdx;
+                }
             }
             break;
         case Opcode::record_type_:
-            i.typeFeedback = deserializer.readBytesOf<ObservedValues>(SerialFlags::CodeFeedback);
+            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
+                deserializer.readBytes(&i.typeFeedback, sizeof(ObservedValues),
+                                       SerialFlags::CodeFeedback);
+            }
             break;
         case Opcode::record_test_:
-            i.testFeedback = deserializer.readBytesOf<ObservedTest>(SerialFlags::CodeFeedback);
+            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
+                deserializer.readBytes(&i.testFeedback, sizeof(ObservedTest),
+                                       SerialFlags::CodeFeedback);
+            }
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -372,7 +395,7 @@ void BC::deserialize(AbstractDeserializer& deserializer,
         case Opcode::put_:
         case Opcode::clear_binding_cache_:
             assert((size - 1) % 4 == 0);
-            if (size > 1) {
+            if (size > 1 && deserializer.willRead(SerialFlags::CodeMisc)) {
                 deserializer.readBytes((void*)(code + 1), size - 1,
                                        SerialFlags::CodeMisc);
             }
@@ -432,7 +455,7 @@ void BC::serialize(AbstractSerializer& serializer,
         case Opcode::named_call_:
             serializer.writeBytesOf<NumArgs>(i.callFixedArgs.nargs, SerialFlags::CodeMisc);
             serializer.writeConst(i.callFixedArgs.ast, SerialFlags::CodeMisc);
-            serializer.writeBytesOf<Context>(i.callFixedArgs.given, SerialFlags::CodeMisc);
+            serializer.writeBytesOf<unsigned long>(i.callFixedArgs.given.toI(), SerialFlags::CodeMisc);
             // Write named arguments
             if (*code == Opcode::named_call_ || *code == Opcode::call_dots_) {
                 for (size_t j = 0; j < i.callFixedArgs.nargs; j++) {
