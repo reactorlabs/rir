@@ -225,6 +225,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
     disableInterpreter([&]{
         disableGc([&] {
             Serializer serializer(buffer, options);
+            serializer.writeBytesOf(options);
             serializer.writeInline(sexp);
         });
     });
@@ -240,6 +241,8 @@ SEXP deserialize(ByteBuffer& buffer, const SerialOptions& options,
     disableInterpreter([&]{
         disableGc([&] {
             Deserializer deserializer(buffer, options, retrieveHash);
+            auto serializedOptions = deserializer.readBytesOf<SerialOptions>();
+            assert(serializedOptions == options && "serialize/deserialize options mismatch");
             result = deserializer.readInline();
         });
     });

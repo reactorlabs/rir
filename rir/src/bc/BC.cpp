@@ -296,8 +296,7 @@ void BC::serializeR(std::vector<bool>& extraPoolChildren, SEXP refTable,
     }
 }
 
-void BC::deserialize(AbstractDeserializer& deserializer,
-                     std::vector<SerialFlags>& extraPoolFlags, Opcode* code,
+void BC::deserialize(AbstractDeserializer& deserializer, Opcode* code,
                      size_t codeSize, Code* container) {
     while (codeSize > 0) {
         if (deserializer.willRead(SerialFlags::CodeMisc)) {
@@ -365,10 +364,7 @@ void BC::deserialize(AbstractDeserializer& deserializer,
             break;
         case Opcode::mk_promise_:
         case Opcode::mk_eager_promise_:
-            if (deserializer.willRead(SerialFlags::CodeMisc)) {
-                i.fun = deserializer.readBytesOf<FunIdx>(SerialFlags::CodeMisc);
-                extraPoolFlags[i.fun] = SerialFlags::CodePromise;
-            }
+            DESERIALIZE(i.fun, readBytesOf<FunIdx>, SerialFlags::CodeMisc);
             break;
         case Opcode::record_call_:
             if (deserializer.willRead(SerialFlags::CodeFeedback)) {
@@ -381,7 +377,6 @@ void BC::deserialize(AbstractDeserializer& deserializer,
                 for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
                     auto targetIdx = deserializer.readBytesOf<unsigned>(
                         SerialFlags::CodeFeedback);
-                    extraPoolFlags[targetIdx] = SerialFlags::CodeFeedback;
                     i.callFeedback.targets[j] = targetIdx;
                 }
             }
@@ -830,7 +825,8 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
 void BC::debugCompare(const Opcode* code1, const Opcode* code2,
                       size_t codeSize1, size_t codeSize2,
                       const Code* container1, const Code* container2,
-                      const char* prefix, std::stringstream& differences) {
+                      const char* prefix, std::stringstream& differences,
+                      bool compareFeedbackAndExtraPoolRBytecodes) {
     auto loggedDifferences = false;
     auto initialCodeSize1 = codeSize1;
     while (codeSize1 > 0 && codeSize2 > 0) {
@@ -848,7 +844,10 @@ void BC::debugCompare(const Opcode* code1, const Opcode* code2,
              // different values
              opcode1 != Opcode::push_ &&
              // Calls will have different closures
-             opcode1 != Opcode::record_call_)) {
+             opcode1 != Opcode::record_call_ &&
+             // Ignore feedback differences if excluded
+             (compareFeedbackAndExtraPoolRBytecodes || opcode1 != Opcode::record_type_) &&
+             (compareFeedbackAndExtraPoolRBytecodes || opcode1 != Opcode::record_test_))) {
             // Even if the bytecode data is different, it could just be different pool
             // entries for equivalent SEXPs. So we check by printing the bytecode (not
             // perfect, there's a slim chance of true negative, but good enough)

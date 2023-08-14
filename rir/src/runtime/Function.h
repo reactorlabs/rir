@@ -83,7 +83,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     /// (before we do operations which will cause weird errors otherwise). If
     /// not, will add each difference to differences.
     static void debugCompare(const Function* f1, const Function* f2,
-                             std::stringstream& differences);
+                             std::stringstream& differences,
+                             bool compareFeedbackAndExtraPoolRBytecodes = true);
 
     bool isOptimized() const {
         return signature_.optimization !=

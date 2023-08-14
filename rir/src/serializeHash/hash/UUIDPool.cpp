@@ -550,7 +550,7 @@ SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
                 return sexp;
             }
             LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
-            return nullptr;
+            return R_NilValue;
         }
         Rf_error("SEXP deserialized from hash which we don't have, and no server");
     }

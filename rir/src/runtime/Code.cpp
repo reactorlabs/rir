@@ -295,13 +295,13 @@ Code* Code::deserialize(AbstractDeserializer& deserializer) {
            "sanity check failed: code's outer is not a Function");
 
     // Bytecode
-    std::vector<SerialFlags> extraPoolFlags(code->extraPoolSize, SerialFlags::CodePoolUnknown);
-    BC::deserialize(deserializer, extraPoolFlags, code->code(), code->codeSize, code);
+    BC::deserialize(deserializer, code->code(), code->codeSize, code);
 
     // Extra pool
     SEXP extraPool = Rf_allocVector(VECSXP, code->extraPoolSize);
     for (unsigned i = 0; i < code->extraPoolSize; ++i) {
-        SET_VECTOR_ELT(extraPool, i, deserializer.read(extraPoolFlags[i]));
+        auto extraPoolFlag = SerialFlags::ById[deserializer.readBytesOf<unsigned>(SerialFlags::CodeMisc)];
+        SET_VECTOR_ELT(extraPool, i, deserializer.read(extraPoolFlag));
     }
 
     // Srclist
@@ -374,6 +374,7 @@ void Code::serialize(AbstractSerializer& serializer) const {
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize extra pool", container(), [&]{
         for (unsigned i = 0; i < extraPoolSize; ++i) {
+            serializer.writeBytesOf(extraPoolFlags[i].id(), SerialFlags::CodeMisc);
             serializer.write(getExtraPoolEntry(i), extraPoolFlags[i]);
         }
     });
@@ -773,7 +774,8 @@ static bool isProbablyDirectlyComparable[] = {
 
 static void compareSexps(SEXP sexp1, SEXP sexp2,
                          const char* prefix, const char* srcPrefix,
-                         std::stringstream& differences) {
+                         std::stringstream& differences,
+                         bool compareFeedbackAndExtraPoolRBytecodes) {
     if (TYPEOF(sexp1) != TYPEOF(sexp2)) {
         differences << prefix << " " << srcPrefix << " types differ: "
                     << Rf_type2char(TYPEOF(sexp1)) << " vs "
@@ -795,7 +797,8 @@ static void compareSexps(SEXP sexp1, SEXP sexp2,
             Code::unpack(sexp1),
             Code::unpack(sexp2),
             poolPrefix.c_str(),
-            differences
+            differences,
+            compareFeedbackAndExtraPoolRBytecodes
         );
     } else if (TYPEOF(sexp1) == RAWSXP) {
         auto raw1 = RAW(sexp1);
@@ -822,7 +825,7 @@ static void compareSrcs(unsigned src1, unsigned src2,
 }
 
 void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
-                        std::stringstream& differences) {
+                        std::stringstream& differences, bool compareFeedbackAndExtraPoolRBytecodes) {
     compareSrcs(c1->src, c2->src, prefix, "src", differences);
     compareAsts(c1->trivialExpr, c2->trivialExpr, prefix, "trivialExpr", differences);
     if (c1->srcLength != c2->srcLength) {
@@ -837,7 +840,11 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
         differences << prefix << " stackLengths differ: " << c1->stackLength
                     << " vs " << c2->stackLength << "\n";
     }
-    if (c1->extraPoolSize != c2->extraPoolSize) {
+    // c1 may have extra pool R-bytecodes than c2,
+    // if it was from a closure with them and c2 was from an AST-only closure
+    if (compareFeedbackAndExtraPoolRBytecodes ?
+        c1->extraPoolSize != c2->extraPoolSize :
+        c1->extraPoolSize < c2->extraPoolSize) {
         differences << prefix << " extraPoolSizes differ: " << c1->extraPoolSize
                     << " vs " << c2->extraPoolSize << "\n";
     }
@@ -859,14 +866,14 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
                     srcPrefix, differences);
     }
     BC::debugCompare(c1->code(), c2->code(), c1->codeSize, c2->codeSize, c1, c2,
-                     prefix, differences);
+                     prefix, differences, compareFeedbackAndExtraPoolRBytecodes);
     for (unsigned i = 0; i < std::min(c1->extraPoolSize, c2->extraPoolSize); i++) {
         auto pool1 = c1->getExtraPoolEntry(i);
         auto pool2 = c2->getExtraPoolEntry(i);
 
         char poolPrefix[100];
         sprintf(poolPrefix, "entry %d", i);
-        compareSexps(pool1, pool2, prefix, poolPrefix, differences);
+        compareSexps(pool1, pool2, prefix, poolPrefix, differences, compareFeedbackAndExtraPoolRBytecodes);
     }
 }
 

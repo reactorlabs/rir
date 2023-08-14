@@ -116,13 +116,13 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
 void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf((R_xlen_t)size, SerialFlags::FunMiscBytes);
     signature().serialize(serializer);
-    serializer.writeBytesOf(context_.toI(), SerialFlags::FunMiscBytes);
-    serializer.writeBytesOf(flags_.to_i(), SerialFlags::FunMiscBytes);
-    serializer.writeBytesOf(invocationCount_, SerialFlags::FunStats);
-    serializer.writeBytesOf(deoptCount_, SerialFlags::FunStats);
-    serializer.writeBytesOf(deadCallReached_, SerialFlags::FunStats);
-    serializer.writeBytesOf(invoked, SerialFlags::FunStats);
-    serializer.writeBytesOf(execTime, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned long>(context_.toI(), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned long>(flags_.to_i(), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(invocationCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned>(deoptCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned>(deadCallReached_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned long>(invoked, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned long>(execTime, SerialFlags::FunStats);
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
         serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);
@@ -247,7 +247,8 @@ void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) con
 }
 
 void Function::debugCompare(const Function* f1, const Function* f2,
-                            std::stringstream& differences) {
+                            std::stringstream& differences,
+                            bool compareFeedbackAndExtraPoolRBytecodes) {
     FunctionSignature::debugCompare(f1->signature(), f2->signature(), differences);
     if (f1->context() != f2->context()) {
         differences << "context: " << f1->context() << " != " << f2->context()
@@ -275,19 +276,30 @@ void Function::debugCompare(const Function* f1, const Function* f2,
         differences << "numArgs: " << f1->numArgs_ << " != " << f2->numArgs_
                     << "(note: signature also has numArgs)\n";
     }
-    if (f1->invocationCount() != f2->invocationCount()) {
-        differences << "invocationCount: " << f1->invocationCount() << " != "
-                    << f2->invocationCount() << "\n";
+    if (compareFeedbackAndExtraPoolRBytecodes) {
+        if (f1->invocationCount_ != f2->invocationCount_) {
+            differences << "invocationCount: " << f1->invocationCount_
+                        << " != " << f2->invocationCount_ << "\n";
+        }
+        if (f1->deoptCount_ != f2->deoptCount_) {
+            differences << "deoptCount: " << f1->deoptCount_
+                        << " != " << f2->deoptCount_ << "\n";
+        }
+        if (f1->deadCallReached_ != f2->deadCallReached_) {
+            differences << "deadCallReached: " << f1->deadCallReached_
+                        << " != " << f2->deadCallReached_ << "\n";
+        }
+        if (f1->invoked != f2->invoked) {
+            differences << "invoked: " << f1->invoked
+                        << " != " << f2->invoked << "\n";
+        }
+        if (f1->execTime != f2->execTime) {
+            differences << "invocationTime: " << f1->execTime
+                        << " != " << f2->execTime << "\n";
+        }
     }
-    if (f1->invocationTime() != f2->invocationTime()) {
-        differences << "invocationTime: " << f1->invocationTime() << " != "
-                    << f2->invocationTime() << "\n";
-    }
-    if (f1->deoptCount() != f2->deoptCount()) {
-        differences << "deoptCount: " << f1->deoptCount() << " != "
-                    << f2->deoptCount() << "\n";
-    }
-    Code::debugCompare(f1->body(), f2->body(), "body", differences);
+    Code::debugCompare(f1->body(), f2->body(), "body", differences,
+                       compareFeedbackAndExtraPoolRBytecodes);
     for (unsigned i = 0; i < std::min(f1->numArgs_, f2->numArgs_); i++) {
         auto arg1 = f1->defaultArg_[i];
         auto arg2 = f2->defaultArg_[i];
@@ -301,7 +313,7 @@ void Function::debugCompare(const Function* f1, const Function* f2,
             char prefix[100];
             sprintf(prefix, "defaultArg[%d]", i);
             Code::debugCompare(Code::unpack(arg1), Code::unpack(arg2),
-                               prefix, differences);
+                               prefix, differences, compareFeedbackAndExtraPoolRBytecodes);
         }
     }
 }
