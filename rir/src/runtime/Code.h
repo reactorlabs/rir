@@ -227,24 +227,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     static Code* deserializeR(SEXP refTable, R_inpstream_t inp);
     void serializeR(SEXP refTable, R_outpstream_t out) const;
-    /// If existing is non-null, will deserialize data specified by the
-    /// serializer (e.g. feedback) into `existing` and return it.
-    static Code* deserialize(AbstractDeserializer& deserializer,
-                             Code* existing);
+    static Code* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
-
-    /// See `Function::deserializeSrc`. Generally you will call that and that is
-    /// the only function which calls this.
-    static Code* deserializeSrc(SEXP outer, ByteBuffer& buffer);
-    /// See `Function::serializeSrc`. Generally you will call that and that is
-    /// the only function which calls this.
-    void serializeSrc(ByteBuffer& buffer) const;
-    /// See `Function::deserializeFeedback`. Generally you will call that and
-    /// that is the only function which calls this.
-    void deserializeFeedback(ByteBuffer& buffer);
-    /// See `Function::serializeFeedback`. Generally you will call that and that
-    /// is the only function which calls this.
-    void serializeFeedback(ByteBuffer& buffer) const;
 
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;

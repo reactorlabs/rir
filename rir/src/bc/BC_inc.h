@@ -244,23 +244,6 @@ class BC {
                           std::vector<SerialFlags>& extraPoolFlags,
                           const Opcode* code, size_t codeSize,
                           const Code* container);
-    /// Read bytecodes from data where only the part compiled from source was
-    /// serialized (i.e. bytecode instructions, but not feedback)
-    static void deserializeSrc(ByteBuffer& buffer, Opcode* code,
-                               size_t codeSize, Code* container);
-    /// Write bytecodes and mark entries which are inside the source (promises,
-    /// but not recorded calls or any other information)
-    static void serializeSrc(ByteBuffer& buffer,
-                             std::vector<ExtraPoolEntryRefInSrc>& entries,
-                             const Opcode* code, size_t codeSize,
-                             const Code* container);
-    /// Insert feedback into record instructions
-    static void deserializeFeedback(ByteBuffer& buffer, Opcode* code,
-                                    size_t codeSize, Code* container);
-    /// Serialize feedback from record instructions
-    static void serializeFeedback(ByteBuffer& buffer,
-                                  const Opcode* code, size_t codeSize,
-                                  const Code* container);
     static void hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
                      const Opcode* code, size_t codeSize,
                      const Code* container);

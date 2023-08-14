@@ -81,8 +81,7 @@ void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
     OutU64(out, execTime);
 }
 
-Function* Function::deserialize(AbstractDeserializer& deserializer,
-                                Function* fun) {
+Function* Function::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
     auto sig = FunctionSignature::deserialize(deserializer);
@@ -93,53 +92,24 @@ Function* Function::deserialize(AbstractDeserializer& deserializer,
     auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
-    SEXP store = fun ? fun->container() : p(Rf_allocVector(EXTERNALSXP, funSize));
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
-    // This assertion could be statically checked
-    assert(deserializer.willRead(SerialFlags::FunBody) &&
-           deserializer.willRead(SerialFlags::FunDefaultArg) &&
-           "must deserialize function body and default args when we deserialize"
-           "function");
-    TODO: Handle refs when we deserialize with existing
-    auto body = Code::deserialize(deserializer,
-                                  fun ? fun->body() : nullptr);
-    if (!fun) {
-        p(body->container());
-    }
-    std::vector<SEXP> defaultArgs;
-    if (!fun) {
-        defaultArgs.resize(sig.numArguments);
-    }
+    auto body = p(deserializer.read(SerialFlags::FunBody));
+    std::vector<SEXP> defaultArgs(sig.numArguments, nullptr);
     for (unsigned i = 0; i < sig.numArguments; i++) {
         if (deserializer.readBytesOf<bool>(SerialFlags::FunDefaultArg)) {
-            auto defaultArg = Code::deserialize(deserializer, fun ? fun->defaultArg(i) : nullptr);
-            if (!fun) {
-                defaultArgs[i] = p(defaultArg->container());
-            }
+            defaultArgs[i] = p(deserializer.read(SerialFlags::FunDefaultArg));
         }
     }
 
-    if (!fun) {
-        fun = new (DATAPTR(store)) Function(funSize, body->container(), defaultArgs, sig, ctx);
-    } else if (deserializer.willRead(SerialFlags::FunMiscBytes)) {
-        // Assignment is implicitly deleted because of constant, but the
-        // constant value doesn't apply here (this entire else-if is actually
-        // never used as of now, because we only have existing fun when we are
-        // deserializing feedback)
-        memcpy(&fun->signature_, &sig, sizeof(FunctionSignature));
-        fun->context_ = ctx;
-    }
-    if (deserializer.willRead(SerialFlags::FunMiscBytes)) {
-        fun->flags_ = flags;
-    }
-    if (deserializer.willRead(SerialFlags::FunStats)) {
-        fun->invocationCount_ = invocationCount_;
-        fun->deoptCount_ = deoptCount_;
-        fun->deadCallReached_ = deadCallReached_;
-        fun->invoked = invoked;
-        fun->execTime = execTime;
-    }
+    auto fun = new (DATAPTR(store)) Function(funSize, body, defaultArgs, sig, ctx);
+    fun->flags_ = flags;
+    fun->invocationCount_ = invocationCount_;
+    fun->deoptCount_ = deoptCount_;
+    fun->deadCallReached_ = deadCallReached_;
+    fun->invoked = invoked;
+    fun->execTime = execTime;
     return fun;
 }
 
@@ -155,64 +125,9 @@ void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf(execTime, SerialFlags::FunStats);
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
-        serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);
         if (defaultArg_[i]) {
-            serializer.write(defaultArg_[i], SerialFlags::FunBody);
-        }
-    }
-}
-
-Function* Function::deserializeSrc(ByteBuffer& buffer) {
-    Protect p;
-    R_xlen_t funSize = buffer.getInt();
-    auto sig = FunctionSignature::deserialize(buffer);
-    Context ctx;
-    buffer.getBytes((uint8_t*)&ctx, sizeof(Context));
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
-    auto flags = EnumSet<Flag>(buffer.getLong());
-    auto body = p(Code::deserializeSrc(store, buffer)->container());
-    std::vector<SEXP> defaultArgs;
-    defaultArgs.resize(sig.numArguments);
-    for (unsigned i = 0; i < sig.numArguments; i++) {
-        if (buffer.getBool()) {
-            defaultArgs[i] = p(Code::deserializeSrc(store, buffer)->container());
-        }
-    }
-
-    auto fun = new (DATAPTR(store))
-        Function(funSize, body, defaultArgs, sig, ctx);
-    fun->flags_ = flags;
-    return fun;
-}
-
-void Function::serializeSrc(ByteBuffer& buffer) const {
-    buffer.putInt(size);
-    signature().serialize(buffer);
-    buffer.putBytes((uint8_t*)&context_, sizeof(Context));
-    buffer.putLong(flags_.to_i());
-    body()->serializeSrc(buffer);
-    for (unsigned i = 0; i < numArgs_; i++) {
-        buffer.putBool(defaultArg_[i] != nullptr);
-        if (defaultArg_[i]) {
-            Code::unpack(defaultArg_[i])->serializeSrc(buffer);
-        }
-    }
-}
-
-void Function::deserializeFeedback(ByteBuffer& buffer) {
-    body()->deserializeFeedback(buffer);
-    for (unsigned i = 0; i < numArgs_; i++) {
-        if (defaultArg_[i]) {
-            Code::unpack(defaultArg_[i])->deserializeFeedback(buffer);
-        }
-    }
-}
-
-void Function::serializeFeedback(ByteBuffer& buffer) const {
-    body()->serializeFeedback(buffer);
-    for (unsigned i = 0; i < numArgs_; i++) {
-        if (defaultArg_[i]) {
-            Code::unpack(defaultArg_[i])->serializeFeedback(buffer);
+            serializer.write(defaultArg_[i], SerialFlags::FunDefaultArg);
         }
     }
 }

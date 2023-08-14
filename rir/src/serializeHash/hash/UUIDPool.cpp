@@ -462,7 +462,7 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     }
 
     // Read regular data
-    return deserialize(buf, useHashes);
+    return deserialize(buf, SerialOptions{useHashes, false, false, false});
 }
 
 void UUIDPool::writeItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {
@@ -518,7 +518,7 @@ void UUIDPool::writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashe
     }
 
     // Write regular data
-    serialize(sexp, buf, useHashes);
+    serialize(sexp, buf, SerialOptions{useHashes, false, false, false});
 }
 
 void UUIDPool::writeNullableItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {

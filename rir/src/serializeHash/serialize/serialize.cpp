@@ -16,10 +16,12 @@ static const uint64_t dataBound = 0xfedcba9876543210;
 static const uint64_t intBound = 0xfedcba9876543211;
 #endif
 
-SerialOptions SerialOptions::DeepCopy{false, false, false};
-SerialOptions SerialOptions::CompilerServer{true, false, false};
-SerialOptions SerialOptions::CompilerClientSource{false, true, false};
-SerialOptions SerialOptions::CompilerClientFeedback{false, false, true};
+SerialOptions SerialOptions::DeepCopy{false, false, false, false};
+SerialOptions SerialOptions::CompilerServer{true, false, false, false};
+SerialOptions SerialOptions::CompilerClientRetrieve{false, false, false, false};
+SerialOptions SerialOptions::CompilerClientSourceAndFeedback{false, false, false, true};
+SerialOptions SerialOptions::CompilerClientSource{false, true, false, false};
+SerialOptions SerialOptions::CompilerClientFeedback{false, false, true, false};
 
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
@@ -30,7 +32,10 @@ bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
 static bool shouldSkip(const SerialOptions& options, const SerialFlags& flags) {
     return
         (options.onlySource && !flags.contains(SerialFlag::InSource)) ||
-        (options.onlyFeedback && !flags.contains(SerialFlag::InFeedback));
+        (options.onlyFeedback && !flags.contains(SerialFlag::InFeedback)) ||
+        (options.onlySourceAndFeedback &&
+         !flags.contains(SerialFlag::InSource) &&
+         !flags.contains(SerialFlag::InFeedback));
 }
 
 bool Serializer::willWrite(const rir::SerialFlags& flags) const {

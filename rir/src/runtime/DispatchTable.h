@@ -212,20 +212,8 @@ struct DispatchTable
 
     static DispatchTable* deserializeR(SEXP refTable, R_inpstream_t inp);
     void serializeR(SEXP refTable, R_outpstream_t out) const;
-    /// If existing is non-null, will deserialize data specified by the
-    /// serializer (e.g. feedback) into `existing` and return it.
-    static DispatchTable* deserialize(AbstractDeserializer& deserializer,
-                                      DispatchTable* existing = nullptr);
+    static DispatchTable* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
-    /// Returns an SEXP containing a DispatchTable with a baseline deserialized
-    /// with hashed recorded calls.
-    static SEXP deserializeBaselineSrc(ByteBuffer& buffer);
-    /// Serialize the baseline, serializing recorded calls as hashed.
-    void serializeBaselineSrc(ByteBuffer& buffer) const;
-    /// Deserializes and adds feedback to the baseline.
-    void deserializeBaselineFeedback(ByteBuffer& buffer);
-    /// Serialize the baseline's feedback.
-    void serializeBaselineFeedback(ByteBuffer& buffer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
     void print(std::ostream&, bool isDetailed = false) const;

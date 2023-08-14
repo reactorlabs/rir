@@ -272,15 +272,12 @@ void Code::serializeR(SEXP refTable, R_outpstream_t out) const {
     });
 }
 
-Code* Code::deserialize(AbstractDeserializer& deserializer, Code* code) {
+Code* Code::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
-    bool codeIsNew = !code;
     auto size = deserializer.readBytesOf<R_xlen_t>(SerialFlags::CodeMisc);
-    auto store = code ? code->container() : p(Rf_allocVector(EXTERNALSXP, size));
+    auto store = p(Rf_allocVector(EXTERNALSXP, size));
     deserializer.addRef(store);
-    if (!code) {
-        code = new (DATAPTR(store)) Code;
-    }
+    auto code = new (DATAPTR(store)) Code;
 
     // Header
     DESERIALIZE(code->src, readSrc, SerialFlags::CodeAst);
@@ -302,9 +299,8 @@ Code* Code::deserialize(AbstractDeserializer& deserializer, Code* code) {
     BC::deserialize(deserializer, extraPoolFlags, code->code(), code->codeSize, code);
 
     // Extra pool
-    SEXP extraPool = codeIsNew ? Rf_allocVector(VECSXP, code->extraPoolSize) : code->getEntry(0);
+    SEXP extraPool = Rf_allocVector(VECSXP, code->extraPoolSize);
     for (unsigned i = 0; i < code->extraPoolSize; ++i) {
-        TODO: Handle existing feedback in extra pool promises
         SET_VECTOR_ELT(extraPool, i, deserializer.read(extraPoolFlags[i]));
     }
 
@@ -316,9 +312,7 @@ Code* Code::deserialize(AbstractDeserializer& deserializer, Code* code) {
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
                   NumLocals, CODE_MAGIC};
-    if (codeIsNew) {
-        code->setEntry(0, extraPool);
-    }
+    code->setEntry(0, extraPool);
     if (outer) {
         code->setEntry(3, outer);
     }
@@ -406,119 +400,6 @@ void Code::serialize(AbstractSerializer& serializer) const {
             }
         }
     });
-}
-
-Code* Code::deserializeSrc(SEXP outer, ByteBuffer& buffer) {
-    Protect p;
-    R_xlen_t size = buffer.getInt();
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
-    Code* code = new (DATAPTR(store)) Code;
-
-    // Header
-    code->src = src_pool_add(p(rir::deserialize(buffer, false)));
-    if (buffer.getBool()) {
-        code->trivialExpr = p(rir::deserialize(buffer, false));
-    }
-    code->stackLength = buffer.getInt();
-    *const_cast<unsigned*>(&code->localsCount) = buffer.getInt();
-    *const_cast<unsigned*>(&code->bindingCacheSize) = buffer.getInt();
-    code->codeSize = buffer.getInt();
-    code->srcLength = buffer.getInt();
-    if (buffer.getBool()) {
-        code->arglistOrder(ArglistOrder::unpack(p(rir::deserialize(buffer, false))));
-    }
-    code->setEntry(3, outer);
-
-    // Bytecode
-    BC::deserializeSrc(buffer, code->code(), code->codeSize, code);
-
-    // Extra pool
-    code->extraPoolSize = buffer.getInt();
-    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
-    for (unsigned i = 0; i < code->extraPoolSize; ++i) {
-        SEXP entrySexp;
-        switch ((ExtraPoolEntryRefInSrc::Type)buffer.getInt()) {
-        case ExtraPoolEntryRefInSrc::Promise:
-            entrySexp = p(Code::deserializeSrc(outer, buffer)->container());
-            break;
-        case ExtraPoolEntryRefInSrc::ArbitrarySexp:
-            entrySexp = p(rir::deserialize(buffer, false));
-            break;
-        default:
-            assert(false && "corrupt deserialization data (corrupt extra pool ref type)");
-        }
-        SET_VECTOR_ELT(extraPool, i, entrySexp);
-    }
-    code->setEntry(0, extraPool);
-
-    // Srclist
-    for (unsigned i = 0; i < code->srcLength; i++) {
-        code->srclist()[i].pcOffset = buffer.getInt();
-        // TODO: Intern
-        code->srclist()[i].srcIdx = src_pool_add(p(rir::deserialize(buffer, false)));
-    }
-    code->info = {// GC area starts just after the header
-                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
-                  NumLocals, CODE_MAGIC};
-
-    // Src codes are always bytecode
-    code->kind = Kind::Bytecode;
-    code->nativeCode_ = nullptr;
-
-    return code;
-}
-
-void Code::serializeSrc(ByteBuffer& buffer) const {
-    // Header
-    rir::serialize(src_pool_at(src), buffer, false);
-    buffer.putBool(trivialExpr);
-    if (trivialExpr) {
-        rir::serialize(trivialExpr, buffer, false);
-    }
-    buffer.putInt(stackLength);
-    buffer.putInt(localsCount);
-    buffer.putInt(bindingCacheSize);
-    buffer.putInt(codeSize);
-    buffer.putInt(srcLength);
-    buffer.putBool(arglistOrder());
-    if (arglistOrder()) {
-        rir::serialize(arglistOrder()->container(), buffer, false);
-    }
-
-    // Bytecode
-    std::vector<ExtraPoolEntryRefInSrc> extraPoolEntries;
-    BC::serializeSrc(buffer, extraPoolEntries, code(), codeSize, this);
-
-    // Extra pool
-    buffer.putInt(extraPoolEntries.size());
-    for (auto& entry : extraPoolEntries) {
-        auto entrySexp = getExtraPoolEntry(entry.idx);
-        buffer.putInt((unsigned)entry.type);
-        switch (entry.type) {
-        case ExtraPoolEntryRefInSrc::Promise:
-            Code::unpack(entrySexp)->serializeSrc(buffer);
-            break;
-        case ExtraPoolEntryRefInSrc::ArbitrarySexp:
-            rir::serialize(entrySexp, buffer, false);
-            break;
-        default:
-            assert(false);
-        }
-    }
-
-    // Srclist
-    for (unsigned i = 0; i < srcLength; i++) {
-        buffer.putInt(srclist()[i].pcOffset);
-        rir::serialize(src_pool_at(srclist()[i].srcIdx), buffer, false);
-    }
-}
-
-void Code::deserializeFeedback(ByteBuffer& buffer) {
-    BC::deserializeFeedback(buffer, code(), codeSize, this);
-}
-
-void Code::serializeFeedback(ByteBuffer& buffer) const {
-    BC::serializeFeedback(buffer, code(), codeSize, this);
 }
 
 void Code::hash(Hasher& hasher) const {

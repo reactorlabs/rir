@@ -130,9 +130,9 @@ handleRetrieveServerRequest(zmq::socket_t* socket,
     if (what) {
         // Data format =
         //   Request::Retrieved
-        // + serialize(what)
+        // + serialize(what, CompilerClientRetrieve)
         clientResponse.putLong((uint64_t)Request::Retrieved);
-        serialize(what, clientResponse, true);
+        serialize(what, clientResponse, SerialOptions::CompilerClientRetrieve);
     } else {
         std::cerr << "(not found)" << std::endl;
         // Data format =
@@ -269,9 +269,8 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + serializeBaselineSrc(what)
-                // + serialize(decompiledClosure(what))
-                // + serializeBaselineFeedback(what)
+                // + serialize(what, CompilerClientSourceAndFeedback)
+                // + serialize(decompiledClosure(what), CompilerClientSource)
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -285,9 +284,8 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
                 request.putLong((uint64_t)Request::Compile);
-                DispatchTable::unpack(what)->serializeBaselineSrc(request);
-                serialize(rirDecompile(what), request, false);
-                DispatchTable::unpack(what)->serializeBaselineFeedback(request);
+                serialize(what, request, SerialOptions::CompilerClientSourceAndFeedback);
+                serialize(rirDecompile(what), request, SerialOptions::CompilerClientSource);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());
@@ -309,7 +307,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(pirPrint)
                 // + pirPrint
                 // + hashRoot(what)
-                // + serialize(what)
+                // + serialize(what, CompilerServer)
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
                 auto pirPrintSize = response.getLong();
@@ -323,7 +321,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 SEXP responseWhat = UUIDPool::get(responseWhatHash);
                 if (!responseWhat) {
                     // Actually deserialize
-                    responseWhat = deserialize(response, true, responseWhatHash);
+                    responseWhat = deserialize(response, SerialOptions::CompilerServer, responseWhatHash);
                 }
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
@@ -348,12 +346,12 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
         [=](ByteBuffer& response) -> SEXP {
             // Response data format =
             //   Response::Retrieved
-            // + serialize(what)
+            // + serialize(what, CompilerServer)
             // | Response::RetrieveFailed
             auto responseMagic = (Response)response.getLong();
             switch (responseMagic) {
             case Response::Retrieved:
-                return deserialize(response, true, hash);
+                return deserialize(response, SerialOptions::CompilerServer, hash);
             case Response::RetrieveFailed:
                 return nullptr;
             default:
