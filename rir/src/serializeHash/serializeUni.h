@@ -144,7 +144,9 @@ class AbstractSerializer {
     inline void writeBytesOf(T c,
                              const SerialFlags& flags = SerialFlags::Inherit) {
         if (sizeof(c) == sizeof(int)) {
-            writeInt(*reinterpret_cast<int*>(&c), flags);
+            int result;
+            memcpy(&result, &c, sizeof(int));
+            writeInt(result, flags);
         } else {
             writeBytes((void*)&c, sizeof(c), flags);
         }
@@ -200,8 +202,10 @@ class AbstractDeserializer {
     template <typename T>
     inline T readBytesOf(const SerialFlags& flags = SerialFlags::Inherit) {
         if (sizeof(T) == sizeof(int)) {
-            auto result = readInt(flags);
-            return *reinterpret_cast<T*>(&result);
+            auto integer = readInt(flags);
+            T result;
+            memcpy(&result, &integer, sizeof(int));
+            return result;
         } else {
             T result;
             readBytes((void*)&result, sizeof(result), flags);
