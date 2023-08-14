@@ -92,37 +92,9 @@ class Compiler {
         // Keep alive. TODO: why is this needed?
         if (origBC)
             dt->baseline()->body()->addExtraPoolEntry(origBC);
-        if (CompilerClient::isRunning() || CompilerServer::isRunning()) {
-            // Store original body so we can send the AST to the server
-            dt->setOriginalBody(BODY(inClosure));
-        }
 
         // Set the closure fields.
         SET_BODY(inClosure, dt->container());
-    }
-
-    /// Input is a compiled closure whose body is a dispatch table, output is a
-    /// closure with the same formals and environment, but with the body it had
-    /// before compilation. Only works on the compiler client
-    static SEXP decompiledClosure(SEXP closure) {
-        assert((CompilerClient::isRunning() || CompilerServer::isRunning()) &&
-               "we only store original closure bodies if the compiler client "
-               "or server is running. See the above line in compileClosure "
-               "where we call dt->setOriginalBody. Add extra to the if"
-               "condition and then modify this assertion to extend support for "
-               "other cases");
-        assert(TYPEOF(closure) == CLOSXP);
-        assert(DispatchTable::check(BODY(closure)));
-
-        auto originalBody = DispatchTable::unpack(BODY(closure))->originalBody();
-        assert(originalBody && "original body not set in dispatch table, how was it compiled?");
-
-        SEXP newClosure = Rf_allocSExp(CLOSXP);
-        SET_FORMALS(newClosure, FORMALS(closure));
-        SET_BODY(newClosure, originalBody);
-        SET_CLOENV(newClosure, CLOENV(closure));
-
-        return newClosure;
     }
 };
 

@@ -92,7 +92,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static Function* deserializeR(SEXP refTable, R_inpstream_t inp);
     void serializeR(SEXP refTable, R_outpstream_t out) const;
-    static Function* deserialize(AbstractDeserializer& deserializer);
+    /// If existing is non-null, will deserialize data specified by the
+    /// serializer (e.g. feedback) into `existing` and return it.
+    static Function* deserialize(AbstractDeserializer& deserializer,
+                                 Function* existing = nullptr);
     void serialize(AbstractSerializer& deserializer) const;
     /// Deserialize from only source information. This is used to deserialize
     /// functions from the compiler client.

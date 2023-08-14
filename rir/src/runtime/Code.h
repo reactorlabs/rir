@@ -225,26 +225,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserializeR(SEXP outer, SEXP refTable, R_inpstream_t inp);
-    void serializeR(bool includeOuter, SEXP refTable, R_outpstream_t out) const;
-    static Code* deserialize(SEXP outer, AbstractDeserializer& deserializer);
-    void serialize(bool includeOuter, AbstractSerializer& deserializer) const;
-
-    static Code* deserializeR(SEXP refTable, R_inpstream_t inp) {
-        return deserializeR(nullptr, refTable, inp);
-    }
-
-    void serializeR(SEXP refTable, R_outpstream_t out) const {
-        serializeR(true, refTable, out);
-    }
-
-    static Code* deserialize(AbstractDeserializer& deserializer) {
-        return deserialize(nullptr, deserializer);
-    }
-
-    void serialize(AbstractSerializer& serializer) const {
-        serialize(true, serializer);
-    }
+    static Code* deserializeR(SEXP refTable, R_inpstream_t inp);
+    void serializeR(SEXP refTable, R_outpstream_t out) const;
+    /// If existing is non-null, will deserialize data specified by the
+    /// serializer (e.g. feedback) into `existing` and return it.
+    static Code* deserialize(AbstractDeserializer& deserializer,
+                             Code* existing);
+    void serialize(AbstractSerializer& deserializer) const;
 
     /// See `Function::deserializeSrc`. Generally you will call that and that is
     /// the only function which calls this.

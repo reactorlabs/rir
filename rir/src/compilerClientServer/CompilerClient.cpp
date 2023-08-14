@@ -269,10 +269,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
+                // + serializeBaselineSrc(what)
                 // + serialize(decompiledClosure(what))
-                // + serializeSrc(what)
-                // + what->baseline()->recordedFeedback()
-                // + what->baseline()->recordedFeedback()
+                // + serializeBaselineFeedback(what)
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -286,10 +285,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
                 request.putLong((uint64_t)Request::Compile);
-                serialize(Compiler::decompiledClosure(what), request, false);
                 DispatchTable::unpack(what)->serializeBaselineSrc(request);
-                DispatchTable::unpack(what)->baseline()->serializeFeedback(request);
-                DispatchTable::unpack(what)->baseline()->serializeFeedback(request);
+                serialize(rirDecompile(what), request, false);
+                DispatchTable::unpack(what)->serializeBaselineFeedback(request);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
                 request.putLong(name.size());

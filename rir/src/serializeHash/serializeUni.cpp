@@ -17,63 +17,140 @@
 
 namespace rir {
 
-/// All flags are set. Flags are only unset in children.
-SerialFlags SerialFlags::Inherit(EnumSet<SerialFlag>::Any());
-/// AST, not guaranteed RIR, hashed, in source, not in feedback
-SerialFlags SerialFlags::Ast(SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource);
-/// Not an SEXP, not hashed, in source, not in feedback
-SerialFlags SerialFlags::DtContext(SerialFlag::InSource);
-/// Not an AST, guaranteed rir, hashed, in source, in feedback
-SerialFlags SerialFlags::DtBaseline(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
-/// Not an AST, guaranteed RIR, not hashed, not in feedback, not in source
-SerialFlags SerialFlags::DtOptimized(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp);
-/// Not an AST, guaranteed rir, hashed, in source, in feedback
-SerialFlags SerialFlags::FunBody(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
-/// Not an AST, guaranteed rir, hashed, in source, in feedback
-SerialFlags SerialFlags::FunDefaultArg(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
-/// Not an SEXP, not hashed, not in source, in feedback
-SerialFlags SerialFlags::FunStats(SerialFlag::InFeedback);
-/// Not an SEXP, hashed, in source, not in feedback
-SerialFlags SerialFlags::FunMiscBytes(SerialFlag::Hashed, SerialFlag::InSource);
-/// Not an AST, guaranteed rir, hashed, not in source, not in feedback
-SerialFlags SerialFlags::CodeOuterFun(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed);
-/// Not an AST, guaranteed rir, hashed, in source, not in feedback
-SerialFlags SerialFlags::CodeArglistOrder(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource);
-/// Child promise in extra pool
-///
-/// Not an AST, guaranteed rir, hashed, in source, in feedback
-SerialFlags SerialFlags::CodePromise(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource, SerialFlag::InFeedback);
-/// Data is part of a record_ bytecode. SEXP is a recorded call in extra pool.
-///
-/// Not an AST, not guaranteed rir, not hashed, not in source, in feedback
-SerialFlags SerialFlags::CodeFeedback(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::InFeedback);
-/// Unclassified SEXP in extra pool: original bytecode, any pool entry in
-/// native code.
-///
-/// Not an AST, not guaranteed rir, hashed, not in source, not in feedback
-SerialFlags SerialFlags::CodePoolUnknown(SerialFlag::MaybeNotAst, SerialFlag::MaybeSexp, SerialFlag::Hashed);
-/// Code kind (i.e. whether the code is native) and native code.
-///
-/// Not an SEXP, hashed, not in source, not in feedback
-SerialFlags SerialFlags::CodeNative(SerialFlag::Hashed);
-/// AST, not guaranteed rir, hashed, in source, not in feedback
-SerialFlags SerialFlags::CodeAst(SerialFlag::MaybeSexp, SerialFlag::Hashed, SerialFlag::InSource);
-/// Not an SEXP, hashed, in source, not in feedback
-SerialFlags SerialFlags::CodeMisc(SerialFlag::MaybeSexp, SerialFlag::MaybeNotAst, SerialFlag::Hashed, SerialFlag::InSource);
+// Inlay hints are needed to understand the below code
+SerialFlags SerialFlags::Inherit(
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
+SerialFlags SerialFlags::Ast(
+    true,
+    false,
+    true,
+    true,
+    true,
+    false);
+SerialFlags SerialFlags::DtContext(
+    false,
+    true,
+    true,
+    false,
+    true,
+    false);
+SerialFlags SerialFlags::DtBaseline(
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
+SerialFlags SerialFlags::DtOptimized(
+    false,
+    true,
+    true,
+    true,
+    false,
+    false);
+SerialFlags SerialFlags::FunBody(
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
+SerialFlags SerialFlags::FunDefaultArg(
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
+SerialFlags SerialFlags::FunStats(
+    false,
+    true,
+    true,
+    false,
+    false,
+    true);
+SerialFlags SerialFlags::FunMiscBytes(
+    true,
+    true,
+    true,
+    false,
+    true,
+    false);
+SerialFlags SerialFlags::CodeArglistOrder(
+    true,
+    true,
+    true,
+    true,
+    true,
+    false);
+SerialFlags SerialFlags::CodeOuterFun(
+    true,
+    true,
+    true,
+    true,
+    true,
+    false);
+SerialFlags SerialFlags::CodePromise(
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
+SerialFlags SerialFlags::CodeFeedback(
+    false,
+    true,
+    true,
+    true,
+    false,
+    true);
+SerialFlags SerialFlags::CodePoolUnknown(
+    true,
+    true,
+    true,
+    true,
+    true,
+    false);
+SerialFlags SerialFlags::CodeNative(
+    true,
+    true,
+    true,
+    false,
+    true,
+    false);
+SerialFlags SerialFlags::CodeAst(
+    true,
+    false,
+    true,
+    true,
+    true,
+    false);
+SerialFlags SerialFlags::CodeMisc(
+    true,
+    true,
+    true,
+    true,
+    true,
+    false);
 
-void AbstractSerializer::writeConst(unsigned idx, SerialFlags flags) {
+void AbstractSerializer::writeConst(unsigned idx, const SerialFlags& flags) {
     write(Pool::get(idx), flags);
 }
 
-void AbstractSerializer::writeSrc(unsigned idx, SerialFlags flags) {
+void AbstractSerializer::writeSrc(unsigned idx, const SerialFlags& flags) {
     write(src_pool_at(idx), flags);
 }
 
-unsigned AbstractDeserializer::readConst(SerialFlags flags) {
+unsigned AbstractDeserializer::readConst(const SerialFlags& flags) {
     return Pool::insert(read(flags));
 }
 
-unsigned AbstractDeserializer::readSrc(SerialFlags flags) {
+unsigned AbstractDeserializer::readSrc(const SerialFlags& flags) {
     return src_pool_add(read(flags));
 }
 
@@ -96,15 +173,6 @@ enum class EnvType {
     Namespace,
     Regular
 };
-
-/// Reverse mapping of SEXP to global index
-static std::unordered_map<SEXP, unsigned> globalsMap = []{
-    std::unordered_map<SEXP, unsigned> map;
-    for (auto g : globals) {
-        map[g] = map.size();
-    }
-    return map;
-}();
 
 /// These SEXPs are added to the ref table the first time they are serialized or
 /// deserialized, and serialized as / deserialized from refs subsequent times.
@@ -430,7 +498,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         SEXPTYPE type;
         if (ALTREP(sexp) && ALTREP_SERIALIZED_CLASS(sexp) && ALTREP_SERIALIZED_STATE(sexp)) {
             type = (SEXPTYPE)SpecialType::Altrep;
-        } else if (globalsMap.count(sexp)) {
+        } else if (global2Index.count(sexp)) {
             type = (SEXPTYPE)SpecialType::Global;
         } else if (canSelfReference(TYPEOF(sexp)) && refs && refs->count(sexp)) {
             type = (SEXPTYPE)SpecialType::Ref;
@@ -490,7 +558,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             });
             break;
         case (SEXPTYPE)SpecialType::Global:
-            writeBytesOf(globalsMap.at(sexp));
+            writeBytesOf(global2Index.at(sexp));
             // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:

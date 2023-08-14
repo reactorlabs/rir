@@ -220,15 +220,20 @@ struct DispatchTable
 
     static DispatchTable* deserializeR(SEXP refTable, R_inpstream_t inp);
     void serializeR(SEXP refTable, R_outpstream_t out) const;
-    static DispatchTable* deserialize(AbstractDeserializer& deserializer);
+    /// If existing is non-null, will deserialize data specified by the
+    /// serializer (e.g. feedback) into `existing` and return it.
+    static DispatchTable* deserialize(AbstractDeserializer& deserializer,
+                                      DispatchTable* existing = nullptr);
     void serialize(AbstractSerializer& deserializer) const;
     /// Returns an SEXP containing a DispatchTable with a baseline deserialized
-    /// via only its source code. This is how we receive objects from the
-    /// compiler client.
+    /// with hashed recorded calls.
     static SEXP deserializeBaselineSrc(ByteBuffer& buffer);
-    /// Serialize the baseline, serializing only its source code. This is how we
-    /// send objects to the compiler server.
+    /// Serialize the baseline, serializing recorded calls as hashed.
     void serializeBaselineSrc(ByteBuffer& buffer) const;
+    /// Deserializes and adds feedback to the baseline.
+    void deserializeBaselineFeedback(ByteBuffer& buffer);
+    /// Serialize the baseline's feedback.
+    void serializeBaselineFeedback(ByteBuffer& buffer) const;
     void hash(Hasher& hasher) const;
     void addConnected(ConnectedCollector& collector) const;
     void print(std::ostream&, bool isDetailed = false) const;
@@ -261,19 +266,6 @@ struct DispatchTable
 
     Context combineContextWith(Context anotherContext) {
         return userDefinedContext_ | anotherContext;
-    }
-
-    SEXP originalBody() {
-        if (originalBodyPoolIdx == 0) {
-            return nullptr;
-        } else {
-            return baseline()->body()->getExtraPoolEntry(originalBodyPoolIdx);
-        }
-    }
-
-    void setOriginalBody(SEXP originalBody) {
-        assert(size() > 0 && "need to set baseline first");
-        originalBodyPoolIdx = baseline()->body()->addExtraPoolEntry(originalBody);
     }
 
     void print(std::ostream& out, bool verbose) const {
@@ -324,7 +316,6 @@ struct DispatchTable
               capacity) {}
 
     size_t size_ = 0;
-    unsigned originalBodyPoolIdx;
     Context userDefinedContext_;
 };
 

@@ -1,4 +1,5 @@
 #include "DispatchTable.h"
+#include "R/Protect.h"
 #include "runtime/log/printPrettyGraph.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serializeR.h"
@@ -54,17 +55,21 @@ void DispatchTable::serializeR(SEXP refTable, R_outpstream_t out) const {
     }
 }
 
-DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
-    DispatchTable* table = create();
-    PROTECT(table->container());
-    deserializer.addRef(table->container());
-    table->userDefinedContext_ = deserializer.readBytesOf<Context>(SerialFlags::DtContext);
-    table->size_ = deserializer.readBytesOf<int>(SerialFlags::DtOptimized);
-    for (size_t i = 0; i < table->size(); i++) {
-        table->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
+DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer,
+                                          DispatchTable* dt) {
+    Protect p;
+    if (!dt) {
+        dt = create();
+        p(dt->container());
     }
-    UNPROTECT(1);
-    return table;
+    deserializer.addRef(dt->container());
+    DESERIALIZE(dt->userDefinedContext_, readBytesOf<Context>, SerialFlags::DtContext);
+    DESERIALIZE(dt->size_, readBytesOf<int>, SerialFlags::DtOptimized);
+    for (size_t i = 0; i < dt->size(); i++) {
+        TODO: Handle existing
+        dt->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
+    }
+    return dt;
 }
 
 void DispatchTable::serialize(AbstractSerializer& serializer) const {
@@ -85,6 +90,14 @@ SEXP DispatchTable::deserializeBaselineSrc(ByteBuffer& buffer) {
 void DispatchTable::serializeBaselineSrc(ByteBuffer& buffer) const {
     buffer.putBytes((uint8_t*)&userDefinedContext_, sizeof(Context));
     baseline()->serializeSrc(buffer);
+}
+
+void DispatchTable::deserializeBaselineFeedback(ByteBuffer& buffer) { // NOLINT(*-make-member-function-const)
+    baseline()->deserializeFeedback(buffer);
+}
+
+void DispatchTable::serializeBaselineFeedback(ByteBuffer& buffer) const {
+    baseline()->serializeFeedback(buffer);
 }
 
 void DispatchTable::hash(Hasher& hasher) const {

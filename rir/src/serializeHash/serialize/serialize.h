@@ -11,24 +11,48 @@
 
 namespace rir {
 
+/// Controls what data is serialized / deserialized and what format some of it
+/// uses. The same options data is serialized with, it must also be deserialized
+/// with.
+struct SerialOptions {
+    /// Whether to serialize connected RIR objects as UUIDs instead of their
+    /// full content. However, recorded calls are always serialized as UUIDs.
+    bool useHashes;
+    /// Whether to only serialize source (no optimized code or feedback).
+    bool onlySource;
+    /// Whether to only serialized feedback (no optimized code or source).
+    bool onlyFeedback;
+
+    /// Serialize everything without hashes
+    static SerialOptions DeepCopy;
+    /// Serialize everything with hashes
+    static SerialOptions CompilerServer;
+    /// Serialize only source without hashes
+    static SerialOptions CompilerClientSource;
+    /// Serialize only feedback without hashes
+    static SerialOptions CompilerClientFeedback;
+};
+
 class Serializer : public AbstractSerializer {
     /// Underlying byte buffer
     ByteBuffer& buffer;
     /// Ref table for recursively-serialized SEXPs
     SerializedRefs refs_;
-    /// Whether to serialize connected RIR objects as UUIDs instead of their
-    /// full content
-    bool useHashes;
+    /// Controls what data is serialized and what format some of it uses. The
+    /// corresponding deserializer must have the same options.
+    SerialOptions options;
 
-    Serializer(ByteBuffer& buffer, bool useHashes)
-        : buffer(buffer), refs_(), useHashes(useHashes) {}
+    Serializer(ByteBuffer& buffer, SerialOptions options)
+        : buffer(buffer), refs_(), options(options) {}
     SerializedRefs* refs() override { return &refs_; }
 
-    friend void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes);
+    friend void serialize(SEXP sexp, ByteBuffer& buffer,
+                          const SerialOptions& options);
   public:
-    void writeBytes(const void *data, size_t size, SerialFlags flags) override;
-    void writeInt(int data, SerialFlags flags) override;
-    void write(SEXP s, SerialFlags flags) override;
+    bool willWrite(const SerialFlags& flags) const override;
+    void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
+    void writeInt(int data, const SerialFlags& flags) override;
+    void write(SEXP s, const SerialFlags& flags) override;
 };
 
 class Deserializer : public AbstractDeserializer {
@@ -36,50 +60,53 @@ class Deserializer : public AbstractDeserializer {
     ByteBuffer& buffer;
     /// Ref table for recursively-(de)serialized SEXPs
     DeserializedRefs refs_;
-    /// Whether to deserialize connected RIR objects from UUIDs instead of their
-    /// full content
-    bool useHashes;
-    /// If set, the first rir SEXP deserialized will assume this hash
+    /// Controls what data is deserialized and what format some of it uses. The
+    /// corresponding serializer must have the same options.
+    SerialOptions options;
+    /// If set, the first rir object deserialized will use this hash
     UUID retrieveHash;
 
-    Deserializer(ByteBuffer& buffer, bool useHashes, const UUID& retrieveHash)
-        : buffer(buffer), refs_(), useHashes(useHashes),
+    Deserializer(ByteBuffer& buffer, SerialOptions options,
+                 const UUID& retrieveHash = UUID())
+        : buffer(buffer), refs_(), options(options),
           retrieveHash(retrieveHash) {}
     DeserializedRefs* refs() override { return &refs_; }
 
-    friend SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes,
+    friend SEXP deserialize(ByteBuffer& sexpBuffer,
+                            const SerialOptions& options,
                             const UUID& retrieveHash);
   public:
-    void readBytes(void *data, size_t size, SerialFlags flags) override;
-    int readInt(SerialFlags flags) override;
-    SEXP read(SerialFlags flags) override;
+    bool willRead(const SerialFlags& flags) const override;
+    void readBytes(void *data, size_t size, const SerialFlags& flags) override;
+    int readInt(const SerialFlags& flags) override;
+    SEXP read(const SerialFlags& flags) override;
     void addRef(SEXP sexp) override;
 };
 
 /// Serialize a SEXP (doesn't have to be RIR) into the buffer, using RIR's
 /// custom serialization format.
 ///
-/// If useHashes is true, connected RIR objects are serialized as UUIDs
-/// instead of their full content. The corresponding call to deserialize MUST be
-/// done with `useHashes=true` as well, AND the SEXP must have already been
-/// recursively interned and preserved.
-void serialize(SEXP sexp, ByteBuffer& buffer, bool useHashes);
+/// The corresponding call to deserialize MUST have the same options.
+/// Additionally, if options.useHashes is true, connected RIR objects are
+/// serialized as UUIDs instead of their full content, and these SEXP MUST be
+/// interned and preserved because they must be retrievable when deserialized.
+void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options);
 /// Deserialize an SEXP (doesn't have to be RIR) from the buffer, using RIR's
 /// custom serialization format.
 ///
-/// If useHashes is true, connected RIR objects are deserialized from UUIDs
-/// and retrieved from the UUIDPool. If the UUIDs aren't in the pool, this
-/// sends a request to compiler server, and fails if it isn't connected or we
-/// can't get a response. The corresponding call to serialize MUST have been
-/// done with `useHashes=true` as well.
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes);
-/// Equivalent to `deserialize(ByteBuffer& sexpBuffer, bool useHashes)`, except
+/// The corresponding call to serialize MUST have had the same options.
+/// Additionally, if options.useHashes is true, connected RIR objects MUST be
+/// retrievable.
+SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options);
+/// Equivalent to
+/// `deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)`, except
 /// if the hash is non-null, the first deserialized internable SEXP will be
 /// interned with it before being fully deserialized. This function is
 /// used/needed to support deserializing recursive hashed structures.
 ///
-/// @see deserialize(ByteBuffer& sexpBuffer, bool useHashes)
-SEXP deserialize(ByteBuffer& sexpBuffer, bool useHashes, const UUID& retrieveHash);
+/// @see deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)
+SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options,
+                 const UUID& retrieveHash);
 
 /// Will serialize and deserialize the SEXP, returning a deep copy, using RIR's
 /// custom serialization format.
