@@ -117,7 +117,8 @@ void DispatchTable::printPrettyGraphContent(const PrettyGraphInnerPrinter& print
 
 void DispatchTable::debugCompare(const rir::DispatchTable* dt1,
                                  const rir::DispatchTable* dt2,
-                                 std::stringstream& differences) {
+                                 std::stringstream& differences,
+                                 bool compareFeedbackAndExtraPoolRBytecodes) {
     if (dt1->size() != dt2->size()) {
         differences << "DispatchTable size differs: " << dt1->size() << " vs " << dt2->size() << "\n";
     }
@@ -126,7 +127,8 @@ void DispatchTable::debugCompare(const rir::DispatchTable* dt1,
         Function::debugCompare(
             Function::unpack(dt1->getEntry(i)),
             Function::unpack(dt2->getEntry(i)),
-            funDifferencesStream
+            funDifferencesStream,
+            compareFeedbackAndExtraPoolRBytecodes
         );
         std::string funDifferences = funDifferencesStream.str();
         if (!funDifferences.empty()) {

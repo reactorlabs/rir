@@ -140,6 +140,26 @@ SerialFlags SerialFlags::CodeMisc(
     true,
     false);
 
+static std::vector<SerialFlags> ById_{
+        SerialFlags::Inherit,
+        SerialFlags::Ast,
+        SerialFlags::DtContext,
+        SerialFlags::DtBaseline,
+        SerialFlags::DtOptimized,
+        SerialFlags::FunBody,
+        SerialFlags::FunDefaultArg,
+        SerialFlags::FunStats,
+        SerialFlags::FunMiscBytes,
+        SerialFlags::CodeArglistOrder,
+        SerialFlags::CodeOuterFun,
+        SerialFlags::CodePromise,
+        SerialFlags::CodeFeedback,
+        SerialFlags::CodePoolUnknown,
+        SerialFlags::CodeNative,
+        SerialFlags::CodeAst,
+        SerialFlags::CodeMisc};
+const std::vector<SerialFlags>& SerialFlags::ById = ById_;
+
 void AbstractSerializer::writeConst(unsigned idx, const SerialFlags& flags) {
     write(Pool::get(idx), flags);
 }

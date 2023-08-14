@@ -243,7 +243,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     /// not, will add each difference to differences, prefixing with `prefix`
     /// (the code type, either body or default arg).
     static void debugCompare(const Code* c1, const Code* c2, const char* prefix,
-                             std::stringstream& differences);
+                             std::stringstream& differences,
+                             bool compareFeedbackAndExtraPoolRBytecodes = true);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

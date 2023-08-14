@@ -98,6 +98,7 @@ class SerialFlags {
     static SerialFlags CodeNative;
     static SerialFlags CodeAst;
     static SerialFlags CodeMisc;
+    static const std::vector<SerialFlags>& ById;
 };
 
 /// Serialized SEXP with flags

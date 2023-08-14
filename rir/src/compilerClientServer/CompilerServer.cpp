@@ -183,21 +183,26 @@ void CompilerServer::tryRun() {
             // handle the case where they are forgotten by just not speculating
             // on them.
             what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
+            PROTECT(what);
             auto what2 = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
+            PROTECT(what2);
             Compiler::compileClosure(what2);
 
             std::stringstream differencesStream;
-            Function::debugCompare(
-                DispatchTable::unpack(BODY(what))->baseline(),
-                DispatchTable::unpack(BODY(what2))->baseline(),
-                differencesStream
+            DispatchTable::debugCompare(
+                DispatchTable::unpack(BODY(what)),
+                DispatchTable::unpack(BODY(what2)),
+                differencesStream,
+                false
             );
             auto differences = differencesStream.str();
             if (!differences.empty()) {
-                std::cerr << "Warning: differences when we encode code via AST and bytecode without recorded calls:"
+                std::cerr << "Differences when we encode code via AST and bytecode without recorded calls:"
                           << std::endl << differences << std::endl;
             }
 
+            // No longer need to protect what, and what2 is no longer used
+            UNPROTECT(2);
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");

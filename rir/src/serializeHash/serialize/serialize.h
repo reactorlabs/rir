@@ -30,6 +30,10 @@ struct SerialOptions {
     /// onlySourceAndFeedback irrelevant.
     bool onlySourceAndFeedback;
 
+    bool operator==(const SerialOptions& other) const {
+        return memcmp(this, &other, sizeof(SerialOptions)) == 0;
+    }
+
     /// Serialize everything, without hashes
     static SerialOptions DeepCopy;
     /// Serialize everything, with hashes

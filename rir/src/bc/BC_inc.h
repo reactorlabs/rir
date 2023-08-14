@@ -234,9 +234,8 @@ class BC {
     static void serializeR(std::vector<bool>& extraPoolChildren, SEXP refTable,
                            R_outpstream_t out, const Opcode* code,
                            size_t codeSize, const Code* container);
-    static void deserialize(AbstractDeserializer& deserializer,
-                            std::vector<SerialFlags>& extraPoolFlags,
-                            Opcode* code, size_t codeSize, Code* container);
+    static void deserialize(AbstractDeserializer& deserializer, Opcode* code,
+                            size_t codeSize, Code* container);
     static void serialize(AbstractSerializer& serializer,
                           std::vector<SerialFlags>& extraPoolFlags,
                           const Opcode* code, size_t codeSize,
@@ -256,7 +255,8 @@ class BC {
                              size_t codeSize1, size_t codeSize2,
                              const Code* container1, const Code* container2,
                              const char* prefix,
-                             std::stringstream& differences);
+                             std::stringstream& differences,
+                             bool compareFeedbackAndExtraPoolRBytecodes = true);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
