@@ -11,7 +11,7 @@ static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
         return std::regex(
-            "EagerCalls"); // Filtering out DelayEnv from all opt pipelines
+            "Cleanup"); // Filtering out DelayEnv from all opt pipelines
     return std::regex("");
 }
 
