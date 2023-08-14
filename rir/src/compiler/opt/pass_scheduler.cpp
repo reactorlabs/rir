@@ -10,8 +10,8 @@ namespace pir {
 static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
-        return std::regex("Constantfold"); // Filtering out Constantfold from
-                                           // all opt pipelines
+        return std::regex("ScopeResolution"); // Filtering out ScopeResolution
+                                              // from all opt pipelines
     return std::regex("");
 }
 
