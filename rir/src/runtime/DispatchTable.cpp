@@ -65,9 +65,10 @@ DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
         dt->userDefinedContext_ = Context(
             deserializer.readBytesOf<unsigned long>(SerialFlags::DtContext));
     }
-    DESERIALIZE(dt->size_, readBytesOf<int>, SerialFlags::DtOptimized);
-    size_t n = deserializer.willRead(SerialFlags::DtOptimized) ? dt->size() : 1;
-    for (size_t i = 0; i < n; i++) {
+    dt->size_ = deserializer.willRead(SerialFlags::DtOptimized)
+                    ? deserializer.readBytesOf<int>(SerialFlags::DtOptimized)
+                    : 1;
+    for (size_t i = 0; i < dt->size(); i++) {
         dt->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
     }
     return dt;

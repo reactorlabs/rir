@@ -374,13 +374,13 @@ void BC::deserialize(AbstractDeserializer& deserializer,
             break;
         case Opcode::record_type_:
             if (deserializer.willRead(SerialFlags::CodeFeedback)) {
-                deserializer.readBytes(&i.typeFeedback, sizeof(ObservedValues),
+                deserializer.readBytes(&i.typeFeedback, sizeof(i.typeFeedback),
                                        SerialFlags::CodeFeedback);
             }
             break;
         case Opcode::record_test_:
             if (deserializer.willRead(SerialFlags::CodeFeedback)) {
-                deserializer.readBytes(&i.testFeedback, sizeof(ObservedTest),
+                deserializer.readBytes(&i.testFeedback, sizeof(i.testFeedback),
                                        SerialFlags::CodeFeedback);
             }
             break;
@@ -484,10 +484,10 @@ void BC::serialize(AbstractSerializer& serializer,
             }
             break;
         case Opcode::record_type_:
-            serializer.writeBytesOf(i.typeFeedback, SerialFlags::CodeFeedback);
+            serializer.writeBytes(&i.typeFeedback, sizeof(i.typeFeedback), SerialFlags::CodeFeedback);
             break;
         case Opcode::record_test_:
-            serializer.writeBytesOf(i.testFeedback, SerialFlags::CodeFeedback);
+            serializer.writeBytes(&i.testFeedback, sizeof(i.testFeedback), SerialFlags::CodeFeedback);
             break;
         case Opcode::br_:
         case Opcode::brtrue_:

@@ -414,7 +414,7 @@ SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
                               << "\n");
                 auto sexp = CompilerClient::retrieve(hash);
                 if (sexp) {
-                    intern(sexp, hash, false);
+                    intern(sexp, hash, false, false);
                     return sexp;
                 }
                 Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
@@ -538,7 +538,7 @@ SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
                           << "\n");
             auto sexp = CompilerClient::retrieve(hash);
             if (sexp) {
-                intern(sexp, hash, false);
+                intern(sexp, hash, false, false);
                 return sexp;
             }
             Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
@@ -546,7 +546,7 @@ SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
             LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
             auto sexp = CompilerServer::retrieve(hash);
             if (sexp) {
-                intern(sexp, hash, true);
+                intern(sexp, hash, true, false);
                 return sexp;
             }
             LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
