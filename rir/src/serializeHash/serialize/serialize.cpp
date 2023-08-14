@@ -2,6 +2,7 @@
 #include "R/Protect.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
+#include "compilerClientServer/CompilerServer.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
 
@@ -213,7 +214,9 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 void Deserializer::addRef(SEXP sexp) {
     AbstractDeserializer::addRef(sexp);
     if (retrieveHash && TYPEOF(sexp) == EXTERNALSXP) {
-        UUIDPool::intern(sexp, retrieveHash, false, false);
+        // TODO: A bit hachy that we hardcode preserve to if the compiler server
+        //  is running
+        UUIDPool::intern(sexp, retrieveHash, CompilerServer::isRunning(), false);
         retrieveHash = UUID();
     }
 }
@@ -222,7 +225,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
     disableInterpreter([&]{
         disableGc([&] {
             Serializer serializer(buffer, options);
-            serializer.AbstractSerializer::write(sexp);
+            serializer.writeInline(sexp);
         });
     });
 }
@@ -237,7 +240,7 @@ SEXP deserialize(ByteBuffer& buffer, const SerialOptions& options,
     disableInterpreter([&]{
         disableGc([&] {
             Deserializer deserializer(buffer, options, retrieveHash);
-            result = deserializer.AbstractDeserializer::read();
+            result = deserializer.readInline();
         });
     });
     return result;

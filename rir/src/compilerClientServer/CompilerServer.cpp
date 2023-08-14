@@ -368,8 +368,12 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
     case Request::Retrieved: {
         // ...
         // + serialize(what, CompilerClientRetrieve)
-        SEXP what = deserialize(clientResponseBuffer, SerialOptions::CompilerClientRetrieve);
-        UUIDPool::intern(what, true, true);
+        SEXP what = deserialize(clientResponseBuffer,
+                                SerialOptions::CompilerClientRetrieve, hash);
+        // We've already recursively interned and preserved (deserialize with
+        // useHashes causes children to be interned, and retrieveHash causes
+        // `what` itself to be interned. Both have preserve=true because they
+        // are explicitly coded to do that when the compiler server is running)
         return what;
     }
     case Request::RetrieveFailed:
