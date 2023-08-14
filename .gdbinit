@@ -183,6 +183,13 @@ define refetch
     shell /usr/bin/git fetch mine && /usr/bin/git reset --hard mine/$(/usr/bin/git rev-parse --abbrev-ref HEAD) && /usr/bin/ninja
     python gdb.execute("file " + gdb.current_progspace().filename)
     directory
+    run
+end
+
+define rerun
+    python gdb.execute("file " + gdb.current_progspace().filename)
+    directory
+    run
 end
 
 define ninja
