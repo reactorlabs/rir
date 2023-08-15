@@ -38,9 +38,9 @@ SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
     return function->body()->getExtraPoolEntry(targets[pos]);
 }
 
-FeedbackOrigin::FeedbackOrigin(rir::Function* function, uint32_t idx)
-    : idx_(idx), function_(function) {
-    assert(idx < function->typeFeedback()->size());
+FeedbackOrigin::FeedbackOrigin(rir::Function* function, FeedbackIndex index)
+    : index_(index), function_(function) {
+    assert(function->typeFeedback()->isValid(index));
 }
 
 DeoptReason::DeoptReason(const FeedbackOrigin& origin,
@@ -110,42 +110,62 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     }
 }
 
-TypeFeedbackSlot& TypeFeedback::operator[](size_t idx) {
-    assert(idx < size_);
-    return slots_[idx];
-}
-
 void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutInteger(out, size_);
-    for (uint32_t i = 0; i < size_; i++) {
-        OutBytes(out, &slots_[i], sizeof(TypeFeedbackSlot));
+    OutInteger(out, callees_size_);
+    for (size_t i = 0; i < callees_size_; i++) {
+        OutBytes(out, callees_ + i, sizeof(ObservedCallees));
+    }
+
+    OutInteger(out, tests_size_);
+    for (size_t i = 0; i < tests_size_; i++) {
+        OutBytes(out, tests_ + i, sizeof(ObservedTest));
+    }
+
+    OutInteger(out, types_size_);
+    for (size_t i = 0; i < types_size_; i++) {
+        OutBytes(out, types_ + i, sizeof(ObservedValues));
     }
 }
 
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     auto size = InInteger(inp);
-
-    std::vector<TypeFeedbackSlot> slots;
-    slots.reserve(size);
-    auto tmp = TypeFeedbackSlot::createCallees();
-
+    std::vector<ObservedCallees> callees;
+    callees.reserve(size);
     for (auto i = 0; i < size; ++i) {
-        InBytes(inp, &tmp, sizeof(TypeFeedbackSlot));
-        slots.push_back(std::move(tmp));
+        ObservedCallees tmp;
+        InBytes(inp, &tmp, sizeof(ObservedCallees));
+        callees.push_back(std::move(tmp));
     }
 
-    return TypeFeedback::create(std::move(slots));
+    size = InInteger(inp);
+    std::vector<ObservedTest> tests;
+    tests.reserve(size);
+    for (auto i = 0; i < size; ++i) {
+        ObservedTest tmp;
+        InBytes(inp, &tmp, sizeof(ObservedTest));
+        tests.push_back(std::move(tmp));
+    }
+
+    size = InInteger(inp);
+    std::vector<ObservedValues> types;
+    types.reserve(size);
+    for (auto i = 0; i < size; ++i) {
+        ObservedValues tmp;
+        InBytes(inp, &tmp, sizeof(ObservedValues));
+        types.push_back(std::move(tmp));
+    }
+
+    return TypeFeedback::create(std::move(callees), std::move(tests),
+                                std::move(types));
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
-    return (*this)[idx].callees();
+    return this->callees_[idx];
 }
 
-ObservedTest& TypeFeedback::test(uint32_t idx) { return (*this)[idx].test(); }
+ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
 
-ObservedValues& TypeFeedback::types(uint32_t idx) {
-    return (*this)[idx].type();
-}
+ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
 
 void ObservedTest::print(std::ostream& out) const {
     switch (seen) {
@@ -189,82 +209,83 @@ void ObservedValues::print(std::ostream& out) const {
     }
 }
 
-void TypeFeedbackSlot::print(std::ostream& out,
-                             const Function* function) const {
-    switch (kind_) {
-    case TypeFeedbackKind::Call:
-        feedback_.callees.print(out, function);
-        break;
-    case TypeFeedbackKind::Test:
-        feedback_.test.print(out);
-        break;
-    case TypeFeedbackKind::Type:
-        feedback_.type.print(out);
-        break;
-    }
-}
+bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }
 
-void TypeFeedback::print(std::ostream& out) const {
-    std::cout << "== type feedback " << this << " (fun " << owner_
-              << ") ==" << std::endl;
-    for (uint32_t i = 0; i < size_; i++) {
-        out << "#" << i << ": ";
-        slots_[i].print(out, owner_);
-        out << std::endl;
-    }
-}
+uint32_t TypeFeedback::Builder::addCallee() { return ncallees_++; }
 
-TypeFeedbackSlot& TypeFeedback::record(unsigned idx, SEXP value) {
-    auto& slot = slots_[idx];
+uint32_t TypeFeedback::Builder::addTest() { return ntests_++; }
 
-    switch (slots_[idx].kind()) {
-    case TypeFeedbackKind::Call:
-        slot.callees().record(owner_, value);
-        break;
-    case TypeFeedbackKind::Test:
-        slot.test().record(value);
-        break;
-    case TypeFeedbackKind::Type:
-        slot.type().record(value);
-        break;
-    }
-
-    return slot;
-}
-
-TypeFeedbackSlot* FeedbackOrigin::slot() const {
-    if (function_ && hasSlot()) {
-        return &(*function_->typeFeedback())[idx_];
-    } else {
-        return nullptr;
-    }
-}
-
-bool FeedbackOrigin::hasSlot() const { return idx_ != UINT32_MAX; }
-
-uint32_t TypeFeedback::Builder::addCallee() {
-    slots_.emplace_back(TypeFeedbackSlot::createCallees());
-    return slots_.size() - 1;
-}
-
-uint32_t TypeFeedback::Builder::addTest() {
-    slots_.emplace_back(TypeFeedbackSlot::createTest());
-    return slots_.size() - 1;
-}
-
-uint32_t TypeFeedback::Builder::addType() {
-    slots_.emplace_back(TypeFeedbackSlot::createType());
-    return slots_.size() - 1;
-}
+uint32_t TypeFeedback::Builder::addType() { return ntypes_++; }
 
 TypeFeedback* TypeFeedback::Builder::build() {
-    return TypeFeedback::create(std::move(slots_));
+    std::vector<ObservedCallees> callees(ncallees_, ObservedCallees{});
+    std::vector<ObservedTest> tests(ntests_, ObservedTest{});
+    std::vector<ObservedValues> types(ntypes_, ObservedValues{});
+
+    return TypeFeedback::create(std::move(callees), std::move(tests),
+                                std::move(types));
 }
 
-TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}); }
+TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
 
 void FeedbackOrigin::function(Function* fun) {
-    assert(!hasSlot() || idx_ < fun->typeFeedback()->size());
+    assert(!hasSlot() || fun->typeFeedback()->isValid(index_));
     function_ = fun;
+}
+bool TypeFeedback::isValid(FeedbackIndex& index) const {
+    switch (index.kind) {
+    case FeedbackKind::Call:
+        return index.idx < callees_size_;
+    case FeedbackKind::Test:
+        return index.idx < tests_size_;
+    case FeedbackKind::Type:
+        return index.idx < types_size_;
+    default:
+        return false;
+    }
+}
+
+TypeFeedback* TypeFeedback::create(std::vector<ObservedCallees>&& callees,
+                                   std::vector<ObservedTest>&& tests,
+                                   std::vector<ObservedValues>&& types) {
+    size_t dataSize = callees.size() * sizeof(ObservedCallees) +
+                      tests.size() * sizeof(ObservedTest) +
+                      types.size() * sizeof(ObservedValues);
+
+    size_t objSize = sizeof(TypeFeedback) + dataSize;
+
+    SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
+
+    TypeFeedback* res = new (INTEGER(store))
+        TypeFeedback(std::move(callees), std::move(tests), std::move(types));
+
+    return res;
+}
+
+TypeFeedback::TypeFeedback(std::vector<ObservedCallees>&& callees,
+                           std::vector<ObservedTest>&& tests,
+                           std::vector<ObservedValues>&& types)
+    : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
+      tests_size_(tests.size()), types_size_(types.size()) {
+
+    size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
+    size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);
+    size_t types_mem_size = types_size_ * sizeof(ObservedValues);
+
+    callees_ = (ObservedCallees*)slots_;
+    tests_ = (ObservedTest*)(slots_ + callees_mem_size);
+    types_ = (ObservedValues*)(slots_ + callees_mem_size + tests_mem_size);
+
+    if (callees_size_) {
+        memcpy(callees_, callees.data(), callees_mem_size);
+    }
+
+    if (tests_size_) {
+        memcpy(tests_, tests.data(), tests_mem_size);
+    }
+
+    if (types_size_) {
+        memcpy(types_, types.data(), types_mem_size);
+    }
 }
 } // namespace rir

@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GlobalObject.h>
@@ -424,8 +425,9 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                     false)),
             t::voidPtr);
         auto drs = llvm::ConstantStruct::get(
-            t::DeoptReason, {c(dr->reason.reason, 32),
-                             c(dr->reason.origin.idx(), 32), srcAddr});
+            t::DeoptReason,
+            {c(dr->reason.reason, 32),
+             c(dr->reason.origin.index().asInteger(), 32), srcAddr});
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
@@ -6132,7 +6134,7 @@ void LowerFunctionLLVM::compile() {
                                 NativeBuiltins::Id::recordTypefeedback),
                             {convertToPointer(origin.function()->typeFeedback(),
                                               t::i8, true),
-                             c(origin.idx()), load(i)});
+                             c(origin.index().idx, 32), load(i)});
                     }
                 }
                 if (i->hasCallFeedback()) {
@@ -6142,7 +6144,7 @@ void LowerFunctionLLVM::compile() {
                              NativeBuiltins::Id::recordTypefeedback),
                          {convertToPointer(origin.function()->typeFeedback(),
                                            t::i8, true),
-                          c(origin.idx()), load(i)});
+                          c(origin.index().idx, 32), load(i)});
                 }
             }
 

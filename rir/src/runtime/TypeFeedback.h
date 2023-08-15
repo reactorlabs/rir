@@ -18,8 +18,71 @@ namespace rir {
 
 struct Code;
 struct Function;
-struct TypeFeedbackSlot;
 class TypeFeedback;
+
+enum class FeedbackKind : uint8_t {
+    Call,
+    Test,
+    Type,
+};
+
+class FeedbackIndex {
+  private:
+    static constexpr unsigned IdxBits = 24;
+    static constexpr unsigned Undefined = (1 << IdxBits) - 1;
+
+    FeedbackIndex(FeedbackKind kind_, uint32_t idx_) : kind(kind_), idx(idx_) {}
+    friend struct std::hash<FeedbackIndex>;
+
+  public:
+    FeedbackKind kind;
+    uint32_t idx : IdxBits;
+
+    FeedbackIndex() : kind(FeedbackKind::Call), idx(Undefined) {}
+
+    static FeedbackIndex call(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Call, idx);
+    }
+    static FeedbackIndex test(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Test, idx);
+    }
+    static FeedbackIndex type(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Type, idx);
+    }
+
+    bool isUndefined() const { return idx == Undefined; }
+
+    const char* name() const {
+        switch (kind) {
+        case FeedbackKind::Call:
+            return "Call";
+            break;
+        case FeedbackKind::Test:
+            return "Test";
+            break;
+        case FeedbackKind::Type:
+            return "Type";
+            break;
+        default:
+            assert(false);
+        }
+    }
+
+    uint32_t asInteger() const { return *((uint32_t*)this); }
+
+    bool operator==(const FeedbackIndex& other) const {
+        return idx == other.idx && kind == other.kind;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const FeedbackIndex& index) {
+        out << index.name() << "#" << index.idx;
+        return out;
+    }
+};
+
+static_assert(sizeof(FeedbackIndex) == sizeof(uint32_t),
+              "Size needs to fit inside in integer for the llvm transition");
 
 #pragma pack(push)
 #pragma pack(1)
@@ -147,31 +210,27 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 enum class Opcode : uint8_t;
 
 // FIXME: rename to FeedbackPosition
-struct FeedbackOrigin {
-  private:
-    // It has to be uint32_t as it it being used in the LLVM lowring code
-    // which relies on it being 32bit.
-    // TODO: move to optional<uint32_t> once we upgrade
-    uint32_t idx_ = UINT32_MAX;
+class FeedbackOrigin {
+    FeedbackIndex index_;
     Function* function_ = nullptr;
 
   public:
     FeedbackOrigin() {}
-    FeedbackOrigin(rir::Function* fun, uint32_t idx);
+    FeedbackOrigin(rir::Function* fun, FeedbackIndex idx);
 
     bool hasSlot() const;
-    TypeFeedbackSlot* slot() const;
-    uint32_t idx() const { return idx_; }
+    FeedbackIndex index() const { return index_; }
+    uint32_t idx() const { return index_.idx; }
     Function* function() const { return function_; }
     void function(Function* fun);
 
     bool operator==(const FeedbackOrigin& other) const {
-        return idx_ == other.idx_ && function_ == other.function_;
+        return index_ == other.index_ && function_ == other.function_;
     }
 
     friend std::ostream& operator<<(std::ostream& out,
                                     const FeedbackOrigin& origin) {
-        out << (void*)origin.function_ << "#" << origin.idx_;
+        out << (void*)origin.function_ << "[" << origin.index_ << "]";
         return out;
     }
 };
@@ -238,72 +297,6 @@ struct DeoptReason {
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
 
-enum class TypeFeedbackKind : uint8_t { Call, Test, Type };
-
-inline const char* kind_as_name(TypeFeedbackKind kind) {
-    switch (kind) {
-    case TypeFeedbackKind::Call:
-        return "Call";
-        break;
-    case TypeFeedbackKind::Test:
-        return "Test";
-        break;
-    case TypeFeedbackKind::Type:
-        return "Type";
-        break;
-    }
-}
-
-struct TypeFeedbackSlot {
-  private:
-    union Feedback {
-        ObservedCallees callees;
-        ObservedValues type;
-        ObservedTest test;
-    };
-
-    const TypeFeedbackKind kind_;
-    Feedback feedback_;
-
-    TypeFeedbackSlot(TypeFeedbackKind kind, const Feedback&& feedback)
-        : kind_(kind), feedback_(feedback) {}
-
-  public:
-    static TypeFeedbackSlot createCallees() {
-        return TypeFeedbackSlot{TypeFeedbackKind::Call,
-                                Feedback{.callees = ObservedCallees()}};
-    }
-
-    static TypeFeedbackSlot createTest() {
-        return TypeFeedbackSlot{TypeFeedbackKind::Test,
-                                Feedback{.test = ObservedTest()}};
-    }
-
-    static TypeFeedbackSlot createType() {
-        return TypeFeedbackSlot{TypeFeedbackKind::Type,
-                                Feedback{.type = ObservedValues()}};
-    }
-
-    TypeFeedbackKind kind() { return kind_; }
-
-    ObservedCallees& callees() {
-        assert(kind_ == TypeFeedbackKind::Call);
-        return feedback_.callees;
-    }
-
-    ObservedTest& test() {
-        assert(kind_ == TypeFeedbackKind::Test);
-        return feedback_.test;
-    }
-
-    ObservedValues& type() {
-        assert(kind_ == TypeFeedbackKind::Type);
-        return feedback_.type;
-    }
-
-    void print(std::ostream& out, const Function* function) const;
-};
-
 #define TYPEFEEDBACK_MAGIC (unsigned)0xfeedbac0
 
 class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
@@ -311,31 +304,33 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     friend Function;
 
     Function* owner_;
-    uint32_t size_;
-    TypeFeedbackSlot slots_[];
+    size_t callees_size_;
+    size_t tests_size_;
+    size_t types_size_;
+    ObservedCallees* callees_;
+    ObservedTest* tests_;
+    ObservedValues* types_;
+    // All the data are stored in this array: callees, tests and types in this
+    // order. The constructors sets the above pointers to point at the
+    // appropriate locations.
+    uint8_t slots_[];
 
-    explicit TypeFeedback(std::vector<TypeFeedbackSlot>&& slots)
-        : RirRuntimeObject(0, 0), owner_(nullptr), size_(slots.size()) {
-        if (size_) {
-            memcpy(&slots_, slots.data(), size_ * sizeof(TypeFeedbackSlot));
-        }
-    }
+    explicit TypeFeedback(std::vector<ObservedCallees>&& callees,
+                          std::vector<ObservedTest>&& tests,
+                          std::vector<ObservedValues>&& types);
 
   public:
-    static TypeFeedback* create(std::vector<TypeFeedbackSlot>&& slots) {
-        size_t dataSize = slots.size() * sizeof(TypeFeedbackSlot);
-        size_t objSize = sizeof(TypeFeedback) + dataSize;
-
-        SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
-        TypeFeedback* res = new (INTEGER(store)) TypeFeedback(std::move(slots));
-        return res;
-    }
+    static TypeFeedback* create(std::vector<ObservedCallees>&& callees,
+                                std::vector<ObservedTest>&& tests,
+                                std::vector<ObservedValues>&& types);
 
     static TypeFeedback* empty();
     static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
-        std::vector<TypeFeedbackSlot> slots_;
+        unsigned ncallees_ = 0;
+        unsigned ntests_ = 0;
+        unsigned ntypes_ = 0;
 
       public:
         uint32_t addCallee();
@@ -344,17 +339,15 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         TypeFeedback* build();
     };
 
-    TypeFeedbackSlot& operator[](size_t idx);
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
     void print(std::ostream& out) const;
 
-    TypeFeedbackSlot& record(uint32_t idx, SEXP callee);
-
-    uint32_t size() const { return size_; }
     void serialize(SEXP refTable, R_outpstream_t out) const;
+
+    bool isValid(FeedbackIndex& index) const;
 };
 
 #pragma pack(pop)
@@ -363,9 +356,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
 namespace std {
 template <>
+struct hash<rir::FeedbackIndex> {
+    std::size_t operator()(const rir::FeedbackIndex& v) const {
+        return hash_combine(hash_combine(0, v.kind), v.idx);
+    }
+};
+
+template <>
 struct hash<rir::FeedbackOrigin> {
     std::size_t operator()(const rir::FeedbackOrigin& v) const {
-        return hash_combine(hash_combine(0, v.idx()), v.function());
+        return hash_combine(hash_combine(0, v.index()), v.function());
     }
 };
 

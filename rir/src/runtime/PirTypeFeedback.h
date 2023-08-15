@@ -46,7 +46,7 @@ struct PirTypeFeedback
         return getMDEntryOfSlot(slot).feedback;
     }
 
-    uint32_t rirIdx(size_t slot);
+    FeedbackIndex rirIdx(size_t slot);
 
     static size_t requiredSize(size_t origins, size_t entries) {
         return sizeof(PirTypeFeedback) + sizeof(SEXP) * origins +
@@ -55,7 +55,7 @@ struct PirTypeFeedback
 
     struct MDEntry {
         uint8_t funIdx;
-        uint32_t rirIdx;
+        FeedbackIndex rirIdx;
         ObservedValues feedback;
         pir::PirType previousType;
         unsigned sampleCount = 0;

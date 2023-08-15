@@ -957,24 +957,19 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
 void recordTypefeedbackImpl(rir::TypeFeedback* typeFeedback, uint32_t idx,
                             SEXP value) {
-    auto& slot = typeFeedback->record(idx, value);
+    auto& feedback = typeFeedback->types(idx);
 
-    if (slot.kind() == TypeFeedbackKind::Type) {
-        auto& feedback = slot.type();
-
-        if (TYPEOF(value) == PROMSXP) {
-            if (PRVALUE(value) == R_UnboundValue &&
-                feedback.stateBeforeLastForce < ObservedValues::promise) {
-                feedback.stateBeforeLastForce = ObservedValues::promise;
-            } else if (feedback.stateBeforeLastForce <
-                       ObservedValues::evaluatedPromise) {
-                feedback.stateBeforeLastForce =
-                    ObservedValues::evaluatedPromise;
-            }
-        } else {
-            if (feedback.stateBeforeLastForce < ObservedValues::value)
-                feedback.stateBeforeLastForce = ObservedValues::value;
+    if (TYPEOF(value) == PROMSXP) {
+        if (PRVALUE(value) == R_UnboundValue &&
+            feedback.stateBeforeLastForce < ObservedValues::promise) {
+            feedback.stateBeforeLastForce = ObservedValues::promise;
+        } else if (feedback.stateBeforeLastForce <
+                   ObservedValues::evaluatedPromise) {
+            feedback.stateBeforeLastForce = ObservedValues::evaluatedPromise;
         }
+    } else {
+        if (feedback.stateBeforeLastForce < ObservedValues::value)
+            feedback.stateBeforeLastForce = ObservedValues::value;
     }
 }
 

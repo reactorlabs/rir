@@ -37,8 +37,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (!i->hasTypeFeedback())
                     return;
 
-                if (i->typeFeedback().feedbackOrigin.slot() ==
-                    deoptCtx->reason().origin.slot()) {
+                if (i->typeFeedback().feedbackOrigin ==
+                    deoptCtx->reason().origin) {
                     if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
                         i->updateTypeFeedback().type =
                             deoptCtx->typeCheckTrigger();

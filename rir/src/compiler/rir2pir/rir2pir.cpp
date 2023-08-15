@@ -384,7 +384,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (!i->typeFeedback().value) {
                     auto& t = i->updateTypeFeedback();
                     t.value = v;
-                    t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+                    t.feedbackOrigin = FeedbackOrigin(srcCode->function(),
+                                                      FeedbackIndex::test(idx));
                 } else if (i->typeFeedback().value != v) {
                     i->updateTypeFeedback().value = nullptr;
                 }
@@ -411,7 +412,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
                         found = true;
                         auto origin = fb->rirIdx(i);
-                        if (origin == idx && mdEntry.readyForReopt) {
+                        if (origin == FeedbackIndex::type(idx) &&
+                            mdEntry.readyForReopt) {
                             feedback = mdEntry.feedback;
                         }
                     });
@@ -420,7 +422,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
             // TODO: deal with multiple locations
             auto& t = i->updateTypeFeedback();
-            t.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+            t.feedbackOrigin =
+                FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
                 t.type.merge(feedback);
                 if (auto force = Force::Cast(i)) {
@@ -450,9 +453,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
 
-            DeoptReason reason =
-                DeoptReason(FeedbackOrigin(srcCode->function(), idx),
-                            DeoptReason::DeadCall);
+            DeoptReason reason = DeoptReason(
+                FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx)),
+                DeoptReason::DeadCall);
 
             auto d = insert(new Deopt(sp));
             d->setDeoptReason(compiler.module->deoptReasonValue(reason),
@@ -466,7 +469,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             //
             auto& f = i->updateCallFeedback();
             f.taken = feedback.taken;
-            f.feedbackOrigin = FeedbackOrigin(srcCode->function(), idx);
+            f.feedbackOrigin =
+                FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
             if (feedback.numTargets == 1) {
                 assert(!feedback.invalid &&
                        "feedback can't be invalid if numTargets is 1");

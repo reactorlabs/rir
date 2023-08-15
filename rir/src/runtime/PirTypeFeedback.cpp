@@ -33,14 +33,14 @@ PirTypeFeedback::PirTypeFeedback(
 
     idx = 0;
 
-    std::unordered_map<TypeFeedbackSlot*, size_t> reverseMapping;
+    std::unordered_map<FeedbackOrigin, size_t> reverseMapping;
 
     for (auto s : slots) {
         auto slot = s.first;
         auto typeFeedback = s.second;
         assert(slot < MAX_SLOT_IDX);
 
-        auto e = reverseMapping.find(typeFeedback.feedbackOrigin.slot());
+        auto e = reverseMapping.find(typeFeedback.feedbackOrigin);
 
         if (e != reverseMapping.end()) {
             entry[slot] = e->second;
@@ -50,15 +50,15 @@ PirTypeFeedback::PirTypeFeedback(
             new (&mdEntries()[idx]) MDEntry;
             mdEntries()[idx].funIdx =
                 functionMap.at(typeFeedback.feedbackOrigin.function());
-            mdEntries()[idx].rirIdx = typeFeedback.feedbackOrigin.idx();
+            mdEntries()[idx].rirIdx = typeFeedback.feedbackOrigin.index();
             mdEntries()[idx].previousType = typeFeedback.type;
-            reverseMapping[typeFeedback.feedbackOrigin.slot()] = idx;
+            reverseMapping[typeFeedback.feedbackOrigin] = idx;
             entry[slot] = idx++;
         }
     }
 }
 
-uint32_t PirTypeFeedback::rirIdx(size_t slot) {
+FeedbackIndex PirTypeFeedback::rirIdx(size_t slot) {
     return getMDEntryOfSlot(slot).rirIdx;
 }
 

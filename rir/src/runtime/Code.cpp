@@ -264,8 +264,17 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
             } else if (bc.isRecord()) {
                 out << "   "
                     << "[ ";
-                (*typeFeedback)[bc.immediate.i].print(out, fun);
-                out << " ] #" << bc.immediate.i << "\n";
+                if (bc.bc == Opcode::record_call_) {
+                    typeFeedback->callees(bc.immediate.i).print(out, fun);
+                    out << " ] Call#";
+                } else if (bc.bc == Opcode::record_test_) {
+                    typeFeedback->test(bc.immediate.i).print(out);
+                    out << " ] Test#";
+                } else {
+                    typeFeedback->types(bc.immediate.i).print(out);
+                    out << " ] Type#";
+                }
+                out << bc.immediate.i << "\n";
             } else {
                 bc.print(out);
             }
