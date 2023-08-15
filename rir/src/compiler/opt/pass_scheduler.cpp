@@ -11,8 +11,8 @@ static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
         return std::regex("");
-    // Filtering out ScopeResolution from all opt pipelines
-    return std::regex("ScopeResolution");
+    // Filtering out Cleanup from all opt pipelines
+    return std::regex("Cleanup");
 }
 
 static const std::regex PIR_PASS_BLACKLIST = getPassBlacklist();
