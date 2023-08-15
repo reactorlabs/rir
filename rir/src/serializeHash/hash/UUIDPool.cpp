@@ -105,6 +105,11 @@ void UUIDPool::initialize() {
         std::stringstream linkTarget;
         linkTarget << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/rirPrettyGraph";
         code = symlink(linkSource, linkTarget.str().c_str());
+        if (code != 0 && errno != EEXIST) {
+            std::cerr << "Could not symlink associated common styles/scripts for PIR_PRINT_INTERNED_RIR_OBJECTS: "
+                      << strerror(errno) << std::endl;
+            std::abort();
+        }
     }
 }
 
