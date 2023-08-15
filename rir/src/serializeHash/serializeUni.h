@@ -129,7 +129,10 @@ class AbstractSerializer {
 
     /// Serial ref table. Returns nullptr if we don't recurse
     virtual SerializedRefs* refs() = 0;
-    /// Write SEXP contents
+    /// Write SEXP contents.
+    ///
+    /// The implementation is extremely similar to WriteItem in serialize.c, but
+    /// there are a few differences
     void writeInline(SEXP s);
 
   public:
@@ -188,6 +191,9 @@ class AbstractDeserializer {
     /// Serial ref table. Returns nullptr if we don't recurse
     virtual DeserializedRefs* refs() = 0;
     /// Read SEXP
+    ///
+    /// The implementation is extremely similar to ReadItem in serialize.c, but
+    /// there are a few differences
     SEXP readInline();
 
   public:
