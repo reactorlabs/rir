@@ -1,13 +1,14 @@
-#include "serialize.h"
+#include "serializeR.h"
 #include "R/Protect.h"
 #include "R/disableGc.h"
 #include "api.h"
 #include "compiler/parameter.h"
-#include "serializeHash/hash/UUIDPool.h"
 #include "interpreter/interp_incl.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "serialize.h"
+#include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
 #include <sstream>
 
@@ -23,8 +24,137 @@ bool pir::Parameter::SERIALIZE_LLVM =
 static const int R_STREAM_DEFAULT_VERSION = 3;
 static const R_pstream_format_t R_STREAM_FORMAT = R_pstream_xdr_format;
 
-static bool _useHashes = false;
-static UUID retrieveHash;
+/// Controls what data is serialized and what format some of it uses. The SEXP
+/// must be deserialized with the same options it was serialized with.
+///
+/// Unfortunately, this is a global variable, because that is the easiest way to
+/// thread these options through the GNU-R serialization API, and because we
+/// already have a separate RIR serializer which stores these in the serializer
+/// (the GNU-R serialization API is serializing children with only `out` and
+/// `refTable`, so we can't just pass our serializer to children).
+static SerialOptions* R_SERIAL_OPTIONS = nullptr;
+/// Similar to R_SERIAL_OPTIONS, we store the retrieve hash for
+/// deserialized RIR objects as a global. As a consequence, we can't deserialize
+/// with before we consume the retrieve hash from a previous serialization.
+static UUID R_SERIAL_RETRIEVE_HASH;
+
+struct RSerializer : AbstractSerializer {
+    /// Underlying R output stream
+    R_outpstream_t out;
+    /// Underlying R ref table
+    SEXP refTable;
+
+    RSerializer(R_outpstream_t out, SEXP refTable)
+        : out(out), refTable(refTable) {}
+
+    SerializedRefs* refs() override { return nullptr; }
+
+    bool willWrite(const SerialFlags& flags) const override {
+        assert(R_SERIAL_OPTIONS && "not setup for serialization");
+        return R_SERIAL_OPTIONS->willReadOrWrite(flags);
+    }
+    void writeBytes(const void *data, size_t size,
+                    const SerialFlags& flags) override {
+        if (!willWrite(flags)) {
+            return;
+        }
+
+        OutBytes(out, data, (int)size);
+    }
+    void writeInt(int data, const SerialFlags& flags) override {
+        if (!willWrite(flags)) {
+            return;
+        }
+
+        OutInteger(out, data);
+    }
+    void write(SEXP s, const SerialFlags& flags) override {
+        if (!willWrite(flags)) {
+            return;
+        }
+
+        if (R_SERIAL_OPTIONS->useHashes) {
+            if (!UUIDPool::tryWriteHash(s, out)) {
+                WriteItem(s, refTable, out);
+            }
+        } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+            if (!UUIDPool::tryWriteHash(s, out)) {
+                // Still serialize children via hashes
+                R_SERIAL_OPTIONS->useHashes = true;
+                WriteItem(s, refTable, out);
+            }
+        } else {
+            WriteItem(s, refTable, out);
+        }
+    }
+};
+
+struct RDeserializer : AbstractDeserializer {
+    /// Underlying R input stream
+    R_inpstream_t inp = nullptr;
+    /// Underlying R read-ref table
+    SEXP refTable = nullptr;
+
+    RDeserializer(R_inpstream_t inp, SEXP refTable)
+        : inp(inp), refTable(refTable) {}
+
+    DeserializedRefs* refs() override { return nullptr; }
+
+    bool willRead(const SerialFlags& flags) const override {
+        assert(R_SERIAL_OPTIONS && "not setup for deserialization");
+        return R_SERIAL_OPTIONS->willReadOrWrite(flags);
+    }
+
+    void readBytes(void *data, size_t size, const SerialFlags& flags) override {
+        if (!willRead(flags)) {
+            return;
+        }
+
+        InBytes(inp, data, (int)size);
+    }
+
+    int readInt(const SerialFlags& flags) override {
+        if (!willRead(flags)) {
+            return 0;
+        }
+
+        return InInteger(inp);
+    }
+
+    SEXP read(const SerialFlags& flags) override {
+        if (!willRead(flags)) {
+            return nullptr;
+        }
+
+        SEXP result;
+        if (R_SERIAL_OPTIONS->useHashes) {
+            result = UUIDPool::tryReadHash(inp);
+            if (!result) {
+                result = ReadItem(refTable, inp);
+            }
+        } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+            result = UUIDPool::tryReadHash(inp);
+            if (!result) {
+                // Still deserialize children via hashes
+                R_SERIAL_OPTIONS->useHashes = true;
+                result = ReadItem(refTable, inp);
+                R_SERIAL_OPTIONS->useHashes = false;
+            }
+        } else {
+            result = ReadItem(refTable, inp);
+        }
+
+        return result;
+    }
+
+    void addRef(SEXP sexp) override {
+        AddReadRef(refTable, sexp);
+        if (R_SERIAL_RETRIEVE_HASH && TYPEOF(sexp) == EXTERNALSXP) {
+            UUIDPool::intern(sexp, R_SERIAL_RETRIEVE_HASH, false, false);
+            R_SERIAL_RETRIEVE_HASH = UUID();
+        }
+    }
+};
 
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
@@ -32,7 +162,8 @@ static bool trySerializeR(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
         OutInteger(out, b->info.magic);
         Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: rirSerializeHook", s, [&]{
-            b->serializeR(refTable, out);
+            RSerializer serializer(out, refTable);
+            b->serialize(serializer);
         });
         return true;
     } else {
@@ -61,22 +192,23 @@ void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out) {
 
 SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: rirDeserializeHook", [&]{
+        RDeserializer deserializer(inp, refTable);
         unsigned magic = InInteger(inp);
         switch (magic) {
         case DISPATCH_TABLE_MAGIC:
-            return DispatchTable::deserializeR(refTable, inp)->container();
+            return DispatchTable::deserialize(deserializer)->container();
         case CODE_MAGIC:
-            return Code::deserializeR(refTable, inp)->container();
+            return Code::deserialize(deserializer)->container();
         case FUNCTION_MAGIC:
-            return Function::deserializeR(refTable, inp)->container();
+            return Function::deserialize(deserializer)->container();
         case ARGLIST_ORDER_MAGIC:
-            return ArglistOrder::deserializeR(refTable, inp)->container();
+            return ArglistOrder::deserialize(deserializer)->container();
         case LAZY_ARGS_MAGIC:
-            return LazyArglist::deserializeR(refTable, inp)->container();
+            return LazyArglist::deserialize(deserializer)->container();
         case LAZY_ENVIRONMENT_MAGIC:
-            return LazyEnvironment::deserializeR(refTable, inp)->container();
+            return LazyEnvironment::deserialize(deserializer)->container();
         case PIR_TYPE_FEEDBACK_MAGIC:
-            return PirTypeFeedback::deserializeR(refTable, inp)->container();
+            return PirTypeFeedback::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";
@@ -86,49 +218,6 @@ SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
         // TODO: Find out why this doesn't work for some nested code objects,
         //  and fix if possible.
         return false;
-    });
-}
-
-SEXP copyBySerialR(SEXP x) {
-    if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
-        return x;
-
-    return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: copyBySerialR", x, [&]{
-        Protect p(x);
-        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-        pir::Parameter::RIR_PRESERVE = true;
-        SEXP copy;
-        disableInterpreter([&]{
-            SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-            disableGc([&] { copy = p(R_unserialize(data, R_NilValue)); });
-        });
-#if defined(ENABLE_SLOWASSERT) && defined(CHECK_COPY_BY_SERIAL)
-        auto xHash = hashRoot(x);
-        auto copyHash = hashRoot(copy);
-        if (xHash != copyHash) {
-            std::stringstream ss;
-            ss << "hash mismatch after serializing: " << xHash
-               << " != " << copyHash;
-            Rf_warning(ss.str().c_str());
-            Rf_PrintValue(x);
-            Rf_PrintValue(copy);
-
-            SEXP copy2;
-            disableInterpreter([&]{
-                SEXP data = p(R_serialize(copy, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-                disableGc([&]{ copy = p(R_unserialize(data2, R_NilValue)); });
-            });
-            auto copyHash2 = hashRoot(copy2);
-            if (copyHash != copyHash2) {
-                std::stringstream ss2;
-                ss2 << "copy hash is also different: " << copyHash2;
-                Rf_warning(ss2.str().c_str());
-                Rf_PrintValue(copy2);
-            }
-        }
-#endif
-        pir::Parameter::RIR_PRESERVE = oldPreserve;
-        return copy;
     });
 }
 
@@ -155,21 +244,27 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
     buffer->getBytes((uint8_t*)data, length);
 }
 
+static SerialOptions* newRSerialOptions(bool useHashes) {
+    return new SerialOptions{useHashes, false, false, false, false};
+}
+
 void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
-    assert(!retrieveHash && "bad state: should start deserializing SEXP with retrieve hash or deserialize a non-RIR SEXP before serializing another SEXP");
     disableInterpreter([&]{
         disableGc([&] {
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: serializeR", sexp, [&]{
                 auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-                auto oldUseHashes = _useHashes;
+                auto oldSerialOptions = R_SERIAL_OPTIONS;
                 pir::Parameter::RIR_PRESERVE = true;
-                _useHashes = useHashes;
+                R_SERIAL_OPTIONS = newRSerialOptions(useHashes);
+
                 struct R_outpstream_st out{};
                 R_InitOutPStream(&out, (R_pstream_data_t)&buffer, R_STREAM_FORMAT,
                                  R_STREAM_DEFAULT_VERSION, rStreamOutChar,
                                  rStreamOutBytes, nullptr, nullptr);
                 R_Serialize(sexp, &out);
-                _useHashes = oldUseHashes;
+
+                delete R_SERIAL_OPTIONS;
+                R_SERIAL_OPTIONS = oldSerialOptions;
                 pir::Parameter::RIR_PRESERVE = oldPreserve;
             });
         });
@@ -177,25 +272,31 @@ void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
 }
 
 SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
-    assert(!retrieveHash && "bad state: should start deserializing SEXP with retrieve hash or deserialize a non-RIR SEXP before deserializing another SEXP");
+    assert(!R_SERIAL_RETRIEVE_HASH &&
+           "bad state: deserializing a different SEXP before we set the retrieve hash from last deserialization");
     SEXP result;
     disableInterpreter([&]{
         disableGc([&] {
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: deserializeR", [&]{
                 auto oldPreserve = pir::Parameter::RIR_PRESERVE;
-                auto oldUseHashes = _useHashes;
+                auto oldSerialOptions = R_SERIAL_OPTIONS;
                 pir::Parameter::RIR_PRESERVE = true;
-                _useHashes = useHashes;
-                retrieveHash = newRetrieveHash;
+                R_SERIAL_OPTIONS = newRSerialOptions(useHashes);
+                R_SERIAL_RETRIEVE_HASH = newRetrieveHash;
+
                 struct R_inpstream_st in{};
                 R_InitInPStream(&in, (R_pstream_data_t)&sexpBuffer, R_STREAM_FORMAT,
                                 rStreamInChar, rStreamInBytes, nullptr, nullptr);
                 SEXP sexp = R_Unserialize(&in);
-                assert(!retrieveHash && "retrieve hash not filled");
+
+                assert(!R_SERIAL_RETRIEVE_HASH && "retrieve hash not filled");
                 assert((!newRetrieveHash || UUIDPool::getHash(sexp) == newRetrieveHash) &&
                        "deserialized SEXP not given retrieve hash");
-                _useHashes = oldUseHashes;
+
+                delete R_SERIAL_OPTIONS;
+                R_SERIAL_OPTIONS = oldSerialOptions;
                 pir::Parameter::RIR_PRESERVE = oldPreserve;
+
                 return sexp;
             }, [&](SEXP s){
                 // TODO: Find out why this doesn't work for some nested code objects,
@@ -211,21 +312,57 @@ SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes) {
     return deserializeR(sexpBuffer, useHashes, UUID());
 }
 
-bool useHashes(__attribute__((unused)) R_outpstream_t out) {
-    // Trying to pretend we don't use a singleton...
-    return _useHashes;
-}
+SEXP copyBySerialR(SEXP x) {
+    if (!pir::Parameter::RIR_SERIALIZE_CHAOS)
+        return x;
 
-bool useHashes(__attribute__((unused)) R_inpstream_t in) {
-    // Trying to pretend we don't use a singleton...
-    return _useHashes;
-}
+    return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: copyBySerialR", x, [&]{
+        Protect p(x);
 
-void useRetrieveHashIfSet(__attribute__((unused)) R_inpstream_t inp, SEXP sexp) {
-    if (retrieveHash) {
-        UUIDPool::intern(sexp, retrieveHash, false, false);
-        retrieveHash = UUID();
-    }
+        auto oldOptions = R_SERIAL_OPTIONS;
+        auto oldPreserve = pir::Parameter::RIR_PRESERVE;
+        pir::Parameter::RIR_PRESERVE = true;
+        R_SERIAL_OPTIONS = newRSerialOptions(false);
+
+        SEXP copy;
+        disableInterpreter([&]{
+            SEXP data = p(R_serialize(x, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+            disableGc([&] { copy = p(R_unserialize(data, R_NilValue)); });
+        });
+
+#if defined(ENABLE_SLOWASSERT) && defined(CHECK_COPY_BY_SERIAL)
+        auto xHash = hashRoot(x);
+        auto copyHash = hashRoot(copy);
+        if (xHash != copyHash) {
+            std::stringstream ss;
+            ss << "hash mismatch after serializing: " << xHash
+               << " != " << copyHash;
+            Rf_warning(ss.str().c_str());
+            Rf_PrintValue(x);
+            Rf_PrintValue(copy);
+
+            SEXP copy2;
+            disableInterpreter([&]{
+                SEXP data = p(R_serialize(copy, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+                disableGc([&]{ copy = p(R_unserialize(data2, R_NilValue)); });
+            });
+
+            auto copyHash2 = hashRoot(copy2);
+            if (copyHash != copyHash2) {
+                std::stringstream ss2;
+                ss2 << "copy hash is also different: " << copyHash2;
+                Rf_warning(ss2.str().c_str());
+                Rf_PrintValue(copy2);
+            }
+        }
+#endif
+
+        delete R_SERIAL_OPTIONS;
+        R_SERIAL_OPTIONS = oldOptions;
+        pir::Parameter::RIR_PRESERVE = oldPreserve;
+
+        return copy;
+    });
 }
 
 } // namespace rir

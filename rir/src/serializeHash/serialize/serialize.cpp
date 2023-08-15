@@ -30,23 +30,23 @@ bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
-static bool shouldSkip(const SerialOptions& options, const SerialFlags& flags) {
+bool SerialOptions::willReadOrWrite(const SerialFlags& flags) const {
     return
-        (options.onlySource && !flags.contains(SerialFlag::InSource)) ||
-        (options.onlyFeedback && !flags.contains(SerialFlag::InFeedback)) ||
-        (options.onlySourceAndFeedback &&
-         !flags.contains(SerialFlag::InSource) &&
-         !flags.contains(SerialFlag::InFeedback)) ||
-        (options.skipEnvLocks && !flags.contains(SerialFlag::NotEnvLock));
+        (!onlySource || flags.contains(SerialFlag::InSource)) &&
+        (!onlyFeedback || flags.contains(SerialFlag::InFeedback)) &&
+        (!onlySourceAndFeedback ||
+         flags.contains(SerialFlag::InSource) ||
+         flags.contains(SerialFlag::InFeedback)) &&
+        (!skipEnvLocks || !flags.contains(SerialFlag::NotEnvLock));
 }
 
 bool Serializer::willWrite(const rir::SerialFlags& flags) const {
-    return !shouldSkip(options, flags);
+    return options.willReadOrWrite(flags);
 }
 
 void Serializer::writeBytes(const void* data, size_t size,
                             const SerialFlags& flags) {
-    if (shouldSkip(options, flags)) {
+    if (!willWrite(flags)) {
         return;
     }
 
@@ -60,7 +60,7 @@ void Serializer::writeBytes(const void* data, size_t size,
 }
 
 void Serializer::writeInt(int data, const SerialFlags& flags) {
-    if (shouldSkip(options, flags)) {
+    if (!willWrite(flags)) {
         return;
     }
 
@@ -76,7 +76,7 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     assert(flags.contains(SerialFlag::MaybeSexp) &&
            "Serializing non SEXP with SEXP flag");
 
-    if (shouldSkip(options, flags)) {
+    if (!willWrite(flags)) {
         return;
     }
 
@@ -94,10 +94,6 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     // `useHashes` is true, but if `useHashes` is true we can use this one.
     // Either way we must call `writeInline` if we didn't write the hash
     // directly to not infinitely recurse.
-    // TODO: Refactor UUIDPool methods into this (or somewhere else in
-    //  serialize or serializeUni) and use separate readItem for recorded calls
-    //  which may be may be null instead of just allowing null on the compiler
-    //  server
     if (options.useHashes) {
         if (!UUIDPool::tryWriteHash(s, buffer)) {
             writeInline(s);
@@ -121,11 +117,11 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
 }
 
 bool Deserializer::willRead(const rir::SerialFlags& flags) const {
-    return !shouldSkip(options, flags);
+    return options.willReadOrWrite(flags);
 }
 
 void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) {
-    if (shouldSkip(options, flags)) {
+    if (!willRead(flags)) {
         // TODO: Allow default data
         memset(data, 0, size);
         return;
@@ -141,7 +137,7 @@ void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) 
 }
 
 int Deserializer::readInt(const SerialFlags& flags) {
-    if (shouldSkip(options, flags)) {
+    if (!willRead(flags)) {
         // TODO: Allow default data
         return 0;
     }
@@ -159,7 +155,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
     assert(flags.contains(SerialFlag::MaybeSexp) &&
            "Deserializing non SEXP with SEXP flag");
 
-    if (shouldSkip(options, flags)) {
+    if (!willRead(flags)) {
         return nullptr;
     }
 
@@ -180,10 +176,6 @@ SEXP Deserializer::read(const SerialFlags& flags) {
     // `useHashes` is true, but if `useHashes` is true we can use this one.
     // Either way we must call `readInline` if we didn't read the hash directly
     // to not infinitely recurse.
-    // TODO: Refactor UUIDPool methods into this (or somewhere else in
-    //  serialize or serializeUni) and use separate readItem for recorded calls
-    //  which may be may be null instead of just allowing null on the compiler
-    //  server
     if (options.useHashes) {
         result = UUIDPool::tryReadHash(buffer);
         if (!result) {
@@ -215,7 +207,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 void Deserializer::addRef(SEXP sexp) {
     AbstractDeserializer::addRef(sexp);
     if (retrieveHash && TYPEOF(sexp) == EXTERNALSXP) {
-        // TODO: A bit hachy that we hardcode preserve to if the compiler server
+        // TODO: Hacky that we hardcode preserve to whether the compiler server
         //  is running
         UUIDPool::intern(sexp, retrieveHash, CompilerServer::isRunning(), false);
         retrieveHash = UUID();
@@ -245,6 +237,10 @@ SEXP deserialize(ByteBuffer& buffer, const SerialOptions& options,
             auto serializedOptions = deserializer.readBytesOf<SerialOptions>();
             assert(serializedOptions == options && "serialize/deserialize options mismatch");
             result = deserializer.readInline();
+
+            assert(!deserializer.retrieveHash && "retrieve hash not filled");
+            assert((!retrieveHash || UUIDPool::getHash(result) == retrieveHash) &&
+                   "deserialized SEXP not given retrieve hash");
         });
     });
     return result;

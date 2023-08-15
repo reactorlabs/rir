@@ -1,12 +1,10 @@
 #include "Function.h"
 #include "R/Protect.h"
-#include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
-#include "runtime/log/printPrettyGraph.h"
-#include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serializeR.h"
+#include "interpreter/instance.h"
 #include "runtime/TypeFeedback.h"
+#include "runtime/log/printPrettyGraph.h"
 
 namespace rir {
 
@@ -18,80 +16,6 @@ void Function::setFlag(rir::Function::Flag f) {
 void Function::resetFlag(rir::Function::Flag f) {
     // UUIDPool::reintern(container());
     flags_.reset(f);
-}
-
-Function* Function::deserializeR(SEXP refTable, R_inpstream_t inp) {
-    Protect p;
-    R_xlen_t functionSize = InInteger(inp);
-    const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
-    Context as;
-    InBytes(inp, &as, sizeof(Context));
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, functionSize));
-    AddReadRef(refTable, store);
-    useRetrieveHashIfSet(inp, store);
-    // Set size to 0 in constructor so we can call with null body, and have an
-    // assertion which checks for null body if we call without size == 0 (any
-    // time when we're not deserializing)
-    auto fun = new (DATAPTR(store)) Function(0, nullptr, {}, sig, as, nullptr);
-    fun->size = functionSize;
-    fun->numArgs_ = InInteger(inp);
-    fun->info.gc_area_length += fun->numArgs_;
-    // What this loop does is that it sets the function owned (yet not
-    // deserialized) SEXPs to something reasonable so it will not confuse the GC
-    // which might run while they are deserialized.
-    // TODO: wouldn't it be better to change the serialization order?
-    for (unsigned i = 0; i < fun->numArgs_ + NUM_PTRS; i++) {
-        fun->setEntry(i, R_NilValue);
-    }
-    auto feedback = p(UUIDPool::readItem(refTable, inp));
-    fun->typeFeedback(TypeFeedback::unpack(feedback));
-    auto body = p(UUIDPool::readItem(refTable, inp));
-    fun->body(body);
-    for (unsigned i = 0; i < fun->numArgs_; i++) {
-        if ((bool)InInteger(inp)) {
-            SEXP arg = p(UUIDPool::readItem(refTable, inp));
-            assert(Code::check(arg));
-            fun->setEntry(Function::NUM_PTRS + i, arg);
-        } else {
-            fun->setEntry(Function::NUM_PTRS + i, nullptr);
-        }
-    }
-    fun->flags_ = EnumSet<Flag>(InU64(inp));
-    fun->invocationCount_ = InUInt(inp);
-    fun->deoptCount_ = InUInt(inp);
-    fun->deadCallReached_ = InUInt(inp);
-    fun->invoked = InU64(inp);
-    fun->execTime = InU64(inp);
-    return fun;
-}
-
-void Function::serializeR(SEXP refTable, R_outpstream_t out) const {
-    HashAdd(container(), refTable);
-    OutInteger(out, (int)size);
-    signature().serialize(refTable, out);
-    OutBytes(out, &context_, sizeof(Context));
-    OutInteger(out, (int)numArgs_);
-    assert(getEntry(0) && "tried to serialize function without a body. "
-                          "Is the function corrupted or being constructed?");
-
-    UUIDPool::writeItem(typeFeedback()->container(), false, refTable, out);
-    UUIDPool::writeItem(getEntry(0), false, refTable, out);
-
-    for (unsigned i = 0; i < numArgs_; i++) {
-        CodeSEXP arg = defaultArg_[i];
-        OutInteger(out, (int)(arg != nullptr));
-        if (arg) {
-            assert(Code::check(arg));
-            // arg->serialize(false, refTable, out);
-            UUIDPool::writeItem(arg, false, refTable, out);
-        }
-    }
-    OutU64(out, flags_.to_i());
-    OutUInt(out, invocationCount_);
-    OutUInt(out, deoptCount_);
-    OutUInt(out, deadCallReached_);
-    OutU64(out, invoked);
-    OutU64(out, execTime);
 }
 
 Function* Function::deserialize(AbstractDeserializer& deserializer) {
@@ -108,6 +32,7 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
+    auto feedback = p(deserializer.read(SerialFlags::FunStats));
     auto body = p(deserializer.read(SerialFlags::FunBody));
     std::vector<SEXP> defaultArgs(sig.numArguments, nullptr);
     for (unsigned i = 0; i < sig.numArguments; i++) {
@@ -116,7 +41,9 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
         }
     }
 
-    auto fun = new (DATAPTR(store)) Function(funSize, body, defaultArgs, sig, ctx);
+    auto fun = new (DATAPTR(store))
+        Function(funSize, body, defaultArgs, sig, ctx,
+                 TypeFeedback::unpack(feedback));
     fun->flags_ = flags;
     fun->invocationCount_ = invocationCount_;
     fun->deoptCount_ = deoptCount_;
@@ -136,6 +63,7 @@ void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf<unsigned>(deadCallReached_, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned long>(invoked, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned long>(execTime, SerialFlags::FunStats);
+    serializer.write(typeFeedback()->container(), SerialFlags::FunStats);
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
         serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);

@@ -83,8 +83,6 @@ struct LazyEnvironment
         return le;
     }
 
-    static LazyEnvironment* deserializeR(SEXP refTable, R_inpstream_t inp);
-    void serializeR(SEXP refTable, R_outpstream_t out) const;
     static LazyEnvironment* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
     void hash(HasherOld& hasher) const;

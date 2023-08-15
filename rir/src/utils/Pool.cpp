@@ -1,6 +1,5 @@
 #include "utils/Pool.h"
 #include "R/Protect.h"
-#include "serializeHash/hash/UUIDPool.h"
 
 namespace rir {
 
@@ -8,14 +7,6 @@ std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
 std::unordered_map<SEXP, size_t> Pool::contents;
 std::unordered_set<size_t> Pool::patchable;
-
-BC::PoolIdx Pool::readItem(SEXP ref_table, R_inpstream_t in) {
-    return insert(UUIDPool::readItem(ref_table, in));
-}
-
-void Pool::writeItem(BC::PoolIdx idx, SEXP ref_table, R_outpstream_t out) {
-    UUIDPool::writeItem(get(idx), false, ref_table, out);
-}
 
 BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))

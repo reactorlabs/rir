@@ -1,60 +1,9 @@
 #include "DispatchTable.h"
 #include "R/Protect.h"
 #include "runtime/log/printPrettyGraph.h"
-#include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
-#include "serializeHash/serialize/serializeR.h"
 
 namespace rir {
-
-DispatchTable* DispatchTable::onlyBaseline(Function* baseline,
-                                           const Context& userDefinedContext,
-                                           size_t capacity) {
-    auto dt = create(capacity);
-    dt->setEntry(0, baseline->container());
-    dt->size_ = 1;
-    dt->userDefinedContext_ = userDefinedContext;
-    return dt;
-}
-
-SEXP DispatchTable::onlyBaselineClosure(Function* baseline,
-                                        const Context& userDefinedContext,
-                                        size_t capacity) {
-    PROTECT(baseline->container());
-    auto dt = onlyBaseline(baseline, userDefinedContext, capacity);
-    PROTECT(dt->container());
-    auto what = Rf_allocSExp(CLOSXP);
-    PROTECT(what);
-    SET_FORMALS(what, R_NilValue);
-    SET_BODY(what, dt->container());
-    SET_CLOENV(what, R_GlobalEnv);
-    UNPROTECT(3);
-    return what;
-}
-
-DispatchTable* DispatchTable::deserializeR(SEXP refTable, R_inpstream_t inp) {
-    DispatchTable* table = create();
-    PROTECT(table->container());
-    AddReadRef(refTable, table->container());
-    useRetrieveHashIfSet(inp, table->container());
-    InBytes(inp, (void*)&table->userDefinedContext_, sizeof(table->userDefinedContext_));
-    table->size_ = InInteger(inp);
-    for (size_t i = 0; i < table->size(); i++) {
-        table->setEntry(i,UUIDPool::readItem(refTable, inp));
-    }
-    UNPROTECT(1);
-    return table;
-}
-
-void DispatchTable::serializeR(SEXP refTable, R_outpstream_t out) const {
-    HashAdd(container(), refTable);
-    OutBytes(out, (void*)&userDefinedContext_, sizeof(userDefinedContext_));
-    OutInteger(out, (int)size());
-    assert(size() > 0);
-    for (size_t i = 0; i < size(); i++) {
-        UUIDPool::writeItem(getEntry(i), false, refTable, out);
-    }
-}
 
 DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
     Protect p;

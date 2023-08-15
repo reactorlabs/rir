@@ -160,9 +160,6 @@ inline SEXP src_pool_at(unsigned index) {
     return VECTOR_ELT(c->src.list, index);
 }
 
-size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in);
-void src_pool_write_item(size_t idx, SEXP ref_table, R_outpstream_t out);
-
 } // namespace rir
 
 #endif // INTERPRETER_CONTEXT_H
