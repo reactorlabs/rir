@@ -10,8 +10,6 @@
 
 namespace rir {
 
-class ConnectedWorklist;
-
 /// Function passed to GNU-R, use `serialize` instead
 void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out);
 /// Function passed to GNU-R, use `deserialize` instead
@@ -42,14 +40,8 @@ SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes);
 /// before being fully deserialized. This function is used/needed to support
 /// deserializing recursive hashed structures.
 ///
-/// @see deserialize(ByteBuffer& sexpBuffer, bool useHashes)
-SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes, const UUID& retrieveHash);
-
-/// Whether to use hashes when serializing in the current stream
-bool useHashes(R_outpstream_t out);
-/// Whether to use hashes when deserializing in the current stream
-bool useHashes(R_inpstream_t in);
-/// If `retrieveHash` is set, interns SEXP with it and unsets it.
-void useRetrieveHashIfSet(R_inpstream_t inp, SEXP sexp);
+/// \see deserialize(ByteBuffer& sexpBuffer, bool useHashes)
+SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes,
+                  const UUID& retrieveHash);
 
 } // namespace rir

@@ -73,8 +73,6 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             true);
     }
 
-    static LazyArglist* deserializeR(SEXP refTable, R_inpstream_t inp);
-    void serializeR(SEXP refTable, R_outpstream_t out) const;
     static LazyArglist* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
     void hash(HasherOld& hasher) const;

@@ -70,8 +70,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         setEntry(0, body);
     }
 
-    static Function* deserializeR(SEXP refTable, R_inpstream_t inp);
-    void serializeR(SEXP refTable, R_outpstream_t out) const;
     static Function* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
     void hash(HasherOld& hasher) const;

@@ -62,9 +62,10 @@ class UUIDPool {
 
   public:
     static void initialize();
+
     /// Intern the SEXP when we already know its hash, not recursively.
     ///
-    /// @see UUIDPool::intern(SEXP, bool, bool)
+    /// \see UUIDPool::intern(SEXP, bool, bool)
     static SEXP intern(SEXP e, const UUID& uuid, bool preserve,
                        bool expectHashToBeTheSame = true);
     /// Will hash the SEXP and:
@@ -76,57 +77,21 @@ class UUIDPool {
     /// Returns a different SEXP if there already exists an interned SEXP with
     /// the recomputed hash.
     static SEXP reintern(SEXP e);
+
     /// Gets the interned SEXP by hash, or nullptr if not interned
     static SEXP get(const UUID& hash);
+    /// Gets the SEXP if interned locally, otherwise sends a request to the
+    /// compiler peer. If the compiler peer doesn't have it, calls `Rf_error` on
+    /// the client and returns `R_NilValue` on the server.
+    static SEXP retrieve(const UUID& hash);
     /// Gets the SEXP's memoized hash, or the null hash if the SEXP was never
     /// interned
     static const UUID& getHash(SEXP sexp);
-    /// When deserializing with `useHashes=true`, reads an extra boolean
-    /// `useHashInstead`. If true, instead of reading an SEXP, reads a hash,
-    /// then looks it up in the intern pool. If the SEXP isn't in the intern
-    /// pool, fetches it from the compiler peer. If the compiler peer isn't
-    /// connected or doesn't have the SEXP, `Rf_error`s.
-    ///
-    /// Otherwise, Calls `ReadItem` to read the SEXP as usual.
-    static SEXP readItem(SEXP ref_table, R_inpstream_t in);
-    /// When deserializing with `useHashes=true`, reads an extra boolean
-    /// `useHashInstead`. If true, instead of reading an SEXP, reads a hash,
-    /// then looks it up in the intern pool. If the SEXP isn't in the intern
-    /// pool, fetches it from the compiler peer. If the compiler peer isn't
-    /// connected or doesn't have the SEXP, `Rf_error`s on the client and
-    /// returns `R_NilValue` on the server (server must handle reading nil SEXPs
-    /// with hashes, client assumes the server always has them)
-    ///
-    /// Otherwise, Calls `rir::deserialize` to read the SEXP as usual.
-    static SEXP readItem(ByteBuffer& buf, bool useHashes);
-    /// When serializing with `useHashes=true`, writes `internable(sexp)` before
-    /// the SEXP. Then, if true, asserts that the SEXP is interned (required for
-    /// `useHashes=true`) and writes the SEXP's hash instead of the SEXP itself.
-    ///
-    /// Otherwise, calls `WriteItem` to write the SEXP as usual.
-    ///
-    /// When in doubt, set `isChild=false`, `isChild=true` is currently unused,
-    /// in the future possibly it can be an optimization but it will never
-    /// affect behavior.
-    static void writeItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out);
-    /// When serializing with `useHashes=true`, writes `internable(sexp)` before
-    /// the SEXP. Then, if true, asserts that the SEXP is interned (required for
-    /// `useHashes=true`) and writes the SEXP's hash instead of the SEXP itself.
-    ///
-    /// Otherwise, calls `rir::serialize` to write the SEXP as usual.
-    ///
-    /// When in doubt, set `isChild=false`, `isChild=true` is currently unused,
-    /// in the future possibly it can be an optimization but it will never
-    /// affect behavior.
-    static void writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashes);
-    /// `writeItem`, but writes an extra bool to handle nullptr.
-    ///
-    /// @see writeItem(SEXP, bool, SEXP, R_outpstream_t)
-    static void writeNullableItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out);
-    /// `readItem`, but reads an extra bool to handle nullptr.
-    ///
-    /// @see readItem(bool, SEXP, R_inpstream_t)
-    static SEXP readNullableItem(SEXP ref_table, R_inpstream_t in);
+
+    /// \see tryWriteHash(SEXP, ByteBuffer&)
+    static bool tryWriteHash(SEXP sexp, R_outpstream_t out);
+    /// \see tryReadHash(ByteBuffer&)
+    static SEXP tryReadHash(R_inpstream_t in);
     /// If the SEXP is internable, writes `true`, writes its hash, then returns
     /// `true`. Otherwise, writes `false`, then returns `false`.
     ///
@@ -142,6 +107,11 @@ class UUIDPool {
     /// doesn't have the hash, it will `Rf_error`. This is the same behavior of
     /// `UUIDPool::readItem`.
     static SEXP tryReadHash(ByteBuffer& buf);
+    /// Calls `tryReadHash`, otherwise reads normally.
+    static SEXP readItem(ByteBuffer& buf, bool useHashes);
+    /// Calls `tryWriteHash`, otherwise writes normally. `isChild` is unused,
+    /// but may be an optimization in the future.
+    static void writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashes);
 };
 
 } // namespace rir

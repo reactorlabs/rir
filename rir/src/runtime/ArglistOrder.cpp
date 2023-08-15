@@ -1,30 +1,8 @@
 #include "ArglistOrder.h"
 #include "R/Protect.h"
 #include "R/Serialize.h"
-#include "serializeHash/serialize/serializeR.h"
 
 namespace rir {
-
-ArglistOrder* ArglistOrder::deserializeR(__attribute__((unused)) SEXP refTable, R_inpstream_t inp) {
-    Protect p;
-    auto size = InInteger(inp);
-    auto store = p(Rf_allocVector(EXTERNALSXP, size));
-    useRetrieveHashIfSet(inp, store);
-    auto arglistOrder = new (DATAPTR(store)) ArglistOrder(InInteger(inp));
-    for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
-        arglistOrder->data[i] = (ArglistOrder::ArgIdx)InInteger(inp);
-    }
-    return arglistOrder;
-}
-
-void ArglistOrder::serializeR(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const {
-    auto size = (int)this->size();
-    OutInteger(out, size);
-    OutInteger(out, (int)nCalls);
-    for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
-        OutInteger(out, (int)data[i]);
-    }
-}
 
 ArglistOrder* ArglistOrder::deserialize(AbstractDeserializer& deserializer) {
     Protect p;

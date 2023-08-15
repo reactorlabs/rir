@@ -15,7 +15,6 @@
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
 #include "serializeHash/serialize/serialize.h"
-#include "serializeHash/serialize/serializeR.h"
 #include "utils/measuring.h"
 #include <sys/stat.h>
 #include <unistd.h>
@@ -389,36 +388,35 @@ const UUID& UUIDPool::getHash(SEXP sexp) {
     return empty;
 }
 
-SEXP UUIDPool::readItem(SEXP ref_table, R_inpstream_t in) {
-    if (useHashes(in)) {
-        // Read whether we are serializing hash
-        auto readHashInstead = InBool(in);
-        if (readHashInstead) {
-            // Read hash instead of regular data,
-            // then retrieve by hash from interned or peer
-            UUID hash;
-            InBytes(in, &hash, sizeof(hash));
-            if (interned.count(hash)) {
-                LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
-                              << interned.at(hash) << "\n");
-                return interned.at(hash);
-            }
-            if (CompilerClient::isRunning()) {
-                LOG(std::cout << "Retrieving by hash from server: " << hash
-                              << "\n");
-                auto sexp = CompilerClient::retrieve(hash);
-                if (sexp) {
-                    intern(sexp, hash, false, false);
-                    return sexp;
-                }
-                Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
-            }
-            Rf_error("SEXP deserialized from hash which we don't have, and no server");
-        }
+SEXP UUIDPool::retrieve(const UUID& hash) {
+    if (interned.count(hash)) {
+        LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
+                      << interned.at(hash) << "\n");
+        return interned.at(hash);
     }
-
-    // Read regular data
-    return ReadItem(ref_table, in);
+    if (CompilerClient::isRunning()) {
+        LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
+        auto sexp = CompilerClient::retrieve(hash);
+        if (sexp) {
+            intern(sexp, hash, false, false);
+            return sexp;
+        }
+        Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
+    } else if (CompilerServer::isRunning()) {
+        LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
+        auto sexp = CompilerServer::retrieve(hash);
+        if (sexp) {
+            intern(sexp, hash, true, false);
+            return sexp;
+        }
+        LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
+        // TODO: Should we be returning this, or returning an explicit "not
+        //  found" token, or still erroring and instead handling explicitly
+        //  via a separate method, maybe renaming the old tryReadHash to
+        //  readHashIfNecessary and the new one to tryReadHashIfNecessary?
+        return R_NilValue;
+    }
+    Rf_error("SEXP deserialized from hash which we don't have, and no server");
 }
 
 SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
@@ -433,41 +431,6 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
 }
 
 void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
-                         SEXP ref_table, R_outpstream_t out) {
-    if (useHashes(out)) {
-        auto writeHashInstead = internable(sexp);
-        // Write whether we are serializing hash
-        OutBool(out, writeHashInstead);
-        if (writeHashInstead) {
-            // Write hash instead of regular data
-            assert(hashes.count(sexp) && "SEXP not interned");
-            // Why does cppcheck think this is unused?
-            // cppcheck-suppress unreadVariable
-            auto hash = hashes.at(sexp);
-            // Not necessarily true: sexp == interned[hash]. But the following are true...
-            assert(interned.count(hash) &&
-                   "SEXP interned with hash but the there's no \"main\" SEXP with that hash");
-            assert((sexp == interned[hash] ||
-                    TYPEOF(sexp) == TYPEOF(interned[hash])) &&
-                   "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different SEXP types)");
-            assert(
-                (sexp == interned[hash] || TYPEOF(sexp) != EXTERNALSXP ||
-                 rirObjectMagic(sexp) == rirObjectMagic(interned[hash])) &&
-                "sanity check failed: SEXP -> hash -> SEXP returned an obviously different SEXP (different RIR types)");
-            assert(hashes[interned[hash]] == hash &&
-                   "sanity check failed: SEXP -> hash -> SEXP -> hash returned a different hash");
-            assert(interned[hashes[interned[hash]]] == interned[hash] &&
-                   "sanity check failed: SEXP -> hash -> SEXP -> hash -> SEXP returned a different SEXP");
-            OutBytes(out, &hash, sizeof(hash));
-            return;
-        }
-    }
-
-    // Write regular data
-    WriteItem(sexp, ref_table, out);
-}
-
-void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
                          ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
         if (tryWriteHash(sexp, buf)) {
@@ -479,25 +442,34 @@ void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
     serialize(sexp, buf, SerialOptions{useHashes, false, false, false});
 }
 
-void UUIDPool::writeNullableItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {
-    OutBool(out, sexp != nullptr);
-    if (sexp) {
-        writeItem(sexp, isChild, ref_table, out);
+bool UUIDPool::tryWriteHash(SEXP sexp, R_outpstream_t out) {
+    auto writeHash = internable(sexp);
+    // Write whether we are serializing hash
+    OutBool(out, writeHash);
+    if (writeHash) {
+        // Write hash instead of regular data
+        if (!hashes.count(sexp)) {
+            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
+            intern(sexp, hashRoot(sexp), false);
+        }
+        auto hash = hashes.at(sexp);
+        OutBytes(out, &hash, sizeof(hash));
     }
+    return writeHash;
 }
 
-SEXP UUIDPool::readNullableItem(SEXP ref_table, R_inpstream_t in) {
-    auto isNotNull = InBool(in);
-    if (isNotNull) {
-        return readItem(ref_table, in);
-    } else {
-        return nullptr;
+SEXP UUIDPool::tryReadHash(R_inpstream_t inp) {
+    auto readHashInstead = InBool(inp);
+    if (readHashInstead) {
+        // Read hash instead of regular data,
+        // then retrieve by hash from interned or peer
+        UUID hash;
+        InBytes(inp, &hash, sizeof(hash));
+        return retrieve(hash);
     }
+    return nullptr;
 }
 
-// TODO: Some refactoring (see TODO in serialize.cpp as well), lots of duplicate
-//  code and we probably shouldn't just return nullptr iff we're on server, but
-//  instead use a separate function.
 bool UUIDPool::tryWriteHash(SEXP sexp, ByteBuffer& buf) {
     auto writeHash = internable(sexp);
     // Write whether we are serializing hash
@@ -521,31 +493,7 @@ SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
         // then retrieve by hash from interned or peer
         UUID hash;
         buf.getBytes((uint8_t*)&hash, sizeof(hash));
-        if (interned.count(hash)) {
-            LOG(std::cout << "Retrieved by hash locally: " << hash << " -> "
-                          << interned.at(hash) << "\n");
-            return interned.at(hash);
-        }
-        if (CompilerClient::isRunning()) {
-            LOG(std::cout << "Retrieving by hash from server: " << hash
-                          << "\n");
-            auto sexp = CompilerClient::retrieve(hash);
-            if (sexp) {
-                intern(sexp, hash, false, false);
-                return sexp;
-            }
-            Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
-        } else if (CompilerServer::isRunning()) {
-            LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
-            auto sexp = CompilerServer::retrieve(hash);
-            if (sexp) {
-                intern(sexp, hash, true, false);
-                return sexp;
-            }
-            LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");
-            return R_NilValue;
-        }
-        Rf_error("SEXP deserialized from hash which we don't have, and no server");
+        return retrieve(hash);
     }
     return nullptr;
 }

@@ -225,8 +225,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserializeR(SEXP refTable, R_inpstream_t inp);
-    void serializeR(SEXP refTable, R_outpstream_t out) const;
     static Code* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
 

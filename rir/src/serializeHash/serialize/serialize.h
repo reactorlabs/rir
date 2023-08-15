@@ -34,6 +34,8 @@ struct SerialOptions {
     /// Whether to skip serializing environment locks
     bool skipEnvLocks;
 
+    bool willReadOrWrite(const SerialFlags& flags) const;
+
     bool operator==(const SerialOptions& other) const {
         return memcmp(this, &other, sizeof(SerialOptions)) == 0;
     }
@@ -126,7 +128,7 @@ SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options);
 /// interned with it before being fully deserialized. This function is
 /// used/needed to support deserializing recursive hashed structures.
 ///
-/// @see deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)
+/// \see deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)
 SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options,
                  const UUID& retrieveHash);
 

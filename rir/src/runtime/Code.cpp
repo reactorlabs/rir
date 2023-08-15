@@ -1,7 +1,6 @@
 #include "Code.h"
 #include "Function.h"
 #include "R/Printing.h"
-#include "R/Serialize.h"
 #include "bc/BC.h"
 #include "compiler/native/pir_jit_llvm.h"
 #include "compiler/parameter.h"
@@ -10,7 +9,6 @@
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "serializeHash/serialize/serialize.h"
-#include "serializeHash/serialize/serializeR.h"
 #include "utils/HTMLBuilder/escapeHtml.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
@@ -135,141 +133,6 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     SLOWASSERT(allowMissing || sidx);
 
     return sidx;
-}
-
-Code* Code::deserializeR(SEXP refTable, R_inpstream_t inp) {
-    Protect p;
-    auto size = InInteger(inp);
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
-    AddReadRef(refTable, store);
-    useRetrieveHashIfSet(inp, store);
-    Code* code = new (DATAPTR(store)) Code;
-
-    // Header
-    code->src = src_pool_read_item(refTable, inp);
-    bool hasTr = InInteger(inp);
-    if (hasTr)
-        code->trivialExpr = UUIDPool::readItem(refTable, inp);
-    code->stackLength = InInteger(inp);
-    *const_cast<unsigned*>(&code->localsCount) = InInteger(inp);
-    *const_cast<unsigned*>(&code->bindingCacheSize) = InInteger(inp);
-    code->codeSize = InInteger(inp);
-    code->srcLength = InInteger(inp);
-    code->extraPoolSize = InInteger(inp);
-    auto hasArgReorder = InInteger(inp);
-    SEXP argReorder = nullptr;
-    if (hasArgReorder) {
-        argReorder = p(UUIDPool::readItem(refTable, inp));
-    }
-    auto outer = p(UUIDPool::readItem(refTable, inp));
-    assert(Function::check(outer) &&
-           "sanity check failed: code's outer is not a function");
-
-    // Bytecode
-    BC::deserializeR(refTable, inp, code->code(), code->codeSize, code);
-
-    // Extra pool
-    SEXP extraPool = p(Rf_allocVector(VECSXP, code->extraPoolSize));
-    for (unsigned i = 0; i < code->extraPoolSize; ++i) {
-        SET_VECTOR_ELT(extraPool, i, UUIDPool::readItem(refTable, inp));
-    }
-
-    // Srclist
-    for (unsigned i = 0; i < code->srcLength; i++) {
-        code->srclist()[i].pcOffset = InInteger(inp);
-        // TODO: Intern
-        code->srclist()[i].srcIdx = src_pool_read_item(refTable, inp);
-    }
-    code->info = {// GC area starts just after the header
-                  (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
-                  NumLocals, CODE_MAGIC};
-    code->setEntry(0, extraPool);
-    code->setEntry(3, outer);
-    if (hasArgReorder) {
-        code->setEntry(2, argReorder);
-    }
-
-    // Native code
-    code->kind = (Kind)InInteger(inp);
-    if (code->kind == Kind::Native) {
-        auto lazyCodeHandleLen = InInteger(inp);
-        InBytes(inp, code->lazyCodeHandle, lazyCodeHandleLen);
-        code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
-        if (InBool(inp)) {
-            code->lazyCodeModule = pir::PirJitLLVM::deserializeModuleR(inp, code);
-            code->setLazyCodeModuleFinalizer();
-        }
-    }
-    // Native code is always null here because it's lazy
-    code->nativeCode_ = nullptr;
-
-    return code;
-}
-
-void Code::serializeR(SEXP refTable, R_outpstream_t out) const {
-    HashAdd(container(), refTable);
-    OutInteger(out, (int)size());
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR source", container(), [&]{
-        src_pool_write_item(src, refTable, out);
-        OutInteger(out, trivialExpr != nullptr);
-        if (trivialExpr)
-            UUIDPool::writeItem(trivialExpr, false, refTable, out);
-    });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR numbers", container(), [&]{
-        OutInteger(out, (int)stackLength);
-        OutInteger(out, (int)localsCount);
-        OutInteger(out, (int)bindingCacheSize);
-        OutInteger(out, (int)codeSize);
-        OutInteger(out, (int)srcLength);
-        OutInteger(out, (int)extraPoolSize);
-    });
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR call argument reordering metadata", container(), [&]{
-        OutInteger(out, getEntry(2) != nullptr);
-        if (getEntry(2))
-            UUIDPool::writeItem(getEntry(2), false, refTable, out);
-    });
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR outer function", container(), [&]{
-        UUIDPool::writeItem(function()->container(), false, refTable, out);
-    });
-
-    std::vector<bool> extraPoolChildren;
-    extraPoolChildren.resize(extraPoolSize);
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR bytecode", container(), [&]{
-        // One might think we can skip serializing entries which are just
-        // recorded calls, but it breaks semantics and causes a test failure
-        BC::serializeR(extraPoolChildren, refTable, out, code(), codeSize, this);
-    });
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR extra pool", container(), [&]{
-        for (unsigned i = 0; i < extraPoolSize; ++i) {
-            UUIDPool::writeItem(getExtraPoolEntry(i), extraPoolChildren[i], refTable, out);
-        }
-    });
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR srclist", container(), [&]{
-        for (unsigned i = 0; i < srcLength; i++) {
-            OutInteger(out, (int)srclist()[i].pcOffset);
-            src_pool_write_item(srclist()[i].srcIdx, refTable, out);
-        }
-    });
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serializeR native", container(), [&]{
-        OutInteger(out, (int)kind);
-        assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
-               "Code in bad pending state");
-        if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
-            assert(lazyCodeHandle[0] != '\0');
-            auto lazyCodeHandleLen = (int)strlen(lazyCodeHandle);
-            OutInteger(out, lazyCodeHandleLen);
-            OutBytes(out, (const char*)lazyCodeHandle, lazyCodeHandleLen);
-            OutBool(out, lazyCodeModule != nullptr);
-            if (lazyCodeModule) {
-                lazyCodeModule->serializeR(out);
-            }
-        }
-    });
 }
 
 Code* Code::deserialize(AbstractDeserializer& deserializer) {

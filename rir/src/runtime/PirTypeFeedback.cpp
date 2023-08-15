@@ -3,7 +3,6 @@
 #include "R/Protect.h"
 #include "compiler/pir/instruction.h"
 #include "serializeHash/hash/UUIDPool.h"
-#include "serializeHash/serialize/serializeR.h"
 #include <unordered_map>
 
 namespace rir {
@@ -65,38 +64,6 @@ Code* PirTypeFeedback::getSrcCodeOfSlot(size_t slot) {
 
 Opcode* PirTypeFeedback::getOriginOfSlot(size_t slot) {
     return getSrcCodeOfSlot(slot)->code() + getBCOffsetOfSlot(slot);
-}
-
-PirTypeFeedback* PirTypeFeedback::deserializeR(SEXP refTable, R_inpstream_t inp) {
-    Protect p;
-    int size = InInteger(inp);
-    SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
-    AddReadRef(refTable, store);
-    useRetrieveHashIfSet(inp, store);
-
-    int numCodes = InInteger(inp);
-    int numEntries = InInteger(inp);
-    auto typeFeedback = new (DATAPTR(store)) PirTypeFeedback(numCodes);
-    InBytes(inp, typeFeedback->entry, sizeof(typeFeedback->entry));
-    for (int i = 0; i < numCodes; i++) {
-        typeFeedback->setEntry(i, p(UUIDPool::readItem(refTable, inp)));
-    }
-    InBytes(inp, typeFeedback->mdEntries(), (int)sizeof(MDEntry) * numEntries);
-    return typeFeedback;
-}
-
-void PirTypeFeedback::serializeR(SEXP refTable, R_outpstream_t out) const {
-    HashAdd(container(), refTable);
-    OutInteger(out, (int)size());
-    auto numCodes = this->numCodes();
-    auto numEntries = this->numEntries();
-    OutInteger(out, numCodes);
-    OutInteger(out, numEntries);
-    OutBytes(out, entry, sizeof(entry));
-    for (int i = 0; i < numCodes; i++) {
-        UUIDPool::writeItem(getEntry(i), false, refTable, out);
-    }
-    OutBytes(out, mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
 
 PirTypeFeedback* PirTypeFeedback::deserialize(AbstractDeserializer& deserializer) {

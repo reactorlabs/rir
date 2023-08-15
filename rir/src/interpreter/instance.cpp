@@ -1,7 +1,6 @@
 #include "instance.h"
 #include "api.h"
 #include "compiler/parameter.h"
-#include "serializeHash/hash/UUIDPool.h"
 
 namespace rir {
 
@@ -70,24 +69,6 @@ void context_init() {
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
     }
-}
-
-size_t src_pool_read_item(SEXP ref_table, R_inpstream_t in) {
-    auto item = UUIDPool::readItem(ref_table, in);
-#ifdef DO_INTERN
-    if (src_pool_interned.count(item)) {
-        return src_pool_interned.at(item);
-    }
-#endif
-    size_t i = src_pool_add(item);
-#ifdef DO_INTERN
-    src_pool_interned[item] = i;
-#endif
-    return i;
-}
-
-void src_pool_write_item(size_t idx, SEXP ref_table, R_outpstream_t out) {
-    UUIDPool::writeItem(src_pool_at(idx), false, ref_table, out);
 }
 
 } // namespace rir
