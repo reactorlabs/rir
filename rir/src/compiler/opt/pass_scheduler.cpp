@@ -11,8 +11,8 @@ static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
         return std::regex("");
-    // Filtering out EagerCalls from all opt pipelines
-    return std::regex("EagerCalls");
+    // Filtering out MatchCallArgs from all opt pipelines
+    return std::regex("MatchCallArgs");
 }
 
 static const std::regex PIR_PASS_BLACKLIST = getPassBlacklist();
