@@ -5,16 +5,18 @@
 #include "getConnectedUni.h"
 #include "R/r.h"
 #include "compiler/parameter.h"
-#include "hashRoot_getConnected_common.h"
-#include "runtime/Code.h"
-#include "runtime/DispatchTable.h"
-#include "runtime/Function.h"
 #include "runtime/LazyArglist.h"
-#include "runtime/LazyEnvironment.h"
-#include "utils/Pool.h"
 #include "utils/measuring.h"
 
 namespace rir {
+
+bool ConnectedCollectorUni::willWrite(const rir::SerialFlags& flags) const {
+    // We only care about writing SEXPs, all other writes are no-ops.
+    // This also skips the assertion Code.cpp which requires the native code
+    // object to be ready for serialization (which it's not, but we're not
+    // actually serializing)
+    return flags.contains(SerialFlag::MaybeSexp);
+}
 
 void ConnectedCollectorUni::write(SEXP s, const rir::SerialFlags& flags) {
     assert(flags.contains(SerialFlag::MaybeSexp) &&

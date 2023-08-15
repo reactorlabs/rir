@@ -37,7 +37,7 @@ bool SerialOptions::willReadOrWrite(const SerialFlags& flags) const {
         (!onlySourceAndFeedback ||
          flags.contains(SerialFlag::InSource) ||
          flags.contains(SerialFlag::InFeedback)) &&
-        (!skipEnvLocks || !flags.contains(SerialFlag::NotEnvLock));
+        (!skipEnvLocks || flags.contains(SerialFlag::NotEnvLock));
 }
 
 bool Serializer::willWrite(const rir::SerialFlags& flags) const {

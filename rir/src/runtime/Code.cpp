@@ -168,9 +168,11 @@ Code* Code::deserialize(AbstractDeserializer& deserializer) {
     }
 
     // Srclist
-    for (unsigned i = 0; i < code->srcLength; i++) {
-        code->srclist()[i].pcOffset = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeMisc);
-        code->srclist()[i].srcIdx = deserializer.readSrc(SerialFlags::CodeAst);
+    if (deserializer.willRead(SerialFlags::CodeMisc)) {
+        for (unsigned i = 0; i < code->srcLength; i++) {
+            code->srclist()[i].pcOffset = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeMisc);
+            code->srclist()[i].srcIdx = deserializer.readSrc(SerialFlags::CodeAst);
+        }
     }
     code->info = {// GC area starts just after the header
                   (uint32_t)((intptr_t)&code->locals_ - (intptr_t)code),
@@ -242,28 +244,32 @@ void Code::serialize(AbstractSerializer& serializer) const {
         }
     });
 
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
-        for (unsigned i = 0; i < srcLength; i++) {
-            serializer.writeBytesOf(srclist()[i].pcOffset, SerialFlags::CodeMisc);
-            serializer.writeSrc(srclist()[i].srcIdx, SerialFlags::CodeAst);
-        }
-    });
-
-    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
-        serializer.writeBytesOf(kind, SerialFlags::CodeNative);
-        assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
-               "Code in bad pending state");
-        if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
-            assert(lazyCodeHandle[0] != '\0');
-            auto lazyCodeHandleLen = (unsigned)strlen(lazyCodeHandle);
-            serializer.writeBytesOf(lazyCodeHandleLen, SerialFlags::CodeNative);
-            serializer.writeBytes(lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
-            serializer.writeBytesOf(lazyCodeModule != nullptr, SerialFlags::CodeNative);
-            if (lazyCodeModule) {
-                lazyCodeModule->serialize(serializer);
+    if (serializer.willWrite(SerialFlags::CodeMisc)) {
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize srclist", container(), [&]{
+            for (unsigned i = 0; i < srcLength; i++) {
+                serializer.writeBytesOf(srclist()[i].pcOffset, SerialFlags::CodeMisc);
+                serializer.writeSrc(srclist()[i].srcIdx, SerialFlags::CodeAst);
             }
-        }
-    });
+        });
+    }
+
+    if (serializer.willWrite(SerialFlags::CodeNative)) {
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: serialize native", container(), [&]{
+            serializer.writeBytesOf(kind, SerialFlags::CodeNative);
+            assert((kind != Kind::Native || lazyCodeHandle[0] != '\0') &&
+                   "Code in bad pending state");
+            if (kind == Kind::Native && lazyCodeHandle[0] != '\0') {
+                assert(lazyCodeHandle[0] != '\0');
+                auto lazyCodeHandleLen = (unsigned)strlen(lazyCodeHandle);
+                serializer.writeBytesOf(lazyCodeHandleLen, SerialFlags::CodeNative);
+                serializer.writeBytes(lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
+                serializer.writeBytesOf(lazyCodeModule != nullptr, SerialFlags::CodeNative);
+                if (lazyCodeModule) {
+                    lazyCodeModule->serialize(serializer);
+                }
+            }
+        });
+    }
 }
 
 void Code::hash(HasherOld& hasher) const {

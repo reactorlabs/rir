@@ -133,7 +133,7 @@ SerialFlags SerialFlags::CodePoolUnknown(
     false,
     true);
 SerialFlags SerialFlags::CodeNative(
-    true,
+    false,
     true,
     true,
     false,

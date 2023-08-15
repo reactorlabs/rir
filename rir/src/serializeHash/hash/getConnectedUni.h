@@ -27,9 +27,7 @@ class ConnectedCollectorUni : AbstractSerializer {
     void doGetConnected(SEXP root);
     friend ConnectedSet getConnectedUni(SEXP root);
   public:
-    bool willWrite(const SerialFlags& flags) const override {
-        return true;
-    }
+    bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size,
                     const SerialFlags& flags) override {}
     void writeInt(int data, const SerialFlags& flags) override {}
