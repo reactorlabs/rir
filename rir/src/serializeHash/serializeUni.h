@@ -42,9 +42,11 @@ enum class SerialFlag {
     InSource,
     /// Data is serialized in feedback.
     InFeedback,
+    /// Data is not the IsLocked field of an environment
+    NotEnvLock,
 
     FIRST = Hashed,
-    LAST = InFeedback
+    LAST = NotEnvLock
 };
 
 /// Wrapper so you can't construct non-sensical collections of flags
@@ -54,7 +56,8 @@ class SerialFlags {
     EnumSet<SerialFlag> flags;
 
     SerialFlags(bool hashed, bool maybeNotAst, bool maybeNotRecordedCall,
-                bool maybeSexp, bool inSource, bool inFeedback)
+                bool maybeSexp, bool inSource, bool inFeedback,
+                bool notEnvLock)
         : id_(nextId++), flags() {
         if (hashed) flags.set(SerialFlag::Hashed);
         if (maybeNotAst) flags.set(SerialFlag::MaybeNotAst);
@@ -62,6 +65,7 @@ class SerialFlags {
         if (maybeSexp) flags.set(SerialFlag::MaybeSexp);
         if (inSource) flags.set(SerialFlag::InSource);
         if (inFeedback) flags.set(SerialFlag::InFeedback);
+        if (notEnvLock) flags.set(SerialFlag::NotEnvLock);
     }
 
   public:
@@ -98,6 +102,9 @@ class SerialFlags {
     static SerialFlags CodeNative;
     static SerialFlags CodeAst;
     static SerialFlags CodeMisc;
+    static SerialFlags EnvLock;
+    static SerialFlags EnvMisc;
+
     static const std::vector<SerialFlags>& ById;
 };
 
