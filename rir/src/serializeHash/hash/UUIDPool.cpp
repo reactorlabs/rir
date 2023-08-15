@@ -443,11 +443,10 @@ SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
     return deserialize(buf, SerialOptions{useHashes, false, false, false});
 }
 
-void UUIDPool::writeItem(SEXP sexp, bool isChild, SEXP ref_table, R_outpstream_t out) {
+void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
+                         SEXP ref_table, R_outpstream_t out) {
     if (useHashes(out)) {
-        auto writeHashInstead = internable(sexp) && (!isChild ||
-                                                     // TODO: Refactor and mention?
-                                                     !isRecursivelySerializable(sexp));
+        auto writeHashInstead = internable(sexp);
         // Write whether we are serializing hash
         OutBool(out, writeHashInstead);
         if (writeHashInstead) {
