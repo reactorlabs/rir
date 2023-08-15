@@ -6,39 +6,56 @@
 
 #include "R/r_incl.h"
 #include "UUID.h"
-#include "serializeHash/serializeUni.h"
-#include <queue>
 #include <unordered_set>
+#include <queue>
 
 namespace rir {
 
 /// SEXP->UUID hasher which is exposed to RIR objects so that they can hash
 /// themselves
-class HasherUni : AbstractSerializer {
-    using Worklist = std::queue<SEXP>;
+class HasherOld {
+    struct Elem {
+        SEXP sexp;
+        bool isAst;
+    };
+    using Worklist = std::queue<Elem>;
 
     /// Underlying UUID hasher
     UUID::Hasher& hasher;
-    // SEXPs already processed; we serialize these as refs instead of recursing.
-    SerializedRefs refs_;
     /// Next SEXPs to process: instead of recursing, we add nested SEXPs to this
     /// queue and then process them in a loop. This is different semantics than
     /// actually recursing, but it doesn't matter because hashes are still the
-    /// same quality and consistent. We still hash ASTs immediately since those
-    /// are hashed with a different function.
-    Worklist worklist;
+    /// same quality and consistent.
+    Worklist& worklist;
 
-    explicit HasherUni(UUID::Hasher& hasher)
-        : hasher(hasher), refs_(), worklist() {}
-    SerializedRefs* refs() override { return &refs_; }
+    HasherOld(UUID::Hasher& hasher, Worklist& worklist)
+        : hasher(hasher), worklist(worklist) {}
 
-    void doHashRoot(SEXP root);
-    friend UUID hashRootUni(SEXP root);
+    friend UUID hashRootOld(SEXP root);
   public:
-    bool willWrite(const SerialFlags& flags) const override;
-    void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
-    void writeInt(int data, const SerialFlags& flags) override;
-    void write(SEXP s, const SerialFlags& flags) override;
+    /// Hash raw data, can't contain any references
+    template<typename T> void hashBytesOf(T c) {
+        hasher.hashBytesOf(c);
+    }
+    /// Hash raw data, can't contain any references
+    void hashBytes(const void* data, size_t size) {
+        hasher.hashBytes(data, size);
+    }
+    /// Hash SEXP. ASTs hash differently and faster
+    void hash(SEXP s, bool isAst = false) {
+        worklist.push({s, isAst});
+    }
+    /// Hash SEXP in constant pool ([Pool])
+    void hashConstant(unsigned idx);
+    /// Hash SEXP in source pool ([src_pool_at])
+    void hashSrc(unsigned idx);
+    /// Hash SEXP which could be nullptr
+    void hashNullable(SEXP s, bool isAst = false) {
+        hashBytesOf<bool>(s != nullptr);
+        if (s) {
+            hash(s, isAst);
+        }
+    }
 };
 
 /// Hash an SEXP (doesn't have to be RIR) into a UUID, by serializing it but
@@ -52,6 +69,6 @@ class HasherUni : AbstractSerializer {
 /// this one at the center; if we call `hashRoot` with a different SEXP in the
 /// connected graph, even though we have the same graph, we get a different view
 /// and thus a different hash.
-UUID hashRootUni(SEXP root);
+UUID hashRootOld(SEXP root);
 
 } // namespace rir

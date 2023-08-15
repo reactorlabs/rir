@@ -5,8 +5,8 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 #include "runtime/log/RirObjectPrintStyle.h"
-#include "serializeHash/hash/getConnected.h"
-#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "TypeFeedback.h"
 #include "utils/ByteBuffer.h"
 #include "utils/random.h"
@@ -222,8 +222,8 @@ struct DispatchTable
     void serializeR(SEXP refTable, R_outpstream_t out) const;
     static DispatchTable* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
-    void hash(Hasher& hasher) const;
-    void addConnected(ConnectedCollector& collector) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
     void print(std::ostream&, bool isDetailed = false) const;
     void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
     /// Check if 2 dispatch tables are the same, for validation and sanity check

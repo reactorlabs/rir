@@ -10,9 +10,10 @@
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
-#include "getConnected.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
+#include "serializeHash/hash/getConnected.h"
+#include "serializeHash/hash/hashRoot.h"
 #include "serializeHash/serialize/serialize.h"
 #include "serializeHash/serialize/serializeR.h"
 #include "utils/measuring.h"
@@ -324,17 +325,6 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
     });
 }
 
-static bool isRecursivelySerializable(SEXP sexp) {
-    if (auto c = Code::check(sexp)) {
-        // Native code may be pending compilation, and if so, it can't yet be
-        // serialized. Even if it's not pending, we need hashes to be consistent
-        if (c->kind == Code::Kind::Native) {
-            return false;
-        }
-    }
-    return true;
-}
-
 SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
 #ifdef DO_INTERN
     return disableGc2([&]{
@@ -350,13 +340,12 @@ SEXP UUIDPool::intern(SEXP e, bool recursive, bool preserve) {
             auto ret = internable(e) ? intern(e, hashRoot(e), preserve) : e;
             if (recursive) {
                 ConnectedSet connected = getConnected(e);
-                for (auto& s : connected) {
-                    if (hashes.count(s.sexp) || !internable(s.sexp) ||
-                        (s.isChild && isRecursivelySerializable(s.sexp))) {
+                for (auto sexp : connected) {
+                    if (hashes.count(sexp) || !internable(sexp)) {
                         continue;
                     }
 
-                    intern(s.sexp, hashRoot(s.sexp), preserve);
+                    intern(sexp, hashRoot(sexp), preserve);
                 }
             }
             return ret;

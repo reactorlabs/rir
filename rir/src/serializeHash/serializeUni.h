@@ -108,15 +108,8 @@ class SerialFlags {
     static const std::vector<SerialFlags>& ById;
 };
 
-/// Serialized SEXP with flags
-struct SerialElem {
-    SEXP sexp = nullptr;
-    SerialFlags flags;
-};
-/// Queue of elements to serialize. Not every serializer uses this, but most do
-typedef std::queue<SerialElem> SerialWorklist;
 /// Map of SEXP to ref which will be written in its place if it gets serialized
-/// again
+/// again (so we don't redundantly and infinitely recurse)
 typedef std::unordered_map<SEXP, unsigned> SerializedRefs;
 /// Vector of SEXPs (map of int to SEXP) which will be returned in place of the
 /// serialized refs
@@ -218,7 +211,12 @@ class AbstractDeserializer {
         if (sizeof(T) == sizeof(int)) {
             auto integer = readInt(flags);
             T result;
+            // Warning happens on code which won't be run because
+            // `sizeof(T) < sizeof(int)`
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfortify-source"
             memcpy(&result, &integer, sizeof(int));
+#pragma clang diagnostic pop
             return result;
         } else {
             T result;

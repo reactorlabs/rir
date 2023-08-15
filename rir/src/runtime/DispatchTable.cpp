@@ -83,7 +83,7 @@ void DispatchTable::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void DispatchTable::hash(Hasher& hasher) const {
+void DispatchTable::hash(HasherOld& hasher) const {
     assert(size() > 0);
     // Only hash baseline so the hash doesn't change when new entries get added
     // (since semantics won't, and other rir objects will reference optimized
@@ -91,7 +91,7 @@ void DispatchTable::hash(Hasher& hasher) const {
     hasher.hash(getEntry(0));
 }
 
-void DispatchTable::addConnected(ConnectedCollector& collector) const {
+void DispatchTable::addConnected(ConnectedCollectorOld& collector) const {
     assert(size() > 0);
     for (size_t i = 0; i < size(); i++) {
         collector.add(getEntry(i), false);

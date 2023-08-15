@@ -8,10 +8,12 @@
 namespace rir {
 
 std::vector<SEXP>* globals_;
+std::unordered_set<SEXP>* globalsSet_;
 std::unordered_map<SEXP, unsigned>* global2Index_;
 std::unordered_map<std::string, SEXP>* cppId2Global_;
 std::unordered_map<SEXP, std::string>* global2CppId_;
 const std::vector<SEXP>& globals = *globals_;
+const std::unordered_set<SEXP>& globalsSet = *globalsSet_;
 const std::unordered_map<SEXP, unsigned>& global2Index = *global2Index_;
 const std::unordered_map<std::string, SEXP>& cppId2Global = *cppId2Global_;
 const std::unordered_map<SEXP, std::string>& global2CppId = *global2CppId_;
@@ -35,9 +37,11 @@ void initGlobals() {
     cppId2Global_->emplace("expandDotsTrigger", symbol::expandDotsTrigger);
 
     globals_ = new std::vector<SEXP>();
+    globalsSet_ = new std::unordered_set<SEXP>();
     global2CppId_ = new std::unordered_map<SEXP, std::string>();
     for (auto& e : *cppId2Global_) {
         globals_->push_back(e.second);
+        globalsSet_->insert(e.second);
         global2CppId_->emplace(e.second, e.first);
     }
     global2Index_ = new std::unordered_map<SEXP, unsigned>();

@@ -60,7 +60,7 @@ void serializeStackArg(const R_bcstack_t& stackArg, AbstractSerializer& serializ
     }
 }
 
-void hashStackArg(const R_bcstack_t& stackArg, Hasher& hasher) {
+void hashStackArg(const R_bcstack_t& stackArg, HasherOld& hasher) {
     auto isSexpArg = stackArg.tag == 0;
     hasher.hashBytesOf(stackArg.tag);
     hasher.hashBytesOf(stackArg.flags);
@@ -72,7 +72,8 @@ void hashStackArg(const R_bcstack_t& stackArg, Hasher& hasher) {
     }
 }
 
-void addConnectedStackArg(const R_bcstack_t& stackArg, ConnectedCollector& collector) {
+void addConnectedStackArg(const R_bcstack_t& stackArg,
+                          ConnectedCollectorOld& collector) {
     auto isSexpArg = stackArg.tag == 0;
     if (isSexpArg) {
         collector.add(stackArg.u.sxpval, false);
@@ -191,7 +192,7 @@ void LazyArglist::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void LazyArglist::hash(Hasher& hasher) const {
+void LazyArglist::hash(HasherOld& hasher) const {
     hasher.hashBytesOf(callId);
     hasher.hashBytesOf(length);
     // actualNargs is a lazily-computed value, and we don't want laziness to
@@ -213,7 +214,7 @@ void LazyArglist::hash(Hasher& hasher) const {
     }
 }
 
-void LazyArglist::addConnected(ConnectedCollector& collector) const {
+void LazyArglist::addConnected(ConnectedCollectorOld& collector) const {
     if (stackArgs) {
         for (size_t i = 0; i < length; ++i) {
             addConnectedStackArg(stackArgs[i], collector);

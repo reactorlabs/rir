@@ -145,7 +145,7 @@ void Function::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void Function::hash(Hasher& hasher) const {
+void Function::hash(HasherOld& hasher) const {
     hasher.hashBytesOf(signature());
     hasher.hashBytesOf(context_);
     hasher.hashBytesOf(numArgs_);
@@ -165,7 +165,7 @@ void Function::hash(Hasher& hasher) const {
     // Don't hash flags because they change
 }
 
-void Function::addConnected(ConnectedCollector& collector) const {
+void Function::addConnected(ConnectedCollectorOld& collector) const {
     collector.add(getEntry(0), false);
 
     for (unsigned i = 0; i < numArgs_; i++) {

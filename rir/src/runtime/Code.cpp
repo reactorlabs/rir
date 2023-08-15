@@ -405,7 +405,7 @@ void Code::serialize(AbstractSerializer& serializer) const {
     });
 }
 
-void Code::hash(Hasher& hasher) const {
+void Code::hash(HasherOld& hasher) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: hash source", container(), [&]{
         hasher.hashSrc(src);
     });
@@ -449,7 +449,7 @@ void Code::hash(Hasher& hasher) const {
     // Don't hash native code
 }
 
-void Code::addConnected(ConnectedCollector& collector) const {
+void Code::addConnected(ConnectedCollectorOld& collector) const {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "Code.cpp: add connected in source", container(), [&]{
         collector.addSrc(src);
     });

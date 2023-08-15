@@ -49,7 +49,7 @@ void ArglistOrder::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void ArglistOrder::hash(Hasher& hasher) const {
+void ArglistOrder::hash(HasherOld& hasher) const {
     auto size = (int)this->size();
     hasher.hashBytesOf(nCalls);
     for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
@@ -57,7 +57,8 @@ void ArglistOrder::hash(Hasher& hasher) const {
     }
 }
 
-void ArglistOrder::addConnected(__attribute__((unused)) ConnectedCollector& collector) const {
+void ArglistOrder::addConnected(__attribute__((unused))
+                                ConnectedCollectorOld& collector) const {
     // No connected SEXPs in ArglistOrder
 }
 

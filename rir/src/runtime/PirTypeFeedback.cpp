@@ -126,7 +126,7 @@ void PirTypeFeedback::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytes(mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
 
-void PirTypeFeedback::hash(Hasher& hasher) const {
+void PirTypeFeedback::hash(HasherOld& hasher) const {
     auto numCodes = this->numCodes();
     auto numEntries = this->numEntries();
     hasher.hashBytesOf(numCodes);
@@ -138,7 +138,7 @@ void PirTypeFeedback::hash(Hasher& hasher) const {
     hasher.hashBytes(mdEntries(), (int)sizeof(MDEntry) * numEntries);
 }
 
-void PirTypeFeedback::addConnected(ConnectedCollector& collector) const {
+void PirTypeFeedback::addConnected(ConnectedCollectorOld& collector) const {
     auto numCodes = this->numCodes();
     for (int i = 0; i < numCodes; i++) {
         collector.add(getEntry(i), false);

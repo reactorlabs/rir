@@ -511,7 +511,7 @@ void BC::serialize(AbstractSerializer& serializer,
     }
 }
 
-void BC::hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
+void BC::hash(HasherOld& hasher, std::vector<bool>& extraPoolIgnored,
               const Opcode* code, size_t codeSize, const Code* container) {
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
@@ -607,7 +607,7 @@ void BC::hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
 }
 
 void BC::addConnected(std::vector<bool>& extraPoolChildren,
-                      ConnectedCollector& collector, const Opcode* code,
+                      ConnectedCollectorOld& collector, const Opcode* code,
                       size_t codeSize, const Code* container) {
     while (codeSize > 0) {
         const BC bc = BC::decode((Opcode*)code, container);
