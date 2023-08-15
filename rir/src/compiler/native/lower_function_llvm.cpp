@@ -6131,7 +6131,7 @@ void LowerFunctionLLVM::compile() {
                     if (origin.hasSlot()) {
                         call(
                             NativeBuiltins::get(
-                                NativeBuiltins::Id::recordTypefeedback),
+                                NativeBuiltins::Id::recordTypeFeedback),
                             {convertToPointer(origin.function()->typeFeedback(),
                                               t::i8, true),
                              c(origin.index().idx, 32), load(i)});
@@ -6141,7 +6141,7 @@ void LowerFunctionLLVM::compile() {
                     auto& origin = i->callFeedback().feedbackOrigin;
                     assert(origin.hasSlot());
                     call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
+                             NativeBuiltins::Id::recordCallFeedback),
                          {convertToPointer(origin.function()->typeFeedback(),
                                            t::i8, true),
                           c(origin.index().idx, 32), load(i)});
