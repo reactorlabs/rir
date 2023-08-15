@@ -232,7 +232,7 @@ void FeedbackOrigin::function(Function* fun) {
     assert(!hasSlot() || fun->typeFeedback()->isValid(index_));
     function_ = fun;
 }
-bool TypeFeedback::isValid(FeedbackIndex& index) const {
+bool TypeFeedback::isValid(const FeedbackIndex& index) const {
     switch (index.kind) {
     case FeedbackKind::Call:
         return index.idx < callees_size_;

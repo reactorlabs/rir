@@ -347,7 +347,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
-    bool isValid(FeedbackIndex& index) const;
+    bool isValid(const FeedbackIndex& index) const;
 
     Function* owner() const { return owner_; }
 };
