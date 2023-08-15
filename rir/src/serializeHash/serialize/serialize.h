@@ -21,6 +21,8 @@ struct SerialOptions {
     /// Whether to only serialize source (no optimized code or feedback).
     bool onlySource;
     /// Whether to only serialize feedback (no optimized code or source).
+    /// TODO: Currently doesn't work because deserialization requires an
+    ///  existing SEXP, and we don't support deserialization with existing SEXPs
     bool onlyFeedback;
     /// Whether to only serialize source and feedback (no optimized code). This
     /// is different than passing onlySource and onlyFeedback, because that
@@ -29,24 +31,27 @@ struct SerialOptions {
     /// course, if onlySource or onlyFeedback it set, that makes
     /// onlySourceAndFeedback irrelevant.
     bool onlySourceAndFeedback;
+    /// Whether to skip serializing environment locks
+    bool skipEnvLocks;
 
     bool operator==(const SerialOptions& other) const {
         return memcmp(this, &other, sizeof(SerialOptions)) == 0;
     }
 
-    /// Serialize everything, without hashes
+    /// Serialize everything, not using hashes, with environment locks
     static SerialOptions DeepCopy;
-    /// Serialize everything, with hashes
+    /// Serialize everything, using hashes, without environment locks
     static SerialOptions CompilerServer;
-    /// Serialize everything, without hashes
+    /// Serialize everything, not using hashes, without environment locks
     /// TODO: use hashes or something because this is probably too much
     ///  unnecessary data again
     static SerialOptions CompilerClientRetrieve;
-    /// Serialize only source and feedback, without hashes
+    /// Serialize only source and feedback, not using hashes, without
+    /// environment locks
     static SerialOptions CompilerClientSourceAndFeedback;
-    /// Serialize only source, without hashes
+    /// Serialize only source, not using hashes, without environment locks
     static SerialOptions CompilerClientSource;
-    /// Serialize only feedback, without hashes
+    /// Serialize only feedback, not using hashes, without environment locks
     static SerialOptions CompilerClientFeedback;
 };
 

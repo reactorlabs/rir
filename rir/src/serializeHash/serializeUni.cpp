@@ -26,6 +26,7 @@ SerialFlags SerialFlags::Inherit(
     true,
     true,
     true,
+    true,
     true);
 SerialFlags SerialFlags::Ast(
     true,
@@ -33,15 +34,18 @@ SerialFlags SerialFlags::Ast(
     true,
     true,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::DtContext(
     false,
     true,
     true,
     false,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::DtBaseline(
+    true,
     true,
     true,
     true,
@@ -54,8 +58,10 @@ SerialFlags SerialFlags::DtOptimized(
     true,
     true,
     false,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::FunBody(
+    true,
     true,
     true,
     true,
@@ -68,6 +74,7 @@ SerialFlags SerialFlags::FunDefaultArg(
     true,
     true,
     true,
+    true,
     true);
 SerialFlags SerialFlags::FunStats(
     false,
@@ -75,6 +82,7 @@ SerialFlags SerialFlags::FunStats(
     true,
     false,
     false,
+    true,
     true);
 SerialFlags SerialFlags::FunMiscBytes(
     true,
@@ -82,22 +90,26 @@ SerialFlags SerialFlags::FunMiscBytes(
     true,
     false,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodeArglistOrder(
     true,
     true,
     true,
     true,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodeOuterFun(
     true,
     true,
     true,
     true,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodePromise(
+    true,
     true,
     true,
     true,
@@ -110,6 +122,7 @@ SerialFlags SerialFlags::CodeFeedback(
     true,
     true,
     false,
+    true,
     true);
 SerialFlags SerialFlags::CodePoolUnknown(
     true,
@@ -117,28 +130,48 @@ SerialFlags SerialFlags::CodePoolUnknown(
     true,
     true,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodeNative(
     true,
     true,
     true,
     false,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodeAst(
     true,
     false,
     true,
     true,
     true,
-    false);
+    false,
+    true);
 SerialFlags SerialFlags::CodeMisc(
     true,
     true,
     true,
     true,
     true,
+    false,
+    true);
+SerialFlags SerialFlags::EnvLock(
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
     false);
+SerialFlags SerialFlags::EnvMisc(
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true);
 
 static std::vector<SerialFlags> ById_{
         SerialFlags::Inherit,
@@ -157,7 +190,9 @@ static std::vector<SerialFlags> ById_{
         SerialFlags::CodePoolUnknown,
         SerialFlags::CodeNative,
         SerialFlags::CodeAst,
-        SerialFlags::CodeMisc};
+        SerialFlags::CodeMisc,
+        SerialFlags::EnvLock,
+        SerialFlags::EnvMisc};
 const std::vector<SerialFlags>& SerialFlags::ById = ById_;
 
 void AbstractSerializer::writeConst(unsigned idx, const SerialFlags& flags) {
@@ -676,7 +711,6 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             // No tag
             break;
         case ENVSXP:
-            // TODO: Don't hash (don't write when hashing)
             if (R_IsPackageEnv(sexp)) {
                 writeBytesOf(EnvType::Package);
                 writeInline(PROTECT(R_PackageEnvName(sexp)));
@@ -687,10 +721,10 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 UNPROTECT(1);
             } else {
                 writeBytesOf(EnvType::Regular);
-                writeBytesOf((bool)R_EnvironmentIsLocked(sexp));
-                write(ENCLOS(sexp));
-                write(FRAME(sexp));
-                write(HASHTAB(sexp));
+                writeBytesOf((bool)R_EnvironmentIsLocked(sexp), SerialFlags::EnvLock);
+                write(ENCLOS(sexp), SerialFlags::EnvMisc);
+                write(FRAME(sexp), SerialFlags::EnvMisc);
+                write(HASHTAB(sexp), SerialFlags::EnvMisc);
             }
             writeAttr();
             // No tag
@@ -942,16 +976,22 @@ SEXP AbstractDeserializer::readInline() {
                 break;
             }
             case EnvType::Regular: {
-                auto isLocked = readBytesOf<bool>();
+                auto isLocked = readBytesOf<bool>(SerialFlags::EnvLock);
                 result = Rf_allocSExp(type);
                 PROTECT(result);
                 if (refs) {
                     refs->push_back(result);
                 }
 
-                SET_ENCLOS(result, read());
-                SET_FRAME(result, read());
-                SET_HASHTAB(result, read());
+                if (willRead(SerialFlags::EnvMisc)) {
+                    SET_ENCLOS(result, read(SerialFlags::EnvMisc));
+                    SET_FRAME(result, read(SerialFlags::EnvMisc));
+                    SET_HASHTAB(result, read(SerialFlags::EnvMisc));
+                } else {
+                    SET_ENCLOS(result, R_NilValue);
+                    SET_FRAME(result, R_NilValue);
+                    SET_HASHTAB(result, R_NilValue);
+                }
 
                 R_RestoreHashCount(result);
                 if (isLocked) {
