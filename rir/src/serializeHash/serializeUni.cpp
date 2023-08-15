@@ -366,43 +366,6 @@ void R_expand_binding_value(SEXP b) {
 #endif
 }
 
-#define HASHSIZE(x) ((int)STDVEC_LENGTH(x))
-#define IS_HASHED(x) (HASHTAB(x) != R_NilValue)
-#define BINDING_LOCK_MASK (1 << 14)
-#define FRAME_LOCK_MASK (1 << 14)
-#define UNLOCK_BINDING(b) ((b)->sxpinfo.gp &= (~BINDING_LOCK_MASK))
-#define UNLOCK_FRAME(e) SET_ENVFLAGS(e, ENVFLAGS(e) & (~FRAME_LOCK_MASK))
-#define ENVFLAGS(x) ((x)->sxpinfo.gp)
-#define SET_ENVFLAGS(x, v) (((x)->sxpinfo.gp)=(v))
-
-/// The opposite of R_LockEnvironment in envir.c.
-/// Very ugly that we're undoing something intended not to be undone (via API),
-/// but the compiler client needs to unlock namespaces which are retrieved from
-/// the server (or the server needs to unlock from the client; as long as the
-/// client has an unlocked namespace), or we get errors.
-void R_UnlockEnvironment(SEXP env, bool bindings) {
-    assert(TYPEOF(env) == ENVSXP && env != R_BaseEnv && env != R_BaseNamespace);
-    if (bindings) {
-        if (IS_HASHED(env)) {
-            SEXP table, chain;
-            int i, size;
-            table = HASHTAB(env);
-            size = HASHSIZE(table);
-            for (i = 0; i < size; i++)
-                for (chain = VECTOR_ELT(table, i);
-                     chain != R_NilValue;
-                     chain = CDR(chain))
-                    UNLOCK_BINDING(chain);
-        }
-        else {
-            SEXP frame;
-            for (frame = FRAME(env); frame != R_NilValue; frame = CDR(frame))
-                UNLOCK_BINDING(frame);
-        }
-    }
-    UNLOCK_FRAME(env);
-}
-
 // Will serialize s if it's an instance of CLS
 template <typename CLS>
 static bool tryWrite(AbstractSerializer& serializer, SEXP s) {
@@ -1008,9 +971,6 @@ SEXP AbstractDeserializer::readInline() {
                 result = findNamespace(name);
                 if (refs) {
                     refs->push_back(result);
-                }
-                if (!willRead(SerialFlags::EnvLock) && result != R_BaseNamespace) {
-                    R_UnlockEnvironment(result, false);
                 }
                 UNPROTECT(1);
                 break;
