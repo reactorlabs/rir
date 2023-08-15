@@ -6,8 +6,8 @@
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
 #include "runtime/log/RirObjectPrintStyle.h"
-#include "serializeHash/hash/getConnected.h"
-#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "serializeHash/serialize/native/SerialModule.h"
 #include "utils/ByteBuffer.h"
 
@@ -230,8 +230,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     static Code* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
 
-    void hash(Hasher& hasher) const;
-    void addConnected(ConnectedCollector& collector) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
 
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }

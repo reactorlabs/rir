@@ -4,8 +4,8 @@
 #include "RirRuntimeObject.h"
 #include "compiler/pir/type.h"
 #include "runtime/TypeFeedback.h"
-#include "serializeHash/hash/getConnected.h"
-#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "serializeHash/serializeUni.h"
 
 #include <iostream>
@@ -82,8 +82,8 @@ struct PirTypeFeedback
     void serializeR(SEXP refTable, R_outpstream_t out) const;
     static PirTypeFeedback* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
-    void hash(Hasher& hasher) const;
-    void addConnected(ConnectedCollector& collector) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
 
   private:
     explicit PirTypeFeedback(int numCodes)

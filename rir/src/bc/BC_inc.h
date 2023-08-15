@@ -8,8 +8,8 @@
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 #include "runtime/log/printPrettyGraph.h"
-#include "serializeHash/hash/getConnected.h"
-#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "serializeHash/serializeUni.h"
 #include "utils/ByteBuffer.h"
 
@@ -243,11 +243,11 @@ class BC {
                           std::vector<SerialFlags>& extraPoolFlags,
                           const Opcode* code, size_t codeSize,
                           const Code* container);
-    static void hash(Hasher& hasher, std::vector<bool>& extraPoolIgnored,
+    static void hash(HasherOld& hasher, std::vector<bool>& extraPoolIgnored,
                      const Opcode* code, size_t codeSize,
                      const Code* container);
     static void addConnected(std::vector<bool>& extraPoolChildren,
-                             ConnectedCollector& collector, const Opcode* code,
+                             ConnectedCollectorOld& collector, const Opcode* code,
                              size_t codeSize, const Code* container);
     static void addToPrettyGraph(const PrettyGraphInnerPrinter& p,
                                  std::vector<bool>& addedExtraPoolEntries,

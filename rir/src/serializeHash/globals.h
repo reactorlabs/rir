@@ -7,6 +7,7 @@
 #include "R/r.h"
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <unordered_map>
 
 namespace rir {
@@ -14,6 +15,7 @@ namespace rir {
 // Globals aren't considered connected and references to them don't have
 // recursive connected references
 extern const std::vector<SEXP>& globals;
+extern const std::unordered_set<SEXP>& globalsSet;
 extern const std::unordered_map<SEXP, unsigned>& global2Index;
 extern const std::unordered_map<std::string, SEXP>& cppId2Global;
 extern const std::unordered_map<SEXP, std::string>& global2CppId;

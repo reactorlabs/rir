@@ -134,7 +134,7 @@ void LazyEnvironment::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void LazyEnvironment::hash(Hasher& hasher) const {
+void LazyEnvironment::hash(HasherOld& hasher) const {
     hasher.hashBytesOf(nargs);
     for (int i = 0; i < (int)nargs; i++) {
         hasher.hashBytesOf(missing[i]);
@@ -150,7 +150,7 @@ void LazyEnvironment::hash(Hasher& hasher) const {
     }
 }
 
-void LazyEnvironment::addConnected(ConnectedCollector& collector) const {
+void LazyEnvironment::addConnected(ConnectedCollectorOld& collector) const {
     for (int i = 0; i < (int)nargs; i++) {
         collector.addConstant(names[i]);
     }

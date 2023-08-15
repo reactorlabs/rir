@@ -6,7 +6,7 @@
 #include "R/r.h"
 #include "RirRuntimeObject.h"
 #include "runtime/log/RirObjectPrintStyle.h"
-#include "serializeHash/hash/hashRoot.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {
@@ -74,8 +74,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void serializeR(SEXP refTable, R_outpstream_t out) const;
     static Function* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
-    void hash(Hasher& hasher) const;
-    void addConnected(ConnectedCollector& collector) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
     void disassemble(std::ostream&) const;
     void print(std::ostream&, bool isDetailed = false) const;
     void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;

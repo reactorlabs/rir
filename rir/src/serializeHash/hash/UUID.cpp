@@ -59,7 +59,7 @@ UUID::Hasher::Hasher() : state(XXH3_createState()), finalized(false) {
 }
 
 UUID::Hasher::~Hasher() {
-    assert(finalized && "UUID::Hasher was not finalized");
+    assert(finalized && "UUID::HasherOld was not finalized");
 }
 
 void UUID::Hasher::hashBytesOfCString(const char* c) {
@@ -67,7 +67,7 @@ void UUID::Hasher::hashBytesOfCString(const char* c) {
 }
 
 void UUID::Hasher::hashBytes(const void* data, size_t size) {
-    assert(!finalized && "UUID::Hasher was already finalized");
+    assert(!finalized && "UUID::HasherOld was already finalized");
     
     if (XXH3_128bits_update(state, data, size) == XXH_ERROR) {
         XXH3_freeState(state);
@@ -76,7 +76,7 @@ void UUID::Hasher::hashBytes(const void* data, size_t size) {
 }
 
 UUID UUID::Hasher::finalize() {
-    assert(!finalized && "UUID::Hasher was already finalized");
+    assert(!finalized && "UUID::HasherOld was already finalized");
     finalized = true;
     
     auto digest = XXH3_128bits_digest(state);

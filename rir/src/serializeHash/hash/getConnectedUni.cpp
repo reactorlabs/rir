@@ -16,4 +16,39 @@
 
 namespace rir {
 
+void ConnectedCollectorUni::write(SEXP s, const rir::SerialFlags& flags) {
+    assert(flags.contains(SerialFlag::MaybeSexp) &&
+               "Hashing non SEXP with SEXP flag");
+
+    if (!willWrite(flags)) {
+        return;
+    }
+
+    if (set.insert(s)) {
+        worklist.push(s);
+    }
+}
+
+void ConnectedCollectorUni::doGetConnected(SEXP root) {
+    set.insert(root);
+    writeInline(root);
+    while (!worklist.empty()) {
+        auto elem = worklist.front();
+        worklist.pop();
+
+        writeInline(elem);
+    }
+}
+
+ConnectedSet getConnectedUni(SEXP root) {
+    ConnectedSet set;
+    disableInterpreter([&]{
+        Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_INTERNING, "getConnected", root, [&] {
+            ConnectedCollectorUni collector(set);
+            collector.doGetConnected(root);
+        });
+    });
+    return set;
+}
+
 } // namespace rir
