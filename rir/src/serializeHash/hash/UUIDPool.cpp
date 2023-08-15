@@ -268,7 +268,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #ifdef DEBUG_DISASSEMBLY
         disassembly[hash] = expectHashToBeTheSame
             ? printRirObject(e, RirObjectPrintStyle::Detailed)
-            : "(recursively interned, can't debug this way)";
+            : "(couldn't be computed at the time it was interned)";
 #endif
 
         // Sanity check in case the UUID changed
@@ -289,10 +289,10 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #endif
 
             // assert(false);
-            std::cerr << "WARNING: SEXP UUID changed. Uninterning, but unless"
-                         "we're testing, semantic deviations have probably"
-                         "occurred and we'll probably crash soon\n";
-            unintern(e);
+            std::cerr << "WARNING: SEXP UUID changed. Unsound, and semantic "
+                         "errors may occur if we rely on outdated behavior\n";
+            // DON'T unintern because we or the compiler peer may request it
+            // from the old hash.
         }
 
         // Do intern
