@@ -211,12 +211,18 @@ class AbstractDeserializer {
         if (sizeof(T) == sizeof(int)) {
             auto integer = readInt(flags);
             T result;
-            // Warning happens on code which won't be run because
-            // `sizeof(T) < sizeof(int)`
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfortify-source"
+            // On clang, -Wfortify-source happens on code which won't be run
+            // because `sizeof(T) < sizeof(int)`.
+            //
+            // I would do `clang diagnostic ignored "-Wfortify-source`, but GCC
+            // complains and for some reason I can't suppress that even with
+            // `GCC diagnostic ignored "-Wpragmas"`. AFAIK GCC doesn't have an
+            // equivalent to `-Wfortify-source`, but clang recognizes GCC's
+            // warnings.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
             memcpy(&result, &integer, sizeof(int));
-#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
             return result;
         } else {
             T result;
