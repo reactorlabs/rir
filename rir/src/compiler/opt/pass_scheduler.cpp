@@ -10,9 +10,9 @@ namespace pir {
 static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
-        return std::regex("ForceDominance"); // Filtering out ForceDominance
-                                             // from all opt pipelines
-    return std::regex("");
+        return std::regex("");
+    // Filtering out DelayEnv from all opt pipelines
+    return std::regex("DelayEnv");
 }
 
 static const std::regex PIR_PASS_BLACKLIST = getPassBlacklist();
