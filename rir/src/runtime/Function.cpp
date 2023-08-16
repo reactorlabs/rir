@@ -49,7 +49,7 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
 }
 
 void Function::serialize(AbstractSerializer& serializer) const {
-    serializer.writeBytesOf((R_xlen_t)size, SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<R_xlen_t>((R_xlen_t)size, SerialFlags::FunMiscBytes);
     signature().serialize(serializer);
     serializer.writeBytesOf<unsigned long>(context_.toI(), SerialFlags::FunMiscBytes);
     serializer.writeBytesOf<unsigned long>(flags_.to_i(), SerialFlags::FunMiscBytes);
@@ -58,6 +58,7 @@ void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf<unsigned>(deadCallReached_, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned long>(invoked, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned long>(execTime, SerialFlags::FunStats);
+
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
         serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);

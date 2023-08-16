@@ -57,12 +57,12 @@ struct FunctionSignature {
     }
 
     void serialize(AbstractSerializer& serializer) const {
-        serializer.writeBytesOf(envCreation, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf(optimization, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf(numArguments, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf(dotsPosition, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf(hasDotsFormals, SerialFlags::FunMiscBytes);
-        serializer.writeBytesOf(hasDefaultArgs, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<Environment>(envCreation, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<OptimizationLevel>(optimization, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<unsigned>(numArguments, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<size_t>(dotsPosition, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<bool>(hasDotsFormals, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<bool>(hasDefaultArgs, SerialFlags::FunMiscBytes);
     }
 
     static FunctionSignature deserialize(const ByteBuffer& buffer) {
