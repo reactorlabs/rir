@@ -112,7 +112,7 @@ void CompilerClient::tryInit() {
 
 static zmq::message_t
 handleRetrieveServerRequest(zmq::socket_t* socket,
-                            ByteBuffer& serverRequestBuffer) {
+                            const ByteBuffer& serverRequestBuffer) {
     // Deserialize the retrieve server-side request
     // Data format =
     //   Response::NeedsRetrieve
@@ -157,7 +157,7 @@ handleRetrieveServerRequest(zmq::socket_t* socket,
 template<typename T>
 CompilerClient::Handle<T>* CompilerClient::request(
         const std::function<void(ByteBuffer&)>&& makeRequest,
-        const std::function<T(ByteBuffer&)>&& makeResponse) {
+        const std::function<T(const ByteBuffer&)>&& makeResponse) {
     if (!isRunning()) {
         return nullptr;
     }
@@ -301,7 +301,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 request.putLong(sizeof(debug.style));
                 request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
             },
-            [](ByteBuffer& response) {
+            [](const ByteBuffer& response) {
                 // Response data format =
                 //   Response::Compiled
                 // + sizeof(pirPrint)
@@ -343,7 +343,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             request.putLong((uint64_t)Request::Retrieve);
             request.putBytes((uint8_t*)&hash, sizeof(hash));
         },
-        [=](ByteBuffer& response) -> SEXP {
+        [=](const ByteBuffer& response) -> SEXP {
             // Response data format =
             //   Response::Retrieved
             // + serialize(what, CompilerServer)

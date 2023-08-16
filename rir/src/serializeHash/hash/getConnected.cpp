@@ -20,11 +20,11 @@ namespace rir {
 ConnectedSet getConnected(SEXP root) {
 #if defined(ENABLE_SLOWASSERT) || DEBUG_CONNECTED_DIFFERENCES
     auto set1 = getConnectedUni(root);
-    std::unordered_set<SEXP> set1MinusSet2;
 #endif
     auto set2 = getConnectedOld(root);
-    std::unordered_set<SEXP> set2MinusSet1;
 #if DEBUG_CONNECTED_DIFFERENCES
+    std::unordered_set<SEXP> set1MinusSet2;
+    std::unordered_set<SEXP> set2MinusSet1;
     std::set_difference(set1.begin(), set1.end(), set2.begin(), set2.end(),
                         std::inserter(set1MinusSet2, set1MinusSet2.begin()));
     std::set_difference(set2.begin(), set2.end(), set1.begin(), set1.end(),

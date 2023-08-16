@@ -224,11 +224,11 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
     });
 }
 
-SEXP deserialize(ByteBuffer& buffer, const SerialOptions& options) {
+SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options) {
     return deserialize(buffer, options, UUID());
 }
 
-SEXP deserialize(ByteBuffer& buffer, const SerialOptions& options,
+SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
                  const UUID& retrieveHash) {
     SEXP result;
     disableInterpreter([&]{

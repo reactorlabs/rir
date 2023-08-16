@@ -65,7 +65,7 @@ struct FunctionSignature {
         serializer.writeBytesOf(hasDefaultArgs, SerialFlags::FunMiscBytes);
     }
 
-    static FunctionSignature deserialize(ByteBuffer& buffer) {
+    static FunctionSignature deserialize(const ByteBuffer& buffer) {
         auto envc = (Environment)buffer.getInt();
         auto opt = (OptimizationLevel)buffer.getInt();
         FunctionSignature sig(envc, opt);

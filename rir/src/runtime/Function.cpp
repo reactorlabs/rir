@@ -246,7 +246,7 @@ void Function::debugCompare(const Function* f1, const Function* f2,
         }
         if (hasArg1 && hasArg2) {
             char prefix[100];
-            sprintf(prefix, "defaultArg[%d]", i);
+            sprintf(prefix, "defaultArg[%u]", i);
             Code::debugCompare(Code::unpack(arg1), Code::unpack(arg2),
                                prefix, differences, compareFeedbackAndExtraPoolRBytecodes);
         }

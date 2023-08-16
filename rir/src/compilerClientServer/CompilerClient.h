@@ -62,7 +62,7 @@ class CompilerClient {
     template<typename T>
     static Handle<T>* request(
             const std::function<void(ByteBuffer&)>&& makeRequest,
-            const std::function<T(ByteBuffer&)>&& makeResponse);
+            const std::function<T(const ByteBuffer&)>&& makeResponse);
   public:
     class CompiledHandle {
         friend class CompilerClient;

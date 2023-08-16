@@ -88,16 +88,10 @@ class UUIDPool {
     /// interned
     static const UUID& getHash(SEXP sexp);
 
+    /// \see tryReadHash(const ByteBuffer&)
+    static SEXP tryReadHash(R_inpstream_t in);
     /// \see tryWriteHash(SEXP, ByteBuffer&)
     static bool tryWriteHash(SEXP sexp, R_outpstream_t out);
-    /// \see tryReadHash(ByteBuffer&)
-    static SEXP tryReadHash(R_inpstream_t in);
-    /// If the SEXP is internable, writes `true`, writes its hash, then returns
-    /// `true`. Otherwise, writes `false`, then returns `false`.
-    ///
-    /// This will intern the SEXP if it's not already interned, unlike
-    /// `writeItem` which will error.
-    static bool tryWriteHash(SEXP sexp, ByteBuffer& buf);
     /// Reads a boolean. If `true`, reads a hash and returns the interned SEXP,
     /// fetching from the compiler peer if necessary. If `false`, returns
     /// `nullptr`.
@@ -106,9 +100,16 @@ class UUIDPool {
     /// hash, it will return `R_NilValue`. If this is the client and the server
     /// doesn't have the hash, it will `Rf_error`. This is the same behavior of
     /// `UUIDPool::readItem`.
-    static SEXP tryReadHash(ByteBuffer& buf);
+    static SEXP tryReadHash(const ByteBuffer& buf);
+
+    /// If the SEXP is internable, writes `true`, writes its hash, then returns
+    /// `true`. Otherwise, writes `false`, then returns `false`.
+    ///
+    /// This will intern the SEXP if it's not already interned, unlike
+    /// `writeItem` which will error.
+    static bool tryWriteHash(SEXP sexp, ByteBuffer& buf);
     /// Calls `tryReadHash`, otherwise reads normally.
-    static SEXP readItem(ByteBuffer& buf, bool useHashes);
+    static SEXP readItem(const ByteBuffer& buf, bool useHashes);
     /// Calls `tryWriteHash`, otherwise writes normally. `isChild` is unused,
     /// but may be an optimization in the future.
     static void writeItem(SEXP sexp, bool isChild, ByteBuffer& buf, bool useHashes);

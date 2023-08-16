@@ -53,6 +53,8 @@ PrettyGraphInnerPrinter::printUsingImpl(SEXP root,
             [&](auto connected, auto isChild, auto type, auto description, auto isFarArway) {
                 // Add item to worklist to be printed, unless it was already
                 // printed, and add to seen
+                // Also, cppcheck can't parse this
+                // cppcheck-suppress internalAstError
                 if (seen.insert(connected).second) {
                     worklist.push(connected);
                 }

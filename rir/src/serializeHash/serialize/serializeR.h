@@ -34,14 +34,15 @@ void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes);
 /// sends a request to compiler peer, and fails if it isn't connected or we
 /// can't get a response. The corresponding call to serialize MUST have been
 /// done with `useHashes=true` as well.
-SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes);
-/// Equivalent to `deserializeR(ByteBuffer& sexpBuffer, bool useHashes)`, except
-/// the first deserialized internable SEXP will also be interned with that hash
+SEXP deserializeR(const ByteBuffer& sexpBuffer, bool useHashes);
+/// Equivalent to
+/// `deserializeR(const ByteBuffer& sexpBuffer, bool useHashes)`, except the
+/// first deserialized internable SEXP will also be interned with that hash
 /// before being fully deserialized. This function is used/needed to support
 /// deserializing recursive hashed structures.
 ///
-/// \see deserialize(ByteBuffer& sexpBuffer, bool useHashes)
-SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes,
+/// \see deserialize(const ByteBuffer& sexpBuffer, bool useHashes)
+SEXP deserializeR(const ByteBuffer& sexpBuffer, bool useHashes,
                   const UUID& retrieveHash);
 
 } // namespace rir

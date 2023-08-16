@@ -692,7 +692,6 @@ void BC::debugCompare(const Opcode* code1, const Opcode* code2,
                 } else {
                     differences << name(opcode1) << "|" << name(opcode2);
                 }
-                loggedDifferences = true;
             }
         }
         size1 = bc1.size();
