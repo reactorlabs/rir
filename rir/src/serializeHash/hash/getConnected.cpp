@@ -19,10 +19,10 @@ namespace rir {
 
 ConnectedSet getConnected(SEXP root) {
 #if defined(ENABLE_SLOWASSERT) || DEBUG_CONNECTED_DIFFERENCES
-    auto set1 = getConnectedOld(root);
+    auto set1 = getConnectedUni(root);
     std::unordered_set<SEXP> set1MinusSet2;
 #endif
-    auto set2 = getConnectedUni(root);
+    auto set2 = getConnectedOld(root);
     std::unordered_set<SEXP> set2MinusSet1;
 #if DEBUG_CONNECTED_DIFFERENCES
     std::set_difference(set1.begin(), set1.end(), set2.begin(), set2.end(),
@@ -30,13 +30,13 @@ ConnectedSet getConnected(SEXP root) {
     std::set_difference(set2.begin(), set2.end(), set1.begin(), set1.end(),
                         std::inserter(set2MinusSet1, set2MinusSet1.begin()));
     if (!set1MinusSet2.empty()) {
-        std::cerr << "getConnectedOld has more elements than getConnectedUni:\n";
+        std::cerr << "getConnectedUni has " << set1MinusSet2.size() << " elements not in getConnectedOld:\n";
         for (auto e : set1MinusSet2) {
             std::cerr << "  " << Print::dumpSexp(e, 75) << "\n";
         }
     }
     if (!set2MinusSet1.empty()) {
-        std::cerr << "getConnectedUni has more elements than getConnectedOld:\n";
+        std::cerr << "getConnectedOld has " << set2MinusSet1.size() << " elements not in getConnectedUni:\n";
         for (auto e : set2MinusSet1) {
             std::cerr << "  " << Print::dumpSexp(e, 75) << "\n";
         }
