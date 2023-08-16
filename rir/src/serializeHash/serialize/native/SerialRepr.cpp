@@ -320,7 +320,10 @@ static void patchNamesMetadata(llvm::GlobalVariable& inst,
                                llvm::MDNode* namesMeta) {
     std::stringstream llvmName;
     llvmName << "names";
-    for (auto& nameOperand : namesMeta->operands()) {
+    if (namesMeta->getNumOperands() == 0) {
+        // Special case so that the empty vector name still starts with "names_"
+        llvmName << "_";
+    } else for (auto& nameOperand : namesMeta->operands()) {
         auto nameMetadata = (llvm::MDTuple*)nameOperand.get();
         auto type = ((llvm::MDString*)(nameMetadata->getOperand(0)).get())->getString();
         auto data = ((llvm::MDString*)(nameMetadata->getOperand(1)).get())->getString();

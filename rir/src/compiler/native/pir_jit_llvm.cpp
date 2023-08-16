@@ -588,7 +588,10 @@ void PirJitLLVM::initializeLLVM() {
     // - symbols starting with "efn_" are external function pointers
     // - symbols starting with "src_" are source pool entries
     // - symbols starting with "cp_" are constant pool entries
-    // - symbols starting with "names_" are vectors of names (constant pool entries)
+    // - symbols starting with "names_" are vectors of names (constant pool
+    //   entries). "names_" is the symbol for the empty vector, others won't
+    //   have a trailing "_"
+    //
     // These all must exist in the host process.
     //
     // On macOS/clang/ARM (which one? idk) the symbols sometimes start with '_'
@@ -635,21 +638,35 @@ void PirJitLLVM::initializeLLVM() {
                                 reinterpret_cast<uintptr_t>(addr)),
                             JITSymbolFlags::Exported);
                 } else if (names) {
-                    // TODO: Don't leak memory, cleanup somehow
-                    auto numNames = (size_t)std::count(n.begin(), n.end(), '_');
-                    auto namesArray = (uint32_t*)malloc(sizeof(uint32_t) * numNames);
-                    size_t idx = 6;
-                    for (size_t i = 0; i < numNames; ++i) {
-                        auto nextIdx = n.find('_', idx);
-                        auto idxStr = n.substr(idx, nextIdx - idx);
-                        namesArray[i] = std::strtoul(idxStr.c_str(), nullptr, 16);
-                        idx = nextIdx + 1;
-                    }
+                    if (n == "names_") {
+                        // Special case, we have an empty vector.
+                        // It won't be read, so we can pass a dangling address
+                        // (idk if there's an idiomatic way to do this in LLVM
+                        // or if it causes some kind of UB)
+                        NewSymbols[Name] =
+                            JITEvaluatedSymbol(static_cast<JITTargetAddress>(
+                                                   (uintptr_t)0xdeadbeef),
+                                               JITSymbolFlags::Exported);
+                    } else {
+                        // TODO: Don't leak memory, cleanup somehow
+                        auto numNames =
+                            (size_t)std::count(n.begin(), n.end(), '_');
+                        auto namesArray =
+                            (uint32_t*)malloc(sizeof(uint32_t) * numNames);
+                        size_t idx = 6;
+                        for (size_t i = 0; i < numNames; ++i) {
+                            auto nextIdx = n.find('_', idx);
+                            auto idxStr = n.substr(idx, nextIdx - idx);
+                            namesArray[i] =
+                                std::strtoul(idxStr.c_str(), nullptr, 16);
+                            idx = nextIdx + 1;
+                        }
 
-                    NewSymbols[Name] = JITEvaluatedSymbol(
+                        NewSymbols[Name] = JITEvaluatedSymbol(
                             static_cast<JITTargetAddress>(
                                 reinterpret_cast<uintptr_t>(namesArray)),
                             JITSymbolFlags::Exported);
+                    }
                 } else {
                     std::cout << "unknown symbol " << n << "\n";
                 }

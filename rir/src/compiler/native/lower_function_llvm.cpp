@@ -198,7 +198,10 @@ llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
 llvm::Value* LowerFunctionLLVM::llvmNames(llvm::Module& mod, const std::vector<BC::PoolIdx>& names) {
     std::stringstream llvmNameStr;
     llvmNameStr << "names";
-    for (const auto& e : names) {
+    if (names.empty()) {
+        // Special case so that the empty vector name still starts with "names_"
+        llvmNameStr << "_";
+    } else for (const auto& e : names) {
         llvmNameStr << "_" << std::hex << e;
     }
     auto llvmName = llvmNameStr.str();
