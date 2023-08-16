@@ -419,7 +419,67 @@ SEXP UUIDPool::retrieve(const UUID& hash) {
     Rf_error("SEXP deserialized from hash which we don't have, and no server");
 }
 
-SEXP UUIDPool::readItem(ByteBuffer& buf, bool useHashes) {
+SEXP UUIDPool::tryReadHash(R_inpstream_t inp) {
+    auto readHashInstead = InBool(inp);
+    if (readHashInstead) {
+        // Read hash instead of regular data,
+        // then retrieve by hash from interned or peer
+        UUID hash;
+        InBytes(inp, &hash, sizeof(hash));
+        return retrieve(hash);
+    }
+    return nullptr;
+}
+
+bool UUIDPool::tryWriteHash(SEXP sexp, R_outpstream_t out) {
+    auto writeHash = internable(sexp);
+    // Write whether we are serializing hash
+    OutBool(out, writeHash);
+    if (writeHash) {
+        // Write hash instead of regular data
+        if (!hashes.count(sexp)) {
+            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
+            intern(sexp, hashRoot(sexp), false);
+        }
+        // cppcheck is wrong, this is read
+        // cppcheck-suppress unreadVariable
+        auto hash = hashes.at(sexp);
+        OutBytes(out, &hash, sizeof(hash));
+    }
+    return writeHash;
+}
+
+SEXP UUIDPool::tryReadHash(const ByteBuffer& buf) {
+    auto readHashInstead = buf.getBool();
+    if (readHashInstead) {
+        // Read hash instead of regular data,
+        // then retrieve by hash from interned or peer
+        UUID hash;
+        buf.getBytes((uint8_t*)&hash, sizeof(hash));
+        return retrieve(hash);
+    }
+    return nullptr;
+}
+
+bool UUIDPool::tryWriteHash(SEXP sexp, ByteBuffer& buf) {
+    auto writeHash = internable(sexp);
+    // Write whether we are serializing hash
+    buf.putBool(writeHash);
+    if (writeHash) {
+        // Write hash instead of regular data
+        if (!hashes.count(sexp)) {
+            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
+            intern(sexp, hashRoot(sexp), false);
+        }
+        // cppcheck is wrong, this is read
+        // cppcheck-suppress unreadVariable
+        auto hash = hashes.at(sexp);
+        buf.putBytes((uint8_t*)&hash, sizeof(hash));
+    }
+    return writeHash;
+}
+
+SEXP UUIDPool::readItem(const ByteBuffer& buf, bool useHashes) {
     if (useHashes) {
         if (auto result = tryReadHash(buf)) {
             return result;
@@ -440,62 +500,6 @@ void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
 
     // Write regular data
     serialize(sexp, buf, SerialOptions{useHashes, false, false, false});
-}
-
-bool UUIDPool::tryWriteHash(SEXP sexp, R_outpstream_t out) {
-    auto writeHash = internable(sexp);
-    // Write whether we are serializing hash
-    OutBool(out, writeHash);
-    if (writeHash) {
-        // Write hash instead of regular data
-        if (!hashes.count(sexp)) {
-            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
-            intern(sexp, hashRoot(sexp), false);
-        }
-        auto hash = hashes.at(sexp);
-        OutBytes(out, &hash, sizeof(hash));
-    }
-    return writeHash;
-}
-
-SEXP UUIDPool::tryReadHash(R_inpstream_t inp) {
-    auto readHashInstead = InBool(inp);
-    if (readHashInstead) {
-        // Read hash instead of regular data,
-        // then retrieve by hash from interned or peer
-        UUID hash;
-        InBytes(inp, &hash, sizeof(hash));
-        return retrieve(hash);
-    }
-    return nullptr;
-}
-
-bool UUIDPool::tryWriteHash(SEXP sexp, ByteBuffer& buf) {
-    auto writeHash = internable(sexp);
-    // Write whether we are serializing hash
-    buf.putBool(writeHash);
-    if (writeHash) {
-        // Write hash instead of regular data
-        if (!hashes.count(sexp)) {
-            LOG(std::cout << "Interning new SEXP at write: " << sexp << "\n");
-            intern(sexp, hashRoot(sexp), false);
-        }
-        auto hash = hashes.at(sexp);
-        buf.putBytes((uint8_t*)&hash, sizeof(hash));
-    }
-    return writeHash;
-}
-
-SEXP UUIDPool::tryReadHash(ByteBuffer& buf) {
-    auto readHashInstead = buf.getBool();
-    if (readHashInstead) {
-        // Read hash instead of regular data,
-        // then retrieve by hash from interned or peer
-        UUID hash;
-        buf.getBytes((uint8_t*)&hash, sizeof(hash));
-        return retrieve(hash);
-    }
-    return nullptr;
 }
 
 } // namespace rir

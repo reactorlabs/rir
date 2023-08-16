@@ -149,7 +149,8 @@ class AbstractSerializer {
                              const SerialFlags& flags = SerialFlags::Inherit) {
         if (sizeof(c) == sizeof(int)) {
             int result;
-            memcpy(&result, &c, sizeof(int));
+            // min is redundant, but prevents overflow warnings from linters
+            memcpy(&result, &c, std::min(sizeof(int), sizeof(T)));
             writeInt(result, flags);
         } else {
             writeBytes((void*)&c, sizeof(c), flags);
@@ -211,18 +212,8 @@ class AbstractDeserializer {
         if (sizeof(T) == sizeof(int)) {
             auto integer = readInt(flags);
             T result;
-            // On clang, -Wfortify-source happens on code which won't be run
-            // because `sizeof(T) < sizeof(int)`.
-            //
-            // I would do `clang diagnostic ignored "-Wfortify-source`, but GCC
-            // complains and for some reason I can't suppress that even with
-            // `GCC diagnostic ignored "-Wpragmas"`. AFAIK GCC doesn't have an
-            // equivalent to `-Wfortify-source`, but clang recognizes GCC's
-            // warnings.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wall"
-            memcpy(&result, &integer, sizeof(int));
-#pragma GCC diagnostic pop
+            // min is redundant, but prevents overflow warnings from linters
+            memcpy(&result, &integer, std::min(sizeof(int), sizeof(T)));
             return result;
         } else {
             T result;

@@ -81,7 +81,7 @@ class Serializer : public AbstractSerializer {
 
 class Deserializer : public AbstractDeserializer {
     /// Underlying byte buffer
-    ByteBuffer& buffer;
+    const ByteBuffer& buffer;
     /// Ref table for recursively-(de)serialized SEXPs
     DeserializedRefs refs_;
     /// Controls what data is deserialized and what format some of it uses. The
@@ -90,13 +90,13 @@ class Deserializer : public AbstractDeserializer {
     /// If set, the first rir object deserialized will use this hash
     UUID retrieveHash;
 
-    Deserializer(ByteBuffer& buffer, SerialOptions options,
+    Deserializer(const ByteBuffer& buffer, SerialOptions options,
                  const UUID& retrieveHash = UUID())
         : buffer(buffer), refs_(), options(options),
           retrieveHash(retrieveHash) {}
     DeserializedRefs* refs() override { return &refs_; }
 
-    friend SEXP deserialize(ByteBuffer& sexpBuffer,
+    friend SEXP deserialize(const ByteBuffer& sexpBuffer,
                             const SerialOptions& options,
                             const UUID& retrieveHash);
   public:
@@ -121,15 +121,15 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options);
 /// The corresponding call to serialize MUST have had the same options.
 /// Additionally, if options.useHashes is true, connected RIR objects MUST be
 /// retrievable.
-SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options);
+SEXP deserialize(const ByteBuffer& sexpBuffer, const SerialOptions& options);
 /// Equivalent to
-/// `deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)`, except
+/// `deserialize(const ByteBuffer& sexpBuffer, const SerialOptions& options)`, except
 /// if the hash is non-null, the first deserialized internable SEXP will be
 /// interned with it before being fully deserialized. This function is
 /// used/needed to support deserializing recursive hashed structures.
 ///
-/// \see deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options)
-SEXP deserialize(ByteBuffer& sexpBuffer, const SerialOptions& options,
+/// \see deserialize(const ByteBuffer& sexpBuffer, const SerialOptions& options)
+SEXP deserialize(const ByteBuffer& sexpBuffer, const SerialOptions& options,
                  const UUID& retrieveHash);
 
 /// Will serialize and deserialize the SEXP, returning a deep copy, using RIR's

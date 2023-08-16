@@ -3,6 +3,8 @@
 
 namespace rir {
 
+// cppcheck is wrong, this can't be const
+// cppcheck-suppress constParameter
 R_bcstack_t deserializeStackArg(Protect& p, AbstractDeserializer& deserializer) {
     R_bcstack_t res;
     res.tag = deserializer.readBytesOf<int>();

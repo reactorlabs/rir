@@ -747,7 +747,7 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
                         << src1.pcOffset << " vs " << src2.pcOffset << "\n";
         }
         char srcPrefix[100];
-        sprintf(srcPrefix, "src %d", i);
+        sprintf(srcPrefix, "src %u", i);
         compareSrcs(src1.srcIdx, src2.srcIdx, prefix,
                     srcPrefix, differences);
     }
@@ -758,7 +758,7 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
         auto pool2 = c2->getExtraPoolEntry(i);
 
         char poolPrefix[100];
-        sprintf(poolPrefix, "entry %d", i);
+        sprintf(poolPrefix, "entry %u", i);
         compareSexps(pool1, pool2, prefix, poolPrefix, differences, compareFeedbackAndExtraPoolRBytecodes);
     }
 }

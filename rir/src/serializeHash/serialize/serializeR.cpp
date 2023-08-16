@@ -271,7 +271,7 @@ void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
     });
 }
 
-SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
+SEXP deserializeR(const ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetrieveHash) {
     assert(!R_SERIAL_RETRIEVE_HASH &&
            "bad state: deserializing a different SEXP before we set the retrieve hash from last deserialization");
     SEXP result;
@@ -308,7 +308,7 @@ SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes, const UUID& newRetriev
     return result;
 }
 
-SEXP deserializeR(ByteBuffer& sexpBuffer, bool useHashes) {
+SEXP deserializeR(const ByteBuffer& sexpBuffer, bool useHashes) {
     return deserializeR(sexpBuffer, useHashes, UUID());
 }
 

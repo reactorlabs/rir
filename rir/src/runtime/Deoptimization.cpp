@@ -6,7 +6,7 @@
 
 namespace rir {
 
-void FrameInfo::deserialize(ByteBuffer& buf) {
+void FrameInfo::deserialize(const ByteBuffer& buf) {
     code = Code::unpack(UUIDPool::readItem(buf, true));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
@@ -35,7 +35,7 @@ SEXP DeoptMetadata::container() const {
     return result;
 }
 
-DeoptMetadata* DeoptMetadata::deserialize(ByteBuffer& buf) {
+DeoptMetadata* DeoptMetadata::deserialize(const ByteBuffer& buf) {
     auto numFrames = (size_t)buf.getInt();
     auto size = sizeof(DeoptMetadata) + numFrames * sizeof(FrameInfo);
     SEXP store = Rf_allocVector(RAWSXP, (int)size);
