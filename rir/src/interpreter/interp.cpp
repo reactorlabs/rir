@@ -10,7 +10,6 @@
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
 #include "compilerClientServer/CompilerClient.h"
-#include "compilerClientServer/compiler_server_client_shared_utils.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -39,6 +38,9 @@ bool INTERPRETER_IS_ACTIVE = true;
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
+
+#define COMPARE_SERIALIZATION_DIFFERENCES 0
+#define COMPARE_SERIALIZATION_DIFFERENCES_DETAILED 0
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -982,11 +984,18 @@ SEXP doCall(CallContext& call, bool popArgs) {
                 PROTECT(body1);
                 auto body2 = copyBySerialR(body);
                 PROTECT(body2);
-                // auto body3 = copyBySerialR(body1);
-                // PROTECT(body3);
-                // auto body4 = copyBySerial(body2);
-                // PROTECT(body4);
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                auto body3 = copyBySerialR(body1);
+                PROTECT(body3);
+                auto body4 = copyBySerial(body2);
+                PROTECT(body4);
+#endif
                 body = body1;
+                // TODO: Disabling this for now, but there's an issue where
+                //  function invocation times and flags are different from body0
+                //  to body1 and body2. With the old R serialization algorithm
+                //  they body2's were identical to body0, so it's weird...
+#if COMPARE_SERIALIZATION_DIFFERENCES || COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
                 disableInterpreter([&]{
                     std::stringstream differencesStream;
                     DispatchTable::debugCompare(
@@ -1010,7 +1019,8 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         std::cout << "WARNING: Serialization differences between 1 and 2:\n"
                                   << differences << "\n";
                     }
-                    /* differencesStream = std::stringstream();
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                    differencesStream = std::stringstream();
                     DispatchTable::debugCompare(
                         DispatchTable::unpack(body2),
                         DispatchTable::unpack(body3),
@@ -1053,10 +1063,14 @@ SEXP doCall(CallContext& call, bool popArgs) {
                     if (!differences.empty()) {
                         std::cout << "!!! WARNING: Serialization differences between 1 and 1:\n"
                                   << differences << "\n";
-                    } */
+                    }
+#endif
                 });
+#endif
                 UNPROTECT(3);
-                // UNPROTECT(2);
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                UNPROTECT(2);
+#endif
                 serializeCounter = 0;
             }
             PROTECT(body);
