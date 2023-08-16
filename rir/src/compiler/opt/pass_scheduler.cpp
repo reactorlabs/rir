@@ -11,8 +11,8 @@ static std::regex getPassBlacklist() {
     auto filter = getenv("PIR_PASS_BLACKLIST");
     if (filter)
         return std::regex("");
-    // Filtering out Cleanup from all opt pipelines
-    return std::regex("Cleanup");
+    // Filtering out Constantfold from all opt pipelines
+    return std::regex("Constantfold");
 }
 
 static const std::regex PIR_PASS_BLACKLIST = getPassBlacklist();
