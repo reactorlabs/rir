@@ -6,6 +6,13 @@
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
 
+/// This adds padding to each serialize call, but immediately raises an
+/// assertion failure when a deserialize call deserializes a region which was
+/// not serialized with the same type/size and flags in a serialize call.
+///
+/// Regardless of whether this is enabled, we always serialize and check options
+/// because that is cheap (only a few bytes at the start of serializing the
+/// root, whereas this adds padding to each child and even non-SEXP fields)
 #define DEBUG_SERIALIZE_CONSISTENCY 1
 
 namespace rir {
