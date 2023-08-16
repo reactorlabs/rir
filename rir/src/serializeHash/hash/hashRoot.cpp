@@ -18,9 +18,9 @@ namespace rir {
 
 UUID hashRoot(SEXP root) {
 #if defined(ENABLE_SLOWASSERT) || DEBUG_HASH_DIFFERENCES
-    auto uuid1 = hashRootOld(root);
+    auto uuid1 = hashRootUni(root);
 #endif
-    auto uuid2 = hashRootUni(root);
+    auto uuid2 = hashRootOld(root);
 #if DEBUG_HASH_DIFFERENCES
     if (uuid1 != uuid2) {
         std::cerr << "hashRootOld and hashRootUni disagree:\n";
