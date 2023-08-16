@@ -35,6 +35,7 @@ else ()
 endif ()
 
 set(XXHASH_BUILD_XXHSUM OFF)
+set(BUILD_SHARED_LIBS ON)
 add_subdirectory(${XXHASH_DIR}/cmake_unofficial/ ${XXHASH_DIR}/build/ EXCLUDE_FROM_ALL)
 
 add_definitions(-g)
