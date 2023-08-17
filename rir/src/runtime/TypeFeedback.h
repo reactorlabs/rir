@@ -52,21 +52,7 @@ class FeedbackIndex {
 
     bool isUndefined() const { return idx == Undefined; }
 
-    const char* name() const {
-        switch (kind) {
-        case FeedbackKind::Call:
-            return "Call";
-            break;
-        case FeedbackKind::Test:
-            return "Test";
-            break;
-        case FeedbackKind::Type:
-            return "Type";
-            break;
-        default:
-            assert(false);
-        }
-    }
+    const char* name() const;
 
     uint32_t asInteger() const { return *((uint32_t*)this); }
 
@@ -76,7 +62,12 @@ class FeedbackIndex {
 
     friend std::ostream& operator<<(std::ostream& out,
                                     const FeedbackIndex& index) {
-        out << index.name() << "#" << index.idx;
+        out << index.name() << "#";
+        if (index.isUndefined()) {
+            out << "unknown";
+        } else {
+            out << index.idx;
+        }
         return out;
     }
 };

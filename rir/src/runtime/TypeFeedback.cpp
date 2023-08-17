@@ -288,4 +288,19 @@ TypeFeedback::TypeFeedback(std::vector<ObservedCallees>&& callees,
         memcpy(types_, types.data(), types_mem_size);
     }
 }
+const char* FeedbackIndex::name() const {
+    switch (kind) {
+    case FeedbackKind::Call:
+        return "Call";
+        break;
+    case FeedbackKind::Test:
+        return "Test";
+        break;
+    case FeedbackKind::Type:
+        return "Type";
+        break;
+    default:
+        assert(false);
+    }
+}
 } // namespace rir
