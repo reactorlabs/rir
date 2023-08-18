@@ -63,7 +63,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
         if (feedback) {
-            // FIXME: update the serialization order
             typeFeedback(feedback);
         }
     }

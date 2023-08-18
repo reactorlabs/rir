@@ -6122,7 +6122,6 @@ void LowerFunctionLLVM::compile() {
 
             // For OSR-in try to collect more typefeedback for the part of the
             // code that was not yet executed.
-            // FIXME: is this correct? the feedbackOrigin index?
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
