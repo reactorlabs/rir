@@ -60,6 +60,9 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_LOG_INTERNING=
         1           log every new intern, reused intern, unintern, and other intern related events.
 
+    PIR_WARN_INTERNING=
+        1           warn when an interned object's UUID changes and other inconsistencies. Superseded by PIR_LOG_INTERNING
+
 The following flags can be useful for profiling and finding out which passes take how much time to
 complete.
 
