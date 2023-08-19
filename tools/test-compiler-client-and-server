@@ -13,6 +13,7 @@ if [ -z "$RIR_BUILD" ]; then
     RIR_BUILD=$(pwd)
 fi
 export RIR_BUILD
+# shellcheck disable=SC2144
 if [ ! -f $RIR_BUILD/librir.* ]; then
     echo "could not find librir. are you in the correct directory?"
     exit 1
@@ -27,15 +28,25 @@ export PORT="${PORT=5555}"
 # We run both the compiler server and client, but exit early if either of them fails
 # Boilerplate
 LOCKDIR=$(mktemp -d) || exit "$?"
-trap 'exit 1' ABRT
-trap 'mv "$LOCKDIR" "$LOCKDIR~" && rm -rf "$LOCKDIR~"; kill 0' EXIT
+trap 'rm -rf "$LOCKDIR"; wait' EXIT
 diex() {
   echo "!! $1 crashed" >&2;
-  ln -s _ "$LOCKDIR/.lock" 2> /dev/null && kill -ABRT "$$";
+
+  # kill the other process
+  if [ "$1" == "server" ]; then
+      [ ! -z "$client_pid" ] && kill "$client_pid"
+  else
+      [ ! -z "$server_pid" ] && kill "$server_pid"
+  fi
+
+  exit 1
 }
 
 # Actually run compiler server and client, we delay the client a bit to ensure the server is started
 { LOG_PREFIX="(server) " "${SCRIPTPATH}/test-compiler-server-only" || diex "server"; } &
+server_pid=$!
 { sleep 0.1; LOG_PREFIX="(client) " "${SCRIPTPATH}/test-compiler-client-only" || diex "client"; } &
+client_pid=$!
+
 # Ensure the process keeps running until the children are actually done
 wait
