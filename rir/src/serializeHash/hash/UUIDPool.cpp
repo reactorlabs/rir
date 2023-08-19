@@ -21,6 +21,7 @@
 
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_INTERNING) stmt
+#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_INTERNING || pir::Parameter::PIR_WARN_INTERNING) stmt
 
 namespace rir {
 
@@ -29,6 +30,12 @@ bool pir::Parameter::PIR_LOG_INTERNING =
     strcmp(getenv("PIR_LOG_INTERNING"), "") != 0 &&
     strcmp(getenv("PIR_LOG_INTERNING"), "0") != 0 &&
     strcmp(getenv("PIR_LOG_INTERNING"), "false") != 0;
+
+bool pir::Parameter::PIR_WARN_INTERNING =
+    getenv("PIR_WARN_INTERNING") != nullptr &&
+    strcmp(getenv("PIR_WARN_INTERNING"), "") != 0 &&
+    strcmp(getenv("PIR_WARN_INTERNING"), "0") != 0 &&
+    strcmp(getenv("PIR_WARN_INTERNING"), "false") != 0;
 
 bool pir::Parameter::PIR_MEASURE_INTERNING =
     getenv("PIR_MEASURE_INTERNING") != nullptr &&
@@ -152,8 +159,9 @@ void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
         auto hash = hashes.at(e);
         hashes.erase(e);
         if (!interned.count(hash)) {
-            std::cerr << "WARNING: SEXP was interned, but the corresponding UUID is empty:\n"
-                      << Print::dumpSexp(e) << "\n";
+            LOG_WARN(std::cerr << "WARNING: SEXP was interned, but the "
+                                  "corresponding UUID is empty:\n"
+                               << Print::dumpSexp(e) << "\n");
             // Don't return
         }
 
@@ -205,7 +213,8 @@ void UUIDPool::uninternGcd(SEXP e) {
     // There seems to be a bug somewhere where R is calls finalizer on the wrong
     // object, or calls it twice. Or maybe it's in our code...
     if (preserved.count(e)) {
-        std::cerr << "WARNING: preserved SEXP is supposedly getting gcd" << std::endl;
+        LOG_WARN(std::cerr << "WARNING: preserved SEXP is supposedly getting gcd"
+                           << std::endl);
         return;
     }
     if (!hashes.count(e)) {
@@ -278,24 +287,27 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
         // Sanity check in case the UUID changed
         if (hashes.count(e)) {
-            std::cerr << "SEXP UUID changed from " << hashes.at(e) << " to "
-                      << hash << ": " << e << "\n" << Print::dumpSexp(e)
-                      << "\n";
+            LOG_WARN(std::cerr << "SEXP UUID changed from " << hashes.at(e)
+                               << " to " << hash << ": " << e << "\n"
+                               << Print::dumpSexp(e) << "\n");
 
 #ifdef DEBUG_DISASSEMBLY
             auto oldDisassembly = disassembly[hashes.at(e)];
             auto newDisassembly = disassembly[hash];
             if (oldDisassembly != newDisassembly) {
-                std::cerr << "note: disassembly changed from:\n" << oldDisassembly
-                          << "\nto:\n" << newDisassembly << "\n";
+                LOG_WARN(std::cerr << "note: disassembly changed from:\n"
+                                   << oldDisassembly << "\nto:\n"
+                                   << newDisassembly << "\n");
             } else {
-                std::cerr << "note: disassembly:\n" << oldDisassembly << "\n";
+                LOG_WARN(std::cerr << "note: disassembly:\n" << oldDisassembly
+                                   << "\n");
             }
 #endif
 
             // assert(false);
-            std::cerr << "WARNING: SEXP UUID changed. Unsound, and semantic "
-                         "errors may occur if we rely on outdated behavior\n";
+            LOG_WARN(std::cerr << "WARNING: SEXP UUID changed. Unsound, and "
+                                  "semantic errors may occur if we rely on "
+                                  "outdated behavior\n");
             // DON'T unintern because we or the compiler peer may request it
             // from the old hash.
         }

@@ -57,6 +57,7 @@ struct Parameter {
     static unsigned PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY;
 
     static bool PIR_LOG_INTERNING;
+    static bool PIR_WARN_INTERNING;
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_MEASURE_INTERNING;
     static bool PIR_MEASURE_CLIENT_SERVER;
