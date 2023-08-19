@@ -395,7 +395,7 @@ test_sanitize:
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
     - /opt/rir/tools/fetch-llvm.sh
-    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize ../..
+    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) CCFLAGS="-fPIC" CXXFLAGS="-fPIC" cmake -DCMAKE_BUILD_TYPE=sanitize ../..
     - make -j6
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
     # intercept_tls_get_addr=0 helps with leak sanitizer crashes
