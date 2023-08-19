@@ -20,7 +20,7 @@ class Rir2Pir {
             const std::list<PirTypeFeedback*>& outerFeedback);
 
     bool tryCompile(Builder& insert) __attribute__((warn_unused_result));
-    bool tryCompileContinuation(Builder& insert, rir::Code* c, Opcode* start,
+    bool tryCompileContinuation(Builder& insert, Opcode* start,
                                 const std::vector<PirType>& initialStack)
         __attribute__((warn_unused_result));
 
