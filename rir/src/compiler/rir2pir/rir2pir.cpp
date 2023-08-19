@@ -1329,9 +1329,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     return true;
 }
 
-bool Rir2Pir::tryCompileContinuation(Builder& insert, rir::Code* c, Opcode* start,
+bool Rir2Pir::tryCompileContinuation(Builder& insert, Opcode* start,
                                      const std::vector<PirType>& initialStack) {
-    return tryCompile(c, insert, start, initialStack);
+    return tryCompile(cls->owner()->rirFunction()->body(), insert, start,
+                      initialStack);
 }
 
 bool Rir2Pir::tryCompile(Builder& insert) {
@@ -1376,8 +1377,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                              const std::vector<PirType>& initialStack) {
     assert(!finalized);
-    SLOWASSERT(start >= srcCode->code());
-    SLOWASSERT(start <= srcCode->endCode());
+    assert(start >= srcCode->code());
+    assert(start <= srcCode->endCode());
 
     auto firstBB = insert.getCurrentBB();
     insert.createNextBB();
@@ -1449,12 +1450,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         BC bc = BC::advance(&finger, srcCode);
         // cppcheck-suppress variableScope
         const auto nextPos = finger;
-        SLOWASSERT(nextPos <= end);
+        assert(nextPos <= end);
 
         assert(pos != end);
         if (bc.isJmp()) {
             auto trg = bc.jmpTarget(pos);
-            SLOWASSERT(trg <= end);
+            assert(trg <= end);
             if (bc.isUncondJmp()) {
                 finger = trg;
                 continue;
@@ -1593,7 +1594,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             BC ldcode = BC::advance(&pc, srcCode);
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
-            SLOWASSERT(pc <= end);
+            assert(pc <= end);
 
             SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();

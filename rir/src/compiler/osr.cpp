@@ -23,7 +23,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
     pir::Backend backend(module, logger, "continuation");
 
     cmp.compileContinuation(
-        closure, c, &ctx,
+        closure, c->function(), &ctx,
         [&](Continuation* cnt) {
             cmp.optimizeModule();
             fun = backend.getOrCompile(cnt);
