@@ -2,6 +2,8 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "compiler/parameter.h"
+#include "interpreter/instance.h"
+#include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 #include <stack>
 #include <unordered_map>
@@ -103,12 +105,44 @@ static void hashNewAst(SEXP s, UUID::Hasher& hasher,
             assert(false && "unexpected DOTSXP in AST");
         }
 
-        case CLOSXP: {
-            assert(false && "unexpected CLOSXP in AST");
-        }
-
         case ENVSXP: {
             assert(false && "unexpected ENVSXP in AST");
+        }
+
+        // Not sure if this should actually happen or if it's a bug in RIR, but
+        // this is encountered in regression_intern_reg_s4.R
+        case CLOSXP: {
+            auto body = BODY(s);
+            SEXP src;
+            switch (TYPEOF(body)) {
+            case EXTERNALSXP:
+                src = src_pool_at(DispatchTable::unpack(body)->baseline()->body()->src);
+                break;
+            case BCODESXP:
+                src = VECTOR_ELT(CDR(body), 0);
+                break;
+            case LANGSXP:
+            // These cases should maybe be part of default
+            case SYMSXP:
+            case NILSXP:
+            case LISTSXP:
+            case SPECIALSXP:
+            case BUILTINSXP:
+            case CHARSXP:
+            case LGLSXP:
+            case INTSXP:
+            case REALSXP:
+            case CPLXSXP:
+            case STRSXP:
+            case VECSXP:
+            case RAWSXP:
+                src = body;
+                break;
+            default:
+                assert(false && "unexpected body type in AST closure");
+            }
+            recurse(src);
+            break;
         }
 
         case SPECIALSXP:
