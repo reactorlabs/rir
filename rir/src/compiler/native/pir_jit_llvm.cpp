@@ -658,7 +658,7 @@ void PirJitLLVM::initializeLLVM() {
                         //  in SerialRepr)
                         R_PreserveObject(container);
                         size_t idx = 6;
-                        for (size_t i = 0; i < numNames; ++i) {
+                        for (R_xlen_t i = 0; i < numNames; ++i) {
                             auto nextIdx = n.find('_', idx);
                             auto idxStr = n.substr(idx, nextIdx - idx);
                             INTEGER(container)[i] = (int)std::strtoul(idxStr.c_str(), nullptr, 16);
