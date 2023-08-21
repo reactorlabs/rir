@@ -629,13 +629,16 @@ void PirJitLLVM::initializeLLVM() {
                     auto idxStr = n.substr(src ? 4 : 3, 8);
                     auto idx = std::strtoul(idxStr.c_str(), nullptr, 16);
 
-                    // TODO: Don't leak memory, cleanup somehow
-                    auto addr = (uint32_t*)malloc(sizeof(uint32_t));
-                    *addr = idx;
+                    auto container = Rf_allocVector(INTSXP, 1);
+                    // TODO: Don't leak memory, attach to object so that this
+                    //  gets freed when the last Code object using it does (also
+                    //  in SerialRepr)
+                    R_PreserveObject(container);
+                    INTEGER(container)[0] = (int)idx;
 
                     NewSymbols[Name] = JITEvaluatedSymbol(
                             static_cast<JITTargetAddress>(
-                                reinterpret_cast<uintptr_t>(addr)),
+                                reinterpret_cast<uintptr_t>(INTEGER(container))),
                             JITSymbolFlags::Exported);
                 } else if (names) {
                     if (n == "names_") {
@@ -648,23 +651,23 @@ void PirJitLLVM::initializeLLVM() {
                                                    (uintptr_t)0xdeadbeef),
                                                JITSymbolFlags::Exported);
                     } else {
-                        // TODO: Don't leak memory, cleanup somehow
-                        auto numNames =
-                            (size_t)std::count(n.begin(), n.end(), '_');
-                        auto namesArray =
-                            (uint32_t*)malloc(sizeof(uint32_t) * numNames);
+                        auto numNames = (R_xlen_t)std::count(n.begin(), n.end(), '_');
+                        auto container = Rf_allocVector(INTSXP, numNames);
+                        // TODO: Don't leak memory, attach to object so that this
+                        //  gets freed when the last Code object using it does (also
+                        //  in SerialRepr)
+                        R_PreserveObject(container);
                         size_t idx = 6;
                         for (size_t i = 0; i < numNames; ++i) {
                             auto nextIdx = n.find('_', idx);
                             auto idxStr = n.substr(idx, nextIdx - idx);
-                            namesArray[i] =
-                                std::strtoul(idxStr.c_str(), nullptr, 16);
+                            INTEGER(container)[i] = (int)std::strtoul(idxStr.c_str(), nullptr, 16);
                             idx = nextIdx + 1;
                         }
 
                         NewSymbols[Name] = JITEvaluatedSymbol(
                             static_cast<JITTargetAddress>(
-                                reinterpret_cast<uintptr_t>(namesArray)),
+                                reinterpret_cast<uintptr_t>(INTEGER(container))),
                             JITSymbolFlags::Exported);
                     }
                 } else {
