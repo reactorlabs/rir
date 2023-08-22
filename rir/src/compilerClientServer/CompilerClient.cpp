@@ -14,9 +14,10 @@
 #ifdef MULTI_THREADED_COMPILER_CLIENT
 #include "utils/ctpl.h"
 #endif
+#include "R/Printing.h"
 #include "bc/Compiler.h"
-#include <zmq.hpp>
 #include <array>
+#include <zmq.hpp>
 
 namespace rir {
 
@@ -122,8 +123,10 @@ void CompilerClient::tryInit() {
 }
 
 static zmq::message_t
-handleRetrieveServerRequest(zmq::socket_t* socket,
+handleRetrieveServerRequest(int index, zmq::socket_t* socket,
                             const ByteBuffer& serverRequestBuffer) {
+    LOG(std::cerr << "Socket " << index << " received retrieve request: ");
+
     // Deserialize the retrieve server-side request
     // Data format =
     //   Response::NeedsRetrieve
@@ -132,6 +135,7 @@ handleRetrieveServerRequest(zmq::socket_t* socket,
     assert(requestMagic == Response::NeedsRetrieve);
     UUID hash;
     serverRequestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
+    LOG(std::cerr << hash << " -> ");
 
     // Get SEXP
     SEXP what = UUIDPool::get(hash);
@@ -139,6 +143,7 @@ handleRetrieveServerRequest(zmq::socket_t* socket,
     // Serialize the client-side response
     ByteBuffer clientResponse;
     if (what) {
+        LOG(std::cerr << what << " " << Print::dumpSexp(what) << std::endl);
         // Data format =
         //   Request::Retrieved
         // + serialize(what, CompilerClientRetrieve)
@@ -152,6 +157,8 @@ handleRetrieveServerRequest(zmq::socket_t* socket,
     }
 
     // Send the client response
+    LOG(std::cerr << "Socket " << index << " sending retrieve response"
+                  << std::endl);
     auto clientResponseSize = *socket->send(
         zmq::message_t(clientResponse.data(),
                        clientResponse.size()),
@@ -182,8 +189,8 @@ CompilerClient::Handle<T>* CompilerClient::request(
         }
         if (!socketConnected) {
             const auto& serverAddr = (*serverAddrs)[index];
-            std::cerr << "CompilerClient: reconnecting to " << serverAddr
-                      << std::endl;
+            LOG_WARN(std::cerr << "CompilerClient: reconnecting to " << serverAddr
+                               << std::endl);
             socket->connect(serverAddr);
             (*socketsConnected)[index] = true;
         }
@@ -217,10 +224,12 @@ CompilerClient::Handle<T>* CompilerClient::request(
             assert(hashOnlyRequestSize == hashOnlyRequestSize2);
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
-            // Wait for the response
+
+            // Wait for and retrieve the response
             zmq::message_t hashOnlyResponse;
             socket->recv(hashOnlyResponse, zmq::recv_flags::none);
-            // Receive the response
+
+            // Process the response
             // Response data format =
             //   Response::NeedsFull
             // | from makeResponse()
@@ -228,8 +237,13 @@ CompilerClient::Handle<T>* CompilerClient::request(
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
             auto hashOnlyResponseMagic = (Response)hashOnlyResponseBuffer.peekLong();
             if (hashOnlyResponseMagic != Response::NeedsFull) {
+                LOG(std::cerr << "Socket " << index
+                              << " received memoized hashOnly response"
+                              << std::endl);
                 return makeResponse(hashOnlyResponseBuffer);
             }
+            LOG(std::cerr << "Socket " << index << " needs to send full request"
+                          << std::endl);
         }
 
         // Send the request
@@ -243,22 +257,26 @@ CompilerClient::Handle<T>* CompilerClient::request(
         auto requestSize2 = request.size();
         assert(requestSize == requestSize2);
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
-        // Wait for the response
+
+        // Wait for and receive the response
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
         zmq::message_t response;
         socket->recv(response, zmq::recv_flags::none);
-        // Receive the response
-        // Response data format =
-        //   from makeResponse()
         ByteBuffer responseBuffer((uint8_t*)response.data(), response.size());
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
-        auto responseMagic = (Response)responseBuffer.peekLong();
+
         // Handle retrieve requests
+        auto responseMagic = (Response)responseBuffer.peekLong();
         while (responseMagic == Response::NeedsRetrieve) {
-            response = handleRetrieveServerRequest(socket, responseBuffer);
+            response = handleRetrieveServerRequest(index, socket, responseBuffer);
             responseBuffer = ByteBuffer((uint8_t*)response.data(), response.size());
             responseMagic = (Response)responseBuffer.peekLong();
         }
+
+        // Process the response
+        // Response data format =
+        //   from makeResponse()
+        LOG(std::cerr << "Socket " << index << " received response" << std::endl);
         return makeResponse(responseBuffer);
     };
 #ifdef MULTI_THREADED_COMPILER_CLIENT
