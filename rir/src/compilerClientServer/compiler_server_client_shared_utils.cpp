@@ -19,6 +19,22 @@ size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY =
         ? strtol(getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
         : 1024 * 1024;
 
+bool pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED =
+    getenv("PIR_LOG_COMPILER_PEER_DETAILED") != nullptr &&
+    strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "") != 0 &&
+    strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "0") != 0;
+
+bool pir::Parameter::PIR_LOG_COMPILER_CLIENT =
+    getenv("PIR_LOG_COMPILER_CLIENT") != nullptr &&
+    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "") != 0 &&
+    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "0") != 0;
+
+bool pir::Parameter::PIR_WARN_COMPILER_CLIENT =
+    getenv("PIR_WARN_COMPILER_CLIENT") != nullptr &&
+    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "") != 0 &&
+    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "0") != 0;
+
+
 bool pir::Parameter::PIR_MEASURE_CLIENT_SERVER =
     getenv("PIR_MEASURE_CLIENT_SERVER") != nullptr &&
     strtol(getenv("PIR_MEASURE_CLIENT_SERVER"), nullptr, 10);
