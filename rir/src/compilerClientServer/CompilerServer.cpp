@@ -291,7 +291,6 @@ void CompilerServer::tryRun() {
             //   Response::Compiled
             // + sizeof(pirPrint)
             // + pirPrint
-            // + hashRoot(what)
             // + serialize(what, CompilerServer)
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             LOG_RESPONSE("Response::Compiled");
@@ -300,9 +299,11 @@ void CompilerServer::tryRun() {
             auto pirPrintSize = pirPrint.size();
             response.putLong(pirPrintSize);
             response.putBytes((uint8_t*)pirPrint.data(), pirPrintSize);
-            auto hash = UUIDPool::getHash(what);
-            LOG_RESPONSE(hash << " + serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
-            response.putBytes((uint8_t*)&hash, sizeof(hash));
+            // TODO: Send only the closure body (since formals and environment
+            //  are redundant), but first send the body's hash so we can reuse
+            //  and skip deserialization if possible (see commit tagged
+            //  cant-send-compiled-hash)
+            LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
             serialize(what, response, SerialOptions::CompilerServer);
             break;
         }
