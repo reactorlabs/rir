@@ -32,11 +32,22 @@ thread_pool* threads;
 static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
 
-#define DEBUG_LOG(code) do {} while (0)
+#define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_CLIENT) stmt
+#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_CLIENT || pir::Parameter::PIR_WARN_COMPILER_CLIENT) stmt
 
 static const char* SENDING_REQUEST_TIMER_NAME = "CompilerClient.cpp: sending request";
 static const char* RECEIVING_RESPONSE_TIMER_NAME = "CompilerClient.cpp: receiving response";
 static const char* RETRIEVE_TIMER_NAME = "CompilerClient.cpp: retriving SEXP";
+
+bool pir::Parameter::PIR_LOG_COMPILER_CLIENT =
+    getenv("PIR_LOG_COMPILER_CLIENT") != nullptr &&
+    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "") != 0 &&
+    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "0") != 0;
+
+bool pir::Parameter::PIR_WARN_COMPILER_CLIENT =
+    getenv("PIR_WARN_COMPILER_CLIENT") != nullptr &&
+    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "") != 0 &&
+    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "0") != 0;
 
 static bool PIR_CLIENT_SKIP_DISCREPANCY_CHECK =
     getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK") != nullptr &&
@@ -165,7 +176,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
         auto socket = (*sockets)[index];
         auto socketConnected = (*socketsConnected)[index];
         if (!socket->handle()) {
-            std::cerr << "CompilerClient: socket closed" << std::endl;
+            LOG_WARN(std::cerr << "CompilerClient: socket closed" << std::endl);
             *socket = zmq::socket_t(*context, zmq::socket_type::req);
             socketConnected = false;
         }
@@ -195,8 +206,8 @@ CompilerClient::Handle<T>* CompilerClient::request(
             hashOnlyRequest.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
 
             // Send the hash-only request
-            DEBUG_LOG(std::cerr << "Socket " << index << " sending hashOnly request"
-                                << std::endl);
+            LOG(std::cerr << "Socket " << index << " sending hashOnly request"
+                          << std::endl);
             auto hashOnlyRequestSize =
                 *socket->send(zmq::message_t(
                                   hashOnlyRequest.data(),
@@ -222,7 +233,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
         }
 
         // Send the request
-        DEBUG_LOG(std::cerr << "Socket " << index << " sending request" << std::endl);
+        LOG(std::cerr << "Socket " << index << " sending request" << std::endl);
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
         auto requestSize =
             *socket->send(zmq::message_t(
@@ -413,14 +424,16 @@ const CompiledResponseData& CompilerClient::CompiledHandle::getResponse() {
         case std::future_status::ready:
         break;
         case std::future_status::timeout: {
-        std::cerr << console::with_red("Timeout waiting for remote PIR")
-                  << std::endl;
+        LOG_WARN(std::cerr << console::with_red("Timeout waiting for remote PIR")
+                           << std::endl);
         // Disconnect because the server probably crashed, and we want
         // to be able to restart without restarting the client; it will
         // attempt to reconnect before sending the next request
         auto socketIndex = *socketIndexRef;
         if (socketIndex != -1) {
-            std::cerr << "Disconnecting " << socketIndex << ", will reconnect on next request" << std::endl;
+            LOG_WARN(std::cerr << "Disconnecting " << socketIndex
+                               << ", will reconnect on next request"
+                               << std::endl);
             auto socket = (*sockets)[socketIndex];
             auto socketAddr = (*serverAddrs)[socketIndex];
             socket->disconnect(socketAddr);
