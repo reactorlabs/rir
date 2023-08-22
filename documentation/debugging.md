@@ -63,8 +63,11 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_WARN_INTERNING=
         1           warn when an interned object's UUID changes and other inconsistencies. Superseded by PIR_LOG_INTERNING
 
+    PIR_LOG_COMPILER_PEER_DETAILED=
+        1           log the contents of every request sent to and received by the compiler client or server
+
     PIR_LOG_COMPILER_CLIENT=
-        1           log every request sent to the compiler server and every response received
+        1           log every request sent to the compiler server and every response received. Superseded by PIR_LOG_COMPILER_PEER_DETAILED
 
     PIR_WARN_COMPILER_CLIENT=
         1           warn when the compiler client connection times out or closes. Superseded by PIR_LOG_COMPILER_CLIENT
