@@ -352,7 +352,6 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 //   Response::Compiled
                 // + sizeof(pirPrint)
                 // + pirPrint
-                // + hashRoot(what)
                 // + serialize(what, CompilerServer)
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
@@ -362,20 +361,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
                 LOG_RESPONSE("pirPrint = (size = " << pirPrint.size() << ")");
-                UUID responseWhatHash;
-                response.getBytes((uint8_t*)&responseWhatHash, sizeof(responseWhatHash));
-                // Try to get hashed if we already have the compiled value
-                // (unlikely but maybe possible)
-                SEXP responseWhat = UUIDPool::get(responseWhatHash);
-                bool isResponseReused = responseWhat != nullptr;
-                if (!responseWhat) {
-                    // Actually deserialize
-                    responseWhat = deserialize(response, SerialOptions::CompilerServer, responseWhatHash);
-                }
-                LOG_RESPONSE(responseWhatHash << " + serialize("
-                                              << Print::dumpSexp(responseWhat)
-                                              << ", CompilerServer) "
-                                              << (isResponseReused ? "(reused)" : "(new)"));
+                SEXP responseWhat = deserialize(response, SerialOptions::CompilerServer);
+                LOG_RESPONSE("serialize(" << Print::dumpSexp(responseWhat)
+                                          << ", CompilerServer)");
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );
