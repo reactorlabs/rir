@@ -26,13 +26,29 @@ namespace rir {
     } } while (false)
 
 #define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
+#define START_LOGGING_REQUEST() LOG_DETAILED(do {                              \
+        logDetailedDepth++;                                                    \
+        logDetailedIndent = std::string(logDetailedDepth * 2, ' ');            \
+    } while (0))
+#define END_LOGGING_REQUEST() LOG_DETAILED(do {                                \
+        logDetailedDepth--;                                                    \
+        logDetailedIndent = std::string(logDetailedDepth * 2, ' ');            \
+    } while (0))
+#define START_LOGGING_RESPONSE() START_LOGGING_REQUEST()
+#define END_LOGGING_RESPONSE() END_LOGGING_REQUEST()
+#define START_LOGGING_SERVER_REQUEST() START_LOGGING_REQUEST()
+#define END_LOGGING_SERVER_REQUEST() END_LOGGING_REQUEST()
+#define START_LOGGING_CLIENT_RESPONSE() START_LOGGING_REQUEST()
+#define END_LOGGING_CLIENT_RESPONSE() END_LOGGING_REQUEST()
+static int logDetailedDepth = 0;
+static std::string logDetailedIndent;
 // Arrows are different directions than CompilerClient.cpp, since we receive
 // requests and send responses, send server requests and receive client
 // responses
-#define LOG_REQUEST(message) LOG_DETAILED(std::cerr << "  << " << message << std::endl)
-#define LOG_RESPONSE(message) LOG_DETAILED(std::cerr << "  >> " << message << std::endl)
-#define LOG_SERVER_REQUEST(message) LOG_DETAILED(std::cerr << "  >>> " << message << std::endl)
-#define LOG_CLIENT_RESPONSE(message) LOG_DETAILED(std::cerr << "  <<< " << message << std::endl)
+#define LOG_REQUEST(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<< " << message << std::endl)
+#define LOG_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << ">> " << message << std::endl)
+#define LOG_SERVER_REQUEST(message) LOG_DETAILED(std::cerr << logDetailedIndent << ">>> " << message << std::endl)
+#define LOG_CLIENT_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<<< " << message << std::endl)
 
 static const char* PROCESSING_REQUEST_TIMER_NAME = "CompilerServer.cpp: processing request (not sending, receiving, compiling, or interning)";
 static const char* SENDING_RESPONSE_TIMER_NAME = "CompilerServer.cpp: sending response";
@@ -84,6 +100,7 @@ void CompilerServer::tryRun() {
         // Request data format =
         // - Request
         // + ...
+        START_LOGGING_REQUEST();
         ByteBuffer requestBuffer((uint8_t*)request.data(), request.size());
         auto magic = (Request)requestBuffer.getLong();
 
@@ -93,8 +110,11 @@ void CompilerServer::tryRun() {
             std::cerr << "Received kill request" << std::endl;
             LOG_REQUEST("Request::Kill");
             // ... (end of request)
+            END_LOGGING_REQUEST();
             // Send Response::Killed
+            START_LOGGING_RESPONSE();
             LOG_RESPONSE("Response::Killed");
+            END_LOGGING_RESPONSE();
             auto response = Response::Killed;
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
@@ -108,6 +128,7 @@ void CompilerServer::tryRun() {
         case Request::Retrieved:
         case Request::RetrieveFailed:
             LOG_REQUEST("Request::Retrieved | Request::RetrieveFailed");
+            END_LOGGING_REQUEST();
             std::cerr << "Unexpected client-side response (" << (uint64_t)magic
                       << ") server shouldn't have or didn't send a request. "
                       << "Ignoring" << std::endl;
@@ -119,12 +140,15 @@ void CompilerServer::tryRun() {
             UUID hash;
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
             LOG_REQUEST("hash = " << hash);
+            END_LOGGING_REQUEST();
+            START_LOGGING_RESPONSE();
             if (memoizedRequests->count(hash)) {
                 std::cerr << "Found memoized result for hash (hash-only) "
                           << hash << std::endl;
                 // Send the response (memoized)
                 auto result = (*memoizedRequests)[hash];
                 LOG_RESPONSE("(memoized full response)");
+                END_LOGGING_RESPONSE();
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
                 Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
                 socket->send(zmq::message_t(result.data(), result.size()),
@@ -138,6 +162,7 @@ void CompilerServer::tryRun() {
                 // Send Response::NeedsFull
                 auto response = Response::NeedsFull;
                 LOG_RESPONSE("Response::NeedsFull");
+                END_LOGGING_RESPONSE();
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
                 Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
                 socket->send(zmq::message_t(&response, sizeof(response)),
@@ -155,10 +180,13 @@ void CompilerServer::tryRun() {
         // Handle if we memoized
         UUID requestHash = UUID::hash(request.data(), request.size());
         if (memoizedRequests->count(requestHash)) {
+            END_LOGGING_REQUEST();
             std::cerr << "Found memoized result for hash " << requestHash << std::endl;
             // Send the response (memoized)
             auto result = (*memoizedRequests)[requestHash];
+            START_LOGGING_RESPONSE();
             LOG_RESPONSE("(memoized full response)");
+            END_LOGGING_RESPONSE();
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
             socket->send(zmq::message_t(
@@ -258,6 +286,8 @@ void CompilerServer::tryRun() {
             pir::DebugOptions debug(debugFlags, passFilterString,
                                     functionFilterString, debugStyle);
             LOG_REQUEST("debug = pir::DebugOptions(...)");
+            END_LOGGING_REQUEST();
+
             // It's a bit confusing that debug options are passed from the
             // client. We may want this to be the case, but we also want server
             // debug options; the current solution is to merge them and take
@@ -292,6 +322,7 @@ void CompilerServer::tryRun() {
             // + sizeof(pirPrint)
             // + pirPrint
             // + serialize(what, CompilerServer)
+            START_LOGGING_RESPONSE();
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             LOG_RESPONSE("Response::Compiled");
             response.putLong((uint64_t)Response::Compiled);
@@ -305,6 +336,7 @@ void CompilerServer::tryRun() {
             //  cant-send-compiled-hash)
             LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
             serialize(what, response, SerialOptions::CompilerServer);
+            END_LOGGING_RESPONSE();
             break;
         }
         case Request::Retrieve: {
@@ -315,12 +347,14 @@ void CompilerServer::tryRun() {
             UUID hash;
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
             LOG_REQUEST("hash = " << hash);
+            END_LOGGING_REQUEST();
 
             // Get SEXP
             what = UUIDPool::get(hash);
 
             // Serialize the response
             std::cerr << "Retrieve " << hash << " = ";
+            START_LOGGING_RESPONSE();
             if (what) {
                 std::cerr << what << " " << Print::dumpSexp(what) << std::endl;
 
@@ -338,6 +372,7 @@ void CompilerServer::tryRun() {
                 LOG_RESPONSE("Response::RetrieveFailed");
                 response.putLong((uint64_t)Response::RetrieveFailed);
             }
+            END_LOGGING_RESPONSE();
             break;
         }
         case Request::Kill:
@@ -375,15 +410,19 @@ void CompilerServer::tryRun() {
 
 SEXP CompilerServer::retrieve(const rir::UUID& hash) {
     std::cerr << "Retrieving from client " << hash << std::endl;
-    // Send the server-side request
+    // Build the server-side request
     // Data format =
     //   Response::NeedsRetrieve
     // + UUID hash
+    START_LOGGING_SERVER_REQUEST();
     ByteBuffer serverRequest;
     LOG_SERVER_REQUEST("Response::NeedsRetrieve");
     serverRequest.putLong((uint64_t)Response::NeedsRetrieve);
     LOG_SERVER_REQUEST("hash = " << hash);
     serverRequest.putBytes((uint8_t*)&hash, sizeof(UUID));
+    END_LOGGING_SERVER_REQUEST();
+
+    // Send the server-side request
     auto serverRequestSize = serverRequest.size();
     auto serverRequestSize2 = *socket->send(zmq::message_t(
                                                 serverRequest.data(),
@@ -402,6 +441,7 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
     // Data format =
     // - Response
     // + ...
+    START_LOGGING_CLIENT_RESPONSE();
     ByteBuffer clientResponseBuffer((uint8_t*)clientResponse.data(), clientResponse.size());
     auto magic = (Request)clientResponseBuffer.getLong();
     switch (magic) {
@@ -418,6 +458,7 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
         // `what` itself to be interned. Both have preserve=true because they
         // are explicitly coded to do that when the compiler server is running)
         UNPROTECT(1);
+        END_LOGGING_CLIENT_RESPONSE();
         return what;
     }
     case Request::RetrieveFailed:
@@ -425,10 +466,12 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
         // (no data)
         LOG_CLIENT_RESPONSE("Request::RetrieveFailed");
         std::cerr << "Client doesn't have the SEXP" << std::endl;
+        END_LOGGING_CLIENT_RESPONSE();
         return nullptr;
     default:
         std::cerr << "Unexpected client request or client-side response ("
                   << (uint64_t)magic << "). Ignoring" << std::endl;
+        END_LOGGING_CLIENT_RESPONSE();
         return nullptr;
     }
 }

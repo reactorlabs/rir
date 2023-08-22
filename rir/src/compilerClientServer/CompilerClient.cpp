@@ -34,13 +34,29 @@ static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
 
 #define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
+#define START_LOGGING_REQUEST() LOG_DETAILED(do {                              \
+        logDetailedDepth++;                                                    \
+        logDetailedIndent = std::string(logDetailedDepth * 2, ' ');            \
+    } while (0))
+#define END_LOGGING_REQUEST() LOG_DETAILED(do {                                \
+        logDetailedDepth--;                                                    \
+        logDetailedIndent = std::string(logDetailedDepth * 2, ' ');            \
+    } while (0))
+#define START_LOGGING_RESPONSE() START_LOGGING_REQUEST()
+#define END_LOGGING_RESPONSE() END_LOGGING_REQUEST()
+#define START_LOGGING_SERVER_REQUEST() START_LOGGING_REQUEST()
+#define END_LOGGING_SERVER_REQUEST() END_LOGGING_REQUEST()
+#define START_LOGGING_CLIENT_RESPONSE() START_LOGGING_REQUEST()
+#define END_LOGGING_CLIENT_RESPONSE() END_LOGGING_REQUEST()
+static int logDetailedDepth = 0;
+static std::string logDetailedIndent;
 // Arrows are different directions than CompilerServer.cpp, since we send
 // requests and receive responses, receive server requests and send client
 // responses
-#define LOG_REQUEST(message) LOG_DETAILED(std::cerr << "  >> " << message << std::endl)
-#define LOG_RESPONSE(message) LOG_DETAILED(std::cerr << "  << " << message << std::endl)
-#define LOG_SERVER_REQUEST(message) LOG_DETAILED(std::cerr << "  <<< " << message << std::endl)
-#define LOG_CLIENT_RESPONSE(message) LOG_DETAILED(std::cerr << "  >>> " << message << std::endl)
+#define LOG_REQUEST(message) LOG_DETAILED(std::cerr << logDetailedIndent << ">> " << message << std::endl)
+#define LOG_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<< " << message << std::endl)
+#define LOG_SERVER_REQUEST(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<<< " << message << std::endl)
+#define LOG_CLIENT_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << ">>> " << message << std::endl)
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_CLIENT) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_CLIENT || pir::Parameter::PIR_WARN_COMPILER_CLIENT) stmt
 
@@ -130,12 +146,15 @@ handleRetrieveServerRequest(int index, zmq::socket_t* socket,
     // Data format =
     //   Response::NeedsRetrieve
     // + UUID hash
+    START_LOGGING_SERVER_REQUEST();
     auto requestMagic = (Response)serverRequestBuffer.getLong();
     assert(requestMagic == Response::NeedsRetrieve);
     LOG_SERVER_REQUEST("Response::NeedsRetrieve");
     UUID hash;
     serverRequestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
     LOG_SERVER_REQUEST("hash = " << hash);
+    END_LOGGING_SERVER_REQUEST();
+
     LOG(std::cerr << "Retrieve " << hash << " -> ");
 
     // Get SEXP
@@ -148,16 +167,20 @@ handleRetrieveServerRequest(int index, zmq::socket_t* socket,
         // Data format =
         //   Request::Retrieved
         // + serialize(what, CompilerClientRetrieve)
+        START_LOGGING_CLIENT_RESPONSE();
         LOG_CLIENT_RESPONSE("Request::Retrieved");
         clientResponse.putLong((uint64_t)Request::Retrieved);
         LOG_CLIENT_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerClientRetrieve)");
         serialize(what, clientResponse, SerialOptions::CompilerClientRetrieve);
+        END_LOGGING_CLIENT_RESPONSE();
     } else {
         std::cerr << "(not found)" << std::endl;
         // Data format =
         //   Request::RetrieveFailed
+        START_LOGGING_CLIENT_RESPONSE();
         LOG_CLIENT_RESPONSE("Request::RetrieveFailed");
         clientResponse.putLong((uint64_t)Request::RetrieveFailed);
+        END_LOGGING_CLIENT_RESPONSE();
     }
 
     // Send the client response
@@ -216,11 +239,13 @@ CompilerClient::Handle<T>* CompilerClient::request(
             // Request data format =
             //   Request::Memoize
             // + hash
+            START_LOGGING_REQUEST();
             ByteBuffer hashOnlyRequest;
             LOG_REQUEST("Request::Memoize");
             hashOnlyRequest.putLong((uint64_t)Request::Memoize);
             LOG_REQUEST("hash = " << requestHash);
             hashOnlyRequest.putBytes((uint8_t*)&requestHash, sizeof(requestHash));
+            END_LOGGING_REQUEST();
 
             // Send the hash-only request
             LOG(std::cerr << "Socket " << index << " sending hashOnly request"
@@ -243,6 +268,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             // Response data format =
             //   Response::NeedsFull
             // | from makeResponse()
+            START_LOGGING_RESPONSE();
             ByteBuffer hashOnlyResponseBuffer((uint8_t*)hashOnlyResponse.data(), hashOnlyResponse.size());
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
             auto hashOnlyResponseMagic = (Response)hashOnlyResponseBuffer.peekLong();
@@ -255,6 +281,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             LOG(std::cerr << "Socket " << index << " needs to send full request"
                           << std::endl);
             LOG_RESPONSE("Response::NeedsFull");
+            END_LOGGING_RESPONSE();
         }
 
         // Send the request
@@ -323,6 +350,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + debug.functionFilterString
                 // + sizeof(debug.style) (always 4)
                 // + debug.style
+                START_LOGGING_REQUEST();
                 LOG_REQUEST("Request::Compile");
                 request.putLong((uint64_t)Request::Compile);
                 LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
@@ -346,6 +374,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                                  debug.functionFilterString.size());
                 request.putLong(sizeof(debug.style));
                 request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
+                END_LOGGING_REQUEST();
             },
             [](const ByteBuffer& response) {
                 // Response data format =
@@ -353,6 +382,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // + sizeof(pirPrint)
                 // + pirPrint
                 // + serialize(what, CompilerServer)
+                START_LOGGING_RESPONSE();
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
                 LOG_RESPONSE("Response::Compiled");
@@ -364,6 +394,8 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 SEXP responseWhat = deserialize(response, SerialOptions::CompilerServer);
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(responseWhat)
                                           << ", CompilerServer)");
+                END_LOGGING_RESPONSE();
+
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );
@@ -381,26 +413,31 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             // Request data format =
             //   Request::Retrieve
             // + hash
+            START_LOGGING_REQUEST();
             LOG_REQUEST("Request::Retrieve");
             request.putLong((uint64_t)Request::Retrieve);
             LOG_REQUEST("hash = " << hash);
             request.putBytes((uint8_t*)&hash, sizeof(hash));
+            END_LOGGING_REQUEST();
         },
         [=](const ByteBuffer& response) -> SEXP {
             // Response data format =
             //   Response::Retrieved
             // + serialize(what, CompilerServer)
             // | Response::RetrieveFailed
+            START_LOGGING_RESPONSE();
             auto responseMagic = (Response)response.getLong();
             switch (responseMagic) {
             case Response::Retrieved: {
                 LOG_RESPONSE("Response::Retrieved");
                 auto what = deserialize(response, SerialOptions::CompilerServer, hash);
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
+                END_LOGGING_RESPONSE();
                 return what;
             }
             case Response::RetrieveFailed:
                 LOG_RESPONSE("Response::RetrieveFailed");
+                END_LOGGING_RESPONSE();
                 return nullptr;
             default:
                 assert(false && "Unexpected response magic");
@@ -429,7 +466,9 @@ void CompilerClient::killServers() {
     for (size_t i = 0; i < sockets->size(); i++) {
       auto& socket = (*sockets)[i];
       // Send the request
+      START_LOGGING_REQUEST();
       LOG_REQUEST("Request::Kill");
+      END_LOGGING_REQUEST();
       auto request = Request::Kill;
       socket->send(zmq::message_t(&request, sizeof(request)),
                    zmq::send_flags::none);
@@ -438,7 +477,9 @@ void CompilerClient::killServers() {
       socket->recv(response, zmq::recv_flags::none);
       if (response.size() == sizeof(Response::Killed) &&
           *(Response*)response.data() == Response::Killed) {
+        START_LOGGING_RESPONSE();
         LOG_RESPONSE("Response::Killed");
+        END_LOGGING_RESPONSE();
       } else {
         std::cerr << "Error: server " << i << " didn't acknowledge kill request"
                   << std::endl;
