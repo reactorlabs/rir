@@ -11,6 +11,12 @@ namespace rir {
 
 void ObservedCallees::record(Code* caller, SEXP callee,
                              bool invalidateWhenFull) {
+    if (!Rf_isFunction(callee)) {
+        std::cerr << "Warning: skipping recording non-callee " << callee
+                  << " of type " << Rf_type2char(TYPEOF(callee)) << std::endl;
+        return;
+    }
+
     if (taken < CounterOverflow)
         taken++;
 
@@ -28,6 +34,8 @@ void ObservedCallees::record(Code* caller, SEXP callee,
         if (invalidateWhenFull)
             invalid = true;
     }
+
+    recording::recordSC(*this);
 }
 
 SEXP ObservedCallees::getTarget(const Code* code, size_t pos) const {
@@ -75,6 +83,8 @@ void DeoptReason::record(SEXP val) const {
         assert(*pc() == Opcode::record_test_);
         ObservedTest* feedback = (ObservedTest*)(pc() + 1);
         feedback->seen = ObservedTest::Both;
+        rir::recording::prepareRecordSC(srcCode());
+        rir::recording::recordSC(*feedback);
         break;
     }
     case DeoptReason::Typecheck: {
@@ -82,6 +92,7 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedValues* feedback = (ObservedValues*)(pc() + 1);
+        rir::recording::prepareRecordSC(srcCode());
         feedback->record(val);
         if (TYPEOF(val) == PROMSXP) {
             if (PRVALUE(val) == R_UnboundValue &&
@@ -101,6 +112,7 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         ObservedCallees* feedback = (ObservedCallees*)(pc() + 1);
+        rir::recording::prepareRecordSC(srcCode());
         feedback->record(srcCode(), val, true);
         assert(feedback->taken > 0);
         break;

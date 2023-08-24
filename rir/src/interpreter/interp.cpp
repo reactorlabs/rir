@@ -9,6 +9,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -2308,6 +2309,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_call_) {
             ObservedCallees* feedback = (ObservedCallees*)pc;
             SEXP callee = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(c, callee);
             pc += sizeof(ObservedCallees);
             NEXT();
@@ -2316,6 +2318,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_test_) {
             ObservedTest* feedback = (ObservedTest*)pc;
             SEXP t = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(t);
             pc += sizeof(ObservedTest);
             NEXT();
@@ -2324,6 +2327,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(record_type_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP t = ostack_top();
+            rir::recording::prepareRecordSC(c);
             feedback->record(t);
             pc += sizeof(ObservedValues);
             NEXT();

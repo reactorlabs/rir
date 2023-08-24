@@ -216,3 +216,57 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE) {
+    if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation), is.logical)))) {
+        warning("ambiguous non-logical given")
+    }
+    .Call("filterRecordings", compile, deoptimize, type_feedback, invocation)
+}
+
+recordings.save <- function(filename) {
+    .Call("saveRecordings", filename)
+}
+
+recordings.load <- function(filename) {
+    .Call("loadRecordings", filename)
+}
+
+recordings.replay <- function(from, start_recording = FALSE) {
+    if (is.list(from)) {
+        .Call("replayRecordings", from, start_recording)
+    } else {
+        .Call("replayRecordingsFromFile", from, start_recording)
+    }
+}
+
+recordings.start <- function() {
+    invisible(.Call("startRecordings"))
+}
+
+recordings.stop <- function() {
+    invisible(.Call("stopRecordings"))
+}
+
+recordings.reset <- function() {
+    invisible(.Call("resetRecordings"))
+}
+
+recordings.enabled <- function() {
+    .Call("isRecordings")
+}
+
+recordings.get <- function() {
+    .Call("getRecordings")
+}
+
+recordings.eval <- function(expr, env=parent.frame()) {
+    recordings.start()
+    eval(expr, env)
+    recordings.stop()
+    recordings.get()
+}
+
+recordings.print <- function(filename = NULL, fromFile = NULL) {
+    .Call("printRecordings", filename, fromFile)
+}

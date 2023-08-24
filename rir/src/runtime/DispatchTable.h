@@ -8,6 +8,8 @@
 
 namespace rir {
 
+struct DispatchTable;
+
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
 
 typedef SEXP DispatchTableEntry;
@@ -24,8 +26,10 @@ struct DispatchTable
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
-        assert(i < capacity());
-        return Function::unpack(getEntry(i));
+        assert(i < size());
+        auto f = Function::unpack(getEntry(i));
+        assert(f->dispatchTable() == this);
+        return f;
     }
 
     Function* best() const {
@@ -37,6 +41,7 @@ struct DispatchTable
         auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==
                FunctionSignature::Environment::CallerProvided);
+        assert(f->dispatchTable() == this);
         return f;
     }
 
@@ -92,6 +97,7 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        f->attachDispatchTable(this);
     }
 
     bool contains(const Context& assumptions) const {
@@ -102,6 +108,7 @@ struct DispatchTable
     }
 
     void remove(Code* funCode) {
+        std::cerr << "removing function " << funCode->function() << std::endl;
         size_t i = 1;
         for (; i < size(); ++i) {
             if (get(i)->body() == funCode)
@@ -112,6 +119,7 @@ struct DispatchTable
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
+        get(i)->attachDispatchTable(nullptr);
         setEntry(i, nullptr);
         size_--;
     }
@@ -130,7 +138,11 @@ struct DispatchTable
                 if (i != 0) {
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
+                    fun->attachDispatchTable(this);
                     fun->addDeoptCount(old->deoptCount());
+                    old->overridenBy = fun;
+                    old->attachDispatchTable(nullptr);
+
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }
@@ -155,6 +167,7 @@ struct DispatchTable
 #endif
             // Evict one element and retry
             auto pos = 1 + (Random::singleton()() % (size() - 1));
+            get(pos)->attachDispatchTable(nullptr);
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
@@ -167,6 +180,7 @@ struct DispatchTable
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());
+        fun->attachDispatchTable(this);
 
 #ifdef DEBUG_DISPATCH
         std::cout << "Added version to DT, new order is: \n";
@@ -199,8 +213,9 @@ struct DispatchTable
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,
-                            Function::deserialize(refTable, inp)->container());
+            auto fun = Function::deserialize(refTable, inp);
+            table->setEntry(i, fun->container());
+            fun->attachDispatchTable(table);
         }
         UNPROTECT(1);
         return table;
@@ -217,11 +232,13 @@ struct DispatchTable
 
         auto clone = create(this->capacity());
         clone->setEntry(0, this->getEntry(0));
+        clone->get(0)->attachDispatchTable(clone);
 
         auto j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 clone->setEntry(j, getEntry(i));
+                clone->get(j)->attachDispatchTable(clone);
                 j++;
             }
         }

@@ -3,13 +3,12 @@
 
 #include "R/r.h"
 #include "common.h"
+#include "recording_hooks.h"
 #include <array>
 #include <cstdint>
 #include <iostream>
 
 namespace rir {
-
-struct Code;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -56,6 +55,8 @@ struct ObservedTest {
                 seen = OnlyTrue;
             else if (seen != OnlyTrue)
                 seen = Both;
+
+            recording::recordSC(*this);
             return;
         }
         if (e == R_FalseValue) {
@@ -63,9 +64,13 @@ struct ObservedTest {
                 seen = OnlyFalse;
             else if (seen != OnlyFalse)
                 seen = Both;
+
+            recording::recordSC(*this);
             return;
         }
         seen = Both;
+
+        recording::recordSC(*this);
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
@@ -149,6 +154,8 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
+
+        rir::recording::recordSC(*this);
     }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
@@ -162,7 +169,8 @@ struct FeedbackOrigin {
     Code* srcCode_ = nullptr;
 
   public:
-    FeedbackOrigin() {}
+    FeedbackOrigin() = default;
+    FeedbackOrigin(uint32_t offset) : offset_(offset), srcCode_(nullptr) {}
     FeedbackOrigin(rir::Code* src, Opcode* pc);
 
     Opcode* pc() const {
