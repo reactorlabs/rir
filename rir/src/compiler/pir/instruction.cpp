@@ -1193,7 +1193,8 @@ Call::Call(Value* callerEnv, Value* fun, const std::vector<Value*>& args,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
+    auto argtype = (PirType(RType::prom) | RType::prom | RType::expandedDots)
+                       .orMaybeMissing() |
                    PirType::val();
     if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
@@ -1215,8 +1216,9 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
-                   PirType::val();
+    auto argtype =
+        (PirType(RType::prom) | RType::expandedDots).orMaybeMissing() |
+        PirType::val();
     if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1241,8 +1243,9 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 
     // Calling builtins with names or ... is not supported by callBuiltin,
     // that's why those calls go through the normal call BC.
-    auto argtype = PirType(RType::prom) | RType::missing | RType::expandedDots |
-                   PirType::val();
+    auto argtype =
+        (PirType(RType::prom) | RType::expandedDots).orMaybeMissing() |
+        PirType::val();
     if (auto con = Const::Cast(fun))
         if (TYPEOF(con->c()) == BUILTINSXP)
             argtype = argtype | PirType::val();
@@ -1273,10 +1276,10 @@ StaticCall::StaticCall(Value* callerEnv, ClosureVersion* clsVersion,
                "Static Call cannot accept dynamic number of arguments");
         if (cls->formals().names()[i] == R_DotsSymbol) {
             pushArg(args[i],
-                    PirType() | RType::prom | RType::missing | RType::dots);
+                    (PirType(RType::prom) | RType::dots).orMaybeMissing());
         } else {
             pushArg(args[i],
-                    PirType() | RType::prom | RType::missing | PirType::val());
+                    PirType(RType::prom).orMaybeMissing() | PirType::val());
         }
     }
 

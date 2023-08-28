@@ -37,8 +37,8 @@ void PirType::merge(SEXPTYPE sexptype) {
         t_.r.set(RType::env);
         break;
     case PROMSXP:
-        flags_.set(TypeFlags::lazy);
         flags_.set(TypeFlags::promiseWrapped);
+        flags_.set(TypeFlags::lazy);
         t_.r = PirType::any().t_.r;
         break;
     case EXPRSXP:
@@ -138,24 +138,32 @@ static bool maybeContainsNAOrNaN(SEXP vector) {
 }
 
 PirType::PirType(SEXP e) : flags_(topRTypeFlags()), t_(RTypeSet()) {
+
+    if (e == R_MissingArg) {
+        *this = theMissingValue();
+        return;
+    }
+
     // these are set by merge below
     flags_.reset(TypeFlags::promiseWrapped);
     flags_.reset(TypeFlags::lazy);
 
     if (TYPEOF(e) == PROMSXP) {
+        flags_.set(TypeFlags::promiseWrapped);
         if (PRVALUE(e) != R_UnboundValue) {
             e = PRVALUE(e);
-            flags_.set(TypeFlags::promiseWrapped);
-            if (e != R_MissingArg)
-                flags_.set(TypeFlags::notWrappedMissing);
+            if (e == R_MissingArg)
+                t_.r.set(RType::missing);
+        } else {
+            flags_.set(TypeFlags::lazy);
+            t_.r.set(RType::missing);
         }
     }
 
-    if (e == R_MissingArg)
-        t_.r.set(RType::missing);
-    else if (e == R_UnboundValue)
+    if (e == R_UnboundValue)
         t_.r.set(RType::unbound);
-    else
+
+    if (e != R_UnboundValue && e != R_MissingArg)
         merge(TYPEOF(e));
 
     if (TYPEOF(e) == PROMSXP)
@@ -208,10 +216,8 @@ bool PirType::isInstance(SEXP val) const {
             assert(!Rf_isObject(val));
             if (maybePromiseWrapped() && !maybeLazy()) {
                 auto v = PRVALUE(val);
-                if (flags_.contains(TypeFlags::notWrappedMissing) &&
-                    v == R_MissingArg)
-                    return false;
-                return v != R_UnboundValue && forced().isInstance(v);
+                return v != R_UnboundValue &&
+                       notMissing().forced().isInstance(v);
             }
             return maybe(RType::prom) || (maybeLazy() && maybePromiseWrapped());
         }
@@ -251,9 +257,13 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         if (assumptions.isNotObj(i))
             type = type & type.notMissing().notObject();
         if (assumptions.isSimpleReal(i))
-            type = type & PirType::simpleScalarReal().orPromiseWrapped();
+            type = type & PirType::simpleScalarReal()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
         if (assumptions.isSimpleInt(i))
-            type = type & PirType::simpleScalarInt().orPromiseWrapped();
+            type = type & PirType::simpleScalarInt()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
     }
     // well, if the intersection of context info and current type is void, we
     // probably made a wrong speculation. it's most probably a bug somewhere,
