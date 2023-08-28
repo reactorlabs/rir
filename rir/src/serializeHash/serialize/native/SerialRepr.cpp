@@ -51,14 +51,14 @@ llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
          llvm::MDString::get(ctx, str)});
 }
 
-llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
+llvm::MDNode* SerialRepr::Function::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
-    auto sexp = code->container();
+    auto sexp = function->container();
     UUIDPool::intern(sexp, true, false);
     UUIDPool::writeItem(sexp, false, buf, true);
     return llvm::MDTuple::get(
         ctx,
-        {llvm::MDString::get(ctx, "Code"),
+        {llvm::MDString::get(ctx, "Function"),
          llvm::MDString::get(
              ctx,
              llvm::StringRef((const char*)buf.data(), buf.size()))});
@@ -219,7 +219,7 @@ static void* getMetadataPtr_String(const llvm::MDNode& meta, rir::Code* outer) {
     return (void*)CHAR(PRINTNAME(dataSexp));
 }
 
-static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
+static void* getMetadataPtr_Function(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto sexp = UUIDPool::readItem(buffer, true);
@@ -228,8 +228,8 @@ static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
         R_PreserveObject(sexp);
         outer->addExtraPoolEntry(sexp);
     }
-    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Code SEXP is not actually an EXTERNALSXP");
-    return (void*)rir::Code::unpack(sexp);
+    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Function SEXP is not actually an EXTERNALSXP");
+    return (void*)rir::Function::unpack(sexp);
 }
 
 static void* getMetadataPtr_TypeFeedback(const llvm::MDNode& meta, rir::Code* outer) {
@@ -297,7 +297,7 @@ static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
     {"Builtin", getMetadataPtr_Builtin},
     {"SEXP", getMetadataPtr_SEXP},
     {"String", getMetadataPtr_String},
-    {"Code", getMetadataPtr_Code},
+    {"Function", getMetadataPtr_Function},
     {"TypeFeedback", getMetadataPtr_TypeFeedback},
     {"DeoptMetadata", getMetadataPtr_DeoptMetadata},
     {"OpaqueTrue", getMetadataPtr_OpaqueTrue},

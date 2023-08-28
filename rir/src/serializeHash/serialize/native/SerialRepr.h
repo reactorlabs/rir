@@ -30,7 +30,7 @@ class SerialRepr {
 
     class SEXP;
     class String;
-    class Code;
+    class Function;
     class TypeFeedback;
     class DeoptMetadata;
     class OpaqueTrue;
@@ -76,11 +76,11 @@ class SerialRepr::String : public SerialRepr {
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };
-class SerialRepr::Code : public SerialRepr {
-    rir::Code* code;
+class SerialRepr::Function : public SerialRepr {
+    rir::Function* function;
 
   public:
-    explicit Code(rir::Code* code) : SerialRepr(), code(code) {}
+    explicit Function(rir::Function* function) : SerialRepr(), function(function) {}
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };

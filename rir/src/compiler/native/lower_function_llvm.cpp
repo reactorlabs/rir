@@ -23,13 +23,10 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
 #include <cstdlib>
 #include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/GlobalObject.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
-#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -540,18 +537,11 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         res = constant(ld->c(), needed);
     } else if (val->tag == Tag::DeoptReason) {
         auto dr = (DeoptReasonWrapper*)val;
-        auto srcAddr = (Constant*)builder.CreateIntToPtr(
-            llvm::ConstantInt::get(
-                PirJitLLVM::getContext(),
-                llvm::APInt(
-                    64,
-                    reinterpret_cast<uint64_t>(dr->reason.origin.function()),
-                    false)),
-            t::Code_ptr);
+        auto srcAddr = llvm::cast<Constant>(
+            convertToPointer(dr->reason.origin.function(), true));
         auto drs = llvm::ConstantStruct::get(
-            t::DeoptReason,
-            {c(dr->reason.reason, 32),
-             c(dr->reason.origin.index().asInteger(), 32), srcAddr});
+            t::DeoptReason, {c(dr->reason.reason, 32),
+                             c(dr->reason.origin.index().asInteger(), 32), srcAddr});
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);

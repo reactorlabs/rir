@@ -135,8 +135,8 @@ class LowerFunctionLLVM {
     llvm::Value* convertToPointer(SEXP what, bool constant = false) {
         return convertToPointer(what, t::SEXPREC, SerialRepr::SEXP{what}, constant);
     }
-    llvm::Value* convertToPointer(rir::Code* code_, bool constant = false) {
-        return convertToPointer(code_, t::RirRuntimeObject, SerialRepr::Code{code_}, constant);
+    llvm::Value* convertToPointer(rir::Function* fun, bool constant = false) {
+        return convertToPointer(fun, t::RirRuntimeObject, SerialRepr::Function{fun}, constant);
     }
     llvm::Value* convertToPointer(rir::TypeFeedback* typeFeedback, bool constant) {
         return convertToPointer(typeFeedback, t::i8, SerialRepr::TypeFeedback{typeFeedback}, constant);

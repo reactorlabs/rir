@@ -20,7 +20,13 @@ void ObservedCallees::record(Function* function, SEXP callee,
         int i = 0;
         auto caller = function->body();
         for (; i < numTargets; ++i)
-            if (caller->getExtraPoolEntry(targets[i]) == callee)
+            if (// TODO: `caller->extraPoolSize > targets[i]` is because this
+                //  does not hold when we deopt from compiler-server code.
+                //  Maybe recorded calls aren't sent over or maybe they are
+                //  never equal, but is this really the case? I have no idea if
+                //  this is hiding an underlying problem
+                caller->extraPoolSize > targets[i] &&
+                caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
@@ -115,35 +121,14 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     }
 }
 
-ObservedCallees ObservedCallees::deserialize(rir::AbstractDeserializer& deserializer) {
-    ObservedCallees callees;
-    callees.numTargets = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-    callees.taken = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-    callees.invalid = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
-    for (size_t j = 0; j < callees.numTargets; j++) {
-        auto targetIdx =
-            deserializer.readBytesOf<unsigned>(SerialFlags::CodeFeedback);
-        callees.targets[j] = targetIdx;
-    }
-        return callees;
-}
-
-void ObservedCallees::serialize(rir::AbstractSerializer& serializer) const {
-    serializer.writeBytesOf(numTargets, SerialFlags::CodeFeedback);
-    serializer.writeBytesOf(taken, SerialFlags::CodeFeedback);
-    serializer.writeBytesOf(invalid, SerialFlags::CodeFeedback);
-    for (size_t j = 0; j < numTargets; j++) {
-        auto targetIdx = targets[j];
-        serializer.writeBytesOf(targetIdx, SerialFlags::CodeFeedback);
-    }
-}
-
 TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
     auto size = deserializer.readBytesOf<size_t>();
     std::vector<ObservedCallees> callees;
     callees.reserve(size);
     for (size_t i = 0; i < size; ++i) {
-        callees.push_back(ObservedCallees::deserialize(deserializer));
+        ObservedCallees tmp;
+        deserializer.readBytes(&tmp, sizeof(ObservedCallees));
+        callees.push_back(tmp);
     }
 
     size = deserializer.readBytesOf<size_t>();
@@ -164,13 +149,15 @@ TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
         types.push_back(tmp);
     }
 
-    return TypeFeedback::create(callees, tests, types);
+    auto feedback = TypeFeedback::create(callees, tests, types);
+    deserializer.addRef(feedback->container());
+    return feedback;
 }
 
 void TypeFeedback::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf(callees_size_);
     for (size_t i = 0; i < callees_size_; i++) {
-        (callees_ + i)->serialize(serializer);
+        serializer.writeBytes(callees_ + i, sizeof(ObservedCallees));
     }
 
     serializer.writeBytesOf(tests_size_);
@@ -327,13 +314,10 @@ const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:
         return "Call";
-        break;
     case FeedbackKind::Test:
         return "Test";
-        break;
     case FeedbackKind::Type:
         return "Type";
-        break;
     default:
         assert(false);
     }

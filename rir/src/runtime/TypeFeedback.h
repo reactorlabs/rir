@@ -101,9 +101,6 @@ struct ObservedCallees {
                 bool invalidateWhenFull = false);
     SEXP getTarget(const Function* function, size_t pos) const;
     void print(std::ostream& out, const Function* function) const;
-
-    static ObservedCallees deserialize(AbstractDeserializer& deserializer);
-    void serialize(AbstractSerializer& deserializer) const;
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
