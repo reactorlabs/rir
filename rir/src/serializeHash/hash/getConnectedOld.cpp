@@ -2,9 +2,9 @@
 // Created by Jakob Hain on 7/23/23.
 //
 
+#include "getConnectedOld.h"
 #include "R/r.h"
 #include "compiler/parameter.h"
-#include "getConnectedOld.h"
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
@@ -37,7 +37,8 @@ static inline void addConnectedRir(SEXP sexp,
         !tryAddConnected<ArglistOrder>(sexp, collector) &&
         !tryAddConnected<LazyArglist>(sexp, collector) &&
         !tryAddConnected<LazyEnvironment>(sexp, collector) &&
-        !tryAddConnected<PirTypeFeedback>(sexp, collector)) {
+        !tryAddConnected<PirTypeFeedback>(sexp, collector) &&
+        !tryAddConnected<TypeFeedback>(sexp, collector)) {
         std::cerr << "couldn't add connected in EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);

@@ -1,6 +1,5 @@
 #include "TypeFeedback.h"
 
-#include "R/Serialize.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "runtime/Code.h"
@@ -183,6 +182,16 @@ void TypeFeedback::serialize(AbstractSerializer& serializer) const {
     for (size_t i = 0; i < types_size_; i++) {
         serializer.writeBytes(types_ + i, sizeof(ObservedValues));
     }
+}
+
+void TypeFeedback::hash(__attribute__((unused)) HasherOld& hasher) const {
+    // Doesn't actually hash because it's all feedback
+}
+
+void TypeFeedback::addConnected(
+    __attribute__((unused)) ConnectedCollectorOld& collector) const {
+    // Connected objects are already added because they're in the extra pool,
+    // and everything in the extra pool gets added in Code.cpp
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {

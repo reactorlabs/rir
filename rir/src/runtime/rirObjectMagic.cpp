@@ -5,6 +5,7 @@
 #include "rirObjectMagic.h"
 #include "Code.h"
 #include "DispatchTable.h"
+#include "GenericDispatchTable.h"
 #include "LazyArglist.h"
 #include "LazyEnvironment.h"
 #include "RirRuntimeObject.h"
@@ -27,6 +28,10 @@ const char* rirObjectClassName(unsigned magic) {
             return "LazyEnvironment";
         case PIR_TYPE_FEEDBACK_MAGIC:
             return "PirTypeFeedback";
+        case TYPEFEEDBACK_MAGIC:
+            return "TypeFeedback";
+        case GENERIC_DISPATCH_TABLE_MAGIC:
+            return "GenericDispatchTable";
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";

@@ -343,6 +343,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     static TypeFeedback* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& serializer) const;
 
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+
     bool isValid(const FeedbackIndex& index) const;
 
     Function* owner() const { return owner_; }

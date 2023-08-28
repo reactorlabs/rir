@@ -396,7 +396,8 @@ static void writeRir(AbstractSerializer& serializer, SEXP s) {
         !tryWrite<ArglistOrder>(serializer, s) &&
         !tryWrite<LazyArglist>(serializer, s) &&
         !tryWrite<LazyEnvironment>(serializer, s) &&
-        !tryWrite<PirTypeFeedback>(serializer, s)) {
+        !tryWrite<PirTypeFeedback>(serializer, s) &&
+        !tryWrite<TypeFeedback>(serializer, s)) {
         std::cerr << "couldn't serialize EXTERNALSXP: ";
         Rf_PrintValue(s);
         assert(false);
@@ -421,6 +422,8 @@ static SEXP readRir(AbstractDeserializer& deserializer) {
             return LazyEnvironment::deserialize(deserializer)->container();
         case PIR_TYPE_FEEDBACK_MAGIC:
             return PirTypeFeedback::deserialize(deserializer)->container();
+        case TYPEFEEDBACK_MAGIC:
+            return TypeFeedback::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";

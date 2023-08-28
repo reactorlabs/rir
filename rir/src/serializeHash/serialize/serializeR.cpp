@@ -180,7 +180,8 @@ void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out) {
             !trySerializeR<ArglistOrder>(s, refTable, out) &&
             !trySerializeR<LazyArglist>(s, refTable, out) &&
             !trySerializeR<LazyEnvironment>(s, refTable, out) &&
-            !trySerializeR<PirTypeFeedback>(s, refTable, out)) {
+            !trySerializeR<PirTypeFeedback>(s, refTable, out) &&
+            !trySerializeR<TypeFeedback>(s, refTable, out)) {
             std::cerr << "couldn't serialize EXTERNALSXP: ";
             Rf_PrintValue(s);
             assert(false);
@@ -209,6 +210,8 @@ SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
             return LazyEnvironment::deserialize(deserializer)->container();
         case PIR_TYPE_FEEDBACK_MAGIC:
             return PirTypeFeedback::deserialize(deserializer)->container();
+        case TYPEFEEDBACK_MAGIC:
+            return TypeFeedback::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";

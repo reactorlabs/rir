@@ -115,7 +115,8 @@ static inline void hashRir(SEXP sexp, HasherOld& hasher) {
             !tryHash<ArglistOrder>(sexp, hasher) &&
             !tryHash<LazyArglist>(sexp, hasher) &&
             !tryHash<LazyEnvironment>(sexp, hasher) &&
-            !tryHash<PirTypeFeedback>(sexp, hasher)) {
+            !tryHash<PirTypeFeedback>(sexp, hasher) &&
+            !tryHash<TypeFeedback>(sexp, hasher)) {
             std::cerr << "couldn't hash EXTERNALSXP: ";
             Rf_PrintValue(sexp);
             assert(false);
