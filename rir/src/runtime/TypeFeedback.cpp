@@ -116,52 +116,73 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     }
 }
 
-void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutInteger(out, callees_size_);
-    for (size_t i = 0; i < callees_size_; i++) {
-        OutBytes(out, callees_ + i, sizeof(ObservedCallees));
+ObservedCallees ObservedCallees::deserialize(rir::AbstractDeserializer& deserializer) {
+    ObservedCallees callees;
+    callees.numTargets = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
+    callees.taken = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
+    callees.invalid = deserializer.readBytesOf<uint32_t>(SerialFlags::CodeFeedback);
+    for (size_t j = 0; j < callees.numTargets; j++) {
+        auto targetIdx =
+            deserializer.readBytesOf<unsigned>(SerialFlags::CodeFeedback);
+        callees.targets[j] = targetIdx;
     }
+        return callees;
+}
 
-    OutInteger(out, tests_size_);
-    for (size_t i = 0; i < tests_size_; i++) {
-        OutBytes(out, tests_ + i, sizeof(ObservedTest));
-    }
-
-    OutInteger(out, types_size_);
-    for (size_t i = 0; i < types_size_; i++) {
-        OutBytes(out, types_ + i, sizeof(ObservedValues));
+void ObservedCallees::serialize(rir::AbstractSerializer& serializer) const {
+    serializer.writeBytesOf(numTargets, SerialFlags::CodeFeedback);
+    serializer.writeBytesOf(taken, SerialFlags::CodeFeedback);
+    serializer.writeBytesOf(invalid, SerialFlags::CodeFeedback);
+    for (size_t j = 0; j < numTargets; j++) {
+        auto targetIdx = targets[j];
+        serializer.writeBytesOf(targetIdx, SerialFlags::CodeFeedback);
     }
 }
 
-TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
-    auto size = InInteger(inp);
+TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
+    auto size = deserializer.readBytesOf<size_t>();
     std::vector<ObservedCallees> callees;
     callees.reserve(size);
-    for (auto i = 0; i < size; ++i) {
-        ObservedCallees tmp;
-        InBytes(inp, &tmp, sizeof(ObservedCallees));
-        callees.push_back(std::move(tmp));
+    for (size_t i = 0; i < size; ++i) {
+        callees.push_back(ObservedCallees::deserialize(deserializer));
     }
 
-    size = InInteger(inp);
+    size = deserializer.readBytesOf<size_t>();
     std::vector<ObservedTest> tests;
     tests.reserve(size);
-    for (auto i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         ObservedTest tmp;
-        InBytes(inp, &tmp, sizeof(ObservedTest));
-        tests.push_back(std::move(tmp));
+        deserializer.readBytes(&tmp, sizeof(ObservedTest));
+        tests.push_back(tmp);
     }
 
-    size = InInteger(inp);
+    size = deserializer.readBytesOf<size_t>();
     std::vector<ObservedValues> types;
     types.reserve(size);
-    for (auto i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         ObservedValues tmp;
-        InBytes(inp, &tmp, sizeof(ObservedValues));
-        types.push_back(std::move(tmp));
+        deserializer.readBytes(&tmp, sizeof(ObservedValues));
+        types.push_back(tmp);
     }
 
     return TypeFeedback::create(callees, tests, types);
+}
+
+void TypeFeedback::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf(callees_size_);
+    for (size_t i = 0; i < callees_size_; i++) {
+        (callees_ + i)->serialize(serializer);
+    }
+
+    serializer.writeBytesOf(tests_size_);
+    for (size_t i = 0; i < tests_size_; i++) {
+        serializer.writeBytes(tests_ + i, sizeof(ObservedTest));
+    }
+
+    serializer.writeBytesOf(types_size_);
+    for (size_t i = 0; i < types_size_; i++) {
+        serializer.writeBytes(types_ + i, sizeof(ObservedValues));
+    }
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {

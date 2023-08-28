@@ -47,11 +47,41 @@ void DispatchTable::addConnected(ConnectedCollectorOld& collector) const {
     }
 }
 
-void DispatchTable::print(std::ostream& out, bool isDetailed) const {
-    out << "DispatchTable(size = " << size() << "):\n";
-    for (size_t i = 0; i < size(); i++) {
-        out << "Entry " << i << ":\n";
-        get(i)->print(out, isDetailed);
+void DispatchTable::print(std::ostream& out, bool isDetailed) const { // NOLINT(*-no-recursion)
+    std::cout << "== dispatch table " << this << " ==\n";
+
+    for (size_t entry = 0; entry < size(); ++entry) {
+        Function* f = get(entry);
+        std::cout << "= version " << entry << " (" << f << ") =\n";
+        f->disassemble(std::cout);
+    }
+
+    if (isDetailed) {
+        auto code = baseline()->body();
+        auto pc = code->code();
+        auto printHeader = true;
+
+        Opcode* prev = nullptr;
+        Opcode* pprev = nullptr;
+
+        while (pc < code->endCode()) {
+            auto bc = BC::decode(pc, code);
+            if (bc.bc == Opcode::close_) {
+                if (printHeader) {
+                    out << "== nested closures ==\n";
+                    printHeader = false;
+                }
+
+                // prev is the push_ of srcref
+                // pprev is the push_ of body
+                auto body = BC::decodeShallow(pprev).immediateConst();
+                auto dt = DispatchTable::unpack(body);
+                dt->print(std::cout, isDetailed);
+            }
+            pprev = prev;
+            prev = pc;
+            pc = BC::next(pc);
+        }
     }
 }
 
@@ -61,6 +91,28 @@ void DispatchTable::printPrettyGraphContent(const PrettyGraphInnerPrinter& print
         print.addEdgeTo(getEntry(i), true, "entry", [&](std::ostream& s) {
             s << "entry " << i;
         });
+    }
+
+    // Add edges to nested closures
+    {
+        auto code = baseline()->body();
+        auto pc = code->code();
+
+        Opcode* prev = nullptr;
+        Opcode* pprev = nullptr;
+
+        while (pc < code->endCode()) {
+            auto bc = BC::decode(pc, code);
+            if (bc.bc == Opcode::close_) {
+                // prev is the push_ of srcref
+                // pprev is the push_ of body
+                auto childBody = BC::decodeShallow(pprev).immediateConst();
+                print.addEdgeTo(childBody, true, "nested-closure");
+            }
+            pprev = prev;
+            prev = pc;
+            pc = BC::next(pc);
+        }
     }
 }
 

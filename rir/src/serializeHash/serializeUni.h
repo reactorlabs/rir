@@ -81,6 +81,7 @@ class SerialFlags {
     static SerialFlags DtOptimized;
     static SerialFlags FunBody;
     static SerialFlags FunDefaultArg;
+    static SerialFlags FunFeedback;
     static SerialFlags FunStats;
     static SerialFlags FunMiscBytes;
     static SerialFlags CodeArglistOrder;

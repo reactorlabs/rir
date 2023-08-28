@@ -171,31 +171,9 @@ void BC::deserialize(AbstractDeserializer& deserializer, Opcode* code,
             DESERIALIZE(i.fun, readBytesOf<FunIdx>, SerialFlags::CodeMisc);
             break;
         case Opcode::record_call_:
-            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
-                i.callFeedback.numTargets = deserializer.readBytesOf<uint32_t>(
-                    SerialFlags::CodeFeedback);
-                i.callFeedback.taken = deserializer.readBytesOf<uint32_t>(
-                    SerialFlags::CodeFeedback);
-                i.callFeedback.invalid = deserializer.readBytesOf<uint32_t>(
-                    SerialFlags::CodeFeedback);
-                for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
-                    auto targetIdx = deserializer.readBytesOf<unsigned>(
-                        SerialFlags::CodeFeedback);
-                    i.callFeedback.targets[j] = targetIdx;
-                }
-            }
-            break;
         case Opcode::record_type_:
-            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
-                deserializer.readBytes(&i.typeFeedback, sizeof(i.typeFeedback),
-                                       SerialFlags::CodeFeedback);
-            }
-            break;
         case Opcode::record_test_:
-            if (deserializer.willRead(SerialFlags::CodeFeedback)) {
-                deserializer.readBytes(&i.testFeedback, sizeof(i.testFeedback),
-                                       SerialFlags::CodeFeedback);
-            }
+            DESERIALIZE(i.i, readBytesOf<Immediate>, SerialFlags::CodeFeedback);
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -287,20 +265,22 @@ void BC::serialize(AbstractSerializer& serializer,
             extraPoolFlags[i.fun] = SerialFlags::CodePromise;
             break;
         case Opcode::record_call_:
-            serializer.writeBytesOf(i.callFeedback.numTargets, SerialFlags::CodeFeedback);
-            serializer.writeBytesOf(i.callFeedback.taken, SerialFlags::CodeFeedback);
-            serializer.writeBytesOf(i.callFeedback.invalid, SerialFlags::CodeFeedback);
-            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
-                auto targetIdx = i.callFeedback.targets[j];
-                serializer.writeBytesOf(targetIdx, SerialFlags::CodeFeedback);
-                extraPoolFlags[targetIdx] = SerialFlags::CodeFeedback;
+            serializer.writeBytesOf<Immediate>(i.i, SerialFlags::CodeFeedback);
+            if (container->function()->body() == container) {
+                // The feedback itself is already serialized, but we also want to record which extra pool entries are part of it
+                auto feedback =
+                    container->function()->typeFeedback()->callees(i.i);
+                // Don't hash because this is a recording instruction,
+                // but we also want to skip hashing recorded extra pool entries
+                for (size_t j = 0; j < feedback.numTargets; j++) {
+                    extraPoolFlags[feedback.targets[j]] =
+                        SerialFlags::CodeFeedback;
+                }
             }
             break;
         case Opcode::record_type_:
-            serializer.writeBytes(&i.typeFeedback, sizeof(i.typeFeedback), SerialFlags::CodeFeedback);
-            break;
         case Opcode::record_test_:
-            serializer.writeBytes(&i.testFeedback, sizeof(i.testFeedback), SerialFlags::CodeFeedback);
+            serializer.writeBytesOf<Immediate>(i.i, SerialFlags::CodeFeedback);
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -383,13 +363,17 @@ void BC::hash(HasherOld& hasher, std::vector<bool>& extraPoolIgnored,
             hasher.hashConstant(i.callBuiltinFixedArgs.ast);
             hasher.hashConstant(i.callBuiltinFixedArgs.builtin);
             break;
-        case Opcode::record_call_:
-            // Don't hash because this is a recording instruction,
-            // but we also want to skip hashing recorded extra pool entries
-            for (size_t j = 0; j < i.callFeedback.numTargets; j++) {
-                extraPoolIgnored[i.callFeedback.targets[j]] = true;
+        case Opcode::record_call_: {
+            auto feedback = container->function()->typeFeedback()->callees(i.i);
+            if (container->function()->body() == container) {
+                // Don't hash because this is a recording instruction,
+                // but we also want to skip hashing recorded extra pool entries
+                for (size_t j = 0; j < feedback.numTargets; j++) {
+                    extraPoolIgnored[feedback.targets[j]] = true;
+                }
             }
             break;
+        }
         case Opcode::record_type_:
         case Opcode::record_test_:
             assert((size - 1) % 4 == 0);
@@ -495,7 +479,6 @@ void BC::addConnected(std::vector<bool>& extraPoolChildren,
         case Opcode::invalid_:
         case Opcode::num_of:
             assert(false);
-            break;
         }
         size = bc.size();
         assert(codeSize >= size);
@@ -544,7 +527,7 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             addConstant(i.accessor, type);  \
             break;
         CONSTANT_CASE(push, pool, "push")
-        CONSTANT_CASE(ldfun, pool, "unexpected-name")
+        CONSTANT_CASE(ldfun, pool, "unexpected-name") // NOLINT(*-branch-clone)
         CONSTANT_CASE(ldddvar, pool, "unexpected-name")
         CONSTANT_CASE(ldvar, pool, "unexpected-name")
         CONSTANT_CASE(ldvar_noforce, pool, "unexpected-name")
@@ -553,7 +536,7 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
         CONSTANT_CASE(stvar, pool, "unexpected-name")
         CONSTANT_CASE(stvar_super, pool, "unexpected-name")
         CONSTANT_CASE(missing, pool, "unexpected-name")
-        CONSTANT_CASE(ldvar_cached, poolAndCache.poolIndex, "unexpected-name")
+        CONSTANT_CASE(ldvar_cached, poolAndCache.poolIndex, "unexpected-name") // NOLINT(*-branch-clone)
         CONSTANT_CASE(ldvar_for_update_cache, poolAndCache.poolIndex, "unexpected-name")
         CONSTANT_CASE(stvar_cached, poolAndCache.poolIndex, "unexpected-name")
         case Opcode::guard_fun_:
@@ -587,10 +570,14 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
             addConstant(i.callBuiltinFixedArgs.builtin, "unexpected-builtin");
             break;
         case Opcode::record_call_:
-            for (auto j = 0; j < i.callFeedback.numTargets; j++) {
-                addExtraPoolEntry(i.callFeedback.targets[j], false, "target", [&](std::ostream& s){
-                    s << "record_call " << j;
-                });
+            if (container->function()->body() == container) {
+                auto feedback =
+                    container->function()->typeFeedback()->callees(i.i);
+                for (auto j = 0; j < feedback.numTargets; j++) {
+                    addExtraPoolEntry(
+                        feedback.targets[j], false, "target",
+                        [&](std::ostream& s) { s << "record_call " << j; });
+                }
             }
             break;
         case Opcode::record_type_:

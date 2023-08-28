@@ -547,7 +547,7 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
                     64,
                     reinterpret_cast<uint64_t>(dr->reason.origin.function()),
                     false)),
-            t::voidPtr);
+            t::Code_ptr);
         auto drs = llvm::ConstantStruct::get(
             t::DeoptReason,
             {c(dr->reason.reason, 32),
@@ -6265,8 +6265,7 @@ void LowerFunctionLLVM::compile() {
                         call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::recordTypeFeedback),
-                            {convertToPointer(origin.function()->typeFeedback(),
-                                              t::i8, true),
+                            {convertToPointer(origin.function()->typeFeedback(), true),
                              c(origin.index().idx, 32), load(i)});
                     }
                 }
@@ -6275,8 +6274,7 @@ void LowerFunctionLLVM::compile() {
                     assert(origin.hasSlot());
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
-                         {convertToPointer(origin.function()->typeFeedback(),
-                                           t::i8, true),
+                         {convertToPointer(origin.function()->typeFeedback(), true),
                           c(origin.index().idx, 32), load(i)});
                 }
             }

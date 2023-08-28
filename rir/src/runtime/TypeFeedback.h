@@ -5,6 +5,9 @@
 #include "Rinternals.h"
 #include "common.h"
 #include "runtime/RirRuntimeObject.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "serializeHash/serializeUni.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -98,6 +101,9 @@ struct ObservedCallees {
                 bool invalidateWhenFull = false);
     SEXP getTarget(const Function* function, size_t pos) const;
     void print(std::ostream& out, const Function* function) const;
+
+    static ObservedCallees deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
@@ -334,7 +340,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     void print(std::ostream& out) const;
 
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static TypeFeedback* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& serializer) const;
 
     bool isValid(const FeedbackIndex& index) const;
 

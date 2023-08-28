@@ -64,6 +64,19 @@ llvm::MDNode* SerialRepr::Code::metadata(llvm::LLVMContext& ctx) const {
              llvm::StringRef((const char*)buf.data(), buf.size()))});
 }
 
+llvm::MDNode* SerialRepr::TypeFeedback::metadata(llvm::LLVMContext& ctx) const {
+    ByteBuffer buf;
+    auto sexp = typeFeedback->container();
+    UUIDPool::intern(sexp, true, false);
+    UUIDPool::writeItem(sexp, false, buf, true);
+    return llvm::MDTuple::get(
+        ctx,
+        {llvm::MDString::get(ctx, "TypeFeedback"),
+         llvm::MDString::get(
+             ctx,
+             llvm::StringRef((const char*)buf.data(), buf.size()))});
+}
+
 llvm::MDNode* SerialRepr::DeoptMetadata::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     m->internRecursive();
@@ -219,6 +232,19 @@ static void* getMetadataPtr_Code(const llvm::MDNode& meta, rir::Code* outer) {
     return (void*)rir::Code::unpack(sexp);
 }
 
+static void* getMetadataPtr_TypeFeedback(const llvm::MDNode& meta, rir::Code* outer) {
+    auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
+    ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
+    auto sexp = UUIDPool::readItem(buffer, true);
+    if (outer) {
+        // TODO: why is gcAttach not enough?
+        R_PreserveObject(sexp);
+        outer->addExtraPoolEntry(sexp);
+    }
+    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized TypeFeedback SEXP is not actually an EXTERNALSXP");
+    return (void*)rir::TypeFeedback::unpack(sexp);
+}
+
 static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
@@ -272,6 +298,7 @@ static std::unordered_map<std::string, GetMetadataPtr> getMetadataPtr{
     {"SEXP", getMetadataPtr_SEXP},
     {"String", getMetadataPtr_String},
     {"Code", getMetadataPtr_Code},
+    {"TypeFeedback", getMetadataPtr_TypeFeedback},
     {"DeoptMetadata", getMetadataPtr_DeoptMetadata},
     {"OpaqueTrue", getMetadataPtr_OpaqueTrue},
     {"R_Visible", getMetadataPtr_R_Visible},

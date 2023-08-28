@@ -76,6 +76,14 @@ SerialFlags SerialFlags::FunDefaultArg(
     true,
     true,
     true);
+SerialFlags SerialFlags::FunFeedback(
+    false,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true);
 SerialFlags SerialFlags::FunStats(
     false,
     true,
@@ -181,6 +189,7 @@ static std::vector<SerialFlags> ById_{
         SerialFlags::DtOptimized,
         SerialFlags::FunBody,
         SerialFlags::FunDefaultArg,
+        SerialFlags::FunFeedback,
         SerialFlags::FunStats,
         SerialFlags::FunMiscBytes,
         SerialFlags::CodeArglistOrder,

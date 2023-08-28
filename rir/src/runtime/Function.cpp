@@ -32,7 +32,7 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
     deserializer.addRef(store);
 
-    auto feedback = p(deserializer.read(SerialFlags::FunStats));
+    auto feedback = p(deserializer.read(SerialFlags::FunFeedback));
     auto body = p(deserializer.read(SerialFlags::FunBody));
     std::vector<SEXP> defaultArgs(sig.numArguments, nullptr);
     for (unsigned i = 0; i < sig.numArguments; i++) {
@@ -64,7 +64,7 @@ void Function::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytesOf<unsigned long>(invoked, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned long>(execTime, SerialFlags::FunStats);
 
-    serializer.write(typeFeedback()->container(), SerialFlags::FunStats);
+    serializer.write(typeFeedback()->container(), SerialFlags::FunFeedback);
     serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
         serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);

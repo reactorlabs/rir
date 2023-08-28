@@ -63,7 +63,7 @@ edge.other-body, edge.DispatchTable-entry, edge.Function-body, edge.Code-arglist
     width: 4px;
 }
 
-edge.Function-default-arg, edge.Code-promise {
+edge.DispatchTable-nested-closure, edge.Function-default-arg, edge.Code-promise {
     line-color: #3f6212;
     target-arrow-color: #3f6212;
     color: #3f6212;

@@ -31,6 +31,7 @@ class SerialRepr {
     class SEXP;
     class String;
     class Code;
+    class TypeFeedback;
     class DeoptMetadata;
     class OpaqueTrue;
     class R_Visible;
@@ -80,6 +81,15 @@ class SerialRepr::Code : public SerialRepr {
 
   public:
     explicit Code(rir::Code* code) : SerialRepr(), code(code) {}
+
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+};
+class SerialRepr::TypeFeedback : public SerialRepr {
+    rir::TypeFeedback* typeFeedback;
+
+  public:
+    explicit TypeFeedback(rir::TypeFeedback* typeFeedback)
+        : SerialRepr(), typeFeedback(typeFeedback) {}
 
     llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
 };

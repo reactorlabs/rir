@@ -242,44 +242,6 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
-    void print(std::ostream& out, bool verbose) const {
-        std::cout << "== dispatch table " << this << " ==\n";
-
-        for (size_t entry = 0; entry < size(); ++entry) {
-            Function* f = get(entry);
-            std::cout << "= version " << entry << " (" << f << ") =\n";
-            f->disassemble(std::cout);
-        }
-
-        if (verbose) {
-            auto code = baseline()->body();
-            auto pc = code->code();
-            auto print_header = true;
-
-            Opcode* prev = NULL;
-            Opcode* pprev = NULL;
-
-            while (pc < code->endCode()) {
-                auto bc = BC::decode(pc, code);
-                if (bc.bc == Opcode::close_) {
-                    if (print_header) {
-                        out << "== nested closures ==\n";
-                        print_header = false;
-                    }
-
-                    // prev is the push_ of srcref
-                    // pprev is the push_ of body
-                    auto body = BC::decodeShallow(pprev).immediateConst();
-                    auto dt = DispatchTable::unpack(body);
-                    dt->print(std::cout, verbose);
-                }
-                pprev = prev;
-                prev = pc;
-                pc = bc.next(pc);
-            }
-        }
-    }
-
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t capacity)
