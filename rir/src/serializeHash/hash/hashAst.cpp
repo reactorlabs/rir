@@ -13,7 +13,11 @@ namespace rir {
 
 // Assumes all symbols are never freed (currently yes because they're in a pool,
 // and it makes sense since they're all AST nodes that they're persistent)
-static std::unordered_map<SEXP, UUID> hashCache;
+static std::unordered_map<SEXP, UUID>* hashCache;
+
+void initAstHashCache() {
+    hashCache = new std::unordered_map<SEXP, UUID>();
+}
 
 inline static void
 serializeAstVector(SEXP s, const std::function<void(size_t)>& serializeElem) {
@@ -237,8 +241,8 @@ UUID hashAst(SEXP root) {
     UUID result;
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "hashAst", root, [&]{
         // Fastcase
-        if (hashCache.count(root)) {
-            result = hashCache.at(root);
+        if (hashCache->count(root)) {
+            result = hashCache->at(root);
             return;
         }
 
@@ -254,9 +258,9 @@ UUID hashAst(SEXP root) {
             // calls onto the stack
             top.started = true;
             hashNewAst(top.sexp, top.hasher, [&](SEXP next){
-                if (hashCache.count(next)) {
+                if (hashCache->count(next)) {
                     // Fastcase
-                    top.children.push_back(hashCache.at(next));
+                    top.children.push_back(hashCache->at(next));
                 } else {
                     stack.emplace(&top, next);
                     // Push null UUID to be filled in later. Need to push after
@@ -274,7 +278,7 @@ UUID hashAst(SEXP root) {
                 auto parentIdx = stack.top().parentIdx;
                 auto sexp = stack.top().sexp;
                 auto hash = stack.top().finalize();
-                hashCache[sexp] = hash;
+                (*hashCache)[sexp] = hash;
                 stack.pop();
                 if (parent) {
                     // The SEXP's hash is part of the parent's hash.

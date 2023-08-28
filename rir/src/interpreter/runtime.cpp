@@ -3,6 +3,7 @@
 #include "profiler.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/serialize/serializeR.h"
+#include "serializeHash/hash/hashAst.h"
 #include "serializeHash/serialize/native/SerialRepr.h"
 
 #include "compilerClientServer/CompilerClient.h"
@@ -34,6 +35,7 @@ void initializeRuntime() {
                          rirDecompile, rirPrint, rirDeserializeHook, rirSerializeHook,
                          materialize);
     initGlobals();
+    initAstHashCache();
     RuntimeProfiler::initProfiler();
     CompilerClient::tryInit();
 }
