@@ -20,13 +20,7 @@ void ObservedCallees::record(Function* function, SEXP callee,
         int i = 0;
         auto caller = function->body();
         for (; i < numTargets; ++i)
-            if (// TODO: `caller->extraPoolSize > targets[i]` is because this
-                //  does not hold when we deopt from compiler-server code.
-                //  Maybe recorded calls aren't sent over or maybe they are
-                //  never equal, but is this really the case? I have no idea if
-                //  this is hiding an underlying problem
-                caller->extraPoolSize > targets[i] &&
-                caller->getExtraPoolEntry(targets[i]) == callee)
+            if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
