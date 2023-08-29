@@ -8,6 +8,8 @@
 
 #pragma once
 
+#define COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE 0
+
 namespace rir {
 
 enum class Request : uint64_t {

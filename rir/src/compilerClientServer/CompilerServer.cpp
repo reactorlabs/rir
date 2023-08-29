@@ -209,7 +209,9 @@ void CompilerServer::tryRun() {
             LOG_REQUEST("Request::Compile");
             // ...
             // + serialize(what, CompilerClientSourceAndFeedback)
+#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
             // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+#endif
             // + sizeof(assumptions) (always 8)
             // + assumptions
             // + sizeof(name)
@@ -230,8 +232,9 @@ void CompilerServer::tryRun() {
             // handle the case where they are forgotten by just not speculating
             // on them.
             what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
-            PROTECT(what);
             LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
+#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
+            PROTECT(what);
             auto what2 = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
             PROTECT(what2);
             Compiler::compileClosure(what2);
@@ -252,6 +255,7 @@ void CompilerServer::tryRun() {
 
             // No longer need to protect what, and what2 is no longer used
             UNPROTECT(2);
+#endif
             auto assumptionsSize = requestBuffer.getLong();
             SOFT_ASSERT(assumptionsSize == sizeof(Context),
                         "Invalid assumptions size");

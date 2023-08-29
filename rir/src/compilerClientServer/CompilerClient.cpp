@@ -337,7 +337,9 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // Request data format =
                 //   Request::Compile
                 // + serialize(what, CompilerClientSourceAndFeedback)
+#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
                 // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+#endif
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
                 // + sizeof(name)
@@ -355,8 +357,10 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 request.putLong((uint64_t)Request::Compile);
                 LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
                 serialize(what, request, SerialOptions::CompilerClientSourceAndFeedback);
+#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
                 LOG_REQUEST("* serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClientSource)");
                 serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClientSource);
+#endif
                 LOG_REQUEST("assumptions = " << assumptions);
                 request.putLong(sizeof(Context));
                 request.putBytes((uint8_t*)&assumptions, sizeof(Context));
