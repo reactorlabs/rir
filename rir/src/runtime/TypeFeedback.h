@@ -200,7 +200,6 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class Opcode : uint8_t;
 
-// FIXME: rename to FeedbackPosition
 class FeedbackOrigin {
     FeedbackIndex index_;
     Function* function_ = nullptr;
@@ -306,14 +305,14 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // appropriate locations.
     uint8_t slots_[];
 
-    explicit TypeFeedback(std::vector<ObservedCallees>&& callees,
-                          std::vector<ObservedTest>&& tests,
-                          std::vector<ObservedValues>&& types);
+    explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
+                          const std::vector<ObservedTest>& tests,
+                          const std::vector<ObservedValues>& types);
 
   public:
-    static TypeFeedback* create(std::vector<ObservedCallees>&& callees,
-                                std::vector<ObservedTest>&& tests,
-                                std::vector<ObservedValues>&& types);
+    static TypeFeedback* create(const std::vector<ObservedCallees>& callees,
+                                const std::vector<ObservedTest>& tests,
+                                const std::vector<ObservedValues>& types);
 
     static TypeFeedback* empty();
     static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);

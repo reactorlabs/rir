@@ -155,8 +155,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         types.push_back(std::move(tmp));
     }
 
-    return TypeFeedback::create(std::move(callees), std::move(tests),
-                                std::move(types));
+    return TypeFeedback::create(callees, tests, types);
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -222,8 +221,7 @@ TypeFeedback* TypeFeedback::Builder::build() {
     std::vector<ObservedTest> tests(ntests_, ObservedTest{});
     std::vector<ObservedValues> types(ntypes_, ObservedValues{});
 
-    return TypeFeedback::create(std::move(callees), std::move(tests),
-                                std::move(types));
+    return TypeFeedback::create(callees, tests, types);
 }
 
 TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
@@ -245,9 +243,9 @@ bool TypeFeedback::isValid(const FeedbackIndex& index) const {
     }
 }
 
-TypeFeedback* TypeFeedback::create(std::vector<ObservedCallees>&& callees,
-                                   std::vector<ObservedTest>&& tests,
-                                   std::vector<ObservedValues>&& types) {
+TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
+                                   const std::vector<ObservedTest>& tests,
+                                   const std::vector<ObservedValues>& types) {
     size_t dataSize = callees.size() * sizeof(ObservedCallees) +
                       tests.size() * sizeof(ObservedTest) +
                       types.size() * sizeof(ObservedValues);
@@ -256,15 +254,15 @@ TypeFeedback* TypeFeedback::create(std::vector<ObservedCallees>&& callees,
 
     SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
 
-    TypeFeedback* res = new (INTEGER(store))
-        TypeFeedback(std::move(callees), std::move(tests), std::move(types));
+    TypeFeedback* res =
+        new (INTEGER(store)) TypeFeedback(callees, tests, types);
 
     return res;
 }
 
-TypeFeedback::TypeFeedback(std::vector<ObservedCallees>&& callees,
-                           std::vector<ObservedTest>&& tests,
-                           std::vector<ObservedValues>&& types)
+TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
+                           const std::vector<ObservedTest>& tests,
+                           const std::vector<ObservedValues>& types)
     : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
       tests_size_(tests.size()), types_size_(types.size()) {
 
