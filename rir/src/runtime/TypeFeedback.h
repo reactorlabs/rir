@@ -317,7 +317,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
                                 const std::vector<ObservedValues>& types);
 
     static TypeFeedback* empty();
-    static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
 
     class Builder {
         unsigned ncallees_ = 0;

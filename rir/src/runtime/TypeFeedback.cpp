@@ -96,31 +96,12 @@ void DeoptReason::record(SEXP val) const {
     }
 }
 
-void ObservedCallees::print(std::ostream& out, const Function* function) const {
-    if (taken == ObservedCallees::CounterOverflow)
-        out << "*, <";
-    else
-        out << taken << ", <";
-    if (numTargets == ObservedCallees::MaxTargets)
-        out << "*>, ";
-    else
-        out << numTargets << ">, ";
-
-    out << (invalid ? "invalid" : "valid");
-    out << (numTargets ? ", " : " ");
-
-    for (unsigned i = 0; i < numTargets; ++i) {
-        auto target = getTarget(function, i);
-        out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
-    }
-}
-
 TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
     auto size = deserializer.readBytesOf<size_t>();
     std::vector<ObservedCallees> callees;
     callees.reserve(size);
     for (size_t i = 0; i < size; ++i) {
-        ObservedCallees tmp;
+        ObservedCallees tmp; // NOLINT(*-pro-type-member-init)
         deserializer.readBytes(&tmp, sizeof(ObservedCallees));
         callees.push_back(tmp);
     }
@@ -182,6 +163,47 @@ ObservedCallees& TypeFeedback::callees(uint32_t idx) {
 ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
 
 ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
+
+void TypeFeedback::print(std::ostream& out) const {
+    out << "TypeFeedback:\n";
+    out << "  " << callees_size_ << " callees:\n";
+    for (size_t i = 0; i < callees_size_; ++i) {
+        out << "    " << i << ": ";
+        callees_[i].print(out, owner_);
+        out << "\n";
+    }
+    out << "  " << tests_size_ << " tests:\n";
+    for (size_t i = 0; i < tests_size_; ++i) {
+        out << "    " << i << ": ";
+        tests_[i].print(out);
+        out << "\n";
+    }
+    out << "  " << types_size_ << " types:\n";
+    for (size_t i = 0; i < types_size_; ++i) {
+        out << "    " << i << ": ";
+        types_[i].print(out);
+        out << "\n";
+    }
+}
+
+void ObservedCallees::print(std::ostream& out, const Function* function) const {
+    if (taken == ObservedCallees::CounterOverflow)
+        out << "*, <";
+    else
+        out << taken << ", <";
+    if (numTargets == ObservedCallees::MaxTargets)
+        out << "*>, ";
+    else
+        out << numTargets << ">, ";
+
+    out << (invalid ? "invalid" : "valid");
+    out << (numTargets ? ", " : " ");
+
+    for (unsigned i = 0; i < numTargets; ++i) {
+        auto target = getTarget(function, i);
+        out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
+    }
+}
 
 void ObservedTest::print(std::ostream& out) const {
     switch (seen) {

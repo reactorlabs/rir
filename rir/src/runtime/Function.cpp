@@ -140,6 +140,8 @@ if (flags_.includes(F))                                                    \
     } else {
         body()->disassemble(out);
     }
+    out << "[feedback]\n";
+    typeFeedback()->print(out);
 }
 
 void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
