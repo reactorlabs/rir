@@ -22,9 +22,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     struct Speculation {
         SEXP builtin;
         Checkpoint* cp;
-        FeedbackOrigin origin;
+        FeedbackPosition origin;
         Speculation() {}
-        Speculation(SEXP builtin, Checkpoint* cp, const FeedbackOrigin& origin)
+        Speculation(SEXP builtin, Checkpoint* cp, const FeedbackPosition& origin)
             : builtin(builtin), cp(cp), origin(origin) {
             assert(origin.hasSlot());
         }

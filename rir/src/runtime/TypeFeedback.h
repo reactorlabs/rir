@@ -202,13 +202,13 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class Opcode : uint8_t;
 
-class FeedbackOrigin {
+class FeedbackPosition {
     FeedbackIndex index_;
     Function* function_ = nullptr;
 
   public:
-    FeedbackOrigin() {}
-    FeedbackOrigin(rir::Function* fun, FeedbackIndex idx);
+    FeedbackPosition() {}
+    FeedbackPosition(rir::Function* fun, FeedbackIndex idx);
 
     bool hasSlot() const;
     FeedbackIndex index() const { return index_; }
@@ -216,12 +216,12 @@ class FeedbackOrigin {
     Function* function() const { return function_; }
     void function(Function* fun);
 
-    bool operator==(const FeedbackOrigin& other) const {
+    bool operator==(const FeedbackPosition& other) const {
         return index_ == other.index_ && function_ == other.function_;
     }
 
     friend std::ostream& operator<<(std::ostream& out,
-                                    const FeedbackOrigin& origin) {
+                                    const FeedbackPosition& origin) {
         out << (void*)origin.function_ << "[" << origin.index_ << "]";
         return out;
     }
@@ -240,9 +240,9 @@ struct DeoptReason {
     };
 
     DeoptReason::Reason reason;
-    FeedbackOrigin origin;
+    FeedbackPosition origin;
 
-    DeoptReason(const FeedbackOrigin& origin, DeoptReason::Reason reason);
+    DeoptReason(const FeedbackPosition& origin, DeoptReason::Reason reason);
 
     bool operator==(const DeoptReason& other) const {
         return reason == other.reason && origin == other.origin;
@@ -360,8 +360,8 @@ struct hash<rir::FeedbackIndex> {
 };
 
 template <>
-struct hash<rir::FeedbackOrigin> {
-    std::size_t operator()(const rir::FeedbackOrigin& v) const {
+struct hash<rir::FeedbackPosition> {
+    std::size_t operator()(const rir::FeedbackPosition& v) const {
         return hash_combine(hash_combine(0, v.index()), v.function());
     }
 };

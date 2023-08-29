@@ -37,12 +37,12 @@ SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
     return function->body()->getExtraPoolEntry(targets[pos]);
 }
 
-FeedbackOrigin::FeedbackOrigin(rir::Function* function, FeedbackIndex index)
+FeedbackPosition::FeedbackPosition(rir::Function* function, FeedbackIndex index)
     : index_(index), function_(function) {
     assert(function->typeFeedback()->isValid(index));
 }
 
-DeoptReason::DeoptReason(const FeedbackOrigin& origin,
+DeoptReason::DeoptReason(const FeedbackPosition& origin,
                          DeoptReason::Reason reason)
     : reason(reason), origin(origin) {}
 
@@ -247,7 +247,7 @@ void ObservedValues::print(std::ostream& out) const {
     }
 }
 
-bool FeedbackOrigin::hasSlot() const { return !index_.isUndefined(); }
+bool FeedbackPosition::hasSlot() const { return !index_.isUndefined(); }
 
 uint32_t TypeFeedback::Builder::addCallee() { return ncallees_++; }
 
@@ -265,7 +265,7 @@ TypeFeedback* TypeFeedback::Builder::build() {
 
 TypeFeedback* TypeFeedback::empty() { return TypeFeedback::create({}, {}, {}); }
 
-void FeedbackOrigin::function(Function* fun) {
+void FeedbackPosition::function(Function* fun) {
     assert(!hasSlot() || fun->typeFeedback()->isValid(index_));
     function_ = fun;
 }

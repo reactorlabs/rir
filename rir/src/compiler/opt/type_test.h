@@ -12,7 +12,7 @@ class TypeTest {
         PirType result;
         Instruction* test;
         bool expectation;
-        FeedbackOrigin feedbackOrigin;
+        FeedbackPosition feedbackOrigin;
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,

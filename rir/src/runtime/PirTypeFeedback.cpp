@@ -35,7 +35,7 @@ PirTypeFeedback::PirTypeFeedback(
 
     idx = 0;
 
-    std::unordered_map<FeedbackOrigin, size_t> reverseMapping;
+    std::unordered_map<FeedbackPosition, size_t> reverseMapping;
 
     for (auto s : slots) {
         auto slot = s.first;

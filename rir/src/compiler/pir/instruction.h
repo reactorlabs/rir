@@ -146,10 +146,10 @@ enum class VisibilityFlag : uint8_t {
 struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
-    FeedbackOrigin feedbackOrigin;
+    FeedbackPosition feedbackOrigin;
 };
 struct CallFeedback {
-    FeedbackOrigin feedbackOrigin;
+    FeedbackPosition feedbackOrigin;
     size_t taken = 0;
     SEXP monomorphic = nullptr;
     SEXPTYPE type = NILSXP;
@@ -984,12 +984,12 @@ class VLIE(FrameState, Effects() | Effect::ReadsEnv) {
 class FLIE(LdFun, 2, Effects::Any()) {
   private:
     SEXP hint_ = nullptr;
-    FeedbackOrigin hintOrigin_;
+    FeedbackPosition hintOrigin_;
 
   public:
     SEXP hint() { return hint_; }
-    const FeedbackOrigin& hintOrigin() { return hintOrigin_; }
-    void hint(SEXP hint, const FeedbackOrigin& hintOrigin) {
+    const FeedbackPosition& hintOrigin() { return hintOrigin_; }
+    void hint(SEXP hint, const FeedbackPosition& hintOrigin) {
         hint_ = hint;
         hintOrigin_ = hintOrigin;
     }

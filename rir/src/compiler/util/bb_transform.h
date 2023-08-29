@@ -33,11 +33,11 @@ class BBTransform {
                            size_t nDropContexts, bool condition,
                            BB* deoptBlock_, const std::string& debugMesage);
     static void insertAssume(Instruction* condition, bool assumePositive,
-                             Checkpoint* cp, const FeedbackOrigin& origin,
+                             Checkpoint* cp, const FeedbackPosition& origin,
                              DeoptReason::Reason reason, BB* bb,
                              BB::Instrs::iterator& position);
     static void insertAssume(Instruction* condition, bool assumePositive,
-                             Checkpoint* cp, const FeedbackOrigin& origin,
+                             Checkpoint* cp, const FeedbackPosition& origin,
                              DeoptReason::Reason reason);
     static Value* insertCalleeGuard(Compiler& compiler, const CallFeedback& fb,
                                     const DeoptReason& dr, Value* callee,
