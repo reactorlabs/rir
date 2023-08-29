@@ -365,8 +365,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
     switch (kind) {
     case Kind::Bytecode: {
-        Function* fun = function();
-        TypeFeedback* typeFeedback = fun->typeFeedback();
+        auto fun = Function::check(getEntry(3));
+        auto typeFeedback = fun ? fun->typeFeedback() : nullptr;
         Opcode* pc = code();
         size_t label = 0;
         std::map<Opcode*, size_t> targets;
@@ -431,13 +431,25 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 out << "   "
                     << "[ ";
                 if (bc.bc == Opcode::record_call_) {
-                    typeFeedback->callees(bc.immediate.i).print(out, fun);
+                    if (typeFeedback) {
+                        typeFeedback->callees(bc.immediate.i).print(out, fun);
+                    } else {
+                        out << "<no outer fun!>";
+                    }
                     out << " ] Call#";
                 } else if (bc.bc == Opcode::record_test_) {
-                    typeFeedback->test(bc.immediate.i).print(out);
+                    if (typeFeedback) {
+                        typeFeedback->test(bc.immediate.i).print(out);
+                    } else {
+                        out << "<no outer fun!>";
+                    }
                     out << " ] Test#";
                 } else {
-                    typeFeedback->types(bc.immediate.i).print(out);
+                    if (typeFeedback) {
+                        typeFeedback->types(bc.immediate.i).print(out);
+                    } else {
+                        out << "<no outer fun!>";
+                    }
                     out << " ] Type#";
                 }
                 out << bc.immediate.i << "\n";
@@ -595,8 +607,9 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
             s << "arglist order";
         });
     }
-    if (!isInFunction(function(), this)) {
-        print.addEdgeTo(function()->container(), false, "unexpected", [&](std::ostream& s) {
+    auto fun = Function::check(getEntry(3));
+    if (fun && !isInFunction(fun, this)) {
+        print.addEdgeTo(fun->container(), false, "unexpected", [&](std::ostream& s) {
             s << "function, its not this code's parent!";
         });
     }

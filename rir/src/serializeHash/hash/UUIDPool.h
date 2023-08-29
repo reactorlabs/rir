@@ -66,8 +66,8 @@ class UUIDPool {
     /// Intern the SEXP when we already know its hash, not recursively.
     ///
     /// \see UUIDPool::intern(SEXP, bool, bool)
-    static SEXP intern(SEXP e, const UUID& uuid, bool preserve,
-                       bool expectHashToBeTheSame = true);
+    static SEXP intern(SEXP e, const UUID& hash, bool preserve,
+                       bool isSexpComplete = true);
     /// Will hash the SEXP and:
     /// - If not in the pool, will add it *and* if `recursive` is set,
     ///   recursively intern connected SEXPs. Then returns the original SEXP

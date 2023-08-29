@@ -124,7 +124,15 @@ SerialFlags SerialFlags::CodePromise(
     true,
     true,
     true);
-SerialFlags SerialFlags::CodeFeedback = SerialFlags::FunFeedback;
+// The values should be the same as FunFeedback's, however the is different
+SerialFlags SerialFlags::CodeFeedback(
+    false,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true);
 SerialFlags SerialFlags::CodePoolUnknown(
     true,
     true,

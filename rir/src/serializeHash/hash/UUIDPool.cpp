@@ -74,7 +74,11 @@ static std::unordered_map<UUID, std::string> disassembly;
 #endif
 
 static bool internable(SEXP e) {
-    return TYPEOF(e) == EXTERNALSXP;
+    // TypeFeedback isn't interned, it's serialized inline like other SEXPs
+    // because we never need to refer to a TypeFeedback alone, it changes
+    // frequently, it's skipped during hashing, and if 2 TypeFeedbacks are
+    // equivalent, being identical doesn't matter.
+    return TYPEOF(e) == EXTERNALSXP && !TypeFeedback::check(e);
 }
 
 #ifdef DO_INTERN
@@ -226,25 +230,23 @@ void UUIDPool::uninternGcd(SEXP e) {
 }
 #endif
 
-SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashToBeTheSame) {
-    return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: intern specific", e, expectHashToBeTheSame, [&] {
+SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool isSexpComplete) {
+    return Measuring::timeEventIf2(pir::Parameter::PIR_MEASURE_INTERNING, "UUIDPool.cpp: intern specific", e, isSexpComplete, [&] {
         Protect p(e);
         assert(internable(e));
-        (void)expectHashToBeTheSame;
+        (void)isSexpComplete;
 
 #ifdef DO_INTERN
-        SLOWASSERT((!expectHashToBeTheSame || hashRoot(e) == hash) &&
-                   "SEXP hash isn't deterministic or `hash` in `UUIDPool::intern(e, hash)` is wrong");
         if (interned.count(hash)) {
             // Reuse interned SEXP
             auto existing = interned.at(hash);
             assert(TYPEOF(e) == TYPEOF(existing) && "obvious hash collision (different types)");
-            assert((TYPEOF(e) != EXTERNALSXP || rirObjectMagic(e) == rirObjectMagic(existing) || !expectHashToBeTheSame) &&
+            assert((TYPEOF(e) != EXTERNALSXP || rirObjectMagic(e) == rirObjectMagic(existing) || !isSexpComplete) &&
                    "obvious hash collision (different RIR types)");
             if (!hashes.count(e)) {
                 // This SEXP is structurally-equivalent to the interned SEXP but not
                 // the same (different pointers), so we must still record it
-                LOG(std::cout << "Reuse intern: " << hash << " -> " << e << (expectHashToBeTheSame ? "\n" : " (recursive)\n"));
+                LOG(std::cout << "Reuse intern: " << hash << " -> " << e << (isSexpComplete ? "\n" : " (recursive)\n"));
                 hashes[e] = hash;
 
                 // Add to intern list for this UUID
@@ -280,8 +282,9 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 
         // Intern new SEXP
 #ifdef DEBUG_DISASSEMBLY
-        disassembly[hash] = expectHashToBeTheSame
-            ? printRirObject(e, RirObjectPrintStyle::Detailed)
+        disassembly[hash] =
+            isSexpComplete
+                ? printRirObject(e, RirObjectPrintStyle::Detailed)
             : "(couldn't be computed at the time it was interned)";
 #endif
 
@@ -317,7 +320,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool expectHashTo
 #ifdef DEBUG_DISASSEMBLY
         LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif
-        if (expectHashToBeTheSame) {
+        if (isSexpComplete) {
             printInternedIfNecessary(e, hash);
         }
         interned[hash] = e;
@@ -409,16 +412,28 @@ SEXP UUIDPool::retrieve(const UUID& hash) {
     if (CompilerClient::isRunning()) {
         LOG(std::cout << "Retrieving by hash from server: " << hash << "\n");
         auto sexp = CompilerClient::retrieve(hash);
+        LOG(std::cout << "Retrieved by hash from server: " << hash << " -> "
+                      << sexp << "\n");
         if (sexp) {
-            intern(sexp, hash, false, false);
+#if DEBUG_DISASSEMBLY
+            disassembly[hash] = printRirObject(sexp, RirObjectPrintStyle::Detailed);
+            LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
+#endif
+            intern(sexp, hash, false, true);
             return sexp;
         }
         Rf_error("SEXP deserialized from hash which we don't have, and server also doesn't have it");
     } else if (CompilerServer::isRunning()) {
         LOG(std::cout << "Retrieving by hash from client: " << hash << "\n");
         auto sexp = CompilerServer::retrieve(hash);
+        LOG(std::cout << "Retrieved by hash from client: " << hash << " -> "
+                      << sexp << "\n");
         if (sexp) {
-            intern(sexp, hash, true, false);
+#if DEBUG_DISASSEMBLY
+            disassembly[hash] = printRirObject(sexp, RirObjectPrintStyle::Detailed);
+            LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
+#endif
+            intern(sexp, hash, true, true);
             return sexp;
         }
         LOG(std::cout << "SEXP deserialized from hash which we don't have, and client also doesn't have it");

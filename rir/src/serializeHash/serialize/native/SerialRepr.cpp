@@ -228,7 +228,10 @@ static void* getMetadataPtr_Function(const llvm::MDNode& meta, rir::Code* outer)
         R_PreserveObject(sexp);
         outer->addExtraPoolEntry(sexp);
     }
-    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized Function SEXP is not actually an EXTERNALSXP");
+    assert(TYPEOF(sexp) == EXTERNALSXP &&
+           "deserialized Function SEXP is not actually an EXTERNALSXP");
+    assert(rir::Function::check(sexp) &&
+           "deserialized Function SEXP is not actually a Function");
     return (void*)rir::Function::unpack(sexp);
 }
 
@@ -241,7 +244,10 @@ static void* getMetadataPtr_TypeFeedback(const llvm::MDNode& meta, rir::Code* ou
         R_PreserveObject(sexp);
         outer->addExtraPoolEntry(sexp);
     }
-    assert(TYPEOF(sexp) == EXTERNALSXP && "deserialized TypeFeedback SEXP is not actually an EXTERNALSXP");
+    assert(TYPEOF(sexp) == EXTERNALSXP &&
+           "deserialized TypeFeedback SEXP is not actually an EXTERNALSXP");
+    assert(rir::TypeFeedback::check(sexp) &&
+           "deserialized TypeFeedback SEXP is not actually a TypeFeedback");
     return (void*)rir::TypeFeedback::unpack(sexp);
 }
 
@@ -249,7 +255,8 @@ static void* getMetadataPtr_DeoptMetadata(const llvm::MDNode& meta, rir::Code* o
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
     auto m = DeoptMetadata::deserialize(buffer);
-    assert(m->numFrames < 65536 && "deserialized obviously corrupt DeoptMetadata");
+    assert(m->numFrames < 65536 &&
+           "deserialized obviously corrupt DeoptMetadata");
     if (outer) {
         // TODO: why is gcAttach not enough?
         R_PreserveObject(m->container());

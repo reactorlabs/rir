@@ -30,7 +30,18 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+
     deserializer.addRef(store);
+    // There's an interesting situation where we patch (use) the function WHILE
+    // it's being deserialized (recursive deserialization madness), so we have
+    // to make `Function::unpack` not crash by making `store` have the function
+    // magic. Fortunately, we don't actually use the function (besides
+    // unpacking) before we finish deserializing it, of course that would
+    // lead to a terrible crash...
+    *((rir_header*)STDVEC_DATAPTR(store)) =
+        {sizeof(Function) - NUM_PTRS * sizeof(SEXP),
+         0,
+         FUNCTION_MAGIC};
 
     auto feedback = p(deserializer.read(SerialFlags::FunFeedback));
     auto body = p(deserializer.read(SerialFlags::FunBody));

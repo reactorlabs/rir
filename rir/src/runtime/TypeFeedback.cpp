@@ -98,30 +98,21 @@ void DeoptReason::record(SEXP val) const {
 
 TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
     auto size = deserializer.readBytesOf<size_t>();
-    std::vector<ObservedCallees> callees;
-    callees.reserve(size);
+    std::vector<ObservedCallees> callees(size);
     for (size_t i = 0; i < size; ++i) {
-        ObservedCallees tmp; // NOLINT(*-pro-type-member-init)
-        deserializer.readBytes(&tmp, sizeof(ObservedCallees));
-        callees.push_back(tmp);
+        deserializer.readBytes(&callees[i], sizeof(ObservedCallees));
     }
 
     size = deserializer.readBytesOf<size_t>();
-    std::vector<ObservedTest> tests;
-    tests.reserve(size);
+    std::vector<ObservedTest> tests(size);
     for (size_t i = 0; i < size; ++i) {
-        ObservedTest tmp;
-        deserializer.readBytes(&tmp, sizeof(ObservedTest));
-        tests.push_back(tmp);
+        deserializer.readBytes(&tests[i], sizeof(ObservedTest));
     }
 
     size = deserializer.readBytesOf<size_t>();
-    std::vector<ObservedValues> types;
-    types.reserve(size);
+    std::vector<ObservedValues> types(size);
     for (size_t i = 0; i < size; ++i) {
-        ObservedValues tmp;
-        deserializer.readBytes(&tmp, sizeof(ObservedValues));
-        types.push_back(tmp);
+        deserializer.readBytes(&types[i], sizeof(ObservedValues));
     }
 
     auto feedback = TypeFeedback::create(callees, tests, types);
@@ -146,14 +137,13 @@ void TypeFeedback::serialize(AbstractSerializer& serializer) const {
     }
 }
 
-void TypeFeedback::hash(__attribute__((unused)) HasherOld& hasher) const {
-    // Doesn't actually hash because it's all feedback
+void TypeFeedback::hash(__attribute__((unused)) HasherOld& hasher) const { // NOLINT(*-convert-member-functions-to-static)
+    assert(false && "Feedback should never be hashed");
 }
 
 void TypeFeedback::addConnected(
-    __attribute__((unused)) ConnectedCollectorOld& collector) const {
-    // Connected objects are already added because they're in the extra pool,
-    // and everything in the extra pool gets added in Code.cpp
+    __attribute__((unused)) ConnectedCollectorOld& collector) const { // NOLINT(*-convert-member-functions-to-static)
+    assert(false && "Feedback should never be hashed (don't call addConnected)");
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
@@ -165,19 +155,26 @@ ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
 ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
 
 void TypeFeedback::print(std::ostream& out) const {
-    out << "TypeFeedback:\n";
+    out << "TypeFeedback";
+    if (!owner_) {
+        out << " (owner not set)";
+    }
+    out << ":\n";
+
     out << "  " << callees_size_ << " callees:\n";
     for (size_t i = 0; i < callees_size_; ++i) {
         out << "    " << i << ": ";
         callees_[i].print(out, owner_);
         out << "\n";
     }
+
     out << "  " << tests_size_ << " tests:\n";
     for (size_t i = 0; i < tests_size_; ++i) {
         out << "    " << i << ": ";
         tests_[i].print(out);
         out << "\n";
     }
+
     out << "  " << types_size_ << " types:\n";
     for (size_t i = 0; i < types_size_; ++i) {
         out << "    " << i << ": ";
@@ -200,8 +197,12 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     out << (numTargets ? ", " : " ");
 
     for (unsigned i = 0; i < numTargets; ++i) {
-        auto target = getTarget(function, i);
-        out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
+        if (function) {
+            auto target = getTarget(function, i);
+            out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
+        } else {
+            out << "<entry " << targets[i] << ">";
+        }
     }
 }
 
