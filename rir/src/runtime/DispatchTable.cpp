@@ -19,7 +19,9 @@ DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
                     ? deserializer.readBytesOf<int>(SerialFlags::DtOptimized)
                     : 1;
     for (size_t i = 0; i < dt->size(); i++) {
-        dt->setEntry(i,deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized));
+        auto version = deserializer.read(i == 0 ? SerialFlags::DtBaseline : SerialFlags::DtOptimized);
+        Function::unpack(version)->dispatchTable(dt);
+        dt->setEntry(i, version);
     }
     return dt;
 }
