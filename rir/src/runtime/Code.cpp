@@ -89,6 +89,15 @@ void Code::lazyCode(const std::string& handle, const SerialModuleRef& module) {
 
 void Code::function(Function* fun) { setEntry(3, fun->container()); }
 
+rir::Function* Code::functionOpt() const {
+    auto f = getEntry(3);
+    if (!f && kind == Kind::Deserializing) {
+        return nullptr;
+    }
+    assert(f && "no function, but code is not being deserialized");
+    return rir::Function::check(f);
+}
+
 rir::Function* Code::function() const {
     auto f = getEntry(3);
     if (!f && kind == Kind::Deserializing) {
@@ -141,8 +150,9 @@ Code* Code::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto size = deserializer.readBytesOf<R_xlen_t>(SerialFlags::CodeMisc);
     auto store = p(Rf_allocVector(EXTERNALSXP, size));
-    deserializer.addRef(store);
     auto code = new (DATAPTR(store)) Code;
+    // Magic is already set
+    deserializer.addRef(store);
 
     // Header
     DESERIALIZE(code->src, readSrc, SerialFlags::CodeAst);
@@ -365,8 +375,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
     switch (kind) {
     case Kind::Bytecode: {
-        auto fun = Function::check(getEntry(3));
-        auto typeFeedback = fun ? fun->typeFeedback() : nullptr;
+        auto fun = functionOpt();
+        auto typeFeedback = fun && !fun->isDeserializing() ? fun->typeFeedback() : nullptr;
         Opcode* pc = code();
         size_t label = 0;
         std::map<Opcode*, size_t> targets;
@@ -607,7 +617,7 @@ void Code::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
             s << "arglist order";
         });
     }
-    auto fun = Function::check(getEntry(3));
+    auto fun = functionOpt();
     if (fun && !isInFunction(fun, this)) {
         print.addEdgeTo(fun->container(), false, "unexpected", [&](std::ostream& s) {
             s << "function, its not this code's parent!";

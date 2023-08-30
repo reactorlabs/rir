@@ -213,7 +213,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 
 void Deserializer::addRef(SEXP sexp) {
     AbstractDeserializer::addRef(sexp);
-    if (retrieveHash && TYPEOF(sexp) == EXTERNALSXP) {
+    if (retrieveHash && UUIDPool::internable(sexp)) {
         // TODO: Hacky that we hardcode preserve to whether the compiler server
         //  is running
         UUIDPool::intern(sexp, retrieveHash, CompilerServer::isRunning(), false);

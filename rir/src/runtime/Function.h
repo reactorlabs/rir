@@ -82,6 +82,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         setEntry(BODY_IDX, body);
     }
 
+    bool isDeserializing() const {
+        return !getEntry(BODY_IDX);
+    }
     TypeFeedback* typeFeedback() const {
         return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
     }

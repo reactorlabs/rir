@@ -116,7 +116,7 @@ TypeFeedback* TypeFeedback::deserialize(AbstractDeserializer& deserializer) {
     }
 
     auto feedback = TypeFeedback::create(callees, tests, types);
-    deserializer.addRef(feedback->container());
+    // TypeFeedback doesn't need addRef
     return feedback;
 }
 

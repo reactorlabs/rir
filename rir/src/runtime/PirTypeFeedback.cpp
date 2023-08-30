@@ -68,6 +68,8 @@ PirTypeFeedback* PirTypeFeedback::deserialize(AbstractDeserializer& deserializer
     Protect p;
     auto size = deserializer.readBytesOf<R_xlen_t>();
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    // Need to ensure magic is correct so that we know this is internable
+    ((rir_header*)STDVEC_DATAPTR(store))->magic = PIR_TYPE_FEEDBACK_MAGIC;
     deserializer.addRef(store);
 
     auto numCodes = deserializer.readBytesOf<int>();

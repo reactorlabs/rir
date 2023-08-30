@@ -30,18 +30,22 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
-
-    deserializer.addRef(store);
-    // There's an interesting situation where we patch (use) the function WHILE
+    // There's an interesting situation where we start using the function WHILE
     // it's being deserialized (recursive deserialization madness), so we have
     // to make `Function::unpack` not crash by making `store` have the function
-    // magic. Fortunately, we don't actually use the function (besides
-    // unpacking) before we finish deserializing it, of course that would
-    // lead to a terrible crash...
+    // magic, and we have to make fun->typeFeedback() return nullptr.
+    //
+    // That's what these assignments do. Fortunately we don't try to use
+    // anything else...
     *((rir_header*)STDVEC_DATAPTR(store)) =
         {sizeof(Function) - NUM_PTRS * sizeof(SEXP),
-         0,
+         NUM_PTRS,
          FUNCTION_MAGIC};
+    for (unsigned i = 0; i < NUM_PTRS; i++) {
+        EXTERNALSXP_SET_ENTRY(store, i, nullptr);
+    }
+    // Also needed to set FUNCTION_MAGIC for addRef
+    deserializer.addRef(store);
 
     auto feedback = p(deserializer.read(SerialFlags::FunFeedback));
     auto body = p(deserializer.read(SerialFlags::FunBody));
@@ -119,6 +123,10 @@ void Function::disassemble(std::ostream& out) const {
 }
 
 void Function::print(std::ostream& out, bool isDetailed) const {
+    if (isDeserializing()) {
+        out << "(function is being deserialized)\n";
+        return;
+    }
     if (isDetailed) {
         out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
     }

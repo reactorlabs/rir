@@ -8,9 +8,7 @@ ArglistOrder* ArglistOrder::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto size = deserializer.readBytesOf<R_xlen_t>();
     auto store = p(Rf_allocVector(EXTERNALSXP, size));
-    // Needs ref for sanity check (assertion) even though it's not actually
-    // needed
-    deserializer.addRef(store);
+    // Doesn't need ref since this is never used alone
     auto arglistOrder = new (DATAPTR(store)) ArglistOrder(deserializer.readBytesOf<int>());
     for (int i = 0, offset = sizeof(ArglistOrder); offset < size; i++, offset += sizeof(*data)) {
         arglistOrder->data[i] = (ArglistOrder::ArgIdx)deserializer.readBytesOf<int>();

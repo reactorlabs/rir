@@ -243,15 +243,16 @@ enum class EnvType {
 
 /// These SEXPs are added to the ref table the first time they are serialized or
 /// deserialized, and serialized as / deserialized from refs subsequent times.
-static bool canSelfReference(SEXPTYPE type) {
-    switch (type) {
+static bool canSelfReference(SEXP sexp) {
+    switch (TYPEOF(sexp)) {
     case SYMSXP:
     case ENVSXP:
     case EXTPTRSXP:
     case WEAKREFSXP:
     case BCODESXP:
-    case EXTERNALSXP:
         return true;
+    case EXTERNALSXP:
+        return !TypeFeedback::check(sexp) && !ArglistOrder::check(sexp);
     case NILSXP:
     case LISTSXP:
     case CLOSXP:
@@ -610,7 +611,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             type = (SEXPTYPE)SpecialType::Altrep;
         } else if (global2Index.count(sexp)) {
             type = (SEXPTYPE)SpecialType::Global;
-        } else if (canSelfReference(TYPEOF(sexp)) && refs && refs->count(sexp)) {
+        } else if (canSelfReference(sexp) && refs && refs->count(sexp)) {
             type = (SEXPTYPE)SpecialType::Ref;
         } else {
             type = TYPEOF(sexp);
@@ -648,7 +649,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             }
         };
 
-        if (type == TYPEOF(sexp) && canSelfReference(type) && refs &&
+        if (type == TYPEOF(sexp) && canSelfReference(sexp) && refs &&
             !refs->count(sexp)) {
             (*refs)[sexp] = refs->size();
         }
@@ -1158,7 +1159,7 @@ SEXP AbstractDeserializer::readInline() {
         SLOWASSERT(
             (type == (SEXPTYPE)SpecialType::Altrep ||
              type == (SEXPTYPE)SpecialType::Global ||
-             type == (SEXPTYPE)SpecialType::Ref || !canSelfReference(type) ||
+             type == (SEXPTYPE)SpecialType::Ref || !canSelfReference(result) ||
              !refs ||
              std::find(refs->begin(), refs->end(), result) != refs->end()) &&
             "sanity check failed: type can self reference but wasn't inserted "

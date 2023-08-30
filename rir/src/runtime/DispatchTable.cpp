@@ -9,6 +9,7 @@ DispatchTable* DispatchTable::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto dt = create();
     p(dt->container());
+    // Magic is already set
     deserializer.addRef(dt->container());
     if (deserializer.willRead(SerialFlags::DtContext)) {
         dt->userDefinedContext_ = Context(
@@ -56,7 +57,7 @@ void DispatchTable::print(std::ostream& out, bool isDetailed) const { // NOLINT(
         f->disassemble(std::cout);
     }
 
-    if (isDetailed) {
+    if (isDetailed && !baseline()->isDeserializing()) {
         auto code = baseline()->body();
         auto pc = code->code();
         auto printHeader = true;

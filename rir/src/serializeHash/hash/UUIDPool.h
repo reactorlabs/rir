@@ -63,6 +63,10 @@ class UUIDPool {
   public:
     static void initialize();
 
+    /// Whether the SEXP can be interned, and is serialized as a hash when
+    /// interned SEXPs are.
+    static bool internable(SEXP sexp);
+
     /// Intern the SEXP when we already know its hash, not recursively.
     ///
     /// \see UUIDPool::intern(SEXP, bool, bool)

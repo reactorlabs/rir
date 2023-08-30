@@ -73,12 +73,15 @@ static unsigned prettyPrintCount = 0;
 static std::unordered_map<UUID, std::string> disassembly;
 #endif
 
-static bool internable(SEXP e) {
-    // TypeFeedback isn't interned, it's serialized inline like other SEXPs
-    // because we never need to refer to a TypeFeedback alone, it changes
-    // frequently, it's skipped during hashing, and if 2 TypeFeedbacks are
-    // equivalent, being identical doesn't matter.
-    return TYPEOF(e) == EXTERNALSXP && !TypeFeedback::check(e);
+bool UUIDPool::internable(SEXP sexp) {
+    // TypeFeedback and ArglistOrder aren't interned, they're serialized inline
+    // like non-RIR SEXPs because we never need to refer to them alone, identity
+    // doesn't matter (only equivalence), and they usually aren't big. Plus,
+    // TypeFeedback changes frequently, so it would need to be re-interned
+    // frequently
+    return TYPEOF(sexp) == EXTERNALSXP &&
+           !TypeFeedback::check(sexp) &&
+           !ArglistOrder::check(sexp);
 }
 
 #ifdef DO_INTERN
@@ -415,7 +418,7 @@ SEXP UUIDPool::retrieve(const UUID& hash) {
         LOG(std::cout << "Retrieved by hash from server: " << hash << " -> "
                       << sexp << "\n");
         if (sexp) {
-#if DEBUG_DISASSEMBLY
+#ifdef DEBUG_DISASSEMBLY
             disassembly[hash] = printRirObject(sexp, RirObjectPrintStyle::Detailed);
             LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif
@@ -429,7 +432,7 @@ SEXP UUIDPool::retrieve(const UUID& hash) {
         LOG(std::cout << "Retrieved by hash from client: " << hash << " -> "
                       << sexp << "\n");
         if (sexp) {
-#if DEBUG_DISASSEMBLY
+#ifdef DEBUG_DISASSEMBLY
             disassembly[hash] = printRirObject(sexp, RirObjectPrintStyle::Detailed);
             LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif

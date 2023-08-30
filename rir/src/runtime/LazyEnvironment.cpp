@@ -40,6 +40,8 @@ LazyEnvironment* LazyEnvironment::deserialize(AbstractDeserializer& deserializer
     Protect p;
     auto size = deserializer.readBytesOf<R_xlen_t>();
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    // Need to ensure magic is correct so that we know this is internable
+    ((rir_header*)STDVEC_DATAPTR(store))->magic = LAZY_ENVIRONMENT_MAGIC;
     deserializer.addRef(store);
 
     auto nargs = deserializer.readBytesOf<int>();

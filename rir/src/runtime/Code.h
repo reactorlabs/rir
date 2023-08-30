@@ -209,6 +209,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return ArglistOrder::unpack(data);
     }
 
+  private:
+    // Only used when code may not be fully deserialized
+    rir::Function* functionOpt() const;
+  public:
     rir::Function* function() const;
     void function(rir::Function*);
 

@@ -54,6 +54,8 @@ LazyArglist* LazyArglist::deserialize(AbstractDeserializer& deserializer) {
     Protect p;
     auto size = deserializer.readBytesOf<R_xlen_t>();
     SEXP store = p(Rf_allocVector(EXTERNALSXP, size));
+    // Need to ensure magic is correct so that we know this is internable
+    ((rir_header*)STDVEC_DATAPTR(store))->magic = LAZY_ARGS_MAGIC;
     deserializer.addRef(store);
 
     auto callId = deserializer.readBytesOf<ArglistOrder::CallId>();
