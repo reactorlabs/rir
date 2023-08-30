@@ -59,8 +59,8 @@ struct Parameter {
     static bool PIR_LOG_INTERNING;
     static bool PIR_WARN_INTERNING;
     static bool PIR_LOG_COMPILER_PEER_DETAILED;
-    static bool PIR_LOG_COMPILER_CLIENT;
-    static bool PIR_WARN_COMPILER_CLIENT;
+    static bool PIR_LOG_COMPILER_PEER;
+    static bool PIR_WARN_COMPILER_PEER;
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_MEASURE_INTERNING;
     static bool PIR_MEASURE_CLIENT_SERVER;

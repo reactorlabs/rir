@@ -36,6 +36,19 @@ We use [ZeroMQ](https://zeromq.org) for communication. See the ZeroMQ docs for a
     PIR_SERVER_ADDR=
         <address>        (on server) address to listen on
 
+#### Logging
+
+    PIR_LOG_COMPILER_PEER_DETAILED=
+        1           log the contents of every request sent to and received by the compiler client or server
+    PIR_LOG_COMPILER_PEER=
+        1           log every message sent from/to the compiler peer. Superseded by PIR_LOG_COMPILER_PEER_DETAILED
+    PIR_WARN_COMPILER_PEER=
+        1           warn when the compiler peer connection times out or closes. Superseded by PIR_LOG_COMPILER_PEER
+
+These options are also in [./debugging.md](./debugging.md). They can be applied to client or server, and will log on whatever peer they're applied but not affect connected peers.
+
+It's recommended to set `PIR_WARN_COMPILER_PEER` to see any issues. Try setting `PIR_LOG_COMPILER_PEER` on the server to see the requests and responses being made. 
+
 ## What is a compiler server?
 
 A separate process which JIT-compiles code while the local process interprets your program. It can be on the same or different machine. This reduces the overhead of compiling.

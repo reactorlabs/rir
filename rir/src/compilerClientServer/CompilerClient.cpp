@@ -33,6 +33,8 @@ thread_pool* threads;
 static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
 
+#define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
+#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
 #define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
 #define START_LOGGING_REQUEST() LOG_DETAILED(do {                              \
         logDetailedDepth++;                                                    \
@@ -57,8 +59,6 @@ static std::string logDetailedIndent;
 #define LOG_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<< " << message << std::endl)
 #define LOG_SERVER_REQUEST(message) LOG_DETAILED(std::cerr << logDetailedIndent << "<<< " << message << std::endl)
 #define LOG_CLIENT_RESPONSE(message) LOG_DETAILED(std::cerr << logDetailedIndent << ">>> " << message << std::endl)
-#define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_CLIENT) stmt
-#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_CLIENT || pir::Parameter::PIR_WARN_COMPILER_CLIENT) stmt
 
 static const char* SENDING_REQUEST_TIMER_NAME = "CompilerClient.cpp: sending request";
 static const char* RECEIVING_RESPONSE_TIMER_NAME = "CompilerClient.cpp: receiving response";

@@ -20,11 +20,13 @@ namespace rir {
 
 #define SOFT_ASSERT(x, msg) do {                                               \
     if (!(x)) {                                                                \
-        std::cerr << "Assertion failed (client issue): " << msg << " (" << #x  \
-                  << ")" << std::endl;                                         \
+        LOG_WARN(std::cerr << "Assertion failed (client issue): " << msg       \
+                           << " (" << #x ")" << std::endl);                    \
         break;                                                                 \
     } } while (false)
 
+#define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
+#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
 #define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
 #define START_LOGGING_REQUEST() LOG_DETAILED(do {                              \
         logDetailedDepth++;                                                    \
@@ -89,11 +91,11 @@ void CompilerServer::tryRun() {
     (void)_isRunning;
     // Won't return
     for (;;) {
-        std::cerr << "Waiting for next request..." << std::endl;
+        LOG(std::cerr << "Waiting for next request..." << std::endl);
         // Receive the request
         zmq::message_t request;
         socket->recv(request, zmq::recv_flags::none);
-        std::cerr << "Got request (" << request.size() << " bytes)" << std::endl;
+        LOG(std::cerr << "Got request (" << request.size() << " bytes)" << std::endl);
 
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
         // Deserialize the request.
@@ -121,7 +123,7 @@ void CompilerServer::tryRun() {
             socket->send(zmq::message_t(&response, sizeof(response)),
                          zmq::send_flags::none);
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
-            std::cerr << "Sent kill acknowledgement, will die" << std::endl;
+            LOG(std::cerr << "Sent kill acknowledgement, will die" << std::endl);
             _isRunning = false;
             exit(0);
         }
@@ -129,9 +131,9 @@ void CompilerServer::tryRun() {
         case Request::RetrieveFailed:
             LOG_REQUEST("Request::Retrieved | Request::RetrieveFailed");
             END_LOGGING_REQUEST();
-            std::cerr << "Unexpected client-side response (" << (uint64_t)magic
-                      << ") server shouldn't have or didn't send a request. "
-                      << "Ignoring" << std::endl;
+            LOG_WARN(std::cerr << "Unexpected client-side response (" << (uint64_t)magic
+                               << ") server shouldn't have or didn't send a request. "
+                               << "Ignoring" << std::endl);
             continue;
         case Request::Memoize: {
             LOG_REQUEST("Request::Memoize");
@@ -143,8 +145,8 @@ void CompilerServer::tryRun() {
             END_LOGGING_REQUEST();
             START_LOGGING_RESPONSE();
             if (memoizedRequests->count(hash)) {
-                std::cerr << "Found memoized result for hash (hash-only) "
-                          << hash << std::endl;
+                LOG(std::cerr << "Found memoized result for hash (hash-only) "
+                              << hash << std::endl);
                 // Send the response (memoized)
                 auto result = (*memoizedRequests)[hash];
                 LOG_RESPONSE("(memoized full response)");
@@ -154,11 +156,11 @@ void CompilerServer::tryRun() {
                 socket->send(zmq::message_t(result.data(), result.size()),
                              zmq::send_flags::none);
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
-                std::cerr << "Sent memoized result for hash (hash-only) "
-                          << hash << std::endl;
+                LOG(std::cerr << "Sent memoized result for hash (hash-only) "
+                              << hash << std::endl);
             } else {
-                std::cerr << "No memoized result for hash (hash-only) " << hash
-                          << std::endl;
+                LOG(std::cerr << "No memoized result for hash (hash-only) " << hash
+                              << std::endl);
                 // Send Response::NeedsFull
                 auto response = Response::NeedsFull;
                 LOG_RESPONSE("Response::NeedsFull");
@@ -168,8 +170,8 @@ void CompilerServer::tryRun() {
                 socket->send(zmq::message_t(&response, sizeof(response)),
                              zmq::send_flags::none);
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
-                std::cerr << "Sent request full for hash (hash-only) " << hash
-                          << std::endl;
+                LOG(std::cerr << "Sent request full for hash (hash-only) " << hash
+                              << std::endl);
             }
             continue;
         }
@@ -181,7 +183,8 @@ void CompilerServer::tryRun() {
         UUID requestHash = UUID::hash(request.data(), request.size());
         if (memoizedRequests->count(requestHash)) {
             END_LOGGING_REQUEST();
-            std::cerr << "Found memoized result for hash " << requestHash << std::endl;
+            LOG(std::cerr << "Found memoized result for hash " << requestHash
+                          << std::endl);
             // Send the response (memoized)
             auto result = (*memoizedRequests)[requestHash];
             START_LOGGING_RESPONSE();
@@ -194,10 +197,12 @@ void CompilerServer::tryRun() {
                              result.size()),
                          zmq::send_flags::none);
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
-            std::cerr << "Sent memoized result for hash " << requestHash << std::endl;
+            LOG(std::cerr << "Sent memoized result for hash " << requestHash
+                          << std::endl);
             continue;
         } else {
-            std::cerr << "No memoized result for hash " << requestHash << std::endl;
+            LOG(std::cerr << "No memoized result for hash " << requestHash
+                          << std::endl);
         }
 
         // Handle other request types
@@ -205,7 +210,7 @@ void CompilerServer::tryRun() {
         ByteBuffer response;
         switch (magic) {
         case Request::Compile: {
-            std::cerr << "Received compile request" << std::endl;
+            LOG(std::cerr << "Received compile request" << std::endl);
             LOG_REQUEST("Request::Compile");
             // ...
             // + serialize(what, CompilerClientSourceAndFeedback)
@@ -249,8 +254,9 @@ void CompilerServer::tryRun() {
             );
             auto differences = differencesStream.str();
             if (!differences.empty()) {
-                std::cerr << "Differences when we encode code via AST and bytecode without recorded calls:"
-                          << std::endl << differences << std::endl;
+                LOG(std::cerr << "Differences when we encode code via AST and "
+                                 "bytecode without recorded calls:"
+                              << std::endl << differences << std::endl);
             }
 
             // No longer need to protect what, and what2 is no longer used
@@ -344,7 +350,7 @@ void CompilerServer::tryRun() {
             break;
         }
         case Request::Retrieve: {
-            std::cerr << "Received retrieve request" << std::endl;
+            LOG(std::cerr << "Received retrieve request" << std::endl);
             LOG_REQUEST("Request::Retrieve");
             // ...
             // + UUID hash
@@ -357,10 +363,10 @@ void CompilerServer::tryRun() {
             what = UUIDPool::get(hash);
 
             // Serialize the response
-            std::cerr << "Retrieve " << hash << " = ";
+            LOG(std::cerr << "Retrieve " << hash << " = ");
             START_LOGGING_RESPONSE();
             if (what) {
-                std::cerr << what << " " << Print::dumpSexp(what) << std::endl;
+                LOG(std::cerr << what << " " << Print::dumpSexp(what) << std::endl);
 
                 // Response data format =
                 //   Response::Retrieved
@@ -370,7 +376,7 @@ void CompilerServer::tryRun() {
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
                 serialize(what, response, SerialOptions::CompilerServer);
             } else {
-                std::cerr << "(not found)" << std::endl;
+                LOG(std::cerr << "(not found)" << std::endl);
                 // Response data format =
                 //   Response::RetrieveFailed
                 LOG_RESPONSE("Response::RetrieveFailed");
@@ -384,9 +390,10 @@ void CompilerServer::tryRun() {
         case Request::Retrieved:
         case Request::RetrieveFailed:
             assert(false);
-        /*default:
-            std::cerr << "Invalid magic: " << (uint64_t)magic << std::endl;
-            continue;*/
+        default:
+            LOG_WARN(std::cerr << "Unhandled magic: " << (uint64_t)magic
+                               << std::endl);
+            continue;
         }
 
         // Memoize the response
@@ -407,13 +414,13 @@ void CompilerServer::tryRun() {
                     "Client didn't receive the full response");
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
 
-        std::cerr << "Sent response (" << responseSize << " bytes)"
-                  << std::endl;
+        LOG(std::cerr << "Sent response (" << responseSize << " bytes)"
+                      << std::endl);
     }
 }
 
 SEXP CompilerServer::retrieve(const rir::UUID& hash) {
-    std::cerr << "Retrieving from client " << hash << std::endl;
+    LOG(std::cerr << "Retrieving from client " << hash << std::endl);
     // Build the server-side request
     // Data format =
     //   Response::NeedsRetrieve
@@ -438,8 +445,8 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
     // Receive the client-side response
     zmq::message_t clientResponse;
     socket->recv(clientResponse, zmq::recv_flags::none);
-    std::cerr << "Got client-side response (" << clientResponse.size()
-              << " bytes)" << std::endl;
+    LOG(std::cerr << "Got client-side response (" << clientResponse.size()
+                  << " bytes)" << std::endl);
 
     // Deserialize the client-side response
     // Data format =
@@ -469,12 +476,13 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
         // ...
         // (no data)
         LOG_CLIENT_RESPONSE("Request::RetrieveFailed");
-        std::cerr << "Client doesn't have the SEXP" << std::endl;
+        LOG(std::cerr << "Client doesn't have the SEXP" << std::endl);
         END_LOGGING_CLIENT_RESPONSE();
         return nullptr;
     default:
-        std::cerr << "Unexpected client request or client-side response ("
-                  << (uint64_t)magic << "). Ignoring" << std::endl;
+        LOG_WARN(std::cerr << "Unexpected client request or client-side "
+                              "response (" << (uint64_t)magic << "). Ignoring"
+                           << std::endl);
         END_LOGGING_CLIENT_RESPONSE();
         return nullptr;
     }

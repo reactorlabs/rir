@@ -24,15 +24,15 @@ bool pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED =
     strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "") != 0 &&
     strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "0") != 0;
 
-bool pir::Parameter::PIR_LOG_COMPILER_CLIENT =
-    getenv("PIR_LOG_COMPILER_CLIENT") != nullptr &&
-    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "") != 0 &&
-    strcmp(getenv("PIR_LOG_COMPILER_CLIENT"), "0") != 0;
+bool pir::Parameter::PIR_LOG_COMPILER_PEER =
+    getenv("PIR_LOG_COMPILER_PEER") != nullptr &&
+    strcmp(getenv("PIR_LOG_COMPILER_PEER"), "") != 0 &&
+    strcmp(getenv("PIR_LOG_COMPILER_PEER"), "0") != 0;
 
-bool pir::Parameter::PIR_WARN_COMPILER_CLIENT =
-    getenv("PIR_WARN_COMPILER_CLIENT") != nullptr &&
-    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "") != 0 &&
-    strcmp(getenv("PIR_WARN_COMPILER_CLIENT"), "0") != 0;
+bool pir::Parameter::PIR_WARN_COMPILER_PEER =
+    getenv("PIR_WARN_COMPILER_PEER") != nullptr &&
+    strcmp(getenv("PIR_WARN_COMPILER_PEER"), "") != 0 &&
+    strcmp(getenv("PIR_WARN_COMPILER_PEER"), "0") != 0;
 
 
 bool pir::Parameter::PIR_MEASURE_CLIENT_SERVER =
