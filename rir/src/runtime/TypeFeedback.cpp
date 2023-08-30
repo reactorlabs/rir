@@ -47,7 +47,8 @@ DeoptReason::DeoptReason(const FeedbackPosition& origin,
     : reason(reason), origin(origin) {}
 
 void DeoptReason::record(SEXP val) const {
-    if (origin.function()->body()->kind == Code::Kind::Deserializing) {
+    if (origin.function()->isDeserializing() ||
+        origin.function()->body()->kind == Code::Kind::Deserializing) {
         // TODO: Is there still a way to record? We probably already have
         //  function in some cases, if so maybe we could set it earlier...
         //  Regardless, the only issue here is we just deopt again

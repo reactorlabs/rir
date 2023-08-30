@@ -29,4 +29,3 @@ grid.show.viewport(viewport(x=0.6, y=0.6,
 ## A flash plotting example
 grid.multipanel(vp=viewport(0.5, 0.5, 0.8, 0.8))
 # R: /opt/rir/rir/src/runtime/TypeFeedback.cpp:146: void rir::TypeFeedback::addConnected(rir::ConnectedCollectorOld&) const: Assertion `false && "Feedback should never be hashed (don't call addConnected)"' failed.
-# Abort (core dumped)
