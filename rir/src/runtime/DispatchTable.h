@@ -4,10 +4,11 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "TypeFeedback.h"
+#include "compilerClientServer/CompilerClient.h"
 #include "runtime/log/RirObjectPrintStyle.h"
 #include "serializeHash/hash/getConnectedOld.h"
 #include "serializeHash/hash/hashRootOld.h"
-#include "TypeFeedback.h"
 #include "utils/ByteBuffer.h"
 #include "utils/random.h"
 #include <ostream>
@@ -102,12 +103,20 @@ struct DispatchTable
     }
 
     bool contains(const Context& assumptions) const {
-        for (size_t i = 0; i < size(); ++i)
-            if (get(i)->context() == assumptions)
-                return !get(i)->disabled();
-        return false;
+        auto i = indexOf(assumptions);
+        return i != SIZE_MAX && !get(i)->disabled();
     }
 
+  private:
+    // Note: Also returns index if disabled
+    size_t indexOf(const Context& assumptions) const {
+        for (size_t i = 0; i < size(); ++i)
+            if (get(i)->context() == assumptions)
+                return i;
+        return SIZE_MAX;
+    }
+
+  public:
     void remove(Code* funCode) {
         size_t i = 1;
         for (; i < size(); ++i) {
@@ -153,7 +162,19 @@ struct DispatchTable
             }
         }
         i++;
-        assert(!contains(fun->context()));
+        if (CompilerClient::isRunning()) {
+            // Not sure if this even happens or is the right approach, but in
+            // theory, since only DT baselines are hashed, the compiler server
+            // could return a DT with an already optimized closure. In this
+            // case, replacing should be ok
+            auto indexOfSameContext = indexOf(fun->context());
+            if (indexOfSameContext != SIZE_MAX) {
+                setEntry(indexOfSameContext, fun->container());
+                return;
+            }
+        } else {
+            assert(!contains(fun->context()));
+        }
         if (size() == capacity()) {
 #ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";

@@ -361,6 +361,11 @@ void Code::addConnected(ConnectedCollectorOld& collector) const {
 }
 
 void Code::disassemble(std::ostream& out, const std::string& prefix) const {
+    if (kind == Kind::Deserializing) {
+        out << "(code is being deserialized)\n";
+        return;
+    }
+
     if (auto map = pirTypeFeedback()) {
         map->forEachSlot(
             [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {

@@ -197,7 +197,7 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     out << (numTargets ? ", " : " ");
 
     for (unsigned i = 0; i < numTargets; ++i) {
-        if (function) {
+        if (function && function->body()->kind != Code::Kind::Deserializing) {
             auto target = getTarget(function, i);
             out << target << "(" << Rf_type2char(TYPEOF(target)) << ") ";
         } else {
