@@ -286,6 +286,7 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
         memcpy(types_, types.data(), types_mem_size);
     }
 }
+
 const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:
