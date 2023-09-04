@@ -2112,6 +2112,7 @@ void LowerFunctionLLVM::compile() {
         stack({container(paramCode())});
         additionalStackSlots++;
     }
+
     {
         SmallSet<std::pair<Value*, SEXP>> bindings;
         Visitor::run(code->entry, [&](Instruction* i) {

@@ -34,41 +34,40 @@ static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
 
+void printStack(int n) {
+    int sz = ostack_length();
+    std::cout << "ostack (length = " << sz << ")\n";
+    if (n > sz)
+        n = sz;
+    for (int i = n; i > 0; i--) {
+        auto cell = ostack_cell_at(i - 1);
+        auto sexp = cell->u.sxpval;
+        std::cout << "* ostack[" << (sz - i) << "] = ";
+        if (cell->tag == 0 && sexp) {
+            std::cout << Print::dumpSexp(sexp, 100);
+        } else {
+            std::cout << "{ tag = " << cell->tag << ", flags = " << cell->flags
+                      << ", u = { ival = " << cell->u.ival
+                      << ", dval = " << cell->u.dval << ", sxpval = " << sexp
+                      << " } }";
+        }
+        std::cout << "\n";
+    }
+    std::cout.flush();
+}
+
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
 #ifdef PRINT_INTERP
 static void printInterp(Opcode* pc, Code* c) {
 #ifdef PRINT_STACK_SIZE
-#define INTSEQSXP 9999
     // Prevent printing instructions (and recursing) while printing stack
     static bool printingStackSize = false;
     if (printingStackSize)
         return;
-
     // Print stack
     printingStackSize = true;
-    std::cout << "#; Stack:\n";
-    for (int i = 0;; i++) {
-        auto typ = ostack_cell_at(i)->tag;
-        SEXP sexp = ostack_at(i);
-        if (sexp == nullptr || ostack_length() - i == 0)
-            break;
-        else if (i == PRINT_STACK_SIZE) {
-            std::cout << "    ...\n";
-            break;
-        }
-        if (typ == 0) {
-            std::cout << "    >>> " << Print::dumpSexp(sexp) << " <<<\n";
-        } else if (typ == INTSXP || typ == LGLSXP) {
-            std::cout << "    int/lgl >>> " << ostack_cell_at(i)->u.ival
-                      << " <<<\n";
-        } else if (typ == REALSXP) {
-            std::cout << "    real >>> " << ostack_cell_at(i)->u.dval
-                      << " <<<\n";
-        } else if (typ == INTSEQSXP) {
-            std::cout << "    intseq >>> " << Print::dumpSexp(sexp) << " <<<\n";
-        }
-    }
+    printStack(PRINT_STACK_SIZE);
     printingStackSize = false;
 #endif
     // Print source
@@ -82,7 +81,6 @@ static void printInterp(Opcode* pc, Code* c) {
     std::cout << "#";
     bc.print(std::cout);
 }
-
 static void printLastop() { std::cout << "> lastop\n"; }
 #endif
 
@@ -276,27 +274,27 @@ static void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
 #pragma GCC diagnostic ignored "-Wcast-align"
 
 SEXP materialize(SEXP wrapper) {
-    SEXP res = nullptr;
-    RCNTXT* cur = (RCNTXT*)R_GlobalContext;
+
     if (auto lazyArgs = LazyArglist::check(wrapper)) {
-        res = lazyArgs->createArglist();
+        auto res = lazyArgs->createArglist();
         // Fixup the contexts chain
-        while (cur) {
+        for (auto cur = (RCNTXT*)R_GlobalContext; cur; cur = cur->nextcontext) {
             if (cur->promargs == wrapper)
                 cur->promargs = res;
-            cur = cur->nextcontext;
         }
-    } else if (auto lazyEnv = LazyEnvironment::check(wrapper)) {
-        assert(!lazyEnv->materialized());
+        return res;
+    }
 
+    if (auto lazyEnv = LazyEnvironment::check(wrapper)) {
+        assert(!lazyEnv->materialized());
         PROTECT(wrapper);
-        SEXP arglist = R_NilValue;
+        auto arglist = R_NilValue;
         auto names = lazyEnv->names;
         for (size_t i = 0; i < lazyEnv->nargs; ++i) {
-            SEXP val = lazyEnv->getArg(i);
+            auto val = lazyEnv->getArg(i);
             if (val == R_UnboundValue)
                 continue;
-            SEXP name = cp_pool_at(names[i]);
+            auto name = cp_pool_at(names[i]);
             if (TYPEOF(name) == LISTSXP)
                 name = CAR(name);
             // cons protects its args if needed
@@ -308,29 +306,29 @@ SEXP materialize(SEXP wrapper) {
                 SET_MISSING(arglist, 2);
         }
         auto parent = lazyEnv->getParent();
-        res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+        auto res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+        PROTECT(res);
         lazyEnv->materialized(res);
         // Make sure wrapper is not collected by the gc (we may still use it to
         // access the materialized env)
         Rf_setAttrib(res, symbol::delayedEnv, wrapper);
         lazyEnv->clear();
         // Fixup the contexts chain
-        while (cur) {
+        for (auto cur = (RCNTXT*)R_GlobalContext; cur; cur = cur->nextcontext) {
             if (cur->cloenv == wrapper)
                 cur->cloenv = res;
             if (cur->sysparent == wrapper)
                 cur->sysparent = res;
-            cur = cur->nextcontext;
         }
         if (LazyEnvironment::check(parent)) {
             parent = materialize(parent);
             SET_ENCLOS(res, parent);
         }
-
-        UNPROTECT(1);
+        UNPROTECT(2);
+        return res;
     }
-    assert(res);
-    return res;
+
+    assert(false);
 }
 
 SEXP materializeCallerEnv(CallContext& callCtx) {
@@ -1590,6 +1588,8 @@ void deoptFramesWithContext(const CallContext* callCtxt,
     if (auto le = LazyEnvironment::check(deoptEnv)) {
         assert(!le->materialized());
         deoptEnv = materialize(deoptEnv);
+        // Still need to set the cloenv because materialize only patches the
+        // context list starting with R_GlobalContext
         cntxt->cloenv = deoptEnv;
     }
     assert(TYPEOF(deoptEnv) == ENVSXP);
