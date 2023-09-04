@@ -76,6 +76,7 @@ class CompilerContext {
         std::stack<LoopContext> loops;
         CodeContext* parent;
         std::unordered_map<SEXP, CacheSlotNumber> loadsSlotInCache;
+        bool inliningPromise = false;
 
         CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : cs(fun, ast), parent(p) {}
@@ -115,7 +116,6 @@ class CompilerContext {
     };
 
     class PromiseContext : public CodeContext {
-
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
             : CodeContext(ast, fun, p) {}
@@ -143,6 +143,9 @@ class CompilerContext {
     ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
+
+    bool inliningPromise() const { return code.top()->inliningPromise; }
+    void setInliningPromise(bool val) { code.top()->inliningPromise = val; }
 
     LoopContext& loop() { return code.top()->loops.top(); }
 
@@ -1052,26 +1055,31 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
             return false;
 
         emitGuardForNamePrimitive(cs, fun);
-        BC::Label trueBranch = cs.mkLabel();
-        BC::Label nextBranch = cs.mkLabel();
+        BC::Label falseBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
-        cs << BC::asbool() << BC::brtrue(trueBranch);
+        cs << BC::asbool() << BC::brfalse(falseBranch);
 
-        if (args.length() < 3) {
-            if (!voidContext) {
-                cs << BC::push(R_NilValue);
-                cs << BC::invisible();
-            }
-        } else {
-            compileExpr(ctx, args[2], voidContext);
-        }
-        cs << BC::br(nextBranch);
-
-        cs << trueBranch;
         compileExpr(ctx, args[1], voidContext);
 
-        cs << nextBranch;
+        if (args.length() == 2 && voidContext) {
+            // No else branch needed
+            cs << falseBranch;
+        } else {
+            BC::Label nextBranch = cs.mkLabel();
+            cs << BC::br(nextBranch) << falseBranch;
+
+            if (args.length() == 3) {
+                // There's an else branch in the code
+                compileExpr(ctx, args[2], voidContext);
+            } else if (!voidContext) {
+                // No else branch in the code but still need the NULL
+                cs << BC::push(R_NilValue) << BC::invisible();
+            }
+
+            cs << nextBranch;
+        }
+
         return true;
     }
 
@@ -1089,6 +1097,21 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         return true;
     }
 
+    if (fun == symbol::Invisible && args.length() < 2) {
+        emitGuardForNamePrimitive(cs, fun);
+
+        if (args.length() == 0) {
+            cs << BC::push(R_NilValue);
+        } else {
+            ctx.setInliningPromise(true);
+            compileExpr(ctx, args[0]);
+            ctx.setInliningPromise(false);
+        }
+
+        cs << BC::invisible();
+        return true;
+    }
+
     if (fun == symbol::Return && args.length() < 2) {
         emitGuardForNamePrimitive(cs, fun);
 
@@ -1097,7 +1120,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
         else
             compileExpr(ctx, args[0]);
 
-        if (ctx.inLoop() || ctx.isInPromise())
+        if (ctx.inLoop() || ctx.isInPromise() || ctx.inliningPromise())
             cs << BC::return_();
         else
             cs << BC::ret();
@@ -1366,7 +1389,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopNext()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopNext());
             return true;
         }
     }
@@ -1381,7 +1404,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
         if (ctx.loopIsLocal()) {
             emitGuardForNamePrimitive(cs, fun);
-            cs << BC::br(ctx.loopBreak()) << BC::push(R_NilValue);
+            cs << BC::br(ctx.loopBreak());
             return true;
         }
     }
@@ -1748,12 +1771,14 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
     }
 
     if (arg_type == ArgType::RAW_VALUE) {
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         return;
     }
 
     // Constant arguments do not need to be promise wrapped
-    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS)
+    if (arg_type != ArgType::EAGER_PROMISE_FROM_TOS) {
         switch (TYPEOF(CAR(arg))) {
         case LANGSXP:
         case SYMSXP:
@@ -1771,21 +1796,26 @@ static void compileLoadOneArg(CompilerContext& ctx, SEXP arg, ArgType arg_type,
             cs << BC::push(eager);
             return;
         }
+    }
 
     Code* prom;
     if (arg_type == ArgType::EAGER_PROMISE) {
         // Compile the expression to evaluate it eagerly, and
         // wrap the return value in a promise without rir code
+        ctx.setInliningPromise(true);
         compileExpr(ctx, CAR(arg), false);
+        ctx.setInliningPromise(false);
         prom = compilePromiseNoRir(ctx, CAR(arg));
     } else if (arg_type == ArgType::EAGER_PROMISE_FROM_TOS) {
         // The value we want to wrap in the argument's promise is
-        // already on TOS, no nead to compile the expression.
+        // already on TOS, no need to compile the expression.
         // Wrap it in a promise without rir code.
         prom = compilePromiseNoRir(ctx, CAR(arg));
-    } else { // ArgType::PROMISE
+    } else if (arg_type == ArgType::PROMISE) {
         // Compile the expression as a promise.
         prom = compilePromise(ctx, CAR(arg));
+    } else {
+        assert(false);
     }
 
     size_t idx = cs.addPromise(prom);
@@ -1996,7 +2026,8 @@ void compileExpr(CompilerContext& ctx, SEXP exp, bool voidContext) {
 Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
-    ctx.cs() << BC::ret();
+    if (!ctx.cs().isNextPosUnreachable())
+        ctx.cs() << BC::ret();
     return ctx.pop();
 }
 
@@ -2050,7 +2081,8 @@ SEXP Compiler::finalize() {
     scanNames(exp);
 
     compileExpr(ctx, exp);
-    ctx.cs() << BC::ret();
+    if (!ctx.cs().isNextPosUnreachable())
+        ctx.cs() << BC::ret();
     Code* body = ctx.pop();
     function.finalize(body, signature, Context());
 
