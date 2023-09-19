@@ -214,8 +214,8 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
                 auto i = Instruction::Cast(*p);
                 p++;
                 if (i && i != firstInstr) {
-                    if (i->bb() != firstInstr->bb())
-                        changed = true;
+                    // if (i->bb() != firstInstr->bb())
+                    //     changed = true;
                     if (!firstInstr->type.isA(i->type))
                         continue;
                     if (i->bb() == firstInstr->bb()) {
@@ -260,7 +260,12 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
                             continue;
                         }
                     }
-                    i->replaceUsesWith(firstInstr);
+                    i->replaceUsesWith(
+                        firstInstr,
+                        [&](Instruction*, size_t) { changed = true; },
+                        [&](Instruction*) { return true; }
+
+                    );
                     // Make sure this instruction really gets removed
                     i->effects.reset();
                 }

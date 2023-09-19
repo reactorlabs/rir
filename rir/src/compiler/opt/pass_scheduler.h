@@ -30,22 +30,37 @@ class PassScheduler {
 
     void run(const std::function<bool(const Pass*, size_t)>& apply) const {
         for (auto& phase : schedule_.phases) {
+            // std::cerr << phase.name << " - size:  " << phase.passes.size() <<
+            // " NEW PHASE!!
+            // ----------------------------------------------------------------"
+            // << "\n";
             auto budget = phase.budget;
             bool changed = false;
             int iteration = 0;
+
             do {
                 changed = false;
+
+                // first element phase.passes  is always a PhaseMarker
                 for (auto& pass : phase.passes) {
-                    if (!phase.once) {
-                        if (budget < pass->cost()) {
-                            budget = 0;
-                            break;
-                        }
-                        budget -= pass->cost();
+                    if (pass->isPhaseMarker()) {
+                        // std::cerr << "-------------- new iter started!
+                        // -------------- \n";
                     }
-                    if (apply(pass.get(), iteration)) {
+                    if (!phase.once) {
+                        // if (budget < pass->cost()) {
+                        //     budget = 0;
+                        //     break;
+                        // }
+                        // budget -= pass->cost();
+                    }
+
+                    bool applyRes = apply(pass.get(), iteration);
+                    if (applyRes) {
                         changed = true;
                     }
+                    // std::cerr << "PASS: " << pass->getName() << " - res: " <<
+                    // applyRes << " - iter: " << iteration << "\n";
                 }
                 iteration++;
             } while (changed && budget && !phase.once);
