@@ -1003,10 +1003,21 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->function()->invocationCount() > 0 &&
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
-                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize <
+                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE) {
+                        if (fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
-                        call.triggerOsr = true;
+                            // std::cerr << "***** CODE SIZE "
+                            //           << fun->body()->codeSize << " < "
+                            //           << pir::Parameter::PIR_OPT_BC_SIZE
+                            //           << "\n";
+                            call.triggerOsr = true;
+                        } else {
+                            // std::cerr
+                            //     << "!!!!! CODE SIZE " <<
+                            //     fun->body()->codeSize
+                            //     << " >= " << pir::Parameter::PIR_OPT_BC_SIZE
+                            //     << "\n";
+                        }
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
                     fun = dispatch(call, table);

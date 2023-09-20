@@ -70,15 +70,16 @@ inline bool RecompileHeuristic(Function* fun,
     auto abandon =
         funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
 
-    auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
-                                 : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        fun->clearInvocationTime();
-        return !abandon;
-    }
+    // auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
+    //                              : pir::Parameter::PIR_OPT_TIME;
+    // if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
+    //     fun->clearInvocationTime();
+    //     return !abandon;
+    // }
 
     if (fun->isOptimized())
-        return false;
+        return !abandon;
+
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0)
         return !abandon;
