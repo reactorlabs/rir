@@ -43,10 +43,10 @@ class PassScheduler {
 
                 // first element phase.passes  is always a PhaseMarker
                 for (auto& pass : phase.passes) {
-                    if (pass->isPhaseMarker()) {
-                        // std::cerr << "-------------- new iter started!
-                        // -------------- \n";
-                    }
+                    // if (pass->isPhaseMarker()) {
+                    //     std::cerr << "-------------- new iter started!
+                    //     -------------- \n";
+                    // }
                     if (!phase.once) {
                         // if (budget < pass->cost()) {
                         //     budget = 0;
@@ -59,10 +59,18 @@ class PassScheduler {
                     if (applyRes) {
                         changed = true;
                     }
-                    // std::cerr << "PASS: " << pass->getName() << " - res: " <<
-                    // applyRes << " - iter: " << iteration << "\n";
+
+                    if (iteration >= 50) {
+                        std::cerr << "PASS: " << pass->getName()
+                                  << " - res: " << applyRes
+                                  << " - iter: " << iteration
+                                  << (applyRes ? " *****" : "") << "\n";
+                    }
                 }
                 iteration++;
+                // if (iteration >= 20) {
+                //     assert(false);
+                // }
             } while (changed && budget && !phase.once);
         }
     }

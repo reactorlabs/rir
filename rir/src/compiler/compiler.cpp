@@ -366,11 +366,8 @@ void Compiler::optimizeModule() {
                                       size_t iteration) {
         auto newIterStarted = translation->isPhaseMarker();
 
-        // if (newIterStarted)
-        //     std::cerr << "NEW ITERATION! **********************************"
-        //     <<   "\n";
         // std::cerr << translation->getName() <<  " - iteration: " << iteration
-        // << "\n";
+        // // << "\n";
         bool changed = false;
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
@@ -383,13 +380,13 @@ void Compiler::optimizeModule() {
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 // if (!versionTracked) {
-                // std::cerr << "******************STARTING TRACE for version "
-                // << v << "******************** \n"; versionTracked =v;
-                //}
+                //     std::cerr << "******************STARTING TRACE for
+                //     version " << v << "******************** \n";
+                //     versionTracked =v;
+                // }
 
                 if (newIterStarted && iteration == 0) {
                     v->anyChange = false;
-                    // v->anyChangeCurrentIter = false;
 
                 } else if (newIterStarted && iteration > 0) {
                     v->anyChange = v->anyChangeCurrentIter;
@@ -412,19 +409,19 @@ void Compiler::optimizeModule() {
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
                     // if (v == versionTracked) {
-                    // std::cerr << "apply " << translation->getName() << " -
-                    // resApply: " << (resApply? "TRUE *******" : "FALSE") << "
-                    // - iter: " << iteration << "\n";
-                    //}
+                    //     std::cerr << "apply " << translation->getName() << "
+                    //     - resApply: " << (resApply? "TRUE *******" : "FALSE")
+                    //     << " - iter: " << iteration << "\n";
+                    // }
                     v->anyChangeCurrentIter |= resApply;
                     if (resApply)
                         changed = true;
                 } else {
 
                     // if (v == versionTracked) {
-                    // std::cerr << "skipping " << translation->getName() << " -
-                    // iter: " << iteration << "\n";
-                    //}
+                    //     std::cerr << "skipping " << translation->getName() <<
+                    //     " - iter: " << iteration << "\n";
+                    // }
                 }
 
                 if (MEASURE_COMPILER_PERF)
