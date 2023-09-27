@@ -6,6 +6,7 @@
 
 #include "pass.h"
 
+#include <fstream>
 namespace rir {
 namespace pir {
 
@@ -29,11 +30,25 @@ class PassScheduler {
     const static PassScheduler& quick();
 
     void run(const std::function<bool(const Pass*, size_t)>& apply) const {
+        // static int invk = 0;
+
+        // std::ostream& ost = std::cerr;
+
+        // std::ofstream ost;
+        // ost.open("iters.txt", std::ios_base::app); // append instead of
+        // overwrite
+
+        // ost <<  " NEW scheduler run !!
+        // ---------------------------------------------------------------******************************"
+        // << invk   << "\n"; invk++;
+
         for (auto& phase : schedule_.phases) {
-            // std::cerr << phase.name << " - size:  " << phase.passes.size() <<
-            // " NEW PHASE!!
-            // ----------------------------------------------------------------"
+
+            // ost << phase.name << " - size:  " << phase.passes.size() <<  "
+            // NEW PHASE!!
+            // ---------------------------------------------------------------"
             // << "\n";
+
             auto budget = phase.budget;
             bool changed = false;
             int iteration = 0;
@@ -44,8 +59,8 @@ class PassScheduler {
                 // first element phase.passes  is always a PhaseMarker
                 for (auto& pass : phase.passes) {
                     // if (pass->isPhaseMarker()) {
-                    //     std::cerr << "-------------- new iter started!
-                    //     -------------- \n";
+                    //     ost << "-------------- new iter started!
+                    //     -------------- " << iteration << " \n";
                     // }
                     if (!phase.once) {
                         // if (budget < pass->cost()) {
@@ -60,17 +75,20 @@ class PassScheduler {
                         changed = true;
                     }
 
-                    if (iteration >= 50) {
-                        std::cerr << "PASS: " << pass->getName()
-                                  << " - res: " << applyRes
-                                  << " - iter: " << iteration
-                                  << (applyRes ? " *****" : "") << "\n";
-                    }
+                    // if (iteration >= 20) {
+                    // ost << "invk:" << invk <<" - " << phase.name << " - PASS:
+                    // " << pass->getName()
+                    //           << " - res: " << applyRes
+                    //           << " - iter: " << iteration
+                    //           << (applyRes ? " *****" : "") << "\n";
+
+                    // ost.flush();
+                    //}
                 }
                 iteration++;
-                // if (iteration >= 20) {
-                //     assert(false);
-                // }
+                if (iteration >= 100) {
+                    assert(false && "more than 100 iterations!");
+                }
             } while (changed && budget && !phase.once);
         }
     }

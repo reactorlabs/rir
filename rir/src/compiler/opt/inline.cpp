@@ -46,6 +46,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             Closure* inlineeCls = nullptr;
             ClosureVersion* inlinee = nullptr;
             Value* staticEnv = nullptr;
+            std::function<void()> rollBack = [&]() {};
 
             bool hasDotslistArg = false;
             const FrameState* callerFrameState = nullptr;
@@ -101,6 +102,10 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         it = bb->insert(it, e);
                         it++;
                         staticEnv = e;
+                        rollBack = [&]() {
+                            it--;
+                            it = bb->remove(it);
+                        };
                     } else {
                         continue;
                     }
@@ -218,14 +223,17 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 (callerFrameState &&
                  callerFrameState->code ==
                      inlinee->owner()->rirFunction()->body())) {
+                rollBack();
                 continue;
             } else if (weight > Parameter::INLINER_MAX_INLINEE_SIZE) {
                 if (!inlineeCls->rirFunction()->flags.contains(
                         rir::Function::ForceInline) &&
                     inlinee->numNonDeoptInstrs() >
-                        Parameter::INLINER_MAX_INLINEE_SIZE * 4)
+                        Parameter::INLINER_MAX_INLINEE_SIZE * 4) {
                     inlineeCls->rirFunction()->flags.set(
                         rir::Function::NotInlineable);
+                }
+                rollBack();
                 continue;
             } else {
                 updateAllowInline(inlinee);
@@ -233,6 +241,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (allowInline == SafeToInline::No) {
                     inlineeCls->rirFunction()->flags.set(
                         rir::Function::NotInlineable);
+                    rollBack();
                     continue;
                 }
             }
