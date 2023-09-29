@@ -63,8 +63,6 @@ inline bool RecompileHeuristic(Function* fun,
         return true;
     if (flags.contains(Function::NotOptimizable))
         return false;
-    if (fun->isOptimized())
-        return false;
 
     if (!funMaybeDisabled)
         funMaybeDisabled = fun;
@@ -79,12 +77,21 @@ inline bool RecompileHeuristic(Function* fun,
     //     return !abandon;
     // }
 
+    // if (fun->isOptimized())
+    //     return false;
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0)
         return !abandon;
 
     if (fun->invocationCount() == wu)
         return !abandon;
+
+    if (fun->invocationCount() > wu) {
+        auto current = fun->dispatchTable()->currentTypeFeedbackVersion();
+        if (current > funMaybeDisabled->typeFeedback()->version()) {
+            return true;
+        }
+    }
 
     return false;
 }

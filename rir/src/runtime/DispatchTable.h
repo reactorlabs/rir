@@ -134,6 +134,7 @@ struct DispatchTable
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
             if (old->context() == assumptions) {
+                // FIXME: it will always be > 0, right?
                 if (i != 0) {
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
@@ -141,7 +142,7 @@ struct DispatchTable
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }
-                old->dispatchTable(nullptr);
+                // old->dispatchTable(nullptr);
                 return;
             }
             if (!(assumptions < get(i)->context())) {
@@ -279,6 +280,10 @@ struct DispatchTable
                 pc = bc.next(pc);
             }
         }
+    }
+
+    size_t currentTypeFeedbackVersion() {
+        return baseline()->typeFeedback()->version();
     }
 
   private:

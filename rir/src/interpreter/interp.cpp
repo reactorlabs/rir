@@ -1003,21 +1003,10 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->function()->invocationCount() > 0 &&
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
-                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE) {
-                        if (fun->body()->codeSize <
+                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
+                        fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
-                            // std::cerr << "***** CODE SIZE "
-                            //           << fun->body()->codeSize << " < "
-                            //           << pir::Parameter::PIR_OPT_BC_SIZE
-                            //           << "\n";
-                            call.triggerOsr = true;
-                        } else {
-                            // std::cerr
-                            //     << "!!!!! CODE SIZE " <<
-                            //     fun->body()->codeSize
-                            //     << " >= " << pir::Parameter::PIR_OPT_BC_SIZE
-                            //     << "\n";
-                        }
+                        call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
                     fun = dispatch(call, table);
@@ -2010,10 +1999,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        ObservedValues& feedback =
-            c->function()->typeFeedback()->types(*(Immediate*)(pc + 1));
-        if (feedback.stateBeforeLastForce < state)
-            feedback.stateBeforeLastForce = state;
+        auto idx = *(Immediate*)(pc + 1);
+        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
+            if (feedback.stateBeforeLastForce < state) {
+                feedback.stateBeforeLastForce = state;
+            }
+        });
     };
 
     // TODO: move above
@@ -2328,7 +2319,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
-            typeFeedback->callees(idx).record(function, callee);
+            typeFeedback->record_callee(idx, function, callee);
             NEXT();
         }
 
@@ -2336,7 +2327,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->test(idx).record(t);
+            typeFeedback->record_test(idx, t);
             NEXT();
         }
 
@@ -2344,7 +2335,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->types(idx).record(t);
+            typeFeedback->record_type(idx, t);
             NEXT();
         }
 

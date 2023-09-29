@@ -4,10 +4,12 @@
 #include "R/r.h"
 #include "Rinternals.h"
 #include "common.h"
+#include "interpreter/profiler.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -79,6 +81,8 @@ static_assert(sizeof(FeedbackIndex) == sizeof(uint32_t),
 #pragma pack(1)
 
 struct ObservedCallees {
+    friend TypeFeedback;
+
     static constexpr unsigned CounterBits = 29;
     static constexpr unsigned CounterOverflow = (1 << CounterBits) - 1;
     static constexpr unsigned TargetBits = 2;
@@ -94,10 +98,12 @@ struct ObservedCallees {
     uint32_t invalid : 1;
     std::array<unsigned, MaxTargets> targets;
 
-    void record(Function* function, SEXP callee,
-                bool invalidateWhenFull = false);
     SEXP getTarget(const Function* function, size_t pos) const;
     void print(std::ostream& out, const Function* function) const;
+
+  private:
+    bool record(Function* function, SEXP callee,
+                bool invalidateWhenFull = false);
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
@@ -110,36 +116,44 @@ inline bool fastVeceltOk(SEXP vec) {
 }
 
 struct ObservedTest {
+    friend TypeFeedback;
+
     enum { None, OnlyTrue, OnlyFalse, Both };
     uint32_t seen : 2;
     uint32_t unused : 30;
 
     ObservedTest() : seen(0), unused(0) {}
 
-    inline void record(const SEXP e) {
+    void print(std::ostream& out) const;
+
+  private:
+    inline bool record(const SEXP e) {
+        uint32_t old;
+        memcpy(&old, this, sizeof(ObservedTest));
+
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
             else if (seen != OnlyTrue)
                 seen = Both;
-            return;
-        }
-        if (e == R_FalseValue) {
+        } else if (e == R_FalseValue) {
             if (seen == None)
                 seen = OnlyFalse;
             else if (seen != OnlyFalse)
                 seen = Both;
-            return;
+        } else {
+            seen = Both;
         }
-        seen = Both;
-    }
 
-    void print(std::ostream& out) const;
+        return memcmp(&old, this, sizeof(ObservedTest));
+    }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {
+    friend TypeFeedback;
+    friend RuntimeProfiler;
 
     enum StateBeforeLastForce {
         unknown,
@@ -167,7 +181,10 @@ struct ObservedValues {
 
     void print(std::ostream& out) const;
 
-    inline void record(SEXP e) {
+  private:
+    inline bool record(SEXP e) {
+        uint32_t old;
+        memcpy(&old, this, sizeof(ObservedValues));
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -193,6 +210,21 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
+
+        // FIXME: is this correct, originally it was only in DeoptReason::record
+        // if (TYPEOF(e) == PROMSXP) {
+        //     if (PRVALUE(e) == R_UnboundValue &&
+        //         stateBeforeLastForce < ObservedValues::promise)
+        //         stateBeforeLastForce = ObservedValues::promise;
+        //     else if (stateBeforeLastForce < ObservedValues::evaluatedPromise)
+        //         stateBeforeLastForce = ObservedValues::evaluatedPromise;
+        // } else {
+        //     // FIXME: this was in recordTypeFeedbackImpl
+        //     if (stateBeforeLastForce < ObservedValues::value)
+        //         stateBeforeLastForce = ObservedValues::value;
+        // }
+
+        return memcmp(&old, this, sizeof(ObservedValues));
     }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
@@ -293,6 +325,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
     friend Function;
 
+    size_t version_;
     Function* owner_;
     size_t callees_size_;
     size_t tests_size_;
@@ -333,6 +366,36 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
+    void record_callee(uint32_t idx, Function* function, SEXP callee,
+                       bool invalidateWhenFull = false) {
+        if (callees(idx).record(function, callee, invalidateWhenFull)) {
+            version_++;
+        }
+    }
+
+    void record_test(uint32_t idx, const SEXP e) {
+        if (test(idx).record(e)) {
+            version_++;
+        }
+    }
+
+    void record_type(uint32_t idx, const SEXP e) {
+        if (types(idx).record(e)) {
+            version_++;
+        }
+    }
+
+    void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
+        ObservedValues& slot = types(idx);
+        uint32_t o, n;
+        memcpy(&o, &slot, sizeof(ObservedValues));
+        f(slot);
+        memcpy(&n, &slot, sizeof(ObservedValues));
+        if (memcmp(&o, &n, sizeof(ObservedValues))) {
+            version_++;
+        }
+    }
+
     void print(std::ostream& out) const;
 
     void serialize(SEXP refTable, R_outpstream_t out) const;
@@ -340,6 +403,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     bool isValid(const FeedbackIndex& index) const;
 
     Function* owner() const { return owner_; }
+
+    size_t version() const { return version_; }
+    void version(size_t version) { version_ = version; }
 };
 
 #pragma pack(pop)

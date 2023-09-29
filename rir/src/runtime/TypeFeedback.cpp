@@ -12,7 +12,7 @@
 
 namespace rir {
 
-void ObservedCallees::record(Function* function, SEXP callee,
+bool ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
@@ -26,11 +26,15 @@ void ObservedCallees::record(Function* function, SEXP callee,
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
+            return true;
         }
     } else {
-        if (invalidateWhenFull)
+        if (invalidateWhenFull) {
             invalid = true;
+            return true;
+        }
     }
+    return false;
 }
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
@@ -61,17 +65,19 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback()->types(origin.idx());
-        feedback.record(val);
-        if (TYPEOF(val) == PROMSXP) {
-            if (PRVALUE(val) == R_UnboundValue &&
-                feedback.stateBeforeLastForce < ObservedValues::promise)
-                feedback.stateBeforeLastForce = ObservedValues::promise;
-            else if (feedback.stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
-                feedback.stateBeforeLastForce =
-                    ObservedValues::evaluatedPromise;
-        }
+        auto feedback = origin.function()->typeFeedback();
+        feedback->record_type(origin.idx(), val);
+        feedback->record_type(origin.idx(), [&](auto& slot) {
+            if (TYPEOF(val) == PROMSXP) {
+                if (PRVALUE(val) == R_UnboundValue &&
+                    slot.stateBeforeLastForce < ObservedValues::promise)
+                    slot.stateBeforeLastForce = ObservedValues::promise;
+                else if (slot.stateBeforeLastForce <
+                         ObservedValues::evaluatedPromise)
+                    slot.stateBeforeLastForce =
+                        ObservedValues::evaluatedPromise;
+            }
+        });
         break;
     }
     case DeoptReason::DeadCall:
@@ -79,10 +85,8 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback =
-            origin.function()->typeFeedback()->callees(origin.idx());
-        feedback.record(origin.function(), val, true);
-        assert(feedback.taken > 0);
+        auto feedback = origin.function()->typeFeedback();
+        feedback->record_callee(origin.idx(), origin.function(), val, true);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
@@ -263,8 +267,9 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
                            const std::vector<ObservedValues>& types)
-    : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
-      tests_size_(tests.size()), types_size_(types.size()) {
+    : RirRuntimeObject(0, 0), version_(0), owner_(nullptr),
+      callees_size_(callees.size()), tests_size_(tests.size()),
+      types_size_(types.size()) {
 
     size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
     size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);
@@ -286,7 +291,6 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
         memcpy(types_, types.data(), types_mem_size);
     }
 }
-
 const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:

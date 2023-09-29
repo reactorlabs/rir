@@ -405,9 +405,14 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     }
 
     log.finalPIR();
+
     // the type feedback is only used at the baseline
-    function.finalize(body, signature, cls->context(),
-                      rir::TypeFeedback::empty());
+    // here we only set the current version used to compile this function
+    auto feedback = rir::TypeFeedback::empty();
+    feedback->version(
+        cls->optFunction->dispatchTable()->currentTypeFeedbackVersion());
+
+    function.finalize(body, signature, cls->context(), feedback);
     for (auto& c : done)
         c.second->function(function.function());
 

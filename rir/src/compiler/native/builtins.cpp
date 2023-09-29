@@ -957,26 +957,26 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
 void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
                             SEXP value) {
-    auto& slot = feedback->types(idx);
-    slot.record(value);
-
-    if (TYPEOF(value) == PROMSXP) {
-        if (PRVALUE(value) == R_UnboundValue &&
-            slot.stateBeforeLastForce < ObservedValues::promise) {
-            slot.stateBeforeLastForce = ObservedValues::promise;
-        } else if (slot.stateBeforeLastForce <
-                   ObservedValues::evaluatedPromise) {
-            slot.stateBeforeLastForce = ObservedValues::evaluatedPromise;
+    feedback->record_type(idx, value);
+    feedback->record_type(idx, [&](auto& slot) {
+        if (TYPEOF(value) == PROMSXP) {
+            if (PRVALUE(value) == R_UnboundValue &&
+                slot.stateBeforeLastForce < ObservedValues::promise) {
+                slot.stateBeforeLastForce = ObservedValues::promise;
+            } else if (slot.stateBeforeLastForce <
+                       ObservedValues::evaluatedPromise) {
+                slot.stateBeforeLastForce = ObservedValues::evaluatedPromise;
+            }
+        } else {
+            if (slot.stateBeforeLastForce < ObservedValues::value)
+                slot.stateBeforeLastForce = ObservedValues::value;
         }
-    } else {
-        if (slot.stateBeforeLastForce < ObservedValues::value)
-            slot.stateBeforeLastForce = ObservedValues::value;
-    }
+    });
 }
 
 void recordCallFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
                             SEXP value) {
-    feedback->callees(idx).record(feedback->owner(), value);
+    feedback->record_callee(idx, feedback->owner(), value);
 }
 
 void assertFailImpl(const char* msg) {
