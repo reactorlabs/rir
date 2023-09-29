@@ -129,6 +129,7 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     for (size_t i = 0; i < types_size_; i++) {
         OutBytes(out, types_ + i, sizeof(ObservedValues));
     }
+    OutInteger(out, version_);
 }
 
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
@@ -159,7 +160,10 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
         types.push_back(std::move(tmp));
     }
 
-    return TypeFeedback::create(callees, tests, types);
+    auto res = TypeFeedback::create(callees, tests, types);
+    res->version_ = InInteger(inp);
+
+    return res;
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {

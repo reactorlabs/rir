@@ -208,8 +208,9 @@ struct DispatchTable
         AddReadRef(refTable, table->container());
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,
-                            Function::deserialize(refTable, inp)->container());
+            auto fun = Function::deserialize(refTable, inp);
+            fun->dispatchTable(table);
+            table->setEntry(i, fun->container());
         }
         UNPROTECT(1);
         return table;
