@@ -17,6 +17,7 @@
 
 namespace rir {
 
+#define COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK && COMPILER_CLIENT_SEND_FULL
 
 #define SOFT_ASSERT(x, msg) do {                                               \
     if (!(x)) {                                                                \
@@ -206,16 +207,21 @@ void CompilerServer::tryRun() {
         }
 
         // Handle other request types
-        SEXP what = nullptr;
+        SEXP what;
         ByteBuffer response;
         switch (magic) {
         case Request::Compile: {
             LOG(std::cerr << "Received compile request" << std::endl);
             LOG_REQUEST("Request::Compile");
             // ...
-            // + serialize(what, CompilerClientSourceAndFeedback)
-#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
+#if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
             // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+            // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
+            // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClientFeedback)
+            // + DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->referencedPoolEntries()
+#endif
+#if COMPILER_CLIENT_SEND_FULL
+            // + serialize(what, CompilerClientSourceAndFeedback)
 #endif
             // + sizeof(assumptions) (always 8)
             // + assumptions
@@ -236,15 +242,37 @@ void CompilerServer::tryRun() {
             // record_call_ SEXPs, because those are very large and we can
             // handle the case where they are forgotten by just not speculating
             // on them.
-            what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
-            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
-#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
+#if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
+            what = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
+            SOFT_ASSERT(TYPEOF(what) == CLOSXP,
+                        "deserialized source closure to compile isn't actually a closure");
             PROTECT(what);
-            auto what2 = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
+            Compiler::compileClosure(what);
+            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSource)");
+            DispatchTable::unpack(BODY(what))->baseline()->deserializeFullSignature(requestBuffer);
+            LOG_REQUEST("baseline->fullSignature");
+            auto feedback = deserialize(requestBuffer, SerialOptions::CompilerClientFeedback);
+            SOFT_ASSERT(TypeFeedback::check(feedback),
+                        "deserialized type feedback isn't actually type feedback");
+            DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
+            LOG_REQUEST("serialize(" << feedback << ", CompilerClientFeedback)");
+            auto referencedPoolEntries = TypeFeedback::ReferencedPoolEntries::deserialize(requestBuffer);
+            TypeFeedback::unpack(feedback)->setReferencedPoolEntries(referencedPoolEntries);
+            LOG_REQUEST("feedback->referencedPoolEntries()");
+            UNPROTECT(1);
+#endif
+#if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL
+            auto what2 = what;
             PROTECT(what2);
-            Compiler::compileClosure(what2);
-            LOG_REQUEST("* serialize(Compiler::decompileClosure(" << Print::dumpSexp(what2) << "), CompilerClientSource)");
-
+#endif
+#if COMPILER_CLIENT_SEND_FULL
+            what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
+            SOFT_ASSERT(TYPEOF(what) == CLOSXP && DispatchTable::check(BODY(what)),
+                        "deserialized rir closure to compile isn't actually a rir closure");
+            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
+#endif
+#if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL
+            PROTECT(what);
             std::stringstream differencesStream;
             DispatchTable::debugCompare(
                 DispatchTable::unpack(BODY(what)),
@@ -254,9 +282,9 @@ void CompilerServer::tryRun() {
             );
             auto differences = differencesStream.str();
             if (!differences.empty()) {
-                LOG(std::cerr << "Differences when we encode code via AST and "
-                                 "bytecode without recorded calls:"
-                              << std::endl << differences << std::endl);
+                LOG_WARN(std::cerr << "Differences when we encode code via AST "
+                                      "and bytecode without recorded calls:"
+                                   << std::endl << differences << std::endl);
             }
 
             // No longer need to protect what, and what2 is no longer used

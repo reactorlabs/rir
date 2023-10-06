@@ -97,6 +97,9 @@ class Compiler {
         SET_BODY(inClosure, dt->container());
     }
 
+    // TODO: Move the 2 functions below (or at least the second one) to
+    //  DispatchTable or somewhere else?
+
     /// Takes a closure with a RIR body and returns a copy with same formals and
     /// environment, but decompiled (AST) body
     static SEXP decompileClosure(SEXP closure) {

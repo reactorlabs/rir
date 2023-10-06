@@ -237,7 +237,7 @@ struct DispatchTable
     /// not, will add each difference to differences.
     static void debugCompare(const DispatchTable* dt1, const DispatchTable* dt2,
                              std::stringstream& differences,
-                             bool compareFeedbackAndExtraPoolRBytecodes = true);
+                             bool compareExtraPoolRBytecodes = true);
 
 
     Context userDefinedContext() const { return userDefinedContext_; }

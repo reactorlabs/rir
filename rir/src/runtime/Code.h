@@ -246,7 +246,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     /// (the code type, either body or default arg).
     static void debugCompare(const Code* c1, const Code* c2, const char* prefix,
                              std::stringstream& differences,
-                             bool compareFeedbackAndExtraPoolRBytecodes = true);
+                             bool compareExtraPoolRBytecodes = true);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

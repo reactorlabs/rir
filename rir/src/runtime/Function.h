@@ -93,6 +93,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
     }
 
+    /// "Full signature" include context, flags, and invocation info
+    void serializeFullSignature(ByteBuffer& buf) const;
+    /// "Full signature" include context, flags, and invocation info
+    void deserializeFullSignature(ByteBuffer& buf);
     static Function* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
     void hash(HasherOld& hasher) const;
@@ -105,7 +109,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     /// not, will add each difference to differences.
     static void debugCompare(const Function* f1, const Function* f2,
                              std::stringstream& differences,
-                             bool compareFeedbackAndExtraPoolRBytecodes = true);
+                             bool compareExtraPoolRBytecodes = true);
 
     bool isOptimized() const {
         return signature_.optimization !=

@@ -334,6 +334,27 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
+    /// Vector of entries in the function body extra pool that are referenced by
+    /// this TypeFeedback.
+    class ReferencedPoolEntries {
+        std::vector<SEXP> entries;
+
+        explicit ReferencedPoolEntries(std::vector<SEXP>&& entries) : entries(entries) {}
+        friend class TypeFeedback;
+
+      public:
+        static ReferencedPoolEntries deserialize(ByteBuffer& buffer);
+        void serialize(ByteBuffer& buffer) const;
+    };
+
+    /// Get vector of entries in the function body extra pool that are
+    /// referenced by this TypeFeedback.
+    ReferencedPoolEntries referencedPoolEntries() const;
+    /// Add the pool entries to the function body extra pool at their respective
+    /// indices. Raises an assertion failure if an entry already exists at any
+    /// index where we try to add one.
+    void setReferencedPoolEntries(ReferencedPoolEntries& referencedPoolEntries) const;
+
     void print(std::ostream& out) const;
 
     static TypeFeedback* deserialize(AbstractDeserializer& deserializer);

@@ -336,9 +336,14 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
             [=](ByteBuffer& request) {
                 // Request data format =
                 //   Request::Compile
-                // + serialize(what, CompilerClientSourceAndFeedback)
-#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
+#if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
                 // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+                // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
+                // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClientFeedback)
+                // + DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->referencedPoolEntries()
+#endif
+#if COMPILER_CLIENT_SEND_FULL
+                // + serialize(what, CompilerClientSourceAndFeedback)
 #endif
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
@@ -355,11 +360,21 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 START_LOGGING_REQUEST();
                 LOG_REQUEST("Request::Compile");
                 request.putLong((uint64_t)Request::Compile);
+#if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
+                LOG_REQUEST("serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClientSource)");
+                serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClientSource);
+                auto baseline = DispatchTable::unpack(BODY(what))->baseline();
+                LOG_REQUEST("baseline->fullSignature");
+                baseline->serializeFullSignature(request);
+                auto feedback = baseline->typeFeedback();
+                LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClientFeedback)");
+                serialize(feedback->container(), request, SerialOptions::CompilerClientFeedback);
+                LOG_REQUEST("feedback->referencedPoolEntries()");
+                feedback->referencedPoolEntries().serialize(request);
+#endif
+#if COMPILER_CLIENT_SEND_FULL
                 LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
                 serialize(what, request, SerialOptions::CompilerClientSourceAndFeedback);
-#if COMPARE_COMPILER_CLIENT_SENT_BYTECODE_WITH_SOURCE
-                LOG_REQUEST("* serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClientSource)");
-                serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClientSource);
 #endif
                 LOG_REQUEST("assumptions = " << assumptions);
                 request.putLong(sizeof(Context));

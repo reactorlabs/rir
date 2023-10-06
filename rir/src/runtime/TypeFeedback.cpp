@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "runtime/Code.h"
 #include "runtime/Function.h"
+#include "serializeHash/hash/UUIDPool.h"
 
 #include <cassert>
 #include <ostream>
@@ -156,12 +157,80 @@ void TypeFeedback::addConnected(
 }
 
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
+    assert(idx < this->callees_size_ && "Out of bounds callee access");
     return this->callees_[idx];
 }
 
-ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
+ObservedTest& TypeFeedback::test(uint32_t idx) {
+    assert(idx < this->tests_size_ && "Out of bounds test access");
+    return this->tests_[idx];
+}
 
-ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
+ObservedValues& TypeFeedback::types(uint32_t idx) {
+    assert(idx < this->types_size_ && "Out of bounds type access");
+    return this->types_[idx];
+}
+
+TypeFeedback::ReferencedPoolEntries
+TypeFeedback::ReferencedPoolEntries::deserialize(ByteBuffer& buffer) {
+    std::vector<SEXP> entries(buffer.getLong());
+    for (auto& entry : entries) {
+        if (buffer.getBool()) {
+            entry = UUIDPool::readItem(buffer, true);
+        }
+    }
+    return ReferencedPoolEntries(std::move(entries));
+}
+
+void TypeFeedback::ReferencedPoolEntries::serialize(ByteBuffer& buffer) const {
+    buffer.putLong(entries.size());
+    for (auto& entry : entries) {
+        buffer.putBool(entry != nullptr);
+        if (entry) {
+            UUIDPool::writeItem(entry, false, buffer, true);
+        }
+    }
+}
+
+TypeFeedback::ReferencedPoolEntries TypeFeedback::referencedPoolEntries() const {
+    assert(owner() &&
+           "TypeFeedback must have an owner to get referenced pool entries");
+    auto ownerBody = owner()->body();
+
+    std::vector<SEXP> entries(ownerBody->extraPoolSize, nullptr);
+
+    // The only referenced pool entries are callees
+    for (size_t calleeIdx = 0; calleeIdx < callees_size_; calleeIdx++) {
+        auto& callee = callees_[calleeIdx];
+        for (size_t targetIdx = 0; targetIdx < callee.numTargets; targetIdx++) {
+            auto poolIdx = callee.targets[targetIdx];
+            entries[poolIdx] = ownerBody->getExtraPoolEntry(poolIdx);
+        }
+    }
+
+    return ReferencedPoolEntries(std::move(entries));
+}
+
+void TypeFeedback::setReferencedPoolEntries(TypeFeedback::ReferencedPoolEntries& referencedPoolEntries) const {
+    assert(owner() &&
+           "TypeFeedback must have an owner to set referenced pool entries");
+    auto ownerBody = owner()->body();
+
+    auto& entries = referencedPoolEntries.entries;
+    for (size_t poolIdx = 0; poolIdx < entries.size(); poolIdx++) {
+        auto entry = entries[poolIdx];
+        if (!entry) {
+            continue;
+        }
+        while (ownerBody->extraPoolSize < poolIdx) {
+            ownerBody->addExtraPoolEntry(R_NilValue);
+        }
+        assert(ownerBody->extraPoolSize == poolIdx &&
+               "TypeFeedback owner already has a pool entry at where the "
+               "referenced entry will be placed");
+        ownerBody->addExtraPoolEntry(entry);
+    }
+}
 
 void TypeFeedback::print(std::ostream& out) const {
     out << "TypeFeedback";

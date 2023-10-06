@@ -250,8 +250,7 @@ class BC {
                              size_t codeSize1, size_t codeSize2,
                              const Code* container1, const Code* container2,
                              const char* prefix,
-                             std::stringstream& differences,
-                             bool compareFeedbackAndExtraPoolRBytecodes = true);
+                             std::stringstream& differences);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;

@@ -36,7 +36,7 @@ struct FunctionSignature {
         return sig;
     }
 
-    void serialize(SEXP refTable, R_outpstream_t out) const {
+    void serialize(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
         OutUInt(out, numArguments);
@@ -74,6 +74,20 @@ struct FunctionSignature {
         sig.hasDotsFormals = buffer.getBool();
         sig.hasDefaultArgs = buffer.getBool();
         return sig;
+    }
+
+    /// Deserialize buffer into this, and assert that const fields match.
+    void deserializeFrom(const ByteBuffer& buffer) {
+        auto envc = (Environment)buffer.getInt();
+        auto opt = (OptimizationLevel)buffer.getInt();
+        assert(envc == envCreation &&
+               "FunctionSignature deserialized with different environment");
+        assert(opt == optimization &&
+              "FunctionSignature deserialized with different optimization");
+        numArguments = buffer.getInt();
+        dotsPosition = buffer.getLong();
+        hasDotsFormals = buffer.getBool();
+        hasDefaultArgs = buffer.getBool();
     }
 
     void serialize(ByteBuffer& buffer) const {

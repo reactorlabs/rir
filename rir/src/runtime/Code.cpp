@@ -689,11 +689,14 @@ static bool isProbablyDirectlyComparable[] = {
 static void compareSexps(SEXP sexp1, SEXP sexp2,
                          const char* prefix, const char* srcPrefix,
                          std::stringstream& differences,
-                         bool compareFeedbackAndExtraPoolRBytecodes) {
+                         bool compareExtraPoolRBytecodes) {
     if (TYPEOF(sexp1) != TYPEOF(sexp2)) {
-        differences << prefix << " " << srcPrefix << " types differ: "
-                    << Rf_type2char(TYPEOF(sexp1)) << " vs "
-                    << Rf_type2char(TYPEOF(sexp2)) << "\n";
+        if (compareExtraPoolRBytecodes ||
+            TYPEOF(sexp1) != BCODESXP || TYPEOF(sexp2) != NILSXP) {
+            differences << prefix << " " << srcPrefix
+                        << " types differ: " << Rf_type2char(TYPEOF(sexp1))
+                        << " vs " << Rf_type2char(TYPEOF(sexp2)) << "\n";
+        }
         return;
     }
     if (TYPEOF(sexp1) == EXTERNALSXP &&
@@ -712,7 +715,7 @@ static void compareSexps(SEXP sexp1, SEXP sexp2,
             Code::unpack(sexp2),
             poolPrefix.c_str(),
             differences,
-            compareFeedbackAndExtraPoolRBytecodes
+            compareExtraPoolRBytecodes
         );
     } else if (TYPEOF(sexp1) == RAWSXP) {
         auto raw1 = RAW(sexp1);
@@ -739,7 +742,7 @@ static void compareSrcs(unsigned src1, unsigned src2,
 }
 
 void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
-                        std::stringstream& differences, bool compareFeedbackAndExtraPoolRBytecodes) {
+                        std::stringstream& differences, bool compareExtraPoolRBytecodes) {
     compareSrcs(c1->src, c2->src, prefix, "src", differences);
     compareAsts(c1->trivialExpr, c2->trivialExpr, prefix, "trivialExpr", differences);
     if (c1->srcLength != c2->srcLength) {
@@ -756,7 +759,7 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
     }
     // c1 may have extra pool R-bytecodes than c2,
     // if it was from a closure with them and c2 was from an AST-only closure
-    if (compareFeedbackAndExtraPoolRBytecodes ?
+    if (compareExtraPoolRBytecodes ?
         c1->extraPoolSize != c2->extraPoolSize :
         c1->extraPoolSize < c2->extraPoolSize) {
         differences << prefix << " extraPoolSizes differ: " << c1->extraPoolSize
@@ -780,14 +783,14 @@ void Code::debugCompare(const Code* c1, const Code* c2, const char* prefix,
                     srcPrefix, differences);
     }
     BC::debugCompare(c1->code(), c2->code(), c1->codeSize, c2->codeSize, c1, c2,
-                     prefix, differences, compareFeedbackAndExtraPoolRBytecodes);
+                     prefix, differences);
     for (unsigned i = 0; i < std::min(c1->extraPoolSize, c2->extraPoolSize); i++) {
         auto pool1 = c1->getExtraPoolEntry(i);
         auto pool2 = c2->getExtraPoolEntry(i);
 
         char poolPrefix[100];
         sprintf(poolPrefix, "entry %u", i);
-        compareSexps(pool1, pool2, prefix, poolPrefix, differences, compareFeedbackAndExtraPoolRBytecodes);
+        compareSexps(pool1, pool2, prefix, poolPrefix, differences, compareExtraPoolRBytecodes);
     }
 }
 

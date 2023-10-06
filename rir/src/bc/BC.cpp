@@ -616,8 +616,7 @@ void BC::addToPrettyGraph(const PrettyGraphInnerPrinter& p,
 void BC::debugCompare(const Opcode* code1, const Opcode* code2,
                       size_t codeSize1, size_t codeSize2,
                       const Code* container1, const Code* container2,
-                      const char* prefix, std::stringstream& differences,
-                      bool compareFeedbackAndExtraPoolRBytecodes) {
+                      const char* prefix, std::stringstream& differences) {
     auto loggedDifferences = false;
     auto initialCodeSize1 = codeSize1;
     while (codeSize1 > 0 && codeSize2 > 0) {
@@ -633,12 +632,7 @@ void BC::debugCompare(const Opcode* code1, const Opcode* code2,
             (memcmp(pc1, pc2, size1) != 0 &&
              // For non-trivial SEXPs like environments, calls will push
              // different values
-             opcode1 != Opcode::push_ &&
-             // Calls will have different closures
-             opcode1 != Opcode::record_call_ &&
-             // Ignore feedback differences if excluded
-             (compareFeedbackAndExtraPoolRBytecodes || opcode1 != Opcode::record_type_) &&
-             (compareFeedbackAndExtraPoolRBytecodes || opcode1 != Opcode::record_test_))) {
+             opcode1 != Opcode::push_)) {
             // Even if the bytecode data is different, it could just be different pool
             // entries for equivalent SEXPs. So we check by printing the bytecode (not
             // perfect, there's a slim chance of true negative, but good enough)
