@@ -263,10 +263,10 @@ void Function::debugCompare(const Function* f1, const Function* f2,
     }
     // TODO: invocationCount, invoked, and execTime are frequently different,
     //   even when doing a deep copy. Why?
-    /*if (f1->invocationCount_ != f2->invocationCount_) {
+    if (f1->invocationCount_ != f2->invocationCount_) {
         differences << "invocationCount: " << f1->invocationCount_
                     << " != " << f2->invocationCount_ << "\n";
-    }*/
+    }
     if (f1->deoptCount_ != f2->deoptCount_) {
         differences << "deoptCount: " << f1->deoptCount_
                     << " != " << f2->deoptCount_ << "\n";
@@ -275,14 +275,14 @@ void Function::debugCompare(const Function* f1, const Function* f2,
         differences << "deadCallReached: " << f1->deadCallReached_
                     << " != " << f2->deadCallReached_ << "\n";
     }
-    /*if (f1->invoked != f2->invoked) {
+    if (f1->invoked != f2->invoked) {
         differences << "invoked: " << f1->invoked
                     << " != " << f2->invoked << "\n";
     }
     if (f1->execTime != f2->execTime) {
         differences << "invocationTime: " << f1->execTime
                     << " != " << f2->execTime << "\n";
-    }*/
+    }
     Code::debugCompare(f1->body(), f2->body(), "body", differences,
                        compareExtraPoolRBytecodes);
     for (unsigned i = 0; i < std::min(f1->numArgs_, f2->numArgs_); i++) {
