@@ -84,6 +84,9 @@ complete.
     PIR_MEASURE_COMPILER_BACKEND=
         1          print overall time spend in different phases in the backend
 
+    PIR_MEASURE_COMPILED_CLOSURES=
+        1          print # of compiled closures and time it spends to compile each one
+
     PIR_MEASURE_SERIALIZATION=
         1          print detailed report on time spent in serialization
 

@@ -48,6 +48,9 @@ struct Parameter {
     /// Disabled by default, but PIR_OSR=1 will enable
     static bool FORCE_ENABLE_OSR;
 
+    /// Log every time a closure is compiled (no OSR) and how long it takes.
+    static bool PIR_MEASURE_COMPILED_CLOSURES;
+
     /// Serialize LLVM bitcode. Enabled regardless of env var iff the compiler
     /// server is running, otherwise enabled if PIR_PIR_DEBUG_SERIALIZE_LLVM is set
     static bool SERIALIZE_LLVM;
