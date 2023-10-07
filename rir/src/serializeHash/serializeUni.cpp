@@ -90,7 +90,7 @@ SerialFlags SerialFlags::FunStats(
     true,
     false,
     false,
-    true,
+    false,
     true);
 SerialFlags SerialFlags::FunMiscBytes(
     true,

@@ -25,19 +25,21 @@ void Function::deserializeFullSignature(ByteBuffer& buf) {
     invocationCount_ = buf.getInt();
     deoptCount_ = buf.getInt();
     deadCallReached_ = buf.getInt();
-    invoked = buf.getLong();
-    execTime = buf.getLong();
+    // invoked = buf.getLong();
+    // execTime = buf.getLong();
 }
 
 void Function::serializeFullSignature(ByteBuffer& buf) const {
     signature_.serialize(buf);
     buf.putLong(context_.toI());
     buf.putBytes((uint8_t*)&flags_, sizeof(flags_));
-    buf.putInt(invocationCount_);
-    buf.putInt(deoptCount_);
-    buf.putInt(deadCallReached_);
-    buf.putLong(invoked);
-    buf.putLong(execTime);
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    buf.putInt(std::min(invocationCount_, 2u));
+    buf.putInt(std::min(deoptCount_, 2u));
+    buf.putInt(std::min(deadCallReached_, 4u));
+    // buf.putLong(invoked);
+    // buf.putLong(execTime);
 }
 
 Function* Function::deserialize(AbstractDeserializer& deserializer) {
@@ -46,9 +48,18 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
     auto sig = FunctionSignature::deserialize(deserializer);
     auto ctx = Context(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
     auto flags = EnumSet<Flag>(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
-    auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
-    auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
-    auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    if (deserializer.willRead(SerialFlags::FunStats)) {
+        invocationCount_ =
+            deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+        deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+        deadCallReached_ =
+            deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+    }
     auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
     SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
@@ -95,6 +106,11 @@ void Function::serialize(AbstractSerializer& serializer) const {
     signature().serialize(serializer);
     serializer.writeBytesOf<unsigned long>(context_.toI(), SerialFlags::FunMiscBytes);
     serializer.writeBytesOf<unsigned long>(flags_.to_i(), SerialFlags::FunMiscBytes);
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    serializer.writeBytesOf<unsigned>(std::min(invocationCount_, 2u), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(std::min(deoptCount_, 2u), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(std::min(deadCallReached_, 4u), SerialFlags::FunMiscBytes);
     serializer.writeBytesOf<unsigned>(invocationCount_, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned>(deoptCount_, SerialFlags::FunStats);
     serializer.writeBytesOf<unsigned>(deadCallReached_, SerialFlags::FunStats);
@@ -276,8 +292,8 @@ void Function::debugCompare(const Function* f1, const Function* f2,
                     << " != " << f2->deadCallReached_ << "\n";
     }
     if (f1->invoked != f2->invoked) {
-        differences << "invoked: " << f1->invoked
-                    << " != " << f2->invoked << "\n";
+        differences << "invoked: " << f1->invoked << " != " << f2->invoked
+                    << "\n";
     }
     if (f1->execTime != f2->execTime) {
         differences << "invocationTime: " << f1->execTime
