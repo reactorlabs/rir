@@ -364,12 +364,20 @@ void BC::hash(HasherOld& hasher, std::vector<bool>& extraPoolIgnored,
             hasher.hashConstant(i.callBuiltinFixedArgs.builtin);
             break;
         case Opcode::record_call_: {
-            auto feedback = container->function()->typeFeedback()->callees(i.i);
+            auto feedback = container->function()->typeFeedback();
+            if (i.i >= feedback->numCallees()) {
+                // TODO: Bug where, when we only send the compiler server the
+                //  client source and feedback, we get record_call instructions
+                //  with corrupt indices
+                std::cerr << "BC.cpp hash record_call_ index out of range\n";
+                break;
+            }
+            auto callees = feedback->callees(i.i);
             if (container->function()->body() == container) {
                 // Don't hash because this is a recording instruction,
                 // but we also want to skip hashing recorded extra pool entries
-                for (size_t j = 0; j < feedback.numTargets; j++) {
-                    extraPoolIgnored[feedback.targets[j]] = true;
+                for (size_t j = 0; j < callees.numTargets; j++) {
+                    extraPoolIgnored[callees.targets[j]] = true;
                 }
             }
             break;

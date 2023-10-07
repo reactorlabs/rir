@@ -156,6 +156,10 @@ void TypeFeedback::addConnected(
     // assert(false && "Feedback should never be hashed (don't call addConnected)");
 }
 
+unsigned TypeFeedback::numCallees() const {
+    return callees_size_;
+}
+
 ObservedCallees& TypeFeedback::callees(uint32_t idx) {
     assert(idx < this->callees_size_ && "Out of bounds callee access");
     return this->callees_[idx];

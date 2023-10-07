@@ -330,6 +330,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         TypeFeedback* build();
     };
 
+    // TODO: Bug where, when we only send the compiler server the client source
+    //  and feedback, we get record_call instructions with corrupt indices
+    unsigned numCallees() const;
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);

@@ -9,7 +9,7 @@
 #pragma once
 
 #define COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK 1
-#define COMPILER_CLIENT_SEND_FULL 1
+#define COMPILER_CLIENT_SEND_FULL 0
 
 namespace rir {
 
