@@ -6,7 +6,9 @@
 
 #include <unordered_map>
 
-/// Bimap of std::vector<T> and std::unordered_map<T, size_t>
+/// Bimap of `std::vector<T>` and `std::unordered_map<T, size_t>`.
+/// The vector can have multiple copies of the same item, and the map will map
+/// to the last occurrence.
 template<typename T> class BimapVector {
     std::vector<T> ltr_;
     std::unordered_map<T, size_t> rtl_;
@@ -32,7 +34,6 @@ template<typename T> class BimapVector {
     }
 
     void push_back(const T& t) {
-        assert(rtl_.count(t) == 0 && "BimapVector already contains this element");
         ltr_.push_back(t);
         rtl_[t] = ltr_.size() - 1;
     }

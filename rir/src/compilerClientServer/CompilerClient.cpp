@@ -91,6 +91,12 @@ void CompilerClient::tryInit() {
     assert(!isRunning());
     _isRunning = true;
 
+    // TODO: Figure out what objects we fail to retain and where, so we don't
+    //  need this. Currently, enabling the GC causes a crash later on, and I've
+    //  already tried preserving all deserialized objects, extra pool entries in
+    //  compiled closures, and the compiled closures themselves
+    R_GCEnabled = false;
+
     serverAddrs = new std::vector<std::string>();
     std::istringstream serverAddrReader(serverAddrStr);
     while (!serverAddrReader.fail()) {
@@ -335,6 +341,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
         auto innerHandle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
+
                 // Request data format =
                 //   Request::Compile
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
