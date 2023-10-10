@@ -20,12 +20,9 @@ namespace rir {
 
 #define COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK && COMPILER_CLIENT_SEND_FULL
 
-#define SOFT_ASSERT(x, msg) do {                                               \
-    if (!(x)) {                                                                \
+#define SOFT_ASSERT(x, msg) if (!(x))                                          \
         LOG_WARN(std::cerr << "Assertion failed (client issue): " << msg       \
-                           << " (" << #x ")" << std::endl);                    \
-        break;                                                                 \
-    } } while (false)
+                           << " (" << #x ")" << std::endl);
 
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt

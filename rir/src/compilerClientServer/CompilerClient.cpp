@@ -33,6 +33,11 @@ thread_pool* threads;
 static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
 
+
+#define CHECK_MSG_SIZE(size, size2) if (size != size2)                         \
+        LOG_WARN(std::cerr << "Different sizes: " << #size << "=" << size      \
+                           << ", " << #size2 << "=" << size2 << std::endl);
+
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
 #define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
@@ -198,7 +203,7 @@ handleRetrieveServerRequest(int index, zmq::socket_t* socket,
                        clientResponse.size()),
         zmq::send_flags::none);
     auto clientResponseSize2 = clientResponse.size();
-    assert(clientResponseSize == clientResponseSize2);
+    CHECK_MSG_SIZE(clientResponseSize, clientResponseSize2);
 
     // Return the server's next response
     zmq::message_t serverResponse;
@@ -263,7 +268,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
                                   hashOnlyRequest.size()),
                               zmq::send_flags::none);
             auto hashOnlyRequestSize2 = hashOnlyRequest.size();
-            assert(hashOnlyRequestSize == hashOnlyRequestSize2);
+            CHECK_MSG_SIZE(hashOnlyRequestSize, hashOnlyRequestSize2);
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RECEIVING_RESPONSE_TIMER_NAME, true);
 
@@ -300,7 +305,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
                               request.size()),
                           zmq::send_flags::none);
         auto requestSize2 = request.size();
-        assert(requestSize == requestSize2);
+        CHECK_MSG_SIZE(requestSize, requestSize2);
         Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
 
         // Wait for and receive the response

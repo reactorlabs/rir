@@ -1,5 +1,5 @@
 jitOn <- as.numeric(Sys.getenv("R_ENABLE_JIT", unset=2)) == 0 && (Sys.getenv("PIR_ENABLE", unset="on") == "on")
-if (!jitOn || Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "" || Sys.getenv("PIR_CLIENT_ADDR") != "")
+if (!jitOn || Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
   quit()
 
 # Sanity check for loop peeling, and testing that enabling/disabling works
