@@ -8,6 +8,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PirTypeFeedback.h"
+#include "runtime/ExtraPoolStub.h"
 #include "runtime/RirRuntimeObject.h"
 
 #include <iomanip>
@@ -340,6 +341,9 @@ std::string Print::dumpEXTERNALSXP(SEXP s, size_t length) {
         ss << "(rir::PirTypeFeedback*)" << p;
     } else if (auto p = TypeFeedback::check(s)) {
         ss << "(rir::TypeFeedback*)" << p;
+    } else if (auto p = ExtraPoolStub::check(s)) {
+        ss << "(rir::ExtraPoolStub*)";
+        p->print(ss);
     } else {
         assert(false && "missing RirRuntimeObject printing");
     }

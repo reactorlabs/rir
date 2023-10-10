@@ -219,6 +219,7 @@ void CompilerServer::tryRun() {
             // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
             // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
             // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
+            // + (uintptr_t)DispatchTable::unpack(BODY(what))->baseline()->body()
             // + DispatchTable::unpack(BODY(what))->baseline()->body()->extraPoolSize
 #endif
 #if COMPILER_CLIENT_SEND_FULL
@@ -257,8 +258,11 @@ void CompilerServer::tryRun() {
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
             LOG_REQUEST("serialize(" << feedback << ", CompilerClient(...))");
-            ExtraPoolStub::pad(DispatchTable::unpack(BODY(what))->baseline()->body(), requestBuffer.getInt());
-            LOG_REQUEST("baseline->body()->extraPoolSize");
+            auto sourcePoolAddr = (uintptr_t)requestBuffer.getLong();
+            LOG_REQUEST("(uintptr_t)codeWithPool");
+            auto sourcePoolSize = requestBuffer.getInt();
+            LOG_REQUEST("codeWithPool->extraPoolSize");
+            ExtraPoolStub::pad(sourcePoolAddr, sourcePoolSize, DispatchTable::unpack(BODY(what))->baseline()->body());
             UNPROTECT(1);
 #endif
 #if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL

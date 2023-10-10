@@ -18,6 +18,21 @@ struct Code;
 /// uses. The same options data is serialized with, it must also be deserialized
 /// with.
 struct SerialOptions {
+    class ExtraPool {
+        Code* codeWithPool;
+        BimapVector<SEXP> map;
+
+      public:
+        ExtraPool() : codeWithPool(nullptr), map() {}
+        ExtraPool(Code* codeWithPool);
+        operator bool() const { return codeWithPool; }
+
+        bool isEntry(SEXP entry) const;
+        bool isStub(SEXP stub) const;
+        SEXP entry(SEXP stub) const;
+        SEXP stub(SEXP entry) const;
+    };
+
     /// Whether to serialize connected RIR objects as UUIDs instead of their
     /// full content, besides recorded calls, which are serialized as UUIDs
     /// depending on `useHashesForRecordedCalls`.
@@ -30,7 +45,7 @@ struct SerialOptions {
     /// Whether to skip serializing environment locks
     bool skipEnvLocks;
     /// If nonempty, we serialize the corresponding SEXPs with extra pool stubs
-    BimapVector<SEXP> extraPool;
+    ExtraPool extraPool;
 
     /// Don't serialize the extra pool, since we are only serializing to check
     /// compatibility and that isn't used

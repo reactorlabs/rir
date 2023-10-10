@@ -26,25 +26,47 @@ static const uint64_t dataBound = 0xfedcba9876543210;
 static const uint64_t intBound = 0xfedcba9876543211;
 #endif
 
-SerialOptions SerialOptions::DeepCopy{false, false, false, false, BimapVector<SEXP>{}};
-SerialOptions SerialOptions::CompilerServer{false, false, false, true, BimapVector<SEXP>{}};
+SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::ExtraPool()};
+SerialOptions SerialOptions::CompilerServer{false, false, false, true, SerialOptions::ExtraPool()};
 
 SerialOptions SerialOptions::CompilerClient(Code* codeWithPool) {
-    SerialOptions options{false, false, false, true, BimapVector<SEXP>{}};
-    for (unsigned i = 0; i < codeWithPool->extraPoolSize; i++) {
-        options.extraPool.push_back(codeWithPool->getExtraPoolEntry(i));
-    }
-    return options;
+    return SerialOptions{false, false, false, true, SerialOptions::ExtraPool(codeWithPool)};
 }
 
-SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, BimapVector<SEXP>{}};
-SerialOptions SerialOptions::SourceAndFeedback{false, true, true, true, BimapVector<SEXP>{}};
+SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::ExtraPool()};
+SerialOptions SerialOptions::SourceAndFeedback{false, true, true, true, SerialOptions::ExtraPool()};
 
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
 bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
+
+SerialOptions::ExtraPool::ExtraPool(rir::Code* codeWithPool)
+    : codeWithPool(codeWithPool), map() {
+    for (unsigned i = 0; i < codeWithPool->extraPoolSize; i++) {
+        map.push_back(codeWithPool->getExtraPoolEntry(i));
+    }
+}
+
+bool SerialOptions::ExtraPool::isStub(SEXP stub) const {
+    auto rirStub = ExtraPoolStub::check(stub);
+    return rirStub && rirStub->codeWithPoolAddr == (uintptr_t)codeWithPool;
+}
+
+bool SerialOptions::ExtraPool::isEntry(SEXP entry) const {
+    return map.count(entry);
+}
+
+SEXP SerialOptions::ExtraPool::entry(SEXP stub) const {
+    assert(isStub(stub) && "not a stub for this extra pool");
+    return map.at(ExtraPoolStub::unpack(stub)->index);
+}
+
+SEXP SerialOptions::ExtraPool::stub(SEXP entry) const {
+    assert(isEntry(entry) && "not an entry in this extra pool");
+    return ExtraPoolStub::create((uintptr_t)codeWithPool, map.at(entry));
+}
 
 SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deserializer) {
     SerialOptions options;
@@ -115,8 +137,8 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     }
 
     // If this is a stubbed extra pool entry, serialize the stub instead
-    if (options.extraPool.count(s)) {
-        s = ExtraPoolStub::create(options.extraPool.at(s));
+    if (options.extraPool.isEntry(s)) {
+        s = options.extraPool.stub(s);
     }
 
 #if DEBUG_SERIALIZE_CONSISTENCY
@@ -245,11 +267,8 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 #endif
 
     // If this is a stubbed extra pool entry, deserialize the stub instead
-    if (ExtraPoolStub::check(result) && !options.extraPool.empty()) {
-        // TODO: fix this issue instead of avoiding it
-        if (ExtraPoolStub::unpack(result) < options.extraPool.size()) {
-            result = options.extraPool.at(ExtraPoolStub::unpack(result));
-        }
+    if (options.extraPool.isStub(result)) {
+        result = options.extraPool.entry(result);
     }
 
     return result;

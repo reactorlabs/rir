@@ -7,37 +7,49 @@
 
 namespace rir {
 
-static const char* STUB_PREFIX = "\x02extraPoolStub_\x03";
-
-/// From https://stackoverflow.com/a/4770992
-bool isPrefix(const char* prefix, const char* str) {
-    return strncmp(prefix, str, strlen(prefix)) == 0;
+ExtraPoolStub::ExtraPoolStub(uintptr_t codeWithPoolAddr, size_t index)
+    : RirRuntimeObject(0, 0),
+      codeWithPoolAddr(codeWithPoolAddr),
+      index(index) {
+      assert(codeWithPoolAddr != 0 && "codeWithPoolAddr must be non-null");
 }
 
-bool ExtraPoolStub::check(SEXP sexp) {
-    return TYPEOF(sexp) == SYMSXP && isPrefix(STUB_PREFIX, CHAR(PRINTNAME(sexp)));
+SEXP ExtraPoolStub::create(uintptr_t codeWithPoolAddr, size_t index) {
+    auto store = Rf_allocVector(EXTERNALSXP, sizeof(ExtraPoolStub));
+    new (DATAPTR(store)) ExtraPoolStub(codeWithPoolAddr, index);
+    return store;
 }
 
-size_t ExtraPoolStub::unpack(SEXP sexp) {
-    assert(check(sexp) && "not an extra pool stub");
-    auto numStr = CHAR(PRINTNAME(sexp)) + strlen(STUB_PREFIX);
-    char* endptr;
-    auto num = strtol(numStr, &endptr, 10);
-    assert(*endptr == '\0' &&
-           "extra pool stub corrupt, has the right prefix but it's not "
-           "followed by a number");
-    return (size_t)num;
+void ExtraPoolStub::print(std::ostream& out) const {
+    out << "(" << codeWithPoolAddr << ", " << index << ")";
 }
 
-SEXP ExtraPoolStub::create(size_t index) {
-    char stubName[100];
-    snprintf(stubName, sizeof(stubName), "%s%zu", STUB_PREFIX, index);
-    return Rf_install(stubName);
+ExtraPoolStub* ExtraPoolStub::deserialize(AbstractDeserializer& deserializer) {
+    auto codeWithPoolAddr = deserializer.readBytesOf<uintptr_t>();
+    auto index = deserializer.readBytesOf<size_t>();
+    auto store = create(codeWithPoolAddr, index);
+    return unpack(store);
 }
 
-void ExtraPoolStub::pad(Code* codeWithPool, size_t size) {
-    for (auto i = (size_t)codeWithPool->extraPoolSize; i < size; i++) {
-        codeWithPool->addExtraPoolEntry(create(i));
+void ExtraPoolStub::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf(codeWithPoolAddr);
+    serializer.writeBytesOf(index);
+}
+
+void ExtraPoolStub::hash(HasherOld& hasher) const {
+    hasher.hashBytesOf(codeWithPoolAddr);
+    hasher.hashBytesOf(index);
+}
+
+void ExtraPoolStub::addConnected(__attribute__((unused)) ConnectedCollectorOld& collector) const {
+    // Nothing to add
+}
+
+void ExtraPoolStub::pad(uintptr_t sourceCodeWithPoolAddr, size_t sourcePoolSize,
+                        Code* targetCodeWithPool) {
+    for (auto i = (size_t)targetCodeWithPool->extraPoolSize; i < sourcePoolSize;
+         i++) {
+        targetCodeWithPool->addExtraPoolEntry(create(sourceCodeWithPoolAddr, i));
     }
 }
 

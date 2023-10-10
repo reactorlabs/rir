@@ -7,6 +7,7 @@
 #include "R/Funtab.h"
 #include "compiler/parameter.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/ExtraPoolStub.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "serializeHash/globals.h"
@@ -252,7 +253,7 @@ static bool canSelfReference(SEXP sexp) {
     case BCODESXP:
         return true;
     case EXTERNALSXP:
-        return !TypeFeedback::check(sexp) && !ArglistOrder::check(sexp);
+        return !TypeFeedback::check(sexp) && !ArglistOrder::check(sexp) && !ExtraPoolStub::check(sexp);
     case NILSXP:
     case LISTSXP:
     case CLOSXP:
@@ -399,7 +400,8 @@ static void writeRir(AbstractSerializer& serializer, SEXP s) {
         !tryWrite<LazyArglist>(serializer, s) &&
         !tryWrite<LazyEnvironment>(serializer, s) &&
         !tryWrite<PirTypeFeedback>(serializer, s) &&
-        !tryWrite<TypeFeedback>(serializer, s)) {
+        !tryWrite<TypeFeedback>(serializer, s) &&
+        !tryWrite<ExtraPoolStub>(serializer, s)) {
         std::cerr << "couldn't serialize EXTERNALSXP: ";
         Rf_PrintValue(s);
         assert(false);
@@ -426,6 +428,8 @@ static SEXP readRir(AbstractDeserializer& deserializer) {
             return PirTypeFeedback::deserialize(deserializer)->container();
         case TYPEFEEDBACK_MAGIC:
             return TypeFeedback::deserialize(deserializer)->container();
+        case EXTRA_POOL_STUB_MAGIC:
+            return ExtraPoolStub::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";
@@ -673,6 +677,9 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:
+            // If you get an out-of-range here, a RIR object is probably either
+            // not adding its ref, or the rir object should be excluded from
+            // `canSelfReference` (and probably also `UUIDPool::internable`)
             writeBytesOf((unsigned)refs->at(sexp));
             // Attr and tag already present
             break;

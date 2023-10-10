@@ -10,6 +10,7 @@
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
+#include "runtime/ExtraPoolStub.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
 #include "serializeHash/hash/getConnected.h"
@@ -81,7 +82,8 @@ bool UUIDPool::internable(SEXP sexp) {
     // frequently
     return TYPEOF(sexp) == EXTERNALSXP &&
            !TypeFeedback::check(sexp) &&
-           !ArglistOrder::check(sexp);
+           !ArglistOrder::check(sexp) &&
+           !ExtraPoolStub::check(sexp);
 }
 
 #ifdef DO_INTERN
@@ -517,7 +519,7 @@ SEXP UUIDPool::readItem(const ByteBuffer& buf, bool useHashes) {
     }
 
     // Read regular data
-    return deserialize(buf, SerialOptions{useHashes, useHashes, false, false, BimapVector<SEXP>{}});
+    return deserialize(buf, SerialOptions{useHashes, useHashes, false, false, SerialOptions::ExtraPool()});
 }
 
 void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
@@ -529,7 +531,7 @@ void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
     }
 
     // Write regular data
-    serialize(sexp, buf, SerialOptions{useHashes, useHashes, false, false, BimapVector<SEXP>{}});
+    serialize(sexp, buf, SerialOptions{useHashes, useHashes, false, false, SerialOptions::ExtraPool()});
 }
 
 } // namespace rir

@@ -347,13 +347,13 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
         auto innerHandle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
-
                 // Request data format =
                 //   Request::Compile
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
                 // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
                 // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
                 // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
+                // + (uintptr_t)DispatchTable::unpack(BODY(what))->baseline()->body()
                 // + DispatchTable::unpack(BODY(what))->baseline()->body()->extraPoolSize
 #endif
 #if COMPILER_CLIENT_SEND_FULL
@@ -383,8 +383,10 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 auto feedback = baseline->typeFeedback();
                 LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClient(...))");
                 serialize(feedback->container(), request, compilerClientOptions);
-                LOG_REQUEST("baseline->body()->extraPoolSize");
-                request.putInt(baseline->body()->extraPoolSize);
+                LOG_REQUEST("(uintptr_t)codeWithPool");
+                request.putLong((uintptr_t)codeWithPool);
+                LOG_REQUEST("codeWithPool->extraPoolSize");
+                request.putInt(codeWithPool->extraPoolSize);
 #endif
 #if COMPILER_CLIENT_SEND_FULL
                 LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", SourceAndFeedback)");
