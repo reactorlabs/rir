@@ -7,21 +7,17 @@
 namespace rir {
 
 void FrameInfo::deserialize(const ByteBuffer& buf) {
-    code = Code::unpack(UUIDPool::readItem(buf, true));
+    code = Code::unpack(UUIDPool::readItem(buf, false));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
     inPromise = (bool)buf.getInt();
 }
 
 void FrameInfo::serialize(ByteBuffer& buf) const {
-    UUIDPool::writeItem(code->container(), false, buf, true);
+    UUIDPool::writeItem(code->container(), false, buf, false);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
-}
-
-void FrameInfo::internRecursive() const {
-    UUIDPool::intern(code->container(), true, false);
 }
 
 void FrameInfo::gcAttach(Code* outer) const {
@@ -54,12 +50,6 @@ void DeoptMetadata::serialize(ByteBuffer& buf) const {
     buf.putInt((uint32_t)numFrames);
     for (size_t i = 0; i < numFrames; ++i) {
         frames[i].serialize(buf);
-    }
-}
-
-void DeoptMetadata::internRecursive() const {
-    for (size_t i = 0; i < numFrames; ++i) {
-        frames[i].internRecursive();
     }
 }
 

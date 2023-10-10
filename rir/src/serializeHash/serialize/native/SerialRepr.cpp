@@ -34,8 +34,7 @@ llvm::MDNode* SerialRepr::SEXP::metadata(llvm::LLVMContext& ctx) const {
              llvm::MDString::get(ctx, getBuiltinName(what))});
     }
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, false, buf, true);
+    UUIDPool::writeItem(what, false, buf, false);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "SEXP"),
@@ -54,8 +53,7 @@ llvm::MDNode* SerialRepr::String::metadata(llvm::LLVMContext& ctx) const {
 llvm::MDNode* SerialRepr::Function::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     auto sexp = function->container();
-    UUIDPool::intern(sexp, true, false);
-    UUIDPool::writeItem(sexp, false, buf, true);
+    UUIDPool::writeItem(sexp, false, buf, false);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "Function"),
@@ -67,8 +65,7 @@ llvm::MDNode* SerialRepr::Function::metadata(llvm::LLVMContext& ctx) const {
 llvm::MDNode* SerialRepr::TypeFeedback::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
     auto sexp = typeFeedback->container();
-    UUIDPool::intern(sexp, true, false);
-    UUIDPool::writeItem(sexp, false, buf, true);
+    UUIDPool::writeItem(sexp, false, buf, false);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(ctx, "TypeFeedback"),
@@ -79,7 +76,7 @@ llvm::MDNode* SerialRepr::TypeFeedback::metadata(llvm::LLVMContext& ctx) const {
 
 llvm::MDNode* SerialRepr::DeoptMetadata::metadata(llvm::LLVMContext& ctx) const {
     ByteBuffer buf;
-    m->internRecursive();
+    // m->internRecursive();
     m->serialize(buf);
     return llvm::MDTuple::get(
         ctx,
@@ -134,8 +131,7 @@ llvm::MDNode* SerialRepr::srcIdxMetadata(llvm::LLVMContext& ctx, Immediate i) {
     // trivial to serialize (specifically, we care about having no global envs)
     auto what = src_pool_at(i);
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, false, buf, true);
+    UUIDPool::writeItem(what, false, buf, false);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -148,8 +144,7 @@ llvm::MDNode* SerialRepr::poolIdxMetadata(llvm::LLVMContext& ctx, BC::PoolIdx i)
     // other tricky exprs, if it does we need to abstract SEXP::metadata...
     auto what = Pool::get(i);
     ByteBuffer buf;
-    UUIDPool::intern(what, true, false);
-    UUIDPool::writeItem(what, false, buf, true);
+    UUIDPool::writeItem(what, false, buf, false);
     return llvm::MDTuple::get(
         ctx,
         {llvm::MDString::get(
@@ -171,8 +166,7 @@ llvm::MDNode* SerialRepr::namesMetadata(llvm::LLVMContext& ctx,
                      llvm::MDString::get(ctx, global2CppId.at(sexp))}));
         } else {
             ByteBuffer buf;
-            UUIDPool::intern(sexp, true, false);
-            UUIDPool::writeItem(sexp, false, buf, true);
+            UUIDPool::writeItem(sexp, false, buf, false);
             args.push_back(
                 llvm::MDTuple::get(
                     ctx,
@@ -199,7 +193,7 @@ static void* getMetadataPtr_Builtin(const llvm::MDNode& meta,
 static void* getMetadataPtr_SEXP(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, false);
     if (outer) {
         // TODO: why is gcAttach not enough?
         R_PreserveObject(sexp);
@@ -222,7 +216,7 @@ static void* getMetadataPtr_String(const llvm::MDNode& meta, rir::Code* outer) {
 static void* getMetadataPtr_Function(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, false);
     if (outer) {
         // TODO: why is gcAttach not enough?
         R_PreserveObject(sexp);
@@ -238,7 +232,7 @@ static void* getMetadataPtr_Function(const llvm::MDNode& meta, rir::Code* outer)
 static void* getMetadataPtr_TypeFeedback(const llvm::MDNode& meta, rir::Code* outer) {
     auto data = ((llvm::MDString*)meta.getOperand(1).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, false);
     if (outer) {
         // TODO: why is gcAttach not enough?
         R_PreserveObject(sexp);
@@ -328,7 +322,7 @@ static void patchSrcIdxMetadata(llvm::GlobalVariable& inst,
                                 llvm::MDNode* srcIdxMeta) {
     auto data = ((llvm::MDString*)srcIdxMeta->getOperand(0).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, false);
 
     // TODO: Reuse index if it's already in the source pool
     //  (and maybe merge and refactor pools)
@@ -341,7 +335,7 @@ static void patchPoolIdxMetadata(llvm::GlobalVariable& inst,
                                  llvm::MDNode* poolIdxMeta) {
     auto data = ((llvm::MDString*)poolIdxMeta->getOperand(0).get())->getString();
     ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-    auto sexp = UUIDPool::readItem(buffer, true);
+    auto sexp = UUIDPool::readItem(buffer, false);
 
     // TODO: Reuse index if it's already in the constant pool
     //  (and maybe merge and refactor pools)
@@ -367,7 +361,7 @@ static void patchNamesMetadata(llvm::GlobalVariable& inst,
             sexp = cppId2Global.at(data.str());
         } else if (type.equals("SEXP")) {
             ByteBuffer buffer((uint8_t*)data.data(), (uint32_t)data.size());
-            sexp = UUIDPool::readItem(buffer, true);
+            sexp = UUIDPool::readItem(buffer, false);
         } else {
             assert(false && "Invalid name type (not \"Global\" or \"SEXP\")");
         }
