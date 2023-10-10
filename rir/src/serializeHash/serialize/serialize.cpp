@@ -3,7 +3,7 @@
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerServer.h"
-#include "runtime/DispatchTable.h"
+#include "runtime/Code.h"
 #include "runtime/ExtraPoolStub.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
@@ -29,14 +29,10 @@ static const uint64_t intBound = 0xfedcba9876543211;
 SerialOptions SerialOptions::DeepCopy{false, false, false, false, BimapVector<SEXP>{}};
 SerialOptions SerialOptions::CompilerServer{false, false, false, true, BimapVector<SEXP>{}};
 
-SerialOptions SerialOptions::CompilerClient(SEXP closureWithExtraPool) {
-    assert(TYPEOF(closureWithExtraPool) == CLOSXP &&
-           DispatchTable::check(BODY(closureWithExtraPool)) &&
-           "closureWithExtraPool must be a rir closure");
-    auto codeWithExtraPool = DispatchTable::unpack(BODY(closureWithExtraPool))->baseline()->body();
+SerialOptions SerialOptions::CompilerClient(Code* codeWithPool) {
     SerialOptions options{false, false, false, true, BimapVector<SEXP>{}};
-    for (unsigned i = 0; i < codeWithExtraPool->extraPoolSize; i++) {
-        options.extraPool.push_back(codeWithExtraPool->getExtraPoolEntry(i));
+    for (unsigned i = 0; i < codeWithPool->extraPoolSize; i++) {
+        options.extraPool.push_back(codeWithPool->getExtraPoolEntry(i));
     }
     return options;
 }
@@ -120,7 +116,7 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
 
     // If this is a stubbed extra pool entry, serialize the stub instead
     if (options.extraPool.count(s)) {
-        s = ExtraPoolStub::create(options.extraPool[s]);
+        s = ExtraPoolStub::create(options.extraPool.at(s));
     }
 
 #if DEBUG_SERIALIZE_CONSISTENCY
@@ -250,7 +246,10 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 
     // If this is a stubbed extra pool entry, deserialize the stub instead
     if (ExtraPoolStub::check(result) && !options.extraPool.empty()) {
-        result = options.extraPool[ExtraPoolStub::unpack(result)];
+        // TODO: fix this issue instead of avoiding it
+        if (ExtraPoolStub::unpack(result) < options.extraPool.size()) {
+            result = options.extraPool.at(ExtraPoolStub::unpack(result));
+        }
     }
 
     return result;

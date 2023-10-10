@@ -12,6 +12,8 @@
 
 namespace rir {
 
+struct Code;
+
 /// Controls what data is serialized / deserialized and what format some of it
 /// uses. The same options data is serialized with, it must also be deserialized
 /// with.
@@ -46,8 +48,8 @@ struct SerialOptions {
     /// Serialize everything, no hashes, no environment locks
     static SerialOptions CompilerServer;
     /// Serialize everything, no hashes, no environment locks.
-    /// Serialize and deserialize the closure's baseline pool entries from stubs
-    static SerialOptions CompilerClient(SEXP closureWithExtraPool);
+    /// Serialize and deserialize the pool entries from stubs
+    static SerialOptions CompilerClient(Code* codeWithPool);
     //  TODO: Remove both of the below
     /// Serialize everything, hashes for recorded calls, no environment locks
     static SerialOptions CompilerClientRetrieve;

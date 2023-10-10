@@ -338,6 +338,12 @@ CompilerClient::Handle<T>* CompilerClient::request(
 
 CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
     CompilerClient::CompiledHandle* handle = nullptr;
+
+    auto codeWithPool = DispatchTable::unpack(BODY(what))->baseline()->body();
+    auto compilerClientOptions = SerialOptions::CompilerClient(codeWithPool);
+    // TODO: Is this preserve necessary?
+    R_PreserveObject(codeWithPool->container());
+
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
         auto innerHandle = request<CompiledResponseData>(
             [=](ByteBuffer& request) {
@@ -370,13 +376,13 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 request.putLong((uint64_t)Request::Compile);
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
                 LOG_REQUEST("serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClient(...))");
-                serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClient(what));
+                serialize(Compiler::decompileClosure(what), request, compilerClientOptions);
                 auto baseline = DispatchTable::unpack(BODY(what))->baseline();
                 LOG_REQUEST("baseline->fullSignature");
                 baseline->serializeFullSignature(request);
                 auto feedback = baseline->typeFeedback();
                 LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClient(...))");
-                serialize(feedback->container(), request, SerialOptions::CompilerClient(what));
+                serialize(feedback->container(), request, compilerClientOptions);
                 LOG_REQUEST("baseline->body()->extraPoolSize");
                 request.putInt(baseline->body()->extraPoolSize);
 #endif
@@ -418,11 +424,13 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
                 LOG_RESPONSE("pirPrint = (size = " << pirPrint.size() << ")");
-                SEXP responseWhat = deserialize(response, SerialOptions::CompilerClient(what));
+                SEXP responseWhat = deserialize(response, compilerClientOptions);
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(responseWhat)
                                           << ", CompilerServer)");
                 END_LOGGING_RESPONSE();
 
+                // TODO: Is the above preserve necessary?
+                R_ReleaseObject(codeWithPool->container());
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );

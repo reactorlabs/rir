@@ -27,8 +27,11 @@ template<typename T> class BimapVector {
     size_t size() const { return ltr_.size(); }
     bool empty() const { return ltr_.empty(); }
     bool count(const T& t) const { return rtl_.count(t); }
-    const T& operator[](size_t i) const { return ltr_[i]; }
-    size_t operator[](const T& t) const {
+    const T& at(size_t i) const {
+        assert(i < ltr_.size() && "BimapVector index out of bounds");
+        return ltr_.at(i);
+    }
+    size_t at(const T& t) const {
         assert(rtl_.count(t) && "BimapVector does not contain this element");
         return rtl_.at(t);
     }
