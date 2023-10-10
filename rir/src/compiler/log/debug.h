@@ -102,6 +102,36 @@ struct DebugOptions {
                style != DebugStyle::Standard;
     }
 
+    friend std::ostream& operator<<(std::ostream& out, const DebugOptions& o) {
+        out << "DebugOptions(";
+        bool first = true;
+#define V(n)                                                                   \
+        if (o.includes(DebugFlag::n)) {                                        \
+            if (!first) out << ", ";                                           \
+            out << #n;                                                         \
+            first = false;                                                     \
+        }
+        LIST_OF_PIR_DEBUGGING_FLAGS(V)
+#undef V
+        if (o.passFilterString != ".*") {
+            if (!first) out << ", ";
+            out << "passFilter=" << o.passFilterString;
+            first = false;
+        }
+        if (o.functionFilterString != ".*") {
+            if (!first) out << ", ";
+            out << "functionFilter=" << o.functionFilterString;
+            first = false;
+        }
+        if (o.style != DebugStyle::Standard) {
+            if (!first) out << ", ";
+            out << "style=" << (int)o.style;
+            first = false;
+        }
+        out << ")";
+        return out;
+    }
+
     static DebugOptions DefaultDebugOptions;
 };
 

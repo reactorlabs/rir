@@ -375,17 +375,15 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 LOG_REQUEST("Request::Compile");
                 request.putLong((uint64_t)Request::Compile);
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-                LOG_REQUEST("serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClient(...))");
-                serialize(Compiler::decompileClosure(what), request, compilerClientOptions);
+                auto decompiled = Compiler::decompileClosure(what);
+                LOG_REQUEST("serialize(" << Print::dumpSexp(decompiled) << ", CompilerClient(...))");
+                serialize(decompiled, request, compilerClientOptions);
                 auto baseline = DispatchTable::unpack(BODY(what))->baseline();
-                LOG_REQUEST("baseline->fullSignature");
+                LOG_REQUEST("full signature");
                 baseline->serializeFullSignature(request);
                 auto feedback = baseline->typeFeedback();
-                LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClient(...))");
                 serialize(feedback->container(), request, compilerClientOptions);
-                LOG_REQUEST("(uintptr_t)codeWithPool");
                 request.putLong((uintptr_t)codeWithPool);
-                LOG_REQUEST("codeWithPool->extraPoolSize");
                 request.putInt(codeWithPool->extraPoolSize);
 #endif
 #if COMPILER_CLIENT_SEND_FULL
@@ -398,7 +396,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 LOG_REQUEST("name = " << name);
                 request.putLong(name.size());
                 request.putBytes((uint8_t*)name.c_str(), name.size());
-                LOG_REQUEST("debug = pir::DebugOptions(...)");
+                LOG_REQUEST("debug = " << debug);
                 request.putLong(sizeof(debug.flags));
                 request.putBytes((uint8_t*)&debug.flags, sizeof(debug.flags));
                 request.putLong(debug.passFilterString.size());

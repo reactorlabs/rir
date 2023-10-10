@@ -249,19 +249,16 @@ void CompilerServer::tryRun() {
             SOFT_ASSERT(TYPEOF(what) == CLOSXP,
                         "deserialized source closure to compile isn't actually a closure");
             PROTECT(what);
-            Compiler::compileClosure(what);
             LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClient(...))");
+            Compiler::compileClosure(what);
             DispatchTable::unpack(BODY(what))->baseline()->deserializeFullSignature(requestBuffer);
-            LOG_REQUEST("baseline->fullSignature");
+            LOG_REQUEST("full signature");
             auto feedback = deserialize(requestBuffer, SerialOptions::CompilerServer);
             SOFT_ASSERT(TypeFeedback::check(feedback),
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
-            LOG_REQUEST("serialize(" << feedback << ", CompilerClient(...))");
             auto sourcePoolAddr = (uintptr_t)requestBuffer.getLong();
-            LOG_REQUEST("(uintptr_t)codeWithPool");
             auto sourcePoolSize = requestBuffer.getInt();
-            LOG_REQUEST("codeWithPool->extraPoolSize");
             ExtraPoolStub::pad(sourcePoolAddr, sourcePoolSize, DispatchTable::unpack(BODY(what))->baseline()->body());
             UNPROTECT(1);
 #endif
@@ -327,7 +324,7 @@ void CompilerServer::tryRun() {
             requestBuffer.getBytes((uint8_t*)&debugStyle, debugStyleSize);
             pir::DebugOptions debug(debugFlags, passFilterString,
                                     functionFilterString, debugStyle);
-            LOG_REQUEST("debug = pir::DebugOptions(...)");
+            LOG_REQUEST("debug = " << debug);
             END_LOGGING_REQUEST();
 
             // It's a bit confusing that debug options are passed from the
