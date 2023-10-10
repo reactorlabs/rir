@@ -7,6 +7,7 @@
 #include "api.h"
 #include "bc/Compiler.h"
 #include "compiler_server_client_shared_utils.h"
+#include "runtime/ExtraPoolStub.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/serialize/serialize.h"
@@ -215,13 +216,13 @@ void CompilerServer::tryRun() {
             LOG_REQUEST("Request::Compile");
             // ...
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-            // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+            // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
             // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
-            // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClientFeedback)
-            // + DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->referencedPoolEntries()
+            // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
+            // + DispatchTable::unpack(BODY(what))->baseline()->body()->extraPoolSize
 #endif
 #if COMPILER_CLIENT_SEND_FULL
-            // + serialize(what, CompilerClientSourceAndFeedback)
+            // + serialize(what, SourceAndFeedback)
 #endif
             // + sizeof(assumptions) (always 8)
             // + assumptions
@@ -243,22 +244,21 @@ void CompilerServer::tryRun() {
             // handle the case where they are forgotten by just not speculating
             // on them.
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-            what = deserialize(requestBuffer, SerialOptions::CompilerClientSource);
+            what = deserialize(requestBuffer, SerialOptions::CompilerServer);
             SOFT_ASSERT(TYPEOF(what) == CLOSXP,
                         "deserialized source closure to compile isn't actually a closure");
             PROTECT(what);
             Compiler::compileClosure(what);
-            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSource)");
+            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClient(...))");
             DispatchTable::unpack(BODY(what))->baseline()->deserializeFullSignature(requestBuffer);
             LOG_REQUEST("baseline->fullSignature");
-            auto feedback = deserialize(requestBuffer, SerialOptions::CompilerClientFeedback);
+            auto feedback = deserialize(requestBuffer, SerialOptions::CompilerServer);
             SOFT_ASSERT(TypeFeedback::check(feedback),
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
-            LOG_REQUEST("serialize(" << feedback << ", CompilerClientFeedback)");
-            auto referencedPoolEntries = TypeFeedback::ReferencedPoolEntries::deserialize(requestBuffer);
-            TypeFeedback::unpack(feedback)->setReferencedPoolEntries(referencedPoolEntries);
-            LOG_REQUEST("feedback->referencedPoolEntries()");
+            LOG_REQUEST("serialize(" << feedback << ", CompilerClient(...))");
+            ExtraPoolStub::pad(DispatchTable::unpack(BODY(what))->baseline()->body(), requestBuffer.getInt());
+            LOG_REQUEST("baseline->body()->extraPoolSize");
             UNPROTECT(1);
 #endif
 #if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL
@@ -266,10 +266,10 @@ void CompilerServer::tryRun() {
             PROTECT(what2);
 #endif
 #if COMPILER_CLIENT_SEND_FULL
-            what = deserialize(requestBuffer, SerialOptions::CompilerClientSourceAndFeedback);
+            what = deserialize(requestBuffer, SerialOptions::SourceAndFeedback);
             SOFT_ASSERT(TYPEOF(what) == CLOSXP && DispatchTable::check(BODY(what)),
                         "deserialized rir closure to compile isn't actually a rir closure");
-            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
+            LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", SourceAndFeedback)");
 #endif
 #if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL
             PROTECT(what);
@@ -352,14 +352,14 @@ void CompilerServer::tryRun() {
             // because we want to store it in the UUID pool for Retrieve requests
             // (since we memoize requests) so that compiler client can retrieve
             // it later
-            UUIDPool::intern(what, true, true);
+            // UUIDPool::intern(what, true, true);
 
             // Serialize the response
             // Response data format =
             //   Response::Compiled
             // + sizeof(pirPrint)
             // + pirPrint
-            // + serialize(what, CompilerServer)
+            // + serialize(what, CompilerClient(...))
             START_LOGGING_RESPONSE();
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             LOG_RESPONSE("Response::Compiled");
@@ -372,12 +372,13 @@ void CompilerServer::tryRun() {
             //  are redundant), but first send the body's hash so we can reuse
             //  and skip deserialization if possible (see commit tagged
             //  cant-send-compiled-hash)
-            LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
+            LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerClient(...))");
             serialize(what, response, SerialOptions::CompilerServer);
             END_LOGGING_RESPONSE();
             break;
         }
         case Request::Retrieve: {
+            assert(false && "TODO remove, we don't need this anymore");
             LOG(std::cerr << "Received retrieve request" << std::endl);
             LOG_REQUEST("Request::Retrieve");
             // ...
@@ -448,6 +449,7 @@ void CompilerServer::tryRun() {
 }
 
 SEXP CompilerServer::retrieve(const rir::UUID& hash) {
+    assert(false && "TODO remove, we don't need this anymore");
     LOG(std::cerr << "Retrieving from client " << hash << std::endl);
     // Build the server-side request
     // Data format =

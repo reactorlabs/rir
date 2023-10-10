@@ -176,6 +176,15 @@ class AbstractSerializer {
                     const SerialFlags& flags = SerialFlags::Inherit);
     /// Write SEXP in source pool ([src_pool_at])
     void writeSrc(unsigned idx, const SerialFlags& flags = SerialFlags::Ast);
+
+    // Helpers
+    void writeSexpVector(const std::vector<SEXP>& vec,
+                         const SerialFlags& flags = SerialFlags::Inherit) {
+        writeBytesOf<size_t>(vec.size(), flags);
+        for (auto s : vec) {
+            write(s, flags);
+        }
+    }
 };
 
 /// Abstract class to deserialize an SEXP
@@ -246,6 +255,16 @@ class AbstractDeserializer {
         if (refs()) {
             refs()->push_back(s);
         }
+    }
+
+    // Helpers
+    std::vector<SEXP> readSexpVector(const SerialFlags& flags = SerialFlags::Inherit) {
+        auto size = readBytesOf<size_t>(flags);
+        std::vector<SEXP> result(size);
+        for (size_t i = 0; i < size; ++i) {
+            result[i] = read(flags);
+        }
+        return result;
     }
 };
 

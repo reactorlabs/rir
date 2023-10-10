@@ -7,6 +7,7 @@
 #include "R/r_incl.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/serializeUni.h"
+#include "utils/BimapVector.h"
 #include "utils/ByteBuffer.h"
 
 namespace rir {
@@ -16,45 +17,42 @@ namespace rir {
 /// with.
 struct SerialOptions {
     /// Whether to serialize connected RIR objects as UUIDs instead of their
-    /// full content. However, recorded calls are always serialized as UUIDs.
+    /// full content, besides recorded calls, which are serialized as UUIDs
+    /// depending on `useHashesForRecordedCalls`.
     bool useHashes;
-    /// Whether to only serialize source (no optimized code or feedback).
-    bool onlySource;
-    /// Whether to only serialize feedback (no optimized code or source).
-    /// TODO: Currently doesn't work because deserialization requires an
-    ///  existing SEXP, and we don't support deserialization with existing SEXPs
-    bool onlyFeedback;
-    /// Whether to only serialize source and feedback (no optimized code). This
-    /// is different than passing onlySource and onlyFeedback, because that
-    /// would serialize data which is both source and feedback, this serializes
-    /// data which is either source or feedback (negated "and" confusion). Of
-    /// course, if onlySource or onlyFeedback it set, that makes
-    /// onlySourceAndFeedback irrelevant.
+    /// Whether to serialize recorded calls as UUIDs instead of their full
+    /// content.
+    bool useHashesForRecordedCalls;
+    /// Whether to only serialize source and feedback (no optimized code).
     bool onlySourceAndFeedback;
     /// Whether to skip serializing environment locks
     bool skipEnvLocks;
+    /// If nonempty, we serialize the corresponding SEXPs with extra pool stubs
+    BimapVector<SEXP> extraPool;
+
+    /// Don't serialize the extra pool, since we are only serializing to check
+    /// compatibility and that isn't used
+    static SerialOptions deserializeCompatible(AbstractDeserializer& deserializer);
+    /// Don't serialize the extra pool, since we are only serializing to check
+    /// compatibility and that isn't used
+    void serializeCompatible(AbstractSerializer& serializer) const;
+    /// Check equality of everything except the extra pool
+    bool areCompatibleWith(const SerialOptions& other) const;
 
     bool willReadOrWrite(const SerialFlags& flags) const;
 
-    bool operator==(const SerialOptions& other) const {
-        return memcmp(this, &other, sizeof(SerialOptions)) == 0;
-    }
-
-    /// Serialize everything, not using hashes, with environment locks
+    /// Serialize everything, no hashes, environment locks
     static SerialOptions DeepCopy;
-    /// Serialize everything, using hashes, without environment locks
+    /// Serialize everything, no hashes, no environment locks
     static SerialOptions CompilerServer;
-    /// Serialize everything, not using hashes, without environment locks
-    /// TODO: use hashes or something because this is probably too much
-    ///  unnecessary data again
+    /// Serialize everything, no hashes, no environment locks.
+    /// Serialize and deserialize the closure's baseline pool entries from stubs
+    static SerialOptions CompilerClient(SEXP closureWithExtraPool);
+    //  TODO: Remove both of the below
+    /// Serialize everything, hashes for recorded calls, no environment locks
     static SerialOptions CompilerClientRetrieve;
-    /// Serialize only source and feedback, not using hashes, without
-    /// environment locks
-    static SerialOptions CompilerClientSourceAndFeedback;
-    /// Serialize only source, not using hashes, without environment locks
-    static SerialOptions CompilerClientSource;
-    /// Serialize only feedback, not using hashes, without environment locks
-    static SerialOptions CompilerClientFeedback;
+    /// Serialize only source and feedback, no hashes, no environment locks
+    static SerialOptions SourceAndFeedback;
 };
 
 class Serializer : public AbstractSerializer {
@@ -66,10 +64,12 @@ class Serializer : public AbstractSerializer {
     /// corresponding deserializer must have the same options.
     SerialOptions options;
 
-    Serializer(ByteBuffer& buffer, SerialOptions options)
-        : buffer(buffer), refs_(), options(options) {}
     SerializedRefs* refs() override { return &refs_; }
 
+    Serializer(ByteBuffer& buffer, const SerialOptions& options)
+        : buffer(buffer), refs_(), options(options) {
+        options.serializeCompatible(*this);
+    }
     friend void serialize(SEXP sexp, ByteBuffer& buffer,
                           const SerialOptions& options);
   public:
@@ -90,12 +90,16 @@ class Deserializer : public AbstractDeserializer {
     /// If set, the first rir object deserialized will use this hash
     UUID retrieveHash;
 
-    Deserializer(const ByteBuffer& buffer, SerialOptions options,
-                 const UUID& retrieveHash = UUID())
-        : buffer(buffer), refs_(), options(options),
-          retrieveHash(retrieveHash) {}
     DeserializedRefs* refs() override { return &refs_; }
 
+    Deserializer(const ByteBuffer& buffer, const SerialOptions& options,
+                 const UUID& retrieveHash = UUID())
+        : buffer(buffer), refs_(), options(options),
+          retrieveHash(retrieveHash) {
+        auto serializedOptions = SerialOptions::deserializeCompatible(*this);
+        assert(serializedOptions.areCompatibleWith(options) &&
+               "serialize/deserialize options incompatible (not equal)");
+    }
     friend SEXP deserialize(const ByteBuffer& sexpBuffer,
                             const SerialOptions& options,
                             const UUID& retrieveHash);

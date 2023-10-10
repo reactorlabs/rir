@@ -139,6 +139,7 @@ void CompilerClient::tryInit() {
 static zmq::message_t
 handleRetrieveServerRequest(int index, zmq::socket_t* socket,
                             const ByteBuffer& serverRequestBuffer) {
+    assert(false && "TODO remove, we don't need this anymore");
     LOG(std::cerr << "Socket " << index << " received retrieve request"
                   << std::endl);
 
@@ -337,13 +338,13 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // Request data format =
                 //   Request::Compile
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-                // + serialize(Compiler::decompileClosure(what), CompilerClientSource)
+                // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
                 // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
-                // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClientFeedback)
-                // + DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->referencedPoolEntries()
+                // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
+                // + DispatchTable::unpack(BODY(what))->baseline()->body()->extraPoolSize
 #endif
 #if COMPILER_CLIENT_SEND_FULL
-                // + serialize(what, CompilerClientSourceAndFeedback)
+                // + serialize(what, SourceAndFeedback)
 #endif
                 // + sizeof(assumptions) (always 8)
                 // + assumptions
@@ -361,20 +362,20 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 LOG_REQUEST("Request::Compile");
                 request.putLong((uint64_t)Request::Compile);
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-                LOG_REQUEST("serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClientSource)");
-                serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClientSource);
+                LOG_REQUEST("serialize(Compiler::decompileClosure(" << Print::dumpSexp(what) << "), CompilerClient(...))");
+                serialize(Compiler::decompileClosure(what), request, SerialOptions::CompilerClient(what));
                 auto baseline = DispatchTable::unpack(BODY(what))->baseline();
                 LOG_REQUEST("baseline->fullSignature");
                 baseline->serializeFullSignature(request);
                 auto feedback = baseline->typeFeedback();
-                LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClientFeedback)");
-                serialize(feedback->container(), request, SerialOptions::CompilerClientFeedback);
-                LOG_REQUEST("feedback->referencedPoolEntries()");
-                feedback->referencedPoolEntries().serialize(request);
+                LOG_REQUEST("serialize(" << feedback->container() << ", CompilerClient(...))");
+                serialize(feedback->container(), request, SerialOptions::CompilerClient(what));
+                LOG_REQUEST("baseline->body()->extraPoolSize");
+                request.putInt(baseline->body()->extraPoolSize);
 #endif
 #if COMPILER_CLIENT_SEND_FULL
-                LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClientSourceAndFeedback)");
-                serialize(what, request, SerialOptions::CompilerClientSourceAndFeedback);
+                LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", SourceAndFeedback)");
+                serialize(what, request, SerialOptions::SourceAndFeedback);
 #endif
                 LOG_REQUEST("assumptions = " << assumptions);
                 request.putLong(sizeof(Context));
@@ -395,12 +396,12 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 request.putBytes((uint8_t*)&debug.style, sizeof(debug.style));
                 END_LOGGING_REQUEST();
             },
-            [](const ByteBuffer& response) {
+            [=](const ByteBuffer& response) {
                 // Response data format =
                 //   Response::Compiled
                 // + sizeof(pirPrint)
                 // + pirPrint
-                // + serialize(what, CompilerServer)
+                // + serialize(what, CompilerClient(...))
                 START_LOGGING_RESPONSE();
                 auto responseMagic = (Response)response.getLong();
                 assert(responseMagic == Response::Compiled);
@@ -410,7 +411,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 pirPrint.resize(pirPrintSize);
                 response.getBytes((uint8_t*)pirPrint.data(), pirPrintSize);
                 LOG_RESPONSE("pirPrint = (size = " << pirPrint.size() << ")");
-                SEXP responseWhat = deserialize(response, SerialOptions::CompilerServer);
+                SEXP responseWhat = deserialize(response, SerialOptions::CompilerClient(what));
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(responseWhat)
                                           << ", CompilerServer)");
                 END_LOGGING_RESPONSE();
@@ -426,6 +427,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {
+    assert(false && "TODO remove, we don't need this anymore");
     Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME, true);
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {

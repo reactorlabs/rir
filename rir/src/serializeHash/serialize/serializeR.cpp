@@ -248,7 +248,7 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 }
 
 static SerialOptions* newRSerialOptions(bool useHashes) {
-    return new SerialOptions{useHashes, false, false, false, false};
+    return new SerialOptions{useHashes, useHashes, false, false, BimapVector<SEXP>{}};
 }
 
 void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
