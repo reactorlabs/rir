@@ -12,16 +12,16 @@
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/closure.h"
-#include "compiler/pir/type.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "compilerClientServer/compiler_server_client_shared_utils.h"
 #include "interpreter/interp_incl.h"
+#include "runtime/DispatchTable.h"
+#include "runtime/log/printPrettyGraphFromEnv.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/ByteBuffer.h"
-#include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 
 #include <cassert>
@@ -402,6 +402,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         delete compilerServerHandle;
     });
 
+    printPrettyGraphOfCompiledIfNecessary(what, name);
+
     return what;
 }
 
@@ -655,6 +657,12 @@ REXPORT SEXP rirKillCompilerServers() {
 
 REXPORT SEXP initializeUUIDPool() {
     UUIDPool::initialize();
+    R_Visible = (Rboolean)false;
+    return R_NilValue;
+}
+
+REXPORT SEXP initializePrintPrettyGraphFromEnv() {
+    rir::initializePrintPrettyGraphFromEnv();
     R_Visible = (Rboolean)false;
     return R_NilValue;
 }

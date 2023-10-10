@@ -11,6 +11,14 @@
 #define COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK 1
 #define COMPILER_CLIENT_SEND_FULL 0
 
+#define CHECK_MSG_NOT_TOO_LARGE(size) do {                                     \
+        if (size > (unsigned)INT_MAX) {                                        \
+            std::cerr << "Message too large for zeromq: " << #size << "="      \
+                      << size << " (> INT_MAX)" << std::endl;                  \
+            assert(false);                                                     \
+        }                                                                      \
+    } while (0)
+
 namespace rir {
 
 enum class Request : uint64_t {

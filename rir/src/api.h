@@ -29,6 +29,7 @@ REXPORT SEXP rirSetUserContext(SEXP f, SEXP udc);
 REXPORT SEXP rirCreateSimpleIntContext();
 
 REXPORT SEXP initializeUUIDPool();
+REXPORT SEXP initializePrintPrettyGraphFromEnv();
 /// Send a message from the compiler client (this) to each connected compiler
 /// server, which kills the server (exit 0) on receive. Then stops the client
 /// for the remainder of the session

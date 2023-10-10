@@ -50,12 +50,11 @@ graphical representation of the code choose the GraphViz debug style.
         Detailed    print very detailed information in rir objects, useful for debugging or explaining unexpected semantic differences
         PrettyGraph print in HTML which can be loaded with `tools/rirPrettyGraph` in the same location to display an interactive graph
 
-    PIR_PRINT_INTERNED_RIR_OBJECTS=
-        <0|1|path>  if set, folder to print pretty graphs of RIR objects which get interned. If set to 1, prints HTML to stdout. If set to 0 or unset (default), won't print.
-                    Interning doesn't occur in normal RIR execution, it will get triggered if RIR_SERIALIZE_CHAOS, PIR_DEBUG_SERIALIZE_LLVM, PIR_CLIENT_ADDR, or PIR_SERVER_ADDR is set.
+    PIR_GRAPH_PRINT_RIR_OBJECTS=
+        <0|1|path>  if set, folder to print pretty graphs of RIR objects which get compiled or interned. If set to 1, prints HTML to stdout. If set to 0 or unset (default), won't print.
 
-    PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY=
-        n           print pretty graphs of RIR objects which get interned every n-th time, defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
+    PIR_GRAPH_PRINT_RIR_OBJECTS_FREQUENCY=
+        n           print pretty graphs of every nth RIR object which gets compiled or interned. Defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
 
     PIR_LOG_INTERNING=
         1           log every new intern, reused intern, unintern, and other intern related events.

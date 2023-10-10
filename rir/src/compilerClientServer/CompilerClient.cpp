@@ -33,10 +33,9 @@ thread_pool* threads;
 static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 #endif
 
-
 #define CHECK_MSG_SIZE(size, size2) if (size != size2)                         \
-        LOG_WARN(std::cerr << "Different sizes: " << #size << "=" << size      \
-                           << ", " << #size2 << "=" << size2 << std::endl);
+        std::cerr << "Different sizes: " << #size << "=" << size << ", "       \
+                  << #size2 << "=" << size2 << std::endl;
 
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
@@ -198,6 +197,7 @@ handleRetrieveServerRequest(int index, zmq::socket_t* socket,
     // Send the client response
     LOG(std::cerr << "Socket " << index << " sending retrieve response"
                   << std::endl);
+    CHECK_MSG_NOT_TOO_LARGE(clientResponse.size());
     auto clientResponseSize = *socket->send(
         zmq::message_t(clientResponse.data(),
                        clientResponse.size()),
@@ -262,6 +262,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
             // Send the hash-only request
             LOG(std::cerr << "Socket " << index << " sending hashOnly request"
                           << std::endl);
+            CHECK_MSG_NOT_TOO_LARGE(hashOnlyRequest.size());
             auto hashOnlyRequestSize =
                 *socket->send(zmq::message_t(
                                   hashOnlyRequest.data(),
@@ -299,6 +300,7 @@ CompilerClient::Handle<T>* CompilerClient::request(
         // Send the request
         LOG(std::cerr << "Socket " << index << " sending request" << std::endl);
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_REQUEST_TIMER_NAME, true);
+        CHECK_MSG_NOT_TOO_LARGE(request.size());
         auto requestSize =
             *socket->send(zmq::message_t(
                               request.data(),

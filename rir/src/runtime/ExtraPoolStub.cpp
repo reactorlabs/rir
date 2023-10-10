@@ -21,7 +21,7 @@ SEXP ExtraPoolStub::create(uintptr_t codeWithPoolAddr, size_t index) {
 }
 
 void ExtraPoolStub::print(std::ostream& out) const {
-    out << "(" << codeWithPoolAddr << ", " << index << ")";
+    out << "(" << (void*)codeWithPoolAddr << ", " << index << ")";
 }
 
 ExtraPoolStub* ExtraPoolStub::deserialize(AbstractDeserializer& deserializer) {

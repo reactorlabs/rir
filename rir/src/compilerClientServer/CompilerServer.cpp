@@ -152,6 +152,7 @@ void CompilerServer::tryRun() {
                 END_LOGGING_RESPONSE();
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
                 Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
+                CHECK_MSG_NOT_TOO_LARGE(result.size());
                 socket->send(zmq::message_t(result.data(), result.size()),
                              zmq::send_flags::none);
                 Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
@@ -191,6 +192,7 @@ void CompilerServer::tryRun() {
             END_LOGGING_RESPONSE();
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
+            CHECK_MSG_NOT_TOO_LARGE(result.size());
             socket->send(zmq::message_t(
                              result.data(),
                              result.size()),
@@ -431,6 +433,7 @@ void CompilerServer::tryRun() {
         Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, SENDING_RESPONSE_TIMER_NAME, true);
         size_t responseSize;
         Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER && what, "CompilerServer.cpp: sending new response with SEXP", what, [&]{
+            CHECK_MSG_NOT_TOO_LARGE(response.size());
             responseSize = *socket->send(zmq::message_t{
                                              response.data(),
                                              response.size()},
@@ -463,6 +466,7 @@ SEXP CompilerServer::retrieve(const rir::UUID& hash) {
 
     // Send the server-side request
     auto serverRequestSize = serverRequest.size();
+    CHECK_MSG_NOT_TOO_LARGE(serverRequest.size());
     auto serverRequestSize2 = *socket->send(zmq::message_t(
                                                 serverRequest.data(),
                                                 serverRequest.size()),

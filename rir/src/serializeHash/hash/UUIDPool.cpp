@@ -11,14 +11,13 @@
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "runtime/ExtraPoolStub.h"
+#include "runtime/log/printPrettyGraphFromEnv.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
 #include "serializeHash/hash/getConnected.h"
 #include "serializeHash/hash/hashRoot.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
-#include <sys/stat.h>
-#include <unistd.h>
 
 // Can change this to log interned and uninterned hashes and pointers
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_INTERNING) stmt
@@ -43,32 +42,12 @@ bool pir::Parameter::PIR_MEASURE_INTERNING =
     strtol(getenv("PIR_MEASURE_INTERNING"), nullptr, 10);
 
 
-bool pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS =
-    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") != nullptr &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "0") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "false") != 0;
-const char* pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH =
-    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") != nullptr &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "0") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "false") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "1") != 0 &&
-    strcmp(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS"), "true") != 0 ?
-        getenv("PIR_PRINT_INTERNED_RIR_OBJECTS") : nullptr;
-unsigned pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY =
-    getenv("PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY") != nullptr
-        ? strtol(getenv("PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY"), nullptr, 10)
-        : 10;
-
-
 bool UUIDPool::isInitialized = false;
 std::unordered_map<UUID, SEXP> UUIDPool::interned;
 std::unordered_map<SEXP, UUID> UUIDPool::hashes;
 std::unordered_map<SEXP, SEXP> UUIDPool::nextToIntern;
 std::unordered_map<SEXP, SEXP> UUIDPool::prevToIntern;
 std::unordered_set<SEXP> UUIDPool::preserved;
-static unsigned prettyPrintCount = 0;
 
 #ifdef DEBUG_DISASSEMBLY
 static std::unordered_map<UUID, std::string> disassembly;
@@ -105,58 +84,6 @@ static void registerFinalizerIfPossible(SEXP e, R_CFinalizer_t finalizer) {
 void UUIDPool::initialize() {
     assert(!isInitialized);
     isInitialized = true;
-    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
-        // Create folder (not recursively) if it doesn't exist
-        auto code = mkdir(pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH, 0777);
-        if (code != 0 && errno != EEXIST) {
-            std::cerr << "Could not create folder for PIR_PRINT_INTERNED_RIR_OBJECTS: "
-                      << strerror(errno) << std::endl;
-            std::abort();
-        }
-        // Also softlink rirPrettyGraph (HTML dependency) in the folder.
-        // We do this even if the folder already exists, because the user may
-        // have corrupted it.
-        auto linkSource = getenv("PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION");
-        assert(linkSource && "PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION should be set by the R executable, we need it to softlink rirPrettyGraph for the HTML prints");
-        std::stringstream linkTarget;
-        linkTarget << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/rirPrettyGraph";
-        code = symlink(linkSource, linkTarget.str().c_str());
-        if (code != 0 && errno != EEXIST) {
-            std::cerr << "Could not symlink associated common styles/scripts for PIR_PRINT_INTERNED_RIR_OBJECTS: "
-                      << strerror(errno) << std::endl;
-            std::abort();
-        }
-    }
-}
-
-static void printInterned(SEXP sexp, const UUID& hash) {
-    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH) {
-        // Create new file which is denoted by the current date and hash
-        std::stringstream filePath;
-        filePath << pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_PATH << "/" << time(nullptr) << "-" << hash.str() << ".html";
-        std::ofstream file(filePath.str());
-        if (!file.is_open()) {
-            std::cerr << "Could not open file for PIR_PRINT_INTERNED_RIR_OBJECTS: "
-                      << strerror(errno) << std::endl;
-            std::abort();
-        }
-        // Print HTML pretty graph to file
-        printRirObject(sexp, file, RirObjectPrintStyle::PrettyGraph);
-        // File closes automatically (RAII)
-    } else {
-        // Just print HTML pretty graph to stdout
-        printRirObject(sexp, std::cout, RirObjectPrintStyle::PrettyGraph);
-    }
-}
-
-void UUIDPool::printInternedIfNecessary(SEXP sexp, const UUID& hash) {
-    if (pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS) {
-        prettyPrintCount++;
-        if (prettyPrintCount == pir::Parameter::PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY) {
-            printInterned(sexp, hash);
-            prettyPrintCount = 0;
-        }
-    }
 }
 
 void UUIDPool::unintern(SEXP e, bool isGettingGcd) {
@@ -326,7 +253,7 @@ SEXP UUIDPool::intern(SEXP e, const UUID& hash, bool preserve, bool isSexpComple
         LOG(std::cout << "Disassembly:\n" << disassembly[hash] << "\n");
 #endif
         if (isSexpComplete) {
-            printInternedIfNecessary(e, hash);
+            printPrettyGraphOfInternedIfNecessary(e, hash);
         }
         interned[hash] = e;
         hashes[e] = hash;

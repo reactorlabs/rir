@@ -55,9 +55,9 @@ struct Parameter {
     /// server is running, otherwise enabled if PIR_PIR_DEBUG_SERIALIZE_LLVM is set
     static bool SERIALIZE_LLVM;
 
-    static bool PIR_PRINT_INTERNED_RIR_OBJECTS;
-    static const char* PIR_PRINT_INTERNED_RIR_OBJECTS_PATH;
-    static unsigned PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY;
+    static bool PIR_GRAPH_PRINT_RIR_OBJECTS;
+    static const char* PIR_GRAPH_PRINT_RIR_OBJECTS_PATH;
+    static unsigned PIR_GRAPH_PRINT_RIR_OBJECTS_FREQUENCY;
 
     static bool PIR_LOG_INTERNING;
     static bool PIR_WARN_INTERNING;

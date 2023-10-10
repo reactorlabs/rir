@@ -5,6 +5,7 @@
 #include "rirObjectMagic.h"
 #include "Code.h"
 #include "DispatchTable.h"
+#include "ExtraPoolStub.h"
 #include "GenericDispatchTable.h"
 #include "LazyArglist.h"
 #include "LazyEnvironment.h"
@@ -30,6 +31,8 @@ const char* rirObjectClassName(unsigned magic) {
             return "PirTypeFeedback";
         case TYPEFEEDBACK_MAGIC:
             return "TypeFeedback";
+        case EXTRA_POOL_STUB_MAGIC:
+            return "ExtraPoolStub";
         case GENERIC_DISPATCH_TABLE_MAGIC:
             return "GenericDispatchTable";
         default:
