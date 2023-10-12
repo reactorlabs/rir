@@ -36,4 +36,7 @@ benchmarks/
 *.DS_Store
 external/*
 !external/custom-r
+!external/xxHash
 .history
+.cache
+compile_commands.json

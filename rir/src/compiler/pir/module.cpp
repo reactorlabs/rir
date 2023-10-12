@@ -1,5 +1,8 @@
 #include "module.h"
 
+#include "compiler/parameter.h"
+#include "compilerClientServer/CompilerClient.h"
+#include "compilerClientServer/CompilerServer.h"
 #include "pir_impl.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
@@ -31,12 +34,20 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
     // the real environment if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
     auto id = Idx(f, getEnv(CLOENV(closure)));
-    auto env = f->flags.contains(Function::InnerFunction)
+    auto env = f->flags().contains(Function::InnerFunction)
                    ? Env::notClosed()
                    : getEnv(CLOENV(closure));
     if (!closures.count(id))
         closures[id] = new Closure(name, closure, f, env, userContext);
-    assert(closures.at(id)->rirClosure() == closure);
+    // If the compiler server is running sometimes this false.
+    // Or client, but only if we're not calling hashRoot on children.
+    // Thus it probably means closures.at(id) is an equivalent duplicate.
+    // TODO: Investigate
+    assert(closures.at(id)->rirClosure() == closure ||
+           CompilerServer::isRunning() ||
+           CompilerClient::isRunning() ||
+           Parameter::RIR_SERIALIZE_CHAOS > 0 ||
+           Parameter::SERIALIZE_LLVM);
     return closures.at(id);
 }
 

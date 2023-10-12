@@ -8,6 +8,8 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PirTypeFeedback.h"
+#include "runtime/ExtraPoolStub.h"
+#include "runtime/RirRuntimeObject.h"
 
 #include <iomanip>
 #include <sstream>
@@ -82,36 +84,36 @@ std::string Print::trim(std::string s, size_t n) {
     return s.substr(0, n - 4) + "|...";
 }
 
-std::string Print::dumpPROMSXP(SEXP s) {
+std::string Print::dumpPROMSXP(SEXP s, size_t length) {
     std::stringstream ss;
     ss << "<prom";
     if (PRVALUE(s) != R_UnboundValue)
-        ss << " val=" << dumpSexp(PRVALUE(s));
-    ss << " " << dumpSexp(PRCODE(s));
+        ss << " val=" << dumpSexp(PRVALUE(s), length);
+    ss << " " << dumpSexp(PRCODE(s), length);
     // No PRENV(s) because we don't want to materialize if lazy
-    ss << " env=" << dumpSexp(s->u.promsxp.env) << ">";
+    ss << " env=" << dumpSexp(s->u.promsxp.env, length) << ">";
     return ss.str();
 }
 
-std::string Print::dumpCLOSXP(SEXP s) {
+std::string Print::dumpCLOSXP(SEXP s, size_t length) {
     std::stringstream ss;
     ss << "function(";
     auto f = FORMALS(s);
     while (f != R_NilValue) {
         if (TAG(f) != R_NilValue)
-            ss << dumpSexp(TAG(f));
+            ss << dumpSexp(TAG(f), length);
         if (CAR(f) != R_MissingArg)
-            ss << "=" << dumpSexp(CAR(f));
+            ss << "=" << dumpSexp(CAR(f), length);
         f = CDR(f);
         if (f != R_NilValue)
             ss << ", ";
     }
-    ss << ") " << dumpSexp(BODY(s));
-    ss << " env=" << dumpSexp(CLOENV(s));
+    ss << ") " << dumpSexp(BODY(s), length);
+    ss << " env=" << dumpSexp(CLOENV(s), length);
     return ss.str();
 }
 
-std::string Print::dumpLISTSXP(SEXP s, size_t limit) {
+std::string Print::dumpLISTSXP(SEXP s, size_t limit, size_t length) {
     std::stringstream ss;
     ss << "<" << sexptype2char(TYPEOF(s));
 
@@ -124,11 +126,11 @@ std::string Print::dumpLISTSXP(SEXP s, size_t limit) {
         ss << " ";
         out++;
         if (TAG(s) != R_NilValue) {
-            auto e = dumpSexp(TAG(s));
+            auto e = dumpSexp(TAG(s), length);
             ss << e << "=";
             out += 1 + e.length();
         }
-        auto e = dumpSexp(CAR(s));
+        auto e = dumpSexp(CAR(s), length);
         ss << e;
         out += e.length();
         s = CDR(s);
@@ -137,17 +139,17 @@ std::string Print::dumpLISTSXP(SEXP s, size_t limit) {
     return ss.str();
 }
 
-std::string Print::dumpLANGSXP(SEXP s) {
+std::string Print::dumpLANGSXP(SEXP s, size_t length) {
     std::stringstream ss;
     if (s != R_NilValue) {
-        ss << dumpSexp(CAR(s));
+        ss << dumpSexp(CAR(s), length);
         s = CDR(s);
     }
     ss << "(";
     while (s != R_NilValue) {
         if (TAG(s) != R_NilValue)
-            ss << dumpSexp(TAG(s)) << "=";
-        ss << dumpSexp(CAR(s));
+            ss << dumpSexp(TAG(s), length) << "=";
+        ss << dumpSexp(CAR(s), length);
         s = CDR(s);
         if (s != R_NilValue)
             ss << ", ";
@@ -156,7 +158,7 @@ std::string Print::dumpLANGSXP(SEXP s) {
     return ss.str();
 }
 
-std::string Print::dumpVector(SEXP s, size_t limit) {
+std::string Print::dumpVector(SEXP s, size_t limit, size_t length) {
     std::stringstream ss;
 
     auto unsafe = unsafeTags(s);
@@ -190,7 +192,7 @@ std::string Print::dumpVector(SEXP s, size_t limit) {
                     break;
                 }
                 case STRSXP: {
-                    ss << dumpSexp(STRING_PTR(s)[0]);
+                    ss << dumpSexp(STRING_PTR(s)[0], length);
                     break;
                 }
                 case RAWSXP: {
@@ -250,13 +252,13 @@ std::string Print::dumpVector(SEXP s, size_t limit) {
                     }
                     case STRSXP: {
                         // NA checked for CHARSXP in dumpSexp
-                        auto e = dumpSexp(STRING_PTR(s)[i]);
+                        auto e = dumpSexp(STRING_PTR(s)[i], length);
                         ss << e;
                         out += e.length();
                         break;
                     }
                     case VECSXP: {
-                        auto e = dumpSexp(VECTOR_PTR(s)[i]);
+                        auto e = dumpSexp(VECTOR_PTR(s)[i], length);
                         ss << e;
                         out += e.length();
                         break;
@@ -305,7 +307,7 @@ std::string Print::dumpVector(SEXP s, size_t limit) {
     return ss.str();
 }
 
-std::string Print::dumpEXTERNALSXP(SEXP s) {
+std::string Print::dumpEXTERNALSXP(SEXP s, size_t length) {
     std::stringstream ss;
     ss << "<";
     if (auto p = Code::check(s)) {
@@ -315,6 +317,9 @@ std::string Print::dumpEXTERNALSXP(SEXP s) {
             break;
         case Code::Kind::Native:
             ss << "n ";
+            break;
+        case Code::Kind::Deserializing:
+            ss << "ds ";
             break;
         }
         ss << "(rir::Code*)" << p;
@@ -334,6 +339,11 @@ std::string Print::dumpEXTERNALSXP(SEXP s) {
         ss << "(rir::LazyEnvironment*)" << p;
     } else if (auto p = PirTypeFeedback::check(s)) {
         ss << "(rir::PirTypeFeedback*)" << p;
+    } else if (auto p = TypeFeedback::check(s)) {
+        ss << "(rir::TypeFeedback*)" << p;
+    } else if (auto p = ExtraPoolStub::check(s)) {
+        ss << "(rir::ExtraPoolStub*)";
+        p->print(ss);
     } else {
         assert(false && "missing RirRuntimeObject printing");
     }
@@ -380,12 +390,12 @@ std::string Print::dumpSexp(SEXP s, size_t length) {
     }
 
     case LISTSXP: {
-        ss << dumpLISTSXP(s, length);
+        ss << dumpLISTSXP(s, length, length);
         break;
     }
 
     case CLOSXP: {
-        ss << dumpCLOSXP(s);
+        ss << dumpCLOSXP(s, length);
         break;
     }
 
@@ -409,12 +419,12 @@ std::string Print::dumpSexp(SEXP s, size_t length) {
     }
 
     case PROMSXP: {
-        ss << dumpPROMSXP(s);
+        ss << dumpPROMSXP(s, length);
         break;
     }
 
     case LANGSXP: {
-        ss << dumpLANGSXP(s);
+        ss << dumpLANGSXP(s, length);
         break;
     }
 
@@ -439,12 +449,12 @@ std::string Print::dumpSexp(SEXP s, size_t length) {
     case STRSXP:
     case VECSXP:
     case RAWSXP: {
-        ss << dumpVector(s, length);
+        ss << dumpVector(s, length, length);
         break;
     }
 
     case EXTERNALSXP: {
-        ss << dumpEXTERNALSXP(s);
+        ss << dumpEXTERNALSXP(s, length);
         break;
     }
 

@@ -261,7 +261,7 @@ BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
 }
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
-                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               Checkpoint* cp, const FeedbackPosition& origin,
                                DeoptReason::Reason reason, BB* bb,
                                BB::Instrs::iterator& position) {
     position = bb->insert(position, condition);
@@ -272,7 +272,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
 }
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
-                               Checkpoint* cp, const FeedbackOrigin& origin,
+                               Checkpoint* cp, const FeedbackPosition& origin,
                                DeoptReason::Reason reason) {
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();

@@ -13,5 +13,6 @@ PKG="$SCRIPTPATH/../rir/"
 
 export EXTRA_LOAD_SO="`ls $RIR_BUILD/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
+export PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION="$SCRIPTPATH/rirPrettyGraph"
 
 $R_HOME/bin/`basename "$0"` "$@"

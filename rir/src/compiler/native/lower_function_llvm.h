@@ -9,6 +9,7 @@
 #include "compiler/native/types_llvm.h"
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
+#include "serializeHash/serialize/native/SerialRepr.h"
 #include <llvm/IR/Instructions.h>
 
 #include "llvm/IR/DIBuilder.h"
@@ -42,7 +43,6 @@ class LowerFunctionLLVM {
     size_t numTemps;
     size_t maxTemps;
     llvm::Value* basepointer = nullptr;
-    llvm::Value* constantpool = nullptr;
     llvm::BasicBlock* entryBlock = nullptr;
     int inPushContext = 0;
     std::unordered_set<Value*> escapesInlineContext;
@@ -111,13 +111,44 @@ class LowerFunctionLLVM {
 
     llvm::FunctionCallee getBuiltin(const rir::pir::NativeBuiltin& b);
 
+    static llvm::FunctionCallee convertToFunction(llvm::Module& mod,
+                                                  const void* what,
+                                                  llvm::FunctionType* ty,
+                                                  /// Currently only for builtins, if
+                                                  /// we need to convert more functions
+                                                  /// we'll need to change to fn-id,
+                                                  /// tagged union or something else
+                                                  int builtinId);
     llvm::FunctionCallee convertToFunction(const void* what,
-                                           llvm::FunctionType* ty);
+                                           llvm::FunctionType* ty,
+                                           /// Currently only for builtins, if
+                                           /// we need to convert more functions
+                                           /// we'll need to change to fn-id,
+                                           /// tagged union or something else
+                                           int builtinId);
+    static llvm::Value* convertToPointer(llvm::Module& mod, const void* what,
+                                         llvm::Type* ty, bool constant,
+                                         llvm::MDNode* reprMeta);
     llvm::Value* convertToPointer(const void* what, llvm::Type* ty,
+                                  const SerialRepr& repr,
                                   bool constant = false);
     llvm::Value* convertToPointer(SEXP what, bool constant = false) {
-        return convertToPointer(what, t::SEXPREC, constant);
+        return convertToPointer(what, t::SEXPREC, SerialRepr::SEXP{what}, constant);
     }
+    llvm::Value* convertToPointer(rir::Function* fun, bool constant = false) {
+        return convertToPointer(fun, t::RirRuntimeObject, SerialRepr::Function{fun}, constant);
+    }
+    llvm::Value* convertToPointer(rir::TypeFeedback* typeFeedback, bool constant) {
+        return convertToPointer(typeFeedback, t::i8, SerialRepr::TypeFeedback{typeFeedback}, constant);
+    }
+
+    static llvm::Value* llvmSrcIdx(llvm::Module& mod, Immediate i);
+    llvm::Value* llvmSrcIdx(Immediate i);
+    static llvm::Value* llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i);
+    llvm::Value* llvmPoolIdx(BC::PoolIdx i);
+    static llvm::Value* llvmNames(llvm::Module& mod,
+                                  const std::vector<BC::PoolIdx>& names);
+    llvm::Value* llvmNames(const std::vector<BC::PoolIdx>& names);
 
     struct Variable {
         bool deadMove(const Variable& other) const;
@@ -280,11 +311,6 @@ class LowerFunctionLLVM {
 
     std::vector<llvm::Value*> loadedArgs;
 
-    static llvm::Constant* c(void* i) {
-        return llvm::ConstantInt::get(PirJitLLVM::getContext(),
-                                      llvm::APInt(64, (intptr_t)i));
-    }
-
     static llvm::Constant* c(unsigned long i, int bs = 64) {
         return llvm::ConstantInt::get(PirJitLLVM::getContext(),
                                       llvm::APInt(bs, i));
@@ -310,15 +336,11 @@ class LowerFunctionLLVM {
                                      llvm::APFloat(d));
     }
 
-    static llvm::Constant* c(const std::vector<unsigned int>& array) {
-        std::vector<llvm::Constant*> init;
-        for (const auto& e : array)
-            init.push_back(c(e));
-        auto ty = llvm::ArrayType::get(t::Int, array.size());
-        return llvm::ConstantArray::get(ty, init);
-    }
-
-    llvm::Value* globalConst(llvm::Constant* init, llvm::Type* ty = nullptr);
+    static llvm::GlobalVariable* globalConst(llvm::Module& mod,
+                                             llvm::Constant* init,
+                                             llvm::Type* ty = nullptr);
+    llvm::GlobalVariable* globalConst(llvm::Constant* init,
+                                      llvm::Type* ty = nullptr);
     llvm::AllocaInst* topAlloca(llvm::Type* t, size_t len = 1);
 
     llvm::Value* argument(int i);
@@ -393,7 +415,8 @@ class LowerFunctionLLVM {
 
     llvm::CallInst* call(const NativeBuiltin& builtin,
                          const std::vector<llvm::Value*>& args);
-    llvm::Value* callRBuiltin(SEXP builtin, const std::vector<Value*>& args,
+    llvm::Value* callRBuiltin(int builtinId, SEXP builtin,
+                              const std::vector<Value*>& args,
                               int srcIdx, CCODE, llvm::Value* env);
 
     llvm::Value* box(llvm::Value* v, PirType t, bool protect = true);

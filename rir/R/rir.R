@@ -216,3 +216,14 @@ rir.annotateDepromised <- function(closure) {
     rir.markFunction(copy, DepromiseArgs=TRUE)
     copy
 }
+
+# Kill compiler servers connected to the client (this is the client)
+rir.killCompilerServers <- function() {
+    .Call("rirKillCompilerServers")
+}
+
+# We need to run this after all static C++ initializers are run
+invisible(.Call("initializeUUIDPool"))
+
+# We need to ensure the compiler server starts after ALL code is loaded, so it can't be in initializeRuntime
+invisible(.Call("tryToRunCompilerServer"))

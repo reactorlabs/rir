@@ -189,7 +189,7 @@ tests_fullverify:
     - make -j6
     - bin/tests
 
-# Test particular features, like deoptimization and serialization
+# Test particular features, like deoptimization
 test_features_1:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
@@ -265,6 +265,73 @@ test_features_3:
     when: on_failure
     expire_in: 1 week
 
+# Test serialization (no LLVM bitcode)
+test_serialize_chaos:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - RIR_SERIALIZE_CHAOS=5 FAST_TESTS=1 bin/tests
+    - PIR_WARMUP=2 RIR_SERIALIZE_CHAOS=50 bin/gnur-make-tests check || $SAVE_LOGS
+    - ../../tools/check-gnur-make-tests-error
+    - RIR_SERIALIZE_CHAOS=10 bin/tests
+  artifacts:
+    paths:
+      - logs
+    when: on_failure
+    expire_in: 1 week
+
+# Test LLVM bitcode serialization
+test_serialize_llvm:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - PIR_DEBUG_SERIALIZE_LLVM=1 bin/gnur-make-tests check || $SAVE_LOGS
+    - ../../tools/check-gnur-make-tests-error
+  artifacts:
+    paths:
+      - logs
+    when: on_failure
+    expire_in: 1 week
+
+# Test regular and LLVM bitcode serialization
+test_serialize_both:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - /opt/rir/container/install-test-deps.sh
+    - cd /opt/rir/build/release
+    - PIR_DEBUG_SERIALIZE_LLVM=1 FAST_TESTS=1 RIR_SERIALIZE_CHAOS=5 bin/tests
+    - PIR_DEBUG_SERIALIZE_LLVM=1 RIR_SERIALIZE_CHAOS=10 bin/tests
+  artifacts:
+    paths:
+      - logs
+    when: on_failure
+    expire_in: 1 week
 
 # Run ubsan and gc torture
 test_gctorture_1:
@@ -334,6 +401,7 @@ test_big_inline:
 test_sanitize:
   image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   variables:
+    CLANG_DIR: /opt/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04
     GIT_STRATEGY: none
   stage: Run tests
   needs:
@@ -341,17 +409,64 @@ test_sanitize:
   except:
     - schedules
   script:
+    # TODO: Store clang-16 and zlib on prl
+    # Install clang-16
+    - apt install libtinfo5
+    - wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz -O $CLANG_DIR.tar.xz
+    - tar -xf $CLANG_DIR.tar.xz -C /opt
+    # Manually add zlib (required when building on clang-16)
+    - wget https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.xz -O /opt/rir/external/zlib-1.3.tar.xz
+    - tar -xf /opt/rir/external/zlib-1.3.tar.xz -C /opt/rir/external
+    - cd /opt/rir/external/zlib-1.3
+    - ./configure --prefix=/opt/rir/external/zlib
+    - make -j6
+    - make install
+    # Rest
     - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - mkdir /opt/rir/build/sanitize
     - cd /opt/rir/build/sanitize
     - /opt/rir/tools/fetch-llvm.sh
-    - CC=$(ls ../../external/clang*/bin/clang) CXX=$(ls ../../external/clang*/bin/clang) cmake -DCMAKE_BUILD_TYPE=sanitize ../..
+    - cmake -DCMAKE_BUILD_TYPE=sanitize
+            -DCMAKE_C_COMPILER=$CLANG_DIR/bin/clang
+            -DCMAKE_CXX_COMPILER=$CLANG_DIR/bin/clang++
+            -DZLIB_LIBRARY=/opt/rir/external/zlib/lib/libz.so
+            -DZLIB_INCLUDE_DIR=/opt/rir/external/zlib/include
+            ../..
     - make -j6
     # R_LD_PRELOAD is a feature of the test-runner. To repro this without the testrunner use LD_PRELOAD instead.
     # intercept_tls_get_addr=0 helps with leak sanitizer crashes
-    - ASAN_OPTIONS="intercept_tls_get_addr=0" LSAN_OPTIONS="symbolize=1" ASAN_SYMBOLIZER_PATH=$(ls /opt/rir/external/clang*/bin/llvm-symbolizer) R_LD_PRELOAD=$(ls /opt/rir/external/clang*/lib/clang/12.0.0/lib/linux/libclang_rt.asan-x86_64.so) bin/tests
+    - ASAN_OPTIONS="intercept_tls_get_addr=0" 
+      LSAN_OPTIONS="symbolize=1" 
+      ASAN_SYMBOLIZER_PATH=$CLANG_DIR/bin/llvm-symbolizer
+      R_LD_PRELOAD=$CLANG_DIR/lib/clang/16/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.so
+      bin/tests
   # sometimes leak sanitizer segfaults
   retry: 2
+
+# Test the compiler server and client (on localhost)
+test_compiler_server_client:
+  image: registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
+  variables:
+    GIT_STRATEGY: none
+    PIR_LLVM_OPT_LEVEL: 0
+  stage: Run tests
+  needs:
+    - rir_container
+  except:
+    - schedules
+  script:
+    - mkdir $CI_PROJECT_DIR/results && mkdir $CI_PROJECT_DIR/results/debug && mkdir $CI_PROJECT_DIR/results/release
+    - curl 10.200.14.25:8080/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz > /opt/rir/external/clang+llvm-12.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - /opt/rir/tools/fetch-llvm.sh
+    - mkdir /opt/rir/build/debug && cd /opt/rir/build/debug && cmake -DCMAKE_BUILD_TYPE=Debug ../.. && make -j6
+    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server; cp /tmp/test-compiler-server-actual.out /tmp/test-compiler-client-actual.out $CI_PROJECT_DIR/results/debug/
+    - cd /opt/rir/build/release
+    - PIR_CLIENT_SKIP_DISCREPANCY_CHECK=1 ./bin/test-compiler-client-and-server; cp /tmp/test-compiler-server-actual.out /tmp/test-compiler-client-actual.out $CI_PROJECT_DIR/results/release/
+  artifacts:
+    paths:
+      - results
+    when: always
+    expire_in: 1 week
 
 # Test the benchmarks container before deploying
 test_benchmarks:

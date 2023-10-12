@@ -9,11 +9,14 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "compilerClientServer/CompilerClient.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/TypeFeedback_inl.h"
 #include "safe_force.h"
+#include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serialize/serializeR.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 
@@ -30,9 +33,14 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
+bool INTERPRETER_IS_ACTIVE = true;
+
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr);
+
+#define COMPARE_SERIALIZATION_DIFFERENCES 0
+#define COMPARE_SERIALIZATION_DIFFERENCES_DETAILED 0
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -823,6 +831,8 @@ const unsigned pir::Parameter::PIR_REOPT_TIME =
     getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
+const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
+    getenv("PIR_OPT_BC_SIZE") ? atoi(getenv("PIR_OPT_BC_SIZE")) : 20;
 
 static unsigned serializeCounter = 0;
 
@@ -970,7 +980,99 @@ SEXP doCall(CallContext& call, bool popArgs) {
         if (pir::Parameter::RIR_SERIALIZE_CHAOS) {
             serializeCounter++;
             if (serializeCounter == pir::Parameter::RIR_SERIALIZE_CHAOS) {
-                body = copyBySerial(body);
+                auto body0 = body;
+                PROTECT(body0);
+                auto body1 = copyBySerial(body);
+                PROTECT(body1);
+                auto body2 = copyBySerialR(body);
+                PROTECT(body2);
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                auto body3 = copyBySerialR(body1);
+                PROTECT(body3);
+                auto body4 = copyBySerial(body2);
+                PROTECT(body4);
+#endif
+                body = body1;
+                // TODO: Disabling this for now, but there's an issue where
+                //  function invocation times and flags are different from body0
+                //  to body1 and body2. With the old R serialization algorithm
+                //  they body2's were identical to body0, so it's weird...
+#if COMPARE_SERIALIZATION_DIFFERENCES || COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                disableInterpreter([&]{
+                    std::stringstream differencesStream;
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body0),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    auto differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 0 and 1:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body1),
+                        DispatchTable::unpack(body2),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 1 and 2:\n"
+                                  << differences << "\n";
+                    }
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body2),
+                        DispatchTable::unpack(body3),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 2 and 3:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body3),
+                        DispatchTable::unpack(body4),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 3 and 4:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body4),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "WARNING: Serialization differences between 4 and 1:\n"
+                                  << differences << "\n";
+                    }
+                    differencesStream = std::stringstream();
+                    DispatchTable::debugCompare(
+                        DispatchTable::unpack(body1),
+                        DispatchTable::unpack(body1),
+                        differencesStream
+                    );
+                    differences = differencesStream.str();
+                    if (!differences.empty()) {
+                        std::cout << "!!! WARNING: Serialization differences between 1 and 1:\n"
+                                  << differences << "\n";
+                    }
+#endif
+                });
+#endif
+                UNPROTECT(3);
+#if COMPARE_SERIALIZATION_DIFFERENCES_DETAILED
+                UNPROTECT(2);
+#endif
                 serializeCounter = 0;
             }
             PROTECT(body);
@@ -1001,9 +1103,21 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->function()->invocationCount() > 0 &&
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
-                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize < 20) {
-                        call.triggerOsr = true;
+                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE) {
+                        if (fun->body()->codeSize <
+                            pir::Parameter::PIR_OPT_BC_SIZE) {
+                            // std::cerr << "***** CODE SIZE "
+                            //           << fun->body()->codeSize << " < "
+                            //           << pir::Parameter::PIR_OPT_BC_SIZE
+                            //           << "\n";
+                            call.triggerOsr = true;
+                        } else {
+                            // std::cerr
+                            //     << "!!!!! CODE SIZE " <<
+                            //     fun->body()->codeSize
+                            //     << " >= " << pir::Parameter::PIR_OPT_BC_SIZE
+                            //     << "\n";
+                        }
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
                     fun = dispatch(call, table);
@@ -1013,7 +1127,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
 
-        if (fun->flags.contains(Function::DepromiseArgs)) {
+        if (fun->flags().contains(Function::DepromiseArgs)) {
             // Force arguments and depromise
             call.depromiseArgs();
         }
@@ -1767,7 +1881,7 @@ bool isColonFastcase(SEXP lhs, SEXP rhs) {
     // TODO(o):
     // I don't like this part of the condition. It prevents us from constant
     // folding the colonEffects instruction. Can we do this differently?
-    if (XLENGTH(lhs) == 0 || XLENGTH(rhs) == 0)
+    if (RAW_LENGTH(lhs) == 0 || RAW_LENGTH(rhs) == 0)
         return true;
 
     switch (TYPEOF(lhs)) {
@@ -1881,6 +1995,8 @@ SEXP colonCastRhs(SEXP newLhs, SEXP rhs) {
 
 bool pir::Parameter::ENABLE_OSR =
     !getenv("PIR_OSR") || *getenv("PIR_OSR") != '0';
+bool pir::Parameter::FORCE_ENABLE_OSR =
+    getenv("PIR_OSR") && *getenv("PIR_OSR") == '1';
 static size_t osrLimit =
     getenv("PIR_OSR_LIMIT") ? std::atoi(getenv("PIR_OSR_LIMIT")) : 5000;
 static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
@@ -1892,13 +2008,13 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
         auto l = Rf_length(FRAME(env));
         auto dt = DispatchTable::check(BODY(callCtxt->callee));
         if (dt &&
-            !dt->baseline()->flags.includes(Function::Flag::NotOptimizable) &&
+            !dt->baseline()->flags().includes(Function::Flag::NotOptimizable) &&
             size <= (long)pir::ContinuationContext::MAX_STACK &&
             l <= (long)pir::ContinuationContext::MAX_ENV) {
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
             if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
                 PROTECT(fun->container());
-                dt->baseline()->flags.set(Function::Flag::MarkOpt);
+                dt->baseline()->setFlag(Function::Flag::MarkOpt);
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 auto res = nc(code, basePtr, env, callCtxt->callee);
@@ -1914,6 +2030,10 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                  Opcode* initialPC, BindingCache* cache) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr));
+
+    if (!INTERPRETER_IS_ACTIVE) {
+        std::cerr << "TODO: Interpreting code during serialization or comparison\n";
+    }
 
     checkUserInterrupt();
     auto native = c->nativeCode();
@@ -1990,16 +2110,21 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         } else {
             // This is a lazy loading stub, it replaces the promise with the
             // actual value. From now on it will be a value...
-            if (CAR(PREXPR(s)) == symbol::lazyLoadDBfetch)
+            if ((s)->u.listsxp.carval == symbol::lazyLoadDBfetch)
                 state = ObservedValues::StateBeforeLastForce::value;
             else
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        ObservedValues* feedback = (ObservedValues*)(pc + 1);
-        if (feedback->stateBeforeLastForce < state)
-            feedback->stateBeforeLastForce = state;
+        ObservedValues& feedback =
+            c->function()->typeFeedback()->types(*(Immediate*)(pc + 1));
+        if (feedback.stateBeforeLastForce < state)
+            feedback.stateBeforeLastForce = state;
     };
+
+    // TODO: move above
+    auto function = c->function();
+    auto typeFeedback = function->typeFeedback();
 
     // main loop
     BEGIN_MACHINE {
@@ -2306,26 +2431,26 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            ObservedCallees* feedback = (ObservedCallees*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP callee = ostack_top();
-            feedback->record(c, callee);
-            pc += sizeof(ObservedCallees);
+            typeFeedback->callees(idx).record(function, callee);
             NEXT();
         }
 
         INSTRUCTION(record_test_) {
-            ObservedTest* feedback = (ObservedTest*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedTest);
+            typeFeedback->test(idx).record(t);
             NEXT();
         }
 
         INSTRUCTION(record_type_) {
-            ObservedValues* feedback = (ObservedValues*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedValues);
+            typeFeedback->types(idx).record(t);
             NEXT();
         }
 
@@ -3052,13 +3177,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(asbool_) {
             SEXP val = ostack_top();
             int cond = NA_LOGICAL;
-            if (XLENGTH(val) > 1)
+            if (RAW_LENGTH(val) > 1)
                 Rf_warningcall(
                     getSrcAt(c, pc - 1),
                     "the condition has length > 1 and only the first "
                     "element will be used");
 
-            if (XLENGTH(val) > 0) {
+            if (RAW_LENGTH(val) > 0) {
                 switch (TYPEOF(val)) {
                 case LGLSXP:
                     cond = LOGICAL(val)[0];
@@ -3074,7 +3199,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
             if (cond == NA_LOGICAL) {
                 const char* msg =
-                    XLENGTH(val)
+                    RAW_LENGTH(val)
                         ? (Rf_isLogical(val)
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
@@ -3195,8 +3320,19 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             checkUserInterrupt();
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
+            // We enable OSR if:
+            // - We are NOT in serialize chaos mode (deserialization breaks OSR)
+            // - AND we are NOT in preserve mode (deserialization breaks OSR)
+            // - AND the compiler-client is NOT running (deserialization breaks
+            //   OSR; but even if it worked, we don't want to compile anything
+            //   locally, and OSR on the compiler-server isn't implemented)
+            // - OR any of the above is true, but we're forcing OSR regardless
+            //   (e.g. for testing)
             // TODO: why does osr-in deserialized code break?
-            if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
+            if ((!pir::Parameter::RIR_SERIALIZE_CHAOS &&
+                 !pir::Parameter::RIR_PRESERVE &&
+                 !CompilerClient::isRunning()) ||
+                pir::Parameter::FORCE_ENABLE_OSR) {
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     loopCounter = 0;
@@ -3321,7 +3457,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 goto fallback;
             }
 
-            if (i >= XLENGTH(val) || i < 0)
+            if (i >= RAW_LENGTH(val) || i < 0)
                 goto fallback;
 
             switch (TYPEOF(val)) {
@@ -3871,7 +4007,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
-            advanceOpcode();
+            (void)advanceOpcode();
             NEXT();
         }
 
@@ -3888,7 +4024,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(ret_) { goto eval_done; }
 
         INSTRUCTION(int3_) {
+#ifdef __ARM_ARCH
+            __builtin_debugtrap();
+#else
             asm("int3");
+#endif
             NEXT();
         }
 

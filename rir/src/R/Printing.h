@@ -16,12 +16,12 @@ class Print {
     static std::string sexptype2char(SEXPTYPE type);
     static std::string trim(std::string s, size_t n);
     static std::string unsafeTags(SEXP s);
-    static std::string dumpPROMSXP(SEXP s);
-    static std::string dumpCLOSXP(SEXP s);
-    static std::string dumpLISTSXP(SEXP s, size_t limit);
-    static std::string dumpLANGSXP(SEXP s);
-    static std::string dumpVector(SEXP s, size_t limit);
-    static std::string dumpEXTERNALSXP(SEXP s);
+    static std::string dumpPROMSXP(SEXP s, size_t length = 50);
+    static std::string dumpCLOSXP(SEXP s, size_t length = 50);
+    static std::string dumpLISTSXP(SEXP s, size_t limit, size_t length = 50);
+    static std::string dumpLANGSXP(SEXP s, size_t length = 50);
+    static std::string dumpVector(SEXP s, size_t limit, size_t length = 50);
+    static std::string dumpEXTERNALSXP(SEXP s, size_t length = 50);
 };
 
 } // namespace rir

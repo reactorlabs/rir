@@ -54,7 +54,8 @@ void Builder::add(Instruction* i) {
         assert(false && "Invalid instruction");
     case Tag::PirCopy:
         assert(false && "This instruction is only allowed during lowering");
-    default: {}
+    default: {
+    }
     }
     bb->append(i);
 }
@@ -125,8 +126,9 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
         }
         auto mkenv = new MkEnv(closureEnv, names, args.data(), miss);
 
-        auto rirCode = cnt->owner()->rirFunction()->body();
-        mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
+        // FIXME: what does this mean, we need both rirFun and we need idx
+        mkenv->updateTypeFeedback().feedbackOrigin.function(
+            cnt->owner()->rirFunction());
         add(mkenv);
         this->env = mkenv;
     } else {
@@ -150,7 +152,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     std::vector<Value*> args(closure->nargs());
     size_t nargs = version->effectiveNArgs();
 
-    auto depromiseArgs = version->owner()->rirFunction()->flags.contains(
+    auto depromiseArgs = version->owner()->rirFunction()->flags().contains(
         rir::Function::Flag::DepromiseArgs);
 
     for (long i = nargs - 1; i >= 0; --i) {
@@ -170,9 +172,10 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
 
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     auto rirFun = version->owner()->rirFunction();
-    if (rirFun->flags.contains(rir::Function::NeedsFullEnv))
+    if (rirFun->flags().contains(rir::Function::NeedsFullEnv))
         mkenv->neverStub = true;
-    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirFun->body());
+    // FIXME: what does this mean, we need both rirFun and we need idx
+    mkenv->updateTypeFeedback().feedbackOrigin.function(rirFun);
     add(mkenv);
     this->env = mkenv;
 }

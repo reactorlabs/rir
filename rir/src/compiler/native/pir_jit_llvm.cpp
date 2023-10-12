@@ -4,8 +4,10 @@
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include "serializeHash/serialize/native/SerialModule.h"
 #include "utils/filesystem.h"
 
+#include "compiler/parameter.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/Core.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -24,6 +26,8 @@ namespace rir {
 namespace pir {
 
 std::unique_ptr<llvm::orc::LLJIT> PirJitLLVM::JIT;
+std::unordered_map<std::string, std::weak_ptr<SerialModule>>
+    PirJitLLVM::internedModules;
 
 size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
@@ -312,16 +316,18 @@ PirJitLLVM::~PirJitLLVM() {
 void PirJitLLVM::finalize() {
     assert(!finalized);
     if (M) {
+        auto serialModule =
+            Parameter::SERIALIZE_LLVM ?
+            internModule(SerialModule(*M)).first :
+            nullptr;
         // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
             DIB->finalize();
         }
-        // TODO: maybe later have TSM from the start and use locking
-        //       to allow concurrent compilation?
-        auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
-        ExitOnErr(JIT->addIRModule(std::move(TSM)));
-        for (auto& fix : jitFixup)
-            fix.second.first->lazyCodeHandle(fix.second.second.str());
+        addToJit(std::move(M));
+        for (auto& fix : jitFixup) {
+            fix.second.first->lazyCode(fix.second.second, serialModule);
+        }
         nModules++;
     }
     finalized = true;
@@ -353,11 +359,8 @@ void PirJitLLVM::compile(
 
             DI->initializeTypes(DIB.get());
 
-            // Darwin only supports dwarf2.
             M->addModuleFlag(llvm::Module::Warning, "Dwarf Version",
-                             JIT->getTargetTriple().isOSDarwin()
-                                 ? 2
-                                 : llvm::dwarf::DWARF_VERSION);
+                             llvm::dwarf::DWARF_VERSION);
 
             // Add the current debug info version into the module.
             M->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
@@ -441,7 +444,7 @@ void PirJitLLVM::compile(
         target->pirTypeFeedback(funCompiler.pirTypeFeedback);
     if (funCompiler.hasArgReordering())
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
-    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
+    jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName().str()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
         bool debug = true;
@@ -457,7 +460,35 @@ void PirJitLLVM::compile(
     });
 }
 
-llvm::LLVMContext& PirJitLLVM::getContext() { return *TSC.getContext(); }
+llvm::LLVMContext& PirJitLLVM::getContext() {
+    if (!initialized) {
+        initializeLLVM();
+    }
+    return *TSC.getContext();
+}
+
+SerialModuleRef PirJitLLVM::finishDeserializingModule(SerialModule&& module,
+                                                      rir::Code* outer) {
+    auto serialModuleAndIsNew = internModule(std::move(module));
+    auto serialModule = serialModuleAndIsNew.first;
+    if (serialModuleAndIsNew.second) {
+        addToJit(serialModule->decode(outer));
+    }
+    return serialModule;
+
+}
+
+SerialModuleRef PirJitLLVM::deserializeModuleR(R_inpstream_t inp,
+                                               rir::Code* outer) {
+    return finishDeserializingModule(SerialModule::deserializeR(inp), outer);
+}
+
+SerialModuleRef
+PirJitLLVM::deserializeModule(AbstractDeserializer& deserializer,
+                              rir::Code* outer) {
+    return finishDeserializingModule(SerialModule::deserialize(deserializer),
+                                     outer);
+}
 
 void PirJitLLVM::initializeLLVM() {
     if (initialized)
@@ -552,10 +583,19 @@ void PirJitLLVM::initializeLLVM() {
             [MainName = JIT->mangleAndIntern("main")](
                 const SymbolStringPtr& Name) { return Name != MainName; })));
 
-    // TODO this is a bit of a hack but it works: the address is stored in the
-    // name. symbols starting with "ept_" are external pointers, the ones
-    // starting with "efn_" are external function pointers. these must exist in
-    // the host process.
+    // The address or pool index is stored in the name:
+    // - symbols starting with "ept_" are external pointers
+    // - symbols starting with "efn_" are external function pointers
+    // - symbols starting with "src_" are source pool entries
+    // - symbols starting with "cp_" are constant pool entries
+    // - symbols starting with "names_" are vectors of names (constant pool
+    //   entries). "names_" is the symbol for the empty vector, others won't
+    //   have a trailing "_"
+    //
+    // These all must exist in the host process.
+    //
+    // On macOS/clang/ARM (which one? idk) the symbols sometimes start with '_'
+    // before everything else, so we trim that.
     class ExtSymbolGenerator : public llvm::orc::DefinitionGenerator {
       public:
         Error tryToGenerate(LookupState& LS, LookupKind K, JITDylib& JD,
@@ -565,11 +605,19 @@ void PirJitLLVM::initializeLLVM() {
             for (auto s : LookupSet) {
                 auto& Name = s.first;
                 auto n = (*Name).str();
+                if (n[0] == '_') {
+                    n = n.substr(1);
+                }
+
                 auto ept = n.substr(0, 4) == "ept_";
                 auto efn = n.substr(0, 4) == "efn_";
+                auto src = n.substr(0, 4) == "src_";
+                auto cp = n.substr(0, 3) == "cp_";
+                auto names = n.substr(0, 6) == "names_";
 
                 if (ept || efn) {
-                    auto addrStr = n.substr(4);
+                    // 16 = sizeof(uintptr_t)
+                    auto addrStr = n.substr(4, 16);
                     auto addr = std::strtoul(addrStr.c_str(), nullptr, 16);
                     NewSymbols[Name] = JITEvaluatedSymbol(
                         static_cast<JITTargetAddress>(
@@ -577,6 +625,51 @@ void PirJitLLVM::initializeLLVM() {
                         JITSymbolFlags::Exported |
                             (efn ? JITSymbolFlags::Callable
                                  : JITSymbolFlags::None));
+                } else if (src || cp) {
+                    auto idxStr = n.substr(src ? 4 : 3, 8);
+                    auto idx = std::strtoul(idxStr.c_str(), nullptr, 16);
+
+                    auto container = Rf_allocVector(INTSXP, 1);
+                    // TODO: Don't leak memory, attach to object so that this
+                    //  gets freed when the last Code object using it does (also
+                    //  in SerialRepr)
+                    R_PreserveObject(container);
+                    INTEGER(container)[0] = (int)idx;
+
+                    NewSymbols[Name] = JITEvaluatedSymbol(
+                            static_cast<JITTargetAddress>(
+                                reinterpret_cast<uintptr_t>(INTEGER(container))),
+                            JITSymbolFlags::Exported);
+                } else if (names) {
+                    if (n == "names_") {
+                        // Special case, we have an empty vector.
+                        // It won't be read, so we can pass a dangling address
+                        // (idk if there's an idiomatic way to do this in LLVM
+                        // or if it causes some kind of UB)
+                        NewSymbols[Name] =
+                            JITEvaluatedSymbol(static_cast<JITTargetAddress>(
+                                                   (uintptr_t)0xdeadbeef),
+                                               JITSymbolFlags::Exported);
+                    } else {
+                        auto numNames = (R_xlen_t)std::count(n.begin(), n.end(), '_');
+                        auto container = Rf_allocVector(INTSXP, numNames);
+                        // TODO: Don't leak memory, attach to object so that this
+                        //  gets freed when the last Code object using it does (also
+                        //  in SerialRepr)
+                        R_PreserveObject(container);
+                        size_t idx = 6;
+                        for (R_xlen_t i = 0; i < numNames; ++i) {
+                            auto nextIdx = n.find('_', idx);
+                            auto idxStr = n.substr(idx, nextIdx - idx);
+                            INTEGER(container)[i] = (int)std::strtoul(idxStr.c_str(), nullptr, 16);
+                            idx = nextIdx + 1;
+                        }
+
+                        NewSymbols[Name] = JITEvaluatedSymbol(
+                            static_cast<JITTargetAddress>(
+                                reinterpret_cast<uintptr_t>(INTEGER(container))),
+                            JITSymbolFlags::Exported);
+                    }
                 } else {
                     std::cout << "unknown symbol " << n << "\n";
                 }
@@ -602,6 +695,29 @@ void PirJitLLVM::initializeLLVM() {
     }
 
     initialized = true;
+}
+
+void PirJitLLVM::addToJit(std::unique_ptr<llvm::Module>&& M) {
+    // TODO: maybe later have TSM from the start and use locking
+    //       to allow concurrent compilation?
+    auto TSM = llvm::orc::ThreadSafeModule(std::move(M), TSC);
+    ExitOnErr(JIT->addIRModule(std::move(TSM)));
+}
+
+std::pair<SerialModuleRef, bool> PirJitLLVM::internModule(rir::SerialModule&& module) {
+    auto it = internedModules.find(module.bitcode);
+    if (it != internedModules.end()) {
+        if (it->second.expired()) {
+            auto ptr = std::make_shared<SerialModule>(module);
+            it->second = ptr;
+            return std::make_pair(ptr, false);
+        } else {
+            return std::make_pair(SerialModuleRef(it->second), false);
+        }
+    }
+    auto ptr = std::make_shared<SerialModule>(module);
+    internedModules.emplace(ptr->bitcode, ptr);
+    return std::make_pair(ptr, true);
 }
 
 } // namespace pir

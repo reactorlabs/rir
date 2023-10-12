@@ -252,9 +252,6 @@ struct Context {
     unsigned isImproving(const Context& other, bool hasDotsFormals,
                          bool hasDefaultArgs) const;
 
-    static Context deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
-
     friend struct std::hash<rir::Context>;
     friend std::ostream& operator<<(std::ostream& out, const Context& a);
 

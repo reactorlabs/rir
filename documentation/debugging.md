@@ -45,6 +45,33 @@ graphical representation of the code choose the GraphViz debug style.
         GraphViz   print pir in GraphViz, displaying all instructions within BBs
         GraphVizBB print pir in GraphViz, displaying only BB names and connections
 
+    RIR_DEBUG_STYLE=
+        Standard    print basic information in rir objects in human-readable format
+        Detailed    print very detailed information in rir objects, useful for debugging or explaining unexpected semantic differences
+        PrettyGraph print in HTML which can be loaded with `tools/rirPrettyGraph` in the same location to display an interactive graph
+
+    PIR_PRINT_INTERNED_RIR_OBJECTS=
+        <0|1|path>  if set, folder to print pretty graphs of RIR objects which get interned. If set to 1, prints HTML to stdout. If set to 0 or unset (default), won't print.
+                    Interning doesn't occur in normal RIR execution, it will get triggered if RIR_SERIALIZE_CHAOS, PIR_DEBUG_SERIALIZE_LLVM, PIR_CLIENT_ADDR, or PIR_SERVER_ADDR is set.
+
+    PIR_PRINT_INTERNED_RIR_OBJECTS_FREQUENCY=
+        n           print pretty graphs of RIR objects which get interned every n-th time, defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
+
+    PIR_LOG_INTERNING=
+        1           log every new intern, reused intern, unintern, and other intern related events.
+
+    PIR_WARN_INTERNING=
+        1           warn when an interned object's UUID changes and other inconsistencies. Superseded by PIR_LOG_INTERNING
+
+    PIR_LOG_COMPILER_PEER_DETAILED=
+        1           log the contents of every request sent to and received by the compiler client or server
+
+    PIR_LOG_COMPILER_PEER=
+        1           log every message sent from/to the compiler peer. Superseded by PIR_LOG_COMPILER_PEER_DETAILED
+
+    PIR_WARN_COMPILER_PEER=
+        1           warn when the compiler peer connection times out or closes. Superseded by PIR_LOG_COMPILER_PEER
+
 The following flags can be useful for profiling and finding out which passes take how much time to
 complete.
 
@@ -56,6 +83,18 @@ complete.
 
     PIR_MEASURE_COMPILER_BACKEND=
         1          print overall time spend in different phases in the backend
+
+    PIR_MEASURE_COMPILED_CLOSURES=
+        1          print # of compiled closures and time it spends to compile each one
+
+    PIR_MEASURE_SERIALIZATION=
+        1          print detailed report on time spent in serialization
+
+    PIR_MEASURE_INTERNING=
+        1          print detailed report on time spent in interning
+
+    PIR_MEASURE_CLIENT_SERVER=
+        1          print time spent in client server communication (sending and receiving requests + processing)
 
 #### Controlling compilation
 
@@ -81,6 +120,9 @@ complete.
     PIR_DEBUG_DEOPTS=
         1          show failing assumption when a deopt happens
 
+    R_DISABLE_GC=
+        1          disable the garbage collector
+
 #### Optimization heuristics
 
 For more flags see compiler/parameter.h.
@@ -103,6 +145,12 @@ For more flags see compiler/parameter.h.
     RIR_SERIALIZE_CHAOS=
         n          serialize and deserialize the dispatch table on every `n`th
                    RIR call. WARNING: This sometimes prevents optimization
+
+    PIR_DEBUG_SERIALIZE_LLVM=
+        1          serialize LLVM IR, and add metadata to make it patchable on
+                   different sessions. This will be set regardless of the env
+                   var if RIR_PRESERVE is set or the compiler server is running,
+                   so the only time this is useful is when debugging.
 
 ### Disassembly annotations
 
@@ -168,6 +216,9 @@ debugging:
 * `rir.eval`: evaluates the code in RIR
 * `rir.body`: returns the body of rir-compiled function. The body is the vector
   containing its ast maps and code objects
+* `rir.serialize`: Serializes the SEXP, preserving RIR/PIR-compiled closures, to the given path
+* `rir.deserialize`: Deserializes and returns the SEXP at the given path
+* `rir.killCompilerServers`: (on client) send a special request to kill compiler servers connected to this client
 * `.printInvocation`: prints invocation during evaluation
 * `.int3`: breakpoint during evaluation
 
@@ -405,3 +456,16 @@ In order to use rr inside a docker container, it is necessary to run it with som
 `docker run --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -it registry.gitlab.com/rirvm/rir_mirror/benchmark:SOME_COMMIT_ID`
 
 Recording Ř works just fine, with the usual `-d rr` . However, when running  `rr replay`, it complains about not being able to find the debug symbols. To overcome this issue type in: `/opt/rir/external/custom-r/bin/exec/R` right after `rr replay` (within the *rr* prompt).
+
+## CLion
+
+You can create run/debug configurations for Ř in CLion.
+
+CLion should be smart enough to automatically generate a CMake configuration from our `CMakeLists.txt`, and thus have some preset run configurations. The one you will use is `rir`. This configuration will already build Ř in a folder called `cmake-build-debug`. However, you must do some manual configuration in order to get it to run properly:
+
+- Change `executable` to `<path to rir>/external/custom-r/bin/exec/R` (this is the path to the R executable that was built by Ř; replace `<path to rir>` with the actual repo path)
+- Set the following environment variables (again, replace `<path to rir>` with the actual repo path):
+  - On Linux: `LD_LIBRARY_PATH=<path to rir>/external/custom-r/lib;EXTRA_LOAD_R=<path to rir>/rir/R/rir.R;EXTRA_LOAD_SO=<path to rir>/cmake-build-sanitize/Debug/librir.dylib;R_DOC_DIR=<path to rir>/external/custom-r/doc;R_HOME=<path to rir>/external/custom-r;R_HOME_DIR=<path to rir>/external/custom-r;R_INCLUDE_DIR=<path to rir>/external/custom-r/include;R_SHARE_DIR=<path to rir>/external/custom-r/share`
+  - On macOS: `DYLD_LIBRARY_PATH=<path to rir>/external/custom-r/lib;EXTRA_LOAD_R=<path to rir>/rir/R/rir.R;EXTRA_LOAD_SO=<path to rir>/cmake-build-sanitize/Debug/librir.dylib;R_DOC_DIR=<path to rir>/external/custom-r/doc;R_HOME=<path to rir>/external/custom-r;R_HOME_DIR=<path to rir>/external/custom-r;R_INCLUDE_DIR=<path to rir>/external/custom-r/include;R_SHARE_DIR=<path to rir>/external/custom-r/share`
+
+This should be enough to get run to start the REPL, and debug to work with breakpoints. You can also redirect input from files (e.g. one of the tests), or add extra environment variables like `PIR_DEBUG`.

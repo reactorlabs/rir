@@ -7,6 +7,11 @@
 #include "compiler/pir/type.h"
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
+#include "runtime/log/printPrettyGraph.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "serializeHash/serializeUni.h"
+#include "utils/ByteBuffer.h"
 
 #include <array>
 #include <cassert>
@@ -57,6 +62,16 @@ enum class Opcode : uint8_t {
 #include "insns.h"
 
     num_of
+};
+
+struct ExtraPoolEntryRefInSrc {
+    enum Type : unsigned {
+        Promise,
+        ArbitrarySexp
+    };
+
+    unsigned idx;
+    Type type;
 };
 
 // ============================================================
@@ -152,9 +167,6 @@ class BC {
         uint32_t i;
         RirTypecheck typecheck;
         NumLocals loc;
-        ObservedCallees callFeedback;
-        ObservedValues typeFeedback;
-        ObservedTest testFeedback;
         PoolAndCachePositionRange poolAndCache;
         CachePositionRange cacheIdx;
         ImmediateArguments() {
@@ -217,13 +229,32 @@ class BC {
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
-    static void deserialize(SEXP refTable, R_inpstream_t inp, Opcode* code,
+    static void deserialize(AbstractDeserializer& deserializer, Opcode* code,
                             size_t codeSize, Code* container);
-    static void serialize(SEXP refTable, R_outpstream_t out, const Opcode* code,
-                          size_t codeSize, const Code* container);
+    static void serialize(AbstractSerializer& serializer,
+                          std::vector<SerialFlags>& extraPoolFlags,
+                          const Opcode* code, size_t codeSize,
+                          const Code* container);
+    static void hash(HasherOld& hasher, std::vector<bool>& extraPoolIgnored,
+                     const Opcode* code, size_t codeSize,
+                     const Code* container);
+    static void addConnected(std::vector<bool>& extraPoolChildren,
+                             ConnectedCollectorOld& collector, const Opcode* code,
+                             size_t codeSize, const Code* container);
+    static void addToPrettyGraph(const PrettyGraphInnerPrinter& p,
+                                 std::vector<bool>& addedExtraPoolEntries,
+                                 const Opcode* code, size_t codeSize,
+                                 const Code* container);
+    /// Compare bytecodes and print differences.
+    static void debugCompare(const Opcode* code1, const Opcode* code2,
+                             size_t codeSize1, size_t codeSize2,
+                             const Code* container1, const Code* container2,
+                             const char* prefix,
+                             std::stringstream& differences);
 
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
+    void printAssociatedData(std::ostream& out, bool printDetailed = false) const;
     void printImmediateArgs(std::ostream& out) const;
     void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;
@@ -267,6 +298,11 @@ class BC {
 
     bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
+    bool isRecord() const {
+        return bc == Opcode::record_call_ || bc == Opcode::record_test_ ||
+               bc == Opcode::record_type_;
+    }
+
     bool isExit() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
@@ -309,10 +345,10 @@ class BC {
 #define V(NESTED, name, name_) inline static BC name();
     BC_NOARGS(V, _)
 #undef V
-    inline static BC recordCall();
+    inline static BC recordCall(uint32_t idx);
     inline static BC recordBinop();
-    inline static BC recordType();
-    inline static BC recordTest();
+    inline static BC recordType(uint32_t idx);
+    inline static BC recordTest(uint32_t idx);
     inline static BC asSwitchIdx();
     inline static BC popn(unsigned n);
     inline static BC push(SEXP constant);
@@ -406,14 +442,6 @@ class BC {
             extraInformation.get());
     }
 
-    CallFeedbackExtraInformation& callFeedbackExtra() const {
-        assert(bc == Opcode::record_call_ && "not a record call instruction");
-        assert(extraInformation.get() &&
-               "missing extra information. created through decodeShallow?");
-        return *static_cast<CallFeedbackExtraInformation*>(
-            extraInformation.get());
-    }
-
   private:
     void allocExtraInformation() {
         assert(extraInformation == nullptr);
@@ -426,10 +454,6 @@ class BC {
         case Opcode::call_dots_:
         case Opcode::named_call_: {
             extraInformation.reset(new CallInstructionExtraInformation);
-            break;
-        }
-        case Opcode::record_call_: {
-            extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
         default: {
@@ -455,13 +479,6 @@ class BC {
             break;
         }
 
-        case Opcode::record_call_: {
-            // Read call target feedback from the extra pool
-            for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
-                callFeedbackExtra().targets.push_back(
-                    immediate.callFeedback.getTarget(code, i));
-            break;
-        }
         default: {
         }
         }
@@ -580,18 +597,10 @@ class BC {
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
-            memcpy(&immediate.i, pc, sizeof(immediate.i));
-            break;
         case Opcode::record_call_:
-            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
-            break;
         case Opcode::record_test_:
-            memcpy(reinterpret_cast<void*>(&immediate.testFeedback), pc,
-                   sizeof(ObservedValues));
-            break;
         case Opcode::record_type_:
-            memcpy(reinterpret_cast<void*>(&immediate.typeFeedback), pc,
-                   sizeof(ObservedValues));
+            memcpy(&immediate.i, pc, sizeof(immediate.i));
             break;
 #define V(NESTED, name, name_) case Opcode::name_##_:
             BC_NOARGS(V, _)

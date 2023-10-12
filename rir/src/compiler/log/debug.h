@@ -57,12 +57,14 @@ enum class DebugStyle {
 struct DebugOptions {
     typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
-    const std::regex passFilter;
-    const std::regex functionFilter;
+    std::regex passFilter;
+    std::string passFilterString;
+    std::regex functionFilter;
+    std::string functionFilterString;
     DebugStyle style;
 
     DebugOptions operator|(const DebugFlags& f) const {
-        return {flags | f, passFilter, functionFilter, style};
+        return {flags | f, passFilter, passFilterString, functionFilter, functionFilterString, style};
     }
     bool includes(const DebugFlags& otherFlags) const {
         return flags.includes(otherFlags);
@@ -74,14 +76,26 @@ struct DebugOptions {
         return flags.intersects(otherFlags);
     }
 
-    explicit DebugOptions(unsigned long long flags)
-        : flags(flags), passFilter(".*"), functionFilter(".*"),
-          style(DebugStyle::Standard) {}
-    DebugOptions(const DebugFlags& flags, const std::regex& filter,
-                 const std::regex& functionFilter, DebugStyle style)
-        : flags(flags), passFilter(filter), functionFilter(functionFilter),
-          style(style) {}
-    DebugOptions() {}
+    explicit DebugOptions(int flags)
+        : DebugOptions(DebugFlags(flags)) {}
+    explicit DebugOptions(DebugFlags flags)
+        : DebugOptions(flags, ".*", ".*",
+                       DebugStyle::Standard) {}
+    DebugOptions(const DebugFlags& flags, const std::string& passFilter,
+                 const std::string& functionFilter, DebugStyle style)
+        : flags(flags), passFilter(std::regex(passFilter)),
+          passFilterString(passFilter), functionFilter(functionFilter),
+          functionFilterString(functionFilter), style(style) {}
+    DebugOptions(const DebugFlags& flags, std::regex passFilter,
+                 std::string passFilterString,
+                 std::regex functionFilter,
+                 std::string functionFilterString,
+                 DebugStyle style)
+        : flags(flags), passFilter(std::move(passFilter)),
+          passFilterString(std::move(passFilterString)),
+          functionFilter(std::move(functionFilter)),
+          functionFilterString(std::move(functionFilterString)), style(style) {}
+    DebugOptions() : DebugOptions(0) {}
 
     bool multipleFiles() const {
         return includes(DebugFlag::PrintPassesIntoFolders) ||

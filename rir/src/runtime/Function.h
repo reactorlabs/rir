@@ -5,13 +5,18 @@
 #include "FunctionSignature.h"
 #include "R/r.h"
 #include "RirRuntimeObject.h"
+#include "runtime/log/RirObjectPrintStyle.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "utils/ByteBuffer.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
+
+struct DispatchTable;
 
 /**
  * Aliases for readability.
  */
-typedef SEXP FunctionSEXP;
 
 // Function magic constant is designed to help to distinguish between Function
 // objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
@@ -39,28 +44,72 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
-    static constexpr size_t NUM_PTRS = 1;
+    // In its entries, a function ows two SEXP pointers + a variable length of
+    // default arguments code:
+    static constexpr size_t NUM_PTRS = 2;
+    // 0: body (Code*)
+    static constexpr size_t BODY_IDX = 0;
+    // 1: type feedback (TypeFeedback*)
+    static constexpr size_t TYPE_FEEDBACK_IDX = 1;
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
-             const FunctionSignature& signature, const Context& ctx)
+             const FunctionSignature& signature, const Context& ctx,
+             TypeFeedback* feedback)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
-              sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
+              sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
           signature_(signature), context_(ctx) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
-        body(body_);
+        if (body_) {
+            body(body_);
+        } else {
+            // Happens when we create a function in deserialization
+            assert(functionSize == 0);
+        }
+        if (feedback) {
+            typeFeedback(feedback);
+        }
     }
 
-    Code* body() const { return Code::unpack(getEntry(0)); }
-    void body(SEXP body) { setEntry(0, body); }
+    Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
+    void body(SEXP body) {
+        assert(body);
+        assert(Code::check(body));
+        setEntry(BODY_IDX, body);
+    }
 
-    static Function* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
-    void disassemble(std::ostream&);
+    bool isDeserializing() const {
+        return !getEntry(BODY_IDX);
+    }
+    TypeFeedback* typeFeedback() const {
+        return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+    }
+    void typeFeedback(TypeFeedback* typeFeedback) {
+        typeFeedback->owner_ = this;
+        setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
+    }
+
+    /// "Full signature" include context, flags, and invocation info
+    void serializeFullSignature(ByteBuffer& buf) const;
+    /// "Full signature" include context, flags, and invocation info
+    void deserializeFullSignature(ByteBuffer& buf);
+    static Function* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+    void disassemble(std::ostream&) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+    /// Check if 2 functions are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences.
+    static void debugCompare(const Function* f1, const Function* f2,
+                             std::stringstream& differences,
+                             bool compareExtraPoolRBytecodes = true);
 
     bool isOptimized() const {
         return signature_.optimization !=
@@ -74,15 +123,21 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    size_t invocationCount() { return invocationCount_; }
+    size_t invocationCount() const { return invocationCount_; }
 
-    size_t deoptCount() { return deoptCount_; }
+    size_t deoptCount() const { return deoptCount_; }
     void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     static inline unsigned long rdtsc() {
+#ifdef __ARM_ARCH
+        uint64_t val;
+        asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+        return val;
+#else
         unsigned low, high;
         asm volatile("rdtsc" : "=a"(low), "=d"(high));
         return ((low) | ((uint64_t)(high) << 32));
+#endif
     }
     static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
 
@@ -110,7 +165,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             invoked = 0;
         }
     }
-    unsigned long invocationTime() { return execTime; }
+    unsigned long invocationTime() const { return execTime; }
     void clearInvocationTime() { execTime = 0; }
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -135,10 +190,15 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         RIR_FUNCTION_FLAGS(V)
 #undef V
 
-        FIRST = Deopt,
+            FIRST = Deopt,
         LAST = DisableNumArgumentsSpezialization
     };
-    EnumSet<Flag> flags;
+  private:
+    EnumSet<Flag> flags_;
+  public:
+    const EnumSet<Flag>& flags() const { return flags_; }
+    void setFlag(Flag f);
+    void resetFlag(Flag f);
 
     void inheritFlags(const Function* other) {
         static Flag inherited[] = {ForceInline,
@@ -147,10 +207,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                                    DisableArgumentTypeSpecialization,
                                    DisableNumArgumentsSpezialization,
                                    DepromiseArgs};
-        auto f = other->flags;
+        auto f = other->flags_;
         for (auto flag : inherited)
             if (f.contains(flag))
-                flags.set(flag);
+                setFlag(flag);
     }
 
     void clearDisabledAssumptions(Context& given) const;
@@ -161,13 +221,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const FunctionSignature& signature() const { return signature_; }
     const Context& context() const { return context_; }
 
-    bool disabled() const { return flags.contains(Flag::Deopt); }
+    bool disabled() const { return flags_.contains(Flag::Deopt); }
     bool pendingCompilation() const { return body()->pendingCompilation(); }
 
     void registerDeopt() {
         // Deopt counts are kept on the optimized versions
         assert(isOptimized());
-        flags.set(Flag::Deopt);
+        setFlag(Flag::Deopt);
         if (deoptCount_ < UINT_MAX)
             deoptCount_++;
     }
@@ -178,13 +238,16 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         if (r == DeoptReason::DeadCall)
             deadCallReached_++;
         if (r == DeoptReason::EnvStubMaterialized)
-            flags.set(NeedsFullEnv);
+            setFlag(NeedsFullEnv);
     }
 
     size_t deadCallReached() const {
         assert(!isOptimized());
         return deadCallReached_;
     }
+
+    void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
+    DispatchTable* dispatchTable() { return dispatchTable_; }
 
   private:
     unsigned numArgs_;
@@ -199,11 +262,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
+    DispatchTable* dispatchTable_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
-    // locals contains: body
-    CodeSEXP locals[NUM_PTRS];
-    CodeSEXP defaultArg_[];
+    // locals contains: body (BODY_IDX) and typeFeedback (TYPE_FEEDBACK_IDX)
+    SEXP locals[NUM_PTRS];
+    SEXP defaultArg_[];
 };
 
 #pragma pack(pop)

@@ -2,8 +2,6 @@
 
 #include <R/r.h>
 
-#define REXPORT extern "C"
-
 REXPORT SEXP R_serialize(SEXP object, SEXP icon, SEXP ascii, SEXP Sversion,
                          SEXP fun);
 REXPORT SEXP R_unserialize(SEXP icon, SEXP fun);
@@ -30,12 +28,12 @@ REXPORT void OutRefIndex(R_outpstream_t stream, int i);
 REXPORT int InRefIndex(R_inpstream_t stream, int flags);
 REXPORT void OutStringVec(R_outpstream_t stream, SEXP s, SEXP ref_table);
 
-static inline void OutChar(R_outpstream_t stream, int chr) {
-    stream->OutChar(stream, chr);
+static inline void OutChar(R_outpstream_t stream, char chr) {
+    stream->OutChar(stream, (int)chr);
 }
 
-static inline int InChar(R_inpstream_t stream) {
-    return stream->InChar(stream);
+static inline char InChar(R_inpstream_t stream) {
+    return (char)stream->InChar(stream);
 }
 
 static inline void OutBytes(R_outpstream_t stream, const void* buf,
@@ -45,4 +43,55 @@ static inline void OutBytes(R_outpstream_t stream, const void* buf,
 
 static inline void InBytes(R_inpstream_t stream, void* buf, int length) {
     stream->InBytes(stream, buf, length);
+}
+
+static inline bool InBool(R_inpstream_t stream) {
+    return (bool)stream->InChar(stream);
+}
+
+static inline void OutBool(R_outpstream_t stream, bool b) {
+    stream->OutChar(stream, (int)b);
+}
+
+static inline void OutUInt(R_outpstream_t stream, unsigned int x) {
+    OutBytes(stream, &x, sizeof(x));
+}
+
+static inline unsigned int InUInt(R_inpstream_t stream) {
+    unsigned int x;
+    InBytes(stream, &x, sizeof(x));
+    return x;
+}
+
+static inline void OutU64(R_outpstream_t stream, uint64_t x) {
+    OutBytes(stream, &x, sizeof(x));
+}
+
+static inline uint64_t InU64(R_inpstream_t stream) {
+    uint64_t x;
+    InBytes(stream, &x, sizeof(x));
+    return x;
+}
+
+static inline void OutSize(R_outpstream_t stream, size_t x) {
+    OutU64(stream, (uint64_t)x);
+}
+
+static inline size_t InSize(R_inpstream_t stream) {
+    return (size_t)InU64(stream);
+}
+
+static inline void WriteNullableItem(SEXP s, SEXP ref_table, R_outpstream_t stream) {
+    OutBool(stream, s != nullptr);
+    if (s) {
+        WriteItem(s, ref_table, stream);
+    }
+}
+
+static inline SEXP ReadNullableItem(SEXP ref_table, R_inpstream_t stream) {
+    if (InBool(stream)) {
+        return ReadItem(ref_table, stream);
+    } else {
+        return nullptr;
+    }
 }

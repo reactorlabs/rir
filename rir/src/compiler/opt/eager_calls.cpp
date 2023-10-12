@@ -22,11 +22,11 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     struct Speculation {
         SEXP builtin;
         Checkpoint* cp;
-        FeedbackOrigin origin;
+        FeedbackPosition origin;
         Speculation() {}
-        Speculation(SEXP builtin, Checkpoint* cp, const FeedbackOrigin& origin)
+        Speculation(SEXP builtin, Checkpoint* cp, const FeedbackPosition& origin)
             : builtin(builtin), cp(cp), origin(origin) {
-            assert(origin.pc());
+            assert(origin.hasSlot());
         }
     };
 
@@ -140,7 +140,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         break;
                 VECTOR_RW_INSTRUCTIONS(V);
 #undef V
-            default: {}
+            default: {
+            }
             }
 
             if (auto call = Call::Cast(*ip)) {
@@ -210,7 +211,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                             }
                                             if (!inBase &&
                                                 ldfun->typeFeedback()
-                                                    .feedbackOrigin.pc())
+                                                    .feedbackOrigin.hasSlot())
                                                 needsGuard[ldfun] = {
                                                     builtin, cp,
                                                     ldfun->typeFeedback()
@@ -262,7 +263,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     } break;
                 VECTOR_RW_INSTRUCTIONS(V)
 #undef V
-            default: {}
+            default: {
+            }
             }
 
             // Look for static calls, where we statically know that all (or
@@ -409,9 +411,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
                 next = ip + 1;
 
-                // This might fire back, since we don't know if we really have no
-                // objects... We should have some profiling. It's still sound, since
-                // static_call_ will check the assumptions
+                // This might fire back, since we don't know if we really have
+                // no objects... We should have some profiling. It's still
+                // sound, since static_call_ will check the assumptions
                 for (size_t i = 0; i < call->nCallArgs(); ++i)
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))

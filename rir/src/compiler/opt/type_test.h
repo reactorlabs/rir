@@ -12,7 +12,7 @@ class TypeTest {
         PirType result;
         Instruction* test;
         bool expectation;
-        FeedbackOrigin feedbackOrigin;
+        FeedbackPosition feedbackOrigin;
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
@@ -35,10 +35,10 @@ class TypeTest {
                 return failed();
         }
 
-        if (!feedback.feedbackOrigin.pc())
+        if (!feedback.feedbackOrigin.hasSlot())
             return failed();
 
-        assert(feedback.feedbackOrigin.pc());
+        assert(feedback.feedbackOrigin.hasSlot());
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||

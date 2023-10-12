@@ -51,6 +51,7 @@ extern FUNTAB R_FunTab[];
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
+extern int R_GCEnabled;
 }
 
 // Performance critical stuff copied from Rinlinedfun.h
@@ -100,6 +101,13 @@ inline void* DATAPTR(SEXP x) {
 
 inline R_xlen_t XLENGTH_EX(SEXP x) {
     return ALTREP(x) ? ALTREP_LENGTH(x) : STDVEC_LENGTH(x);
+}
+
+/// This is semantically equivalent to LENGTH and XLENGTH, but necessary when
+///  write barrier is enabled if x isn't necessarily an actual vector
+///  TODO: technically UB so refactor to not rely on this behavior
+inline R_xlen_t RAW_LENGTH(SEXP x) {
+    return ALTREP(x) ? ALTREP_LENGTH(x) : ((VECSEXP) (x))->vecsxp.length;
 }
 
 typedef struct {

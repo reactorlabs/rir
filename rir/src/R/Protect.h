@@ -23,6 +23,14 @@ class Protect {
         return value;
     }
 
+    SEXP nullable(SEXP value) {
+        if (value) {
+            Rf_protect(value);
+            ++protectedValues_;
+        }
+        return value;
+    }
+
     ~Protect() { Rf_unprotect(protectedValues_); }
 
   private:

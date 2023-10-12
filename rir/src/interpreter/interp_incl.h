@@ -14,6 +14,15 @@ struct Code;
 struct CallContext;
 class Configurations;
 
+extern bool INTERPRETER_IS_ACTIVE;
+
+template<class F> inline void disableInterpreter(F f) {
+    bool wasActive = INTERPRETER_IS_ACTIVE;
+    INTERPRETER_IS_ACTIVE = false;
+    f();
+    INTERPRETER_IS_ACTIVE = wasActive;
+}
+
 bool isValidClosureSEXP(SEXP closure);
 
 void initializeRuntime();
@@ -45,11 +54,6 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
 SEXP rirDecompile(SEXP s);
 
 void rirPrint(SEXP s);
-
-void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out);
-SEXP deserializeRir(SEXP refTable, R_inpstream_t inp);
-// Will serialize and deserialize the SEXP, returning a deep copy.
-SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 

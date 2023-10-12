@@ -5,6 +5,7 @@
 #include "interpreter/instance.h"
 #include "interpreter/interp_incl.h"
 #include "runtime/RirRuntimeObject.h"
+#include "serializeHash/serializeUni.h"
 
 #include <cassert>
 #include <cstdint>
@@ -32,24 +33,24 @@ struct LazyEnvironment
         memset(missing, 0, sizeof(char) * nargs);
     }
 
-    SEXP materialized() { return getEntry(0); }
+    SEXP materialized() const { return getEntry(0); }
     void materialized(SEXP m) { setEntry(0, m); }
 
     size_t nargs;
     Immediate* names;
 
-    SEXP getArg(size_t i) { return getEntry(i + ArgOffset); }
+    SEXP getArg(size_t i) const { return getEntry(i + ArgOffset); }
     void setArg(size_t i, SEXP val, bool overrideMissing) {
         setEntry(i + ArgOffset, val);
         if (overrideMissing)
             missing[i] = false;
     }
-    SEXP getArg(SEXP n);
-    bool isMissing(SEXP n);
-    bool isMissing(size_t i);
-    size_t getArgIdx(SEXP n);
+    SEXP getArg(SEXP n) const;
+    bool isMissing(SEXP n) const;
+    bool isMissing(size_t i) const;
+    size_t getArgIdx(SEXP n) const;
 
-    SEXP getParent() { return getEntry(1); }
+    SEXP getParent() const { return getEntry(1); }
 
     void clear() {
         setEntry(1, nullptr);
@@ -82,9 +83,17 @@ struct LazyEnvironment
         return le;
     }
 
+    static LazyEnvironment* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+
     // This byteset remembers which slots have been overwritten, such that they
     // should not be considered missing anymore.
     char missing[];
+
+  private:
+    size_t size() const;
 };
 
 } // namespace rir

@@ -767,13 +767,13 @@ int asSwitchIdxImpl(SEXP val) {
 
 int checkTrueFalseImpl(SEXP val) {
     int cond = NA_LOGICAL;
-    if (XLENGTH(val) > 1)
+    if (RAW_LENGTH(val) > 1)
         Rf_warningcall(
             // TODO: pass srcid
             R_NilValue, "the condition has length > 1 and only the first "
                         "element will be used");
 
-    if (XLENGTH(val) > 0) {
+    if (RAW_LENGTH(val) > 0) {
         switch (TYPEOF(val)) {
         case LGLSXP:
             cond = LOGICAL(val)[0];
@@ -788,7 +788,7 @@ int checkTrueFalseImpl(SEXP val) {
 
     if (cond == NA_LOGICAL) {
         const char* msg =
-            XLENGTH(val) ? (Rf_isLogical(val)
+            RAW_LENGTH(val) ? (Rf_isLogical(val)
                                 ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                          : ("argument is of length zero");
@@ -821,8 +821,9 @@ static SEXP deoptSentinelContainer = []() {
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
     R_PreserveObject(store);
-    deoptSentinel = new (INTEGER(store))
-        Function(0, c->container(), {}, deoptSentinelSig, Context());
+    deoptSentinel =
+        new (INTEGER(store)) Function(0, c->container(), {}, deoptSentinelSig,
+                                      Context(), rir::TypeFeedback::empty());
     deoptSentinel->registerDeopt();
     UNPROTECT(1);
     return store;
@@ -954,44 +955,37 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-void recordTypefeedbackImpl(Opcode* pos, rir::Code* code, SEXP value) {
-    switch (*pos) {
-    case Opcode::record_test_: {
-        ObservedTest* feedback = (ObservedTest*)(pos + 1);
-        feedback->record(value);
-        break;
-    }
-    case Opcode::record_type_: {
-        assert(*pos == Opcode::record_type_);
-        ObservedValues* feedback = (ObservedValues*)(pos + 1);
-        feedback->record(value);
-        if (TYPEOF(value) == PROMSXP) {
-            if (PRVALUE(value) == R_UnboundValue &&
-                feedback->stateBeforeLastForce < ObservedValues::promise)
-                feedback->stateBeforeLastForce = ObservedValues::promise;
-            else if (feedback->stateBeforeLastForce <
-                     ObservedValues::evaluatedPromise)
-                feedback->stateBeforeLastForce =
-                    ObservedValues::evaluatedPromise;
-        } else {
-            if (feedback->stateBeforeLastForce < ObservedValues::value)
-                feedback->stateBeforeLastForce = ObservedValues::value;
+void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
+                            SEXP value) {
+    auto& slot = feedback->types(idx);
+    slot.record(value);
+
+    if (TYPEOF(value) == PROMSXP) {
+        if (PRVALUE(value) == R_UnboundValue &&
+            slot.stateBeforeLastForce < ObservedValues::promise) {
+            slot.stateBeforeLastForce = ObservedValues::promise;
+        } else if (slot.stateBeforeLastForce <
+                   ObservedValues::evaluatedPromise) {
+            slot.stateBeforeLastForce = ObservedValues::evaluatedPromise;
         }
-        break;
+    } else {
+        if (slot.stateBeforeLastForce < ObservedValues::value)
+            slot.stateBeforeLastForce = ObservedValues::value;
     }
-    case Opcode::record_call_: {
-        ObservedCallees* feedback = (ObservedCallees*)(pos + 1);
-        feedback->record(code, value);
-        break;
-    }
-    default:
-        assert(false);
-    }
+}
+
+void recordCallFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
+                            SEXP value) {
+    feedback->callees(idx).record(feedback->owner(), value);
 }
 
 void assertFailImpl(const char* msg) {
     std::cout << "Assertion in jitted code failed: '" << msg << "'\n";
+#ifdef __ARM_ARCH
+    __builtin_debugtrap();
+#else
     asm("int3");
+#endif
 }
 
 void printValueImpl(SEXP v) { Rf_PrintValue(v); }
@@ -1312,6 +1306,10 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     SLOWASSERT(env == symbol::delayedEnv || TYPEOF(env) == ENVSXP ||
                env == R_NilValue || LazyEnvironment::check(env));
 
+    if (!INTERPRETER_IS_ACTIVE) {
+        std::cerr << "TODO: Interpreting code during serialization or comparison\n";
+    }
+
     auto fun = Function::unpack(Pool::get(target));
 
     CallContext call(callId, c, callee, nargs, astP,
@@ -1450,8 +1448,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     RCNTXT cntxt;
 
-    // This code needs to be protected, because its slot in the dispatch table
-    // could get overwritten while we are executing it.
+    // This code needs to be protected, because its slot in the dispatch
+    // table could get overwritten while we are executing it.
     PROTECT(fun->container());
 
     initClosureContext(ast, &cntxt, symbol::delayedEnv, env, lazyArgs.asSexp(),
@@ -2423,10 +2421,17 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
-    get_(Id::recordTypefeedback) = {
-        "recordTypefeedback",
-        (void*)&recordTypefeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::i64, t::i64, t::SEXP}, false),
+    get_(Id::recordTypeFeedback) = {
+        "recordTypeFeedback",
+        (void*)&recordTypeFeedbackImpl,
+        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
+                                false),
+        {}};
+    get_(Id::recordCallFeedback) = {
+        "recordCallFeedback",
+        (void*)&recordCallFeedbackImpl,
+        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
+                                false),
         {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,

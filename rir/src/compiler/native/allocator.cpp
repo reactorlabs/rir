@@ -22,8 +22,8 @@ void NativeAllocator::compute() {
         // them accessible to the runtime profiler.
         // TODO: this needs to be replaced by proper mapping of slots.
         if (RuntimeProfiler::enabled() && a != b &&
-            (a->typeFeedback().feedbackOrigin.pc() ||
-             b->typeFeedback().feedbackOrigin.pc()))
+            (a->typeFeedback().feedbackOrigin.hasSlot() ||
+             b->typeFeedback().feedbackOrigin.hasSlot()))
             return true;
         return livenessIntervals.interfere(a, b);
     };
@@ -102,10 +102,7 @@ void NativeAllocator::compute() {
             }
         };
 
-        size_t pos = 0;
         for (auto i : *bb) {
-            ++pos;
-
             if (!needsASlot(i))
                 continue;
 

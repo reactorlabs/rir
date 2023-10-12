@@ -4,6 +4,7 @@
 
 #include "api.h"
 #include "R/Serialize.h"
+#include "Rinternals.h"
 #include "bc/BC.h"
 #include "bc/Compiler.h"
 #include "compiler/backend.h"
@@ -14,13 +15,18 @@
 #include "compiler/pir/type.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
+#include "compilerClientServer/CompilerClient.h"
+#include "compilerClientServer/CompilerServer.h"
+#include "compilerClientServer/compiler_server_client_shared_utils.h"
 #include "interpreter/interp_incl.h"
+#include "serializeHash/hash/UUIDPool.h"
+#include "utils/ByteBuffer.h"
+#include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 
 #include <cassert>
 #include <cstdio>
 #include <list>
-#include <memory>
 #include <string>
 
 using namespace rir;
@@ -34,6 +40,11 @@ static size_t oldInlinerMax = 0;
 static bool oldPreserve = false;
 static unsigned oldSerializeChaos = false;
 static size_t oldDeoptChaos = false;
+
+bool pir::Parameter::PIR_MEASURE_COMPILED_CLOSURES =
+    getenv("PIR_MEASURE_COMPILED_CLOSURES") != nullptr &&
+    strtol(getenv("PIR_MEASURE_COMPILED_CLOSURES"), nullptr, 10);
+
 
 bool parseDebugStyle(const char* str, pir::DebugStyle& s) {
 #define V(style)                                                               \
@@ -56,13 +67,9 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     if (!t)
         Rf_error("Not a rir compiled code (CLOSXP but not DispatchTable)");
 
-    std::cout << "== closure " << what << " (dispatch table " << t << ", env "
-              << CLOENV(what) << ") ==\n";
-    for (size_t entry = 0; entry < t->size(); ++entry) {
-        Function* f = t->get(entry);
-        std::cout << "= version " << entry << " (" << f << ") =\n";
-        f->disassemble(std::cout);
-    }
+    std::cout << "== closure " << what << " (env " << CLOENV(what) << ") ==\n";
+
+    t->print(std::cout, Rf_asLogical(verbose));
 
     return R_NilValue;
 }
@@ -125,50 +132,50 @@ REXPORT SEXP rirMarkFunction(SEXP what, SEXP which, SEXP reopt_,
     Function* fun = dt->get(i);
     if (reopt != NA_LOGICAL) {
         if (reopt) {
-            fun->flags.set(Function::MarkOpt);
-            fun->flags.reset(Function::NotOptimizable);
+            fun->setFlag(Function::MarkOpt);
+            fun->resetFlag(Function::NotOptimizable);
         } else {
-            fun->flags.reset(Function::MarkOpt);
+            fun->resetFlag(Function::MarkOpt);
         }
     }
     if (forceInline != NA_LOGICAL) {
         if (forceInline)
-            fun->flags.set(Function::ForceInline);
+            fun->setFlag(Function::ForceInline);
         else
-            fun->flags.reset(Function::ForceInline);
+            fun->resetFlag(Function::ForceInline);
     }
     if (disableInline != NA_LOGICAL) {
         if (disableInline)
-            fun->flags.set(Function::DisableInline);
+            fun->setFlag(Function::DisableInline);
         else
-            fun->flags.reset(Function::DisableInline);
+            fun->resetFlag(Function::DisableInline);
     }
     if (disableSpecialization != NA_LOGICAL) {
         if (disableSpecialization)
-            fun->flags.set(Function::DisableAllSpecialization);
+            fun->setFlag(Function::DisableAllSpecialization);
         else
-            fun->flags.reset(Function::DisableAllSpecialization);
+            fun->resetFlag(Function::DisableAllSpecialization);
     }
     if (disableArgumentTypeSpecialization != NA_LOGICAL) {
         if (disableArgumentTypeSpecialization)
-            fun->flags.set(Function::DisableArgumentTypeSpecialization);
+            fun->setFlag(Function::DisableArgumentTypeSpecialization);
         else
-            fun->flags.reset(Function::DisableArgumentTypeSpecialization);
+            fun->resetFlag(Function::DisableArgumentTypeSpecialization);
     }
     if (disableNumArgumentSpecialization != NA_LOGICAL) {
         if (disableNumArgumentSpecialization)
-            fun->flags.set(Function::DisableNumArgumentsSpezialization);
+            fun->setFlag(Function::DisableNumArgumentsSpezialization);
         else
-            fun->flags.reset(Function::DisableNumArgumentsSpezialization);
+            fun->resetFlag(Function::DisableNumArgumentsSpezialization);
     }
 
     bool DISABLE_ANNOTATIONS = getenv("PIR_DISABLE_ANNOTATIONS") ? true : false;
     if (!DISABLE_ANNOTATIONS) {
         if (depromiseArgs != NA_LOGICAL) {
             if (depromiseArgs)
-                fun->flags.set(Function::DepromiseArgs);
+                fun->setFlag(Function::DepromiseArgs);
             else
-                fun->flags.reset(Function::DepromiseArgs);
+                fun->resetFlag(Function::DepromiseArgs);
         }
     }
 
@@ -243,18 +250,18 @@ static pir::DebugOptions::DebugFlags getInitialDebugFlags() {
     return flags;
 }
 
-static std::regex getInitialDebugPassFilter() {
+static std::string getInitialDebugPassFilter() {
     auto filter = getenv("PIR_DEBUG_PASS_FILTER");
     if (filter)
-        return std::regex(filter);
-    return std::regex(".*");
+        return {filter};
+    return {".*"};
 }
 
-static std::regex getInitialDebugFunctionFilter() {
+static std::string getInitialDebugFunctionFilter() {
     auto filter = getenv("PIR_DEBUG_FUNCTION_FILTER");
     if (filter)
-        return std::regex(filter);
-    return std::regex(".*");
+        return {filter};
+    return {".*"};
 }
 
 static pir::DebugStyle getInitialDebugStyle() {
@@ -274,8 +281,8 @@ static pir::DebugStyle getInitialDebugStyle() {
     return style;
 }
 
-pir::DebugOptions pir::DebugOptions::DefaultDebugOptions = {
-    getInitialDebugFlags(), getInitialDebugPassFilter(),
+pir::DebugOptions pir::DebugOptions::DefaultDebugOptions =
+    {getInitialDebugFlags(), getInitialDebugPassFilter(),
     getInitialDebugFunctionFilter(), getInitialDebugStyle()};
 
 REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
@@ -288,7 +295,10 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 }
 
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
-                const pir::DebugOptions& debug) {
+                const pir::DebugOptions& debug,
+                std::string* closureVersionPirPrint) {
+    Protect p(what);
+
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
     }
@@ -296,72 +306,102 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         Rf_error("Cannot optimize compiled expression, only closure");
     }
 
-    PROTECT(what);
+    Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_COMPILED_CLOSURES, "api.cpp: pirCompile", what, [&]() {
+        auto compilerServerHandle =
+            CompilerClient::pirCompile(what, assumptions, name, debug);
 
-    bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    // compile to pir
-    pir::Module* m = new pir::Module;
-    pir::Log logger(debug);
-    logger.title("Compiling " + name);
-    pir::Compiler cmp(m, logger);
-    auto compile = [&](pir::ClosureVersion* c) {
-        logger.flushAll();
-        cmp.optimizeModule();
+        if (!compilerServerHandle || PIR_CLIENT_DRY_RUN) {
+            // Actually pirCompile on the client
+            auto dryRun = debug.includes(pir::DebugFlag::DryRun);
+            // compile to pir
+            auto m = new pir::Module;
+            pir::Log logger(debug);
+            logger.title("Compiling " + name);
+            pir::Compiler cmp(m, logger);
+            auto compile = [&](pir::ClosureVersion* c) {
+                logger.flushAll();
+                cmp.optimizeModule();
 
-        if (dryRun)
-            return;
+                if (dryRun)
+                    return;
 
-        rir::Function* done = nullptr;
-        {
-            // Single Backend instance, gets destroyed at the end of this block
-            // to finalize the LLVM module so that we can eagerly compile the
-            // body
-            pir::Backend backend(m, logger, name);
-            auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-                auto fun = backend.getOrCompile(c);
-                Protect p(fun->container());
-                DispatchTable::unpack(body)->insert(fun);
-                if (body == BODY(what))
-                    done = fun;
-            };
-            m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
-                if (c->owner()->hasOriginClosure()) {
-                    auto cls = c->owner()->rirClosure();
-                    auto body = BODY(cls);
-                    auto dt = DispatchTable::unpack(body);
-                    if (dt->contains(c->context())) {
-                        // Dispatch also to versions with pending compilation
-                        // since we're not evaluating
-                        auto other = dt->dispatch(c->context(), false);
-                        assert(other != dt->baseline());
-                        assert(other->context() == c->context());
-                        if (other->body()->isCompiled())
-                            return;
-                    }
-                    // Don't lower functions that have not been called often, as
-                    // they have incomplete type-feedback.
-                    if (dt->size() == 1 &&
-                        dt->baseline()->invocationCount() < 2)
-                        return;
-                    apply(body, c);
+                rir::Function* done = nullptr;
+                {
+                    // Single Backend instance, gets destroyed at the end of this block to finalize the LLVM module so that we can eagerly compile the body
+                    pir::Backend backend(m, logger, name);
+                    auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+                        auto fun = backend.getOrCompile(c);
+                        p(fun->container());
+                        DispatchTable::unpack(body)->insert(fun);
+                        if (body == BODY(what))
+                            done = fun;
+                    };
+                    m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
+                        if (c->owner()->hasOriginClosure()) {
+                            auto cls = c->owner()->rirClosure();
+                            auto body = BODY(cls);
+                            auto dt = DispatchTable::unpack(body);
+                            if (dt->contains(c->context())) {
+                                // Dispatch also to versions with pending compilation since we're not evaluating
+                                auto other = dt->dispatch(c->context(), false);
+                                assert(other != dt->baseline());
+                                assert(other->context() == c->context());
+                                if (other->body()->isCompiled())
+                                    return;
+                            }
+                            // Don't lower functions that have not been called often, as they have incomplete type-feedback.
+                            if (dt->size() == 1 &&
+                                dt->baseline()->invocationCount() < 2)
+                                return;
+                            apply(body, c);
+                        }
+                    });
+                    if (!done)
+                        apply(BODY(what), c);
                 }
-            });
-            if (!done)
-                apply(BODY(what), c);
+                // Eagerly compile the main function
+                done->body()->nativeCode();
+                if (closureVersionPirPrint) {
+                    *closureVersionPirPrint =
+                        printClosureVersionForCompilerServerComparison(c);
+                }
+                if (compilerServerHandle) {
+                    // Compare compiled version with remote for discrepancies
+                    compilerServerHandle->compare(c);
+                }
+            };
+
+            cmp.compileClosure(
+                what, name, assumptions, true, compile,
+                [&]() {
+                    if (debug.includes(pir::DebugFlag::ShowWarnings))
+                        std::cerr << "Compilation failed\n";
+                },
+                {});
+
+            delete m;
+        } else {
+            if (debug.flags.contains(pir::DebugFlag::PrintFinalPir)) {
+                auto finalPir = compilerServerHandle->getFinalPir();
+                std::cerr << "Final PIR of '" << name << "':\n"
+                          << finalPir << "\n";
+            }
+
+            // replace with the compiler server's version
+            auto newWhat = compilerServerHandle->getSexp();
+            auto dt = DispatchTable::unpack(BODY(what));
+            auto newDt = DispatchTable::unpack(BODY(newWhat));
+            for (unsigned i = 0; i < newDt->size(); ++i) {
+                if (i == 0) {
+                    dt->baseline(newDt->baseline());
+                } else {
+                    dt->insert(newDt->get(i));
+                }
+            }
         }
-        // Eagerly compile the main function
-        done->body()->nativeCode();
-    };
+        delete compilerServerHandle;
+    });
 
-    cmp.compileClosure(what, name, assumptions, true, compile,
-                       [&]() {
-                           if (debug.includes(pir::DebugFlag::ShowWarnings))
-                               std::cerr << "Compilation failed\n";
-                       },
-                       {});
-
-    delete m;
-    UNPROTECT(1);
     return what;
 }
 
@@ -603,12 +643,41 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
+REXPORT SEXP rirKillCompilerServers() {
+    R_Visible = (Rboolean)false;
+    if (!CompilerClient::isRunning()) {
+        Rf_warning("Compiler client isn't running");
+        return R_NilValue;
+    }
+    CompilerClient::killServers();
+    return R_NilValue;
+}
+
+REXPORT SEXP initializeUUIDPool() {
+    UUIDPool::initialize();
+    R_Visible = (Rboolean)false;
+    return R_NilValue;
+}
+
+REXPORT SEXP tryToRunCompilerServer() {
+    CompilerServer::tryRun();
+    R_Visible = (Rboolean)false;
+    return R_NilValue;
+}
+
 REXPORT SEXP playground() {
 
     return R_NilValue;
 }
 
 bool startup() {
+    if (getenv("R_DISABLE_GC") &&
+        strcmp(getenv("R_DISABLE_GC"), "") != 0 &&
+        strcmp(getenv("R_DISABLE_GC"), "0") != 0 &&
+        strcmp(getenv("R_DISABLE_GC"), "false") != 0) {
+        Rf_warning("R GC is disabled");
+        R_GCEnabled = false;
+    }
     initializeRuntime();
     return true;
 }

@@ -1,4 +1,4 @@
-if (Sys.getenv("R_ENABLE_JIT") == 0 || Sys.getenv("PIR_ENABLE") == "force" || Sys.getenv("PIR_ENABLE") == "off" || Sys.getenv("RIR_SERIALIZE_CHAOS") == "1" || Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
+if (Sys.getenv("R_ENABLE_JIT") == 0 || Sys.getenv("PIR_ENABLE") == "force" || Sys.getenv("PIR_ENABLE") == "off" || Sys.getenv("RIR_SERIALIZE_CHAOS") > 0 || Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "" || Sys.getenv("PIR_CLIENT_ADDR") != "")
   quit()
 
 add_noinline1 <- rir.compile(function(a,b) a+b)

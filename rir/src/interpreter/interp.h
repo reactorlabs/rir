@@ -58,10 +58,12 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 inline bool RecompileHeuristic(Function* fun,
                                Function* funMaybeDisabled = nullptr) {
 
-    auto flags = fun->flags;
+    auto flags = fun->flags();
     if (flags.contains(Function::MarkOpt))
         return true;
     if (flags.contains(Function::NotOptimizable))
+        return false;
+    if (fun->isOptimized())
         return false;
 
     if (!funMaybeDisabled)
@@ -70,15 +72,13 @@ inline bool RecompileHeuristic(Function* fun,
     auto abandon =
         funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
 
-    auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
-                                 : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        fun->clearInvocationTime();
-        return !abandon;
-    }
+    // auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
+    //                              : pir::Parameter::PIR_OPT_TIME;
+    // if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
+    //     fun->clearInvocationTime();
+    //     return !abandon;
+    // }
 
-    if (fun->isOptimized())
-        return false;
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0)
         return !abandon;
@@ -91,17 +91,17 @@ inline bool RecompileHeuristic(Function* fun,
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
+    return (fun->flags().contains(Function::MarkOpt) || !fun->isOptimized() ||
             (context.smaller(fun->context()) &&
              context.isImproving(fun) > table->size()) ||
-            fun->flags.contains(Function::Reoptimize));
+            fun->flags().contains(Function::Reoptimize));
 }
 
 inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {
     // We have more assumptions available, let's recompile
     // More assumptions are available than this version uses. Let's
     // try compile a better matching version.
-    auto flags = fun->flags;
+    auto flags = fun->flags();
 #ifdef DEBUG_DISPATCH
     std::cout << "Optimizing for new context " << fun->invocationCount()
               << ": ";
@@ -113,8 +113,8 @@ inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {
     if (TYPEOF(lhs) == SYMSXP)
         name = lhs;
     if (flags.contains(Function::MarkOpt))
-        fun->flags.reset(Function::MarkOpt);
-    globalContext()->closureOptimizer(callee, given, name);
+        fun->resetFlag(Function::MarkOpt);
+    SET_BODY(callee, BODY(globalContext()->closureOptimizer(callee, given, name)));
 }
 
 inline bool matches(const CallContext& call, Function* f) {

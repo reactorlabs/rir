@@ -2,9 +2,12 @@
 
 #include "R/Serialize.h"
 #include "R/r.h"
+#include "serializeHash/serializeUni.h"
+#include "utils/ByteBuffer.h"
 
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 namespace rir {
@@ -21,25 +24,79 @@ struct FunctionSignature {
         Contextual,
     };
 
-    static FunctionSignature deserialize(SEXP refTable, R_inpstream_t inp) {
-        Environment envc = (Environment)InInteger(inp);
-        OptimizationLevel opt = (OptimizationLevel)InInteger(inp);
-        unsigned numArgs = InInteger(inp);
+    static FunctionSignature deserialize(__attribute__((unused)) SEXP refTable,
+                                         R_inpstream_t inp) {
+        auto envc = (Environment)InInteger(inp);
+        auto opt = (OptimizationLevel)InInteger(inp);
         FunctionSignature sig(envc, opt);
-        sig.numArguments = numArgs;
-        sig.dotsPosition = InInteger(inp);
+        sig.numArguments = InUInt(inp);
+        sig.dotsPosition = InU64(inp);
         sig.hasDotsFormals = InInteger(inp);
         sig.hasDefaultArgs = InInteger(inp);
         return sig;
     }
 
-    void serialize(SEXP refTable, R_outpstream_t out) const {
+    void serialize(__attribute__((unused)) SEXP refTable, R_outpstream_t out) const {
         OutInteger(out, (int)envCreation);
         OutInteger(out, (int)optimization);
-        OutInteger(out, numArguments);
-        OutInteger(out, dotsPosition);
+        OutUInt(out, numArguments);
+        OutU64(out, dotsPosition);
         OutInteger(out, hasDotsFormals);
         OutInteger(out, hasDefaultArgs);
+    }
+
+    static FunctionSignature deserialize(AbstractDeserializer& deserializer) {
+        auto envc = deserializer.readBytesOf<Environment>(SerialFlags::FunMiscBytes);
+        auto opt = deserializer.readBytesOf<OptimizationLevel>(SerialFlags::FunMiscBytes);
+        FunctionSignature sig(envc, opt);
+        sig.numArguments = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+        sig.dotsPosition = deserializer.readBytesOf<size_t>(SerialFlags::FunMiscBytes);
+        sig.hasDotsFormals = deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes);
+        sig.hasDefaultArgs = deserializer.readBytesOf<bool>(SerialFlags::FunMiscBytes);
+        return sig;
+    }
+
+    void serialize(AbstractSerializer& serializer) const {
+        serializer.writeBytesOf<Environment>(envCreation, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<OptimizationLevel>(optimization, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<unsigned>(numArguments, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<size_t>(dotsPosition, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<bool>(hasDotsFormals, SerialFlags::FunMiscBytes);
+        serializer.writeBytesOf<bool>(hasDefaultArgs, SerialFlags::FunMiscBytes);
+    }
+
+    static FunctionSignature deserialize(const ByteBuffer& buffer) {
+        auto envc = (Environment)buffer.getInt();
+        auto opt = (OptimizationLevel)buffer.getInt();
+        FunctionSignature sig(envc, opt);
+        sig.numArguments = buffer.getInt();
+        sig.dotsPosition = buffer.getLong();
+        sig.hasDotsFormals = buffer.getBool();
+        sig.hasDefaultArgs = buffer.getBool();
+        return sig;
+    }
+
+    /// Deserialize buffer into this, and assert that const fields match.
+    void deserializeFrom(const ByteBuffer& buffer) {
+        auto envc = (Environment)buffer.getInt();
+        auto opt = (OptimizationLevel)buffer.getInt();
+        assert(envc == envCreation &&
+               "FunctionSignature deserialized with different environment");
+        assert(opt == optimization &&
+              "FunctionSignature deserialized with different optimization");
+        numArguments = buffer.getInt();
+        dotsPosition = buffer.getLong();
+        hasDotsFormals = buffer.getBool();
+        hasDefaultArgs = buffer.getBool();
+    }
+
+    void serialize(ByteBuffer& buffer) const {
+        buffer.putInt((uint32_t)envCreation);
+        buffer.putInt((uint32_t)optimization);
+        buffer.putInt(numArguments);
+        buffer.putLong(dotsPosition);
+        buffer.putBool(hasDotsFormals);
+        buffer.putBool(hasDefaultArgs);
     }
 
     void pushFormal(SEXP arg, SEXP name) {
@@ -57,6 +114,36 @@ struct FunctionSignature {
             out << "optimized code ";
         if (envCreation == Environment::CallerProvided)
             out << "needsEnv ";
+    }
+
+    /// Compare two signatures and print the differences to the given stream.
+    static void debugCompare(const FunctionSignature& f1,
+                             const FunctionSignature& f2,
+                             std::stringstream& differences) {
+        if (f1.envCreation != f2.envCreation) {
+            differences << "envCreation: " << (int)f1.envCreation << " != "
+                        << (int)f2.envCreation << std::endl;
+        }
+        if (f1.optimization != f2.optimization) {
+            differences << "optimization: " << (int)f1.optimization << " != "
+                        << (int)f2.optimization << std::endl;
+        }
+        if (f1.numArguments != f2.numArguments) {
+            differences << "numArguments: " << f1.numArguments << " != "
+                        << f2.numArguments << std::endl;
+        }
+        if (f1.hasDotsFormals != f2.hasDotsFormals) {
+            differences << "hasDotsFormals: " << f1.hasDotsFormals << " != "
+                        << f2.hasDotsFormals << std::endl;
+        }
+        if (f1.hasDefaultArgs != f2.hasDefaultArgs) {
+            differences << "hasDefaultArgs: " << f1.hasDefaultArgs << " != "
+                        << f2.hasDefaultArgs << std::endl;
+        }
+        if (f1.dotsPosition != f2.dotsPosition) {
+            differences << "dotsPosition: " << f1.dotsPosition << " != "
+                        << f2.dotsPosition << std::endl;
+        }
     }
 
   public:

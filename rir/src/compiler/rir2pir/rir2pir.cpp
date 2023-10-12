@@ -17,6 +17,7 @@
 #include "compiler/util/visitor.h"
 #include "insert_cast.h"
 #include "runtime/ArglistOrder.h"
+#include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
 
@@ -144,9 +145,10 @@ namespace pir {
 
 Rir2Pir::Rir2Pir(Compiler& cmp, ClosureVersion* cls, ClosureLog& log,
                  const std::string& name,
-                 const std::list<PirTypeFeedback*>& outerFeedback)
+                 const std::list<PirTypeFeedback*>& outerFeedback,
+                 rir::TypeFeedback* typeFeedback)
     : compiler(cmp), cls(cls), log(log), name(name),
-      outerFeedback(outerFeedback) {
+      outerFeedback(outerFeedback), typeFeedback(typeFeedback) {
     if (cls->optFunction && cls->optFunction->body()->pirTypeFeedback())
         this->outerFeedback.push_back(
             cls->optFunction->body()->pirTypeFeedback());
@@ -370,7 +372,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_test_: {
-        auto feedback = bc.immediate.testFeedback;
+        uint32_t idx = bc.immediate.i;
+        auto& feedback = typeFeedback->test(idx);
+
         if (feedback.seen == ObservedTest::OnlyTrue ||
             feedback.seen == ObservedTest::OnlyFalse) {
             if (auto i = Instruction::Cast(at(0))) {
@@ -380,7 +384,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (!i->typeFeedback().value) {
                     auto& t = i->updateTypeFeedback();
                     t.value = v;
-                    t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+                    t.feedbackOrigin = FeedbackPosition(srcCode->function(),
+                                                      FeedbackIndex::test(idx));
                 } else if (i->typeFeedback().value != v) {
                     i->updateTypeFeedback().value = nullptr;
                 }
@@ -395,7 +400,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_type_: {
-        auto feedback = bc.immediate.typeFeedback;
+        uint32_t idx = bc.immediate.i;
+        auto& feedback = typeFeedback->types(idx);
+
         if (auto i = Instruction::Cast(at(0))) {
             // Search for the most specific feedback for this location
             for (auto fb : outerFeedback) {
@@ -404,8 +411,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 fb->forEachSlot(
                     [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
                         found = true;
-                        auto origin = fb->getOriginOfSlot(i);
-                        if (origin == pos && mdEntry.readyForReopt) {
+                        auto origin = fb->rirIdx(i);
+                        if (origin == FeedbackIndex::type(idx) &&
+                            mdEntry.readyForReopt) {
                             feedback = mdEntry.feedback;
                         }
                     });
@@ -414,7 +422,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
             // TODO: deal with multiple locations
             auto& t = i->updateTypeFeedback();
-            t.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+            t.feedbackOrigin =
+                FeedbackPosition(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
                 t.type.merge(feedback);
                 if (auto force = Force::Cast(i)) {
@@ -431,9 +440,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::record_call_: {
+        uint32_t idx = bc.immediate.i;
         Value* target = top();
 
-        auto feedback = bc.immediate.callFeedback;
+        auto& feedback = typeFeedback->callees(bc.immediate.i);
 
         // If this call was never executed we might as well compile an
         // unconditional deopt.
@@ -443,8 +453,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
 
-            DeoptReason reason = DeoptReason(FeedbackOrigin(srcCode, pos),
-                                             DeoptReason::DeadCall);
+            DeoptReason reason = DeoptReason(
+                FeedbackPosition(srcCode->function(), FeedbackIndex::call(idx)),
+                DeoptReason::DeadCall);
 
             auto d = insert(new Deopt(sp));
             d->setDeoptReason(compiler.module->deoptReasonValue(reason),
@@ -453,17 +464,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         } else if (auto i = Instruction::Cast(target)) {
             // See if the call feedback suggests a monomorphic target
             // TODO: Deopts in promises are not supported by the promise
-            // inliner. So currently it does not pay off to put any deopts in
-            // there.
+            // inliner. So currently it does not pay off to put any deopts
+            // in there.
             //
             auto& f = i->updateCallFeedback();
-            const auto& feedback = bc.immediate.callFeedback;
             f.taken = feedback.taken;
-            f.feedbackOrigin = FeedbackOrigin(srcCode, pos);
+            f.feedbackOrigin =
+                FeedbackPosition(srcCode->function(), FeedbackIndex::call(idx));
             if (feedback.numTargets == 1) {
                 assert(!feedback.invalid &&
                        "feedback can't be invalid if numTargets is 1");
-                f.monomorphic = feedback.getTarget(srcCode, 0);
+                f.monomorphic = feedback.getTarget(srcCode->function(), 0);
                 f.type = TYPEOF(f.monomorphic);
                 f.stableEnv = true;
             } else if (feedback.numTargets > 1) {
@@ -472,7 +483,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 bool stableBody = !feedback.invalid;
                 bool stableEnv = !feedback.invalid;
                 for (size_t i = 0; i < feedback.numTargets; ++i) {
-                    SEXP b = feedback.getTarget(srcCode, i);
+                    SEXP b = feedback.getTarget(srcCode->function(), i);
                     if (!first) {
                         first = b;
                     } else {
@@ -492,11 +503,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (auto c = cls->isContinuation()) {
                     if (auto d = c->continuationContext->asDeoptContext()) {
                         if (d->reason().reason == DeoptReason::CallTarget) {
-                            if (d->reason().pc() == pos) {
+                            if (d->reason().origin.idx() == idx) {
                                 auto deoptCallTarget = d->callTargetTrigger();
                                 for (size_t i = 0; i < feedback.numTargets;
                                      ++i) {
-                                    SEXP b = feedback.getTarget(srcCode, i);
+                                    SEXP b = feedback.getTarget(
+                                        srcCode->function(), i);
                                     if (b != deoptCallTarget)
                                         deoptedCallTargets.insert(b);
                                 }
@@ -617,7 +629,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         bool stableEnv = ti.stableEnv;
         if (monomorphicClosure)
             if (auto dt = DispatchTable::check(BODY(ti.monomorphic)))
-                if (dt->baseline()->flags.includes(
+                if (dt->baseline()->flags().includes(
                         Function::Flag::InnerFunction))
                     stableEnv = false;
 
@@ -1347,12 +1359,14 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert, Opcode* start,
 }
 
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, false)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
+                          false)
         .tryCompile(prom, insert);
 }
 
 Value* Rir2Pir::tryInlinePromise(rir::Code* srcCode, Builder& insert) {
-    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, true)
+    return PromiseRir2Pir(compiler, cls, log, name, outerFeedback, typeFeedback,
+                          true)
         .tryTranslate(srcCode, insert);
 }
 
@@ -1363,6 +1377,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                              const std::vector<PirType>& initialStack) {
     assert(!finalized);
+    assert(start >= srcCode->code());
+    assert(start <= srcCode->endCode());
 
     auto firstBB = insert.getCurrentBB();
     insert.createNextBB();
@@ -1434,10 +1450,12 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         BC bc = BC::advance(&finger, srcCode);
         // cppcheck-suppress variableScope
         const auto nextPos = finger;
+        assert(nextPos <= end);
 
         assert(pos != end);
         if (bc.isJmp()) {
             auto trg = bc.jmpTarget(pos);
+            assert(trg <= end);
             if (bc.isUncondJmp()) {
                 finger = trg;
                 continue;
@@ -1576,6 +1594,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
             BC ldcode = BC::advance(&pc, srcCode);
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
+            assert(pc <= end);
 
             SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();

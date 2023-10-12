@@ -2,6 +2,9 @@
 #define ARGLIST_ORDER_H
 
 #include "RirRuntimeObject.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "serializeHash/serializeUni.h"
 
 #include <iostream>
 #include <vector>
@@ -54,6 +57,14 @@ struct ArglistOrder
                (2 * reordering.size() + sz) * sizeof(*data);
     }
 
+    size_t size() const {
+        size_t sz = 0;
+        for (size_t i = 0; i < nCalls; i++) {
+            sz += originalArglistLength(i);
+        }
+        return sizeof(ArglistOrder) + (2 * nCalls + sz) * sizeof(*data);
+    }
+
     static ArglistOrder* New(std::vector<CallArglistOrder> const& reordering) {
         SEXP cont = Rf_allocVector(EXTERNALSXP, size(reordering));
         ArglistOrder* res = new (DATAPTR(cont)) ArglistOrder(reordering);
@@ -61,7 +72,7 @@ struct ArglistOrder
     }
 
     explicit ArglistOrder(std::vector<CallArglistOrder> const& reordering)
-        : RirRuntimeObject(0, 0), nCalls(reordering.size()) {
+        : ArglistOrder(reordering.size()) {
         auto offset = nCalls * 2;
         for (size_t i = 0; i < nCalls; i++) {
             data[2 * i] = offset;
@@ -84,12 +95,22 @@ struct ArglistOrder
         return data[callId * 2 + 1];
     }
 
+    static ArglistOrder* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+
     /*
      * Layout of data[] is nCalls * (offset, length), followed by
      * nCalls * (variable length list of indices)
      */
     size_t nCalls;
     ArgIdx data[];
+
+  private:
+    // cppcheck-suppress uninitMemberVarPrivate
+    explicit ArglistOrder(size_t nCalls)
+        : RirRuntimeObject(0, 0), nCalls(nCalls) {}
 };
 
 #pragma pack(pop)

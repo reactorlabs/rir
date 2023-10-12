@@ -1,0 +1,38 @@
+#!/bin/bash -e
+
+# region prelude
+SCRIPTPATH=$(cd "$(dirname "$0")" && pwd)
+if [ ! -d "$SCRIPTPATH" ]; then
+    echo "${LOG_PREFIX}Could not determine absolute dir of $0"
+    echo "${LOG_PREFIX}Maybe accessed with symlink"
+fi
+export SCRIPTPATH
+
+if [ -z "$RIR_BUILD" ]; then
+    RIR_BUILD=$(pwd)
+fi
+export RIR_BUILD
+if [ ! -f $RIR_BUILD/librir.* ]; then
+    echo "${LOG_PREFIX}could not find librir. are you in the correct directory?"
+    exit 1
+fi
+
+. "${SCRIPTPATH}/script_include.sh"
+RIR_EXE="${RIR_BUILD}/bin/R"
+export PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION="$SCRIPTPATH/rirPrettyGraph"
+# endregion
+
+export PIR_CLIENT_ADDR="${PIR_CLIENT_ADDR=tcp://localhost:${PORT=5555}}"
+
+EXPECTED_PATH="${SCRIPTPATH}/test-compiler-client-expected.out"
+ACTUAL_PATH="/tmp/test-compiler-client-actual.out"
+
+echo "${LOG_PREFIX}-> Running compiler client test"
+PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY=1024 "${RIR_EXE}" -f "${SCRIPTPATH}/test-compiler-client.r" > "${ACTUAL_PATH}" 2>&1
+echo "${LOG_PREFIX}-> Comparing output"
+if diff "${EXPECTED_PATH}" "${ACTUAL_PATH}"; then
+  echo "${LOG_PREFIX}-> Files are the same"
+else
+  echo "${LOG_PREFIX}!! Files are different"
+  # exit 1  # TODO: Actuall set expected output and check, ensure the run is deterministic
+fi

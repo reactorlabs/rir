@@ -8,6 +8,8 @@ set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
 set(LLVM_DIR ${CMAKE_SOURCE_DIR}/external/llvm-12)
+set(ZEROMQ_DIR ${CMAKE_SOURCE_DIR}/external/zeromq)
+set(XXHASH_DIR ${CMAKE_SOURCE_DIR}/external/xxHash)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
@@ -22,29 +24,28 @@ endif ()
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# use GCC 9 on macOS. Otherwise we use clang
-if(APPLE)
-    option(MACOS_USE_GCC_9 "Use GCC 9 on macOS." FALSE)
-endif(APPLE)
+include_directories(${ZEROMQ_DIR}/include)
+# Won't work on Linux if we try to link statically:
+#     /usr/bin/ld: ../external/zeromq/lib/libzmq.a(libzmq_la-zmq.o): relocation R_X86_64_PC32 against symbol
+#     `_ZSt7nothrow@@GLIBCXX_3.4' can not be used when making a shared object; recompile with -fPIC
+if (${APPLE})
+    link_libraries(${ZEROMQ_DIR}/lib/libzmq.dylib)
+else ()
+    link_libraries(${ZEROMQ_DIR}/lib/libzmq.so)
+endif ()
 
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_C_COMPILER /usr/local/bin/gcc-9 CACHE PATH "" FORCE)
-    set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
-endif()
+set(XXHASH_BUILD_XXHSUM OFF)
+set(BUILD_SHARED_LIBS ON)
+add_subdirectory(${XXHASH_DIR}/cmake_unofficial/ ${XXHASH_DIR}/build/ EXCLUDE_FROM_ALL)
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
 set(CMAKE_CXX_FLAGS_FULLVERIFIER "${CMAKE_CXX_FLAGS_RELEASE} -DFULLVERIFIER")
 set(CMAKE_CXX_FLAGS_RELEASESLOWASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DENABLE_SLOWASSERT")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT -DDEBUG_DISASSEMBLY")
 set(CMAKE_CXX_FLAGS_DEBUGOPT "-Og -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
-# with macOS GCC 9 we need to explicitly use libc++, since llvm does. See https://libcxx.llvm.org/docs/UsingLibcxx.html#using-libc-with-gcc
-if(${MACOS_USE_GCC_9})
-    set(CMAKE_CXX_FLAGS_LIBCXX "-nostdinc++ -nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s.1 -lgcc")
-else()
-    set(CMAKE_CXX_FLAGS_LIBCXX "")
-endif()
+set(CMAKE_CXX_FLAGS_LIBCXX "")
 set(CMAKE_CXX_FLAGS "${LLVM_CXX_FLAGS} ${CMAKE_CXX_FLAGS_LIBCXX} -Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wmissing-include-dirs -Wstrict-overflow=3 -std=c++14 -fno-rtti -fno-exceptions -Wimplicit-fallthrough -Wno-deprecated-declarations")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DSWITCH_TO_NAMED=1")
 set(CMAKE_C_FLAGS_RELEASENOASSERT "${CMAKE_C_FLAGS_RELEASE} -DNDEBUG")
@@ -54,8 +55,16 @@ set(CMAKE_C_FLAGS_DEBUG "-O0 -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS_DEBUGOPT "-Og -DSWITCH_TO_NAMED=1 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
-set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
-set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_RELEASE} -g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
+if (${APPLE})
+    set(SANITIZE_FLAGS "-g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fno-sanitize=alignment -shared-libasan -fvisibility=default")
+else()
+    set(SANITIZE_FLAGS "-g2 -fno-omit-frame-pointer -fsanitize=undefined -fsanitize=address -fsanitize=leak -fno-sanitize=alignment -shared-libasan -fvisibility=default")
+endif()
+set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_RELEASE} ${SANITIZE_FLAGS}")
+set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_RELEASE} ${SANITIZE_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG_SANITIZE "${CMAKE_CXX_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
+set(CMAKE_C_FLAGS_DEBUG_SANITIZE "${CMAKE_C_FLAGS_DEBUG} ${SANITIZE_FLAGS}")
+
 
 MARK_AS_ADVANCED(
     CMAKE_CXX_FLAGS_SANITIZE
@@ -96,12 +105,15 @@ endif()
 
 # Create proxy scripts for the scripts in /tools
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/.bin_create")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/tests"           "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/tests \"$@\"")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/R"               "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/R \"$@\"")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rscript"         "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/Rscript \"$@\"")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rgnu"            "#!/bin/sh\n${CMAKE_SOURCE_DIR}/external/custom-r/bin/R \"$@\"")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make"       "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make \"$@\"")
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make-tests" "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make-tests \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/tests"                           "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/tests \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/test-compiler-client-and-server" "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/test-compiler-client-and-server \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/test-compiler-client-only"       "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/test-compiler-client-only \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/test-compiler-server-only"       "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/test-compiler-server-only \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/R"                               "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/R \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rscript"                         "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/Rscript \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/Rgnu"                            "#!/bin/sh\n${CMAKE_SOURCE_DIR}/external/custom-r/bin/R \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make"                       "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make \"$@\"")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/gnur-make-tests"                 "#!/bin/sh\nRIR_BUILD=\"${CMAKE_CURRENT_BINARY_DIR}\" ${CMAKE_SOURCE_DIR}/tools/gnur-make-tests \"$@\"")
 
 file(GLOB BIN_IN "${CMAKE_CURRENT_BINARY_DIR}/.bin_create/*")
 file(INSTALL ${BIN_IN} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/bin" FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE)
@@ -118,36 +130,20 @@ endif(${NO_LOCAL_CONFIG})
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
-# again we need to explicitly use libc++
-if(${MACOS_USE_GCC_9})
-    include_directories(/Library/Developer/CommandLineTools/usr/include/c++/v1)
-endif(${MACOS_USE_GCC_9})
 message(STATUS "Using R from ${R_HOME}")
 
 add_custom_target(setup-build-dir
     COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
 
-if(${MACOS_USE_GCC_9})
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh --macos_gcc9
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh --macos_gcc9
-    )
-else()
-    add_custom_target(dependencies
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
-        COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
-    )
-endif()
-
-add_custom_target(default-gnur
-    DEPENDS dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
+add_custom_target(dependencies
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-zeromq.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/fetch-llvm.sh
 )
 
 add_custom_target(setup
     DEPENDS dependencies
-    DEPENDS default-gnur
 )
 
 add_custom_target(tests
@@ -175,10 +171,17 @@ if (DEFINED LLVM_PACKAGE_VERSION)
   target_link_libraries(${PROJECT_NAME} ${LLVM_LIBS})
 endif(DEFINED LLVM_PACKAGE_VERSION)
 
+target_link_libraries(${PROJECT_NAME} xxHash::xxhash)
+
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")
     target_link_libraries(${PROJECT_NAME} R)
     # to resolve build error from
     # https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
-    target_link_libraries(${PROJECT_NAME} -lintl)
+    # target_link_libraries(${PROJECT_NAME} -lintl)
+    include_directories(${LLVM_DIR}/include)
+    target_link_directories(${PROJECT_NAME} INTERFACE ${LLVM_DIR}/lib)
+    # Note: May need to update the version here
+    include_directories(/opt/homebrew/Cellar/gettext/0.21.1/include)
+    target_link_libraries(${PROJECT_NAME} /opt/homebrew/Cellar/gettext/0.21.1/lib/libintl.dylib)
 endif(APPLE)

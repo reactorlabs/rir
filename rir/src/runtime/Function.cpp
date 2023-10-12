@@ -1,67 +1,182 @@
 #include "Function.h"
-#include "R/Serialize.h"
+#include "R/Protect.h"
+#include "Rinternals.h"
 #include "compiler/compiler.h"
+#include "interpreter/instance.h"
+#include "runtime/TypeFeedback.h"
+#include "runtime/log/printPrettyGraph.h"
 
 namespace rir {
 
-Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
-    size_t functionSize = InInteger(inp);
-    const FunctionSignature sig = FunctionSignature::deserialize(refTable, inp);
-    const Context as = Context::deserialize(refTable, inp);
-    SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
-    void* payload = DATAPTR(store);
-    Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
-    fun->numArgs_ = InInteger(inp);
-    fun->info.gc_area_length += fun->numArgs_;
-    for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
-        fun->setEntry(i, R_NilValue);
+void Function::setFlag(rir::Function::Flag f) {
+    // UUIDPool::reintern(container());
+    flags_.set(f);
+}
+
+void Function::resetFlag(rir::Function::Flag f) {
+    // UUIDPool::reintern(container());
+    flags_.reset(f);
+}
+
+void Function::deserializeFullSignature(ByteBuffer& buf) {
+    signature_.deserializeFrom(buf);
+    context_ = Context(buf.getLong());
+    buf.getBytes((uint8_t*)&flags_, sizeof(flags_));
+    invocationCount_ = buf.getInt();
+    deoptCount_ = buf.getInt();
+    deadCallReached_ = buf.getInt();
+    // invoked = buf.getLong();
+    // execTime = buf.getLong();
+}
+
+void Function::serializeFullSignature(ByteBuffer& buf) const {
+    signature_.serialize(buf);
+    buf.putLong(context_.toI());
+    buf.putBytes((uint8_t*)&flags_, sizeof(flags_));
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    buf.putInt(std::min(invocationCount_, 2u));
+    buf.putInt(std::min(deoptCount_, 2u));
+    buf.putInt(std::min(deadCallReached_, 4u));
+    // buf.putLong(invoked);
+    // buf.putLong(execTime);
+}
+
+Function* Function::deserialize(AbstractDeserializer& deserializer) {
+    Protect p;
+    auto funSize = deserializer.readBytesOf<R_xlen_t>(SerialFlags::FunMiscBytes);
+    auto sig = FunctionSignature::deserialize(deserializer);
+    auto ctx = Context(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
+    auto flags = EnumSet<Flag>(deserializer.readBytesOf<unsigned long>(SerialFlags::FunMiscBytes));
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    auto invocationCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    auto deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    auto deadCallReached_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunMiscBytes);
+    if (deserializer.willRead(SerialFlags::FunStats)) {
+        invocationCount_ =
+            deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+        deoptCount_ = deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
+        deadCallReached_ =
+            deserializer.readBytesOf<unsigned>(SerialFlags::FunStats);
     }
-    PROTECT(store);
-    AddReadRef(refTable, store);
-    SEXP body = Code::deserialize(refTable, inp)->container();
-    fun->body(body);
-    PROTECT(body);
-    int protectCount = 2;
-    for (unsigned i = 0; i < fun->numArgs_; i++) {
-        if ((bool)InInteger(inp)) {
-            SEXP arg = Code::deserialize(refTable, inp)->container();
-            PROTECT(arg);
-            protectCount++;
-            fun->setEntry(Function::NUM_PTRS + i, arg);
-        } else
-            fun->setEntry(Function::NUM_PTRS + i, nullptr);
+    auto invoked = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
+    auto execTime = deserializer.readBytesOf<unsigned long>(SerialFlags::FunStats);
+    SEXP store = p(Rf_allocVector(EXTERNALSXP, funSize));
+    // There's an interesting situation where we start using the function WHILE
+    // it's being deserialized (recursive deserialization madness), so we have
+    // to make `Function::unpack` not crash by making `store` have the function
+    // magic, and we have to make fun->typeFeedback() return nullptr.
+    //
+    // That's what these assignments do. Fortunately we don't try to use
+    // anything else...
+    *((rir_header*)STDVEC_DATAPTR(store)) =
+        {sizeof(Function) - NUM_PTRS * sizeof(SEXP),
+         NUM_PTRS,
+         FUNCTION_MAGIC};
+    for (unsigned i = 0; i < NUM_PTRS; i++) {
+        EXTERNALSXP_SET_ENTRY(store, i, nullptr);
     }
-    fun->flags = EnumSet<Flag>(InInteger(inp));
-    UNPROTECT(protectCount);
+    // Also needed to set FUNCTION_MAGIC for addRef
+    deserializer.addRef(store);
+
+    auto feedback = p(deserializer.read(SerialFlags::FunFeedback));
+    auto body = p(deserializer.read(SerialFlags::FunBody));
+    std::vector<SEXP> defaultArgs(sig.numArguments, nullptr);
+    for (unsigned i = 0; i < sig.numArguments; i++) {
+        if (deserializer.readBytesOf<bool>(SerialFlags::FunDefaultArg)) {
+            defaultArgs[i] = p(deserializer.read(SerialFlags::FunDefaultArg));
+        }
+    }
+
+    auto fun = new (DATAPTR(store))
+        Function(funSize, body, defaultArgs, sig, ctx,
+                 TypeFeedback::unpack(feedback));
+    fun->flags_ = flags;
+    fun->invocationCount_ = invocationCount_;
+    fun->deoptCount_ = deoptCount_;
+    fun->deadCallReached_ = deadCallReached_;
+    fun->invoked = invoked;
+    fun->execTime = execTime;
     return fun;
 }
 
-void Function::serialize(SEXP refTable, R_outpstream_t out) const {
-    OutInteger(out, size);
-    signature().serialize(refTable, out);
-    context_.serialize(refTable, out);
-    OutInteger(out, numArgs_);
-    HashAdd(container(), refTable);
-    body()->serialize(refTable, out);
+void Function::serialize(AbstractSerializer& serializer) const {
+    serializer.writeBytesOf<R_xlen_t>((R_xlen_t)size, SerialFlags::FunMiscBytes);
+    signature().serialize(serializer);
+    serializer.writeBytesOf<unsigned long>(context_.toI(), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned long>(flags_.to_i(), SerialFlags::FunMiscBytes);
+    // Misc bytes = whether counts exceed certain values checked by rir2pir.
+    // Stats = actual counts and invocation time
+    serializer.writeBytesOf<unsigned>(std::min(invocationCount_, 2u), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(std::min(deoptCount_, 2u), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(std::min(deadCallReached_, 4u), SerialFlags::FunMiscBytes);
+    serializer.writeBytesOf<unsigned>(invocationCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned>(deoptCount_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned>(deadCallReached_, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned long>(invoked, SerialFlags::FunStats);
+    serializer.writeBytesOf<unsigned long>(execTime, SerialFlags::FunStats);
+
+    serializer.write(typeFeedback()->container(), SerialFlags::FunFeedback);
+    serializer.write(body()->container(), SerialFlags::FunBody);
     for (unsigned i = 0; i < numArgs_; i++) {
-        Code* arg = defaultArg(i);
-        OutInteger(out, (int)(arg != nullptr));
-        if (arg)
-            defaultArg(i)->serialize(refTable, out);
+        serializer.writeBytesOf(defaultArg_[i] != nullptr, SerialFlags::FunDefaultArg);
+        if (defaultArg_[i]) {
+            serializer.write(defaultArg_[i], SerialFlags::FunDefaultArg);
+        }
     }
-    OutInteger(out, flags.to_i());
 }
 
-void Function::disassemble(std::ostream& out) {
-    out << "[sigature] ";
+void Function::hash(HasherOld& hasher) const {
+    hasher.hashBytesOf(signature());
+    hasher.hashBytesOf(context_);
+    hasher.hashBytesOf(numArgs_);
+    // TODO: why are body and args not set sometimes when we hash
+    //  deserialized value to check hash consistency? It probably has
+    //  something to do with cyclic references in serialization, but why?
+    //  (This is one of the reasons we use SEXP instead of unpacking Code
+    //  for body and default args, also because we are going to serialize
+    //  the SEXP anyways to properly handle cyclic references)
+    hasher.hash(getEntry(0));
+
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        hasher.hashNullable(arg);
+    }
+
+    // Don't hash flags because they change
+}
+
+void Function::addConnected(ConnectedCollectorOld& collector) const {
+    collector.add(getEntry(0), false);
+
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        collector.addNullable(arg, false);
+    }
+}
+
+void Function::disassemble(std::ostream& out) const {
+    print(out);
+}
+
+void Function::print(std::ostream& out, bool isDetailed) const {
+    if (isDeserializing()) {
+        out << "(function is being deserialized)\n";
+        return;
+    }
+    if (isDetailed) {
+        out << "[size]" << size << "\n[numArgs] " << numArgs_ << "\n";
+    }
+    out << "[signature] ";
     signature().print(out);
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
     out << "\n";
     out << "[flags]    ";
 #define V(F)                                                                   \
-    if (flags.includes(F))                                                     \
-        out << #F << " ";
+if (flags_.includes(F))                                                    \
+    out << #F << " ";
     RIR_FUNCTION_FLAGS(V)
 #undef V
     out << "\n";
@@ -70,7 +185,138 @@ void Function::disassemble(std::ostream& out) {
         << ", time: " << ((double)invocationTime() / 1e6)
         << "ms, deopt: " << deoptCount();
     out << "\n";
-    body()->disassemble(out);
+    if (isDetailed) {
+        body()->print(out, isDetailed);
+        for (unsigned i = 0; i < numArgs_; i++) {
+            CodeSEXP arg = defaultArg_[i];
+            if (arg) {
+                out << "[default arg " << i << "]\n";
+                Code::unpack(arg)->print(out, isDetailed);
+            }
+        }
+    } else {
+        body()->disassemble(out);
+    }
+    out << "[feedback]\n";
+    typeFeedback()->print(out);
+}
+
+void Function::printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const {
+    print.addName([&](std::ostream& s) {
+        auto ast = src_pool_at(body()->src);
+        auto headAst = TYPEOF(ast) == LANGSXP ? CAR(ast) : R_NilValue;
+        if (TYPEOF(headAst) == SYMSXP) {
+            s << CHAR(PRINTNAME(headAst));
+        } else {
+            s << "<anon size=" << size << " numArgs=" << numArgs_ << ">";
+        }
+    });
+    print.addBody([&](std::ostream& s) {
+        s << "<p class=\"function-signature\">(";
+        signature().print(s);
+        s << ")</p>";
+        if (!context_.empty()) {
+            s << "<p class=\"function-context\">[" << context_
+              << "]</p>";
+        }
+        if (!flags_.empty()) {
+            s << "<p class=\"function-flags\">{";
+        }
+#define V(F)                                                                   \
+        if (flags_.includes(F))                                                \
+            s << #F << " ";
+            RIR_FUNCTION_FLAGS(V)
+#undef V
+        if (!flags_.empty()) {
+            s << "}</p>";
+        }
+        s << "<p class=\"function-stats\">"
+          << "invoked: " << invocationCount()
+          << ", time: " << ((double)invocationTime() / 1e6)
+          << "ms, deopt: " << deoptCount()
+          << "</p>";
+    });
+    print.addEdgeTo(body()->container(), true, "body");
+    for (unsigned i = 0; i < numArgs_; i++) {
+        CodeSEXP arg = defaultArg_[i];
+        if (arg) {
+            print.addEdgeTo(arg, true, "default-arg", [&](std::ostream& s) {
+                s << "arg " << i << " default";
+            });
+        }
+    }
+}
+
+void Function::debugCompare(const Function* f1, const Function* f2,
+                            std::stringstream& differences,
+                            bool compareExtraPoolRBytecodes) {
+    FunctionSignature::debugCompare(f1->signature(), f2->signature(), differences);
+    if (f1->context() != f2->context()) {
+        differences << "context: " << f1->context() << " != " << f2->context()
+                    << "\n";
+    }
+    if (f1->flags() != f2->flags()) {
+        differences << "flags: ";
+#define V(F)                                                                   \
+        if (f1->flags_.includes(F))                                                \
+            differences << #F << " ";
+        RIR_FUNCTION_FLAGS(V)
+#undef V
+        differences << " != ";
+#define V(F)                                                                   \
+        if (f2->flags_.includes(F))                                                \
+            differences << #F << " ";
+        RIR_FUNCTION_FLAGS(V)
+#undef V
+        differences << "\n";
+    }
+    if (f1->size != f2->size) {
+        differences << "size: " << f1->size << " != " << f2->size << "\n";
+    }
+    if (f1->numArgs_ != f2->numArgs_) {
+        differences << "numArgs: " << f1->numArgs_ << " != " << f2->numArgs_
+                    << "(note: signature also has numArgs)\n";
+    }
+    // TODO: invocationCount, invoked, and execTime are frequently different,
+    //   even when doing a deep copy. Why?
+    if (f1->invocationCount_ != f2->invocationCount_) {
+        differences << "invocationCount: " << f1->invocationCount_
+                    << " != " << f2->invocationCount_ << "\n";
+    }
+    if (f1->deoptCount_ != f2->deoptCount_) {
+        differences << "deoptCount: " << f1->deoptCount_
+                    << " != " << f2->deoptCount_ << "\n";
+    }
+    if (f1->deadCallReached_ != f2->deadCallReached_) {
+        differences << "deadCallReached: " << f1->deadCallReached_
+                    << " != " << f2->deadCallReached_ << "\n";
+    }
+    if (f1->invoked != f2->invoked) {
+        differences << "invoked: " << f1->invoked << " != " << f2->invoked
+                    << "\n";
+    }
+    if (f1->execTime != f2->execTime) {
+        differences << "invocationTime: " << f1->execTime
+                    << " != " << f2->execTime << "\n";
+    }
+    Code::debugCompare(f1->body(), f2->body(), "body", differences,
+                       compareExtraPoolRBytecodes);
+    for (unsigned i = 0; i < std::min(f1->numArgs_, f2->numArgs_); i++) {
+        auto arg1 = f1->defaultArg_[i];
+        auto arg2 = f2->defaultArg_[i];
+        auto hasArg1 = (arg1 != nullptr);
+        auto hasArg2 = (arg2 != nullptr);
+        if (hasArg1 != hasArg2) {
+            differences << "defaultArg[" << i << "] != nullptr: " << hasArg1
+                        << " != " << hasArg2 << "\n";
+        }
+        if (hasArg1 && hasArg2) {
+            char prefix[100];
+            sprintf(prefix, "defaultArg[%u]", i);
+            Code::debugCompare(Code::unpack(arg1), Code::unpack(arg2),
+                               prefix, differences, compareExtraPoolRBytecodes);
+        }
+    }
 }
 
 static int GLOBAL_SPECIALIZATION_LEVEL =
@@ -78,11 +324,11 @@ static int GLOBAL_SPECIALIZATION_LEVEL =
         ? atoi(getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL"))
         : 100;
 void Function::clearDisabledAssumptions(Context& given) const {
-    if (flags.contains(Function::DisableArgumentTypeSpecialization))
+    if (flags_.contains(Function::DisableArgumentTypeSpecialization))
         given.clearTypeFlags();
-    if (flags.contains(Function::DisableNumArgumentsSpezialization))
+    if (flags_.contains(Function::DisableNumArgumentsSpezialization))
         given.clearNargs();
-    if (flags.contains(Function::DisableAllSpecialization))
+    if (flags_.contains(Function::DisableAllSpecialization))
         given.clearExcept(pir::Compiler::minimalContext);
 
     if (GLOBAL_SPECIALIZATION_LEVEL < 100)

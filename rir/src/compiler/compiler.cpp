@@ -3,6 +3,7 @@
 #include "pir/continuation.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Map.h"
 #include "utils/measuring.h"
 
@@ -55,7 +56,8 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
                                                      tbl->userDefinedContext());
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
-                   success, fail, outerFeedback);
+                   success, fail, outerFeedback,
+                   tbl->baseline()->typeFeedback());
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -71,7 +73,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback);
+                   fail, outerFeedback, src->baseline()->typeFeedback());
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
@@ -89,7 +91,8 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {});
+    auto typeFeedback = tbl->baseline()->typeFeedback();
+    Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
         log.flush();
@@ -105,7 +108,8 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                               const Context& ctx, bool root, MaybeCls success,
                               Maybe fail,
-                              std::list<PirTypeFeedback*> outerFeedback) {
+                              std::list<PirTypeFeedback*> outerFeedback,
+                              rir::TypeFeedback* typeFeedback) {
 
     if (!ctx.includes(minimalContext)) {
         for (const auto a : minimalContext) {
@@ -119,10 +123,11 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     }
 
     // Currently dots args are not supported in PIR. Unless if we statically
-    // matched all arguments correctly and are therefore guaranteed to receive a
+    // matched all arguments correctly and are therefore guaranteed to
+    // receive a
     // `...` list as DOTSXP in the correct location, we can support them.
-    // TODO: extend call instruction to do the necessary argument shuffling to
-    // support it in all cases
+    // TODO: extend call instruction to do the necessary argument shuffling
+    // to support it in all cases
     if (!ctx.includes(Assumption::StaticallyArgmatched) &&
         closure->formals().hasDots()) {
         logger.warn("no support for ...");
@@ -130,7 +135,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     }
 
     if (closure->rirFunction()->body()->codeSize > Parameter::MAX_INPUT_SIZE) {
-        closure->rirFunction()->flags.set(Function::NotOptimizable);
+        closure->rirFunction()->setFlag(Function::NotOptimizable);
         logger.warn("skipping huge function");
         return fail();
     }
@@ -141,7 +146,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
-    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback);
+    Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
+                    typeFeedback);
 
     auto& context = version->context();
     bool failedToCompileDefaultArgs = false;
@@ -175,8 +181,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
             for (unsigned i = 0; i < closure->nargs() - context.numMissing();
                  ++i) {
                 if (closure->formals().defaultArgs()[i] != R_MissingArg) {
-                    // If this arg has a default, then test if the argument is
-                    // missing and if so, load the default arg.
+                    // If this arg has a default, then test if the argument
+                    // is missing and if so, load the default arg.
                     auto a = builder(new LdArg(i));
                     auto testMissing = builder(new Identical(
                         a, MissingArg::instance(), PirType::any()));
@@ -270,7 +276,8 @@ static void findUnreachable(Module* m, Log& log, const std::string& where) {
                             if (!call->tryDispatch()) {
                                 std::stringstream msg;
                                 msg << "After pass " << where
-                                    << " found a broken static call. Available "
+                                    << " found a broken static call. "
+                                       "Available "
                                        "versions:\n";
                                 call->cls()->eachVersion(
                                     [&](ClosureVersion* v) {

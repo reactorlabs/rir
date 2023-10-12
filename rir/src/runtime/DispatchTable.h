@@ -4,7 +4,14 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "TypeFeedback.h"
+#include "compilerClientServer/CompilerClient.h"
+#include "runtime/log/RirObjectPrintStyle.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "utils/ByteBuffer.h"
 #include "utils/random.h"
+#include <ostream>
 
 namespace rir {
 
@@ -92,20 +99,32 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        f->dispatchTable(this);
     }
 
     bool contains(const Context& assumptions) const {
-        for (size_t i = 0; i < size(); ++i)
-            if (get(i)->context() == assumptions)
-                return !get(i)->disabled();
-        return false;
+        auto i = indexOf(assumptions);
+        return i != SIZE_MAX && !get(i)->disabled();
     }
 
+  private:
+    // Note: Also returns index if disabled
+    size_t indexOf(const Context& assumptions) const {
+        for (size_t i = 0; i < size(); ++i)
+            if (get(i)->context() == assumptions)
+                return i;
+        return SIZE_MAX;
+    }
+
+  public:
     void remove(Code* funCode) {
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->body() == funCode)
+            auto fun = get(i);
+            if (fun->body() == funCode) {
+                fun->dispatchTable(nullptr);
                 break;
+            }
         }
         if (i == size())
             return;
@@ -122,6 +141,7 @@ struct DispatchTable
         assert(size() > 0);
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
+        fun->dispatchTable(this);
         auto assumptions = fun->context();
         size_t i;
         for (i = size() - 1; i > 0; --i) {
@@ -134,6 +154,7 @@ struct DispatchTable
                     setEntry(i, fun->container());
                     assert(get(i) == fun);
                 }
+                old->dispatchTable(nullptr);
                 return;
             }
             if (!(assumptions < get(i)->context())) {
@@ -141,7 +162,19 @@ struct DispatchTable
             }
         }
         i++;
-        assert(!contains(fun->context()));
+        if (CompilerClient::isRunning()) {
+            // Not sure if this even happens or is the right approach, but in
+            // theory, since only DT baselines are hashed, the compiler server
+            // could return a DT with an already optimized closure. In this
+            // case, replacing should be ok
+            auto indexOfSameContext = indexOf(fun->context());
+            if (indexOfSameContext != SIZE_MAX) {
+                setEntry(indexOfSameContext, fun->container());
+                return;
+            }
+        } else {
+            assert(!contains(fun->context()));
+        }
         if (size() == capacity()) {
 #ifdef DEBUG_DISPATCH
             std::cout << "Tried to insert into a full Dispatch table. Have: \n";
@@ -193,24 +226,19 @@ struct DispatchTable
 
     size_t capacity() const { return info.gc_area_length; }
 
-    static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
-        DispatchTable* table = create();
-        PROTECT(table->container());
-        AddReadRef(refTable, table->container());
-        table->size_ = InInteger(inp);
-        for (size_t i = 0; i < table->size(); i++) {
-            table->setEntry(i,
-                            Function::deserialize(refTable, inp)->container());
-        }
-        UNPROTECT(1);
-        return table;
-    }
+    static DispatchTable* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+    /// Check if 2 dispatch tables are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences.
+    static void debugCompare(const DispatchTable* dt1, const DispatchTable* dt2,
+                             std::stringstream& differences,
+                             bool compareExtraPoolRBytecodes = true);
 
-    void serialize(SEXP refTable, R_outpstream_t out) const {
-        HashAdd(container(), refTable);
-        OutInteger(out, 1);
-        baseline()->serialize(refTable, out);
-    }
 
     Context userDefinedContext() const { return userDefinedContext_; }
     DispatchTable* newWithUserContext(Context udc) {
@@ -237,12 +265,12 @@ struct DispatchTable
 
   private:
     DispatchTable() = delete;
-    explicit DispatchTable(size_t cap)
+    explicit DispatchTable(size_t capacity)
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
               sizeof(DispatchTable),
               // GC area is just the pointers in the entry array
-              cap) {}
+              capacity) {}
 
     size_t size_ = 0;
     Context userDefinedContext_;

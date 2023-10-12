@@ -945,8 +945,10 @@ SEXP tryFastBuiltinCall1(const CallContext& call, size_t nargs, bool hasAttrib,
     case blt("islistfactor"): {
         if (nargs != 2)
             return nullptr;
-        auto n = XLENGTH(args[0]);
-        if (n == 0 || !Rf_isVectorList(args[0]))
+        if (!Rf_isVectorList(args[0]))
+            return R_FalseValue;
+        auto n = LENGTH(args[0]);
+        if (n == 0)
             return R_FalseValue;
         int recursive = Rf_asLogical(args[1]);
         if (recursive)

@@ -30,6 +30,7 @@ fi
 . "${SCRIPTPATH}/script_include.sh"
 
 export ROOT_DIR="${SCRIPTPATH}/.."
+export PIR_PRETTY_GRAPH_DEPENDENCY_LOCATION="$SCRIPTPATH/rirPrettyGraph"
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
@@ -84,7 +85,7 @@ function run_test {
   if [ $res -ne 0 ]; then
       echo -e "\n*************************************************************************************"
       echo "*************************************************************************************"
-      echo "***  failed test $name:"
+      echo "***  failed test $name (code $res):"
       echo "***   $R $VALGRIND -f $TEST"
       echo "***  log:"
       echo "*************************************************************************************"

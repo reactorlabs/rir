@@ -5,6 +5,7 @@
 #include "runtime/RirRuntimeObject.h"
 
 #include "interpreter/interp_incl.h"
+#include "serializeHash/serializeUni.h"
 
 #include <cassert>
 #include <cstdint>
@@ -72,6 +73,11 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             true);
     }
 
+    static LazyArglist* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+
   private:
     // cppcheck-suppress uninitMemberVarPrivate
     LazyArglist(ArglistOrder::CallId id, SEXP arglistOrder, size_t length,
@@ -96,6 +102,8 @@ struct LazyArglist : public RirRuntimeObject<LazyArglist, LAZY_ARGS_MAGIC> {
             }
         }
     }
+
+    size_t size() const;
 
     friend struct LazyArglistOnHeap;
     friend struct LazyArglistOnStack;

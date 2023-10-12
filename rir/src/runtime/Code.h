@@ -5,18 +5,32 @@
 #include "PirTypeFeedback.h"
 #include "RirRuntimeObject.h"
 #include "bc/BC_inc.h"
+#include "runtime/log/RirObjectPrintStyle.h"
+#include "serializeHash/hash/getConnectedOld.h"
+#include "serializeHash/hash/hashRootOld.h"
+#include "serializeHash/serialize/native/SerialModule.h"
+#include "utils/ByteBuffer.h"
 
 #include <cassert>
 #include <cstdint>
 #include <ostream>
 #include <time.h>
 
+#ifndef __ARM_ARCH
 #include <asm/msr.h>
+#endif
+
+namespace llvm {
+
+class Function;
+
+} // namespace llvm
 
 namespace rir {
 
 typedef SEXP FunctionSEXP;
 typedef SEXP CodeSEXP;
+typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 
 #define CODE_MAGIC 0xc0de0000
 #define NATIVE_CODE_MAGIC 0xc0deffff
@@ -45,24 +59,22 @@ typedef SEXP CodeSEXP;
 
 struct InterpreterInstance;
 struct Code;
-typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
     friend class CodeVerifier;
 
-    enum class Kind { Bytecode, Native } kind;
+    enum class Kind { Bytecode, Native, Deserializing } kind;
 
-    // extra pool, pir type feedback, arg reordering info
+    // extra pool, pir type feedback, arg reordering info, rir function
     static constexpr size_t NumLocals = 4;
 
     Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx,
          unsigned codeSize, unsigned sourceSize, size_t localsCnt,
          size_t bindingsCacheSize);
-    ~Code();
 
   private:
-    Code() : Code(Kind::Bytecode, nullptr, 0, 0, 0, 0, 0, 0) {}
+    Code() : Code(Kind::Deserializing, nullptr, 0, 0, 0, 0, 0, 0) {}
     static Code* New(Kind kind, Immediate ast, size_t codeSize, size_t sources,
                      size_t locals, size_t bindingCache);
     /*
@@ -83,26 +95,21 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     constexpr static size_t MAX_CODE_HANDLE_LENGTH = 64;
 
   private:
-    char lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH] = "\0";
+    char lazyCodeHandle[MAX_CODE_HANDLE_LENGTH] = "\0";
+    SerialModuleRef lazyCodeModule;
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
+    void setLazyCodeModuleFinalizer();
+    static void finalizeLazyCodeModuleFromContainer(SEXP sexp);
+    void finalizeLazyCodeModule();
+
   public:
-    void lazyCodeHandle(const std::string& h) {
-        assert(h != "");
-        assert(kind == Kind::Native);
-        auto l = h.length() + 1;
-        if (l > MAX_CODE_HANDLE_LENGTH) {
-            assert(false);
-            l = MAX_CODE_HANDLE_LENGTH;
-        }
-        memcpy(&lazyCodeHandle_, h.c_str(), l);
-        lazyCodeHandle_[MAX_CODE_HANDLE_LENGTH - 1] = '\0';
-    }
+    void lazyCode(const std::string& handle, const SerialModuleRef& module);
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;
-        if (kind == Kind::Bytecode || *lazyCodeHandle_ == '\0')
+        if (kind == Kind::Bytecode || lazyCodeHandle[0] == '\0')
             return nullptr;
         return lazyCompile();
     }
@@ -114,7 +121,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     // evaluated (if we trigger some code in the backend, eg. during printing).
     // The current workaround is to skip them during dispatch.
     bool pendingCompilation() const {
-        return kind == Kind::Native && *lazyCodeHandle_ == '\0';
+        return kind == Kind::Native && lazyCodeHandle[0] == '\0';
     }
 
     static unsigned pad4(unsigned sizeInBytes) {
@@ -202,6 +209,10 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return ArglistOrder::unpack(data);
     }
 
+  private:
+    // Only used when code may not be fully deserialized
+    rir::Function* functionOpt() const;
+  public:
     rir::Function* function() const;
     void function(rir::Function*);
 
@@ -218,11 +229,24 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    static Code* deserialize(SEXP refTable, R_inpstream_t inp);
-    void serialize(SEXP refTable, R_outpstream_t out) const;
+    static Code* deserialize(AbstractDeserializer& deserializer);
+    void serialize(AbstractSerializer& deserializer) const;
+
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
+
     void disassemble(std::ostream&, const std::string& promPrefix) const;
     void disassemble(std::ostream& out) const { disassemble(out, ""); }
-    void print(std::ostream&) const;
+    void print(std::ostream&, bool isDetailed = false) const;
+    void printPrettyGraphContent(const PrettyGraphInnerPrinter& print) const;
+
+    /// Check if 2 code objects are the same, for validation and sanity check
+    /// (before we do operations which will cause weird errors otherwise). If
+    /// not, will add each difference to differences, prefixing with `prefix`
+    /// (the code type, either body or default arg).
+    static void debugCompare(const Code* c1, const Code* c2, const char* prefix,
+                             std::stringstream& differences,
+                             bool compareExtraPoolRBytecodes = true);
 
     static size_t extraPtrOffset() {
         static Code* c = (Code*)malloc(sizeof(Code));

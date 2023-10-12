@@ -33,6 +33,7 @@ extern llvm::StructType* VECTOR_SEXPREC;
 extern llvm::PointerType* VECTOR_SEXPREC_ptr;
 
 extern llvm::StructType* RirRuntimeObject;
+extern llvm::PointerType* Function_ptr;
 extern llvm::StructType* LazyEnvironment;
 
 extern llvm::StructType* DeoptReason;

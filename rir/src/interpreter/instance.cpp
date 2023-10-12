@@ -4,6 +4,10 @@
 
 namespace rir {
 
+#ifdef DO_INTERN
+static std::unordered_map<SEXP, size_t> src_pool_interned;
+#endif
+
 void initializeResizeableList(ResizeableList* l, size_t capacity, SEXP parent,
                               size_t index) {
     l->capacity = capacity;

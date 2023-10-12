@@ -50,13 +50,12 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
 typedef std::unordered_map<std::string, pir::ClosureVersion*> ClosuresByName;
 
 ClosuresByName compileRir2Pir(SEXP env, pir::Module* m) {
-    pir::Log logger({pir::DebugOptions::DebugFlags() |
-                         // pir::DebugFlag::PrintIntoStdout |
-                         // pir::DebugFlag::PrintEarlyPir |
-                         // pir::DebugFlag::PrintOptimizationPasses |
-                         pir::DebugFlag::PrintFinalPir,
-                     std::regex(".*"), std::regex(".*"),
-                     pir::DebugStyle::Standard});
+    pir::Log logger(pir::DebugOptions(
+        pir::DebugOptions::DebugFlags() |
+        // pir::DebugFlag::PrintIntoStdout |
+        // pir::DebugFlag::PrintEarlyPir |
+        // pir::DebugFlag::PrintOptimizationPasses |
+        pir::DebugFlag::PrintFinalPir));
     pir::Compiler cmp(m, logger);
 
     // Compile every function in the environment
@@ -353,7 +352,8 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pirCompile(rirFun, {}, "from_testPir2Rir", rir::pir::DebugOptions());
+    rirFun = pirCompile(rirFun, {}, "from_testPir2Rir", rir::pir::DebugOptions());
+    (void)rirFun;
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

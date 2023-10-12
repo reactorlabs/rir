@@ -1,8 +1,12 @@
 #include "api.h"
 #include "interp.h"
 #include "profiler.h"
+#include "serializeHash/globals.h"
+#include "serializeHash/serialize/serializeR.h"
+#include "serializeHash/hash/hashAst.h"
+#include "serializeHash/serialize/native/SerialRepr.h"
 
-#include <iomanip>
+#include "compilerClientServer/CompilerClient.h"
 
 namespace rir {
 
@@ -28,9 +32,12 @@ void initializeRuntime() {
     globalContext_ = new InterpreterInstance;
     context_init();
     registerExternalCode(rirEval, rirApplyClosure, rirForcePromise, rirCompile,
-                         rirDecompile, rirPrint, deserializeRir, serializeRir,
+                         rirDecompile, rirPrint, rirDeserializeHook, rirSerializeHook,
                          materialize);
+    initGlobals();
+    initAstHashCache();
     RuntimeProfiler::initProfiler();
+    CompilerClient::tryInit();
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }

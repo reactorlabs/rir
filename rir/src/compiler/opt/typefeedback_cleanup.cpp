@@ -25,7 +25,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
     std::unordered_set<Instruction*> affected;
     if (deoptCtx) {
-        if (deoptCtx->reason().srcCode() != cls->rirSrc()) {
+        if (deoptCtx->reason().origin.function() !=
+            cls->owner()->rirFunction()) {
             Visitor::run(version->entry, [&](Instruction* i) {
                 if (!i->hasTypeFeedback())
                     return;
@@ -36,8 +37,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (!i->hasTypeFeedback())
                     return;
 
-                if (i->typeFeedback().feedbackOrigin.pc() ==
-                    deoptCtx->reason().pc()) {
+                if (i->typeFeedback().feedbackOrigin ==
+                    deoptCtx->reason().origin) {
                     if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
                         i->updateTypeFeedback().type =
                             deoptCtx->typeCheckTrigger();
