@@ -158,7 +158,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (LdVar::Cast(i))
                     varName = LdVar::Cast(i)->varName;
                 if (varName) {
-                    otherAffectedVars.insert(varName).second;
+                    // otherAffectedVars.insert(varName).second;
+                    otherAffectedVars.insert(varName);
                 }
             }
             if ((needUpdate && (i->hasTypeFeedback() || Phi::Cast(i))) ||
