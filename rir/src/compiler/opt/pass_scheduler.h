@@ -92,8 +92,8 @@ class PassScheduler {
                     //}
                 }
                 iteration++;
-                if (iteration >= 100) {
-                    assert(false && "more than 100 iterations!");
+                if (iteration >= 50) {
+                    assert(false && "more than 50 iterations!");
                 }
             } while (changed && budget && !phase.once);
         }
