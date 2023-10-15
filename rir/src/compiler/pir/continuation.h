@@ -13,6 +13,8 @@ class Continuation : public ClosureVersion {
     Continuation(Closure* closure, rir::Function* fun,
                  const ContinuationContext* continuationContext);
     Continuation* isContinuation() override final { return this; }
+
+    bool typeFeedbackCleanupHasRun = false;
 };
 
 } // namespace pir

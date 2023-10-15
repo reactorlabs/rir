@@ -43,7 +43,8 @@ struct DeoptContext : public ContinuationContext {
     bool operator==(const DeoptContext& other) const {
         return ContinuationContext::operator==(other) && reason_ == reason_ &&
                deadBranchTrigger_ == other.deadBranchTrigger_ &&
-               typeCheckTrigger_ == other.typeCheckTrigger_;
+               typeCheckTrigger_ == other.typeCheckTrigger_ &&
+               callTargetTrigger_ == other.callTargetTrigger_;
     }
 
     // a smaller b  ==>  b can be called when a is the current context

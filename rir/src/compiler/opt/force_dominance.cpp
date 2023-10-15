@@ -99,10 +99,10 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (mk->isEager() && mk->prom()->trivial()) {
                         auto eager = mk->eagerArg();
                         if (eager != MissingArg::instance()) {
-                            c->replaceUsesWith(
-                                eager,
-                                [&](Instruction*, size_t) { anyChange = true; },
-                                [&](Instruction*) { return true; });
+                            c->replaceUsesWith(eager,
+                                               [&](Instruction*, size_t) {
+                                                   anyChange = true;
+                                               });
                         }
                     }
                 }

@@ -260,12 +260,9 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
                             continue;
                         }
                     }
-                    i->replaceUsesWith(
-                        firstInstr,
-                        [&](Instruction*, size_t) { changed = true; },
-                        [&](Instruction*) { return true; }
-
-                    );
+                    i->replaceUsesWith(firstInstr, [&](Instruction*, size_t) {
+                        changed = true;
+                    });
                     // Make sure this instruction really gets removed
                     i->effects.reset();
                 }

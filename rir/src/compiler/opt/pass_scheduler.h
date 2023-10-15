@@ -70,6 +70,12 @@ class PassScheduler {
                         // budget -= pass->cost();
                     }
 
+                    // if (iteration >=50 && phase.name == "Initial" &&
+                    // pass.get()->getName() != "TypefeedbackCleanup") {
+                    //     //std::cerr <<  "skipping " << pass.get()->getName()
+                    //     << "\n"; continue;
+                    // }
+
                     bool applyRes = apply(pass.get(), iteration);
                     if (applyRes) {
                         changed = true;

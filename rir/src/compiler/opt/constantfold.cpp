@@ -160,7 +160,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          AbstractLog& log, size_t iteration) const {
     EarlyConstantfold cf;
     bool anyChange = cf.apply(cmp, cls, code, log, iteration);
-
     Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
 
@@ -962,8 +961,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             !rhs->type.maybe(PirType::num());
                         if (notFactor && cannotCauseCoercionProblems) {
                             colonInputEffects->replaceUsesWith(
-                                True::instance());
-                            iterAnyChange = true;
+                                True::instance(), [&](Instruction*, size_t) {
+                                    iterAnyChange = true;
+                                });
                         }
                     }
                 }
