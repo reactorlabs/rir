@@ -5147,8 +5147,11 @@ void LowerFunctionLLVM::compile() {
 
                     llvm::Value* index =
                         computeAndCheckIndex(extract->idx(), vector, fallback);
+                    // the following fast-case only works for atomic vector
+                    // not for the generic (VECSXP) ones (cf. #1253)
                     auto res0 =
-                        extract->vec()->type.isScalar()
+                        (extract->vec()->type.isScalar() &&
+                         !extract->vec()->type.maybe(RType::vec))
                             ? vector
                             : accessVector(vector, index, extract->vec()->type);
                     res.addInput(convert(res0, i->type));
