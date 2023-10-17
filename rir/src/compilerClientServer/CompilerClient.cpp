@@ -149,7 +149,7 @@ void CompilerClient::tryInit() {
 static zmq::message_t
 handleRetrieveServerRequest(int index, zmq::socket_t* socket,
                             const ByteBuffer& serverRequestBuffer) {
-    assert(false && "TODO remove, we don't need this anymore");
+    assert(PIR_COMPILER_PEER_INTERN && "interning disabled for this session);
     LOG(std::cerr << "Socket " << index << " received retrieve request"
                   << std::endl);
 
@@ -449,7 +449,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {
-    assert(false && "TODO remove, we don't need this anymore");
+    assert(PIR_COMPILER_PEER_INTERN && "interning disabled for this session);
     Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME, true);
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {

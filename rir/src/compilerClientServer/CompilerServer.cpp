@@ -378,7 +378,7 @@ void CompilerServer::tryRun() {
             break;
         }
         case Request::Retrieve: {
-            assert(false && "TODO remove, we don't need this anymore");
+            SOFT_ASSERT(PIR_COMPILER_PEER_INTERN, "interning disabled for this session);;
             LOG(std::cerr << "Received retrieve request" << std::endl);
             LOG_REQUEST("Request::Retrieve");
             // ...
