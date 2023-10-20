@@ -9,7 +9,7 @@ quitEnv$q <- quitEnv$quit
 for (f in sort(list.files("../rir/tests", pattern = "*.[rR]$", full.names = TRUE))) {
     print(paste("*** RUNNING ", basename(f)))
     tryCatch(source(f, echo=TRUE, local=quitEnv), error = function(e) {
-        if (as.character(e) == "quit called") {
+        if (grepl("quit called", as.character(e), fixed = TRUE)) {
             print(paste("*** QUIT ", basename(f)))
         }
         print(paste("*** ERROR in ", basename(f)))
