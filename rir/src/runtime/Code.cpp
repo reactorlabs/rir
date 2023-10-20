@@ -487,7 +487,9 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         if (nativeCode_) {
             out << "nativeCode " << nativeCode_ << ", module:";
             if (lazyCodeModule) {
-                out << "\n" << lazyCodeModule;
+                out << "\n" << lazyCodeModule << " ("
+                    << lazyCodeModule->numBytes() << " bytes)\n"
+                    << *lazyCodeModule;
             } else {
                 out << " (elided)";
             }

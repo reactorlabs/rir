@@ -56,6 +56,10 @@ void SerialModule::serialize(AbstractSerializer& serializer) const {
     serializer.writeBytes((const void*)bitcode.data(), bitcode.size());
 }
 
+size_t SerialModule::numBytes() const {
+    return sizeof(size_t) + bitcode.size();
+}
+
 std::ostream& operator<<(std::ostream& out, const SerialModule& m) {
     auto mod = m.decode(nullptr);
     llvm::raw_os_ostream ro(out);

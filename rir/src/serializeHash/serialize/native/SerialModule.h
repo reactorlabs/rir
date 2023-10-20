@@ -48,6 +48,7 @@ class SerialModule {
   public:
     void serializeR(R_outpstream_t out) const;
     void serialize(AbstractSerializer& serializer) const;
+    size_t numBytes() const;
     friend std::ostream& operator<<(std::ostream&, const SerialModule&);
 };
 
