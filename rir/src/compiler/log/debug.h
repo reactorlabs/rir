@@ -4,6 +4,7 @@
 #include "utils/EnumSet.h"
 
 #include <regex>
+#include <iostream>
 
 namespace rir {
 namespace pir {
