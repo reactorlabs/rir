@@ -27,10 +27,13 @@ static const uint64_t intBound = 0xfedcba9876543211;
 #endif
 
 SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::ExtraPool()};
-SerialOptions SerialOptions::CompilerServer{false, false, false, true, SerialOptions::ExtraPool()};
 
-SerialOptions SerialOptions::CompilerClient(Code* codeWithPool) {
-    return SerialOptions{false, false, false, true, SerialOptions::ExtraPool(codeWithPool)};
+SerialOptions SerialOptions::CompilerServer(bool intern) {
+    return SerialOptions{false, false, false, true, SerialOptions::ExtraPool()};
+}
+
+SerialOptions SerialOptions::CompilerClient(bool intern, Code* codeWithPool) {
+    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool(codeWithPool)};
 }
 
 SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::ExtraPool()};

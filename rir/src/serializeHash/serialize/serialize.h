@@ -61,10 +61,10 @@ struct SerialOptions {
     /// Serialize everything, no hashes, environment locks
     static SerialOptions DeepCopy;
     /// Serialize everything, no hashes, no environment locks
-    static SerialOptions CompilerServer;
+    static SerialOptions CompilerServer(bool intern);
     /// Serialize everything, no hashes, no environment locks.
     /// Serialize and deserialize the pool entries from stubs
-    static SerialOptions CompilerClient(Code* codeWithPool);
+    static SerialOptions CompilerClient(bool intern, Code* codeWithPool);
     //  TODO: Remove both of the below
     /// Serialize everything, hashes for recorded calls, no environment locks
     static SerialOptions CompilerClientRetrieve;

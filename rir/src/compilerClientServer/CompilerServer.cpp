@@ -22,7 +22,7 @@ namespace rir {
 
 #define SOFT_ASSERT(x, msg) if (!(x))                                          \
         LOG_WARN(std::cerr << "Assertion failed (client issue): " << msg       \
-                           << " (" << #x ")" << std::endl);
+                           << " (" << #x ")" << std::endl)
 
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
@@ -215,6 +215,7 @@ void CompilerServer::tryRun() {
             LOG_REQUEST("Request::Compile");
             // ...
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
+            // + bool PIR_CLIENT_INTERN
             // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
             // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
             // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
@@ -244,7 +245,9 @@ void CompilerServer::tryRun() {
             // handle the case where they are forgotten by just not speculating
             // on them.
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
-            what = deserialize(requestBuffer, SerialOptions::CompilerServer);
+            auto intern = requestBuffer.getBool();
+            LOG_REQUEST("PIR_CLIENT_INTERN = " << intern);
+            what = deserialize(requestBuffer, SerialOptions::CompilerServer(intern));
             SOFT_ASSERT(TYPEOF(what) == CLOSXP,
                         "deserialized source closure to compile isn't actually a closure");
             PROTECT(what);
@@ -252,7 +255,7 @@ void CompilerServer::tryRun() {
             Compiler::compileClosure(what);
             DispatchTable::unpack(BODY(what))->baseline()->deserializeFullSignature(requestBuffer);
             LOG_REQUEST("full signature");
-            auto feedback = deserialize(requestBuffer, SerialOptions::CompilerServer);
+            auto feedback = deserialize(requestBuffer, SerialOptions::CompilerServer(intern));
             SOFT_ASSERT(TypeFeedback::check(feedback),
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
@@ -373,16 +376,18 @@ void CompilerServer::tryRun() {
             //  and skip deserialization if possible (see commit tagged
             //  cant-send-compiled-hash)
             LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerClient(...))");
-            serialize(what, response, SerialOptions::CompilerServer);
+            serialize(what, response, SerialOptions::CompilerServer(intern));
             END_LOGGING_RESPONSE();
             break;
         }
         case Request::Retrieve: {
-            SOFT_ASSERT(PIR_COMPILER_PEER_INTERN, "interning disabled for this session);;
             LOG(std::cerr << "Received retrieve request" << std::endl);
             LOG_REQUEST("Request::Retrieve");
             // ...
+            // + bool PIR_CLIENT_INTERN
             // + UUID hash
+            auto intern = requestBuffer.getBool();
+            LOG_REQUEST("PIR_CLIENT_INTERN = " << intern);
             UUID hash;
             requestBuffer.getBytes((uint8_t*)&hash, sizeof(UUID));
             LOG_REQUEST("hash = " << hash);
@@ -403,7 +408,7 @@ void CompilerServer::tryRun() {
                 LOG_RESPONSE("Response::Retrieved");
                 response.putLong((uint64_t)Response::Retrieved);
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
-                serialize(what, response, SerialOptions::CompilerServer);
+                serialize(what, response, SerialOptions::CompilerServer(intern));
             } else {
                 LOG(std::cerr << "(not found)" << std::endl);
                 // Response data format =
@@ -450,7 +455,6 @@ void CompilerServer::tryRun() {
 }
 
 SEXP CompilerServer::retrieve(const rir::UUID& hash) {
-    assert(false && "TODO remove, we don't need this anymore");
     LOG(std::cerr << "Retrieving from client " << hash << std::endl);
     // Build the server-side request
     // Data format =

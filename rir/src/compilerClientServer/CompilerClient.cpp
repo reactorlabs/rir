@@ -35,7 +35,7 @@ static std::chrono::milliseconds PIR_CLIENT_TIMEOUT;
 
 #define CHECK_MSG_SIZE(size, size2) if (size != size2)                         \
         std::cerr << "Different sizes: " << #size << "=" << size << ", "       \
-                  << #size2 << "=" << size2 << std::endl;
+                  << #size2 << "=" << size2 << std::endl
 
 #define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
 #define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
@@ -67,6 +67,11 @@ static std::string logDetailedIndent;
 static const char* SENDING_REQUEST_TIMER_NAME = "CompilerClient.cpp: sending request";
 static const char* RECEIVING_RESPONSE_TIMER_NAME = "CompilerClient.cpp: receiving response";
 static const char* RETRIEVE_TIMER_NAME = "CompilerClient.cpp: retriving SEXP";
+
+static bool PIR_CLIENT_INTERN =
+    getenv("PIR_CLIENT_INTERN") != nullptr &&
+    strcmp(getenv("PIR_CLIENT_INTERN"), "") != 0 &&
+    strcmp(getenv("PIR_CLIENT_INTERN"), "0") != 0;
 
 static bool PIR_CLIENT_SKIP_DISCREPANCY_CHECK =
     getenv("PIR_CLIENT_SKIP_DISCREPANCY_CHECK") != nullptr &&
@@ -149,7 +154,7 @@ void CompilerClient::tryInit() {
 static zmq::message_t
 handleRetrieveServerRequest(int index, zmq::socket_t* socket,
                             const ByteBuffer& serverRequestBuffer) {
-    assert(PIR_COMPILER_PEER_INTERN && "interning disabled for this session);
+    assert(PIR_CLIENT_INTERN && "interning disabled for this session");
     LOG(std::cerr << "Socket " << index << " received retrieve request"
                   << std::endl);
 
@@ -347,7 +352,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
     CompilerClient::CompiledHandle* handle = nullptr;
 
     auto codeWithPool = DispatchTable::unpack(BODY(what))->baseline()->body();
-    auto compilerClientOptions = SerialOptions::CompilerClient(codeWithPool);
+    auto compilerClientOptions = SerialOptions::CompilerClient(PIR_CLIENT_INTERN, codeWithPool);
     // TODO: Is this preserve necessary?
     R_PreserveObject(codeWithPool->container());
 
@@ -357,6 +362,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 // Request data format =
                 //   Request::Compile
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
+                // + bool PIR_CLIENT_INTERN
                 // + serialize(Compiler::decompileClosure(what), CompilerClient(...))
                 // + DispatchTable::unpack(BODY(what))->baseline()->fullSignature()
                 // + serialize(DispatchTable::unpack(BODY(what))->baseline()->typeFeedback()->container(), CompilerClient(...))
@@ -382,6 +388,8 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 LOG_REQUEST("Request::Compile");
                 request.putLong((uint64_t)Request::Compile);
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
+                LOG_REQUEST("PIR_CLIENT_INTERN = " << PIR_CLIENT_INTERN);
+                request.putBool(PIR_CLIENT_INTERN);
                 auto decompiled = Compiler::decompileClosure(what);
                 LOG_REQUEST("serialize(" << Print::dumpSexp(decompiled) << ", CompilerClient(...))");
                 serialize(decompiled, request, compilerClientOptions);
@@ -449,16 +457,19 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
 }
 
 SEXP CompilerClient::retrieve(const rir::UUID& hash) {
-    assert(PIR_COMPILER_PEER_INTERN && "interning disabled for this session);
+    assert(PIR_CLIENT_INTERN && "interning disabled for this session");
     Measuring::startTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, RETRIEVE_TIMER_NAME, true);
     auto handle = request<SEXP>(
         [=](ByteBuffer& request) {
             // Request data format =
             //   Request::Retrieve
+            // + bool PIR_CLIENT_INTERN
             // + hash
             START_LOGGING_REQUEST();
             LOG_REQUEST("Request::Retrieve");
             request.putLong((uint64_t)Request::Retrieve);
+            LOG_REQUEST("PIR_CLIENT_INTERN = " << PIR_CLIENT_INTERN);
+            request.putBool(PIR_CLIENT_INTERN);
             LOG_REQUEST("hash = " << hash);
             request.putBytes((uint8_t*)&hash, sizeof(hash));
             END_LOGGING_REQUEST();
@@ -473,7 +484,7 @@ SEXP CompilerClient::retrieve(const rir::UUID& hash) {
             switch (responseMagic) {
             case Response::Retrieved: {
                 LOG_RESPONSE("Response::Retrieved");
-                auto what = deserialize(response, SerialOptions::CompilerServer, hash);
+                auto what = deserialize(response, SerialOptions::CompilerServer(PIR_CLIENT_INTERN), hash);
                 LOG_RESPONSE("serialize(" << Print::dumpSexp(what) << ", CompilerServer)");
                 END_LOGGING_RESPONSE();
                 return what;
