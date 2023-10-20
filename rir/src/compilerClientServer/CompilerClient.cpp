@@ -352,7 +352,8 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
     CompilerClient::CompiledHandle* handle = nullptr;
 
     auto codeWithPool = DispatchTable::unpack(BODY(what))->baseline()->body();
-    auto compilerClientOptions = SerialOptions::CompilerClient(PIR_CLIENT_INTERN, codeWithPool);
+    auto decompiled = Compiler::decompileClosure(what);
+    auto compilerClientOptions = SerialOptions::CompilerClient(PIR_CLIENT_INTERN, codeWithPool, decompiled);
     // TODO: Is this preserve necessary?
     R_PreserveObject(codeWithPool->container());
 
@@ -390,7 +391,6 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
 #if COMPILER_CLIENT_SEND_SOURCE_AND_FEEDBACK
                 LOG_REQUEST("PIR_CLIENT_INTERN = " << PIR_CLIENT_INTERN);
                 request.putBool(PIR_CLIENT_INTERN);
-                auto decompiled = Compiler::decompileClosure(what);
                 LOG_REQUEST("serialize(" << Print::dumpSexp(decompiled) << ", CompilerClient(...))");
                 serialize(decompiled, request, compilerClientOptions);
                 auto baseline = DispatchTable::unpack(BODY(what))->baseline();
@@ -398,7 +398,6 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 baseline->serializeFullSignature(request);
                 auto feedback = baseline->typeFeedback();
                 serialize(feedback->container(), request, compilerClientOptions);
-                request.putLong((uintptr_t)codeWithPool);
                 request.putInt(codeWithPool->extraPoolSize);
 #endif
 #if COMPILER_CLIENT_SEND_FULL

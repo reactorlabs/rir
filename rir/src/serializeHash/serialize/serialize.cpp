@@ -6,6 +6,7 @@
 #include "runtime/Code.h"
 #include "runtime/ExtraPoolStub.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/hash/hashAst.h"
 #include "utils/measuring.h"
 
 /// This adds padding to each serialize call, but immediately raises an
@@ -29,11 +30,11 @@ static const uint64_t intBound = 0xfedcba9876543211;
 SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::ExtraPool()};
 
 SerialOptions SerialOptions::CompilerServer(bool intern) {
-    return SerialOptions{false, false, false, true, SerialOptions::ExtraPool()};
+    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool()};
 }
 
-SerialOptions SerialOptions::CompilerClient(bool intern, Code* codeWithPool) {
-    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool(codeWithPool)};
+SerialOptions SerialOptions::CompilerClient(bool intern, Code* codeWithPool, SEXP decompiledClosure) {
+    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool(codeWithPool, decompiledClosure)};
 }
 
 SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::ExtraPool()};
@@ -45,8 +46,8 @@ bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
-SerialOptions::ExtraPool::ExtraPool(rir::Code* codeWithPool)
-    : codeWithPool(codeWithPool), map() {
+SerialOptions::ExtraPool::ExtraPool(Code* codeWithPool, SEXP decompiledClosure)
+    : sourceHash(hashDecompiled(decompiledClosure)), map() {
     for (unsigned i = 0; i < codeWithPool->extraPoolSize; i++) {
         map.push_back(codeWithPool->getExtraPoolEntry(i));
     }
@@ -54,7 +55,7 @@ SerialOptions::ExtraPool::ExtraPool(rir::Code* codeWithPool)
 
 bool SerialOptions::ExtraPool::isStub(SEXP stub) const {
     auto rirStub = ExtraPoolStub::check(stub);
-    return rirStub && rirStub->codeWithPoolAddr == (uintptr_t)codeWithPool;
+    return rirStub && rirStub->sourceHash == sourceHash;
 }
 
 bool SerialOptions::ExtraPool::isEntry(SEXP entry) const {
@@ -68,7 +69,7 @@ SEXP SerialOptions::ExtraPool::entry(SEXP stub) const {
 
 SEXP SerialOptions::ExtraPool::stub(SEXP entry) const {
     assert(isEntry(entry) && "not an entry in this extra pool");
-    return ExtraPoolStub::create((uintptr_t)codeWithPool, map.at(entry));
+    return ExtraPoolStub::create(sourceHash, map.at(entry));
 }
 
 SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deserializer) {

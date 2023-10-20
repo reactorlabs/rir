@@ -295,4 +295,8 @@ UUID hashAst(SEXP root) {
     return result;
 }
 
+UUID hashDecompiled(SEXP decompiledClosure) {
+    return hashAst(BODY(decompiledClosure));
+}
+
 } // namespace rir

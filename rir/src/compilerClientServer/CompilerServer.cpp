@@ -10,6 +10,7 @@
 #include "runtime/ExtraPoolStub.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/hash/hashAst.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/measuring.h"
@@ -252,6 +253,7 @@ void CompilerServer::tryRun() {
                         "deserialized source closure to compile isn't actually a closure");
             PROTECT(what);
             LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", CompilerClient(...))");
+            auto sourceHash = hashDecompiled(what);
             Compiler::compileClosure(what);
             DispatchTable::unpack(BODY(what))->baseline()->deserializeFullSignature(requestBuffer);
             LOG_REQUEST("full signature");
@@ -259,9 +261,8 @@ void CompilerServer::tryRun() {
             SOFT_ASSERT(TypeFeedback::check(feedback),
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
-            auto sourcePoolAddr = (uintptr_t)requestBuffer.getLong();
             auto sourcePoolSize = requestBuffer.getInt();
-            ExtraPoolStub::pad(sourcePoolAddr, sourcePoolSize, DispatchTable::unpack(BODY(what))->baseline()->body());
+            ExtraPoolStub::pad(sourceHash, sourcePoolSize, DispatchTable::unpack(BODY(what))->baseline()->body());
             UNPROTECT(1);
 #endif
 #if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL

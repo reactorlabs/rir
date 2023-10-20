@@ -21,18 +21,17 @@ struct Code;
 class ExtraPoolStub :
     public RirRuntimeObject<ExtraPoolStub, EXTRA_POOL_STUB_MAGIC> {
   public:
-    /// Currently this is treated as a literal address and not a code object
-    /// (container isn't added to the extra pool).
-    uintptr_t codeWithPoolAddr;
+    /// Unique hash to identify the source pool
+    UUID sourceHash;
     size_t index;
 
-    ExtraPoolStub(uintptr_t codeWithPoolAddr, size_t index);
+    ExtraPoolStub(const UUID& sourceHash, size_t index);
     /// Create an SEXP stubbing the given extra pool entry
-    static SEXP create(uintptr_t codeWithPoolAddr, size_t index);
+    static SEXP create(const UUID& sourceHash, size_t index);
 
     /// Add stubs to source pool entries to the target code's pool until it's
     /// `size`.
-    static void pad(uintptr_t sourceCodeWithPoolAddr, size_t sourcePoolSize,
+    static void pad(const UUID& sourceHash, size_t sourcePoolSize,
                     Code* targetCodeWithPool);
 
     void print(std::ostream& out) const;

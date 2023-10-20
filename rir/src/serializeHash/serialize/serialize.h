@@ -19,13 +19,13 @@ struct Code;
 /// with.
 struct SerialOptions {
     class ExtraPool {
-        Code* codeWithPool;
+        UUID sourceHash;
         BimapVector<SEXP> map;
 
       public:
-        ExtraPool() : codeWithPool(nullptr), map() {}
-        ExtraPool(Code* codeWithPool);
-        operator bool() const { return codeWithPool; }
+        ExtraPool() : sourceHash(), map() {}
+        ExtraPool(Code* codeWithPool, SEXP decompiledClosure);
+        explicit operator bool() const { return (bool)sourceHash; }
 
         bool isEntry(SEXP entry) const;
         bool isStub(SEXP stub) const;
@@ -64,7 +64,8 @@ struct SerialOptions {
     static SerialOptions CompilerServer(bool intern);
     /// Serialize everything, no hashes, no environment locks.
     /// Serialize and deserialize the pool entries from stubs
-    static SerialOptions CompilerClient(bool intern, Code* codeWithPool);
+    static SerialOptions CompilerClient(bool intern, Code* codeWithPool,
+                                        SEXP decompiledClosure);
     //  TODO: Remove both of the below
     /// Serialize everything, hashes for recorded calls, no environment locks
     static SerialOptions CompilerClientRetrieve;
