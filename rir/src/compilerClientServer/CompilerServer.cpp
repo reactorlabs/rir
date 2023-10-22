@@ -25,9 +25,9 @@ namespace rir {
         LOG_WARN(std::cerr << "Assertion failed (client issue): " << msg       \
                            << " (" << #x ")" << std::endl)
 
-#define LOG(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
-#define LOG_WARN(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
-#define LOG_DETAILED(stmt) if (pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED) stmt
+#define LOG(stmt) if (pir::Parameter::PIR_TRACE_COMPILER_PEER || pir::Parameter::PIR_LOG_COMPILER_PEER) stmt
+#define LOG_WARN(stmt) if (pir::Parameter::PIR_TRACE_COMPILER_PEER || pir::Parameter::PIR_LOG_COMPILER_PEER || pir::Parameter::PIR_WARN_COMPILER_PEER) stmt
+#define LOG_DETAILED(stmt) if (pir::Parameter::PIR_TRACE_COMPILER_PEER) stmt
 #define START_LOGGING_REQUEST() LOG_DETAILED(do {                              \
         logDetailedDepth++;                                                    \
         logDetailedIndent = std::string(logDetailedDepth * 2, ' ');            \

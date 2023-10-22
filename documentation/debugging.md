@@ -56,17 +56,26 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_GRAPH_PRINT_RIR_OBJECTS_FREQUENCY=
         n           print pretty graphs of every nth RIR object which gets compiled or interned. Defaults to 10. Otherwise we print a lot more RIR objects than are necessary.
 
+    PIR_TRACE_SERIALIZATION=
+        1           log every serialized or deserialized piece of data 
+
+    PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH=
+        unsigned    max length we will print serialized raw data in the trace. Ignored unless PIR_TRACE_SERIALIZATION is set
+
+    PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS=
+        regex       exclude logging serialized data from matching flags. Ignored unless PIR_TRACE_SERIALIZATION is set
+
     PIR_LOG_INTERNING=
         1           log every new intern, reused intern, unintern, and other intern related events.
 
     PIR_WARN_INTERNING=
         1           warn when an interned object's UUID changes and other inconsistencies. Superseded by PIR_LOG_INTERNING
 
-    PIR_LOG_COMPILER_PEER_DETAILED=
+    PIR_TRACE_COMPILER_PEER=
         1           log the contents of every request sent to and received by the compiler client or server
 
     PIR_LOG_COMPILER_PEER=
-        1           log every message sent from/to the compiler peer. Superseded by PIR_LOG_COMPILER_PEER_DETAILED
+        1           log every message sent from/to the compiler peer. Superseded by PIR_TRACE_COMPILER_PEER
 
     PIR_WARN_COMPILER_PEER=
         1           warn when the compiler peer connection times out or closes. Superseded by PIR_LOG_COMPILER_PEER

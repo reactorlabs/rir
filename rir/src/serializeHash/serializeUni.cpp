@@ -15,13 +15,14 @@
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <algorithm>
+#include <ostream>
 
 namespace rir {
 
 unsigned SerialFlags::nextId = 0;
 
 // Inlay hints are needed to understand the below code
-SerialFlags SerialFlags::Inherit(
+const SerialFlags SerialFlags::Inherit(
     true,
     true,
     true,
@@ -29,7 +30,7 @@ SerialFlags SerialFlags::Inherit(
     true,
     true,
     true);
-SerialFlags SerialFlags::Ast(
+const SerialFlags SerialFlags::Ast(
     true,
     false,
     true,
@@ -37,7 +38,7 @@ SerialFlags SerialFlags::Ast(
     true,
     false,
     true);
-SerialFlags SerialFlags::DtContext(
+const SerialFlags SerialFlags::DtContext(
     false,
     true,
     true,
@@ -45,7 +46,7 @@ SerialFlags SerialFlags::DtContext(
     true,
     false,
     true);
-SerialFlags SerialFlags::DtBaseline(
+const SerialFlags SerialFlags::DtBaseline(
     true,
     true,
     true,
@@ -53,7 +54,7 @@ SerialFlags SerialFlags::DtBaseline(
     true,
     true,
     true);
-SerialFlags SerialFlags::DtOptimized(
+const SerialFlags SerialFlags::DtOptimized(
     false,
     true,
     true,
@@ -61,7 +62,7 @@ SerialFlags SerialFlags::DtOptimized(
     false,
     false,
     true);
-SerialFlags SerialFlags::FunBody(
+const SerialFlags SerialFlags::FunBody(
     true,
     true,
     true,
@@ -69,7 +70,7 @@ SerialFlags SerialFlags::FunBody(
     true,
     true,
     true);
-SerialFlags SerialFlags::FunDefaultArg(
+const SerialFlags SerialFlags::FunDefaultArg(
     true,
     true,
     true,
@@ -77,7 +78,7 @@ SerialFlags SerialFlags::FunDefaultArg(
     true,
     true,
     true);
-SerialFlags SerialFlags::FunFeedback(
+const SerialFlags SerialFlags::FunFeedback(
     false,
     true,
     true,
@@ -85,7 +86,7 @@ SerialFlags SerialFlags::FunFeedback(
     false,
     true,
     true);
-SerialFlags SerialFlags::FunStats(
+const SerialFlags SerialFlags::FunStats(
     false,
     true,
     true,
@@ -93,7 +94,7 @@ SerialFlags SerialFlags::FunStats(
     false,
     false,
     true);
-SerialFlags SerialFlags::FunMiscBytes(
+const SerialFlags SerialFlags::FunMiscBytes(
     true,
     true,
     true,
@@ -101,7 +102,7 @@ SerialFlags SerialFlags::FunMiscBytes(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodeArglistOrder(
+const SerialFlags SerialFlags::CodeArglistOrder(
     true,
     true,
     true,
@@ -109,7 +110,7 @@ SerialFlags SerialFlags::CodeArglistOrder(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodeOuterFun(
+const SerialFlags SerialFlags::CodeOuterFun(
     true,
     true,
     true,
@@ -117,7 +118,7 @@ SerialFlags SerialFlags::CodeOuterFun(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodePromise(
+const SerialFlags SerialFlags::CodePromise(
     true,
     true,
     true,
@@ -126,7 +127,7 @@ SerialFlags SerialFlags::CodePromise(
     true,
     true);
 // The values should be the same as FunFeedback's, however the is different
-SerialFlags SerialFlags::CodeFeedback(
+const SerialFlags SerialFlags::CodeFeedback(
     false,
     true,
     true,
@@ -134,7 +135,7 @@ SerialFlags SerialFlags::CodeFeedback(
     false,
     true,
     true);
-SerialFlags SerialFlags::CodePoolUnknown(
+const SerialFlags SerialFlags::CodePoolUnknown(
     true,
     true,
     true,
@@ -142,7 +143,7 @@ SerialFlags SerialFlags::CodePoolUnknown(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodeNative(
+const SerialFlags SerialFlags::CodeNative(
     false,
     true,
     true,
@@ -150,7 +151,7 @@ SerialFlags SerialFlags::CodeNative(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodeAst(
+const SerialFlags SerialFlags::CodeAst(
     true,
     false,
     true,
@@ -158,7 +159,7 @@ SerialFlags SerialFlags::CodeAst(
     true,
     false,
     true);
-SerialFlags SerialFlags::CodeMisc(
+const SerialFlags SerialFlags::CodeMisc(
     true,
     true,
     true,
@@ -166,7 +167,7 @@ SerialFlags SerialFlags::CodeMisc(
     true,
     false,
     true);
-SerialFlags SerialFlags::EnvLock(
+const SerialFlags SerialFlags::EnvLock(
     false,
     true,
     true,
@@ -174,7 +175,7 @@ SerialFlags SerialFlags::EnvLock(
     true,
     true,
     false);
-SerialFlags SerialFlags::EnvMisc(
+const SerialFlags SerialFlags::EnvMisc(
     false,
     true,
     true,
@@ -182,29 +183,43 @@ SerialFlags SerialFlags::EnvMisc(
     true,
     true,
     true);
+const SerialFlags SerialFlags::_Unused(
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false);
 
 static std::vector<SerialFlags> ById_{
-        SerialFlags::Inherit,
-        SerialFlags::Ast,
-        SerialFlags::DtContext,
-        SerialFlags::DtBaseline,
-        SerialFlags::DtOptimized,
-        SerialFlags::FunBody,
-        SerialFlags::FunDefaultArg,
-        SerialFlags::FunFeedback,
-        SerialFlags::FunStats,
-        SerialFlags::FunMiscBytes,
-        SerialFlags::CodeArglistOrder,
-        SerialFlags::CodeOuterFun,
-        SerialFlags::CodePromise,
-        SerialFlags::CodeFeedback,
-        SerialFlags::CodePoolUnknown,
-        SerialFlags::CodeNative,
-        SerialFlags::CodeAst,
-        SerialFlags::CodeMisc,
-        SerialFlags::EnvLock,
-        SerialFlags::EnvMisc};
+#define V(name) SerialFlags::name,
+    LIST_OF_SERIAL_FLAGS(V)
+#undef V
+    SerialFlags::_Unused};
+
 const std::vector<SerialFlags>& SerialFlags::ById = ById_;
+
+const SerialFlags& SerialFlags::parse(const std::string& name) {
+#define V(name_)                                                               \
+    if (name == #name_)                                                        \
+        return SerialFlags::name_;
+    LIST_OF_SERIAL_FLAGS(V)
+#undef V
+    std::cerr << "unknown serial flag: " << name << "\n";
+    assert(false && "unknown serial flag, can't parse");
+}
+
+std::ostream& operator<<(std::ostream& out, const SerialFlags& f) {
+#define V(name)                                                                \
+        if (SerialFlags::name.id_ == f.id_) {                                  \
+            out << #name;                                                      \
+            return out;                                                        \
+        }
+    LIST_OF_SERIAL_FLAGS(V)
+#undef V
+    assert(false && "Serial flag is not one of the defined globals, corrupt?");
+}
 
 void AbstractSerializer::writeConst(unsigned idx, const SerialFlags& flags) {
     write(Pool::get(idx), flags);

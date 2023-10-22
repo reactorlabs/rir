@@ -2,6 +2,7 @@
 #define PIR_PARAMETER_H
 
 #include <stddef.h>
+#include <vector>
 
 namespace rir {
 namespace pir {
@@ -59,13 +60,16 @@ struct Parameter {
     static const char* PIR_GRAPH_PRINT_RIR_OBJECTS_PATH;
     static unsigned PIR_GRAPH_PRINT_RIR_OBJECTS_FREQUENCY;
 
+    static bool PIR_TRACE_SERIALIZATION;
+    static unsigned PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH;
+    static std::vector<unsigned> PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS;
+    static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_LOG_INTERNING;
     static bool PIR_WARN_INTERNING;
-    static bool PIR_LOG_COMPILER_PEER_DETAILED;
+    static bool PIR_MEASURE_INTERNING;
+    static bool PIR_TRACE_COMPILER_PEER;
     static bool PIR_LOG_COMPILER_PEER;
     static bool PIR_WARN_COMPILER_PEER;
-    static bool PIR_MEASURE_SERIALIZATION;
-    static bool PIR_MEASURE_INTERNING;
     static bool PIR_MEASURE_CLIENT_SERVER;
 };
 

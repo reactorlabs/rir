@@ -38,10 +38,10 @@ We use [ZeroMQ](https://zeromq.org) for communication. See the ZeroMQ docs for a
 
 #### Logging
 
-    PIR_LOG_COMPILER_PEER_DETAILED=
+    PIR_TRACE_COMPILER_PEER=
         1           log the contents of every request sent to and received by the compiler client or server
     PIR_LOG_COMPILER_PEER=
-        1           log every message sent from/to the compiler peer. Superseded by PIR_LOG_COMPILER_PEER_DETAILED
+        1           log every message sent from/to the compiler peer. Superseded by PIR_TRACE_COMPILER_PEER
     PIR_WARN_COMPILER_PEER=
         1           warn when the compiler peer connection times out or closes. Superseded by PIR_LOG_COMPILER_PEER
 

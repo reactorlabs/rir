@@ -19,10 +19,10 @@ size_t PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY =
         ? strtol(getenv("PIR_CLIENT_COMPILE_SIZE_TO_HASH_ONLY"), nullptr, 10)
         : 1024 * 1024;
 
-bool pir::Parameter::PIR_LOG_COMPILER_PEER_DETAILED =
-    getenv("PIR_LOG_COMPILER_PEER_DETAILED") != nullptr &&
-    strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "") != 0 &&
-    strcmp(getenv("PIR_LOG_COMPILER_PEER_DETAILED"), "0") != 0;
+bool pir::Parameter::PIR_TRACE_COMPILER_PEER =
+    getenv("PIR_TRACE_COMPILER_PEER") != nullptr &&
+    strcmp(getenv("PIR_TRACE_COMPILER_PEER"), "") != 0 &&
+    strcmp(getenv("PIR_TRACE_COMPILER_PEER"), "0") != 0;
 
 bool pir::Parameter::PIR_LOG_COMPILER_PEER =
     getenv("PIR_LOG_COMPILER_PEER") != nullptr &&

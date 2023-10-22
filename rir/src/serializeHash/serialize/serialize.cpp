@@ -1,4 +1,5 @@
 #include "serialize.h"
+#include "R/Printing.h"
 #include "R/Protect.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
@@ -7,6 +8,7 @@
 #include "runtime/ExtraPoolStub.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
+#include "traceSerialize.h"
 #include "utils/measuring.h"
 
 /// This adds padding to each serialize call, but immediately raises an
@@ -165,7 +167,7 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
             writeInline(s);
         }
     } else if (options.useHashesForRecordedCalls &&
-               flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+               !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
         if (!UUIDPool::tryWriteHash(s, buffer)) {
             // Still serialize children via hashes
             auto innerOptions = options;
@@ -189,7 +191,6 @@ bool Deserializer::willRead(const rir::SerialFlags& flags) const {
 
 void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) {
     if (!willRead(flags)) {
-        // TODO: Allow default data
         memset(data, 0, size);
         return;
     }
@@ -205,7 +206,6 @@ void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) 
 
 int Deserializer::readInt(const SerialFlags& flags) {
     if (!willRead(flags)) {
-        // TODO: Allow default data
         return 0;
     }
 
@@ -231,8 +231,12 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 #if DEBUG_SERIALIZE_CONSISTENCY
     assert(buffer.getLong() == sexpBound &&
            "serialize/deserialize sexp boundary mismatch");
-    assert(buffer.getInt() == flags.id() &&
-           "serialize/deserialize sexp flags mismatch");
+    auto id = buffer.getInt();
+    if (id != flags.id()) {
+        std::cerr << "serialize/deserialize sexp flags mismatch: " << id
+                  << " vs " << flags.id() << " (" << flags << ")" << std::endl;
+        assert(false && "serialize/deserialize sexp flags mismatch");
+    }
     auto expectedType = buffer.getInt();
 #endif
 
@@ -250,7 +254,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
             result = readInline();
         }
     } else if (options.useHashesForRecordedCalls &&
-               flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+               !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
         result = UUIDPool::tryReadHash(buffer);
         if (!result) {
             // Still deserialize children via hashes
@@ -292,7 +296,18 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
     disableInterpreter([&]{
         disableGc([&] {
             Serializer serializer(buffer, options);
-            serializer.writeInline(sexp);
+            if (pir::Parameter::PIR_TRACE_SERIALIZATION) {
+                auto oldWritePos = buffer.getWritePos();
+                auto sexpPrint = Print::dumpSexp(sexp, 80);
+                std::cerr << "+ serialize " << sexpPrint << std::endl;
+                TraceSerializer traceSerializer(serializer);
+                traceSerializer.writeInline(sexp);
+                std::cerr << "+ serialized "
+                          << buffer.getWritePos() - oldWritePos << " bytes, "
+                          << sexpPrint << std::endl;
+            } else {
+                serializer.writeInline(sexp);
+            }
         });
     });
 }
@@ -307,7 +322,17 @@ SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
     disableInterpreter([&]{
         disableGc([&] {
             Deserializer deserializer(buffer, options, retrieveHash);
-            result = deserializer.readInline();
+            if (pir::Parameter::PIR_TRACE_SERIALIZATION) {
+                auto oldReadPos = buffer.getReadPos();
+                std::cerr << "- deserialize" << std::endl;
+                TraceDeserializer traceDeserializer(deserializer);
+                result = traceDeserializer.readInline();
+                std::cerr << "- deserialized "
+                          << buffer.getReadPos() - oldReadPos << " bytes, "
+                          << Print::dumpSexp(result, 80) << std::endl;
+            } else {
+                result = deserializer.readInline();
+            }
 
             assert(!deserializer.retrieveHash && "retrieve hash not filled");
             assert((!retrieveHash || UUIDPool::getHash(result) == retrieveHash) &&

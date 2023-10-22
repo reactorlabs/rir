@@ -74,39 +74,49 @@ class SerialFlags {
     /// checks, since these are static singletons.
     unsigned id() const { return id_; }
 
-    static SerialFlags Inherit;
-    static SerialFlags Ast;
-    static SerialFlags DtContext;
-    static SerialFlags DtBaseline;
-    static SerialFlags DtOptimized;
-    static SerialFlags FunBody;
-    static SerialFlags FunDefaultArg;
-    static SerialFlags FunFeedback;
-    static SerialFlags FunStats;
-    static SerialFlags FunMiscBytes;
-    static SerialFlags CodeArglistOrder;
-    /// In source, but nearly always if not always will be serialized as a ref
-    /// because we've already starter serializing the outer function.
-    static SerialFlags CodeOuterFun;
-    /// Child promise in extra pool
-    static SerialFlags CodePromise;
-    /// Data is part of a record_ bytecode. SEXP is a recorded call in extra pool.
-    static SerialFlags CodeFeedback;
-    /// Unclassified SEXP in extra pool: original bytecode, any pool entry in
-    /// native code.
-    static SerialFlags CodePoolUnknown;
-    /// Code kind (i.e. whether the code is native) and native code.
-    ///
-    /// Technically in source, will rarely if ever actually be in source: unless
-    /// we compile a push_ bc which pushes a native code promise, not even a
-    /// dispatch table with native code
-    static SerialFlags CodeNative;
-    static SerialFlags CodeAst;
-    static SerialFlags CodeMisc;
-    static SerialFlags EnvLock;
-    static SerialFlags EnvMisc;
+#define LIST_OF_SERIAL_FLAGS(V)                                                \
+    V(Inherit)                                                                 \
+    V(Ast)                                                                     \
+    V(DtContext)                                                               \
+    V(DtBaseline)                                                              \
+    V(DtOptimized)                                                             \
+    V(FunBody)                                                                 \
+    V(FunDefaultArg)                                                           \
+    V(FunFeedback)                                                             \
+    V(FunStats)                                                                \
+    V(FunMiscBytes)                                                            \
+    V(CodeArglistOrder)                                                        \
+    /** In source, but nearly always if not always will be serialized as a */  \
+    /** ref because we've already starter serializing the outer function. */   \
+    V(CodeOuterFun)                                                            \
+    /** Child promise in extra pool */                                         \
+    V(CodePromise)                                                             \
+    /** Data is part of a record_ bytecode. SEXP is a recorded call in */      \
+    /** extra pool. */                                                         \
+    V(CodeFeedback)                                                            \
+    /** Unclassified SEXP in extra pool: original bytecode, any pool entry */  \
+    /** in native code. */                                                     \
+    V(CodePoolUnknown)                                                         \
+    /** Code kind (i.e. whether the code is native) and native code. */        \
+    /** */                                                                     \
+    /** Technically in source, will rarely if ever actually be in source: */   \
+    /** unless we compile a push_ bc which pushes a native code promise, */    \
+    /** not even a dispatch table with native code */                          \
+    V(CodeNative)                                                              \
+    V(CodeAst)                                                                 \
+    V(CodeMisc)                                                                \
+    V(EnvLock)                                                                 \
+    V(EnvMisc)
+
+#define V(name) static const SerialFlags name;
+    LIST_OF_SERIAL_FLAGS(V)
+#undef V
+    static const SerialFlags _Unused;
 
     static const std::vector<SerialFlags>& ById;
+
+    static const SerialFlags& parse(const std::string& name);
+    friend std::ostream& operator<<(std::ostream& out, const SerialFlags& f);
 };
 
 /// Map of SEXP to ref which will be written in its place if it gets serialized
@@ -129,6 +139,7 @@ class AbstractSerializer {
     /// there are a few differences
     void writeInline(SEXP s);
 
+    friend class TraceSerializer;
   public:
     /// Whether we will write the data with the given flags. Can be used to
     /// optimize by removing null-op calls.
@@ -200,6 +211,7 @@ class AbstractDeserializer {
     /// there are a few differences
     SEXP readInline();
 
+    friend class TraceDeserializer;
   public:
     /// Whether we will write the data with the given flags. Otherwise we will
     /// set the data to 0/null. Can be used to optimize by removing null-op
