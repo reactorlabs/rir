@@ -1,13 +1,12 @@
 #include "compiler.h"
 #include "R/RList.h"
+#include "R/destubCloenv.h"
 #include "pir/continuation.h"
 #include "pir/pir_impl.h"
 #include "rir2pir/rir2pir.h"
 #include "runtime/TypeFeedback.h"
-#include "utils/Map.h"
 #include "utils/measuring.h"
 
-#include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/opt/pass_definitions.h"
 #include "compiler/opt/pass_scheduler.h"
@@ -42,7 +41,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     fun->clearDisabledAssumptions(assumptions);
     assumptions = tbl->combineContextWith(assumptions);
 
-    auto frame = RList(FRAME(CLOENV(closure)));
+    auto frame = RList(FRAME(destubCloenv(closure)));
 
     std::string closureName = name;
     if (name.compare("") == 0) {

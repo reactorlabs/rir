@@ -1,5 +1,6 @@
 #include "module.h"
 
+#include "R/destubCloenv.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
@@ -33,10 +34,10 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
     // For Identification we use the real env, but for optimization we only use
     // the real environment if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
-    auto id = Idx(f, getEnv(CLOENV(closure)));
+    auto id = Idx(f, getEnv(destubCloenv(closure)));
     auto env = f->flags().contains(Function::InnerFunction)
                    ? Env::notClosed()
-                   : getEnv(CLOENV(closure));
+                   : getEnv(destubCloenv(closure));
     if (!closures.count(id))
         closures[id] = new Closure(name, closure, f, env, userContext);
     // If the compiler server is running sometimes this false.

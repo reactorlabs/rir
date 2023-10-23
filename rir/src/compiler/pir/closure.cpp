@@ -1,4 +1,5 @@
 #include "closure.h"
+#include "R/destubCloenv.h"
 #include "closure_version.h"
 #include "continuation.h"
 #include "env.h"
@@ -30,7 +31,7 @@ void Closure::invariant() const {
     // closure (since the closure is then created at runtime).
     assert(origin_ || env == Env::notClosed());
     assert(!origin_ || TYPEOF(origin_) == CLOSXP);
-    assert(env == Env::notClosed() || env->rho == CLOENV(origin_));
+    assert(env == Env::notClosed() || env->rho == destubCloenv(origin_));
     assert(!origin_ || formals_.original() == FORMALS(origin_));
 }
 

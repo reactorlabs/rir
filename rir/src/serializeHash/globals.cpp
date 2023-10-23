@@ -35,6 +35,7 @@ void initGlobals() {
     cppId2Global_->emplace("R_DotsSymbol", R_DotsSymbol);
     cppId2Global_->emplace("R_NamesSymbol", R_NamesSymbol);
     cppId2Global_->emplace("expandDotsTrigger", symbol::expandDotsTrigger);
+    cppId2Global_->emplace("closureEnvStub", symbol::closureEnvStub);
 
     globals_ = new std::vector<SEXP>();
     globalsSet_ = new std::unordered_set<SEXP>();

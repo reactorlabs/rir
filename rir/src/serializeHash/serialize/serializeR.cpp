@@ -252,7 +252,7 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 }
 
 static SerialOptions* newRSerialOptions(bool useHashes) {
-    return new SerialOptions{useHashes, useHashes, false, false, SerialOptions::SourcePools()};
+    return new SerialOptions{useHashes, useHashes, false, nullptr, SerialOptions::SourcePools()};
 }
 
 void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {

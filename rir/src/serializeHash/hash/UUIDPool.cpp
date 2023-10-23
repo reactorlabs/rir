@@ -446,7 +446,7 @@ SEXP UUIDPool::readItem(const ByteBuffer& buf, bool useHashes) {
     }
 
     // Read regular data
-    return deserialize(buf, SerialOptions{useHashes, useHashes, false, false, SerialOptions::SourcePools()});
+    return deserialize(buf, SerialOptions{useHashes, useHashes, false, nullptr, SerialOptions::SourcePools()});
 }
 
 void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
@@ -458,7 +458,7 @@ void UUIDPool::writeItem(SEXP sexp, __attribute__((unused)) bool isChild,
     }
 
     // Write regular data
-    serialize(sexp, buf, SerialOptions{useHashes, useHashes, false, false, SerialOptions::SourcePools()});
+    serialize(sexp, buf, SerialOptions{useHashes, useHashes, false, nullptr, SerialOptions::SourcePools()});
 }
 
 } // namespace rir

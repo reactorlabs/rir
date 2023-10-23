@@ -43,8 +43,9 @@ struct SerialOptions {
     bool useHashesForRecordedCalls;
     /// Whether to only serialize source and feedback (no optimized code).
     bool onlySourceAndFeedback;
-    /// Whether to skip serializing environment locks
-    bool skipEnvLocks;
+    /// If set, will serialize this as a closure environment stub, and warn when
+    /// other local environments are serialized
+    SEXP closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs;
     /// If nonempty, we serialize the corresponding SEXPs with stubs from these
     /// pools
     SourcePools sourcePools;

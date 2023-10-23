@@ -1,10 +1,12 @@
 #include "serialize.h"
 #include "R/Printing.h"
 #include "R/Protect.h"
+#include "R/Symbols.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "runtime/PoolStub.h"
+#include "serializeHash/globals.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "traceSerialize.h"
@@ -29,19 +31,19 @@ static const uint64_t dataBound = 0xfedcba9876543210;
 static const uint64_t intBound = 0xfedcba9876543211;
 #endif
 
-SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::SourcePools()};
+SerialOptions SerialOptions::DeepCopy{false, false, false, nullptr, SerialOptions::SourcePools()};
 
 SerialOptions SerialOptions::CompilerServer(bool intern) {
-    return SerialOptions{intern, intern, false, true, SerialOptions::SourcePools()};
+    return SerialOptions{intern, intern, false, nullptr, SerialOptions::SourcePools()};
 }
 
 SerialOptions SerialOptions::CompilerClient(bool intern, Function* function,
                                             SEXP decompiledClosure) {
-    return SerialOptions{intern, intern, false, true, SerialOptions::SourcePools(function, decompiledClosure)};
+    return SerialOptions{intern, intern, false, CLOENV(decompiledClosure), SerialOptions::SourcePools(function, decompiledClosure)};
 }
 
-SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::SourcePools()};
-SerialOptions SerialOptions::SourceAndFeedback{false, true, true, true, SerialOptions::SourcePools()};
+SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, nullptr, SerialOptions::SourcePools()};
+SerialOptions SerialOptions::SourceAndFeedback{false, true, true, nullptr, SerialOptions::SourcePools()};
 
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
@@ -103,28 +105,24 @@ SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deseria
     SerialOptions options;
     options.useHashes = deserializer.readBytesOf<bool>();
     options.onlySourceAndFeedback = deserializer.readBytesOf<bool>();
-    options.skipEnvLocks = deserializer.readBytesOf<bool>();
     return options;
 }
 
 void SerialOptions::serializeCompatible(AbstractSerializer& serializer) const {
     serializer.writeBytesOf(useHashes);
     serializer.writeBytesOf(onlySourceAndFeedback);
-    serializer.writeBytesOf(skipEnvLocks);
 }
 
 bool SerialOptions::areCompatibleWith(const rir::SerialOptions& other) const {
     return useHashes == other.useHashes &&
-           onlySourceAndFeedback == other.onlySourceAndFeedback &&
-           skipEnvLocks == other.skipEnvLocks;
+           onlySourceAndFeedback == other.onlySourceAndFeedback;
 }
 
 bool SerialOptions::willReadOrWrite(const SerialFlags& flags) const {
     return
         (!onlySourceAndFeedback ||
          flags.contains(SerialFlag::InSource) ||
-         flags.contains(SerialFlag::InFeedback)) &&
-        (!skipEnvLocks || flags.contains(SerialFlag::NotEnvLock));
+         flags.contains(SerialFlag::InFeedback));
 }
 
 bool Serializer::willWrite(const rir::SerialFlags& flags) const {
@@ -170,6 +168,14 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     // If this is a stubbed pool entry, serialize the stub instead
     if (options.sourcePools.isEntry(s)) {
         s = options.sourcePools.stub(s);
+    } else if (s == options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs) {
+        s = symbol::closureEnvStub;
+    } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs &&
+               TYPEOF(s) == ENVSXP && !globalsSet.count(s) &&
+               !R_IsPackageEnv(s) && !R_IsNamespaceEnv(s)) {
+        std::cerr << "WARNING: pointerStubLocalEnvs isn't implemented, and "
+                  << "we're serializing a local env: " << Print::dumpSexp(s)
+                  << std::endl;
     }
 
 #if DEBUG_SERIALIZE_CONSISTENCY
@@ -311,8 +317,11 @@ SEXP Deserializer::read(const SerialFlags& flags) {
            "serialize/deserialize sexp type mismatch");
 #endif
 
-    // If this is a stubbed pool entry, deserialize the stub instead
-    if (options.sourcePools.isStub(result)) {
+    // If this is a stub, deserialize the stubbed value instead
+    if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs &&
+        result == symbol::closureEnvStub) {
+        result = options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs;
+    } else if (options.sourcePools.isStub(result)) {
         result = options.sourcePools.entry(result);
     }
 
