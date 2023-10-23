@@ -189,6 +189,23 @@ bool Deserializer::willRead(const rir::SerialFlags& flags) const {
     return options.willReadOrWrite(flags);
 }
 
+#ifdef DEBUG_SERIALIZE_CONSISTENCY
+static void checkFlagConsistency(const char* deserializedType,
+                                 unsigned deserializedId, const SerialFlags& flags) {
+    if (deserializedId != flags.id()) {
+        std::cerr << "serialize/deserialize " << deserializedType
+                  << " flags mismatch: " << deserializedId << "(";
+        if (deserializedId + 1 < SerialFlags::ById.size()) {
+            std::cerr << SerialFlags::ById[deserializedId];
+        } else {
+            std::cerr << "???";
+        }
+        std::cerr <<  ")" << " vs " << flags.id() << " (" << flags << ")" << std::endl;
+        assert(false && "serialize/deserialize flags mismatch");
+    }
+}
+#endif
+
 void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) {
     if (!willRead(flags)) {
         memset(data, 0, size);
@@ -198,7 +215,7 @@ void Deserializer::readBytes(void* data, size_t size, const SerialFlags& flags) 
 #if DEBUG_SERIALIZE_CONSISTENCY
     assert(buffer.getLong() == dataBound && "serialize/deserialize data boundary mismatch");
     assert(buffer.getLong() == size && "serialize/deserialize data size mismatch");
-    assert(buffer.getInt() == flags.id() && "serialize/deserialize data flags mismatch");
+    checkFlagConsistency("data", buffer.getInt(), flags);
 #endif
 
     buffer.getBytes((uint8_t*)data, size);
@@ -211,7 +228,7 @@ int Deserializer::readInt(const SerialFlags& flags) {
 
 #if DEBUG_SERIALIZE_CONSISTENCY
     assert(buffer.getLong() == intBound && "serialize/deserialize int boundary mismatch");
-    assert(buffer.getInt() == flags.id() && "serialize/deserialize int flags mismatch");
+    checkFlagConsistency("int", buffer.getInt(), flags);
 #endif
 
     auto result = buffer.getInt();
@@ -231,12 +248,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 #if DEBUG_SERIALIZE_CONSISTENCY
     assert(buffer.getLong() == sexpBound &&
            "serialize/deserialize sexp boundary mismatch");
-    auto id = buffer.getInt();
-    if (id != flags.id()) {
-        std::cerr << "serialize/deserialize sexp flags mismatch: " << id
-                  << " vs " << flags.id() << " (" << flags << ")" << std::endl;
-        assert(false && "serialize/deserialize sexp flags mismatch");
-    }
+    checkFlagConsistency("sexp", buffer.getInt(), flags);
     auto expectedType = buffer.getInt();
 #endif
 

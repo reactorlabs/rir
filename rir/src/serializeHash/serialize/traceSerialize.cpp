@@ -5,9 +5,11 @@
 #include "traceSerialize.h"
 #include "R/Printing.h"
 #include "compiler/parameter.h"
+#include "rPackFlags.h"
+#include "runtime/rirObjectMagic.h"
 #include <algorithm>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 namespace rir {
@@ -50,7 +52,7 @@ bool Tracer::shouldTrace(const SerialFlags& flags) {
                         });
 }
 
-void Tracer::tracePrefix(char prefixChar, const rir::SerialFlags& flags) {
+void Tracer::tracePrefix(char prefixChar, const SerialFlags& flags) {
     assert(shouldTrace(flags));
 
     for (size_t i = 0; i < depth; i++) {
@@ -62,42 +64,114 @@ void Tracer::tracePrefix(char prefixChar, const rir::SerialFlags& flags) {
     out.flags(ioflags);
 }
 
-void Tracer::traceInt(char prefixChar, int data, const rir::SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
-        return;
-    }
+bool Tracer::traceSpecial(const SerialFlags& flags, const void* data,
+                          size_t size) {
+    if (flags.id() == SerialFlags::String.id() ||
+        flags.id() == SerialFlags::SymbolName.id()) {
+        out << "str   ";
 
-    tracePrefix(prefixChar, flags);
-    auto ioflags = out.flags();
-    out << std::setfill('0') << std::setw(8) << std::right << std::hex;
-    out << "int   0x" << data;
-    out.flags(ioflags);
-    out << " (" << data << ")" << std::endl;
-}
+        out << std::string((const char*)data, size);
+    } else if (flags.id() == SerialFlags::RFlags.id()) {
+        out << "type  ";
 
-void Tracer::traceBytes(char prefixChar, const void* data, size_t size,
-                        const rir::SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
-        return;
-    }
+        unsigned rFlags = *(const unsigned*)data;
+        SEXPTYPE type;
+        int levs;
+        bool isObj;
+        bool hasAttr;
+        bool hasTag;
+        unpackFlags(rFlags, type, levs, isObj, hasAttr, hasTag);
 
-    tracePrefix(prefixChar, flags);
-    out << "bytes 0x";
-    auto ioflags = out.flags();
-    out << std::setfill('0') << std::setw(2) << std::right << std::hex;
-    for (size_t i = 0; i < size; ++i) {
-        out << (unsigned)((const uint8_t*)data)[i];
-        if (i == maxRawPrintLength) {
-            out.flags(ioflags);
-            out << "... (" << size << ")";
+        switch (type) {
+        case (SEXPTYPE)SpecialType::Altrep:
+            out << "altrep";
+            break;
+        case (SEXPTYPE)SpecialType::Global:
+            out << "global";
+            break;
+        case (SEXPTYPE)SpecialType::Ref:
+            out << "ref";
+            break;
+        default:
+            out << Rf_type2char(type);
             break;
         }
+        if (levs) {
+            out << " +levs=" << levs;
+        }
+        if (isObj) {
+            out << " +obj";
+        }
+        if (hasAttr) {
+            out << " +attr";
+        }
+        if (hasTag) {
+            out << " +tag";
+        }
+    } else if (flags.id() == SerialFlags::RirMagic.id()) {
+        out << "rir   ";
+
+        out << rirObjectClassName(*(const unsigned*)data);
+    } else if (flags.id() == SerialFlags::BuiltinNr.id() ||
+               flags.id() == SerialFlags::EnvType.id() ||
+               flags.id() == SerialFlags::RefId.id() ||
+               flags.id() == SerialFlags::GlobalId.id()) {
+        out << "int   ";
+
+        out << *(const unsigned*)data;
+    } else {
+        return false;
     }
-    out.flags(ioflags);
+
+    // A bit confusing: we handle all other cases in the else branch,
+    // this saves LOC because we don't return true in any of the handled cases,
+    // we just fall through to this
+    return true;
+}
+
+void Tracer::traceInt(char prefixChar, int data, const SerialFlags& flags) {
+    if (!shouldTrace(flags)) {
+        return;
+    }
+
+    tracePrefix(prefixChar, flags);
+    if (!traceSpecial(flags, &data, sizeof(data))) {
+        out << "int   0x";
+        auto ioflags = out.flags();
+        out << std::setfill('0') << std::setw(8) << std::right << std::hex;
+        out << data;
+        out.flags(ioflags);
+        out << " (" << data << ")";
+    }
     out << std::endl;
 }
 
-void Tracer::traceSexp(char prefixChar, SEXP s, const rir::SerialFlags& flags) {
+void Tracer::traceBytes(char prefixChar, const void* data, size_t size,
+                        const SerialFlags& flags) {
+    if (!shouldTrace(flags)) {
+        return;
+    }
+
+    tracePrefix(prefixChar, flags);
+    if (!traceSpecial(flags, data, size)) {
+        out << "bytes ";
+        out << "0x";
+        auto ioflags = out.flags();
+        out << std::setfill('0') << std::setw(2) << std::right << std::hex;
+        for (size_t i = 0; i < size; ++i) {
+            out << (unsigned)((const uint8_t*)data)[i];
+            if (i == maxRawPrintLength) {
+                out.flags(ioflags);
+                out << "... (" << size << ")";
+                break;
+            }
+        }
+        out.flags(ioflags);
+    }
+    out << std::endl;
+}
+
+void Tracer::traceSexp(char prefixChar, SEXP s, const SerialFlags& flags) {
     if (!shouldTrace(flags)) {
         return;
     }
@@ -111,12 +185,12 @@ void TraceSerializer::writeBytes(const void *data, size_t size, const SerialFlag
     inner.writeBytes(data, size, flags);
 }
 
-void TraceSerializer::writeInt(int data, const rir::SerialFlags& flags) {
+void TraceSerializer::writeInt(int data, const SerialFlags& flags) {
     traceInt('+', data, flags);
     inner.writeInt(data, flags);
 }
 
-void TraceSerializer::write(SEXP s, const rir::SerialFlags& flags) {
+void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
     traceSexp('+', s, flags);
 
     depth++;
@@ -140,13 +214,13 @@ void TraceDeserializer::readBytes(void *data, size_t size, const SerialFlags& fl
     traceBytes('-', data, size, flags);
 }
 
-int TraceDeserializer::readInt(const rir::SerialFlags& flags) {
+int TraceDeserializer::readInt(const SerialFlags& flags) {
     int data = inner.readInt(flags);
     traceInt('-', data, flags);
     return data;
 }
 
-SEXP TraceDeserializer::read(const rir::SerialFlags& flags) {
+SEXP TraceDeserializer::read(const SerialFlags& flags) {
     depth++;
     SEXP s = inner.read(flags);
     depth--;

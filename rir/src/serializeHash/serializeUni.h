@@ -74,8 +74,32 @@ class SerialFlags {
     /// checks, since these are static singletons.
     unsigned id() const { return id_; }
 
-#define LIST_OF_SERIAL_FLAGS(V)                                                \
+#define LIST_OF_INHERIT_SERIAL_FLAGS(V) \
     V(Inherit)                                                                 \
+    V(RFlags)                                                                  \
+    V(RAttrib)                                                                 \
+    V(RTag)                                                                    \
+    V(AltrepInfo)                                                              \
+    V(AltrepState)                                                             \
+    V(GlobalId)                                                                \
+    V(RefId)                                                                   \
+    V(SymbolName)                                                              \
+    V(Car)                                                                     \
+    V(ClosureEnv)                                                              \
+    V(ClosureFormals)                                                          \
+    V(ExternalPtrProtection)                                                   \
+    V(ExternalPtrTag)                                                          \
+    V(EnvType)                                                                 \
+    V(BuiltinNr)                                                               \
+    V(StringLength)                                                            \
+    V(String)                                                                  \
+    V(VectorLength)                                                            \
+    V(VectorElt)                                                               \
+    V(RBytecodeCode)                                                           \
+    V(RirMagic)
+
+#define LIST_OF_SERIAL_FLAGS(V)                                                \
+    LIST_OF_INHERIT_SERIAL_FLAGS(V)                                            \
     V(Ast)                                                                     \
     V(DtContext)                                                               \
     V(DtBaseline)                                                              \

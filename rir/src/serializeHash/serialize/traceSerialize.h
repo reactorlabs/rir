@@ -28,6 +28,7 @@ class Tracer {
 
     static bool shouldTrace(const SerialFlags& flags);
     void tracePrefix(char prefixChar, const SerialFlags& flags);
+    bool traceSpecial(const SerialFlags& flags, const void* data, size_t size);
 
   protected:
     size_t depth;

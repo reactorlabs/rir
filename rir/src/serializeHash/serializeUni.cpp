@@ -12,6 +12,7 @@
 #include "runtime/LazyEnvironment.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/hash/hashRoot_getConnected_common.h"
+#include "serializeHash/serialize/rPackFlags.h"
 #include "utils/Pool.h"
 #include "utils/measuring.h"
 #include <algorithm>
@@ -22,14 +23,10 @@ namespace rir {
 unsigned SerialFlags::nextId = 0;
 
 // Inlay hints are needed to understand the below code
-const SerialFlags SerialFlags::Inherit(
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-    true);
+#define V(name)                                                                \
+const SerialFlags SerialFlags::name(true, true, true, true, true, true, true);
+LIST_OF_INHERIT_SERIAL_FLAGS(V)
+#undef V
 const SerialFlags SerialFlags::Ast(
     true,
     false,
@@ -237,26 +234,6 @@ unsigned AbstractDeserializer::readSrc(const SerialFlags& flags) {
     return src_pool_add(read(flags));
 }
 
-/// "TYPEOF" for special cases, different than any normal SEXP TYPEOF, to ensure
-/// they are hashed differently. This is similar to what serialize.c does.
-///
-/// This has the same size as TYPEOF (unsigned)
-enum class SpecialType : SEXPTYPE {
-    // Starts at 128, assuming regular SEXPTYPEs only go up to 127, and we
-    // remove bytes after 255
-    Global = 128,
-    Ref = 129,
-    Altrep = 130,
-    // Only used in writeBc and readBc (when reading and writing bytecode)
-    BcRef = 131
-};
-
-enum class EnvType {
-    Package,
-    Namespace,
-    Regular
-};
-
 /// These SEXPs are added to the ref table the first time they are serialized or
 /// deserialized, and serialized as / deserialized from refs subsequent times.
 static bool canSelfReference(SEXP sexp) {
@@ -310,49 +287,7 @@ static SEXP findNamespace(SEXP info) {
     return val;
 }
 
-
-/*
- * From serialize.c
- * Type/Flag Packing and Unpacking
- *
- * To reduce space consumption for serializing code (lots of list
- * structure) the type (at most 8 bits), several single bit flags,
- * and the sxpinfo gp field (LEVELS, 16 bits) are packed into a single
- * integer. The integer is signed, so this shouldn't be pushed too
- * far. It assumes at least 28 bits, but that should be no problem.
- */
-
-#define IS_OBJECT_BIT_MASK (1 << 8)
-#define HAS_ATTR_BIT_MASK (1 << 9)
-#define HAS_TAG_BIT_MASK (1 << 10)
-#define ENCODE_LEVELS(v) ((v) << 12)
-#define DECODE_LEVELS(v) ((v) >> 12)
-#define DECODE_TYPE(v) ((v) & 255)
-#define CACHED_MASK (1<<5)
-#define HASHASH_MASK 1
-
-static unsigned packFlags(SEXPTYPE type, int levs, bool isobj, bool hasattr,
-                          bool hastag) {
-    unsigned val;
-    if (type == CHARSXP) levs &= (~(CACHED_MASK | HASHASH_MASK));
-    val = type | ENCODE_LEVELS(levs);
-    if (isobj) val |= IS_OBJECT_BIT_MASK;
-    if (hasattr) val |= HAS_ATTR_BIT_MASK;
-    if (hastag) val |= HAS_TAG_BIT_MASK;
-    return val;
-}
-
-
-static void unpackFlags(unsigned flags, SEXPTYPE& ptype, int& plevs,
-                        bool& pisobj, bool& phasattr, bool& phastag) {
-    ptype = DECODE_TYPE(flags);
-    plevs = DECODE_LEVELS(flags);
-    pisobj = !!(flags & IS_OBJECT_BIT_MASK);
-    phasattr = !!(flags & HAS_ATTR_BIT_MASK);
-    phastag = !!(flags & HAS_TAG_BIT_MASK);
-}
-
-/// More code from R
+/// Code from R
 void R_expand_binding_value(SEXP b) {
 #if BOXED_BINDING_CELLS
     SET_BNDCELL_TAG(b, 0);
@@ -397,7 +332,7 @@ void R_expand_binding_value(SEXP b) {
 template <typename CLS>
 static bool tryWrite(AbstractSerializer& serializer, SEXP s) {
     if (CLS* b = CLS::check(s)) {
-        serializer.writeBytesOf(b->info.magic);
+        serializer.writeBytesOf(b->info.magic, SerialFlags::RirMagic);
         Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: writeRir", s, [&]{
             b->serialize(serializer);
         });
@@ -425,7 +360,7 @@ static void writeRir(AbstractSerializer& serializer, SEXP s) {
 
 static SEXP readRir(AbstractDeserializer& deserializer) {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: readRir", [&]{
-        auto magic = deserializer.readBytesOf<unsigned>();
+        auto magic = deserializer.readBytesOf<unsigned>(SerialFlags::RirMagic);
         switch (magic) {
         case DISPATCH_TABLE_MAGIC:
             return DispatchTable::deserialize(deserializer)->container();
@@ -513,7 +448,7 @@ static void writeBc(AbstractSerializer& serializer, SerializedRefs& bcRefs,
                     SEXP sexp) {
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: writeBc1", sexp, [&]{
         SEXP code = R_bcDecode(BCODE_CODE(sexp));
-        serializer.write(code);
+        serializer.write(code, SerialFlags::RBytecodeCode);
         auto consts = BCODE_CONSTS(sexp);
         auto n = LENGTH(consts);
         serializer.writeBytesOf(n);
@@ -546,7 +481,7 @@ static SEXP readBc(AbstractDeserializer& deserializer, DeserializedRefs* refs,
             refs->push_back(result);
         }
         PROTECT(result);
-        auto bytes = deserializer.read();
+        auto bytes = deserializer.read(SerialFlags::RBytecodeCode);
         PROTECT(bytes);
         SETCAR(result, R_bcEncode(bytes));
         auto n = deserializer.readBytesOf<R_len_t>();
@@ -581,22 +516,24 @@ static SEXP readBc(AbstractDeserializer& deserializer, DeserializedRefs* refs,
     });
 }
 
-static void writeString(AbstractSerializer& serializer, SEXP sexp) {
+static void writeString(AbstractSerializer& serializer, SEXP sexp,
+                        const SerialFlags& flags) {
     assert(TYPEOF(sexp) == CHARSXP);
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline char vector", sexp, [&]{
         if (sexp == NA_STRING) {
-            serializer.writeBytesOf<R_len_t>(-1);
+            serializer.writeBytesOf<R_len_t>(-1, SerialFlags::StringLength);
         } else {
             auto n = LENGTH(sexp);
-            serializer.writeBytesOf<R_len_t>(n);
-            serializer.writeBytes(CHAR(sexp), n * sizeof(char));
+            serializer.writeBytesOf<R_len_t>(n, SerialFlags::StringLength);
+            serializer.writeBytes(CHAR(sexp), n * sizeof(char), flags);
         }
     });
 }
 
-static SEXP readString(AbstractDeserializer& deserializer) {
+static SEXP readString(AbstractDeserializer& deserializer,
+                       const SerialFlags& flags) {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline char vector", [&]{
-        auto length = deserializer.readBytesOf<R_len_t>();
+        auto length = deserializer.readBytesOf<R_len_t>(SerialFlags::StringLength);
         if (length == -1) {
             return NA_STRING;
         } else if (length < 8192) {
@@ -604,7 +541,7 @@ static SEXP readString(AbstractDeserializer& deserializer) {
             // R doesn't allow allocVector(SEXP) because it interns
             // strings
             char data[8192];
-            deserializer.readBytes(data, length);
+            deserializer.readBytes(data, length, flags);
             data[length] = '\0';
             return Rf_mkCharLenCE(data, length, CE_NATIVE);
         } else {
@@ -612,7 +549,7 @@ static SEXP readString(AbstractDeserializer& deserializer) {
             // R doesn't allow allocVector(CHARSXP) because it interns
             // strings
             char* data = (char*)malloc(length + 1);
-            deserializer.readBytes(data, length);
+            deserializer.readBytes(data, length, flags);
             data[length] = '\0';
             auto result = Rf_mkCharLenCE(data, length, CE_NATIVE);
             free(data);
@@ -648,7 +585,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                        (type == (SEXPTYPE)SpecialType::Altrep ||
                             ATTRIB(sexp) != R_NilValue);
         auto rFlags = packFlags(type, LEVELS(sexp), OBJECT(sexp), hasAttr, hasTag_);
-        writeBytesOf(rFlags);
+        writeBytesOf(rFlags, SerialFlags::RFlags);
 
         // Write attrs and tag at the beginning if we (maybe) tail call, at the
         // end if we self-reference, and otherwise at the end (otherwise doesn't
@@ -656,14 +593,14 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         auto writeAttr = [&]{
             if (hasAttr) {
                 Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline attribute", sexp, [&]{
-                    write(ATTRIB(sexp));
+                    write(ATTRIB(sexp), SerialFlags::RAttrib);
                 });
             }
         };
         auto writeTag = [&]{
             if (hasTag_) {
                 Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline tag", sexp, [&]{
-                    write(TAG(sexp));
+                    write(TAG(sexp), SerialFlags::RTag);
                 });
             }
         };
@@ -680,22 +617,22 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 auto state = ALTREP_SERIALIZED_STATE(sexp);
                 PROTECT(info);
                 PROTECT(state);
-                write(info);
-                write(state);
+                write(info, SerialFlags::AltrepInfo);
+                write(state, SerialFlags::AltrepState);
                 UNPROTECT(2);
                 writeAttr();
                 // No tag
             });
             break;
         case (SEXPTYPE)SpecialType::Global:
-            writeBytesOf(global2Index.at(sexp));
+            writeBytesOf(global2Index.at(sexp), SerialFlags::GlobalId);
             // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:
             // If you get an out-of-range here, a RIR object is probably either
             // not adding its ref, or the rir object should be excluded from
             // `canSelfReference` (and probably also `UUIDPool::internable`)
-            writeBytesOf((unsigned)refs->at(sexp));
+            writeBytesOf((unsigned)refs->at(sexp), SerialFlags::RefId);
             // Attr and tag already present
             break;
         case NILSXP:
@@ -705,7 +642,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             auto name = PRINTNAME(sexp);
             assert(LENGTH(name) > 0 &&
                    "Empty symbol name, sexp should be a global");
-            writeString(*this, name);
+            writeString(*this, name, SerialFlags::SymbolName);
             writeAttr();
             // No tag
             break;
@@ -720,7 +657,7 @@ void AbstractSerializer::writeInline(SEXP sexp) {
                 if (BNDCELL_TAG(sexp)) {
                     R_expand_binding_value(sexp);
                 }
-                write(CAR(sexp));
+                write(CAR(sexp), SerialFlags::Car);
             });
             writeInline(CDR(sexp));
             break;
@@ -728,15 +665,15 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             writeAttr();
             writeTag();
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline closure sans body", sexp, [&]{
-                write(CLOENV(sexp));
-                write(FORMALS(sexp));
+                write(CLOENV(sexp), SerialFlags::ClosureEnv);
+                write(FORMALS(sexp), SerialFlags::ClosureFormals);
             });
             writeInline(BODY(sexp));
             break;
         case EXTPTRSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline external pointer", sexp, [&]{
-                write(EXTPTR_PROT(sexp));
-                write(EXTPTR_TAG(sexp));
+                write(EXTPTR_PROT(sexp), SerialFlags::ExternalPtrProtection);
+                write(EXTPTR_TAG(sexp), SerialFlags::ExternalPtrTag);
             });
             writeAttr();
             // No tag
@@ -748,15 +685,15 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             break;
         case ENVSXP:
             if (R_IsPackageEnv(sexp)) {
-                writeBytesOf(EnvType::Package);
+                writeBytesOf(EnvType::Package, SerialFlags::EnvType);
                 writeInline(PROTECT(R_PackageEnvName(sexp)));
                 UNPROTECT(1);
             } else if (R_IsNamespaceEnv(sexp)) {
-                writeBytesOf(EnvType::Namespace);
+                writeBytesOf(EnvType::Namespace, SerialFlags::EnvType);
                 writeInline(PROTECT(R_NamespaceEnvSpec(sexp)));
                 UNPROTECT(1);
             } else {
-                writeBytesOf(EnvType::Regular);
+                writeBytesOf(EnvType::Regular, SerialFlags::EnvType);
                 writeBytesOf((bool)R_EnvironmentIsLocked(sexp), SerialFlags::EnvLock);
                 write(ENCLOS(sexp), SerialFlags::EnvMisc);
                 write(FRAME(sexp), SerialFlags::EnvMisc);
@@ -767,12 +704,12 @@ void AbstractSerializer::writeInline(SEXP sexp) {
             break;
         case SPECIALSXP:
         case BUILTINSXP:
-            writeBytesOf(getBuiltinNr(sexp));
+            writeBytesOf(getBuiltinNr(sexp), SerialFlags::BuiltinNr);
             writeAttr();
             // No tag
             break;
         case CHARSXP:
-            writeString(*this, sexp);
+            writeString(*this, sexp, SerialFlags::String);
             writeAttr();
             // No tag
             break;
@@ -780,8 +717,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case INTSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline int vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
-                writeBytes(INTEGER(sexp), n * sizeof(int));
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
+                writeBytes(INTEGER(sexp), n * sizeof(int), SerialFlags::VectorElt);
             });
             writeAttr();
             // No tag
@@ -789,8 +726,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case REALSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline real vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
-                writeBytes(REAL(sexp), n * sizeof(double));
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
+                writeBytes(REAL(sexp), n * sizeof(double), SerialFlags::VectorElt);
             });
             writeAttr();
             // No tag
@@ -798,8 +735,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case CPLXSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline complex number vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
-                writeBytes(COMPLEX(sexp), n * sizeof(Rcomplex));
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
+                writeBytes(COMPLEX(sexp), n * sizeof(Rcomplex), SerialFlags::VectorElt);
             });
             writeAttr();
             // No tag
@@ -807,8 +744,8 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case RAWSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline byte vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
-                writeBytes(RAW(sexp), n * sizeof(Rbyte));
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
+                writeBytes(RAW(sexp), n * sizeof(Rbyte), SerialFlags::VectorElt);
             });
             writeAttr();
             // No tag
@@ -816,9 +753,9 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case STRSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline string vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
                 for (int i = 0; i < n; i++) {
-                    write(STRING_ELT(sexp, i));
+                    write(STRING_ELT(sexp, i), SerialFlags::VectorElt);
                 }
             });
             writeAttr();
@@ -828,9 +765,9 @@ void AbstractSerializer::writeInline(SEXP sexp) {
         case EXPRSXP:
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractSerializer::writeInline expression or vector", sexp, [&]{
                 auto n = XLENGTH(sexp);
-                writeBytesOf<R_xlen_t>(n);
+                writeBytesOf<R_xlen_t>(n, SerialFlags::VectorLength);
                 for (int i = 0; i < n; i++) {
-                    write(VECTOR_ELT(sexp, i));
+                    write(VECTOR_ELT(sexp, i), SerialFlags::VectorElt);
                 }
             });
             writeAttr();
@@ -863,7 +800,7 @@ SEXP AbstractDeserializer::readInline() {
     return Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline", [&]{
         auto refs = this->refs();
 
-        auto rFlags = readBytesOf<unsigned>();
+        auto rFlags = readBytesOf<unsigned>(SerialFlags::RFlags);
         SEXPTYPE type;
         int levels;
         bool object, hasAttr, hasTag_;
@@ -877,7 +814,7 @@ SEXP AbstractDeserializer::readInline() {
         auto readAttr = [&]{
             if (hasAttr) {
                 attrib = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline attribute", [&]{
-                    return read();
+                    return read(SerialFlags::RAttrib);
                 });
                 PROTECT(attrib);
             }
@@ -885,7 +822,7 @@ SEXP AbstractDeserializer::readInline() {
         auto readTag = [&]{
             if (hasTag_) {
                 tag = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline tag", [&]{
-                    return read();
+                    return read(SerialFlags::RTag);
                 });
                 PROTECT(tag);
             }
@@ -894,8 +831,8 @@ SEXP AbstractDeserializer::readInline() {
         SEXP result;
         switch (type) {
         case (SEXPTYPE)SpecialType::Altrep: {
-            auto info = PROTECT(read());
-            auto state = PROTECT(read());
+            auto info = PROTECT(read(SerialFlags::AltrepInfo));
+            auto state = PROTECT(read(SerialFlags::AltrepState));
             readAttr();
             // No tag
             result = ALTREP_UNSERIALIZE_EX(info, state, attrib, object, levels);
@@ -903,11 +840,11 @@ SEXP AbstractDeserializer::readInline() {
             break;
         }
         case (SEXPTYPE)SpecialType::Global:
-            result = globals[readBytesOf<unsigned>()];
+            result = globals[readBytesOf<unsigned>(SerialFlags::GlobalId)];
             // Attr and tag already present
             break;
         case (SEXPTYPE)SpecialType::Ref:
-            result = refs->at(readBytesOf<unsigned>());
+            result = refs->at(readBytesOf<unsigned>(SerialFlags::RefId));
             // Attr and tag already present
             break;
         case NILSXP:
@@ -915,7 +852,7 @@ SEXP AbstractDeserializer::readInline() {
             // No attr or tag
             break;
         case SYMSXP: {
-            auto name = readString(*this);
+            auto name = readString(*this, SerialFlags::SymbolName);
             result = Rf_installTrChar(name);
             // Symbols have read refs (same symbol can be serialized and
             // we want it to point to the same SEXP when deserializing)
@@ -938,7 +875,7 @@ SEXP AbstractDeserializer::readInline() {
                 snprintf(lastname, 8192, "%s", CHAR(PRINTNAME(tag)));
             }
             Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline list elem", result, [&]{
-                SETCAR(result, read());
+                SETCAR(result, read(SerialFlags::Car));
             });
             SETCDR(result, readInline());
             if (type == CLOSXP && CLOENV(result) == R_NilValue) {
@@ -959,8 +896,8 @@ SEXP AbstractDeserializer::readInline() {
                 pir::Parameter::PIR_MEASURE_SERIALIZATION,
                 "serializeUni.cpp: AbstractDeserializer::readInline closure sans body", result,
                 [&] {
-                    SET_CLOENV(result, read());
-                    SET_FORMALS(result, read());
+                    SET_CLOENV(result, read(SerialFlags::ClosureEnv));
+                    SET_FORMALS(result, read(SerialFlags::ClosureFormals));
                 });
             SET_BODY(result, readInline());
             UNPROTECT(1);
@@ -973,8 +910,8 @@ SEXP AbstractDeserializer::readInline() {
                     refs->push_back(result);
                 }
                 R_SetExternalPtrAddr(result, nullptr);
-                R_SetExternalPtrProtected(result, read());
-                R_SetExternalPtrTag(result, read());
+                R_SetExternalPtrProtected(result, read(SerialFlags::ExternalPtrProtection));
+                R_SetExternalPtrTag(result, read(SerialFlags::ExternalPtrTag));
                 UNPROTECT(1);
                 return result;
             });
@@ -990,7 +927,7 @@ SEXP AbstractDeserializer::readInline() {
             // No tag
             break;
         case ENVSXP:
-            switch (readBytesOf<EnvType>()) {
+            switch (readBytesOf<EnvType>(SerialFlags::EnvType)) {
             case EnvType::Package: {
                 auto name = readInline();
                 PROTECT(name);
@@ -1045,21 +982,21 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case SPECIALSXP:
         case BUILTINSXP:
-            result = getBuiltinOrSpecialFun(readBytesOf<int>());
+            result = getBuiltinOrSpecialFun(readBytesOf<int>(SerialFlags::BuiltinNr));
             readAttr();
             // No tag
             break;
         case CHARSXP:
-            result = readString(*this);
+            result = readString(*this, SerialFlags::String);
             readAttr();
             // No tag
             break;
         case LGLSXP:
         case INTSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline int vector", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
-                readBytes((void*)INTEGER(sexp), length * sizeof(int));
+                readBytes((void*)INTEGER(sexp), length * sizeof(int), SerialFlags::VectorElt);
                 return sexp;
             });
             readAttr();
@@ -1067,9 +1004,9 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case REALSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline real vector", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
-                readBytes((void*)REAL(sexp), length * sizeof(double));
+                readBytes((void*)REAL(sexp), length * sizeof(double), SerialFlags::VectorElt);
                 return sexp;
             });
             readAttr();
@@ -1077,9 +1014,9 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case CPLXSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline complex number vector sexp", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
-                readBytes((void*)COMPLEX(sexp), length * sizeof(Rcomplex));
+                readBytes((void*)COMPLEX(sexp), length * sizeof(Rcomplex), SerialFlags::VectorElt);
                 return sexp;
             });
             readAttr();
@@ -1087,9 +1024,9 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case RAWSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline byte vector", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
-                readBytes((void*)RAW(sexp), length * sizeof(Rbyte));
+                readBytes((void*)RAW(sexp), length * sizeof(Rbyte), SerialFlags::VectorElt);
                 return sexp;
             });
             readAttr();
@@ -1097,11 +1034,11 @@ SEXP AbstractDeserializer::readInline() {
             break;
         case STRSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline string vector", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
                 PROTECT(sexp);
                 for (int i = 0; i < length; i++) {
-                    SET_STRING_ELT(sexp, i, read());
+                    SET_STRING_ELT(sexp, i, read(SerialFlags::VectorElt));
                 }
                 UNPROTECT(1);
                 return sexp;
@@ -1112,11 +1049,11 @@ SEXP AbstractDeserializer::readInline() {
         case VECSXP:
         case EXPRSXP:
             result = Measuring::timeEventIf3(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeUni.cpp: AbstractDeserializer::readInline expression or vector", [&]{
-                auto length = readBytesOf<R_xlen_t>();
+                auto length = readBytesOf<R_xlen_t>(SerialFlags::VectorLength);
                 auto sexp = Rf_allocVector(type, length);
                 PROTECT(sexp);
                 for (int i = 0; i < length; i++) {
-                    SET_VECTOR_ELT(sexp, i, read());
+                    SET_VECTOR_ELT(sexp, i, read(SerialFlags::VectorElt));
                 }
                 UNPROTECT(1);
                 return sexp;
