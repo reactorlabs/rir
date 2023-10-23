@@ -7,7 +7,7 @@
 #include "api.h"
 #include "bc/Compiler.h"
 #include "compiler_server_client_shared_utils.h"
-#include "runtime/ExtraPoolStub.h"
+#include "runtime/PoolStub.h"
 #include "serializeHash/hash/UUID.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
@@ -261,8 +261,14 @@ void CompilerServer::tryRun() {
             SOFT_ASSERT(TypeFeedback::check(feedback),
                         "deserialized type feedback isn't actually type feedback");
             DispatchTable::unpack(BODY(what))->baseline()->typeFeedback(TypeFeedback::unpack(feedback));
-            auto sourcePoolSize = requestBuffer.getInt();
-            ExtraPoolStub::pad(sourceHash, sourcePoolSize, DispatchTable::unpack(BODY(what))->baseline()->body());
+            auto sourceBodyPoolSize = requestBuffer.getInt();
+            std::vector<size_t> sourceDefaultArgPoolSizes(requestBuffer.getInt(), 0);
+            for (auto& sourceDefaultArgPoolSize : sourceDefaultArgPoolSizes) {
+                sourceDefaultArgPoolSize = requestBuffer.getInt();
+            }
+            PoolStub::pad(sourceHash, sourceBodyPoolSize,
+                          sourceDefaultArgPoolSizes,
+                          DispatchTable::unpack(BODY(what))->baseline());
             UNPROTECT(1);
 #endif
 #if COMPARE_SOURCE_AND_FEEDBACK_WITH_FULL

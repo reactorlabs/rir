@@ -7,9 +7,9 @@
 #include "R/Funtab.h"
 #include "compiler/parameter.h"
 #include "runtime/DispatchTable.h"
-#include "runtime/ExtraPoolStub.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "runtime/PoolStub.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/hash/hashRoot_getConnected_common.h"
 #include "serializeHash/serialize/rPackFlags.h"
@@ -245,7 +245,7 @@ static bool canSelfReference(SEXP sexp) {
     case BCODESXP:
         return true;
     case EXTERNALSXP:
-        return !TypeFeedback::check(sexp) && !ArglistOrder::check(sexp) && !ExtraPoolStub::check(sexp);
+        return !TypeFeedback::check(sexp) && !ArglistOrder::check(sexp) && !PoolStub::check(sexp);
     case NILSXP:
     case LISTSXP:
     case CLOSXP:
@@ -351,7 +351,7 @@ static void writeRir(AbstractSerializer& serializer, SEXP s) {
         !tryWrite<LazyEnvironment>(serializer, s) &&
         !tryWrite<PirTypeFeedback>(serializer, s) &&
         !tryWrite<TypeFeedback>(serializer, s) &&
-        !tryWrite<ExtraPoolStub>(serializer, s)) {
+        !tryWrite<PoolStub>(serializer, s)) {
         std::cerr << "couldn't serialize EXTERNALSXP: ";
         Rf_PrintValue(s);
         assert(false);
@@ -378,8 +378,8 @@ static SEXP readRir(AbstractDeserializer& deserializer) {
             return PirTypeFeedback::deserialize(deserializer)->container();
         case TYPEFEEDBACK_MAGIC:
             return TypeFeedback::deserialize(deserializer)->container();
-        case EXTRA_POOL_STUB_MAGIC:
-            return ExtraPoolStub::deserialize(deserializer)->container();
+        case POOL_STUB_MAGIC:
+            return PoolStub::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";

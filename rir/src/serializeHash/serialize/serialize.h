@@ -12,19 +12,20 @@
 
 namespace rir {
 
-struct Code;
+class Function;
 
 /// Controls what data is serialized / deserialized and what format some of it
 /// uses. The same options data is serialized with, it must also be deserialized
 /// with.
 struct SerialOptions {
-    class ExtraPool {
+    class SourcePools {
         UUID sourceHash;
+        std::vector<unsigned> poolSeparatorIndices;
         BimapVector<SEXP> map;
 
       public:
-        ExtraPool() : sourceHash(), map() {}
-        ExtraPool(Code* codeWithPool, SEXP decompiledClosure);
+        SourcePools() : sourceHash(), poolSeparatorIndices(), map() {}
+        SourcePools(Function* function, SEXP decompiledClosure);
         explicit operator bool() const { return (bool)sourceHash; }
 
         bool isEntry(SEXP entry) const;
@@ -44,8 +45,9 @@ struct SerialOptions {
     bool onlySourceAndFeedback;
     /// Whether to skip serializing environment locks
     bool skipEnvLocks;
-    /// If nonempty, we serialize the corresponding SEXPs with extra pool stubs
-    ExtraPool extraPool;
+    /// If nonempty, we serialize the corresponding SEXPs with stubs from these
+    /// pools
+    SourcePools sourcePools;
 
     /// Don't serialize the extra pool, since we are only serializing to check
     /// compatibility and that isn't used
@@ -63,8 +65,8 @@ struct SerialOptions {
     /// Serialize everything, no hashes, no environment locks
     static SerialOptions CompilerServer(bool intern);
     /// Serialize everything, no hashes, no environment locks.
-    /// Serialize and deserialize the pool entries from stubs
-    static SerialOptions CompilerClient(bool intern, Code* codeWithPool,
+    /// Serialize and deserialize pool entries from stubs
+    static SerialOptions CompilerClient(bool intern, Function* function,
                                         SEXP decompiledClosure);
     //  TODO: Remove both of the below
     /// Serialize everything, hashes for recorded calls, no environment locks

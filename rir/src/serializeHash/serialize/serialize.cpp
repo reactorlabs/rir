@@ -4,12 +4,12 @@
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerServer.h"
-#include "runtime/Code.h"
-#include "runtime/ExtraPoolStub.h"
+#include "runtime/PoolStub.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "traceSerialize.h"
 #include "utils/measuring.h"
+#include <algorithm>
 
 /// This adds padding to each serialize call, but immediately raises an
 /// assertion failure when a deserialize call deserializes a region which was
@@ -29,18 +29,19 @@ static const uint64_t dataBound = 0xfedcba9876543210;
 static const uint64_t intBound = 0xfedcba9876543211;
 #endif
 
-SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::ExtraPool()};
+SerialOptions SerialOptions::DeepCopy{false, false, false, false, SerialOptions::SourcePools()};
 
 SerialOptions SerialOptions::CompilerServer(bool intern) {
-    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool()};
+    return SerialOptions{intern, intern, false, true, SerialOptions::SourcePools()};
 }
 
-SerialOptions SerialOptions::CompilerClient(bool intern, Code* codeWithPool, SEXP decompiledClosure) {
-    return SerialOptions{intern, intern, false, true, SerialOptions::ExtraPool(codeWithPool, decompiledClosure)};
+SerialOptions SerialOptions::CompilerClient(bool intern, Function* function,
+                                            SEXP decompiledClosure) {
+    return SerialOptions{intern, intern, false, true, SerialOptions::SourcePools(function, decompiledClosure)};
 }
 
-SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::ExtraPool()};
-SerialOptions SerialOptions::SourceAndFeedback{false, true, true, true, SerialOptions::ExtraPool()};
+SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, true, SerialOptions::SourcePools()};
+SerialOptions SerialOptions::SourceAndFeedback{false, true, true, true, SerialOptions::SourcePools()};
 
 unsigned pir::Parameter::RIR_SERIALIZE_CHAOS =
     getenv("RIR_SERIALIZE_CHAOS") ? strtol(getenv("RIR_SERIALIZE_CHAOS"), nullptr, 10) : 0;
@@ -48,30 +49,54 @@ bool pir::Parameter::PIR_MEASURE_SERIALIZATION =
     getenv("PIR_MEASURE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_MEASURE_SERIALIZATION"), nullptr, 10);
 
-SerialOptions::ExtraPool::ExtraPool(Code* codeWithPool, SEXP decompiledClosure)
-    : sourceHash(hashDecompiled(decompiledClosure)), map() {
-    for (unsigned i = 0; i < codeWithPool->extraPoolSize; i++) {
-        map.push_back(codeWithPool->getExtraPoolEntry(i));
+SerialOptions::SourcePools::SourcePools(Function* function,
+                                        SEXP decompiledClosure)
+    : sourceHash(hashDecompiled(decompiledClosure)), poolSeparatorIndices(),
+      map() {
+    auto body = function->body();
+    for (unsigned i = 0; i < body->extraPoolSize; i++) {
+        map.push_back(body->getExtraPoolEntry(i));
+    }
+    for (unsigned defaultArgIdx = 0; defaultArgIdx < function->nargs();
+         defaultArgIdx++) {
+        poolSeparatorIndices.push_back(map.size());
+        if (auto defaultArg = function->defaultArg(defaultArgIdx)) {
+            for (unsigned i = 0; i < defaultArg->extraPoolSize; i++) {
+                map.push_back(defaultArg->getExtraPoolEntry(i));
+            }
+        }
     }
 }
 
-bool SerialOptions::ExtraPool::isStub(SEXP stub) const {
-    auto rirStub = ExtraPoolStub::check(stub);
+bool SerialOptions::SourcePools::isStub(SEXP stub) const {
+    auto rirStub = PoolStub::check(stub);
     return rirStub && rirStub->sourceHash == sourceHash;
 }
 
-bool SerialOptions::ExtraPool::isEntry(SEXP entry) const {
+bool SerialOptions::SourcePools::isEntry(SEXP entry) const {
     return map.count(entry);
 }
 
-SEXP SerialOptions::ExtraPool::entry(SEXP stub) const {
+SEXP SerialOptions::SourcePools::entry(SEXP stub) const {
     assert(isStub(stub) && "not a stub for this extra pool");
-    return map.at(ExtraPoolStub::unpack(stub)->index);
+    auto index = PoolStub::unpack(stub)->index;
+    auto defaultArgIdx = PoolStub::unpack(stub)->defaultArgIdx;
+    auto absoluteIndex = defaultArgIdx == UINT32_MAX ? index : (index + poolSeparatorIndices[defaultArgIdx]);
+    return map.at(absoluteIndex);
 }
 
-SEXP SerialOptions::ExtraPool::stub(SEXP entry) const {
+SEXP SerialOptions::SourcePools::stub(SEXP entry) const {
     assert(isEntry(entry) && "not an entry in this extra pool");
-    return ExtraPoolStub::create(sourceHash, map.at(entry));
+    auto absoluteIndex = (unsigned)map.at(entry);
+    auto poolSeparator = std::upper_bound(poolSeparatorIndices.begin(),
+                                          poolSeparatorIndices.end(), absoluteIndex);
+    auto index = poolSeparator == poolSeparatorIndices.begin()
+                     ? absoluteIndex
+                     : absoluteIndex - *(poolSeparator - 1);
+    // The `- 1` may wrap around, we want body to have index `UINT32_MAX`
+    auto defaultArgIdx = std::distance(poolSeparatorIndices.begin(),
+                                       poolSeparator) - 1;
+    return PoolStub::create(sourceHash, defaultArgIdx, index);
 }
 
 SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deserializer) {
@@ -142,9 +167,9 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
         return;
     }
 
-    // If this is a stubbed extra pool entry, serialize the stub instead
-    if (options.extraPool.isEntry(s)) {
-        s = options.extraPool.stub(s);
+    // If this is a stubbed pool entry, serialize the stub instead
+    if (options.sourcePools.isEntry(s)) {
+        s = options.sourcePools.stub(s);
     }
 
 #if DEBUG_SERIALIZE_CONSISTENCY
@@ -286,9 +311,9 @@ SEXP Deserializer::read(const SerialFlags& flags) {
            "serialize/deserialize sexp type mismatch");
 #endif
 
-    // If this is a stubbed extra pool entry, deserialize the stub instead
-    if (options.extraPool.isStub(result)) {
-        result = options.extraPool.entry(result);
+    // If this is a stubbed pool entry, deserialize the stub instead
+    if (options.sourcePools.isStub(result)) {
+        result = options.sourcePools.entry(result);
     }
 
     return result;

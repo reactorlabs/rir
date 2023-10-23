@@ -10,7 +10,7 @@
 namespace rir {
 
 struct SerialOptions;
-struct UUID;
+class UUID;
 
 // TODO: This class is very tightly coupled with serialize.h and serializeUni.h,
 //   to the point where serializeUni.h has a friend class so this can access a

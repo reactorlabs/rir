@@ -351,11 +351,11 @@ CompilerClient::Handle<T>* CompilerClient::request(
 CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Context& assumptions, const std::string& name, const pir::DebugOptions& debug) {
     CompilerClient::CompiledHandle* handle = nullptr;
 
-    auto codeWithPool = DispatchTable::unpack(BODY(what))->baseline()->body();
+    auto function = DispatchTable::unpack(BODY(what))->baseline();
     auto decompiled = Compiler::decompileClosure(what);
-    auto compilerClientOptions = SerialOptions::CompilerClient(PIR_CLIENT_INTERN, codeWithPool, decompiled);
+    auto compilerClientOptions = SerialOptions::CompilerClient(PIR_CLIENT_INTERN, function, decompiled);
     // TODO: Is this preserve necessary?
-    R_PreserveObject(codeWithPool->container());
+    R_PreserveObject(function->container());
 
     Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, "CompilerClient.cpp: pirCompile", what, [&]{
         auto innerHandle = request<CompiledResponseData>(
@@ -398,7 +398,13 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 baseline->serializeFullSignature(request);
                 auto feedback = baseline->typeFeedback();
                 serialize(feedback->container(), request, compilerClientOptions);
-                request.putInt(codeWithPool->extraPoolSize);
+                request.putInt(function->body()->extraPoolSize);
+                request.putInt(function->nargs());
+                for (unsigned defaultArgIdx = 0;
+                     defaultArgIdx < function->nargs(); defaultArgIdx++) {
+                    auto defaultArg = function->defaultArg(defaultArgIdx);
+                    request.putInt(defaultArg ? defaultArg->extraPoolSize : 0);
+                }
 #endif
 #if COMPILER_CLIENT_SEND_FULL
                 LOG_REQUEST("serialize(" << Print::dumpSexp(what) << ", SourceAndFeedback)");
@@ -444,7 +450,7 @@ CompilerClient::CompiledHandle* CompilerClient::pirCompile(SEXP what, const Cont
                 END_LOGGING_RESPONSE();
 
                 // TODO: Is the above preserve necessary?
-                R_ReleaseObject(codeWithPool->container());
+                R_ReleaseObject(function->container());
                 return CompilerClient::CompiledResponseData{responseWhat, std::move(pirPrint)};
             }
         );

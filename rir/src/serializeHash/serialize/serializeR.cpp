@@ -5,9 +5,9 @@
 #include "compiler/parameter.h"
 #include "interpreter/interp_incl.h"
 #include "runtime/DispatchTable.h"
-#include "runtime/ExtraPoolStub.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
+#include "runtime/PoolStub.h"
 #include "serialize.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
@@ -183,7 +183,7 @@ void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out) {
             !trySerializeR<LazyEnvironment>(s, refTable, out) &&
             !trySerializeR<PirTypeFeedback>(s, refTable, out) &&
             !trySerializeR<TypeFeedback>(s, refTable, out) &&
-            !trySerializeR<ExtraPoolStub>(s, refTable, out)) {
+            !trySerializeR<PoolStub>(s, refTable, out)) {
             std::cerr << "couldn't serialize EXTERNALSXP: ";
             Rf_PrintValue(s);
             assert(false);
@@ -214,8 +214,8 @@ SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
             return PirTypeFeedback::deserialize(deserializer)->container();
         case TYPEFEEDBACK_MAGIC:
             return TypeFeedback::deserialize(deserializer)->container();
-        case EXTRA_POOL_STUB_MAGIC:
-            return ExtraPoolStub::deserialize(deserializer)->container();
+        case POOL_STUB_MAGIC:
+            return PoolStub::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";
@@ -252,7 +252,7 @@ static void rStreamInBytes(R_inpstream_t stream, void* data, int length) {
 }
 
 static SerialOptions* newRSerialOptions(bool useHashes) {
-    return new SerialOptions{useHashes, useHashes, false, false, SerialOptions::ExtraPool()};
+    return new SerialOptions{useHashes, useHashes, false, false, SerialOptions::SourcePools()};
 }
 
 void serializeR(SEXP sexp, ByteBuffer& buffer, bool useHashes) {
