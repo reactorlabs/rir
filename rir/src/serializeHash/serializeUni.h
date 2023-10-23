@@ -163,6 +163,10 @@ class AbstractSerializer {
     /// there are a few differences
     void writeInline(SEXP s);
 
+    /// Returns UINT32_MAX by default (no read pos), but if overridden, allows
+    /// the serializer to track how many bytes get serialized between calls
+    virtual unsigned getWritePos() const { return UINT32_MAX; }
+
     friend class TraceSerializer;
   public:
     /// Whether we will write the data with the given flags. Can be used to
@@ -234,6 +238,10 @@ class AbstractDeserializer {
     /// The implementation is extremely similar to ReadItem in serialize.c, but
     /// there are a few differences
     SEXP readInline();
+
+    /// Returns UINT32_MAX by default (no read pos), but if overridden, allows
+    /// the serializer to track how many bytes get deserialized between calls
+    virtual unsigned getReadPos() const { return UINT32_MAX; }
 
     friend class TraceDeserializer;
   public:

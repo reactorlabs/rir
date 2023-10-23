@@ -40,10 +40,17 @@ class Tracer {
                     const SerialFlags& flags);
     void traceInt(char prefixChar, int data, const SerialFlags& flags);
     void traceSexp(char prefixChar, SEXP s, const SerialFlags& flags);
+    void traceSexp(char prefixChar, SEXP s, unsigned size,
+                   const SerialFlags& flags);
+    void traceSexpDone(char prefixChar, SEXP s, unsigned size,
+                       const SerialFlags& flags);
 };
 
 class TraceSerializer : public AbstractSerializer, private Tracer {
     AbstractSerializer& inner;
+
+    SerializedRefs* refs() override { return inner.refs(); }
+    unsigned getWritePos() const override { return inner.getWritePos(); }
 
     explicit TraceSerializer(AbstractSerializer& inner,
                              std::ostream& out = std::cerr);
@@ -57,11 +64,14 @@ class TraceSerializer : public AbstractSerializer, private Tracer {
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
     void writeInt(int data, const SerialFlags& flags) override;
     void write(SEXP s, const SerialFlags& flags) override;
-    SerializedRefs* refs() override;
 };
 
 class TraceDeserializer : public AbstractDeserializer, private Tracer {
     AbstractDeserializer& inner;
+
+    DeserializedRefs* refs() override { return inner.refs(); }
+    void addRef(SEXP sexp) override { inner.addRef(sexp); }
+    unsigned getReadPos() const override { return inner.getReadPos(); }
 
     explicit TraceDeserializer(AbstractDeserializer& inner,
                                std::ostream& out = std::cerr);
@@ -76,8 +86,6 @@ class TraceDeserializer : public AbstractDeserializer, private Tracer {
     void readBytes(void *data, size_t size, const SerialFlags& flags) override;
     int readInt(const SerialFlags& flags) override;
     SEXP read(const SerialFlags& flags) override;
-    DeserializedRefs* refs() override;
-    void addRef(SEXP sexp) override;
 };
 
 } // namespace rir

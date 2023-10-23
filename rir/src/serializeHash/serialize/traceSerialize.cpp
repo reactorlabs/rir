@@ -171,13 +171,36 @@ void Tracer::traceBytes(char prefixChar, const void* data, size_t size,
     out << std::endl;
 }
 
-void Tracer::traceSexp(char prefixChar, SEXP s, const SerialFlags& flags) {
+void Tracer::traceSexp(char prefixChar, SEXP s, unsigned size,
+                       const SerialFlags& flags) {
     if (!shouldTrace(flags)) {
         return;
     }
 
     tracePrefix(prefixChar, flags);
-    out << "SEXP  " << Print::dumpSexp(s, maxRawPrintLength) << std::endl;
+    out << "SEXP  " << Print::dumpSexp(s, maxRawPrintLength);
+    if (size != UINT32_MAX) {
+        out << " (" << size << " bytes)";
+    }
+    out << std::endl;
+}
+
+void Tracer::traceSexp(char prefixChar, SEXP s, const SerialFlags& flags) {
+    traceSexp(prefixChar, s, UINT32_MAX, flags);
+}
+
+void Tracer::traceSexpDone(char prefixChar, SEXP s, unsigned size,
+                           const SerialFlags& flags) {
+    if (!shouldTrace(flags)) {
+        return;
+    }
+
+    tracePrefix(prefixChar, flags);
+    out << "done  " << Print::dumpSexp(s, maxRawPrintLength);
+    if (size != UINT32_MAX) {
+        out << " (" << size << " bytes)";
+    }
+    out << std::endl;
 }
 
 void TraceSerializer::writeBytes(const void *data, size_t size, const SerialFlags& flags) {
@@ -200,11 +223,15 @@ void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
     }
 
     depth++;
+    auto startPos = getWritePos();
     inner.write(s, flags);
+    auto size = getWritePos() - startPos;
     depth--;
-}
 
-SerializedRefs* TraceSerializer::refs() { return inner.refs(); }
+    if (startPos != UINT32_MAX && willWrite(flags)) {
+        traceSexpDone('+', s, size, flags);
+    }
+}
 
 TraceDeserializer::TraceDeserializer(rir::AbstractDeserializer& inner,
                                      std::ostream& out)
@@ -232,17 +259,15 @@ int TraceDeserializer::readInt(const SerialFlags& flags) {
 
 SEXP TraceDeserializer::read(const SerialFlags& flags) {
     depth++;
+    auto startPos = getReadPos();
     SEXP s = inner.read(flags);
+    auto size = getReadPos() - startPos;
     depth--;
 
     if (willRead(flags)) {
-        traceSexp('-', s, flags);
+        traceSexp('-', s, startPos == UINT32_MAX ? UINT32_MAX : size, flags);
     }
     return s;
 }
-
-DeserializedRefs* TraceDeserializer::refs() { return inner.refs(); }
-
-void TraceDeserializer::addRef(SEXP sexp) { inner.addRef(sexp); }
 
 } // namespace rir

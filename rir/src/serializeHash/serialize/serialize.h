@@ -85,6 +85,7 @@ class Serializer : public AbstractSerializer {
     SerialOptions options;
 
     SerializedRefs* refs() override { return &refs_; }
+    unsigned getWritePos() const override { return buffer.getWritePos(); }
 
     Serializer(ByteBuffer& buffer, const SerialOptions& options)
         : buffer(buffer), refs_(), options(options) {
@@ -111,6 +112,7 @@ class Deserializer : public AbstractDeserializer {
     UUID retrieveHash;
 
     DeserializedRefs* refs() override { return &refs_; }
+    unsigned getReadPos() const override { return buffer.getReadPos(); }
 
     Deserializer(const ByteBuffer& buffer, const SerialOptions& options,
                  const UUID& retrieveHash = UUID())
