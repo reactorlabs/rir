@@ -181,17 +181,23 @@ void Tracer::traceSexp(char prefixChar, SEXP s, const SerialFlags& flags) {
 }
 
 void TraceSerializer::writeBytes(const void *data, size_t size, const SerialFlags& flags) {
-    traceBytes('+', data, size, flags);
+    if (willWrite(flags)) {
+        traceBytes('+', data, size, flags);
+    }
     inner.writeBytes(data, size, flags);
 }
 
 void TraceSerializer::writeInt(int data, const SerialFlags& flags) {
-    traceInt('+', data, flags);
+    if (willWrite(flags)) {
+        traceInt('+', data, flags);
+    }
     inner.writeInt(data, flags);
 }
 
 void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
-    traceSexp('+', s, flags);
+    if (willWrite(flags)) {
+        traceSexp('+', s, flags);
+    }
 
     depth++;
     inner.write(s, flags);
@@ -211,12 +217,16 @@ bool TraceDeserializer::willRead(const SerialFlags& flags) const {
 
 void TraceDeserializer::readBytes(void *data, size_t size, const SerialFlags& flags) {
     inner.readBytes(data, size, flags);
-    traceBytes('-', data, size, flags);
+    if (willRead(flags)) {
+        traceBytes('-', data, size, flags);
+    }
 }
 
 int TraceDeserializer::readInt(const SerialFlags& flags) {
     int data = inner.readInt(flags);
-    traceInt('-', data, flags);
+    if (willRead(flags)) {
+        traceInt('-', data, flags);
+    }
     return data;
 }
 
@@ -225,7 +235,9 @@ SEXP TraceDeserializer::read(const SerialFlags& flags) {
     SEXP s = inner.read(flags);
     depth--;
 
-    traceSexp('-', s, flags);
+    if (willRead(flags)) {
+        traceSexp('-', s, flags);
+    }
     return s;
 }
 
