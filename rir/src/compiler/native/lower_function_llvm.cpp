@@ -5265,7 +5265,8 @@ void LowerFunctionLLVM::compile() {
                     index = builder.CreateAdd(index, index1, "", true, true);
 
                     auto res0 =
-                        extract->vec()->type.isScalar()
+                        (extract->vec()->type.isScalar() &&
+                         !extract->vec()->type.maybe(RType::vec))
                             ? vector
                             : accessVector(vector, index, extract->vec()->type);
 
