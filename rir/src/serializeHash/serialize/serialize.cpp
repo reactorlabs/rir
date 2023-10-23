@@ -39,7 +39,9 @@ SerialOptions SerialOptions::CompilerServer(bool intern) {
 
 SerialOptions SerialOptions::CompilerClient(bool intern, Function* function,
                                             SEXP decompiledClosure) {
-    return SerialOptions{intern, intern, false, CLOENV(decompiledClosure), SerialOptions::SourcePools(function, decompiledClosure)};
+    // TODO: Fix closure stubs and then set
+    //  closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs
+    return SerialOptions{intern, intern, false, nullptr, SerialOptions::SourcePools(function, decompiledClosure)};
 }
 
 SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, nullptr, SerialOptions::SourcePools()};

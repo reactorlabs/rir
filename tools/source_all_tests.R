@@ -11,8 +11,9 @@ for (f in sort(list.files("../rir/tests", pattern = "*.[rR]$", full.names = TRUE
     tryCatch(source(f, echo=TRUE, local=quitEnv), error = function(e) {
         if (grepl("quit called", as.character(e), fixed = TRUE)) {
             print(paste("*** QUIT ", basename(f)))
+        } else {
+            print(paste("*** ERROR in ", basename(f)))
+            print(e)
         }
-        print(paste("*** ERROR in ", basename(f)))
-        print(e)
     })
 }
