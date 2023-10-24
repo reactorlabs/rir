@@ -186,6 +186,10 @@ void Tracer::traceSexp(char prefixChar, SEXP s, unsigned size,
 
     tracePrefix(prefixChar, flags);
     out << "SEXP  " << Print::dumpSexp(s, maxRawPrintLength);
+    auto len = Rf_xlength(s);
+    if (len != 0 && len != 1) {
+        out << " (" << Rf_type2char(TYPEOF(s)) << " len " << len << ")";
+    }
     if (size != UINT32_MAX) {
         out << " (" << size << " bytes)";
     }
