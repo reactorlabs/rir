@@ -39,9 +39,11 @@ SerialOptions SerialOptions::CompilerServer(bool intern) {
 
 SerialOptions SerialOptions::CompilerClient(bool intern, Function* function,
                                             SEXP decompiledClosure) {
-    // TODO: Fix closure stubs and then set
-    //  closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs
-    return SerialOptions{intern, intern, false, nullptr, SerialOptions::SourcePools(function, decompiledClosure)};
+    // TODO: Fix closure env stubs and then set
+    //  closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs.
+    //  Currently we set it iff the environment isn't a namespace
+    auto env = CLOENV(decompiledClosure);
+    return SerialOptions{intern, intern, false, globalsSet.count(env) || R_IsPackageEnv(env) || R_IsNamespaceEnv(env) ? nullptr : env, SerialOptions::SourcePools(function, decompiledClosure)};
 }
 
 SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, nullptr, SerialOptions::SourcePools()};
