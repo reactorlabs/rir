@@ -21,6 +21,10 @@ unsigned pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH =
     getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH") != nullptr ?
     strtol(getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH"), nullptr, 10) :
     48;
+size_t pir::Parameter::PIR_TRACE_SERIALIZATION_MIN_SIZE =
+    getenv("PIR_TRACE_SERIALIZATION_MIN_SIZE") != nullptr ?
+    strtol(getenv("PIR_TRACE_SERIALIZATION_MIN_SIZE"), nullptr, 10) :
+    0;
 std::vector<unsigned>* pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE = nullptr;
 
 static std::vector<unsigned>* getPirTraceSerializationExcludeFlags() {
@@ -48,6 +52,11 @@ bool Tracer::shouldTrace(const SerialFlags& flags) {
                         });
 }
 
+bool Tracer::shouldTrace(const SerialFlags& flags, size_t size) {
+    return shouldTrace(flags) &&
+           size >= pir::Parameter::PIR_TRACE_SERIALIZATION_MIN_SIZE;
+}
+
 void Tracer::tracePrefix(char prefixChar, const SerialFlags& flags) {
     assert(shouldTrace(flags));
 
@@ -62,6 +71,8 @@ void Tracer::tracePrefix(char prefixChar, const SerialFlags& flags) {
 
 bool Tracer::traceSpecial(const SerialFlags& flags, const void* data,
                           size_t size) {
+    assert(shouldTrace(flags, size));
+
     if (flags.id() == SerialFlags::String.id() ||
         flags.id() == SerialFlags::SymbolName.id()) {
         out << "str   ";
@@ -126,7 +137,7 @@ bool Tracer::traceSpecial(const SerialFlags& flags, const void* data,
 }
 
 void Tracer::traceInt(char prefixChar, int data, const SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
+    if (!shouldTrace(flags, sizeof(data))) {
         return;
     }
 
@@ -144,7 +155,7 @@ void Tracer::traceInt(char prefixChar, int data, const SerialFlags& flags) {
 
 void Tracer::traceBytes(char prefixChar, const void* data, size_t size,
                         const SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
+    if (!shouldTrace(flags, size)) {
         return;
     }
 
@@ -169,7 +180,7 @@ void Tracer::traceBytes(char prefixChar, const void* data, size_t size,
 
 void Tracer::traceSexp(char prefixChar, SEXP s, unsigned size,
                        const SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
+    if (!shouldTrace(flags, size == UINT32_MAX ? 0 : size)) {
         return;
     }
 
@@ -187,7 +198,7 @@ void Tracer::traceSexp(char prefixChar, SEXP s, const SerialFlags& flags) {
 
 void Tracer::traceSexpDone(char prefixChar, SEXP s, unsigned size,
                            const SerialFlags& flags) {
-    if (!shouldTrace(flags)) {
+    if (!shouldTrace(flags, size)) {
         return;
     }
 

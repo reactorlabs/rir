@@ -17,6 +17,7 @@ class Tracer {
     unsigned maxRawPrintLength;
 
     static bool shouldTrace(const SerialFlags& flags);
+    static bool shouldTrace(const SerialFlags& flags, size_t size);
     void tracePrefix(char prefixChar, const SerialFlags& flags);
     bool traceSpecial(const SerialFlags& flags, const void* data, size_t size);
 

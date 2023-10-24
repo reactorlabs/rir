@@ -65,6 +65,9 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_TRACE_SERIALIZATION_EXCLUDE=
         regex       exclude logging serialized data from matching flags. Ignored unless PIR_TRACE_SERIALIZATION is set
 
+    PIR_TRACE_SERIALIZATION_MIN_SIZE=
+        size_t      minimum length of individual pieces of data which will be logged. Ignored unless PIR_TRACE_SERIALIZATION is set
+
     PIR_LOG_INTERNING=
         1           log every new intern, reused intern, unintern, and other intern related events.
 
