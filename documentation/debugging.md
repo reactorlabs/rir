@@ -62,7 +62,7 @@ graphical representation of the code choose the GraphViz debug style.
     PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH=
         unsigned    max length we will print serialized raw data in the trace. Ignored unless PIR_TRACE_SERIALIZATION is set
 
-    PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS=
+    PIR_TRACE_SERIALIZATION_EXCLUDE=
         regex       exclude logging serialized data from matching flags. Ignored unless PIR_TRACE_SERIALIZATION is set
 
     PIR_LOG_INTERNING=

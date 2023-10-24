@@ -62,7 +62,7 @@ struct Parameter {
 
     static bool PIR_TRACE_SERIALIZATION;
     static unsigned PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH;
-    static std::vector<unsigned> PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS;
+    static std::vector<unsigned>* PIR_TRACE_SERIALIZATION_EXCLUDE;
     static bool PIR_MEASURE_SERIALIZATION;
     static bool PIR_LOG_INTERNING;
     static bool PIR_WARN_INTERNING;

@@ -76,6 +76,12 @@ struct SerialOptions {
     static SerialOptions SourceAndFeedback;
 };
 
+// TODO: Serializer/Deserializer and serialize/deserialize are tightly coupled.
+//  Serializer/Deserializer expect GC to be disabled which only
+//  serialize/deserialize do, they can also only be created in
+//  serialize/deserialize. Lastly, serialize/deserialize will use
+//  TracingSerializer/TracingDeserializer (subclasses) if tracing is enabled.
+
 class Serializer : public AbstractSerializer {
     /// Underlying byte buffer
     ByteBuffer& buffer;
@@ -86,14 +92,16 @@ class Serializer : public AbstractSerializer {
     SerialOptions options;
 
     SerializedRefs* refs() override { return &refs_; }
-    unsigned getWritePos() const override { return buffer.getWritePos(); }
 
+  protected:
     Serializer(ByteBuffer& buffer, const SerialOptions& options)
         : buffer(buffer), refs_(), options(options) {
         options.serializeCompatible(*this);
     }
     friend void serialize(SEXP sexp, ByteBuffer& buffer,
                           const SerialOptions& options);
+
+    unsigned getWritePos() const { return buffer.getWritePos(); }
   public:
     bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
@@ -113,8 +121,8 @@ class Deserializer : public AbstractDeserializer {
     UUID retrieveHash;
 
     DeserializedRefs* refs() override { return &refs_; }
-    unsigned getReadPos() const override { return buffer.getReadPos(); }
 
+  protected:
     Deserializer(const ByteBuffer& buffer, const SerialOptions& options,
                  const UUID& retrieveHash = UUID())
         : buffer(buffer), refs_(), options(options),
@@ -126,6 +134,8 @@ class Deserializer : public AbstractDeserializer {
     friend SEXP deserialize(const ByteBuffer& sexpBuffer,
                             const SerialOptions& options,
                             const UUID& retrieveHash);
+
+    unsigned getReadPos() const { return buffer.getReadPos(); }
   public:
     bool willRead(const SerialFlags& flags) const override;
     void readBytes(void *data, size_t size, const SerialFlags& flags) override;

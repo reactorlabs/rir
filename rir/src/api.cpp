@@ -21,6 +21,7 @@
 #include "runtime/DispatchTable.h"
 #include "runtime/log/printPrettyGraphFromEnv.h"
 #include "serializeHash/hash/UUIDPool.h"
+#include "serializeHash/serialize/traceSerialize.h"
 #include "utils/ByteBuffer.h"
 #include "utils/measuring.h"
 
@@ -663,6 +664,12 @@ REXPORT SEXP initializeUUIDPool() {
 
 REXPORT SEXP initializePrintPrettyGraphFromEnv() {
     rir::initializePrintPrettyGraphFromEnv();
+    R_Visible = (Rboolean)false;
+    return R_NilValue;
+}
+
+REXPORT SEXP initPirTraceSerializationExcludeFlags() {
+    rir::initPirTraceSerializationExcludeFlags();
     R_Visible = (Rboolean)false;
     return R_NilValue;
 }

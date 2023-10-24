@@ -14,19 +14,6 @@
 
 namespace rir {
 
-static std::vector<unsigned> getPirTraceSerializationExcludeFlags() {
-    std::vector<unsigned> flags;
-    if (getenv("PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS") != nullptr) {
-        std::string excludeFlags = getenv("PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS");
-        std::stringstream ss(excludeFlags);
-        std::string flag;
-        while (std::getline(ss, flag, ',')) {
-            flags.push_back(SerialFlags::parse(flag).id());
-        }
-    }
-    return flags;
-}
-
 bool pir::Parameter::PIR_TRACE_SERIALIZATION =
     getenv("PIR_TRACE_SERIALIZATION") != nullptr &&
     strtol(getenv("PIR_TRACE_SERIALIZATION"), nullptr, 10);
@@ -34,19 +21,28 @@ unsigned pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH =
     getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH") != nullptr ?
     strtol(getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH"), nullptr, 10) :
     48;
-std::vector<unsigned> pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS = getPirTraceSerializationExcludeFlags();
+std::vector<unsigned>* pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE = nullptr;
 
-TraceSerializer::TraceSerializer(rir::AbstractSerializer& inner,
-                                 std::ostream& out)
-    : TraceSerializer(inner, out,pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH) {}
+static std::vector<unsigned>* getPirTraceSerializationExcludeFlags() {
+    auto flags = new std::vector<unsigned>();
+    if (getenv("PIR_TRACE_SERIALIZATION_EXCLUDE") != nullptr) {
+        std::string flagsStr = getenv("PIR_TRACE_SERIALIZATION_EXCLUDE");
+        std::stringstream ss(flagsStr);
+        std::string flag;
+        while (std::getline(ss, flag, ',')) {
+            flags->push_back(SerialFlags::parse(flag).id());
+        }
+    }
+    return flags;
+}
 
-bool TraceSerializer::willWrite(const SerialFlags& flags) const {
-    return inner.willWrite(flags);
+void initPirTraceSerializationExcludeFlags() {
+    pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE = getPirTraceSerializationExcludeFlags();
 }
 
 bool Tracer::shouldTrace(const SerialFlags& flags) {
-    return std::none_of(pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS.begin(),
-                        pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE_FLAGS.end(),
+    return std::none_of(pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE->begin(),
+                        pir::Parameter::PIR_TRACE_SERIALIZATION_EXCLUDE->end(),
                         [&flags](unsigned excludeFlagId) {
                             return flags.id() == excludeFlagId;
                         });
@@ -203,18 +199,24 @@ void Tracer::traceSexpDone(char prefixChar, SEXP s, unsigned size,
     out << std::endl;
 }
 
+TraceSerializer::TraceSerializer(ByteBuffer& buffer,
+                                 const rir::SerialOptions& options,
+                                 std::ostream& out)
+    : TraceSerializer(buffer, options, out,
+                      pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH) {}
+
 void TraceSerializer::writeBytes(const void *data, size_t size, const SerialFlags& flags) {
     if (willWrite(flags)) {
         traceBytes('+', data, size, flags);
     }
-    inner.writeBytes(data, size, flags);
+    Serializer::writeBytes(data, size, flags);
 }
 
 void TraceSerializer::writeInt(int data, const SerialFlags& flags) {
     if (willWrite(flags)) {
         traceInt('+', data, flags);
     }
-    inner.writeInt(data, flags);
+    Serializer::writeInt(data, flags);
 }
 
 void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
@@ -224,7 +226,7 @@ void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
 
     depth++;
     auto startPos = getWritePos();
-    inner.write(s, flags);
+    Serializer::write(s, flags);
     auto size = getWritePos() - startPos;
     depth--;
 
@@ -233,24 +235,23 @@ void TraceSerializer::write(SEXP s, const SerialFlags& flags) {
     }
 }
 
-TraceDeserializer::TraceDeserializer(rir::AbstractDeserializer& inner,
+TraceDeserializer::TraceDeserializer(const ByteBuffer& buffer,
+                                     const rir::SerialOptions& options,
+                                     const rir::UUID& retrieveHash,
                                      std::ostream& out)
-    : TraceDeserializer(inner, out,pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH) {}
+    : TraceDeserializer(buffer, options, retrieveHash, out,
+                        pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH) {}
 
-
-bool TraceDeserializer::willRead(const SerialFlags& flags) const {
-    return inner.willRead(flags);
-}
 
 void TraceDeserializer::readBytes(void *data, size_t size, const SerialFlags& flags) {
-    inner.readBytes(data, size, flags);
+    Deserializer::readBytes(data, size, flags);
     if (willRead(flags)) {
         traceBytes('-', data, size, flags);
     }
 }
 
 int TraceDeserializer::readInt(const SerialFlags& flags) {
-    int data = inner.readInt(flags);
+    int data = Deserializer::readInt(flags);
     if (willRead(flags)) {
         traceInt('-', data, flags);
     }
@@ -260,7 +261,7 @@ int TraceDeserializer::readInt(const SerialFlags& flags) {
 SEXP TraceDeserializer::read(const SerialFlags& flags) {
     depth++;
     auto startPos = getReadPos();
-    SEXP s = inner.read(flags);
+    SEXP s = Deserializer::read(flags);
     auto size = getReadPos() - startPos;
     depth--;
 

@@ -413,7 +413,18 @@ std::string Print::dumpSexp(SEXP s, size_t length) {
             auto unsafe = unsafeTags(s);
             if (unsafe.length())
                 ss << " |" << unsafe;
-            ss << " " << s << ">";
+            ss << " ";
+            if (R_IsPackageEnv(s) || R_IsNamespaceEnv(s)) {
+                ss << (R_IsPackageEnv(s) ? "pkg " : "ns ");
+                auto name = R_IsPackageEnv(s) ? R_PackageEnvName(s) : R_NamespaceEnvSpec(s);
+                if (name != R_NilValue) {
+                    assert(TYPEOF(name) == STRSXP);
+                    for (R_xlen_t i = 0; i < XLENGTH(name); i++) {
+                        ss << CHAR(STRING_ELT(name, i)) << " ";
+                    }
+                }
+            }
+            ss << s << ">";
         }
         break;
     }

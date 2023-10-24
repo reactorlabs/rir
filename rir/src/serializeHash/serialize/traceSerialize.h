@@ -4,23 +4,13 @@
 
 #pragma once
 
-#include "serializeHash/serializeUni.h"
+#include "serialize.h"
 #include <iostream>
 
 namespace rir {
 
 struct SerialOptions;
 class UUID;
-
-// TODO: This class is very tightly coupled with serialize.h and serializeUni.h,
-//   to the point where serializeUni.h has a friend class so this can access a
-//   protected member, and this has serialize and deserialize from serialize.h
-//   as friend functions. Currently this doesn't matter because everything is in
-//   the same module so extensibility isn't necessary, but may be something to
-//   look at in the future. (Serializer and Deserializer are also tightly
-//   coupled with serialize and deserialize, in that they can't be used
-//   standalone and the correct way to serialize/deserialize an SEXP at the
-//   surface is actually to call writeInline, which is a bit confusing)
 
 class Tracer {
     std::ostream& out;
@@ -46,46 +36,39 @@ class Tracer {
                        const SerialFlags& flags);
 };
 
-class TraceSerializer : public AbstractSerializer, private Tracer {
-    AbstractSerializer& inner;
-
-    SerializedRefs* refs() override { return inner.refs(); }
-    unsigned getWritePos() const override { return inner.getWritePos(); }
-
-    explicit TraceSerializer(AbstractSerializer& inner,
-                             std::ostream& out = std::cerr);
-    TraceSerializer(AbstractSerializer& inner, std::ostream& out,
-                    unsigned maxRawPrintLength)
-        : Tracer(out, maxRawPrintLength), inner(inner) {}
+class TraceSerializer : public Serializer, private Tracer {
+    TraceSerializer(ByteBuffer& buffer, const SerialOptions& options,
+                    std::ostream& out = std::cerr);
+    TraceSerializer(ByteBuffer& buffer, const SerialOptions& options,
+                    std::ostream& out, unsigned maxRawPrintLength)
+        : Serializer(buffer, options),
+          Tracer(out, maxRawPrintLength) {}
     friend void serialize(SEXP sexp, ByteBuffer& buffer,
                           const SerialOptions& options);
   public:
-    bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
     void writeInt(int data, const SerialFlags& flags) override;
     void write(SEXP s, const SerialFlags& flags) override;
 };
 
-class TraceDeserializer : public AbstractDeserializer, private Tracer {
-    AbstractDeserializer& inner;
-
-    DeserializedRefs* refs() override { return inner.refs(); }
-    void addRef(SEXP sexp) override { inner.addRef(sexp); }
-    unsigned getReadPos() const override { return inner.getReadPos(); }
-
-    explicit TraceDeserializer(AbstractDeserializer& inner,
-                               std::ostream& out = std::cerr);
-    TraceDeserializer(AbstractDeserializer& inner, std::ostream& out,
+class TraceDeserializer : public Deserializer, private Tracer {
+    TraceDeserializer(const ByteBuffer& buffer, const SerialOptions& options,
+                      const UUID& retrieveHash = UUID(),
+                      std::ostream& out = std::cerr);
+    TraceDeserializer(const ByteBuffer& buffer, const SerialOptions& options,
+                      const UUID& retrieveHash, std::ostream& out,
                       unsigned maxRawPrintLength)
-        : Tracer(out, maxRawPrintLength), inner(inner) {}
+        : Deserializer(buffer, options, retrieveHash),
+          Tracer(out, maxRawPrintLength) {}
     friend SEXP deserialize(const ByteBuffer& sexpBuffer,
                             const SerialOptions& options,
                             const UUID& retrieveHash);
   public:
-    bool willRead(const SerialFlags& flags) const override;
     void readBytes(void *data, size_t size, const SerialFlags& flags) override;
     int readInt(const SerialFlags& flags) override;
     SEXP read(const SerialFlags& flags) override;
 };
+
+void initPirTraceSerializationExcludeFlags();
 
 } // namespace rir

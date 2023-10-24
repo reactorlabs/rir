@@ -175,7 +175,7 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs &&
                TYPEOF(s) == ENVSXP && !globalsSet.count(s) &&
                !R_IsPackageEnv(s) && !R_IsNamespaceEnv(s)) {
-        std::cerr << "WARNING: pointerStubLocalEnvs isn't implemented, and "
+        std::cerr << "WARNING: local envs aren't correctly handled, and "
                   << "we're serializing a local env: " << Print::dumpSexp(s)
                   << std::endl;
     }
@@ -343,17 +343,17 @@ void Deserializer::addRef(SEXP sexp) {
 void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
     disableInterpreter([&]{
         disableGc([&] {
-            Serializer serializer(buffer, options);
             if (pir::Parameter::PIR_TRACE_SERIALIZATION) {
                 auto oldWritePos = buffer.getWritePos();
                 auto sexpPrint = Print::dumpSexp(sexp, 80);
                 std::cerr << "+ serialize " << sexpPrint << std::endl;
-                TraceSerializer traceSerializer(serializer);
+                TraceSerializer traceSerializer(buffer, options);
                 traceSerializer.writeInline(sexp);
                 std::cerr << "+ serialized "
                           << buffer.getWritePos() - oldWritePos << " bytes, "
                           << sexpPrint << std::endl;
             } else {
+                Serializer serializer(buffer, options);
                 serializer.writeInline(sexp);
             }
         });
@@ -369,20 +369,23 @@ SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
     SEXP result;
     disableInterpreter([&]{
         disableGc([&] {
-            Deserializer deserializer(buffer, options, retrieveHash);
             if (pir::Parameter::PIR_TRACE_SERIALIZATION) {
                 auto oldReadPos = buffer.getReadPos();
                 std::cerr << "- deserialize" << std::endl;
-                TraceDeserializer traceDeserializer(deserializer);
+                TraceDeserializer traceDeserializer(buffer, options, retrieveHash);
                 result = traceDeserializer.readInline();
                 std::cerr << "- deserialized "
                           << buffer.getReadPos() - oldReadPos << " bytes, "
                           << Print::dumpSexp(result, 80) << std::endl;
+
+                assert(!traceDeserializer.retrieveHash && "retrieve hash not filled");
             } else {
+                Deserializer deserializer(buffer, options, retrieveHash);
                 result = deserializer.readInline();
+
+                assert(!deserializer.retrieveHash && "retrieve hash not filled");
             }
 
-            assert(!deserializer.retrieveHash && "retrieve hash not filled");
             assert((!retrieveHash || UUIDPool::getHash(result) == retrieveHash) &&
                    "deserialized SEXP not given retrieve hash");
         });
