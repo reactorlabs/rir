@@ -20,7 +20,7 @@ bool pir::Parameter::PIR_TRACE_SERIALIZATION =
 unsigned pir::Parameter::PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH =
     getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH") != nullptr ?
     strtol(getenv("PIR_TRACE_SERIALIZATION_MAX_RAW_PRINT_LENGTH"), nullptr, 10) :
-    48;
+    64;
 size_t pir::Parameter::PIR_TRACE_SERIALIZATION_MIN_SIZE =
     getenv("PIR_TRACE_SERIALIZATION_MIN_SIZE") != nullptr ?
     strtol(getenv("PIR_TRACE_SERIALIZATION_MIN_SIZE"), nullptr, 10) :

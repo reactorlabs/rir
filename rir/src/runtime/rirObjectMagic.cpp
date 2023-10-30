@@ -9,6 +9,7 @@
 #include "LazyArglist.h"
 #include "LazyEnvironment.h"
 #include "PoolStub.h"
+#include "ProxyEnv.h"
 #include "RirRuntimeObject.h"
 
 namespace rir {
@@ -33,6 +34,8 @@ const char* rirObjectClassName(unsigned magic) {
             return "TypeFeedback";
         case POOL_STUB_MAGIC:
             return "PoolStub";
+        case PROXY_ENV_MAGIC:
+            return "ProxyEnv";
         case GENERIC_DISPATCH_TABLE_MAGIC:
             return "GenericDispatchTable";
         default:

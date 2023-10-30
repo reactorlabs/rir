@@ -11,6 +11,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/hash/hashRoot_getConnected_common.h"
 #include "utils/Pool.h"
@@ -40,7 +41,8 @@ static inline void addConnectedRir(SEXP sexp,
         !tryAddConnected<LazyEnvironment>(sexp, collector) &&
         !tryAddConnected<PirTypeFeedback>(sexp, collector) &&
         !tryAddConnected<TypeFeedback>(sexp, collector) &&
-        !tryAddConnected<PoolStub>(sexp, collector)) {
+        !tryAddConnected<PoolStub>(sexp, collector) &&
+        !tryAddConnected<ProxyEnv>(sexp, collector)) {
         std::cerr << "couldn't add connected in EXTERNALSXP: ";
         Rf_PrintValue(sexp);
         assert(false);

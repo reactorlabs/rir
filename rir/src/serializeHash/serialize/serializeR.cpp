@@ -8,6 +8,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "serialize.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "utils/measuring.h"
@@ -183,7 +184,8 @@ void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out) {
             !trySerializeR<LazyEnvironment>(s, refTable, out) &&
             !trySerializeR<PirTypeFeedback>(s, refTable, out) &&
             !trySerializeR<TypeFeedback>(s, refTable, out) &&
-            !trySerializeR<PoolStub>(s, refTable, out)) {
+            !trySerializeR<PoolStub>(s, refTable, out) &&
+            !trySerializeR<ProxyEnv>(s, refTable, out)) {
             std::cerr << "couldn't serialize EXTERNALSXP: ";
             Rf_PrintValue(s);
             assert(false);
@@ -216,6 +218,8 @@ SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
             return TypeFeedback::deserialize(deserializer)->container();
         case POOL_STUB_MAGIC:
             return PoolStub::deserialize(deserializer)->container();
+        case PROXY_ENV_MAGIC:
+            return ProxyEnv::deserialize(deserializer)->container();
         default:
             std::cerr << "unhandled RIR object magic: 0x" << std::hex << magic
                       << "\n";

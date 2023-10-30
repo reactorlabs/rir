@@ -11,6 +11,7 @@
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "runtime/log/printPrettyGraphFromEnv.h"
 #include "runtime/log/printRirObject.h"
 #include "runtime/rirObjectMagic.h"
@@ -62,7 +63,8 @@ bool UUIDPool::internable(SEXP sexp) {
     return TYPEOF(sexp) == EXTERNALSXP &&
            !TypeFeedback::check(sexp) &&
            !ArglistOrder::check(sexp) &&
-           !PoolStub::check(sexp);
+           !PoolStub::check(sexp) &&
+           !ProxyEnv::check(sexp);
 }
 
 #ifdef DO_INTERN

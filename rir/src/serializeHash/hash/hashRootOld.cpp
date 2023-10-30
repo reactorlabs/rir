@@ -12,6 +12,7 @@
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/hash/hashAst.h"
 #include "serializeHash/hash/hashRoot_getConnected_common.h"
@@ -118,7 +119,8 @@ static inline void hashRir(SEXP sexp, HasherOld& hasher) {
             !tryHash<LazyEnvironment>(sexp, hasher) &&
             !tryHash<PirTypeFeedback>(sexp, hasher) &&
             !tryHash<TypeFeedback>(sexp, hasher) &&
-            !tryHash<PoolStub>(sexp, hasher)) {
+            !tryHash<PoolStub>(sexp, hasher) &&
+            !tryHash<ProxyEnv>(sexp, hasher)) {
             std::cerr << "couldn't hash EXTERNALSXP: ";
             Rf_PrintValue(sexp);
             assert(false);

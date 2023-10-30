@@ -22,6 +22,30 @@ SEXP PoolStub::create(const UUID& sourceHash, unsigned defaultArgIdx,
     return store;
 }
 
+void PoolStub::pad(const UUID& sourceHash, size_t sourceBodyPoolSize,
+                   const std::vector<size_t>& sourceDefaultArgPoolSizes,
+                   Function* targetFunction) {
+    auto targetBody = targetFunction->body();
+    for (auto i = (size_t)targetBody->extraPoolSize; i < sourceBodyPoolSize;
+         i++) {
+        targetBody->addExtraPoolEntry(create(sourceHash, UINT32_MAX, i));
+    }
+    for (unsigned defaultArgIdx = 0;
+         defaultArgIdx < sourceDefaultArgPoolSizes.size(); defaultArgIdx++) {
+        auto sourceDefaultArgPoolSize = sourceDefaultArgPoolSizes[defaultArgIdx];
+        if (sourceDefaultArgPoolSize > 0) {
+            auto targetDefaultArg = targetFunction->defaultArg(defaultArgIdx);
+            assert(targetDefaultArg &&
+                   "target default arg is NULL but source default arg has pool "
+                   "entries");
+            for (auto i = (size_t)targetDefaultArg->extraPoolSize;
+                 i < sourceDefaultArgPoolSize; i++) {
+                targetDefaultArg->addExtraPoolEntry(create(sourceHash, defaultArgIdx, i));
+            }
+        }
+    }
+}
+
 void PoolStub::print(std::ostream& out) const {
     out << "(" << sourceHash << ", " << index << ")";
 }
@@ -49,30 +73,6 @@ void PoolStub::hash(HasherOld& hasher) const {
 
 void PoolStub::addConnected(__attribute__((unused)) ConnectedCollectorOld& collector) const {
     // Nothing to add
-}
-
-void PoolStub::pad(const UUID& sourceHash, size_t sourceBodyPoolSize,
-                   const std::vector<size_t>& sourceDefaultArgPoolSizes,
-                   Function* targetFunction) {
-    auto targetBody = targetFunction->body();
-    for (auto i = (size_t)targetBody->extraPoolSize; i < sourceBodyPoolSize;
-         i++) {
-        targetBody->addExtraPoolEntry(create(sourceHash, UINT32_MAX, i));
-    }
-    for (unsigned defaultArgIdx = 0;
-         defaultArgIdx < sourceDefaultArgPoolSizes.size(); defaultArgIdx++) {
-        auto sourceDefaultArgPoolSize = sourceDefaultArgPoolSizes[defaultArgIdx];
-        if (sourceDefaultArgPoolSize > 0) {
-            auto targetDefaultArg = targetFunction->defaultArg(defaultArgIdx);
-            assert(targetDefaultArg &&
-                   "target default arg is NULL but source default arg has pool "
-                   "entries");
-            for (auto i = (size_t)targetDefaultArg->extraPoolSize;
-                 i < sourceDefaultArgPoolSize; i++) {
-                targetDefaultArg->addExtraPoolEntry(create(sourceHash, defaultArgIdx, i));
-            }
-        }
-    }
 }
 
 } // namespace rir

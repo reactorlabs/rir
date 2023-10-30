@@ -90,8 +90,7 @@
     V(remove, "remove")                                                        \
     V(rm, "rm")                                                                \
     V(Recall, "Recall")                                                        \
-    V(expandDotsTrigger, "\x02expandDotsTrigger\x03")                          \
-    V(closureEnvStub, "\x02closureEnvStub\x03")
+    V(expandDotsTrigger, "\x02expandDotsTrigger\x03")
 /*
  * The expandDotsTrigger symbol uses unprintable characters in hopes the users
  * won't create it from R (however, they still can, eg. `as.name("\x1a")`).

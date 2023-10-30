@@ -9,6 +9,7 @@
 #include "runtime/LazyEnvironment.h"
 #include "runtime/PirTypeFeedback.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "runtime/RirRuntimeObject.h"
 
 #include <iomanip>
@@ -343,6 +344,9 @@ std::string Print::dumpEXTERNALSXP(SEXP s, size_t length) {
         ss << "(rir::TypeFeedback*)" << p;
     } else if (auto p = PoolStub::check(s)) {
         ss << "(rir::PoolStub*)";
+        p->print(ss);
+    } else if (auto p = ProxyEnv::check(s)) {
+        ss << "(rir::ProxyEnv*)";
         p->print(ss);
     } else {
         assert(false && "missing RirRuntimeObject printing");

@@ -6,6 +6,7 @@
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "runtime/PoolStub.h"
+#include "runtime/ProxyEnv.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
@@ -39,9 +40,7 @@ SerialOptions SerialOptions::CompilerServer(bool intern) {
 
 SerialOptions SerialOptions::CompilerClient(bool intern, Function* function,
                                             SEXP decompiledClosure) {
-    // TODO: Fix closure env stubs and then set
-    //  closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs.
-    return SerialOptions{intern, intern, false, nullptr, SerialOptions::SourcePools(function, decompiledClosure)};
+    return SerialOptions{intern, intern, false, CLOENV(decompiledClosure), SerialOptions::SourcePools(function, decompiledClosure)};
 }
 
 SerialOptions SerialOptions::CompilerClientRetrieve{false, true, false, nullptr, SerialOptions::SourcePools()};
@@ -170,11 +169,10 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     // If this is a stubbed pool entry, serialize the stub instead
     if (options.sourcePools.isEntry(s)) {
         s = options.sourcePools.stub(s);
-    } else if (s == options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs) {
-        s = symbol::closureEnvStub;
-    } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs &&
-               TYPEOF(s) == ENVSXP && !globalsSet.count(s) &&
-               !R_IsPackageEnv(s) && !R_IsNamespaceEnv(s)) {
+    } else if (s == options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies) {
+        s = ProxyEnv::create(options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
+    } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
+               TYPEOF(s) == ENVSXP && !isGlobalEnv(s)) {
         std::cerr << "WARNING: local envs aren't correctly handled, and "
                   << "we're serializing a local env: " << Print::dumpSexp(s)
                   << std::endl;
@@ -320,9 +318,10 @@ SEXP Deserializer::read(const SerialFlags& flags) {
 #endif
 
     // If this is a stub, deserialize the stubbed value instead
-    if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs &&
-        result == symbol::closureEnvStub) {
-        result = options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs;
+    if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
+        ProxyEnv::check(result)) {
+        result = ProxyEnv::unpack(result)->materialize(
+            options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
     } else if (options.sourcePools.isStub(result)) {
         result = options.sourcePools.entry(result);
     }
@@ -345,7 +344,7 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
         disableGc([&] {
             if (pir::Parameter::PIR_TRACE_SERIALIZATION) {
                 auto oldWritePos = buffer.getWritePos();
-                auto sexpPrint = Print::dumpSexp(sexp, 80);
+                auto sexpPrint = Print::dumpSexp(sexp, 120);
                 std::cerr << "+ serialize " << sexpPrint << std::endl;
                 TraceSerializer traceSerializer(buffer, options);
                 traceSerializer.writeInline(sexp);
@@ -376,7 +375,7 @@ SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
                 result = traceDeserializer.readInline();
                 std::cerr << "- deserialized "
                           << buffer.getReadPos() - oldReadPos << " bytes, "
-                          << Print::dumpSexp(result, 80) << std::endl;
+                          << Print::dumpSexp(result, 120) << std::endl;
 
                 assert(!traceDeserializer.retrieveHash && "retrieve hash not filled");
             } else {

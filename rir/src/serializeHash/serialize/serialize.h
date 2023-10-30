@@ -12,7 +12,7 @@
 
 namespace rir {
 
-class Function;
+struct Function;
 
 /// Controls what data is serialized / deserialized and what format some of it
 /// uses. The same options data is serialized with, it must also be deserialized
@@ -45,7 +45,7 @@ struct SerialOptions {
     bool onlySourceAndFeedback;
     /// If set, will serialize this as a closure environment stub, and warn when
     /// other local environments are serialized
-    SEXP closureEnvAndIfSetWeTryToSerializeLocalEnvsAsStubs;
+    SEXP closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies;
     /// If nonempty, we serialize the corresponding SEXPs with stubs from these
     /// pools
     SourcePools sourcePools;

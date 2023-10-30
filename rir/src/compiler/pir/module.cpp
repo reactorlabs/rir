@@ -1,10 +1,10 @@
 #include "module.h"
 
-#include "R/destubCloenv.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerClient.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "pir_impl.h"
+#include "runtime/ProxyEnv.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 #include "values.h"
@@ -34,10 +34,10 @@ Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
     // For Identification we use the real env, but for optimization we only use
     // the real environment if this is not an inner function. When it is an
     // inner function, then the env is expected to change over time.
-    auto id = Idx(f, getEnv(destubCloenv(closure)));
+    auto id = Idx(f, getEnv(CLOENV(closure)));
     auto env = f->flags().contains(Function::InnerFunction)
                    ? Env::notClosed()
-                   : getEnv(destubCloenv(closure));
+                   : getEnv(CLOENV(closure));
     if (!closures.count(id))
         closures[id] = new Closure(name, closure, f, env, userContext);
     // If the compiler server is running sometimes this false.
@@ -71,8 +71,8 @@ Env* Module::getEnv(SEXP rho) {
     if (environments.count(rho))
         return environments.at(rho);
 
-    assert(TYPEOF(rho) == ENVSXP);
-    Env* parent = getEnv(ENCLOS(rho));
+    assert(TYPEOF(rho) == ENVSXP || ProxyEnv::check(rho));
+    Env* parent = getEnv(ProxyEnv::check(rho) ? ProxyEnv::unpack(rho)->parent() : ENCLOS(rho));
     Env* env = new Env(rho, parent);
     environments[rho] = env;
     return env;
