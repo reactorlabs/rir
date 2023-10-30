@@ -6,15 +6,17 @@
 
 namespace rir {
 
-void FrameInfo::deserialize(const ByteBuffer& buf) {
-    code = Code::unpack(UUIDPool::readItem(buf, false));
+void FrameInfo::deserialize(const ByteBuffer& buf,
+                            const SerialOptions& serialOpts) {
+    code = Code::unpack(rir::deserialize(buf, serialOpts));
     pc = code->code() + buf.getInt();
     stackSize = (size_t)buf.getInt();
     inPromise = (bool)buf.getInt();
 }
 
-void FrameInfo::serialize(ByteBuffer& buf) const {
-    UUIDPool::writeItem(code->container(), false, buf, false);
+void FrameInfo::serialize(ByteBuffer& buf,
+                          const SerialOptions& serialOpts) const {
+    rir::serialize(code->container(), buf, serialOpts);
     buf.putInt((uint32_t)(pc - code->code()));
     buf.putInt((uint32_t)stackSize);
     buf.putInt((uint32_t)inPromise);
@@ -31,7 +33,8 @@ SEXP DeoptMetadata::container() const {
     return result;
 }
 
-DeoptMetadata* DeoptMetadata::deserialize(const ByteBuffer& buf) {
+DeoptMetadata* DeoptMetadata::deserialize(const ByteBuffer& buf,
+                                          const SerialOptions& serialOpts) {
     auto numFrames = (size_t)buf.getInt();
     auto size = sizeof(DeoptMetadata) + numFrames * sizeof(FrameInfo);
     SEXP store = Rf_allocVector(RAWSXP, (int)size);
@@ -39,17 +42,18 @@ DeoptMetadata* DeoptMetadata::deserialize(const ByteBuffer& buf) {
     auto m = new (DATAPTR(store)) DeoptMetadata;
     m->numFrames = numFrames;
     for (size_t i = 0; i < numFrames; ++i) {
-        m->frames[i].deserialize(buf);
+        m->frames[i].deserialize(buf, serialOpts);
         PROTECT(m->frames[i].code->container());
     }
     UNPROTECT(1 + m->numFrames);
     return m;
 }
 
-void DeoptMetadata::serialize(ByteBuffer& buf) const {
+void DeoptMetadata::serialize(ByteBuffer& buf,
+                              const SerialOptions& serialOpts) const {
     buf.putInt((uint32_t)numFrames);
     for (size_t i = 0; i < numFrames; ++i) {
-        frames[i].serialize(buf);
+        frames[i].serialize(buf, serialOpts);
     }
 }
 

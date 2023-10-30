@@ -15,6 +15,8 @@ namespace rir {
 
 #define DESERIALIZE(lhs, fun, flags) if (deserializer.willRead(flags)) lhs = deserializer.fun(flags)
 
+struct SerialOptions;
+
 /// Details about serialized children to 1) optimize and 2) filter what gets
 /// serialized and deserialized (e.g. when hashing, we leave out some data
 /// because we want the hash to be semi-consistent).
@@ -164,6 +166,8 @@ class AbstractSerializer {
     void writeInline(SEXP s);
 
   public:
+    /// Corresponding serial options for byte buffer serialization.
+    virtual const SerialOptions& serialOptions() const = 0;
     /// Whether we will write the data with the given flags. Can be used to
     /// optimize by removing null-op calls.
     virtual bool willWrite(const SerialFlags& flags) const = 0;
@@ -235,6 +239,8 @@ class AbstractDeserializer {
     SEXP readInline();
 
   public:
+    /// Corresponding serial options for byte buffer deserialization.
+    virtual const SerialOptions& serialOptions() const = 0;
     /// Whether we will write the data with the given flags. Otherwise we will
     /// set the data to 0/null. Can be used to optimize by removing null-op
     /// calls AND needed when the data isn't null by default.

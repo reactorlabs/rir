@@ -20,7 +20,12 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
     logger.title("Compiling continuation");
     pir::Compiler cmp(module, logger);
 
-    pir::Backend backend(module, logger, "continuation");
+    pir::Backend backend(module, logger, "continuation",
+                         // Right now, serial options aren't important here,
+                         // because OSR and serialization are completely
+                         // separate. So we could probably pass anything. What
+                         // would we pass if they were used? idk
+                         SerialOptions::DeepCopy);
 
     cmp.compileContinuation(
         closure, c->function(), &ctx,

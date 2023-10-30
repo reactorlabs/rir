@@ -8,9 +8,15 @@
 #include "hashAst.h"
 #include "hashRoot_getConnected_common.h"
 #include "runtime/LazyArglist.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
 
 namespace rir {
+
+SerialOptions& HasherUni::serialOptions() const {
+    // Doesn't matter what we return here, but we unfortunately need something
+    return SerialOptions::DeepCopy;
+}
 
 bool HasherUni::willWrite(const rir::SerialFlags& flags) const {
     return flags.contains(SerialFlag::Hashed);

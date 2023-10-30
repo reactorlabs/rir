@@ -16,8 +16,9 @@ namespace pir {
 
 class Backend {
   public:
-    Backend(Module* m, Log& logger, const std::string& name)
-        : module(m), jit(name), logger(logger) {}
+    Backend(Module* m, Log& logger, const std::string& name,
+            const SerialOptions& serialOpts)
+        : module(m), jit(name, serialOpts), logger(logger) {}
     ~Backend() { jit.finalize(); }
     Backend(const Backend&) = delete;
     Backend& operator=(const Backend&) = delete;

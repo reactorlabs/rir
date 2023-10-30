@@ -14,7 +14,7 @@
 
 namespace rir {
 
-class Function;
+struct Function;
 
 #define POOL_STUB_MAGIC 0xec17a101
 

@@ -10,6 +10,7 @@
 #include "compiler/pir/pir.h"
 #include "runtime/Code.h"
 #include "serializeHash/serialize/native/SerialRepr.h"
+#include "serializeHash/serialize/serialize.h"
 #include <llvm/IR/Instructions.h>
 
 #include "llvm/IR/DIBuilder.h"
@@ -71,6 +72,8 @@ class LowerFunctionLLVM {
     PirJitLLVM::DebugInfo* DI;
     llvm::DIBuilder* DIB;
 
+    SerialOptions serialOpts;
+
     Protect p_;
 
   public:
@@ -85,7 +88,7 @@ class LowerFunctionLLVM {
         const std::unordered_set<Instruction*>& needsLdVarForUpdate,
         PirJitLLVM::Declare declare, const PirJitLLVM::GetModule& getModule,
         const PirJitLLVM::GetFunction& getFunction, PirJitLLVM::DebugInfo* DI,
-        llvm::DIBuilder* DIB)
+        llvm::DIBuilder* DIB, const SerialOptions& serialOpts)
         : target(target), cls(cls), code(code), promMap(promMap),
           refcount(refcount), needsLdVarForUpdate(needsLdVarForUpdate),
           builder(PirJitLLVM::getContext()), MDB(PirJitLLVM::getContext()),
@@ -94,8 +97,8 @@ class LowerFunctionLLVM {
           branchAlwaysFalse(MDB.createBranchWeights(1, 100000000)),
           branchMostlyTrue(MDB.createBranchWeights(1000, 1)),
           branchMostlyFalse(MDB.createBranchWeights(1, 1000)),
-          getModule(getModule), getFunction(getFunction), DI(DI), DIB(DIB) {
-
+          getModule(getModule), getFunction(getFunction), DI(DI), DIB(DIB),
+          serialOpts(serialOpts) {
         fun = declare(code, name, t::nativeFunction);
 
         auto p = promMap.find(code);
@@ -142,9 +145,11 @@ class LowerFunctionLLVM {
         return convertToPointer(typeFeedback, t::i8, SerialRepr::TypeFeedback{typeFeedback}, constant);
     }
 
-    static llvm::Value* llvmSrcIdx(llvm::Module& mod, Immediate i);
+    static llvm::Value* llvmSrcIdx(llvm::Module& mod, Immediate i,
+                                   const SerialOptions& serialOpts);
     llvm::Value* llvmSrcIdx(Immediate i);
-    static llvm::Value* llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i);
+    static llvm::Value* llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i,
+                                    const SerialOptions& serialOpts);
     llvm::Value* llvmPoolIdx(BC::PoolIdx i);
     static llvm::Value* llvmNames(llvm::Module& mod,
                                   const std::vector<BC::PoolIdx>& names);

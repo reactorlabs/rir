@@ -89,13 +89,13 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(llvm::Module& mod,
                                                  bool constant,
                                                  llvm::MDNode* reprMeta) {
     assert(what);
-    char name[21];
-    sprintf(name, "ept_%lx", (uintptr_t)what);
-    return mod.getOrInsertGlobal(name, ty, [&]() {
+    char llvmName[21];
+    sprintf(llvmName, "ept_%lx", (uintptr_t)what);
+    return mod.getOrInsertGlobal(llvmName, ty, [&]() {
         auto var = new llvm::GlobalVariable(
             mod, ty, constant,
             llvm::GlobalValue::LinkageTypes::AvailableExternallyLinkage,
-            nullptr, name, nullptr,
+            nullptr, llvmName, nullptr,
             llvm::GlobalValue::ThreadLocalMode::NotThreadLocal, 0, true);
         if (reprMeta) {
             var->setMetadata(SerialRepr::POINTER_METADATA_NAME, reprMeta);
@@ -110,7 +110,7 @@ llvm::Value* LowerFunctionLLVM::convertToPointer(const void* what,
                                                  bool constant) {
     return convertToPointer(getModule(), what, ty, constant,
                             Parameter::SERIALIZE_LLVM
-                                ? repr.metadata(getModule().getContext())
+                                ? repr.metadata(getModule().getContext(), serialOpts)
                                 : nullptr);
 }
 
@@ -118,13 +118,13 @@ llvm::FunctionCallee
 LowerFunctionLLVM::convertToFunction(llvm::Module& mod, const void* what,
                                      llvm::FunctionType* ty, int builtinId) {
     assert(what);
-    char name[21];
-    sprintf(name, "efn_%lx", (uintptr_t)what);
-    auto llvmFn = mod.getOrInsertFunction(name, ty);
+    char llvmName[21];
+    sprintf(llvmName, "efn_%lx", (uintptr_t)what);
+    auto llvmFn = mod.getOrInsertFunction(llvmName, ty);
     if (Parameter::SERIALIZE_LLVM) {
         mod.getOrInsertNamedMetadata(SerialRepr::FUNCTION_METADATA_NAME)
             ->addOperand(SerialRepr::functionMetadata(
-                llvmFn.getCallee()->getContext(), name, builtinId));
+                llvmFn.getCallee()->getContext(), llvmName, builtinId));
     }
     return llvmFn;
 }
@@ -135,19 +135,21 @@ LowerFunctionLLVM::convertToFunction(const void* what, llvm::FunctionType* ty,
     return convertToFunction(getModule(), what, ty, builtinId);
 }
 
-llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i) {
-    char name[13];
-    sprintf(name, "src_%08x", i);
-    return mod.getOrInsertGlobal(name, t::i32, [&]() {
+llvm::Value* LowerFunctionLLVM::llvmSrcIdx(llvm::Module& mod, Immediate i,
+                                           const SerialOptions& serialOpts) {
+    char llvmName[13];
+    sprintf(llvmName, "src_%08x", i);
+    return mod.getOrInsertGlobal(llvmName, t::i32, [&]() {
         auto value =
             new llvm::GlobalVariable(mod, t::i32, true,
                                      llvm::GlobalValue::AvailableExternallyLinkage,
-                                     nullptr, name, nullptr,
+                                     nullptr, llvmName, nullptr,
                                      llvm::GlobalValue::ThreadLocalMode::NotThreadLocal,
                                      0, true);
         if (Parameter::SERIALIZE_LLVM) {
             value->setMetadata(SerialRepr::SRC_IDX_METADATA_NAME,
-                               SerialRepr::srcIdxMetadata(mod.getContext(), i));
+                               SerialRepr::srcIdxMetadata(mod.getContext(), i,
+                                                          serialOpts));
         }
         return value;
     });
@@ -158,25 +160,27 @@ llvm::Value* LowerFunctionLLVM::llvmSrcIdx(Immediate i) {
         // Assuming this gets optimized out. Otherwise we can use regular
         // ConstantInt like before, but we need to find a way to effectively add
         // metadata to each src-idx ConstantInt.
-        return builder.CreateLoad(llvmSrcIdx(getModule(), i));
+        return builder.CreateLoad(llvmSrcIdx(getModule(), i, serialOpts));
     } else {
         return c(i);
     }
 }
 
-llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i) {
-    char name[12];
-    sprintf(name, "cp_%08x", i);
-    return mod.getOrInsertGlobal(name, t::i32, [&]() {
+llvm::Value* LowerFunctionLLVM::llvmPoolIdx(llvm::Module& mod, BC::PoolIdx i,
+                                            const SerialOptions& serialOpts) {
+    char llvmName[12];
+    sprintf(llvmName, "cp_%08x", i);
+    return mod.getOrInsertGlobal(llvmName, t::i32, [&]() {
         auto value =
             new llvm::GlobalVariable(mod, t::i32, true,
                                      llvm::GlobalValue::AvailableExternallyLinkage,
-                                     nullptr, name, nullptr,
+                                     nullptr, llvmName, nullptr,
                                      llvm::GlobalValue::ThreadLocalMode::NotThreadLocal,
                                      0, true);
         if (Parameter::SERIALIZE_LLVM) {
             value->setMetadata(SerialRepr::POOL_IDX_METADATA_NAME,
-                               SerialRepr::poolIdxMetadata(mod.getContext(), i));
+                               SerialRepr::poolIdxMetadata(mod.getContext(), i,
+                                                           serialOpts));
         }
         return value;
     });
@@ -187,7 +191,7 @@ llvm::Value* LowerFunctionLLVM::llvmPoolIdx(BC::PoolIdx i) {
         // Assuming this gets optimized out. Otherwise we can use regular
         // ConstantInt like before, but we need to find a way to effectively add
         // metadata to each pool-idx ConstantInt.
-        return builder.CreateLoad(llvmPoolIdx(getModule(), i));
+        return builder.CreateLoad(llvmPoolIdx(getModule(), i, serialOpts));
     } else {
         return c(i);
     }

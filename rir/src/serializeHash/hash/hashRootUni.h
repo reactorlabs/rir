@@ -35,6 +35,7 @@ class HasherUni : AbstractSerializer {
     void doHashRoot(SEXP root);
     friend UUID hashRootUni(SEXP root);
   public:
+    SerialOptions& serialOptions() const override;
     bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
     void writeInt(int data, const SerialFlags& flags) override;

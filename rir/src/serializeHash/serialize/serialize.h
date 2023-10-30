@@ -56,6 +56,12 @@ struct SerialOptions {
     /// Don't serialize the extra pool, since we are only serializing to check
     /// compatibility and that isn't used
     void serializeCompatible(AbstractSerializer& serializer) const;
+    /// Don't serialize the extra pool, since we are only serializing to check
+    /// compatibility and that isn't used
+    static SerialOptions deserializeCompatible(const ByteBuffer& buffer);
+    /// Don't serialize the extra pool, since we are only serializing to check
+    /// compatibility and that isn't used
+    void serializeCompatible(ByteBuffer& buffer) const;
     /// Check equality of everything except the extra pool
     bool areCompatibleWith(const SerialOptions& other) const;
 
@@ -103,6 +109,7 @@ class Serializer : public AbstractSerializer {
 
     unsigned getWritePos() const { return buffer.getWritePos(); }
   public:
+    const SerialOptions& serialOptions() const override { return options; }
     bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
     void writeInt(int data, const SerialFlags& flags) override;
@@ -137,6 +144,7 @@ class Deserializer : public AbstractDeserializer {
 
     unsigned getReadPos() const { return buffer.getReadPos(); }
   public:
+    const SerialOptions& serialOptions() const override { return options; }
     bool willRead(const SerialFlags& flags) const override;
     void readBytes(void *data, size_t size, const SerialFlags& flags) override;
     int readInt(const SerialFlags& flags) override;

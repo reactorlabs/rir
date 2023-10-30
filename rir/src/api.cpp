@@ -10,6 +10,7 @@
 #include "compiler/backend.h"
 #include "compiler/compiler.h"
 #include "compiler/log/debug.h"
+#include "compiler/native/lower_function_llvm.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/closure.h"
 #include "compiler/test/PirCheck.h"
@@ -298,6 +299,14 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags) {
 SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 const pir::DebugOptions& debug,
                 std::string* closureVersionPirPrint) {
+    return pirCompile(what, assumptions, name, debug,
+                      closureVersionPirPrint, SerialOptions::DeepCopy);
+}
+
+SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
+                const pir::DebugOptions& debug,
+                std::string* closureVersionPirPrint,
+                const SerialOptions& serialOpts) {
     Protect p(what);
 
     if (!isValidClosureSEXP(what)) {
@@ -329,7 +338,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                 rir::Function* done = nullptr;
                 {
                     // Single Backend instance, gets destroyed at the end of this block to finalize the LLVM module so that we can eagerly compile the body
-                    pir::Backend backend(m, logger, name);
+                    pir::Backend backend(m, logger, name, serialOpts);
                     auto apply = [&](SEXP body, pir::ClosureVersion* c) {
                         auto fun = backend.getOrCompile(c);
                         p(fun->container());

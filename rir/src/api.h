@@ -9,6 +9,12 @@
 
 extern int R_ENABLE_JIT;
 
+namespace rir {
+
+struct SerialOptions;
+
+}; // namespace rir
+
 REXPORT SEXP rirInvocationCount(SEXP what);
 REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,
                                SEXP debugStyle);
@@ -19,6 +25,10 @@ REXPORT SEXP pirSetDebugFlags(SEXP debugFlags);
 SEXP pirCompile(SEXP closure, const rir::Context& assumptions,
                 const std::string& name, const rir::pir::DebugOptions& debug,
                 std::string* closureVersionPirPrint = nullptr);
+SEXP pirCompile(SEXP closure, const rir::Context& assumptions,
+                const std::string& name, const rir::pir::DebugOptions& debug,
+                std::string* closureVersionPirPrint,
+                const rir::SerialOptions& serialOpts);
 extern SEXP rirOptDefaultOpts(SEXP closure, const rir::Context&, SEXP name);
 extern SEXP rirOptDefaultOptsDryrun(SEXP closure, const rir::Context&,
                                     SEXP name);

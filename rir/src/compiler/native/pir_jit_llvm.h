@@ -10,6 +10,7 @@
 #include "compiler/pir/pir.h"
 #include "compiler/pir/promise.h"
 #include "compiler/util/visitor.h"
+#include "serializeHash/serialize/serialize.h"
 
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/DIBuilder.h"
@@ -26,6 +27,7 @@
 namespace rir {
 
 struct Code;
+struct SerialOptions;
 class SerialModule;
 
 namespace pir {
@@ -45,7 +47,7 @@ class PirJitLLVM {
   public:
     static std::unique_ptr<llvm::orc::LLJIT> JIT;
     static std::unordered_map<std::string, std::weak_ptr<SerialModule>> internedModules;
-    explicit PirJitLLVM(const std::string& name);
+    PirJitLLVM(const std::string& name, const SerialOptions& serialOpts);
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
     ~PirJitLLVM();
@@ -65,8 +67,9 @@ class PirJitLLVM {
     static llvm::LLVMContext& getContext();
 
   private:
-    static SerialModuleRef finishDeserializingModule(SerialModule&& module,
-                                                     rir::Code* outer);
+    static SerialModuleRef finishDeserializingModule(
+        SerialModule&& module, rir::Code* outer,
+        const SerialOptions& overrideSerialOpts);
   public:
     /// Deserialize and the module. Then if interned, return the interned
     /// version, otherwise intern AND add to LLJIT.
@@ -75,8 +78,13 @@ class PirJitLLVM {
     /// we add stuff to its extra pool so that it remains alive while being used
     /// by the code. It can be nullptr if we only create the objects for a short
     /// period of time (when printing).
-    static SerialModuleRef deserializeModuleR(R_inpstream_t inp,
-                                              rir::Code* outer);
+    ///
+    /// `overrideSerialOpts` are the options used to deserialize SEXPs in the
+    /// module. Specifically, we pass special options on the compiler client to
+    /// materialize `ProxyEnv`s.
+    static SerialModuleRef deserializeModuleR(
+        R_inpstream_t inp, rir::Code* outer,
+        const SerialOptions& overrideSerialOpts);
     /// Deserialize and the module. Then if interned, return the interned
     /// version, otherwise intern AND add to LLJIT.
     ///
@@ -84,8 +92,13 @@ class PirJitLLVM {
     /// we add stuff to its extra pool so that it remains alive while being used
     /// by the code. It can be nullptr if we only create the objects for a short
     /// period of time (when printing).
-    static SerialModuleRef deserializeModule(AbstractDeserializer& deserializer,
-                                             rir::Code* outer);
+    ///
+    /// `overrideSerialOpts` are the options used to deserialize SEXPs in the
+    /// module. Specifically, we pass special options on the compiler client to
+    /// materialize `ProxyEnv`s.
+    static SerialModuleRef deserializeModule(
+        AbstractDeserializer& deserializer, rir::Code* outer,
+        const SerialOptions& overrideSerialOpts);
   private:
     std::string name;
 
@@ -94,6 +107,10 @@ class PirJitLLVM {
 
     // Directory of all functions and builtins
     std::unordered_map<Code*, llvm::Function*> funs;
+
+    // Options we use when serializing SEXPs within the bitcode so that it can
+    // be transferred across processes.
+    SerialOptions serialOpts;
 
     // We prepend `rshN_` to all user functions, as a mechanism to
     // differentiate them from builtins. `N` denotes that the definition

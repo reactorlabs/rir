@@ -355,7 +355,7 @@ void CompilerServer::tryRun() {
 
             Measuring::countTimerIf(pir::Parameter::PIR_MEASURE_CLIENT_SERVER, PROCESSING_REQUEST_TIMER_NAME, true);
             std::string pirPrint;
-            what = pirCompile(what, assumptions, name, debug, &pirPrint);
+            what = pirCompile(what, assumptions, name, debug, &pirPrint, SerialOptions::CompilerServer(intern));
 
             // Intern, not because we'll have reused it (highly unlikely since
             // we memoize requests, and it doesn't affect anything anyways), but

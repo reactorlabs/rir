@@ -301,7 +301,8 @@ void PirJitLLVM::DebugInfo::clearLocation(llvm::IRBuilder<>& builder) {
     builder.SetCurrentDebugLocation(llvm::DebugLoc());
 }
 
-PirJitLLVM::PirJitLLVM(const std::string& name) : name(name) {
+PirJitLLVM::PirJitLLVM(const std::string& name, const SerialOptions& serialOpts)
+    : name(name), serialOpts(serialOpts) {
     if (!initialized)
         initializeLLVM();
 }
@@ -318,7 +319,7 @@ void PirJitLLVM::finalize() {
     if (M) {
         auto serialModule =
             Parameter::SERIALIZE_LLVM ?
-            internModule(SerialModule(*M)).first :
+            internModule(SerialModule(*M, std::move(serialOpts))).first :
             nullptr;
         // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
@@ -406,7 +407,7 @@ void PirJitLLVM::compile(
                 return r->second;
             return nullptr;
         },
-        DI.get(), DIB.get());
+        DI.get(), DIB.get(), serialOpts);
 
     llvm::DISubprogram* SP = nullptr;
     if (LLVMDebugInfo()) {
@@ -468,26 +469,29 @@ llvm::LLVMContext& PirJitLLVM::getContext() {
 }
 
 SerialModuleRef PirJitLLVM::finishDeserializingModule(SerialModule&& module,
-                                                      rir::Code* outer) {
+                                                      rir::Code* outer,
+                                                      const SerialOptions& overrideSerialOpts) {
     auto serialModuleAndIsNew = internModule(std::move(module));
     auto serialModule = serialModuleAndIsNew.first;
     if (serialModuleAndIsNew.second) {
-        addToJit(serialModule->decode(outer));
+        addToJit(serialModule->decode(outer, overrideSerialOpts));
     }
     return serialModule;
 
 }
 
-SerialModuleRef PirJitLLVM::deserializeModuleR(R_inpstream_t inp,
-                                               rir::Code* outer) {
-    return finishDeserializingModule(SerialModule::deserializeR(inp), outer);
+SerialModuleRef
+PirJitLLVM::deserializeModuleR(R_inpstream_t inp, rir::Code* outer,
+                               const SerialOptions& overrideSerialOpts) {
+    return finishDeserializingModule(SerialModule::deserializeR(inp), outer, overrideSerialOpts);
 }
 
 SerialModuleRef
 PirJitLLVM::deserializeModule(AbstractDeserializer& deserializer,
-                              rir::Code* outer) {
+                              rir::Code* outer,
+                              const SerialOptions& overrideSerialOpts) {
     return finishDeserializingModule(SerialModule::deserialize(deserializer),
-                                     outer);
+                                     outer, overrideSerialOpts);
 }
 
 void PirJitLLVM::initializeLLVM() {

@@ -1,13 +1,11 @@
 #include "serialize.h"
 #include "R/Printing.h"
 #include "R/Protect.h"
-#include "R/Symbols.h"
 #include "R/disableGc.h"
 #include "compiler/parameter.h"
 #include "compilerClientServer/CompilerServer.h"
 #include "runtime/PoolStub.h"
 #include "runtime/ProxyEnv.h"
-#include "serializeHash/globals.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
 #include "traceSerialize.h"
@@ -112,6 +110,19 @@ SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deseria
 void SerialOptions::serializeCompatible(AbstractSerializer& serializer) const {
     serializer.writeBytesOf(useHashes);
     serializer.writeBytesOf(onlySourceAndFeedback);
+}
+
+
+SerialOptions SerialOptions::deserializeCompatible(const ByteBuffer& buffer) {
+    SerialOptions options;
+    options.useHashes = buffer.getBool();
+    options.onlySourceAndFeedback = buffer.getBool();
+    return options;
+}
+
+void SerialOptions::serializeCompatible(ByteBuffer& buffer) const {
+    buffer.putBool(useHashes);
+    buffer.putBool(onlySourceAndFeedback);
 }
 
 bool SerialOptions::areCompatibleWith(const rir::SerialOptions& other) const {

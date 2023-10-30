@@ -208,7 +208,8 @@ Code* Code::deserialize(AbstractDeserializer& deserializer) {
             code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
             if (deserializer.readBytesOf<bool>(SerialFlags::CodeNative)) {
                 code->lazyCodeModule =
-                    pir::PirJitLLVM::deserializeModule(deserializer, code);
+                    pir::PirJitLLVM::deserializeModule(deserializer, code,
+                                                       deserializer.serialOptions());
                 code->setLazyCodeModuleFinalizer();
             }
         }

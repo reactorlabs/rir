@@ -51,6 +51,9 @@ struct RSerializer : AbstractSerializer {
 
     SerializedRefs* refs() override { return nullptr; }
 
+    const SerialOptions& serialOptions() const override {
+        return *R_SERIAL_OPTIONS;
+    }
     bool willWrite(const SerialFlags& flags) const override {
         assert(R_SERIAL_OPTIONS && "not setup for serialization");
         return R_SERIAL_OPTIONS->willReadOrWrite(flags);
@@ -101,6 +104,10 @@ struct RDeserializer : AbstractDeserializer {
         : inp(inp), refTable(refTable) {}
 
     DeserializedRefs* refs() override { return nullptr; }
+
+    const SerialOptions& serialOptions() const override {
+        return *R_SERIAL_OPTIONS;
+    }
 
     bool willRead(const SerialFlags& flags) const override {
         assert(R_SERIAL_OPTIONS && "not setup for deserialization");

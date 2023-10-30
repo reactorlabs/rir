@@ -6,9 +6,15 @@
 #include "R/r.h"
 #include "compiler/parameter.h"
 #include "runtime/LazyArglist.h"
+#include "serializeHash/serialize/serialize.h"
 #include "utils/measuring.h"
 
 namespace rir {
+
+SerialOptions& ConnectedCollectorUni::serialOptions() const {
+    // Doesn't matter what we return here, but we unfortunately need something
+    return SerialOptions::DeepCopy;
+}
 
 bool ConnectedCollectorUni::willWrite(const rir::SerialFlags& flags) const {
     // We only care about writing SEXPs, all other writes are no-ops.

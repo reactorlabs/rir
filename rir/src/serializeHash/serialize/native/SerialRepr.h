@@ -39,14 +39,17 @@ class SerialRepr {
     class R_GlobalContext;
     class R_ReturnedValue;
 
-    virtual llvm::MDNode* metadata(llvm::LLVMContext& ctx) const = 0;
+    virtual llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                                   const SerialOptions& serialOpts) const = 0;
     static llvm::MDNode* functionMetadata(llvm::LLVMContext& ctx,
                                           const char* llvmValueName,
                                           int builtinId);
     static llvm::MDNode* srcIdxMetadata(llvm::LLVMContext& ctx,
-                                        Immediate srcIdx);
+                                        Immediate srcIdx,
+                                        const SerialOptions& serialOpts);
     static llvm::MDNode* poolIdxMetadata(llvm::LLVMContext& ctx,
-                                         BC::PoolIdx poolIdx);
+                                         BC::PoolIdx poolIdx,
+                                         const SerialOptions& serialOpts);
     static llvm::MDNode* namesMetadata(llvm::LLVMContext& ctx,
                                        const std::vector<BC::PoolIdx>& names);
 
@@ -57,7 +60,11 @@ class SerialRepr {
     /// `outer` is the code which the module resides in. It's needed because we
     /// add stuff to its extra pool. It can be nullptr if we only create the
     /// objects for a short period of time (when printing).
-    static void patch(llvm::Module& mod, rir::Code* outer);
+    ///
+    /// `serialOpts` contains options which affect deserialization. These must
+    /// be compatible with the `serialOpts` passed to the metadata constructors.
+    static void patch(llvm::Module& mod, rir::Code* outer,
+                      const SerialOptions& serialOpts);
 };
 
 class SerialRepr::SEXP : public SerialRepr {
@@ -66,7 +73,8 @@ class SerialRepr::SEXP : public SerialRepr {
   public:
     explicit SEXP(::SEXP what) : SerialRepr(), what(what) {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::String : public SerialRepr {
     const char* str;
@@ -74,7 +82,8 @@ class SerialRepr::String : public SerialRepr {
   public:
     explicit String(const char* str) : SerialRepr(), str(str) {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::Function : public SerialRepr {
     rir::Function* function;
@@ -82,7 +91,8 @@ class SerialRepr::Function : public SerialRepr {
   public:
     explicit Function(rir::Function* function) : SerialRepr(), function(function) {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::TypeFeedback : public SerialRepr {
     rir::TypeFeedback* typeFeedback;
@@ -91,7 +101,8 @@ class SerialRepr::TypeFeedback : public SerialRepr {
     explicit TypeFeedback(rir::TypeFeedback* typeFeedback)
         : SerialRepr(), typeFeedback(typeFeedback) {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::DeoptMetadata : public SerialRepr {
     rir::DeoptMetadata* m;
@@ -99,37 +110,43 @@ class SerialRepr::DeoptMetadata : public SerialRepr {
   public:
     explicit DeoptMetadata(rir::DeoptMetadata* m) : SerialRepr(), m(m) {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::OpaqueTrue : public SerialRepr {
   public:
     OpaqueTrue() : SerialRepr() {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::R_Visible : public SerialRepr {
   public:
     R_Visible() : SerialRepr() {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::R_BCNodeStackTop : public SerialRepr {
   public:
     R_BCNodeStackTop() : SerialRepr() {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::R_GlobalContext : public SerialRepr {
   public:
     R_GlobalContext() : SerialRepr() {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 class SerialRepr::R_ReturnedValue : public SerialRepr {
   public:
     R_ReturnedValue() : SerialRepr() {}
 
-    llvm::MDNode* metadata(llvm::LLVMContext& ctx) const override;
+    llvm::MDNode* metadata(llvm::LLVMContext& ctx,
+                           const SerialOptions& serialOpts) const override;
 };
 
 } // namespace pir
