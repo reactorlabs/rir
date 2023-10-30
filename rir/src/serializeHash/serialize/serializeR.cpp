@@ -171,6 +171,10 @@ struct RDeserializer : AbstractDeserializer {
 template <typename CLS>
 static bool trySerializeR(SEXP s, SEXP refTable, R_outpstream_t out) {
     if (CLS* b = CLS::check(s)) {
+        if (canSelfReference(s)) {
+            HashAdd(s, refTable);
+        }
+
         OutInteger(out, b->info.magic);
         Measuring::timeEventIf(pir::Parameter::PIR_MEASURE_SERIALIZATION, "serializeR.cpp: rirSerializeHook", s, [&]{
             RSerializer serializer(out, refTable);

@@ -308,4 +308,8 @@ class AbstractDeserializer {
     }
 };
 
+/// These SEXPs are added to the ref table the first time they are serialized or
+/// deserialized, and serialized as / deserialized from refs subsequent times.
+bool canSelfReference(SEXP sexp);
+
 } // namespace rir

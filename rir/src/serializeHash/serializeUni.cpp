@@ -237,7 +237,7 @@ unsigned AbstractDeserializer::readSrc(const SerialFlags& flags) {
 
 /// These SEXPs are added to the ref table the first time they are serialized or
 /// deserialized, and serialized as / deserialized from refs subsequent times.
-static bool canSelfReference(SEXP sexp) {
+bool canSelfReference(SEXP sexp) {
     switch (TYPEOF(sexp)) {
     case SYMSXP:
     case ENVSXP:
