@@ -2,12 +2,11 @@
 #include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../util/safe_builtins_list.h"
-#include "../util/visitor.h"
-#include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/analysis/cfg.h"
 #include "compiler/compiler.h"
+#include "runtime/ProxyEnv.h"
 #include "pass_definitions.h"
 
 #include <unordered_map>
@@ -183,7 +182,12 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             if (!ldfun->guessedBinding()) {
                                 auto env =
                                     Env::Cast(cls->owner()->closureEnv());
-                                if (env != Env::notClosed() && env->rho) {
+                                if (env != Env::notClosed() && env->rho &&
+                                    // TODO: Speculate in proxies, either by
+                                    //  providing a list of functions to stub or
+                                    //  (probably better) sending a request to
+                                    //  the client
+                                    !ProxyEnv::check(env->rho)) {
                                     auto name = ldfun->varName;
                                     auto builtin = Rf_findVar(name, env->rho);
                                     if (TYPEOF(builtin) == PROMSXP)

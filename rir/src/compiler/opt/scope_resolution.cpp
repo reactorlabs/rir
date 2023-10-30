@@ -3,11 +3,11 @@
 #include "../pir/pir_impl.h"
 #include "../util/phi_placement.h"
 #include "../util/safe_builtins_list.h"
-#include "../util/visitor.h"
 #include "R/r.h"
 #include "compiler/analysis/context_stack.h"
 #include "compiler/compiler.h"
 #include "compiler/util/bb_transform.h"
+#include "runtime/ProxyEnv.h"
 #include "pass_definitions.h"
 #include "utils/Set.h"
 
@@ -679,7 +679,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     SafeBuiltinsList::assumeStableInBaseEnv(
                                         name)) {
                                     auto value = SYMVALUE(name);
-                                    assert(Rf_findVar(name, env->rho) == value);
+                                    assert(ProxyEnv::check(env->rho) || Rf_findVar(name, env->rho) == value);
                                     if (TYPEOF(value) == PROMSXP)
                                         value = PRVALUE(value);
                                     if (value != R_UnboundValue)

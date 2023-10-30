@@ -6,6 +6,7 @@
 #include "R/Funtab.h"
 #include "compiler/native/lower_function_llvm.h"
 #include "compiler/native/types_llvm.h"
+#include "runtime/ProxyEnv.h"
 #include "serializeHash/globals.h"
 #include "serializeHash/serialize/serialize.h"
 #include "utils/ByteBuffer.h"

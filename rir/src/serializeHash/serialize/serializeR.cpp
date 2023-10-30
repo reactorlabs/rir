@@ -82,7 +82,8 @@ struct RSerializer : AbstractSerializer {
             if (!UUIDPool::tryWriteHash(s, out)) {
                 WriteItem(s, refTable, out);
             }
-        } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+        } else if (R_SERIAL_OPTIONS->useHashesForRecordedCalls &&
+                   !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
             if (!UUIDPool::tryWriteHash(s, out)) {
                 // Still serialize children via hashes
                 R_SERIAL_OPTIONS->useHashes = true;
@@ -141,7 +142,8 @@ struct RDeserializer : AbstractDeserializer {
             if (!result) {
                 result = ReadItem(refTable, inp);
             }
-        } else if (flags.contains(SerialFlag::MaybeNotRecordedCall)) {
+        } else if (R_SERIAL_OPTIONS->useHashesForRecordedCalls &&
+                   !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
             result = UUIDPool::tryReadHash(inp);
             if (!result) {
                 // Still deserialize children via hashes

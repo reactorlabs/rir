@@ -169,7 +169,23 @@ void Serializer::writeInt(int data, const SerialFlags& flags) {
     buffer.putInt(*reinterpret_cast<unsigned*>(&data));
 }
 
-void Serializer::write(SEXP s, const SerialFlags& flags) {
+SEXP Serializer::stub(SEXP sexp) const {
+    if (options.sourcePools.isEntry(sexp)) {
+        return options.sourcePools.stub(sexp);
+    } else if (sexp == options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies) {
+        return ProxyEnv::create(options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
+    } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
+               TYPEOF(sexp) == ENVSXP && !isGlobalEnv(sexp)) {
+        std::cerr << "WARNING: local envs aren't correctly handled, and "
+                  << "we're serializing a local env: " << Print::dumpSexp(sexp)
+                  << std::endl;
+        return sexp;
+    } else {
+        return sexp;
+    }
+}
+
+void Serializer::write(SEXP sexp, const SerialFlags& flags) {
     assert(flags.contains(SerialFlag::MaybeSexp) &&
            "Serializing non SEXP with SEXP flag");
 
@@ -177,22 +193,12 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
         return;
     }
 
-    // If this is a stubbed pool entry, serialize the stub instead
-    if (options.sourcePools.isEntry(s)) {
-        s = options.sourcePools.stub(s);
-    } else if (s == options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies) {
-        s = ProxyEnv::create(options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
-    } else if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
-               TYPEOF(s) == ENVSXP && !isGlobalEnv(s)) {
-        std::cerr << "WARNING: local envs aren't correctly handled, and "
-                  << "we're serializing a local env: " << Print::dumpSexp(s)
-                  << std::endl;
-    }
+    sexp = stub(sexp);
 
 #if DEBUG_SERIALIZE_CONSISTENCY
     buffer.putLong(sexpBound);
     buffer.putInt(flags.id());
-    auto type = TYPEOF(s);
+    auto type = TYPEOF(sexp);
     buffer.putInt(type);
 #endif
 
@@ -205,25 +211,25 @@ void Serializer::write(SEXP s, const SerialFlags& flags) {
     // call `writeInline` if we didn't write the hash directly to not infinitely
     // recurse.
     if (options.useHashes) {
-        if (!UUIDPool::tryWriteHash(s, buffer)) {
-            writeInline(s);
+        if (!UUIDPool::tryWriteHash(sexp, buffer)) {
+            writeInline(sexp);
         }
     } else if (options.useHashesForRecordedCalls &&
                !flags.contains(SerialFlag::MaybeNotRecordedCall)) {
-        if (!UUIDPool::tryWriteHash(s, buffer)) {
+        if (!UUIDPool::tryWriteHash(sexp, buffer)) {
             // Still serialize children via hashes
             auto innerOptions = options;
             innerOptions.useHashes = true;
             Serializer innerSerializer(buffer, innerOptions);
-            innerSerializer.writeInline(s);
+            innerSerializer.writeInline(sexp);
         }
     } else {
-        writeInline(s);
+        writeInline(sexp);
     }
 
 #if DEBUG_SERIALIZE_CONSISTENCY
     buffer.putLong(sexpEndBound);
-    assert(type == TYPEOF(s) && "sanity check failed, SEXP changed type after serialization?");
+    assert(type == TYPEOF(sexp) && "sanity check failed, SEXP changed type after serialization?");
 #endif
 }
 
@@ -277,6 +283,18 @@ int Deserializer::readInt(const SerialFlags& flags) {
     return *reinterpret_cast<int*>(&result);
 }
 
+SEXP Deserializer::destub(SEXP sexp) const {
+    if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
+        ProxyEnv::check(sexp)) {
+        return ProxyEnv::unpack(sexp)->materialize(
+            options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
+    } else if (options.sourcePools.isStub(sexp)) {
+        return options.sourcePools.entry(sexp);
+    } else {
+        return sexp;
+    }
+}
+
 SEXP Deserializer::read(const SerialFlags& flags) {
     assert(flags.contains(SerialFlag::MaybeSexp) &&
            "Deserializing non SEXP with SEXP flag");
@@ -328,14 +346,7 @@ SEXP Deserializer::read(const SerialFlags& flags) {
            "serialize/deserialize sexp type mismatch");
 #endif
 
-    // If this is a stub, deserialize the stubbed value instead
-    if (options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies &&
-        ProxyEnv::check(result)) {
-        result = ProxyEnv::unpack(result)->materialize(
-            options.closureEnvAndIfSetWeTryToSerializeLocalEnvsAsProxies);
-    } else if (options.sourcePools.isStub(result)) {
-        result = options.sourcePools.entry(result);
-    }
+    result = destub(result);
 
     return result;
 }
@@ -358,13 +369,13 @@ void serialize(SEXP sexp, ByteBuffer& buffer, const SerialOptions& options) {
                 auto sexpPrint = Print::dumpSexp(sexp, 120);
                 std::cerr << "+ serialize " << sexpPrint << std::endl;
                 TraceSerializer traceSerializer(buffer, options);
-                traceSerializer.writeInline(sexp);
+                traceSerializer.writeInline(traceSerializer.stub(sexp));
                 std::cerr << "+ serialized "
                           << buffer.getWritePos() - oldWritePos << " bytes, "
                           << sexpPrint << std::endl;
             } else {
                 Serializer serializer(buffer, options);
-                serializer.writeInline(sexp);
+                serializer.writeInline(serializer.stub(sexp));
             }
         });
     });
@@ -383,7 +394,7 @@ SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
                 auto oldReadPos = buffer.getReadPos();
                 std::cerr << "- deserialize" << std::endl;
                 TraceDeserializer traceDeserializer(buffer, options, retrieveHash);
-                result = traceDeserializer.readInline();
+                result = traceDeserializer.destub(traceDeserializer.readInline());
                 std::cerr << "- deserialized "
                           << buffer.getReadPos() - oldReadPos << " bytes, "
                           << Print::dumpSexp(result, 120) << std::endl;
@@ -391,7 +402,7 @@ SEXP deserialize(const ByteBuffer& buffer, const SerialOptions& options,
                 assert(!traceDeserializer.retrieveHash && "retrieve hash not filled");
             } else {
                 Deserializer deserializer(buffer, options, retrieveHash);
-                result = deserializer.readInline();
+                result = deserializer.destub(deserializer.readInline());
 
                 assert(!deserializer.retrieveHash && "retrieve hash not filled");
             }

@@ -11,6 +11,7 @@
 #include "compiler/parameter.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
+#include "runtime/ProxyEnv.h"
 #include "pass_definitions.h"
 #include "utils/Pool.h"
 
@@ -194,7 +195,8 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
             }
             auto env = Env::Cast(inlineeCls->closureEnv());
-            if (env && env->rho && R_IsNamespaceEnv(env->rho)) {
+            // If rho is a ProxyEnv, it's guaranteed not to be a namespace
+            if (env && env->rho && !ProxyEnv::check(env->rho) && R_IsNamespaceEnv(env->rho)) {
                 auto expr = BODY_EXPR(inlineeCls->rirClosure());
                 // Closure wrappers for internals
                 if (CAR(expr) == rir::symbol::Internal)

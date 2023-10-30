@@ -99,6 +99,10 @@ class Serializer : public AbstractSerializer {
 
     SerializedRefs* refs() override { return &refs_; }
 
+    /// If the SEXP is a stubbed pool entry or closure environment, return its
+    /// stub or proxy. Otherwise return it unchanged.
+    SEXP stub(SEXP sexp) const;
+
   protected:
     Serializer(ByteBuffer& buffer, const SerialOptions& options)
         : buffer(buffer), refs_(), options(options) {
@@ -113,7 +117,7 @@ class Serializer : public AbstractSerializer {
     bool willWrite(const SerialFlags& flags) const override;
     void writeBytes(const void *data, size_t size, const SerialFlags& flags) override;
     void writeInt(int data, const SerialFlags& flags) override;
-    void write(SEXP s, const SerialFlags& flags) override;
+    void write(SEXP sexp, const SerialFlags& flags) override;
 };
 
 class Deserializer : public AbstractDeserializer {
@@ -128,6 +132,10 @@ class Deserializer : public AbstractDeserializer {
     UUID retrieveHash;
 
     DeserializedRefs* refs() override { return &refs_; }
+
+    /// If the SEXP is a stubbed pool entry or proxy environment, return its
+    /// materialized counterpart. Otherwise return it unchanged.
+    SEXP destub(SEXP sexp) const;
 
   protected:
     Deserializer(const ByteBuffer& buffer, const SerialOptions& options,
