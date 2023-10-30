@@ -50,10 +50,8 @@ class SerialModule {
     std::unique_ptr<llvm::Module> decode(
         Code* outer, const SerialOptions& overrideSerialOpts) const;
     std::unique_ptr<llvm::Module> decode(Code* outer) const;
-    static SerialModule deserializeR(R_inpstream_t inp);
     static SerialModule deserialize(AbstractDeserializer& deserializer);
   public:
-    void serializeR(R_outpstream_t out) const;
     void serialize(AbstractSerializer& serializer) const;
     size_t numBytes() const;
     friend std::ostream& operator<<(std::ostream&, const SerialModule&);

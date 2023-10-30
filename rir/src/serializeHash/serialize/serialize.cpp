@@ -100,29 +100,19 @@ SEXP SerialOptions::SourcePools::stub(SEXP entry) const {
     return PoolStub::create(sourceHash, defaultArgIdx, index);
 }
 
-SerialOptions SerialOptions::deserializeCompatible(AbstractDeserializer& deserializer) {
+SerialOptions
+SerialOptions::deserializeCompatible(AbstractDeserializer& deserializer,
+                                     const SerialFlags& flags) {
     SerialOptions options;
-    options.useHashes = deserializer.readBytesOf<bool>();
-    options.onlySourceAndFeedback = deserializer.readBytesOf<bool>();
+    options.useHashes = deserializer.readBytesOf<bool>(flags);
+    options.onlySourceAndFeedback = deserializer.readBytesOf<bool>(flags);
     return options;
 }
 
-void SerialOptions::serializeCompatible(AbstractSerializer& serializer) const {
-    serializer.writeBytesOf(useHashes);
-    serializer.writeBytesOf(onlySourceAndFeedback);
-}
-
-
-SerialOptions SerialOptions::deserializeCompatible(const ByteBuffer& buffer) {
-    SerialOptions options;
-    options.useHashes = buffer.getBool();
-    options.onlySourceAndFeedback = buffer.getBool();
-    return options;
-}
-
-void SerialOptions::serializeCompatible(ByteBuffer& buffer) const {
-    buffer.putBool(useHashes);
-    buffer.putBool(onlySourceAndFeedback);
+void SerialOptions::serializeCompatible(AbstractSerializer& serializer,
+                                        const SerialFlags& flags) const {
+    serializer.writeBytesOf(useHashes, flags);
+    serializer.writeBytesOf(onlySourceAndFeedback, flags);
 }
 
 bool SerialOptions::areCompatibleWith(const rir::SerialOptions& other) const {

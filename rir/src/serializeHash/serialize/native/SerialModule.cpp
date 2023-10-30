@@ -43,43 +43,22 @@ std::unique_ptr<llvm::Module> SerialModule::decode(Code* outer) const {
     return decode(outer, serialOpts);
 }
 
-SerialModule SerialModule::deserializeR(R_inpstream_t inp) {
-    ByteBuffer serialOptsBuf((size_t)InInteger(inp));
-    InBytes(inp, serialOptsBuf.data(), (int)serialOptsBuf.size());
-    SerialOptions serialOpts = SerialOptions::deserializeCompatible(serialOptsBuf);
-
-    size_t size = InInteger(inp);
-    std::string bitcode(size, '\0');
-    InBytes(inp, (uint8_t*)bitcode.data(), (int)size);
-
-    return {std::move(bitcode), serialOpts};
-}
-
-void SerialModule::serializeR(R_outpstream_t out) const {
-    ByteBuffer serialOptsBuf;
-    serialOpts.serializeCompatible(serialOptsBuf);
-    OutInteger(out, (int)serialOptsBuf.size());
-    OutBytes(out, serialOptsBuf.data(), (int)serialOptsBuf.size());
-
-    OutInteger(out, (int)bitcode.size());
-    OutBytes(out, (const uint8_t*)bitcode.data(), (int)bitcode.size());
-}
-
 SerialModule SerialModule::deserialize(AbstractDeserializer& deserializer) {
-    auto serialOpts = SerialOptions::deserializeCompatible(deserializer);
+    auto serialOpts = SerialOptions::deserializeCompatible(deserializer, SerialFlags::CodeNative);
 
-    auto size = deserializer.readBytesOf<size_t>();
+    auto size = deserializer.readBytesOf<size_t>(SerialFlags::CodeNative);
     std::string bitcode(size, '\0');
-    deserializer.readBytes((void*)bitcode.data(), size);
+    deserializer.readBytes((void*)bitcode.data(), size, SerialFlags::CodeNative);
 
     return {std::move(bitcode), serialOpts};
 }
 
 void SerialModule::serialize(AbstractSerializer& serializer) const {
-    serialOpts.serializeCompatible(serializer);
+    serialOpts.serializeCompatible(serializer, SerialFlags::CodeNative);
 
-    serializer.writeBytesOf(bitcode.size());
-    serializer.writeBytes((const void*)bitcode.data(), bitcode.size());
+    serializer.writeBytesOf(bitcode.size(), SerialFlags::CodeNative);
+    serializer.writeBytes((const void*)bitcode.data(), bitcode.size(),
+                          SerialFlags::CodeNative);
 }
 
 size_t SerialModule::numBytes() const {

@@ -481,12 +481,6 @@ SerialModuleRef PirJitLLVM::finishDeserializingModule(SerialModule&& module,
 }
 
 SerialModuleRef
-PirJitLLVM::deserializeModuleR(R_inpstream_t inp, rir::Code* outer,
-                               const SerialOptions& overrideSerialOpts) {
-    return finishDeserializingModule(SerialModule::deserializeR(inp), outer, overrideSerialOpts);
-}
-
-SerialModuleRef
 PirJitLLVM::deserializeModule(AbstractDeserializer& deserializer,
                               rir::Code* outer,
                               const SerialOptions& overrideSerialOpts) {

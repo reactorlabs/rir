@@ -82,20 +82,6 @@ class PirJitLLVM {
     /// `overrideSerialOpts` are the options used to deserialize SEXPs in the
     /// module. Specifically, we pass special options on the compiler client to
     /// materialize `ProxyEnv`s.
-    static SerialModuleRef deserializeModuleR(
-        R_inpstream_t inp, rir::Code* outer,
-        const SerialOptions& overrideSerialOpts);
-    /// Deserialize and the module. Then if interned, return the interned
-    /// version, otherwise intern AND add to LLJIT.
-    ///
-    /// `outer` is the code object which will contain the module, needed because
-    /// we add stuff to its extra pool so that it remains alive while being used
-    /// by the code. It can be nullptr if we only create the objects for a short
-    /// period of time (when printing).
-    ///
-    /// `overrideSerialOpts` are the options used to deserialize SEXPs in the
-    /// module. Specifically, we pass special options on the compiler client to
-    /// materialize `ProxyEnv`s.
     static SerialModuleRef deserializeModule(
         AbstractDeserializer& deserializer, rir::Code* outer,
         const SerialOptions& overrideSerialOpts);
