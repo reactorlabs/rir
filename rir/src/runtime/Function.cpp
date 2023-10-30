@@ -18,7 +18,7 @@ void Function::resetFlag(rir::Function::Flag f) {
     flags_.reset(f);
 }
 
-void Function::deserializeFullSignature(ByteBuffer& buf) {
+void Function::deserializeFullSignature(const ByteBuffer& buf) {
     signature_.deserializeFrom(buf);
     context_ = Context(buf.getLong());
     buf.getBytes((uint8_t*)&flags_, sizeof(flags_));
@@ -75,7 +75,7 @@ Function* Function::deserialize(AbstractDeserializer& deserializer) {
          NUM_PTRS,
          FUNCTION_MAGIC};
     for (unsigned i = 0; i < NUM_PTRS; i++) {
-        EXTERNALSXP_SET_ENTRY(store, i, nullptr);
+        EXTERNALSXP_SET_ENTRY(store, (int)i, nullptr);
     }
     // Also needed to set FUNCTION_MAGIC for addRef
     deserializer.addRef(store);

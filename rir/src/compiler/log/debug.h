@@ -127,7 +127,7 @@ struct DebugOptions {
         if (o.style != DebugStyle::Standard) {
             if (!first) out << ", ";
             out << "style=" << (int)o.style;
-            first = false;
+            // first = false;
         }
         out << ")";
         return out;

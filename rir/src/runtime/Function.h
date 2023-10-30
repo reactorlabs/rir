@@ -96,7 +96,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     /// "Full signature" include context, flags, and invocation info
     void serializeFullSignature(ByteBuffer& buf) const;
     /// "Full signature" include context, flags, and invocation info
-    void deserializeFullSignature(ByteBuffer& buf);
+    void deserializeFullSignature(const ByteBuffer& buf);
     static Function* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& deserializer) const;
     void hash(HasherOld& hasher) const;

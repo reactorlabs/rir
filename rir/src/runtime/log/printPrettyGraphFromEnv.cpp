@@ -80,6 +80,7 @@ static void printPrettyGraph(SEXP sexp, const std::string& associated) {
 }
 
 void printPrettyGraphIfNecessary(SEXP sexp, const std::string& associated) {
+    // cppcheck-suppress variableScope
     static unsigned graphPrintCounter = 0;
     if (pir::Parameter::PIR_GRAPH_PRINT_RIR_OBJECTS) {
         graphPrintCounter++;
