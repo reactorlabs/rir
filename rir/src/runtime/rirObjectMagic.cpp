@@ -32,6 +32,8 @@ const char* rirObjectClassName(unsigned magic) {
             return "PirTypeFeedback";
         case TYPEFEEDBACK_MAGIC:
             return "TypeFeedback";
+        case SERIAL_MODULE_MAGIC:
+            return "SerialModule";
         case POOL_STUB_MAGIC:
             return "PoolStub";
         case PROXY_ENV_MAGIC:

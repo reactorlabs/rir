@@ -193,6 +193,7 @@ void rirSerializeHook(SEXP s, SEXP refTable, R_outpstream_t out) {
             !trySerializeR<LazyEnvironment>(s, refTable, out) &&
             !trySerializeR<PirTypeFeedback>(s, refTable, out) &&
             !trySerializeR<TypeFeedback>(s, refTable, out) &&
+            !trySerializeR<SerialModule>(s, refTable, out) &&
             !trySerializeR<PoolStub>(s, refTable, out) &&
             !trySerializeR<ProxyEnv>(s, refTable, out)) {
             std::cerr << "couldn't serialize EXTERNALSXP: ";
@@ -225,6 +226,8 @@ SEXP rirDeserializeHook(SEXP refTable, R_inpstream_t inp) {
             return PirTypeFeedback::deserialize(deserializer)->container();
         case TYPEFEEDBACK_MAGIC:
             return TypeFeedback::deserialize(deserializer)->container();
+        case SERIAL_MODULE_MAGIC:
+            return SerialModule::deserialize(deserializer)->container();
         case POOL_STUB_MAGIC:
             return PoolStub::deserialize(deserializer)->container();
         case PROXY_ENV_MAGIC:

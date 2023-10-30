@@ -60,31 +60,20 @@ Code* Code::NewNative(Immediate ast) {
     return New(Kind::Native, ast, 0, 0, 0, 0);
 }
 
-void Code::setLazyCodeModuleFinalizer() {
-    makeFinalizer(Code::finalizeLazyCodeModuleFromContainer, false);
-}
-
-void Code::finalizeLazyCodeModuleFromContainer(SEXP sexp) {
-    Code::unpack(sexp)->finalizeLazyCodeModule();
-}
-
-void Code::finalizeLazyCodeModule() {
-    assert(lazyCodeModule);
-    // Causes this to free the shared reference
-    lazyCodeModule = nullptr;
-}
-
-void Code::lazyCode(const std::string& handle, const SerialModuleRef& module) {
+void Code::lazyCode(const std::string& handle, const SerialModule* module) {
+    if (module) {
+        PROTECT(module->container());
+    }
     assert(!handle.empty());
     assert(handle.size() < MAX_CODE_HANDLE_LENGTH);
     assert(kind == Kind::Native);
-    assert(lazyCodeHandle[0] == '\0' && !lazyCodeModule);
+    assert(lazyCodeHandle[0] == '\0' && !getEntry(4));
     strncpy(lazyCodeHandle, handle.c_str(), MAX_CODE_HANDLE_LENGTH - 1);
-    lazyCodeModule = module;
-    UUIDPool::reintern(container());
     if (module) {
-        setLazyCodeModuleFinalizer();
+        UNPROTECT(1);
+        setLazyCodeModule(module);
     }
+    UUIDPool::reintern(container());
 }
 
 void Code::function(Function* fun) { setEntry(3, fun->container()); }
@@ -207,10 +196,9 @@ Code* Code::deserialize(AbstractDeserializer& deserializer) {
                                    SerialFlags::CodeNative);
             code->lazyCodeHandle[lazyCodeHandleLen] = '\0';
             if (deserializer.readBytesOf<bool>(SerialFlags::CodeNative)) {
-                code->lazyCodeModule =
-                    pir::PirJitLLVM::deserializeModule(deserializer, code,
-                                                       deserializer.serialOptions());
-                code->setLazyCodeModuleFinalizer();
+                auto lazyCodeModule = pir::PirJitLLVM::deserializeModule(
+                    deserializer, code,deserializer.serialOptions());
+                code->setLazyCodeModule(lazyCodeModule);
             }
         }
     }
@@ -276,9 +264,10 @@ void Code::serialize(AbstractSerializer& serializer) const {
                 auto lazyCodeHandleLen = (unsigned)strlen(lazyCodeHandle);
                 serializer.writeBytesOf(lazyCodeHandleLen, SerialFlags::CodeNative);
                 serializer.writeBytes(lazyCodeHandle, lazyCodeHandleLen, SerialFlags::CodeNative);
-                serializer.writeBytesOf(lazyCodeModule != nullptr, SerialFlags::CodeNative);
-                if (lazyCodeModule) {
-                    lazyCodeModule->serialize(serializer);
+                auto lcm = lazyCodeModule();
+                serializer.writeBytesOf(lcm != nullptr, SerialFlags::CodeNative);
+                if (lcm) {
+                    serializer.write(lcm->container(), SerialFlags::CodeNative);
                 }
             }
         });
@@ -487,10 +476,11 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     case Kind::Native: {
         if (nativeCode_) {
             out << "nativeCode " << nativeCode_ << ", module:";
-            if (lazyCodeModule) {
-                out << "\n" << lazyCodeModule << " ("
-                    << lazyCodeModule->numBytes() << " bytes)\n"
-                    << *lazyCodeModule;
+            auto lcm = lazyCodeModule();
+            if (lcm) {
+                out << "\n" << lcm << " ("
+                    << lcm->size() << " bytes)\n";
+                lcm->print(out);
             } else {
                 out << " (elided)";
             }
@@ -816,6 +806,19 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
 }
 
 llvm::ExitOnError ExitOnErr;
+
+const SerialModule* Code::lazyCodeModule() const {
+    auto module = getEntry(4) ? SerialModule::unpack(getEntry(4)) : nullptr;
+    assert((!module || (kind == Kind::Native && *lazyCodeHandle != '\0')) &&
+           "If code has a lazy module, it should be native code with a handle");
+    return module;
+}
+
+void Code::setLazyCodeModule(const rir::SerialModule* module) {
+    assert(kind == Kind::Native && *lazyCodeHandle != '\0' &&
+           "Can only set lazy code module for native code with a handle");
+    setEntry(4, module->container());
+}
 
 NativeCode Code::lazyCompile() {
     assert(kind == Kind::Native);

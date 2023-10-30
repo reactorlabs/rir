@@ -66,8 +66,9 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     enum class Kind { Bytecode, Native, Deserializing } kind;
 
-    // extra pool, pir type feedback, arg reordering info, rir function
-    static constexpr size_t NumLocals = 4;
+    // extra pool, pir type feedback, arg reordering info, rir function,
+    // lazy code module
+    static constexpr size_t NumLocals = 5;
 
     Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx,
          unsigned codeSize, unsigned sourceSize, size_t localsCnt,
@@ -84,6 +85,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
      * 1 : pir type feedback
      * 2 : call argument reordering metadata
      * 3 : rir function
+     * 4 : lazy code module
      */
     SEXP locals_[NumLocals];
 
@@ -96,16 +98,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
   private:
     char lazyCodeHandle[MAX_CODE_HANDLE_LENGTH] = "\0";
-    SerialModuleRef lazyCodeModule;
+    const SerialModule* lazyCodeModule() const;
+    void setLazyCodeModule(const SerialModule* module);
     NativeCode nativeCode_;
     NativeCode lazyCompile();
 
-    void setLazyCodeModuleFinalizer();
-    static void finalizeLazyCodeModuleFromContainer(SEXP sexp);
-    void finalizeLazyCodeModule();
-
   public:
-    void lazyCode(const std::string& handle, const SerialModuleRef& module);
+    void lazyCode(const std::string& handle, const SerialModule* module);
     NativeCode nativeCode() {
         if (nativeCode_)
             return nativeCode_;

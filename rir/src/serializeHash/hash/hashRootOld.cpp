@@ -119,6 +119,7 @@ static inline void hashRir(SEXP sexp, HasherOld& hasher) {
             !tryHash<LazyEnvironment>(sexp, hasher) &&
             !tryHash<PirTypeFeedback>(sexp, hasher) &&
             !tryHash<TypeFeedback>(sexp, hasher) &&
+            !tryHash<SerialModule>(sexp, hasher) &&
             !tryHash<PoolStub>(sexp, hasher) &&
             !tryHash<ProxyEnv>(sexp, hasher)) {
             std::cerr << "couldn't hash EXTERNALSXP: ";

@@ -41,6 +41,7 @@ static inline void addConnectedRir(SEXP sexp,
         !tryAddConnected<LazyEnvironment>(sexp, collector) &&
         !tryAddConnected<PirTypeFeedback>(sexp, collector) &&
         !tryAddConnected<TypeFeedback>(sexp, collector) &&
+        !tryAddConnected<SerialModule>(sexp, collector) &&
         !tryAddConnected<PoolStub>(sexp, collector) &&
         !tryAddConnected<ProxyEnv>(sexp, collector)) {
         std::cerr << "couldn't add connected in EXTERNALSXP: ";

@@ -5,8 +5,10 @@
 #pragma once
 
 #include "R/r_incl.h"
-#include "serializeHash/serializeUni.h"
+#include "runtime/RirRuntimeObject.h"
+#include "serializeHash/hash/getConnectedOld.h"
 #include "serializeHash/serialize/serialize.h"
+#include "serializeHash/serializeUni.h"
 #include <memory>
 #include <string>
 #include <utility>
@@ -20,41 +22,46 @@ class Module;
 namespace rir {
 
 struct Code;
-class SerialModule;
 struct SerialOptions;
-/// Serialized module bitcode. We store these in smart pointers these because
-/// multiple `Code`s may share the same module.
-///
-/// We also intern these because the `Code`s are deserialized so we can't always
-/// determine and give them the same shared_ptr at creation. But [PirJitLLVM] is
-/// where we intern.
-typedef std::shared_ptr<SerialModule> SerialModuleRef;
 
 namespace pir {
 class PirJitLLVM;
 }
 
-/// Serialized module bitcode
-class SerialModule {
-    std::string bitcode;
-    SerialOptions serialOpts;
+/// "SMOD" ASCII -> hex
+#define SERIAL_MODULE_MAGIC 0x534d4f44
 
-    SerialModule(std::string&& bitcode, const SerialOptions& serialOpts) // NOLINT(*-pass-by-value)
-        : bitcode(std::move(bitcode)), serialOpts(serialOpts) {}
+/// Serialized module bitcode
+class SerialModule
+    : public RirRuntimeObject<SerialModule, SERIAL_MODULE_MAGIC> {
+    SerialOptions serialOpts;
+    size_t bitcodeSize;
+    char bitcode[];
+
+    SerialModule(size_t bitcodeSize, const SerialOptions& serialOpts); // NOLINT(*-pass-by-value)
+    SerialModule(std::string&& bitcode, const SerialOptions& serialOpts); // NOLINT(*-pass-by-value)
+    static SEXP create(std::string&& bitcode, const SerialOptions& serialOpts);
+
+    /// Size of the `SerialModule` structure from its `bitcodeSize`
+    static size_t size(size_t bitcodeSize);
 
     // These methods WOULD be public, except we don't want to accidentally call
     // them without PirJitLLVM because the modules won't actually be added to
     // LLJit and currently we always want to add them to LLJIT.
     friend class pir::PirJitLLVM;
-    SerialModule(const llvm::Module& module, const SerialOptions& serialOpts);
+    static SEXP create(const llvm::Module& module, const SerialOptions& serialOpts);
     std::unique_ptr<llvm::Module> decode(
         Code* outer, const SerialOptions& overrideSerialOpts) const;
     std::unique_ptr<llvm::Module> decode(Code* outer) const;
-    static SerialModule deserialize(AbstractDeserializer& deserializer);
   public:
+    size_t size() const;
+    uint64_t firstBitcodeBytes() const;
+
+    void print(std::ostream&) const;
+    static SerialModule* deserialize(AbstractDeserializer& deserializer);
     void serialize(AbstractSerializer& serializer) const;
-    size_t numBytes() const;
-    friend std::ostream& operator<<(std::ostream&, const SerialModule&);
+    void hash(HasherOld& hasher) const;
+    void addConnected(ConnectedCollectorOld& collector) const;
 };
 
 } // namespace rir

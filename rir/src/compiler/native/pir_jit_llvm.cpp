@@ -5,6 +5,7 @@
 #include "compiler/native/pass_schedule_llvm.h"
 #include "compiler/native/types_llvm.h"
 #include "serializeHash/serialize/native/SerialModule.h"
+#include "serializeHash/hash/hashRoot.h"
 #include "utils/filesystem.h"
 
 #include "compiler/parameter.h"
@@ -26,8 +27,7 @@ namespace rir {
 namespace pir {
 
 std::unique_ptr<llvm::orc::LLJIT> PirJitLLVM::JIT;
-std::unordered_map<std::string, std::weak_ptr<SerialModule>>
-    PirJitLLVM::internedModules;
+std::unordered_map<UUID, SerialModule*> PirJitLLVM::internedModules;
 
 size_t PirJitLLVM::nModules = 1;
 bool PirJitLLVM::initialized = false;
@@ -319,8 +319,11 @@ void PirJitLLVM::finalize() {
     if (M) {
         auto serialModule =
             Parameter::SERIALIZE_LLVM ?
-            internModule(SerialModule(*M, std::move(serialOpts))).first :
+            internModule(SerialModule::unpack(SerialModule::create(*M, serialOpts))).first :
             nullptr;
+        if (serialModule) {
+            PROTECT(serialModule->container());
+        }
         // Should this happen before finalize or after?
         if (LLVMDebugInfo()) {
             DIB->finalize();
@@ -328,6 +331,9 @@ void PirJitLLVM::finalize() {
         addToJit(std::move(M));
         for (auto& fix : jitFixup) {
             fix.second.first->lazyCode(fix.second.second, serialModule);
+        }
+        if (serialModule) {
+            UNPROTECT(1);
         }
         nModules++;
     }
@@ -468,24 +474,20 @@ llvm::LLVMContext& PirJitLLVM::getContext() {
     return *TSC.getContext();
 }
 
-SerialModuleRef PirJitLLVM::finishDeserializingModule(SerialModule&& module,
-                                                      rir::Code* outer,
-                                                      const SerialOptions& overrideSerialOpts) {
-    auto serialModuleAndIsNew = internModule(std::move(module));
-    auto serialModule = serialModuleAndIsNew.first;
-    if (serialModuleAndIsNew.second) {
-        addToJit(serialModule->decode(outer, overrideSerialOpts));
-    }
-    return serialModule;
-
-}
-
-SerialModuleRef
+SerialModule*
 PirJitLLVM::deserializeModule(AbstractDeserializer& deserializer,
                               rir::Code* outer,
                               const SerialOptions& overrideSerialOpts) {
-    return finishDeserializingModule(SerialModule::deserialize(deserializer),
-                                     outer, overrideSerialOpts);
+    auto serialModule = SerialModule::unpack(deserializer.read(SerialFlags::CodeNative));
+    auto serialModuleAndIsNew = internModule(serialModule);
+    PROTECT(serialModule->container());
+    serialModule = serialModuleAndIsNew.first;
+    if (serialModuleAndIsNew.second) {
+        addToJit(serialModule->decode(outer, overrideSerialOpts));
+    }
+    UNPROTECT(1);
+    return serialModule;
+
 }
 
 void PirJitLLVM::initializeLLVM() {
@@ -702,20 +704,26 @@ void PirJitLLVM::addToJit(std::unique_ptr<llvm::Module>&& M) {
     ExitOnErr(JIT->addIRModule(std::move(TSM)));
 }
 
-std::pair<SerialModuleRef, bool> PirJitLLVM::internModule(rir::SerialModule&& module) {
-    auto it = internedModules.find(module.bitcode);
-    if (it != internedModules.end()) {
-        if (it->second.expired()) {
-            auto ptr = std::make_shared<SerialModule>(module);
-            it->second = ptr;
-            return std::make_pair(ptr, false);
-        } else {
-            return std::make_pair(SerialModuleRef(it->second), false);
-        }
+void PirJitLLVM::uninternModuleBeforeGc(SEXP moduleSexp) {
+    assert(SerialModule::check(moduleSexp));
+    auto moduleId = hashRoot(moduleSexp);
+    assert(!internedModules.count(moduleId) ||
+           internedModules.at(moduleId)->container() == moduleSexp);
+    internedModules.erase(moduleId);
+}
+
+std::pair<SerialModule*, bool> PirJitLLVM::internModule(SerialModule* module) {
+    assert(module);
+    PROTECT(module->container());
+    auto moduleId = hashRoot(module->container());
+    if (internedModules.count(moduleId)) {
+        UNPROTECT(1);
+        return std::make_pair(internedModules.at(moduleId), false);
     }
-    auto ptr = std::make_shared<SerialModule>(module);
-    internedModules.emplace(ptr->bitcode, ptr);
-    return std::make_pair(ptr, true);
+    module->makeFinalizer(uninternModuleBeforeGc, false);
+    internedModules.emplace(moduleId, module);
+    UNPROTECT(1);
+    return std::make_pair(module, true);
 }
 
 } // namespace pir

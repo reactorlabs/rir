@@ -46,7 +46,7 @@ using PromMap = std::unordered_map<Code*, std::pair<unsigned, MkArg*>>;
 class PirJitLLVM {
   public:
     static std::unique_ptr<llvm::orc::LLJIT> JIT;
-    static std::unordered_map<std::string, std::weak_ptr<SerialModule>> internedModules;
+    static std::unordered_map<UUID, SerialModule*> internedModules;
     PirJitLLVM(const std::string& name, const SerialOptions& serialOpts);
     PirJitLLVM(const PirJitLLVM&) = delete;
     PirJitLLVM(PirJitLLVM&&) = delete;
@@ -66,10 +66,6 @@ class PirJitLLVM {
 
     static llvm::LLVMContext& getContext();
 
-  private:
-    static SerialModuleRef finishDeserializingModule(
-        SerialModule&& module, rir::Code* outer,
-        const SerialOptions& overrideSerialOpts);
   public:
     /// Deserialize and the module. Then if interned, return the interned
     /// version, otherwise intern AND add to LLJIT.
@@ -82,7 +78,7 @@ class PirJitLLVM {
     /// `overrideSerialOpts` are the options used to deserialize SEXPs in the
     /// module. Specifically, we pass special options on the compiler client to
     /// materialize `ProxyEnv`s.
-    static SerialModuleRef deserializeModule(
+    static SerialModule* deserializeModule(
         AbstractDeserializer& deserializer, rir::Code* outer,
         const SerialOptions& overrideSerialOpts);
   private:
@@ -117,7 +113,8 @@ class PirJitLLVM {
     static bool initialized;
 
     static void addToJit(std::unique_ptr<llvm::Module>&& module);
-    static std::pair<SerialModuleRef, bool> internModule(SerialModule&& module);
+    static void uninternModuleBeforeGc(SEXP moduleSexp);
+    static std::pair<SerialModule*, bool> internModule(SerialModule* module);
 
     // Support for debugging pir in gdb
   public:

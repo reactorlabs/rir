@@ -137,7 +137,7 @@ class SerialFlags {
 #define V(name) static const SerialFlags name;
     LIST_OF_SERIAL_FLAGS(V)
 #undef V
-    static const SerialFlags _Unused;
+    static const SerialFlags _Unused; // NOLINT(*-reserved-identifier)
 
     static const std::vector<SerialFlags>& ById;
 
@@ -157,12 +157,12 @@ class AbstractSerializer {
   protected:
     AbstractSerializer() = default;
 
-    /// Serial ref table. Returns nullptr if we don't recurse
+    /// Serial ref table. Returns `nullptr` if we don't recurse
     virtual SerializedRefs* refs() = 0;
     /// Write SEXP contents.
     ///
-    /// The implementation is extremely similar to WriteItem in serialize.c, but
-    /// there are a few differences
+    /// The implementation is extremely similar but not equivalent to
+    /// `WriteItem` in `serialize.c`
     void writeInline(SEXP s);
 
   public:
@@ -230,12 +230,12 @@ class AbstractDeserializer {
   protected:
     AbstractDeserializer() = default;
 
-    /// Serial ref table. Returns nullptr if we don't recurse
+    /// Serial ref table. Returns `nullptr` if we don't recurse
     virtual DeserializedRefs* refs() = 0;
     /// Read SEXP
     ///
-    /// The implementation is extremely similar to ReadItem in serialize.c, but
-    /// there are a few differences
+    /// The implementation is extremely similar but not equivalent to `ReadItem`
+    /// in `serialize.c`
     SEXP readInline();
 
   public:

@@ -13,6 +13,7 @@
 namespace rir {
 
 struct Function;
+class HasherOld;
 
 /// Controls what data is serialized / deserialized and what format some of it
 /// uses. The same options data is serialized with, it must also be deserialized
@@ -60,6 +61,7 @@ struct SerialOptions {
     void serializeCompatible(
         AbstractSerializer& serializer,
         const SerialFlags& flags = SerialFlags::Inherit) const;
+    void hashCompatible(HasherOld& hasher) const;
     /// Check equality of everything except the extra pool
     bool areCompatibleWith(const SerialOptions& other) const;
 

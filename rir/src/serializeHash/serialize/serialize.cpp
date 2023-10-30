@@ -8,6 +8,7 @@
 #include "runtime/ProxyEnv.h"
 #include "serializeHash/hash/UUIDPool.h"
 #include "serializeHash/hash/hashAst.h"
+#include "serializeHash/hash/hashRootOld.h"
 #include "traceSerialize.h"
 #include "utils/measuring.h"
 #include <algorithm>
@@ -113,6 +114,11 @@ void SerialOptions::serializeCompatible(AbstractSerializer& serializer,
                                         const SerialFlags& flags) const {
     serializer.writeBytesOf(useHashes, flags);
     serializer.writeBytesOf(onlySourceAndFeedback, flags);
+}
+
+void SerialOptions::hashCompatible(HasherOld& hasher) const {
+    hasher.hashBytesOf(useHashes);
+    hasher.hashBytesOf(onlySourceAndFeedback);
 }
 
 bool SerialOptions::areCompatibleWith(const rir::SerialOptions& other) const {

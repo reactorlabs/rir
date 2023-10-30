@@ -145,7 +145,7 @@ const SerialFlags SerialFlags::CodeNative(
     false,
     true,
     true,
-    false,
+    true,
     true,
     false,
     true);
@@ -246,6 +246,8 @@ static bool canSelfReference(SEXP sexp) {
     case BCODESXP:
         return true;
     case EXTERNALSXP:
+        // SerialModule can't self-reference, but we want to return true for it
+        // because we want to avoid serializing copies because it's large
         return !TypeFeedback::check(sexp) &&
                !ArglistOrder::check(sexp) &&
                !PoolStub::check(sexp) &&
@@ -355,6 +357,7 @@ static void writeRir(AbstractSerializer& serializer, SEXP s) {
         !tryWrite<LazyEnvironment>(serializer, s) &&
         !tryWrite<PirTypeFeedback>(serializer, s) &&
         !tryWrite<TypeFeedback>(serializer, s) &&
+        !tryWrite<SerialModule>(serializer, s) &&
         !tryWrite<PoolStub>(serializer, s) &&
         !tryWrite<ProxyEnv>(serializer, s)) {
         std::cerr << "couldn't serialize EXTERNALSXP: ";
@@ -383,6 +386,8 @@ static SEXP readRir(AbstractDeserializer& deserializer) {
             return PirTypeFeedback::deserialize(deserializer)->container();
         case TYPEFEEDBACK_MAGIC:
             return TypeFeedback::deserialize(deserializer)->container();
+        case SERIAL_MODULE_MAGIC:
+            return SerialModule::deserialize(deserializer)->container();
         case POOL_STUB_MAGIC:
             return PoolStub::deserialize(deserializer)->container();
         case PROXY_ENV_MAGIC:

@@ -342,6 +342,8 @@ std::string Print::dumpEXTERNALSXP(SEXP s, size_t length) {
         ss << "(rir::PirTypeFeedback*)" << p;
     } else if (auto p = TypeFeedback::check(s)) {
         ss << "(rir::TypeFeedback*)" << p;
+    } else if (auto p = SerialModule::check(s)) {
+        ss << "(rir::SerialModule*)" << p << " (" << p->firstBitcodeBytes() << ")";
     } else if (auto p = PoolStub::check(s)) {
         ss << "(rir::PoolStub*)";
         p->print(ss);
