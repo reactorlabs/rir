@@ -1002,7 +1002,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize < 20) {
+                        fun->body()->codeSize < 200) {
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
