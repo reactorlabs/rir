@@ -211,19 +211,6 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        // FIXME: is this correct, originally it was only in DeoptReason::record
-        // if (TYPEOF(e) == PROMSXP) {
-        //     if (PRVALUE(e) == R_UnboundValue &&
-        //         stateBeforeLastForce < ObservedValues::promise)
-        //         stateBeforeLastForce = ObservedValues::promise;
-        //     else if (stateBeforeLastForce < ObservedValues::evaluatedPromise)
-        //         stateBeforeLastForce = ObservedValues::evaluatedPromise;
-        // } else {
-        //     // FIXME: this was in recordTypeFeedbackImpl
-        //     if (stateBeforeLastForce < ObservedValues::value)
-        //         stateBeforeLastForce = ObservedValues::value;
-        // }
-
         return memcmp(&old, this, sizeof(ObservedValues));
     }
 };
@@ -404,6 +391,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     Function* owner() const { return owner_; }
 
+    // Type feedback is versioned. Each time new feedback
+    // in any of the slot is recorded, its version increased.
+    // The new is important, if we record already known
+    // information, the version is left unchnaged.
     size_t version() const { return version_; }
     void version(size_t version) { version_ = version; }
 };

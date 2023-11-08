@@ -66,6 +66,11 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         auto feedback = origin.function()->typeFeedback();
+
+        // FIXME: very similar code is in the recordTypeFeedbackImpl
+        // IMHO the one there is more correct. Would it make sense
+        // to pull this into the TypeFeedback::record_type()?
+        // and get rid of the overload that takes lambda?
         feedback->record_type(origin.idx(), val);
         feedback->record_type(origin.idx(), [&](auto& slot) {
             if (TYPEOF(val) == PROMSXP) {

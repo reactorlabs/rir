@@ -19,7 +19,6 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     // What this loop does is that it sets the function owned (yet not
     // deserialized) SEXPs to something reasonable so it will not confuse the GC
     // which might run while they are deserialized.
-    // TODO: wouldn't it be better to change the serialization order?
     for (unsigned i = 0; i < fun->numArgs_ + NUM_PTRS; i++) {
         fun->setEntry(i, R_NilValue);
     }

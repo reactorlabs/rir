@@ -2007,7 +2007,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         });
     };
 
-    // TODO: move above
     auto function = c->function();
     auto typeFeedback = function->typeFeedback();
 
