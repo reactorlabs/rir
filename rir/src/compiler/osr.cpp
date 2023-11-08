@@ -27,13 +27,12 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
         [&](Continuation* cnt) {
             cmp.optimizeModule();
             fun = backend.getOrCompile(cnt);
+            auto dt = DispatchTable::unpack(BODY(closure));
+            fun->dispatchTable(dt);
         },
         [&]() { std::cerr << "Continuation compilation failed\n"; });
 
     delete module;
-
-    auto dt = DispatchTable::unpack(BODY(closure));
-    fun->dispatchTable(dt);
 
     return fun;
 }
