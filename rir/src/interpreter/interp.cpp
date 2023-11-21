@@ -2000,6 +2000,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         auto idx = *(Immediate*)(pc + 1);
+        // FIXME: cf. #1260
         c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
                 feedback.stateBeforeLastForce = state;

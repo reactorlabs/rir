@@ -126,7 +126,8 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
         }
         auto mkenv = new MkEnv(closureEnv, names, args.data(), miss);
 
-        // FIXME: what does this mean, we need both rirFun and we need idx
+        // FIXME: (cf. #1260) what does this mean, we need both rirFun and we
+        // need idx
         mkenv->updateTypeFeedback().feedbackOrigin.function(
             cnt->owner()->rirFunction());
         add(mkenv);
@@ -174,7 +175,8 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     auto rirFun = version->owner()->rirFunction();
     if (rirFun->flags.contains(rir::Function::NeedsFullEnv))
         mkenv->neverStub = true;
-    // FIXME: what does this mean, we need both rirFun and we need idx
+    // FIXME: (cf. #1260) what does this mean, we need both rirFun and we need
+    // idx
     mkenv->updateTypeFeedback().feedbackOrigin.function(rirFun);
     add(mkenv);
     this->env = mkenv;

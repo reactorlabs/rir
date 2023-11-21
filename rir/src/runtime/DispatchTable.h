@@ -134,14 +134,11 @@ struct DispatchTable
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
             if (old->context() == assumptions) {
-                // FIXME: it will always be > 0, right?
-                if (i != 0) {
-                    // Remember deopt counts across recompilation to avoid
-                    // deopt loops
-                    fun->addDeoptCount(old->deoptCount());
-                    setEntry(i, fun->container());
-                    assert(get(i) == fun);
-                }
+                // Remember deopt counts across recompilation to avoid
+                // deopt loops
+                fun->addDeoptCount(old->deoptCount());
+                setEntry(i, fun->container());
+                assert(get(i) == fun);
                 // old->dispatchTable(nullptr);
                 return;
             }

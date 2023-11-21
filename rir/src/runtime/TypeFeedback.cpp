@@ -67,7 +67,7 @@ void DeoptReason::record(SEXP val) const {
             break;
         auto feedback = origin.function()->typeFeedback();
 
-        // FIXME: very similar code is in the recordTypeFeedbackImpl
+        // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
         // IMHO the one there is more correct. Would it make sense
         // to pull this into the TypeFeedback::record_type()?
         // and get rid of the overload that takes lambda?

@@ -958,6 +958,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
                             SEXP value) {
     feedback->record_type(idx, value);
+    // FIXME: cf. 1260
     feedback->record_type(idx, [&](auto& slot) {
         if (TYPEOF(value) == PROMSXP) {
             if (PRVALUE(value) == R_UnboundValue &&
