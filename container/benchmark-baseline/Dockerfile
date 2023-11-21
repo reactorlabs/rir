@@ -1,5 +1,5 @@
 FROM ubuntu:20.04
-ARG GRAAL_VERSION=22.0.0.2
+ARG GRAAL_VERSION=22.1.0
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq && \
