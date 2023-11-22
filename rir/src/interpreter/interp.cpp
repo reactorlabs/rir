@@ -824,7 +824,7 @@ const unsigned pir::Parameter::PIR_REOPT_TIME =
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
-    getenv("PIR_OPT_BC_SIZE") ? atoi(getenv("PIR_OPT_BC_SIZE")) : 200;
+    getenv("PIR_OPT_BC_SIZE") ? atoi(getenv("PIR_OPT_BC_SIZE")) : 20;
 
 static unsigned serializeCounter = 0;
 
