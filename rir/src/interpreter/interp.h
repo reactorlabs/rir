@@ -58,10 +58,9 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 inline bool RecompileHeuristic(Function* fun,
                                Function* funMaybeDisabled = nullptr) {
 
-    auto flags = fun->flags;
-    if (flags.contains(Function::MarkOpt))
+    if (fun->flags.contains(Function::MarkOpt))
         return true;
-    if (flags.contains(Function::NotOptimizable))
+    if (fun->flags.contains(Function::NotOptimizable))
         return false;
 
     if (!funMaybeDisabled)
@@ -70,21 +69,24 @@ inline bool RecompileHeuristic(Function* fun,
     auto abandon =
         funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
 
-    auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
-                                 : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        fun->clearInvocationTime();
-        return !abandon;
-    }
-
-    if (fun->isOptimized())
-        return false;
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0)
         return !abandon;
 
     if (fun->invocationCount() == wu)
         return !abandon;
+
+    if (fun->invocationCount() > wu) {
+        /* If the invocation count exceeds the warmup, we check if we should
+         * possibly reoptimize the function. This only makes sense if we have
+         * gathered more type feedback since the last time the fun was compiled.
+         * We use the funMaybeDisabled for the calls when fun is the baseline
+         * funMaybeDisabled is the deopted version. */
+        auto current = fun->dispatchTable()->currentTypeFeedbackVersion();
+        if (current > funMaybeDisabled->typeFeedback()->version()) {
+            return !abandon;
+        }
+    }
 
     return false;
 }
