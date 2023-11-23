@@ -1459,7 +1459,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             R_ReturnedValue = R_NilValue; /* remove restart token */
             fun->registerInvocation();
             result = code->nativeCode()(code, args, env, callee);
-            fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }
@@ -1477,7 +1476,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     ostack_popn(missing);
 
     SLOWASSERT(t == R_BCNodeStackTop);
-    fun->registerEndInvocation();
     return result;
 }
 

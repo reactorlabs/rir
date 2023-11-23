@@ -1131,7 +1131,6 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(call.passedArgs - call.suppliedArgs);
-        fun->registerEndInvocation();
         return result;
     }
     default:
@@ -3973,14 +3972,12 @@ SEXP rirEval(SEXP what, SEXP env) {
         Function* fun = table->baseline();
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
         return res;
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
         return res;
     }
 
