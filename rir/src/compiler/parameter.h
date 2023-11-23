@@ -16,6 +16,7 @@ struct Parameter {
     static const unsigned PIR_WARMUP;
     static const unsigned PIR_OPT_TIME;
     static const unsigned PIR_REOPT_TIME;
+    static const unsigned PIR_OPT_BC_SIZE;
     static const unsigned DEOPT_ABANDON;
 
     static size_t PROMISE_INLINER_MAX_SIZE;

@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/GlobalObject.h>
@@ -418,13 +419,15 @@ llvm::Value* LowerFunctionLLVM::load(Value* val, PirType type, Rep needed) {
         auto srcAddr = (Constant*)builder.CreateIntToPtr(
             llvm::ConstantInt::get(
                 PirJitLLVM::getContext(),
-                llvm::APInt(64,
-                            reinterpret_cast<uint64_t>(dr->reason.srcCode()),
-                            false)),
+                llvm::APInt(
+                    64,
+                    reinterpret_cast<uint64_t>(dr->reason.origin.function()),
+                    false)),
             t::voidPtr);
         auto drs = llvm::ConstantStruct::get(
-            t::DeoptReason, {c(dr->reason.reason, 32),
-                             c(dr->reason.origin.offset(), 32), srcAddr});
+            t::DeoptReason,
+            {c(dr->reason.reason, 32),
+             c(dr->reason.origin.index().asInteger(), 32), srcAddr});
         res = globalConst(drs);
     } else {
         val->printRef(std::cerr);
@@ -6129,21 +6132,25 @@ void LowerFunctionLLVM::compile() {
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
-                if (i->hasTypeFeedback() &&
-                    i->typeFeedback().feedbackOrigin.pc()) {
-                    call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
-                         {c((void*)i->typeFeedback().feedbackOrigin.pc()),
-                          c((void*)i->typeFeedback().feedbackOrigin.srcCode()),
-                          load(i)});
+                if (i->hasTypeFeedback()) {
+                    auto& origin = i->typeFeedback().feedbackOrigin;
+                    if (origin.hasSlot()) {
+                        call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::recordTypeFeedback),
+                            {convertToPointer(origin.function()->typeFeedback(),
+                                              t::i8, true),
+                             c(origin.index().idx, 32), load(i)});
+                    }
                 }
                 if (i->hasCallFeedback()) {
-                    assert(i->callFeedback().feedbackOrigin.pc());
+                    auto& origin = i->callFeedback().feedbackOrigin;
+                    assert(origin.hasSlot());
                     call(NativeBuiltins::get(
-                             NativeBuiltins::Id::recordTypefeedback),
-                         {c((void*)i->callFeedback().feedbackOrigin.pc()),
-                          c((void*)i->callFeedback().feedbackOrigin.srcCode()),
-                          load(i)});
+                             NativeBuiltins::Id::recordCallFeedback),
+                         {convertToPointer(origin.function()->typeFeedback(),
+                                           t::i8, true),
+                          c(origin.index().idx, 32), load(i)});
                 }
             }
 
@@ -6249,12 +6256,13 @@ void LowerFunctionLLVM::compile() {
             auto i = var.first;
             if (Rep::Of(i) != Rep::SEXP)
                 continue;
-            if (!i->typeFeedback().feedbackOrigin.pc())
+            if (!i->typeFeedback().feedbackOrigin.hasSlot())
                 continue;
             if (!var.second.initialized)
                 continue;
             if (var.second.stackSlot < PirTypeFeedback::MAX_SLOT_IDX) {
-                codes.insert(i->typeFeedback().feedbackOrigin.srcCode());
+                codes.insert(
+                    i->typeFeedback().feedbackOrigin.function()->body());
                 variableMapping.emplace(var.second.stackSlot,
                                         i->typeFeedback());
 #ifdef DEBUG_REGISTER_MAP

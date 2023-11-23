@@ -37,3 +37,5 @@ benchmarks/
 external/*
 !external/custom-r
 .history
+.cache
+compile_commands.json

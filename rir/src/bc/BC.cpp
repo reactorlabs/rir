@@ -24,23 +24,6 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.cacheIdx);
         return;
 
-    case Opcode::record_call_:
-        // Call feedback targets are stored in the code extra pool. We don't
-        // have access to them here, so we can't write a call feedback with
-        // preseeded values.
-        assert(immediate.callFeedback.numTargets == 0 &&
-               "cannot write call feedback targets");
-        cs.insert(immediate.callFeedback);
-        return;
-
-    case Opcode::record_test_:
-        cs.insert(immediate.testFeedback);
-        break;
-
-    case Opcode::record_type_:
-        cs.insert(immediate.typeFeedback);
-        break;
-
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
@@ -96,6 +79,9 @@ void BC::write(CodeStream& cs) const {
     case Opcode::pull_:
     case Opcode::is_:
     case Opcode::put_:
+    case Opcode::record_call_:
+    case Opcode::record_test_:
+    case Opcode::record_type_:
         cs.insert(immediate.i);
         return;
 
@@ -331,9 +317,7 @@ void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
 
 void BC::print(std::ostream& out) const {
     out << "   ";
-    if (bc != Opcode::record_call_ && bc != Opcode::record_type_ &&
-        bc != Opcode::record_test_)
-        printOpcode(out);
+    printOpcode(out);
 
     switch (bc) {
     case Opcode::invalid_:
@@ -402,54 +386,11 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
         out << (BC::RirTypecheck)immediate.i;
         break;
-    case Opcode::record_call_: {
-        ObservedCallees prof = immediate.callFeedback;
-        out << "[ ";
-        if (prof.taken == ObservedCallees::CounterOverflow)
-            out << "*, <";
-        else
-            out << prof.taken << ", <";
-        if (prof.numTargets == ObservedCallees::MaxTargets)
-            out << "*>, ";
-        else
-            out << prof.numTargets << ">, ";
-
-        out << (prof.invalid ? "invalid" : "valid");
-        out << (prof.numTargets ? ", " : " ");
-
-        for (int i = 0; i < prof.numTargets; ++i)
-            out << callFeedbackExtra().targets[i] << "("
-                << Rf_type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";
-        out << "]";
+    case Opcode::record_test_:
+    case Opcode::record_type_:
+    case Opcode::record_call_:
+        out << "#" << immediate.i;
         break;
-    }
-
-    case Opcode::record_test_: {
-        out << "[ ";
-        switch (immediate.testFeedback.seen) {
-        case ObservedTest::None:
-            out << "_";
-            break;
-        case ObservedTest::OnlyTrue:
-            out << "T";
-            break;
-        case ObservedTest::OnlyFalse:
-            out << "F";
-            break;
-        case ObservedTest::Both:
-            out << "?";
-            break;
-        }
-        out << " ]";
-        break;
-    }
-
-    case Opcode::record_type_: {
-        out << "[ ";
-        immediate.typeFeedback.print(out);
-        out << " ]";
-        break;
-    }
 
 #define V(NESTED, name, name_) case Opcode::name_##_:
         BC_NOARGS(V, _)

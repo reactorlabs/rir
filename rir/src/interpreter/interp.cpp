@@ -823,6 +823,8 @@ const unsigned pir::Parameter::PIR_REOPT_TIME =
     getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
+const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
+    getenv("PIR_OPT_BC_SIZE") ? atoi(getenv("PIR_OPT_BC_SIZE")) : 20;
 
 static unsigned serializeCounter = 0;
 
@@ -1002,7 +1004,8 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize < 20) {
+                        fun->body()->codeSize <
+                            pir::Parameter::PIR_OPT_BC_SIZE) {
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
@@ -1996,10 +1999,17 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 state = ObservedValues::StateBeforeLastForce::promise;
         }
 
-        ObservedValues* feedback = (ObservedValues*)(pc + 1);
-        if (feedback->stateBeforeLastForce < state)
-            feedback->stateBeforeLastForce = state;
+        auto idx = *(Immediate*)(pc + 1);
+        // FIXME: cf. #1260
+        c->function()->typeFeedback()->record_type(idx, [&](auto& feedback) {
+            if (feedback.stateBeforeLastForce < state) {
+                feedback.stateBeforeLastForce = state;
+            }
+        });
     };
+
+    auto function = c->function();
+    auto typeFeedback = function->typeFeedback();
 
     // main loop
     BEGIN_MACHINE {
@@ -2306,26 +2316,26 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            ObservedCallees* feedback = (ObservedCallees*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP callee = ostack_top();
-            feedback->record(c, callee);
-            pc += sizeof(ObservedCallees);
+            typeFeedback->record_callee(idx, function, callee);
             NEXT();
         }
 
         INSTRUCTION(record_test_) {
-            ObservedTest* feedback = (ObservedTest*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedTest);
+            typeFeedback->record_test(idx, t);
             NEXT();
         }
 
         INSTRUCTION(record_type_) {
-            ObservedValues* feedback = (ObservedValues*)pc;
+            Immediate idx = readImmediate();
+            advanceImmediate();
             SEXP t = ostack_top();
-            feedback->record(t);
-            pc += sizeof(ObservedValues);
+            typeFeedback->record_type(idx, t);
             NEXT();
         }
 
