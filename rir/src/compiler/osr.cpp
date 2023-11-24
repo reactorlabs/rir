@@ -30,7 +30,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
             auto dt = DispatchTable::unpack(BODY(closure));
             fun->dispatchTable(dt);
         },
-        [&]() { std::cerr << "Continuation compilation failed\n"; });
+        [&]() { logger.warn("Continuation compilation failed"); });
 
     delete module;
 
