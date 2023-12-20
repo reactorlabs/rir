@@ -13,6 +13,7 @@
 #include <iostream>
 #include <memory>
 #include <ostream>
+#include <random>
 #include <variant>
 #include <vector>
 
@@ -213,6 +214,42 @@ struct ObservedValues {
 
         return memcmp(&old, this, sizeof(ObservedValues));
     }
+
+    inline bool random_type() {
+        static std::default_random_engine gen;
+        static std::bernoulli_distribution bdistr(0.5);
+        static std::uniform_int_distribution<> tdistr(0, 25);
+
+        uint32_t old;
+        memcpy(&old, this, sizeof(ObservedValues));
+
+        notScalar = notScalar || bdistr(gen);
+        object = object || bdistr(gen);
+        attribs = attribs || object || bdistr(gen);
+        notFastVecelt =
+            notFastVecelt || !(!object && (!attribs || bdistr(gen)));
+
+        uint8_t type = tdistr(gen);
+        // 11 and 12 are not valid sexptypes anymore (were used for factors
+        // before). We give more probability to realsxp and strsxp
+        if (type == 11) {
+            type = 14; // REALSXP
+        } else if (type == 12) {
+            type = 16; // STRSXP
+        }
+
+        if (numTypes < MaxTypes) {
+            int i = 0;
+            for (; i < numTypes; ++i) {
+                if (seen[i] == type)
+                    break;
+            }
+            if (i == numTypes)
+                seen[numTypes++] = type;
+        }
+
+        return memcmp(&old, this, sizeof(ObservedValues));
+    }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
@@ -325,6 +362,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // appropriate locations.
     uint8_t slots_[];
 
+    static inline const double fuzz_threshold = 0.7;
+
+    // static inline const bool fuzz_type_feedback =
+    // !getenv("FUZZ_TYPE_FEEDBACK");
+    static inline const bool fuzz_type_feedback = true;
+
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
                           const std::vector<ObservedValues>& types);
@@ -367,8 +410,17 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     }
 
     void record_type(uint32_t idx, const SEXP e) {
+        static std::default_random_engine gen;
+        static std::uniform_real_distribution<> distr(0., 1.);
+
         if (types(idx).record(e)) {
             version_++;
+        }
+
+        if (fuzz_type_feedback && distr(gen) >= fuzz_threshold) {
+            if (types(idx).random_type()) {
+                version_++;
+            }
         }
     }
 
