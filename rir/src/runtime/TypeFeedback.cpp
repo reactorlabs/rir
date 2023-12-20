@@ -119,6 +119,9 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
     }
 }
 
+const double TypeFeedback::fuzz_type_feedback =
+    getenv("FUZZ_TYPE_FEEDBACK") ? std::stod(getenv("PIR_OPT_LEVEL")) : -1.;
+
 void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     OutInteger(out, callees_size_);
     for (size_t i = 0; i < callees_size_; i++) {
