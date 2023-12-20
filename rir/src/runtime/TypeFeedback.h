@@ -362,11 +362,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // appropriate locations.
     uint8_t slots_[];
 
-    static inline const double fuzz_threshold = 0.7;
+    static constexpr double fuzz_threshold = 0.7;
 
     // static inline const bool fuzz_type_feedback =
     // !getenv("FUZZ_TYPE_FEEDBACK");
-    static inline const bool fuzz_type_feedback = true;
+    static constexpr bool fuzz_type_feedback = true;
 
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
