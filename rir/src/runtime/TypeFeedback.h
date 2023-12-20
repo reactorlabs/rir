@@ -366,7 +366,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     // static inline const bool fuzz_type_feedback =
     // !getenv("FUZZ_TYPE_FEEDBACK");
-    static constexpr bool fuzz_type_feedback = true;
+    static constexpr bool fuzz_type_feedback = false;
 
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
