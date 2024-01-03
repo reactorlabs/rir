@@ -49,7 +49,9 @@ void BB::print(std::ostream& out, bool tty) {
     printPrologue(out, tty);
     for (auto i : instrs) {
         out << "  ";
+        // out << i << "  ";
         i->print(out, tty);
+        // out << i << "  ";
         out << "\n";
     }
     printEpilogue(out, tty);

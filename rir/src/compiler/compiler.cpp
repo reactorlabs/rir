@@ -416,6 +416,21 @@ void Compiler::optimizeModule() {
                     v->anyChangeCurrentIter |= resApply;
                     if (resApply)
                         changed = true;
+
+#ifdef PASS_SCHEDULER_DEBUG
+                    if (iteration >= 40) {
+
+                        std::cerr
+                            << "\n\n ------------------ AFTER "
+                            << translation->getName() << " on cls:" << v
+                            << " ====================================\n\n";
+                        std::cerr << "\n";
+                        v->printCode(std::cerr, true, false);
+                        std::cerr << "\n";
+                    }
+
+#endif
+
                 } else {
 
                     // if (v == versionTracked) {

@@ -67,7 +67,7 @@ struct hash_pair {
 
 std::unordered_map<std::pair<Code*, Compiler*>, int, hash_pair> countFDByCode;
 bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
-                           AbstractLog& log, size_t) const {
+                           AbstractLog& log, size_t iteration) const {
 
     // auto currentKey = std::pair<Code*,Compiler*>(code, &cmp);
     // if (!countFDByCode.count(currentKey)) {
@@ -147,27 +147,67 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         Visitor::run(code->entry, [&](BB* bb) {
             if (!bb->isExit())
                 return;
+
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
                 auto i = *it;
                 int argnum = 0;
+
                 i->eachArg([&](InstrArg& arg) {
                     if (auto mk = MkArg::Cast(arg.val())) {
+
                         auto a = analysis.resultIgnoringUnreachableExits(
-                            i, analysis.cfg);
+                            i, analysis.cfg); // TODO move up?
+
                         if (a.isUnused(mk)) {
-                            auto repl = mk->clone();
+
                             if (auto phi = Phi::Cast(i)) {
+
+                                // std::cerr <<"PHI
+                                // ----------------------------------------
+                                // \n\n"; phi->print(std::cerr, true);
+                                // code->printCode(std::cerr, true, false);
+                                // std::cerr <<"end PHI
+                                // ----------------------------------------
+                                // \n\n";
                                 auto inp = phi->inputAt(argnum);
                                 assert(inp != bb);
-                                inp->append(repl);
-                                anyChange = true;
-                            } else {
+
+                                if (inp != mk->bb()) {
+                                    assert(false && "PHI FD!!"); // TODO
+
+                                    auto repl = mk->clone();
+
+                                    inp->append(repl);
+                                    arg.val() = repl;
+                                    anyChange = true;
+
+                                    // std::cerr << "\n\n\n AAA MKARG cloned: ";
+                                    // repl->print(std::cerr, true);
+                                    // std::cerr << "**************************
+                                    // \n\n\n\n\n\n";
+                                }
+
+                            } else if (mk->bb() != bb) {
+                                // assert(false && "uu");
+                                auto repl = mk->clone();
+                                // assert(mk->bb() != bb && "Adding to same
+                                // BB");
                                 it = bb->insert(it, repl);
                                 it++;
+                                arg.val() = repl;
+                                anyChange = true;
+
+                                // std::cerr << "\n\n\n AAA MKARG cloned: ";
+                                // repl->print(std::cerr, true);
+                                // std::cerr <<   "**************************
+                                // \n\n\n\n\n\n";
                             }
-                            arg.val() = repl;
+
+                            // arg.val() = repl;
+                            // anyChange = true;
+
                             next = it + 1;
                         }
                     }

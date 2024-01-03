@@ -11,7 +11,7 @@ namespace rir {
 namespace pir {
 
 bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
-                size_t) const {
+                size_t iteration) const {
     bool changed = false;
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
@@ -260,9 +260,51 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
                             continue;
                         }
                     }
-                    i->replaceUsesWith(firstInstr, [&](Instruction*, size_t) {
-                        changed = true;
-                    });
+
+                    // if (iteration >= 40) {
+
+                    //     std::cerr << "\n\n ------------------ gvn on cls:" <<
+                    //     cls << " - code: " << code << "
+                    //     ====================================\n\n";
+
+                    //     std::cerr << "\n";
+                    //     i->print(std::cerr);
+                    //     std::cerr << "\n";
+                    //     firstInstr->print(std::cerr);
+                    //     std::cerr << "-----------BEFORE REPLACE
+                    //     -------------\n";
+
+                    //     code->printCode(std::cerr, true, false);
+                    // }
+                    // std::cerr << "\n";
+
+                    assert(firstInstr != i && "firtInstr == i");
+
+                    if (!i->bb()->isDeopt()) {
+
+                        i->replaceUsesWith(firstInstr,
+                                           [&](Instruction*, size_t) {
+                                               // std::cerr << "changed1 !!" <<
+                                               // "\n";
+                                               changed = true;
+                                           });
+                    }
+
+                    // std::cerr << "-------AFTER REPLACE
+                    // -------------------------------------\n"; if (iteration
+                    // >= 40) {
+
+                    //     std::cerr << "\n";
+                    //     i->print(std::cerr);
+                    //     std::cerr << "\n";
+                    //     firstInstr->print(std::cerr);
+                    //     std::cerr << "-----------BEFORE REPLACE
+                    //     -------------\n";
+
+                    //     code->printCode(std::cerr, true, false);
+                    // }
+                    // std::cerr << "\n";
+
                     // Make sure this instruction really gets removed
                     i->effects.reset();
                 }
@@ -273,6 +315,15 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
     // Remove dead instructions here, instead of deferring to the cleanup pass.
     // Sometimes a dead instruction will trip the verifier.
     BBTransform::removeDeadInstrs(code, 1);
+
+    // if (iteration >= 40) {
+
+    //     std::cerr << "\n\n ------------------ EXITING gvn on cls:" << cls <<
+    //     " - code: " << code << " ====================================\n\n";
+    //     std::cerr << "\n";
+    //     code->printCode(std::cerr, true, false);
+    //     std::cerr << "\n";
+    // }
 
     return changed;
 }

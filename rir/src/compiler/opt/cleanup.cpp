@@ -24,9 +24,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                           DeadInstructions::IgnoreUpdatePromise);
     bool anyChange = false;
 
-    if (iter == 300)
-        assert(false);
-
     Visitor::run(
         code->entry, [&](BB* bb) {
             auto ip = bb->begin();
