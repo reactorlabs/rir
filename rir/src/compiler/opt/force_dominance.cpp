@@ -69,21 +69,6 @@ std::unordered_map<std::pair<Code*, Compiler*>, int, hash_pair> countFDByCode;
 bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                            AbstractLog& log, size_t iteration) const {
 
-    // auto currentKey = std::pair<Code*,Compiler*>(code, &cmp);
-    // if (!countFDByCode.count(currentKey)) {
-    //     countFDByCode[currentKey]  =1;
-    // }
-    // else {
-    //     countFDByCode[currentKey]++;
-    // }
-    // std::cerr << "RUNNING FORCE DOMINANCE! " << " - times: " << fdcount << "
-    // -  codes: " << countFDByCode.size() << "\n"; fdcount++;
-
-    // std::cerr << "full list!\n";
-    // for (auto x : countFDByCode) {
-    //     std::cerr << "(" << x.first.first  << "," << x.first.second << ")" <<
-    //     " - times: " << x.second << "\n";
-    // }
 
     bool anyChange = false;
 
@@ -164,13 +149,6 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                             if (auto phi = Phi::Cast(i)) {
 
-                                // std::cerr <<"PHI
-                                // ----------------------------------------
-                                // \n\n"; phi->print(std::cerr, true);
-                                // code->printCode(std::cerr, true, false);
-                                // std::cerr <<"end PHI
-                                // ----------------------------------------
-                                // \n\n";
                                 auto inp = phi->inputAt(argnum);
                                 assert(inp != bb);
 
