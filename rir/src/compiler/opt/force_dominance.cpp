@@ -147,44 +147,35 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                         if (a.isUnused(mk)) {
 
+                            auto withNewPromDo =
+                                [&](std::function<void(Instruction*)> action) {
+                                    auto repl = mk->clone();
+                                    action(repl);
+                                    arg.val() = repl;
+                                    anyChange = true;
+                                };
+
                             if (auto phi = Phi::Cast(i)) {
 
                                 auto inp = phi->inputAt(argnum);
                                 assert(inp != bb);
 
                                 if (inp != mk->bb()) {
-                                    assert(false && "PHI FD!!"); // TODO
+                                    assert(false && "ForceDominance. Do we "
+                                                    "ever hit this case?");
 
-                                    auto repl = mk->clone();
-
-                                    inp->append(repl);
-                                    arg.val() = repl;
-                                    anyChange = true;
-
-                                    // std::cerr << "\n\n\n AAA MKARG cloned: ";
-                                    // repl->print(std::cerr, true);
-                                    // std::cerr << "**************************
-                                    // \n\n\n\n\n\n";
+                                    withNewPromDo([&](Instruction* repl) {
+                                        inp->append(repl);
+                                    });
                                 }
 
                             } else if (mk->bb() != bb) {
-                                // assert(false && "uu");
-                                auto repl = mk->clone();
-                                // assert(mk->bb() != bb && "Adding to same
-                                // BB");
-                                it = bb->insert(it, repl);
-                                it++;
-                                arg.val() = repl;
-                                anyChange = true;
 
-                                // std::cerr << "\n\n\n AAA MKARG cloned: ";
-                                // repl->print(std::cerr, true);
-                                // std::cerr <<   "**************************
-                                // \n\n\n\n\n\n";
+                                withNewPromDo([&](Instruction* repl) {
+                                    it = bb->insert(it, repl);
+                                    it++;
+                                });
                             }
-
-                            // arg.val() = repl;
-                            // anyChange = true;
 
                             next = it + 1;
                         }
