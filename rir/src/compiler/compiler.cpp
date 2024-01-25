@@ -357,17 +357,10 @@ void Compiler::optimizeModule() {
     logger.flushAll();
     size_t passnr = 10;
 
-    // std::cerr << "OPTIMIZEMODULE()!!---------------------------------------
-    // \n";
-
-    // ClosureVersion* versionTracked = nullptr;
-
     PassScheduler::instance().run([&](const Pass* translation,
                                       size_t iteration) {
         auto newIterStarted = translation->isPhaseMarker();
 
-        // std::cerr << translation->getName() <<  " - iteration: " << iteration
-        // // << "\n";
         bool changed = false;
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
@@ -379,20 +372,14 @@ void Compiler::optimizeModule() {
 
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
-                // if (!versionTracked) {
-                //     std::cerr << "******************STARTING TRACE for
-                //     version " << v << "******************** \n";
-                //     versionTracked =v;
-                // }
-
-                if (newIterStarted && iteration == 0) {
-                    v->anyChange = false;
-
-                } else if (newIterStarted && iteration > 0) {
-                    v->anyChange = v->anyChangeCurrentIter;
-                }
-
                 if (newIterStarted) {
+                    if (iteration == 0) {
+                        v->anyChangePreviousIter = false;
+
+                    } else if (iteration > 0) {
+                        v->anyChangePreviousIter = v->anyChangeCurrentIter;
+                    }
+
                     v->anyChangeCurrentIter = false;
                 }
 
@@ -404,18 +391,14 @@ void Compiler::optimizeModule() {
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (iteration == 0 || (iteration > 0 && v->anyChange)) {
+                if (iteration == 0 ||
+                    (iteration > 0 && v->anyChangePreviousIter)) {
 
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
-                    // if (v == versionTracked) {
-                    //     std::cerr << "apply " << translation->getName() << "
-                    //     - resApply: " << (resApply? "TRUE *******" : "FALSE")
-                    //     << " - iter: " << iteration << "\n";
-                    // }
+
                     v->anyChangeCurrentIter |= resApply;
-                    if (resApply)
-                        changed = true;
+                    changed |= resApply;
 
 #ifdef PASS_SCHEDULER_DEBUG
                     if (iteration >= 40) {
@@ -430,13 +413,6 @@ void Compiler::optimizeModule() {
                     }
 
 #endif
-
-                } else {
-
-                    // if (v == versionTracked) {
-                    //     std::cerr << "skipping " << translation->getName() <<
-                    //     " - iter: " << iteration << "\n";
-                    // }
                 }
 
                 if (MEASURE_COMPILER_PERF)

@@ -40,8 +40,8 @@ class ClosureVersion : public Code {
     size_t inlinees = 0;
 
     const bool root;
-    bool anyChange;
-    bool anyChangeCurrentIter;
+    bool anyChangePreviousIter = false;
+    bool anyChangeCurrentIter = false;
 
     rir::Function* optFunction;
 
