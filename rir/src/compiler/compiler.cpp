@@ -374,8 +374,7 @@ void Compiler::optimizeModule() {
             c->eachVersion([&](ClosureVersion* v) {
                 if (newIterStarted) {
                     if (iteration == 0) {
-                        v->anyChangePreviousIter = false;
-
+                        v->anyChangePreviousIter = true;
                     } else if (iteration > 0) {
                         v->anyChangePreviousIter = v->anyChangeCurrentIter;
                     }
@@ -391,8 +390,7 @@ void Compiler::optimizeModule() {
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (iteration == 0 ||
-                    (iteration > 0 && v->anyChangePreviousIter)) {
+                if (v->anyChangePreviousIter) {
 
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);

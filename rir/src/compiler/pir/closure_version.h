@@ -40,7 +40,11 @@ class ClosureVersion : public Code {
     size_t inlinees = 0;
 
     const bool root;
-    bool anyChangePreviousIter = false;
+
+    // these two variables are used by the scheduler algorithm
+    // in order to avoid running the optimization passes to versions
+    // that have already converged
+    bool anyChangePreviousIter = true;
     bool anyChangeCurrentIter = false;
 
     rir::Function* optFunction;
