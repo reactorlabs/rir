@@ -45,7 +45,7 @@ class ClosureVersion : public Code {
     // in order to avoid running the optimization passes to versions
     // that have already converged
     bool anyChangePreviousIter = true;
-    bool anyChangeCurrentIter = false;
+    bool anyChangeCurrentIter = true;
 
     rir::Function* optFunction;
 
