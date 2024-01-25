@@ -370,18 +370,23 @@ void Compiler::optimizeModule() {
                 Measuring::countTimer("compiler.cpp: module cleanup");
         }
 
-        module->eachPirClosure([&](Closure* c) {
-            c->eachVersion([&](ClosureVersion* v) {
-                if (newIterStarted) {
+        if (newIterStarted) {
+            module->eachPirClosure([&](Closure* c) {
+                c->eachVersion([&](ClosureVersion* v) {
                     if (iteration == 0) {
+                        // first iteration of new phase
                         v->anyChangePreviousIter = true;
                     } else if (iteration > 0) {
                         v->anyChangePreviousIter = v->anyChangeCurrentIter;
                     }
 
                     v->anyChangeCurrentIter = false;
-                }
+                });
+            });
+        }
 
+        module->eachPirClosure([&](Closure* c) {
+            c->eachVersion([&](ClosureVersion* v) {
                 auto& clog = logger.get(v);
                 auto pirLog = clog.forPass(passnr, translation->getName());
                 pirLog.pirOptimizationsHeader(translation);
