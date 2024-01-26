@@ -43,7 +43,10 @@ class ClosureVersion : public Code {
 
     // these two variables are used by the scheduler algorithm
     // in order to avoid running the optimization passes to versions
-    // that have already converged
+    // that have already converged (compiler.cpp)
+    // The reasons these are set to true is so that versions that are
+    // cloned in mid compilation (see references to cloneWithCurrentContext)
+    // are also included in optimizations
     bool anyChangePreviousIter = true;
     bool anyChangeCurrentIter = true;
 
