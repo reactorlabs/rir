@@ -403,19 +403,6 @@ void Compiler::optimizeModule() {
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
 
-#ifdef PASS_SCHEDULER_DEBUG
-                    if (iteration >= 40) {
-
-                        std::cerr
-                            << "\n\n ------------------ AFTER "
-                            << translation->getName() << " on cls:" << v
-                            << " ====================================\n\n";
-                        std::cerr << "\n";
-                        v->printCode(std::cerr, true, false);
-                        std::cerr << "\n";
-                    }
-
-#endif
                 }
 
                 if (MEASURE_COMPILER_PERF)
