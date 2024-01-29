@@ -14,6 +14,8 @@ class Continuation : public ClosureVersion {
                  const ContinuationContext* continuationContext);
     Continuation* isContinuation() override final { return this; }
 
+    // we set voyd only one time per version, otherwise the pass doesn't
+    // converge since it would keep changing forever
     bool typeFeedbackCleanupHasRun = false;
 };
 

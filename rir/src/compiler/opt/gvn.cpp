@@ -11,7 +11,7 @@ namespace rir {
 namespace pir {
 
 bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
-                size_t iteration) const {
+                size_t) const {
     bool changed = false;
     std::unordered_map<size_t, SmallSet<Value*>> reverseNumber;
     std::unordered_map<Value*, size_t> number;
@@ -261,11 +261,7 @@ bool GVN::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog& log,
                         }
                     }
 
-                    assert(firstInstr != i && "firtInstr == i");
-
                     i->replaceUsesWith(firstInstr, [&](Instruction*, size_t) {
-                        // std::cerr << "changed1 !!" <<
-                        // "\n";
                         changed = true;
                     });
 

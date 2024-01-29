@@ -34,9 +34,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                 bool isDead = dead.isDead(i);
                 // unused ldfun is a left over from a guard where ldfun was
                 // converted into ldvar.
-                // std::ofstream ost;
-                // ost.open("iters.txt", std::ios_base::app); // append instead
-                // of overwrite
 
                 if (isDead && !Visible::Cast(i) && !Invisible::Cast(i)) {
 
@@ -46,36 +43,19 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
 
                         switch (i->visibilityFlag()) {
                         case VisibilityFlag::On:
-                            // ost<< " von ";
                             bb->replace(ip, new Visible());
                             break;
                         case VisibilityFlag::Off:
-                            // ost<< " voff ";
                             bb->replace(ip, new Invisible());
                             break;
                         default:
                             assert(false);
                         }
                     } else {
-                        // ost<< " velse ";
-
-                        // ost << "inst: " << i << "\n";
-                        // i->print(ost, false);
-                        // ost << i->name() << "\n";
-                        // ost << "bb: " << "\n";
-                        // bb->print(ost,false);
-
-                        // ost << "instr: ";
-                        // i->print(ost, false);
-                        // ost << " iter: ";
-                        //(*ip)->print(ost, false);
-                        // ost << "bb: ";
-                        // bb->print(ost,false);
 
                         next = bb->remove(ip);
                     }
                     removed = true;
-                    // ost<< " removed1 \n";
 
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
@@ -107,7 +87,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                     }
                 } else if (auto b = CallBuiltin::Cast(i)) {
                     if (!i->hasEnv()) {
-                        // ost<< " removed2 \n";
                         std::vector<Value*> args;
                         b->eachCallArg([&](Value* v) { args.push_back(v); });
                         i->replaceUsesAndSwapWith(
@@ -240,7 +219,6 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                 } else {
                     anyChange = true;
                 }
-                // ost.close();
                 ip = next;
             }
         });

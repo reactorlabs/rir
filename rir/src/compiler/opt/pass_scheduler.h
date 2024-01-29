@@ -6,7 +6,6 @@
 
 #include "pass.h"
 
-#include <fstream>
 
 namespace rir {
 namespace pir {

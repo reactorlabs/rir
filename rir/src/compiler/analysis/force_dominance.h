@@ -302,15 +302,6 @@ struct ForcedBy {
         return f == getDominatingForce(forcee);
     }
 
-    // bool isUnused(MkArg* a) const {
-    //     if (isForced(a)) {
-    //         auto e = escaped.find(a);
-    //         if (e == escaped.end())
-    //             return true;
-    //     }
-    //     return false;
-    // }
-
     bool isUnused(MkArg* a) const {
 
         auto f = forcedBy.find(a);

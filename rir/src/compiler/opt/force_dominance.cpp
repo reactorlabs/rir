@@ -41,31 +41,6 @@ namespace pir {
  *
  */
 
-int fdcount = 0;
-int notMatch = 0;
-
-// struct AA {
-//     Compiler* cmp;
-//     int count;
-// };
-
-// A hash function used to hash a pair of any kind
-struct hash_pair {
-    template <class T1, class T2>
-    size_t operator()(const std::pair<T1, T2>& p) const {
-        auto hash1 = std::hash<T1>{}(p.first);
-        auto hash2 = std::hash<T2>{}(p.second);
-
-        if (hash1 != hash2) {
-            return hash1 ^ hash2;
-        }
-
-        // If hash1 == hash2, their XOR is zero.
-        return hash1;
-    }
-};
-
-std::unordered_map<std::pair<Code*, Compiler*>, int, hash_pair> countFDByCode;
 bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                            AbstractLog& log, size_t iteration) const {
 
@@ -196,7 +171,6 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     auto a = analysis.resultIgnoringUnreachableExits(
                         f, analysis.cfg);
                     if (a.isDominatingForce(f)) {
-
                         f->strict = true;
                         if (auto mk = MkArg::Cast(f->followCastsAndForce())) {
                             if (!mk->isEager()) {
@@ -423,7 +397,6 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (cast->kind == CastType::Upcast) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
                         if (mk->isEager()) {
-
                             auto eager = mk->eagerArg();
                             auto allowedToReplace = [&](Instruction* i) {
                                 if (Force::Cast(i) || LdFun::Cast(i))
