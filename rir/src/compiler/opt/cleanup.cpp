@@ -15,7 +15,7 @@ namespace rir {
 namespace pir {
 
 bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
-                    size_t) const {
+                    size_t iter) const {
     std::unordered_set<size_t> usedProms;
     std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
     std::deque<Promise*> todoUsedProms;
@@ -34,10 +34,13 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                 bool isDead = dead.isDead(i);
                 // unused ldfun is a left over from a guard where ldfun was
                 // converted into ldvar.
+
                 if (isDead && !Visible::Cast(i) && !Invisible::Cast(i)) {
+
                     if (i->getObservableEffects().includes(
                             Effect::Visibility) &&
                         i->visibilityFlag() != VisibilityFlag::Unknown) {
+
                         switch (i->visibilityFlag()) {
                         case VisibilityFlag::On:
                             bb->replace(ip, new Visible());
@@ -49,9 +52,11 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                             assert(false);
                         }
                     } else {
+
                         next = bb->remove(ip);
                     }
                     removed = true;
+
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     assert(!MkArg::Cast(arg));

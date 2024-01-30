@@ -162,7 +162,7 @@ PASS(Overflow, true, false)
  */
 PASS(HoistInstruction, false, false)
 
-PASS(TypefeedbackCleanup, true, false)
+PASS(TypefeedbackCleanup, false, false)
 
 class PhaseMarker : public Pass {
   public:

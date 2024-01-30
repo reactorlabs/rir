@@ -211,10 +211,11 @@ void ObservedValues::print(std::ostream& out) const {
                 << ((stateBeforeLastForce ==
                      ObservedValues::StateBeforeLastForce::value)
                         ? "value"
-                    : (stateBeforeLastForce ==
-                       ObservedValues::StateBeforeLastForce::evaluatedPromise)
-                        ? "evaluatedPromise"
-                        : "promise");
+                        : (stateBeforeLastForce ==
+                           ObservedValues::StateBeforeLastForce::
+                               evaluatedPromise)
+                              ? "evaluatedPromise"
+                              : "promise");
         }
     } else {
         out << "<?>";

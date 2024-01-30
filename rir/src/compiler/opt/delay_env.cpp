@@ -55,6 +55,7 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
 
                     if (!exists) {
                         assert(!st->isStArg);
+                        anyChange = true;
                         envInstr->pushArg(st->val(), PirType::any());
                         envInstr->varName.push_back(st->varName);
                     }
@@ -65,6 +66,7 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                     auto st = StVar::Cast(next);
                     if (st && st->env() == envInstr) {
                         if (consumeStVar(st)) {
+                            anyChange = true;
                             it = bb->remove(it + 1);
                             it--;
                             continue;
@@ -88,7 +90,6 @@ bool DelayEnv::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                           (Force::Cast(next) && next->hasObservableEffects())))
                     break;
 
-                anyChange = true;
                 bb->swapWithNext(it);
                 it++;
             }
