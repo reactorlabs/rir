@@ -904,8 +904,6 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                     continue;
                 noObj = false;
             }
-            // noObj = false;
-            // continue;
         }
         if (a->type.maybeObj()) {
             noObj = false;
