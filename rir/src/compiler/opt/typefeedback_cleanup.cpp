@@ -26,8 +26,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     std::unordered_set<Instruction*> affected;
 
     if (deoptCtx) {
-        if (deoptCtx->reason().srcCode() !=
-            cls->rirSrc()) { // deoptless and inlining
+        if (deoptCtx->reason().origin.function() !=
+            cls->owner()->rirFunction()) { // deoptless and inlining
 
             // we set voyd only one time per version, otherwise the pass doesn't
             // converge since it would keep changing forever
@@ -44,8 +44,8 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (!i->hasTypeFeedback())
                     return;
 
-                if (i->typeFeedback().feedbackOrigin.pc() ==
-                    deoptCtx->reason().pc()) {
+                if (i->typeFeedback().feedbackOrigin ==
+                    deoptCtx->reason().origin) {
                     if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
                         i->updateTypeFeedback().type =
                             deoptCtx->typeCheckTrigger();

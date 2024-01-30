@@ -1,6 +1,8 @@
 #include "Function.h"
 #include "R/Serialize.h"
+#include "Rinternals.h"
 #include "compiler/compiler.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
 
@@ -10,18 +12,25 @@ Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
     const Context as = Context::deserialize(refTable, inp);
     SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
     void* payload = DATAPTR(store);
-    Function* fun = new (payload) Function(functionSize, nullptr, {}, sig, as);
+    Function* fun =
+        new (payload) Function(functionSize, nullptr, {}, sig, as, nullptr);
     fun->numArgs_ = InInteger(inp);
     fun->info.gc_area_length += fun->numArgs_;
-    for (unsigned i = 0; i < fun->numArgs_ + 1; i++) {
+    // What this loop does is that it sets the function owned (yet not
+    // deserialized) SEXPs to something reasonable so it will not confuse the GC
+    // which might run while they are deserialized.
+    for (unsigned i = 0; i < fun->numArgs_ + NUM_PTRS; i++) {
         fun->setEntry(i, R_NilValue);
     }
     PROTECT(store);
     AddReadRef(refTable, store);
+    TypeFeedback* feedback = TypeFeedback::deserialize(refTable, inp);
+    PROTECT(feedback->container());
+    fun->typeFeedback(feedback);
     SEXP body = Code::deserialize(refTable, inp)->container();
     fun->body(body);
     PROTECT(body);
-    int protectCount = 2;
+    int protectCount = 3;
     for (unsigned i = 0; i < fun->numArgs_; i++) {
         if ((bool)InInteger(inp)) {
             SEXP arg = Code::deserialize(refTable, inp)->container();
@@ -42,6 +51,7 @@ void Function::serialize(SEXP refTable, R_outpstream_t out) const {
     context_.serialize(refTable, out);
     OutInteger(out, numArgs_);
     HashAdd(container(), refTable);
+    typeFeedback()->serialize(refTable, out);
     body()->serialize(refTable, out);
     for (unsigned i = 0; i < numArgs_; i++) {
         Code* arg = defaultArg(i);
@@ -58,6 +68,7 @@ void Function::disassemble(std::ostream& out) {
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
     out << "\n";
+    out << "[type feedback version] " << typeFeedback()->version() << "\n";
     out << "[flags]    ";
 #define V(F)                                                                   \
     if (flags.includes(F))                                                     \

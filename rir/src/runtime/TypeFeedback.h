@@ -2,19 +2,87 @@
 #define RIR_RUNTIME_FEEDBACK
 
 #include "R/r.h"
+#include "Rinternals.h"
 #include "common.h"
+#include "interpreter/profiler.h"
+#include "runtime/RirRuntimeObject.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
+#include <memory>
+#include <ostream>
+#include <variant>
+#include <vector>
 
 namespace rir {
 
 struct Code;
+struct Function;
+class TypeFeedback;
+
+enum class FeedbackKind : uint8_t {
+    Call,
+    Test,
+    Type,
+};
+
+class FeedbackIndex {
+  private:
+    static constexpr unsigned IdxBits = 24;
+    static constexpr unsigned Undefined = (1 << IdxBits) - 1;
+
+    FeedbackIndex(FeedbackKind kind_, uint32_t idx_) : kind(kind_), idx(idx_) {}
+    friend struct std::hash<FeedbackIndex>;
+
+  public:
+    FeedbackKind kind;
+    uint32_t idx : IdxBits;
+
+    FeedbackIndex() : kind(FeedbackKind::Call), idx(Undefined) {}
+
+    static FeedbackIndex call(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Call, idx);
+    }
+    static FeedbackIndex test(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Test, idx);
+    }
+    static FeedbackIndex type(uint32_t idx) {
+        return FeedbackIndex(FeedbackKind::Type, idx);
+    }
+
+    bool isUndefined() const { return idx == Undefined; }
+
+    const char* name() const;
+
+    uint32_t asInteger() const { return *((uint32_t*)this); }
+
+    bool operator==(const FeedbackIndex& other) const {
+        return idx == other.idx && kind == other.kind;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const FeedbackIndex& index) {
+        out << index.name() << "#";
+        if (index.isUndefined()) {
+            out << "unknown";
+        } else {
+            out << index.idx;
+        }
+        return out;
+    }
+};
+
+static_assert(sizeof(FeedbackIndex) == sizeof(uint32_t),
+              "Size needs to fit inside in integer for the llvm transition");
 
 #pragma pack(push)
 #pragma pack(1)
 
 struct ObservedCallees {
+    friend TypeFeedback;
+
     static constexpr unsigned CounterBits = 29;
     static constexpr unsigned CounterOverflow = (1 << CounterBits) - 1;
     static constexpr unsigned TargetBits = 2;
@@ -28,12 +96,16 @@ struct ObservedCallees {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
     uint32_t invalid : 1;
-
-    void record(Code* caller, SEXP callee, bool invalidateWhenFull = false);
-    SEXP getTarget(const Code* code, size_t pos) const;
-
     std::array<unsigned, MaxTargets> targets;
+
+    SEXP getTarget(const Function* function, size_t pos) const;
+    void print(std::ostream& out, const Function* function) const;
+
+  private:
+    bool record(Function* function, SEXP callee,
+                bool invalidateWhenFull = false);
 };
+
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
@@ -44,34 +116,44 @@ inline bool fastVeceltOk(SEXP vec) {
 }
 
 struct ObservedTest {
+    friend TypeFeedback;
+
     enum { None, OnlyTrue, OnlyFalse, Both };
     uint32_t seen : 2;
     uint32_t unused : 30;
 
     ObservedTest() : seen(0), unused(0) {}
 
-    inline void record(SEXP e) {
+    void print(std::ostream& out) const;
+
+  private:
+    inline bool record(const SEXP e) {
+        uint32_t old;
+        memcpy(&old, this, sizeof(ObservedTest));
+
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
             else if (seen != OnlyTrue)
                 seen = Both;
-            return;
-        }
-        if (e == R_FalseValue) {
+        } else if (e == R_FalseValue) {
             if (seen == None)
                 seen = OnlyFalse;
             else if (seen != OnlyFalse)
                 seen = Both;
-            return;
+        } else {
+            seen = Both;
         }
-        seen = Both;
+
+        return memcmp(&old, this, sizeof(ObservedTest));
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {
+    friend TypeFeedback;
+    friend RuntimeProfiler;
 
     enum StateBeforeLastForce {
         unknown,
@@ -97,33 +179,12 @@ struct ObservedValues {
 
     void reset() { *this = ObservedValues(); }
 
-    void print(std::ostream& out) const {
-        if (numTypes) {
-            for (size_t i = 0; i < numTypes; ++i) {
-                out << Rf_type2char(seen[i]);
-                if (i != (unsigned)numTypes - 1)
-                    out << ", ";
-            }
-            out << " (" << (object ? "o" : "") << (attribs ? "a" : "")
-                << (notFastVecelt ? "v" : "") << (!notScalar ? "s" : "") << ")";
-            if (stateBeforeLastForce !=
-                ObservedValues::StateBeforeLastForce::unknown) {
-                out << " | "
-                    << ((stateBeforeLastForce ==
-                         ObservedValues::StateBeforeLastForce::value)
-                            ? "value"
-                            : (stateBeforeLastForce ==
-                               ObservedValues::StateBeforeLastForce::
-                                   evaluatedPromise)
-                                  ? "evaluatedPromise"
-                                  : "promise");
-            }
-        } else {
-            out << "<?>";
-        }
-    }
+    void print(std::ostream& out) const;
 
-    inline void record(SEXP e) {
+  private:
+    inline bool record(SEXP e) {
+        uint32_t old;
+        memcpy(&old, this, sizeof(ObservedValues));
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -149,6 +210,8 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
+
+        return memcmp(&old, this, sizeof(ObservedValues));
     }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
@@ -156,26 +219,28 @@ static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
 
 enum class Opcode : uint8_t;
 
-struct FeedbackOrigin {
-  private:
-    uint32_t offset_ = 0;
-    Code* srcCode_ = nullptr;
+class FeedbackOrigin {
+    FeedbackIndex index_;
+    Function* function_ = nullptr;
 
   public:
     FeedbackOrigin() {}
-    FeedbackOrigin(rir::Code* src, Opcode* pc);
+    FeedbackOrigin(rir::Function* fun, FeedbackIndex idx);
 
-    Opcode* pc() const {
-        if (offset_ == 0)
-            return nullptr;
-        return (Opcode*)((uintptr_t)srcCode() + offset_);
-    }
-    uint32_t offset() const { return offset_; }
-    Code* srcCode() const { return srcCode_; }
-    void srcCode(Code* src) { srcCode_ = src; }
+    bool hasSlot() const;
+    FeedbackIndex index() const { return index_; }
+    uint32_t idx() const { return index_.idx; }
+    Function* function() const { return function_; }
+    void function(Function* fun);
 
     bool operator==(const FeedbackOrigin& other) const {
-        return offset_ == other.offset_ && srcCode_ == other.srcCode_;
+        return index_ == other.index_ && function_ == other.function_;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out,
+                                    const FeedbackOrigin& origin) {
+        out << (void*)origin.function_ << "[" << origin.index_ << "]";
+        return out;
     }
 };
 
@@ -195,9 +260,6 @@ struct DeoptReason {
     FeedbackOrigin origin;
 
     DeoptReason(const FeedbackOrigin& origin, DeoptReason::Reason reason);
-
-    Code* srcCode() const { return origin.srcCode(); }
-    Opcode* pc() const { return origin.pc(); }
 
     bool operator==(const DeoptReason& other) const {
         return reason == other.reason && origin == other.origin;
@@ -228,13 +290,11 @@ struct DeoptReason {
             out << "Unknown";
             break;
         }
-        out << "@" << (void*)reason.pc();
+        out << "@" << reason.origin;
         return out;
     }
 
-    static DeoptReason unknown() {
-        return DeoptReason(FeedbackOrigin(0, 0), Unknown);
-    }
+    static DeoptReason unknown() { return DeoptReason({}, Unknown); }
 
     void record(SEXP val) const;
 
@@ -246,15 +306,122 @@ struct DeoptReason {
 static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_deopt_ bc immediate args");
 
+#define TYPEFEEDBACK_MAGIC (unsigned)0xfeedbac0
+
+class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
+  private:
+    friend Function;
+
+    size_t version_;
+    Function* owner_;
+    size_t callees_size_;
+    size_t tests_size_;
+    size_t types_size_;
+    ObservedCallees* callees_;
+    ObservedTest* tests_;
+    ObservedValues* types_;
+    // All the data are stored in this array: callees, tests and types in this
+    // order. The constructors sets the above pointers to point at the
+    // appropriate locations.
+    uint8_t slots_[];
+
+    explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
+                          const std::vector<ObservedTest>& tests,
+                          const std::vector<ObservedValues>& types);
+
+  public:
+    static TypeFeedback* create(const std::vector<ObservedCallees>& callees,
+                                const std::vector<ObservedTest>& tests,
+                                const std::vector<ObservedValues>& types);
+
+    static TypeFeedback* empty();
+    static TypeFeedback* deserialize(SEXP refTable, R_inpstream_t inp);
+
+    class Builder {
+        unsigned ncallees_ = 0;
+        unsigned ntests_ = 0;
+        unsigned ntypes_ = 0;
+
+      public:
+        uint32_t addCallee();
+        uint32_t addTest();
+        uint32_t addType();
+        TypeFeedback* build();
+    };
+
+    ObservedCallees& callees(uint32_t idx);
+    ObservedTest& test(uint32_t idx);
+    ObservedValues& types(uint32_t idx);
+
+    void record_callee(uint32_t idx, Function* function, SEXP callee,
+                       bool invalidateWhenFull = false) {
+        if (callees(idx).record(function, callee, invalidateWhenFull)) {
+            version_++;
+        }
+    }
+
+    void record_test(uint32_t idx, const SEXP e) {
+        if (test(idx).record(e)) {
+            version_++;
+        }
+    }
+
+    void record_type(uint32_t idx, const SEXP e) {
+        if (types(idx).record(e)) {
+            version_++;
+        }
+    }
+
+    void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
+        ObservedValues& slot = types(idx);
+        uint32_t o, n;
+        memcpy(&o, &slot, sizeof(ObservedValues));
+        f(slot);
+        memcpy(&n, &slot, sizeof(ObservedValues));
+        if (memcmp(&o, &n, sizeof(ObservedValues))) {
+            version_++;
+        }
+    }
+
+    void print(std::ostream& out) const;
+
+    void serialize(SEXP refTable, R_outpstream_t out) const;
+
+    bool isValid(const FeedbackIndex& index) const;
+
+    Function* owner() const { return owner_; }
+
+    // Type feedback is versioned. Each time new feedback
+    // in any of the slot is recorded, its version increased.
+    // The new is important, if we record already known
+    // information, the version is left unchnaged.
+    size_t version() const { return version_; }
+    void version(size_t version) { version_ = version; }
+};
+
 #pragma pack(pop)
 
 } // namespace rir
 
 namespace std {
 template <>
+struct hash<rir::FeedbackIndex> {
+    std::size_t operator()(const rir::FeedbackIndex& v) const {
+        return hash_combine(hash_combine(0, v.kind), v.idx);
+    }
+};
+
+template <>
+struct hash<rir::FeedbackOrigin> {
+    std::size_t operator()(const rir::FeedbackOrigin& v) const {
+        return hash_combine(hash_combine(0, v.index()), v.function());
+    }
+};
+
+template <>
 struct hash<rir::DeoptReason> {
     std::size_t operator()(const rir::DeoptReason& v) const {
-        return hash_combine(hash_combine(0, v.pc()), v.reason);
+        return hash_combine(hash_combine(0, v.origin), v.reason);
     }
 };
 } // namespace std

@@ -3,7 +3,9 @@
 #include "R/Printing.h"
 #include "R/Serialize.h"
 #include "bc/BC.h"
+#include "bc/BC_inc.h"
 #include "compiler/native/pir_jit_llvm.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
 
 #include <llvm/ExecutionEngine/JITSymbol.h>
@@ -189,7 +191,7 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
         map->forEachSlot(
             [&](size_t i, const PirTypeFeedback::MDEntry& mdEntry) {
                 auto feedback = mdEntry.feedback;
-                out << " - slot #" << i << ": " << mdEntry.offset << " : [";
+                out << " - slot #" << i << ": " << mdEntry.rirIdx << " : [";
                 feedback.print(out);
                 out << "] (" << mdEntry.sampleCount << " records - "
                     << (mdEntry.readyForReopt ? "ready" : "not ready")
@@ -199,6 +201,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
 
     switch (kind) {
     case Kind::Bytecode: {
+        Function* fun = function();
+        TypeFeedback* typeFeedback = fun->typeFeedback();
         Opcode* pc = code();
         size_t label = 0;
         std::map<Opcode*, size_t> targets;
@@ -259,10 +263,23 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
                 bc.printOpcode(out);
                 formatLabel(targets[BC::jmpTarget(pc)]);
                 out << "\n";
+            } else if (bc.isRecord()) {
+                out << "   "
+                    << "[ ";
+                if (bc.bc == Opcode::record_call_) {
+                    typeFeedback->callees(bc.immediate.i).print(out, fun);
+                    out << " ] Call#";
+                } else if (bc.bc == Opcode::record_test_) {
+                    typeFeedback->test(bc.immediate.i).print(out);
+                    out << " ] Test#";
+                } else {
+                    typeFeedback->types(bc.immediate.i).print(out);
+                    out << " ] Type#";
+                }
+                out << bc.immediate.i << "\n";
             } else {
                 bc.print(out);
             }
-
             pc = BC::next(pc);
         }
 

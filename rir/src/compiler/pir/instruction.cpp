@@ -211,7 +211,7 @@ void Instruction::print(std::ostream& out, bool tty) const {
             typeFeedback().value->printRef(out);
         else if (!typeFeedback().type.isVoid())
             out << typeFeedback().type;
-        if (!typeFeedback().feedbackOrigin.pc())
+        if (!typeFeedback().feedbackOrigin.hasSlot())
             out << "@?";
         out << ">";
     }

@@ -54,7 +54,8 @@ void Builder::add(Instruction* i) {
         assert(false && "Invalid instruction");
     case Tag::PirCopy:
         assert(false && "This instruction is only allowed during lowering");
-    default: {}
+    default: {
+    }
     }
     bb->append(i);
 }
@@ -125,8 +126,10 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
         }
         auto mkenv = new MkEnv(closureEnv, names, args.data(), miss);
 
-        auto rirCode = cnt->owner()->rirFunction()->body();
-        mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirCode);
+        // FIXME: (cf. #1260) what does this mean, we need both rirFun and we
+        // need idx
+        mkenv->updateTypeFeedback().feedbackOrigin.function(
+            cnt->owner()->rirFunction());
         add(mkenv);
         this->env = mkenv;
     } else {
@@ -172,7 +175,9 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     auto rirFun = version->owner()->rirFunction();
     if (rirFun->flags.contains(rir::Function::NeedsFullEnv))
         mkenv->neverStub = true;
-    mkenv->updateTypeFeedback().feedbackOrigin.srcCode(rirFun->body());
+    // FIXME: (cf. #1260) what does this mean, we need both rirFun and we need
+    // idx
+    mkenv->updateTypeFeedback().feedbackOrigin.function(rirFun);
     add(mkenv);
     this->env = mkenv;
 }

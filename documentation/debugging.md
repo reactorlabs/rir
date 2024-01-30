@@ -68,6 +68,10 @@ complete.
     PIR_WARMUP=
         number:            after how many invocations a function is (re-) optimized
 
+    PIR_OPT_BC_SIZE=
+        number:            controls the maximum byte code size of a callee that could
+                           trigger OSR in the caller (cf. https://github.com/reactorlabs/rir/issues/1252#issuecomment-1775517529)
+
 #### Extended debug flags
 
     RIR_CHECK_PIR_TYPES=
