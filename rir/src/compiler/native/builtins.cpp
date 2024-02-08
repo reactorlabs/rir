@@ -1310,6 +1310,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                      Context(available));
 
     auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
+    bool calledInfer = false;
+
     auto fail = !missingAsmpt->empty();
     if (fail) {
         if (missingAsmpt->numMissing() == 0 &&
@@ -1397,6 +1399,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
         if (fail) {
             inferCurrentContext(call, fun->nargs());
+            calledInfer = true;
             fail = !call.givenContext.smaller(fun->context());
         }
     }
@@ -1409,7 +1412,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
         recheck = 0;
-        inferCurrentContext(call, fun->nargs());
+        if (!calledInfer) {
+            inferCurrentContext(call, fun->nargs());
+            calledInfer = true;
+        }
+
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             fun->unregisterInvocation();
             auto res = doCall(call, true);
