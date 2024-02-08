@@ -3444,8 +3444,7 @@ void LowerFunctionLLVM::compile() {
                         auto missAsmptStore =
                             Rf_allocVector(RAWSXP, sizeof(Context));
                         auto missAsmptIdx = Pool::insert(missAsmptStore);
-                        new (DATAPTR(missAsmptStore))
-                            Context(nativeTarget->context() - asmpt);
+                        new (DATAPTR(missAsmptStore)) Context();
                         assert(asmpt.smaller(nativeTarget->context()));
                         auto res = withCallFrame(args, [&]() {
                             return call(
