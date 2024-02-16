@@ -99,7 +99,6 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
-        f->attachDispatchTable(this); // TODO ?
         f->dispatchTable(this);
     }
 
@@ -125,7 +124,7 @@ struct DispatchTable
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
-        get(i)->attachDispatchTable(nullptr);
+        get(i)->dispatchTable(nullptr);
         setEntry(i, nullptr);
         size_--;
     }
@@ -145,9 +144,9 @@ struct DispatchTable
                 if (i != 0) {
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
-                    fun->attachDispatchTable(this);
+                    fun->dispatchTable(this);
                     old->overridenBy = fun;
-                    old->attachDispatchTable(nullptr);
+                    old->dispatchTable(nullptr);
                 }
                 // Remember deopt counts across recompilation to avoid
                 // deopt loops
@@ -176,7 +175,7 @@ struct DispatchTable
 #endif
             // Evict one element and retry
             auto pos = 1 + (Random::singleton()() % (size() - 1));
-            get(pos)->attachDispatchTable(nullptr);
+            get(pos)->dispatchTable(nullptr);
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
@@ -189,7 +188,7 @@ struct DispatchTable
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());
-        fun->attachDispatchTable(this);
+        fun->dispatchTable(this);
 
 #ifdef DEBUG_DISPATCH
         std::cout << "Added version to DT, new order is: \n";
@@ -223,9 +222,8 @@ struct DispatchTable
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
             auto fun = Function::deserialize(refTable, inp);
-            fun->dispatchTable(table);
             table->setEntry(i, fun->container());
-            fun->attachDispatchTable(table);
+            fun->dispatchTable(table);
         }
         UNPROTECT(1);
         return table;
@@ -242,13 +240,13 @@ struct DispatchTable
 
         auto clone = create(this->capacity());
         clone->setEntry(0, this->getEntry(0));
-        clone->get(0)->attachDispatchTable(clone);
+        clone->get(0)->dispatchTable(clone);
 
         auto j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 clone->setEntry(j, getEntry(i));
-                clone->get(j)->attachDispatchTable(clone);
+                clone->get(j)->dispatchTable(clone);
                 j++;
             }
         }

@@ -229,7 +229,6 @@ class FeedbackOrigin {
 
   public:
     FeedbackOrigin() {}
-    FeedbackOrigin(uint32_t offset) : offset_(offset), srcCode_(nullptr) {}
     FeedbackOrigin(rir::Function* fun, FeedbackIndex idx);
 
     bool hasSlot() const;

@@ -223,12 +223,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return deadCallReached_;
     }
 
-    void attachDispatchTable(DispatchTable* dt) {
-        // If a DT is already attached, only clearing it is allowed
-        if (dt != nullptr) {
-            assert(dispatchTable_ == nullptr &&
-                   "tried to insert Function into a second DispatchTable");
-        }
+    void init(unsigned invocationCount, unsigned deoptCount) {
+        invocationCount_ = invocationCount;
+        deoptCount_ = deoptCount;
+    }
+
+    Function* overridenBy = nullptr;
+    void dispatchTable(DispatchTable* dt) {
         dispatchTable_ = dt;
 
         // When attaching a dispatch table, we catch up on missed
@@ -240,14 +241,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                 recording::recordInvocation(this, 1, 0);
             }
     }
-
-    void init(unsigned invocationCount, unsigned deoptCount) {
-        invocationCount_ = invocationCount;
-        deoptCount_ = deoptCount;
-    }
-
-    Function* overridenBy = nullptr;
-    void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
 
   private:

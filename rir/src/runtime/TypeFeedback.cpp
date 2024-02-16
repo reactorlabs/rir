@@ -17,7 +17,7 @@ bool ObservedCallees::record(Function* function, SEXP callee,
     if (!Rf_isFunction(callee)) {
         std::cerr << "Warning: skipping recording non-callee " << callee
                   << " of type " << Rf_type2char(TYPEOF(callee)) << std::endl;
-        return;
+        return false;
     }
 
     if (taken < CounterOverflow)
@@ -66,8 +66,9 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        rir::recording::prepareRecordSC(srcCode());
-        rir::recording::recordSC(*feedback);
+        // TODO
+        // rir::recording::prepareRecordSC(srcCode());
+        // rir::recording::recordSC(*feedback);
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
         break;
@@ -75,7 +76,8 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        rir::recording::prepareRecordSC(srcCode());
+        // TODO
+        // rir::recording::prepareRecordSC(srcCode());
         auto feedback = origin.function()->typeFeedback();
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
@@ -101,7 +103,8 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        rir::recording::prepareRecordSC(srcCode());
+        // TODO
+        // rir::recording::prepareRecordSC(srcCode());
         auto feedback = origin.function()->typeFeedback();
         feedback->record_callee(origin.idx(), origin.function(), val, true);
         break;
