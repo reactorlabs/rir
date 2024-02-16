@@ -4,7 +4,9 @@
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
+#include "TypeFeedback.h"
 #include "utils/random.h"
+#include <ostream>
 
 namespace rir {
 
@@ -97,7 +99,8 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
-        f->attachDispatchTable(this);
+        f->attachDispatchTable(this); // TODO ?
+        f->dispatchTable(this);
     }
 
     bool contains(const Context& assumptions) const {
@@ -111,8 +114,11 @@ struct DispatchTable
         std::cerr << "removing function " << funCode->function() << std::endl;
         size_t i = 1;
         for (; i < size(); ++i) {
-            if (get(i)->body() == funCode)
+            auto fun = get(i);
+            if (fun->body() == funCode) {
+                fun->dispatchTable(nullptr);
                 break;
+            }
         }
         if (i == size())
             return;
@@ -130,6 +136,7 @@ struct DispatchTable
         assert(size() > 0);
         assert(fun->signature().optimization !=
                FunctionSignature::OptimizationLevel::Baseline);
+        fun->dispatchTable(this);
         auto assumptions = fun->context();
         size_t i;
         for (i = size() - 1; i > 0; --i) {
@@ -139,13 +146,15 @@ struct DispatchTable
                     // Remember deopt counts across recompilation to avoid
                     // deopt loops
                     fun->attachDispatchTable(this);
-                    fun->addDeoptCount(old->deoptCount());
                     old->overridenBy = fun;
                     old->attachDispatchTable(nullptr);
-
-                    setEntry(i, fun->container());
-                    assert(get(i) == fun);
                 }
+                // Remember deopt counts across recompilation to avoid
+                // deopt loops
+                fun->addDeoptCount(old->deoptCount());
+                setEntry(i, fun->container());
+                assert(get(i) == fun);
+                // old->dispatchTable(nullptr);
                 return;
             }
             if (!(assumptions < get(i)->context())) {
@@ -214,6 +223,7 @@ struct DispatchTable
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
             auto fun = Function::deserialize(refTable, inp);
+            fun->dispatchTable(table);
             table->setEntry(i, fun->container());
             fun->attachDispatchTable(table);
         }
@@ -252,14 +262,56 @@ struct DispatchTable
         return userDefinedContext_ | anotherContext;
     }
 
+    void print(std::ostream& out, bool verbose) const {
+        std::cout << "== dispatch table " << this << " ==\n";
+
+        for (size_t entry = 0; entry < size(); ++entry) {
+            Function* f = get(entry);
+            std::cout << "= version " << entry << " (" << f << ") =\n";
+            f->disassemble(std::cout);
+        }
+
+        if (verbose) {
+            auto code = baseline()->body();
+            auto pc = code->code();
+            auto print_header = true;
+
+            Opcode* prev = NULL;
+            Opcode* pprev = NULL;
+
+            while (pc < code->endCode()) {
+                auto bc = BC::decode(pc, code);
+                if (bc.bc == Opcode::close_) {
+                    if (print_header) {
+                        out << "== nested closures ==\n";
+                        print_header = false;
+                    }
+
+                    // prev is the push_ of srcref
+                    // pprev is the push_ of body
+                    auto body = BC::decodeShallow(pprev).immediateConst();
+                    auto dt = DispatchTable::unpack(body);
+                    dt->print(std::cout, verbose);
+                }
+                pprev = prev;
+                prev = pc;
+                pc = bc.next(pc);
+            }
+        }
+    }
+
+    size_t currentTypeFeedbackVersion() {
+        return baseline()->typeFeedback()->version();
+    }
+
   private:
     DispatchTable() = delete;
-    explicit DispatchTable(size_t cap)
+    explicit DispatchTable(size_t capacity)
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
               sizeof(DispatchTable),
               // GC area is just the pointers in the entry array
-              cap) {}
+              capacity) {}
 
     size_t size_ = 0;
     Context userDefinedContext_;

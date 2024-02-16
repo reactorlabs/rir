@@ -160,7 +160,6 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                          AbstractLog& log, size_t iteration) const {
     EarlyConstantfold cf;
     bool anyChange = cf.apply(cmp, cls, code, log, iteration);
-
     Preserve p;
     std::unordered_map<BB*, bool> branchRemoval;
 
@@ -338,6 +337,18 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (ChkMissing::Cast(i)) {
                     if (i->arg(0).val() == MissingArg::instance())
                         killUnreachable();
+                    else {
+                        // try to remove the ChkMissing if we can prove the arg
+                        // is not the missing value
+                        auto argVal = i->arg(0).val();
+                        auto argValType = argVal->type;
+
+                        if (MkArg::Cast(argVal->cFollowCasts()) ||
+                            !argValType.maybeMissing()) {
+                            i->replaceUsesWith(argVal);
+                            next = bb->remove(ip);
+                        }
+                    }
                 }
                 if (CheckTrueFalse::Cast(i)) {
                     auto a = i->arg(0).val();
@@ -950,8 +961,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             !rhs->type.maybe(PirType::num());
                         if (notFactor && cannotCauseCoercionProblems) {
                             colonInputEffects->replaceUsesWith(
-                                True::instance());
-                            iterAnyChange = true;
+                                True::instance(), [&](Instruction*, size_t) {
+                                    iterAnyChange = true;
+                                });
                         }
                     }
                 }

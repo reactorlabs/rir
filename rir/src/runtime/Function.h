@@ -6,15 +6,15 @@
 #include "R/r.h"
 #include "RirRuntimeObject.h"
 #include "recording_hooks.h"
+#include "runtime/TypeFeedback.h"
 
 namespace rir {
 
-class DispatchTable;
+struct DispatchTable;
 
 /**
  * Aliases for readability.
  */
-typedef SEXP FunctionSEXP;
 
 // Function magic constant is designed to help to distinguish between Function
 // objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
@@ -42,24 +42,42 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
-    static constexpr size_t NUM_PTRS = 1;
+    // In its entries, a function ows two SEXP pointers + a variable length of
+    // default arguments code:
+    static constexpr size_t NUM_PTRS = 2;
+    // 0: body (Code*)
+    static constexpr size_t BODY_IDX = 0;
+    // 1: type feedback (TypeFeedback*)
+    static constexpr size_t TYPE_FEEDBACK_IDX = 1;
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
-             const FunctionSignature& signature, const Context& ctx)
+             const FunctionSignature& signature, const Context& ctx,
+             TypeFeedback* feedback)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
-              sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
+              sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
           signature_(signature), context_(ctx) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
+        if (feedback) {
+            typeFeedback(feedback);
+        }
     }
 
-    Code* body() const { return Code::unpack(getEntry(0)); }
-    void body(SEXP body) { setEntry(0, body); }
+    Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
+    void body(SEXP body) { setEntry(BODY_IDX, body); }
+
+    TypeFeedback* typeFeedback() const {
+        return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+    }
+    void typeFeedback(TypeFeedback* typeFeedback) {
+        typeFeedback->owner_ = this;
+        setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
+    }
 
     static Function* deserialize(SEXP refTable, R_inpstream_t inp);
     void serialize(SEXP refTable, R_outpstream_t out) const;
@@ -152,7 +170,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         RIR_FUNCTION_FLAGS(V)
 #undef V
 
-        FIRST = Deopt,
+            FIRST = Deopt,
         LAST = DisableNumArgumentsSpezialization
     };
     EnumSet<Flag> flags;
@@ -223,22 +241,14 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             }
     }
 
-    DispatchTable* dispatchTable(bool abortIfNull = true) const {
-        if (abortIfNull) {
-            assert(
-                dispatchTable_ &&
-                "Function was never inserted/was removed from DispatchTable");
-        }
-
-        return dispatchTable_;
-    }
-
     void init(unsigned invocationCount, unsigned deoptCount) {
         invocationCount_ = invocationCount;
         deoptCount_ = deoptCount;
     }
 
     Function* overridenBy = nullptr;
+    void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
+    DispatchTable* dispatchTable() { return dispatchTable_; }
 
   private:
     unsigned numArgs_;
@@ -253,12 +263,12 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     FunctionSignature signature_; /// pointer to this version's signature
     Context context_;
-    DispatchTable* dispatchTable_ = nullptr;
+    DispatchTable* dispatchTable_;
 
     // !!! SEXPs traceable by the GC must be declared here !!!
-    // locals contains: body
-    CodeSEXP locals[NUM_PTRS];
-    CodeSEXP defaultArg_[];
+    // locals contains: body (BODY_IDX) and typeFeedback (TYPE_FEEDBACK_IDX)
+    SEXP locals[NUM_PTRS];
+    SEXP defaultArg_[];
 };
 
 #pragma pack(pop)

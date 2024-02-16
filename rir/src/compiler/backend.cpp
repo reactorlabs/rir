@@ -16,6 +16,7 @@
 #include "compiler/util/visitor.h"
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/FunctionWriter.h"
 #include "utils/measuring.h"
@@ -97,7 +98,8 @@ static void approximateNeedsLdVarForUpdate(
             // the same lexical scope.
             apply(i, i->arg(1).val()->followCastsAndForce());
             break;
-        default: {}
+        default: {
+        }
         }
     });
     Visitor::run(code->entry, [&](Instruction* i) {
@@ -404,11 +406,20 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
     }
 
     log.finalPIR();
-    function.finalize(body, signature, cls->context());
+
+    // the type feedback is only used at the baseline
+    // here we only set the current version used to compile this function
+    auto feedback = rir::TypeFeedback::empty();
+    PROTECT(feedback->container());
+    feedback->version(
+        cls->optFunction->dispatchTable()->currentTypeFeedbackVersion());
+
+    function.finalize(body, signature, cls->context(), feedback);
     for (auto& c : done)
         c.second->function(function.function());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
+    UNPROTECT(1);
     return function.function();
 }
 

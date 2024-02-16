@@ -20,3 +20,4 @@ RUN mkdir -p /opt/rir/build/release && \
     cmake -DCMAKE_BUILD_TYPE=release ../.. && \
     make -j8 && \
     rm -rf CMakeFiles /opt/rir/external/clang+llvm*
+

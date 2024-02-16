@@ -10,7 +10,7 @@ bool Pass::apply(Compiler& cmp, ClosureVersion* function, AbstractLog& log,
     bool res = apply(cmp, function, function, log, iteration);
     if (runOnPromises()) {
         function->eachPromise([&](Promise* p) {
-            res = apply(cmp, function, p, log, iteration) && res;
+            res = apply(cmp, function, p, log, iteration) || res;
         });
     }
     changedAnything_ = res;

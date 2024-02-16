@@ -7,6 +7,17 @@ if (!jitOn)
 if (Sys.getenv("PIR_GLOBAL_SPECIALIZATION_LEVEL") != "")
   q()
 
+deoptChaos <- as.numeric(Sys.getenv("PIR_DEOPT_CHAOS", unset=0))
+
+# If this test runs in the with deopt chaos, weird things might
+# happen (cf. #1258): a function might be compiled with the
+# chaos on but run in a context with chaos off making the
+# assert in deoptChaosTriggerImpl fail.
+if (deoptChaos != 0) {
+  warning("skipping due to PIR_DEOPT_CHAOS=", deoptChaos, " set")
+  q()
+}
+
 # Sanity check for loop peeling, and testing that enabling/disabling works
 # These loop peeling tests may be a bit brittle.
 # Loop peeling should be enabled by default

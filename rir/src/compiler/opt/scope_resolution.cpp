@@ -706,16 +706,19 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (auto b = CallBuiltin::Cast(i)) {
                 bool noObjects = true;
                 bool unsafe = false;
+                bool dependsOnEnv = false;
                 i->eachArg([&](Value* v) {
                     if (v != i->env()) {
                         if (v->cFollowCastsAndForce()->type.maybeObj())
                             noObjects = false;
                         if (v->type.isA(RType::expandedDots))
                             unsafe = true;
+                    } else {
+                        dependsOnEnv = true;
                     }
                 });
 
-                if (!unsafe && noObjects &&
+                if (!dependsOnEnv && !unsafe && noObjects &&
                     SafeBuiltinsList::nonObject(b->builtinId)) {
                     std::vector<Value*> args;
                     i->eachArg([&](Value* v) {
@@ -729,6 +732,8 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     });
                     auto safe = BuiltinCallFactory::New(
                         b->env(), b->builtinSexp, args, b->srcIdx);
+
+                    assert(CallSafeBuiltin::Cast(safe));
                     assert(!b->type.maybePromiseWrapped() ||
                            safe->type.maybePromiseWrapped());
                     b->replaceUsesWith(safe);

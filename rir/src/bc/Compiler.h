@@ -5,6 +5,7 @@
 #include "R/Protect.h"
 #include "R/r.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/TypeFeedback.h"
 #include "utils/FunctionWriter.h"
 #include "utils/Pool.h"
 

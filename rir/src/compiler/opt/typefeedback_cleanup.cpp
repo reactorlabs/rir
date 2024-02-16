@@ -24,20 +24,28 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
     TypeFeedback changedVarType;
 
     std::unordered_set<Instruction*> affected;
+
     if (deoptCtx) {
-        if (deoptCtx->reason().srcCode() != cls->rirSrc()) {
-            Visitor::run(version->entry, [&](Instruction* i) {
-                if (!i->hasTypeFeedback())
-                    return;
-                i->updateTypeFeedback().type = PirType::voyd();
-            });
+        if (deoptCtx->reason().origin.function() !=
+            cls->owner()->rirFunction()) { // deoptless and inlining
+
+            // we set voyd only one time per version, otherwise the pass doesn't
+            // converge since it would keep changing forever
+            if (!version->typeFeedbackCleanupHasRun) {
+                Visitor::run(version->entry, [&](Instruction* i) {
+                    if (!i->hasTypeFeedback())
+                        return;
+                    i->updateTypeFeedback().type = PirType::voyd();
+                });
+            }
+            version->typeFeedbackCleanupHasRun = true;
         } else {
             Visitor::run(version->entry, [&](Instruction* i) {
                 if (!i->hasTypeFeedback())
                     return;
 
-                if (i->typeFeedback().feedbackOrigin.pc() ==
-                    deoptCtx->reason().pc()) {
+                if (i->typeFeedback().feedbackOrigin ==
+                    deoptCtx->reason().origin) {
                     if (deoptCtx->reason().reason == DeoptReason::Typecheck) {
                         i->updateTypeFeedback().type =
                             deoptCtx->typeCheckTrigger();
@@ -132,8 +140,9 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             i->eachArg([&](Value* v) {
                 if (auto vi = Instruction::Cast(v)) {
                     if (!vi->hasTypeFeedback() ||
-                        vi->typeFeedback().type.isVoid())
+                        vi->typeFeedback().type.isVoid()) {
                         allInputsHaveFeedback = false;
+                    }
                     if (affected.count(vi))
                         needUpdate = true;
                 } else {
@@ -148,9 +157,10 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     varName = StVar::Cast(i)->varName;
                 if (LdVar::Cast(i))
                     varName = LdVar::Cast(i)->varName;
-                if (varName)
-                    changed =
-                        otherAffectedVars.insert(varName).second || changed;
+                if (varName) {
+                    // otherAffectedVars.insert(varName).second;
+                    otherAffectedVars.insert(varName);
+                }
             }
             if ((needUpdate && (i->hasTypeFeedback() || Phi::Cast(i))) ||
                 (allInputsHaveFeedback && i->hasTypeFeedback() &&
@@ -168,13 +178,22 @@ bool TypefeedbackCleanup::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                     return v->type;
                 });
+
                 if (needUpdate || !inferred.isVoid()) {
+
+                    auto prevType = i->updateTypeFeedback().type;
+                    auto prevValue = i->updateTypeFeedback().value;
                     i->updateTypeFeedback().type = inferred;
-                    if (vals.size() == 1)
+                    if (vals.size() == 1) {
                         i->updateTypeFeedback().value = *vals.begin();
-                    else
+                    } else {
                         i->updateTypeFeedback().value = nullptr;
-                    changed = true;
+                    }
+
+                    if (prevType != i->updateTypeFeedback().type ||
+                        prevValue != i->updateTypeFeedback().value) {
+                        changed = true;
+                    }
                 }
             }
         });

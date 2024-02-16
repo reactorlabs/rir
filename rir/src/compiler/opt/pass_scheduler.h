@@ -6,6 +6,7 @@
 
 #include "pass.h"
 
+
 namespace rir {
 namespace pir {
 
@@ -28,14 +29,24 @@ class PassScheduler {
     const static PassScheduler& instance();
     const static PassScheduler& quick();
 
+
     void run(const std::function<bool(const Pass*, size_t)>& apply) const {
+
+
         for (auto& phase : schedule_.phases) {
+
+
             auto budget = phase.budget;
             bool changed = false;
             int iteration = 0;
+
             do {
                 changed = false;
+
+                // first element phase.passes  is always a PhaseMarker
                 for (auto& pass : phase.passes) {
+
+
                     if (!phase.once) {
                         if (budget < pass->cost()) {
                             budget = 0;
@@ -43,11 +54,21 @@ class PassScheduler {
                         }
                         budget -= pass->cost();
                     }
-                    if (apply(pass.get(), iteration)) {
+
+                    bool applyRes = apply(pass.get(), iteration);
+                    if (applyRes) {
                         changed = true;
                     }
+
                 }
+
                 iteration++;
+
+                auto maxIter = 50;
+                if (iteration >= maxIter) {
+                    std::cerr << "more than " << maxIter << " iterations!";
+                    assert(false);
+                }
             } while (changed && budget && !phase.once);
         }
     }

@@ -21,7 +21,7 @@ struct Code;
 namespace pir {
 struct TypeFeedback;
 struct CallFeedback;
-}
+} // namespace pir
 
 struct PirTypeFeedback
     : public RirRuntimeObject<PirTypeFeedback, PIR_TYPE_FEEDBACK_MAGIC> {
@@ -45,11 +45,8 @@ struct PirTypeFeedback
     ObservedValues& getSampleOfSlot(size_t slot) {
         return getMDEntryOfSlot(slot).feedback;
     }
-    unsigned getBCOffsetOfSlot(size_t slot) {
-        return getMDEntryOfSlot(slot).offset;
-    }
-    Code* getSrcCodeOfSlot(size_t slot);
-    Opcode* getOriginOfSlot(size_t slot);
+
+    FeedbackIndex rirIdx(size_t slot);
 
     static size_t requiredSize(size_t origins, size_t entries) {
         return sizeof(PirTypeFeedback) + sizeof(SEXP) * origins +
@@ -57,8 +54,8 @@ struct PirTypeFeedback
     }
 
     struct MDEntry {
-        uint8_t srcCode;
-        unsigned offset;
+        uint8_t funIdx;
+        FeedbackIndex rirIdx;
         ObservedValues feedback;
         pir::PirType previousType;
         unsigned sampleCount = 0;
