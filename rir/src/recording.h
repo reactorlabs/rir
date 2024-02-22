@@ -107,11 +107,11 @@ class ClosureEvent : public Event {
 
     size_t closureIndex;
 
-    virtual bool containsReference(size_t recordingIdx) const {
+    virtual bool containsReference(size_t recordingIdx) const override {
         return recordingIdx == closureIndex;
     };
 
-    const char* targetName(std::vector<FunRecording>& mapping) const;
+    const char* targetName(std::vector<FunRecording>& mapping) const override;
 };
 
 /**
@@ -131,11 +131,11 @@ class DtEvent : public Event {
 
     size_t dispatchTableIndex;
 
-    virtual bool containsReference(size_t recordingIdx) const {
+    virtual bool containsReference(size_t recordingIdx) const override {
         return recordingIdx == dispatchTableIndex;
     };
 
-    const char* targetName(std::vector<FunRecording>& mapping) const;
+    const char* targetName(std::vector<FunRecording>& mapping) const override;
 };
 
 /**

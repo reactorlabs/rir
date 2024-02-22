@@ -66,18 +66,17 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        // TODO
-        // rir::recording::prepareRecordSC(srcCode());
-        // rir::recording::recordSC(*feedback);
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
+        rir::recording::prepareRecordSC(origin.function()->body());
+        rir::recording::recordSC(feedback);
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        // TODO
-        // rir::recording::prepareRecordSC(srcCode());
+
+        rir::recording::prepareRecordSC(origin.function()->body());
         auto feedback = origin.function()->typeFeedback();
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
@@ -104,7 +103,7 @@ void DeoptReason::record(SEXP val) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         // TODO
-        // rir::recording::prepareRecordSC(srcCode());
+        rir::recording::prepareRecordSC(origin.function()->body());
         auto feedback = origin.function()->typeFeedback();
         feedback->record_callee(origin.idx(), origin.function(), val, true);
         break;

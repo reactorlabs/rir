@@ -23,7 +23,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
-void recordInvocation(const Function* f, ssize_t deltaCount, size_t deltaDeopt);
+void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
 void prepareRecordSC(const Code* container);
 void recordSC(const ObservedCallees& type);
 void recordSC(const ObservedTest& type);

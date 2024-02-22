@@ -54,6 +54,8 @@ void Record::recordSpeculativeContext(DispatchTable* dt,
 
 void Record::recordSpeculativeContext(const Code* code,
                                       std::vector<SpeculativeContext>& ctx) {
+    auto feedback = code->function()->typeFeedback();
+
     Opcode* end = code->endCode();
     Opcode* pc = code->code();
     Opcode* prev = NULL;
@@ -77,13 +79,13 @@ void Record::recordSpeculativeContext(const Code* code,
             break;
         }
         case Opcode::record_call_: {
-            auto observed = bc.immediate.callFeedback;
+            auto observed = feedback->callees(bc.immediate.i);
             decltype(SpeculativeContext::value.callees) callees;
 
             for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
                 size_t idx;
                 if (i < observed.numTargets) {
-                    auto target = observed.getTarget(code, i);
+                    auto target = observed.getTarget(code->function(), i);
                     if (Rf_isFunction(target)) {
                         auto rec = initOrGetRecording(target);
                         idx = rec.first;
@@ -100,11 +102,11 @@ void Record::recordSpeculativeContext(const Code* code,
             break;
         }
         case Opcode::record_test_: {
-            ctx.push_back(bc.immediate.testFeedback);
+            ctx.push_back(feedback->test(bc.immediate.i));
             break;
         }
         case Opcode::record_type_: {
-            ctx.push_back(bc.immediate.typeFeedback);
+            ctx.push_back(feedback->types(bc.immediate.i));
             break;
         }
         default: {
@@ -441,7 +443,7 @@ void Replay::replaySpeculativeContext(
 
                 SEXP callee = PROTECT(replayClosure(callee_idx));
                 assert(Rf_isFunction(callee));
-                feedback->record(code, callee);
+                // feedback->record(code->function(), callee);
                 UNPROTECT(1);
             }
 
@@ -618,7 +620,7 @@ void SpeculativeContextEvent::replayOnDt(Replay& replay,
             SEXP cls = PROTECT(replay.replayClosure(callee));
             assert(!Rf_isNull(cls));
             isReplayingSC++;
-            oc.record(c, cls);
+            // oc.record(c->function(), cls);
             isReplayingSC--;
             UNPROTECT(1);
         }
@@ -820,10 +822,9 @@ void DeoptEvent::replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
     Code* code = fun.body();
 
     // Copy and set current closure's code
-    Code* deoptSrcCode =
-        retrieveCodeFromIndex(replay.rehydrated_closures, this->reasonCodeIdx_);
-    Opcode* deoptPc = (Opcode*)((uintptr_t)deoptSrcCode + reasonCodeOff_);
-    FeedbackOrigin origin(deoptSrcCode, deoptPc);
+    /* Code* deoptSrcCode = */
+    /*     retrieveCodeFromIndex(replay.rehydrated_closures, this->reasonCodeIdx_); */
+    FeedbackOrigin origin(&fun, FeedbackIndex::call(reasonCodeOff_));
     DeoptReason reason(origin, this->reason_);
     auto trigger = trigger_ ? trigger_ : replay.replayClosure(triggerClosure_);
 
@@ -1068,13 +1069,13 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     }
 
     auto reasonCodeIdx =
-        recorder_.findIndex(dt->baseline()->body(), reason.srcCode());
+        recorder_.findIndex(dt->baseline()->body(), reason.origin.function()->body());
 
     assert(reasonCodeIdx.first >= 0 &&
            "Could not locate deopt reason location");
 
     recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx,
-                                 reason.origin.offset(), trigger);
+                                 reason.origin.idx(), trigger);
 }
 
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
@@ -1086,14 +1087,14 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
     recorder_.record<DtInitEvent>(dt, funIdx, oldDeoptCount);
 }
 
-void recordInvocation(const Function* f, ssize_t deltaCount,
+void recordInvocation(Function* f, ssize_t deltaCount,
                       size_t previousCount) {
     RECORDER_FILTER_GUARD(invoke);
     if (!is_recording_ || isPlayingCompile)
         return;
 
     Context version = f->context();
-    auto* dt = f->dispatchTable(false);
+    auto* dt = f->dispatchTable();
     if (!dt) {
         if (f->overridenBy) {
             std::cerr << "[rec invocation] function was overriden" << std::endl;
@@ -1176,7 +1177,7 @@ void recordSC(const ObservedCallees& callees) {
 
     for (size_t i = 0; i < callees.numTargets; i++) {
         targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(code, i)).first;
+            recorder_.initOrGetRecording(callees.getTarget(code->function(), i)).first;
     }
 
     nextSCcode = code;
