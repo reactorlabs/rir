@@ -232,14 +232,6 @@ recordings.load <- function(filename) {
     .Call("loadRecordings", filename)
 }
 
-recordings.replay <- function(from, start_recording = FALSE) {
-    if (is.list(from)) {
-        .Call("replayRecordings", from, start_recording)
-    } else {
-        .Call("replayRecordingsFromFile", from, start_recording)
-    }
-}
-
 recordings.start <- function() {
     invisible(.Call("startRecordings"))
 }

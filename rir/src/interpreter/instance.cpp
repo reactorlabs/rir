@@ -81,7 +81,7 @@ void context_init() {
         std::cerr << "Starting replaying (environment variable)" << std::endl;
         SEXP filename = Rf_mkString(replayPath);
         R_PreserveObject(filename);
-        replayRecordingsFromFile(filename, shouldRecord);
+        // replayRecordingsFromFile(filename, shouldRecord);
         R_ReleaseObject(filename);
     }
 }

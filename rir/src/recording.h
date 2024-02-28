@@ -23,7 +23,6 @@
 namespace rir {
 namespace recording {
 
-class Replay;
 class Record;
 struct FunRecording;
 
@@ -72,7 +71,6 @@ class Event {
   public:
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
-    virtual void replay(Replay& replay) const = 0;
     virtual void print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const = 0;
 
@@ -97,10 +95,6 @@ class Event {
  * `ClosureEvent` is an abstract class.
  */
 class ClosureEvent : public Event {
-  public:
-    void replay(Replay& replay) const override;
-    virtual void replayOnClosure(Replay& replay, SEXP closure) const = 0;
-
   protected:
     ClosureEvent() = default;
     ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
@@ -120,10 +114,6 @@ class ClosureEvent : public Event {
  * `DtEvent` is an abstract class.
  */
 class DtEvent : public Event {
-  public:
-    void replay(Replay& replay) const override;
-    virtual void replayOnDt(Replay& replay, DispatchTable& dt) const = 0;
-
   protected:
     DtEvent() = default;
     DtEvent(size_t dispatchTableIndex)
@@ -146,11 +136,6 @@ class DtEvent : public Event {
  * `VersionEvent` is an abstract class.
  */
 class VersionEvent : public DtEvent {
-  public:
-    void replayOnDt(Replay& replay, DispatchTable& dt) const override;
-    virtual void replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
-                                         Function& fun) const = 0;
-
   protected:
     VersionEvent() = default;
     VersionEvent(size_t dispatchTableIndex, Context version)
@@ -179,7 +164,6 @@ class SpeculativeContextEvent : public DtEvent {
         : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replayOnDt(Replay& replay, DispatchTable& dt) const override;
     virtual bool containsReference(size_t dispatchTable) const override;
 
   protected:
@@ -205,7 +189,6 @@ class CompilationEvent : public ClosureEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replayOnClosure(Replay& replay, SEXP closure) const override;
     virtual bool containsReference(size_t recordingIdx) const override;
 
   protected:
@@ -233,8 +216,6 @@ class DeoptEvent : public VersionEvent {
     void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
-    void replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
-                                 Function& fun) const override;
     virtual bool containsReference(size_t recordingIdx) const override;
 
   protected:
@@ -258,7 +239,6 @@ class DtInitEvent : public DtEvent {
         : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
-    void replayOnDt(Replay& replay, DispatchTable& dt) const override;
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -279,8 +259,6 @@ class InvocationEvent : public VersionEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    void replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
-                                 Function& fun) const override;
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -330,55 +308,6 @@ struct FunRecording {
         assert(primIdx < R_FunTab_Len);
         name = R_FunTab[primIdx].name;
     }
-};
-
-class Replay {
-    SEXP log;
-
-  public:
-    /**
-     * Recorded function metadata to find it back in the current session
-     *
-     * This is directly deserialized from the saved data, with no additional
-     * processing. These will be lazily rehydrated into
-     * Replay::rehydrated_dispatch_tables and Replay::rehydrated_closures.
-     */
-    std::vector<FunRecording> functions;
-
-    /**
-     * Mapping of function index (from Replay::functions) to a real
-     * DispatchTable* in the current R session
-     */
-    std::vector<DispatchTable*> rehydrated_dispatch_tables;
-
-    /**
-     * Mapping of function index (from Replay::functions) to a real function in
-     * the current R session
-     */
-    std::vector<SEXP> rehydrated_closures;
-
-    /**
-     * Replays a closure from Replay::functions given its index and memoizes it
-     */
-    SEXP replayClosure(size_t idx);
-
-    void replaySpeculativeContext(
-        DispatchTable* dt,
-        std::vector<SpeculativeContext>::const_iterator& ctxStart,
-        std::vector<SpeculativeContext>::const_iterator& ctxEnd);
-
-    void replaySpeculativeContext(
-        Code* code, std::vector<SpeculativeContext>::const_iterator& ctxStart,
-        std::vector<SpeculativeContext>::const_iterator& ctxEnd);
-
-    Replay(SEXP recordings);
-
-    ~Replay();
-
-    size_t getEventCount();
-    std::unique_ptr<Event> getEvent(size_t idx);
-
-    size_t replay();
 };
 
 class Record {
@@ -485,8 +414,6 @@ REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();
 REXPORT SEXP isRecordings();
-REXPORT SEXP replayRecordings(SEXP recordings, bool startRecording);
-REXPORT SEXP replayRecordingsFromFile(SEXP filename, bool startRecording);
 REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();

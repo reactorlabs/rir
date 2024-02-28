@@ -289,227 +289,12 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-Replay::Replay(SEXP recordings) {
-    PROTECT(recordings);
-    assert(Rf_isVector(recordings));
-    assert(Rf_length(recordings) == 2);
-
-    SEXP bodiesSexp = VECTOR_ELT(recordings, 0);
-    auto n = Rf_length(bodiesSexp);
-    rehydrated_closures.reserve(n);
-    rehydrated_dispatch_tables.reserve(n);
-    this->functions.reserve(n);
-    for (auto i = 0; i < n; i++) {
-        rehydrated_closures.push_back(R_NilValue);
-        rehydrated_dispatch_tables.push_back(nullptr);
-        SEXP bodySexp = VECTOR_ELT(bodiesSexp, i);
-        this->functions.push_back(
-            serialization::fun_recorder_from_sexp(bodySexp));
-    }
-
-    log = VECTOR_ELT(recordings, 1);
-    R_PreserveObject(log);
-
-    UNPROTECT(1);
-}
-
-Replay::~Replay() { R_ReleaseObject(log); }
-
-size_t Replay::getEventCount() { return (size_t)Rf_length(log); }
-
-std::unique_ptr<Event> Replay::getEvent(size_t idx) {
-    assert(idx < getEventCount());
-    SEXP rawEventEntry = VECTOR_ELT(log, idx);
-    return serialization::event_from_sexp(rawEventEntry);
-}
-
-SEXP Replay::replayClosure(size_t idx) {
-    SEXP closure = rehydrated_closures.at(idx);
-    if (closure != R_NilValue) {
-        return closure;
-    }
-
-    const FunRecording& recording = functions.at(idx);
-    assert(!Rf_isNull(recording.closure));
-
-    if (recording.primIdx >= 0) {
-        SEXP primitive = PROTECT(R_unserialize(recording.closure, R_NilValue));
-        assert(TYPEOF(primitive) == SPECIALSXP ||
-               TYPEOF(primitive) == BUILTINSXP);
-        UNPROTECT(1);
-        return primitive;
-    }
-
-    SEXP name = R_NilValue;
-    if (!recording.name.empty()) {
-        name = Rf_install(recording.name.c_str());
-    }
-
-    closure = PROTECT(R_unserialize(recording.closure, R_NilValue));
-    if (Rf_isNull(closure)) {
-        UNPROTECT(1);
-        return R_NilValue;
-    }
-
-    assert(TYPEOF(closure) == CLOSXP);
-
-    // The env parameter seems to be never read
-    rirCompile(closure, R_NilValue);
-    rehydrated_closures[idx] = closure;
-
-    if (name != R_NilValue) {
-        SEXP env = getEnvironment(recording.env);
-
-        if (env == R_GlobalEnv) {
-            Rf_defineVar(name, closure, R_GlobalEnv);
-        } else if (env != R_UnboundValue) {
-            SEXP existing_closure = Rf_findFun(name, env);
-            if (existing_closure != R_UnboundValue) {
-                BODY(existing_closure) = BODY(closure);
-                assert(BODY(existing_closure));
-            }
-        }
-    }
-
-    // TODO: protect properly
-    R_PreserveObject(BODY(closure));
-    rehydrated_dispatch_tables[idx] = DispatchTable::unpack(BODY(closure));
-
-    UNPROTECT(1);
-
-    return closure;
-}
-
-size_t Replay::replay() {
-    auto n = getEventCount();
-
-    for (size_t i = 0; i < n; i++) {
-        auto entry = getEvent(i);
-        entry->replay(*this);
-    }
-
-    return n;
-}
-
-void Replay::replaySpeculativeContext(
-    DispatchTable* dt,
-    std::vector<SpeculativeContext>::const_iterator& ctxStart,
-    std::vector<SpeculativeContext>::const_iterator& ctxEnd) {
-
-    auto fun = dt->baseline();
-    auto code = fun->body();
-    this->replaySpeculativeContext(code, ctxStart, ctxEnd);
-}
-
-void Replay::replaySpeculativeContext(
-    Code* code, std::vector<SpeculativeContext>::const_iterator& ctxStart,
-    std::vector<SpeculativeContext>::const_iterator& ctxEnd) {
-
-    Opcode* end = code->endCode();
-    Opcode* pc = code->code();
-    Opcode* prev = NULL;
-    Opcode* pprev = NULL;
-
-    while (pc < end) {
-        auto bc = BC::decode(pc, code);
-
-        switch (bc.bc) {
-        case Opcode::mk_promise_:
-        case Opcode::mk_eager_promise_: {
-            auto promise = code->getPromise(bc.immediate.fun);
-            this->replaySpeculativeContext(promise, ctxStart, ctxEnd);
-            break;
-        }
-        case Opcode::close_: {
-            // prev is the push_ of srcref
-            // pprev is the push_ of body
-            auto body = BC::decodeShallow(pprev).immediateConst();
-            auto dt = DispatchTable::unpack(body);
-            this->replaySpeculativeContext(dt, ctxStart, ctxEnd);
-            break;
-        }
-        case Opcode::record_call_: {
-            assert(ctxStart != ctxEnd);
-
-            ObservedCallees* feedback = (ObservedCallees*)(pc + 1);
-            auto callees_idx = (*ctxStart++).value.callees;
-
-            // TODO not sure if this is correct, but it fixes an issue
-            feedback->numTargets = 0;
-            for (auto callee_idx : callees_idx) {
-                if (callee_idx == NO_INDEX) {
-                    continue;
-                }
-
-                SEXP callee = PROTECT(replayClosure(callee_idx));
-                assert(Rf_isFunction(callee));
-                // feedback->record(code->function(), callee);
-                UNPROTECT(1);
-            }
-
-            break;
-        }
-        case Opcode::record_test_: {
-            assert(ctxStart != ctxEnd);
-
-            ObservedTest* feedback = (ObservedTest*)(pc + 1);
-            *feedback = (*ctxStart++).value.test;
-            break;
-        }
-        case Opcode::record_type_: {
-            assert(ctxStart != ctxEnd);
-
-            ObservedValues* feedback = (ObservedValues*)(pc + 1);
-            *feedback = (*ctxStart++).value.values;
-            break;
-        }
-        default: {
-        }
-        }
-        pprev = prev;
-        prev = pc;
-        pc = bc.next(pc);
-    }
-}
-
-void ClosureEvent::replay(Replay& replay) const {
-    SEXP cls = PROTECT(replay.replayClosure(closureIndex));
-    if (Rf_isFunction(cls)) {
-        replayOnClosure(replay, cls);
-    } else {
-        std::cerr << "replaying closure wasn't initialized yet at index "
-                  << closureIndex << std::endl;
-    }
-    UNPROTECT(1);
-}
-
 const char* ClosureEvent::targetName(std::vector<FunRecording>& mapping) const {
     return mapping[closureIndex].name.c_str();
 }
 
-void DtEvent::replay(Replay& replay) const {
-    SEXP body =
-        PROTECT(BODY(PROTECT(replay.replayClosure(dispatchTableIndex))));
-    if (auto dt = DispatchTable::check(body)) {
-        replayOnDt(replay, *dt);
-    } else {
-        std::cerr << "replaying dispatch table wasn't initialized yet at index "
-                  << dispatchTableIndex << std::endl;
-    }
-    UNPROTECT(2);
-}
-
 const char* DtEvent::targetName(std::vector<FunRecording>& mapping) const {
     return mapping[dispatchTableIndex].name.c_str();
-}
-
-void VersionEvent::replayOnDt(Replay& replay, DispatchTable& dt) const {
-    if (auto fun = functionVersion(dt)) {
-        replayOnFunctionVersion(replay, dt, *fun);
-    } else {
-        std::cerr << "function version with context " << version
-                  << " wasn't found in DispatchTable " << &dt << std::endl;
-    }
 }
 
 Function* VersionEvent::functionVersion(const DispatchTable& dt) const {
@@ -592,64 +377,6 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     sc = serialization::speculative_context_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
-void SpeculativeContextEvent::replayOnDt(Replay& replay,
-                                         DispatchTable& dt) const {
-    auto& baseline = *dt.baseline();
-    Code* c = nullptr;
-    if (codeIndex == -1) {
-        c = baseline.body();
-    } else if (codeIndex >= 0) {
-        c = baseline.body()->getPromise((size_t)codeIndex);
-    }
-
-    assert(offset < c->size());
-    Opcode* immediate = c->code() + offset;
-    Opcode* opcode = immediate - 1;
-    auto bc = BC::decode(opcode, c);
-
-    switch (sc.type) {
-    case SpeculativeContextType::Callees: {
-        assert(bc.is(Opcode::record_call_));
-        auto& oc = *(ObservedCallees*)immediate;
-
-        oc.numTargets = 0;
-        for (auto callee : sc.value.callees) {
-            if (callee == (size_t)-1)
-                break;
-
-            SEXP cls = PROTECT(replay.replayClosure(callee));
-            assert(!Rf_isNull(cls));
-            isReplayingSC++;
-            // oc.record(c->function(), cls);
-            isReplayingSC--;
-            UNPROTECT(1);
-        }
-
-        prepareRecordSC(c);
-        recordSC(oc);
-        break;
-    }
-    case SpeculativeContextType::Test: {
-        assert(bc.is(Opcode::record_test_));
-        auto& ot = *(ObservedTest*)immediate;
-        ot = sc.value.test;
-
-        prepareRecordSC(c);
-        recordSC(ot);
-        break;
-    }
-    case SpeculativeContextType::Values: {
-        assert(bc.is(Opcode::record_type_));
-        auto& ov = *(ObservedValues*)immediate;
-        ov = sc.value.values;
-
-        prepareRecordSC(c);
-        recordSC(ov);
-        break;
-    }
-    }
-}
-
 bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
     if (sc.type == SpeculativeContextType::Callees) {
         const auto& callees = sc.value.callees;
@@ -676,19 +403,6 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
     out << "\n        offset=" << offset << "\n        sc=";
     sc.print(mapping, out);
     out << "\n    }";
-}
-
-void CompilationEvent::replayOnClosure(Replay& replay, SEXP closure) const {
-    isPlayingCompile = true;
-    isReplayingSC++;
-    auto start = speculative_contexts.begin();
-    auto end = speculative_contexts.end();
-    auto dt = DispatchTable::unpack(BODY(closure));
-    replay.replaySpeculativeContext(dt, start, end);
-    pirCompile(closure, Context(this->dispatch_context), compileName,
-               pir::DebugOptions::DefaultDebugOptions);
-    isReplayingSC--;
-    isPlayingCompile = false;
 }
 
 bool CompilationEvent::containsReference(size_t recordingIdx) const {
@@ -811,32 +525,6 @@ Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
     }
 }
 
-void DeoptEvent::replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
-                                         Function& fun) const {
-    // A deopt normally occurs _while executing_ a function, and partly consists
-    // in converting the native stack frame into an interpreted stack frame,
-    // while keeping note of the broken invariants that led to the function
-    // being deoptimized in the first place. To replay a deoptimization, we only
-    // have to store the broken invariants. Nothing else.
-
-    Code* code = fun.body();
-
-    // Copy and set current closure's code
-    /* Code* deoptSrcCode = */
-    /*     retrieveCodeFromIndex(replay.rehydrated_closures, this->reasonCodeIdx_); */
-    FeedbackOrigin origin(&fun, FeedbackIndex::call(reasonCodeOff_));
-    DeoptReason reason(origin, this->reason_);
-    auto trigger = trigger_ ? trigger_ : replay.replayClosure(triggerClosure_);
-
-    recordDeopt(code, &dt, reason, trigger);
-
-    isReplayingSC++;
-    reason.record(trigger);
-    isReplayingSC--;
-    assert(fun.isOptimized());
-    fun.flags.set(Function::Flag::Deopt);
-}
-
 bool DeoptEvent::containsReference(size_t recordingIdx) const {
     return (size_t)reasonCodeIdx_.first == recordingIdx ||
            (size_t)triggerClosure_ == recordingIdx ||
@@ -901,11 +589,6 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     }
 }
 
-void DtInitEvent::replayOnDt(Replay& replay, DispatchTable& dt) const {
-    dt.baseline()->init(invocations, deopts);
-    recordDtOverwrite(&dt, invocations, deopts);
-}
-
 void DtInitEvent::print(const std::vector<FunRecording>& mapping,
                         std::ostream& out) const {
     out << "DtInitEvent{\n        invocations=" << this->invocations
@@ -961,23 +644,6 @@ void InvocationEvent::fromSEXP(SEXP sexp) {
     version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     deltaCount = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-}
-
-void InvocationEvent::replayOnFunctionVersion(Replay& replay, DispatchTable& dt,
-                                              Function& fun) const {
-    if (deltaCount > 0) {
-        for (ssize_t i = 0; i < deltaCount; i++) {
-            fun.registerInvocation();
-            fun.registerEndInvocation();
-        }
-    } else if (deltaCount < 0) {
-        auto remaining = -deltaCount;
-        for (ssize_t i = 0; i < remaining; i++) {
-            fun.unregisterInvocation();
-        }
-    } else {
-        fun.addDeoptCount(deltaDeopt);
-    }
 }
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,
@@ -1289,22 +955,6 @@ REXPORT SEXP isRecordings() {
     return Rf_ScalarLogical(rir::recording::is_recording_);
 }
 
-REXPORT SEXP replayRecordings(SEXP recordings, bool startRecording) {
-    rir::recording::Replay replay(recordings);
-    if (startRecording)
-        startRecordings();
-    auto res = replay.replay();
-
-    return Rf_ScalarInteger(res);
-}
-
-REXPORT SEXP replayRecordingsFromFile(SEXP filename, bool startRecording) {
-    auto recordings = loadRecordings(filename);
-    auto res = replayRecordings(recordings, startRecording);
-
-    return res;
-}
-
 REXPORT SEXP saveRecordings(SEXP filename) {
     if (TYPEOF(filename) != STRSXP)
         Rf_error("must provide a string path");
@@ -1339,35 +989,35 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
 
 REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
-    auto& out = std::cout;
-    out << "Recordings:" << std::endl;
-
-    if (Rf_isNull(fromFile)) {
-        rir::recording::printRecordings(out);
-    } else {
-        auto recordingsSexp = PROTECT(loadRecordings(fromFile));
-        rir::recording::Replay replay(recordingsSexp);
-
-        auto eventCount = replay.getEventCount();
-        for (size_t idx = 0; idx < eventCount; idx++) {
-            const auto eventEntry = replay.getEvent(idx);
-
-            const char* name = eventEntry->targetName(replay.functions);
-            std::string ptr_str;
-
-            // If name is empty (unknown), use a different display strategy
-            if (*name == 0) {
-                name = "<?>";
-            }
-
-            Prefixer prefixed(out, name);
-            prefixed << "    ";
-            eventEntry->print(replay.functions, prefixed);
-            prefixed << std::endl;
-        }
-
-        UNPROTECT(1);
-    }
+    // auto& out = std::cout;
+    // out << "Recordings:" << std::endl;
+    //
+    // if (Rf_isNull(fromFile)) {
+    //     rir::recording::printRecordings(out);
+    // } else {
+    //     auto recordingsSexp = PROTECT(loadRecordings(fromFile));
+    //     rir::recording::Replay replay(recordingsSexp);
+    //
+    //     auto eventCount = replay.getEventCount();
+    //     for (size_t idx = 0; idx < eventCount; idx++) {
+    //         const auto eventEntry = replay.getEvent(idx);
+    //
+    //         const char* name = eventEntry->targetName(replay.functions);
+    //         std::string ptr_str;
+    //
+    //         // If name is empty (unknown), use a different display strategy
+    //         if (*name == 0) {
+    //             name = "<?>";
+    //         }
+    //
+    //         Prefixer prefixed(out, name);
+    //         prefixed << "    ";
+    //         eventEntry->print(replay.functions, prefixed);
+    //         prefixed << std::endl;
+    //     }
+    //
+    //     UNPROTECT(1);
+    // }
 
     return R_NilValue;
 }
