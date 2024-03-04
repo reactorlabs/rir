@@ -7,6 +7,7 @@
 
 #include "compiler/parameter.h"
 #include "interp_incl.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 
 #include "R/BuiltinIds.h"
@@ -59,42 +60,65 @@ inline bool RecompileHeuristic(Function* fun,
                                Function* funMaybeDisabled = nullptr) {
 
     auto flags = fun->flags;
-    if (flags.contains(Function::MarkOpt))
+    if (flags.contains(Function::MarkOpt)){
+        recording::recordOptMarkOpt();
         return true;
+    }
     if (flags.contains(Function::NotOptimizable))
         return false;
 
     if (!funMaybeDisabled)
         funMaybeDisabled = fun;
 
-    auto abandon =
-        funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
+    if (funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON)
+        return false;
 
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
     if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
+        recording::recordOptInvocation(fun->invocationCount(), fun->invocationTime());
+        // TODO on abadon
+
         fun->clearInvocationTime();
-        return !abandon;
+        return true;
     }
 
     if (fun->isOptimized())
         return false;
-    auto wu = pir::Parameter::PIR_WARMUP;
-    if (wu == 0)
-        return !abandon;
 
-    if (fun->invocationCount() == wu)
-        return !abandon;
+    auto wu = pir::Parameter::PIR_WARMUP;
+    if (wu == 0 || fun->invocationCount() == wu){
+        recording::recordOptWarmup();
+        return true;
+    }
 
     return false;
 }
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
-            (context.smaller(fun->context()) &&
-             context.isImproving(fun) > table->size()) ||
-            fun->flags.contains(Function::Reoptimize));
+    if (fun->flags.contains(Function::MarkOpt)){
+        recording::recordOptMarkOpt();
+        return true;
+    }
+
+    if (!fun->isOptimized()) {
+        recording::recordOptNotOptimized();
+        return true;
+    }
+
+    if (context.smaller(fun->context()) &&
+        context.isImproving(fun) > table->size()){
+        recording::recordOptIsImproving();
+        return true;
+    }
+
+    if (fun->flags.contains(Function::Reoptimize)){
+        recording::recordOptIsImproving();
+        return true;
+    }
+
+    return false;
 }
 
 inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {

@@ -29,6 +29,16 @@ void recordSC(const ObservedCallees& type);
 void recordSC(const ObservedTest& type);
 void recordSC(const ObservedValues& type);
 
+void recordOptMarkOpt();
+void recordOptWarmup();
+void recordOptInvocation(size_t count, unsigned long time);
+void recordOptNotOptimized();
+void recordOptIsImproving();
+void recordOptReoptimize();
+void recordOptClear();
+
+void recordOsrTrigger();
+
 } // namespace recording
 } // namespace rir
 

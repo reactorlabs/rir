@@ -62,6 +62,56 @@ struct SpeculativeContext {
                std::ostream& out) const;
 };
 
+struct OptReason {
+    enum class Type : uint8_t {
+        MarkOpt,
+        Warmup,
+        Invocation,
+        NotOptimized,
+        IsImproving,
+        Reoptimize,
+        OsrTriggered // TODO somewhere else
+    } reason;
+
+    // For InvocationCountTime
+    size_t count = 0;
+    unsigned long time = 0;
+
+    friend std::ostream& operator <<(std::ostream& out, const OptReason& reason){
+        switch (reason.reason){
+        case Type::MarkOpt:
+            out << "MarkOpt";
+            break;
+
+        case Type::Warmup:
+            out << "Warmup";
+            break;
+
+        case Type::Invocation:
+            out << "Invocation, count: " << reason.count << ", time: " << reason.time;
+            break;
+
+        case Type::NotOptimized:
+            out << "NotOptimized";
+            break;
+
+        case Type::IsImproving:
+            out << "IsImproving";
+            break;
+
+        case Type::Reoptimize:
+            out << "Reoptimize";
+            break;
+
+        case OptReason::Type::OsrTriggered:
+            out << "OsrTriggered";
+            break;
+        }
+
+        return out;
+    }
+};
+
 /**
  * Recorded event
  *
@@ -179,12 +229,19 @@ class SpeculativeContextEvent : public DtEvent {
 
 class CompilationEvent : public ClosureEvent {
   public:
-    CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
+    CompilationEvent(size_t closureIndex,
+                     unsigned long dispatch_context,
                      std::string compileName,
-                     std::vector<SpeculativeContext>&& speculative_contexts)
-        : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
-          compileName(compileName), speculative_contexts(speculative_contexts) {
-    }
+                     std::vector<SpeculativeContext>&& speculative_contexts,
+                     const std::vector<OptReason>& opt_reasons
+                     )
+        : ClosureEvent(closureIndex),
+        dispatch_context(dispatch_context),
+        compileName(compileName),
+        speculative_contexts(speculative_contexts),
+        opt_reasons(opt_reasons)
+        {}
+
     CompilationEvent() {}
 
     SEXP toSEXP() const override;
@@ -202,6 +259,7 @@ class CompilationEvent : public ClosureEvent {
     std::string compileName;
 
     std::vector<SpeculativeContext> speculative_contexts;
+    std::vector<OptReason> opt_reasons;
 };
 
 class DeoptEvent : public VersionEvent {
@@ -336,11 +394,13 @@ class Record {
         bool deopt : 1;
         bool typeFeedback : 1;
         bool invoke : 1;
+        bool optReason : 1;
     } filter = {
         .compile = true,
         .deopt = true,
         .typeFeedback = false,
         .invoke = false,
+        .optReason = true,
     };
 
     template <typename E, typename... Args>

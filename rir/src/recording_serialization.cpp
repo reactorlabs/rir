@@ -1,5 +1,6 @@
 #include "recording_serialization.h"
 #include "Rdefines.h"
+#include "Rinternals.h"
 #include "recording.h"
 
 namespace rir {
@@ -197,6 +198,35 @@ rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isNull(recorder.closure) || TYPEOF(recorder.closure) == RAWSXP);
 
     return recorder;
+}
+
+SEXP to_sexp(const rir::recording::OptReason& reason){
+    const char* fields[] = { "reason", "count", "time", "" };
+    auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
+    size_t i = 0;
+
+    SET_VECTOR_ELT(vec, i++, PROTECT(to_sexp((uint32_t)reason.reason)));
+    SET_VECTOR_ELT(vec, i++, PROTECT(to_sexp(reason.count)));
+    SET_VECTOR_ELT(vec, i++, PROTECT(to_sexp(reason.time)));
+    UNPROTECT(i+1);
+
+    return vec;
+}
+
+rir::recording::OptReason opt_reason_from_sexp(SEXP sexp){
+    assert(Rf_isVector(sexp));
+    assert(Rf_length(sexp) == 3);
+
+    size_t i = 0;
+    auto reason = uint32_t_from_sexp(VECTOR_ELT(sexp, i++));
+    auto count = uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    auto time = uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+
+    return OptReason{
+        .reason = (OptReason::Type)reason,
+        .count = count,
+        .time = time
+    };
 }
 
 } // namespace serialization

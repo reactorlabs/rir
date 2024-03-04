@@ -1007,12 +1007,16 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
                         fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
+
+                        recording::recordOsrTrigger(); // TODO Caller-Callee
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
                     fun = dispatch(call, table);
                 }
             }
+
+            recording::recordOptClear();
         }
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;

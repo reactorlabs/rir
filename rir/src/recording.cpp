@@ -41,6 +41,8 @@ static int isReplayingSC = 0;
 // Don't record invocations while replaying compile events
 static bool isPlayingCompile = false;
 
+std::vector<OptReason> optReasons_;
+
 bool Record::contains(const DispatchTable* dt) {
     return dt_to_recording_index_.count(dt);
 }
@@ -430,20 +432,27 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
         spec.print(mapping, out);
         out << "\n";
     }
+    out << "        ],\n        opt_reasons=[\n";
+    for(auto& reas : this->opt_reasons){
+        out << "            "
+            << reas
+            << "\n";
+    }
     out << "        ]\n    }";
 }
 
 SEXP CompilationEvent::toSEXP() const {
     const char* fields[] = {"closure", "dispatch_context", "name",
-                            "speculative_contexts", ""};
+                            "speculative_contexts", "opt_reasons", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
+
     size_t i = 0;
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(closureIndex));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->dispatch_context));
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->compileName));
-    auto speculative_contexts_sexp =
-        Rf_allocVector(VECSXP, (int)this->speculative_contexts.size());
+
+    auto speculative_contexts_sexp = Rf_allocVector(VECSXP, this->speculative_contexts.size());
     SET_VECTOR_ELT(sexp, i++, speculative_contexts_sexp);
 
     size_t scI = 0;
@@ -452,11 +461,20 @@ SEXP CompilationEvent::toSEXP() const {
                        serialization::to_sexp(speculative_context));
     }
 
+    auto opt_reason_sexp = Rf_allocVector(VECSXP, this->opt_reasons.size());
+    SET_VECTOR_ELT(sexp, i++, opt_reason_sexp);
+
+    size_t optI = 0;
+    for (auto& opt_reason : opt_reasons) {
+        SET_VECTOR_ELT(opt_reason_sexp, optI++, serialization::to_sexp(opt_reason));
+    }
+
     UNPROTECT(1);
     return sexp;
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
+    // TODO
     assert(Rf_length(sexp) == 4);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
@@ -676,7 +694,8 @@ void recordCompile(SEXP cls, const std::string& name,
     auto dispatch_context = assumptions.toI();
 
     recorder_.record<CompilationEvent>(cls, name, dispatch_context, name,
-                                       std::move(sc));
+                                       std::move(sc), optReasons_);
+    optReasons_.clear();
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
@@ -920,6 +939,53 @@ SEXP getEnvironment(const std::string& name) {
 
 void printRecordings(std::ostream& out) { recorder_.printRecordings(out); }
 
+
+void recordOptMarkOpt(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::MarkOpt });
+}
+
+void recordOptWarmup(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::Warmup });
+}
+
+void recordOptInvocation(size_t count, unsigned long time){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({
+        .reason = OptReason::Type::Invocation,
+        .count = count,
+        .time = time,
+    });
+}
+
+void recordOptNotOptimized(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::NotOptimized });
+}
+
+void recordOptIsImproving(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::IsImproving });
+}
+
+void recordOptReoptimize(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::Reoptimize });
+}
+
+void recordOsrTrigger(){
+    RECORDER_FILTER_GUARD(optReason);
+    optReasons_.push_back({.reason = OptReason::Type::OsrTriggered });
+}
+
+void recordOptClear(){
+    for ( auto r : optReasons_ ){
+        std::cout << r << "\n";
+    }
+    optReasons_.clear();
+}
+
 } // namespace recording
 } // namespace rir
 
@@ -949,8 +1015,8 @@ REXPORT SEXP stopRecordings() {
 REXPORT SEXP resetRecordings() {
     rir::recording::recorder_.reset();
     return R_NilValue;
-}
 
+}
 REXPORT SEXP isRecordings() {
     return Rf_ScalarLogical(rir::recording::is_recording_);
 }
@@ -989,35 +1055,35 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
 
 REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
-    // auto& out = std::cout;
-    // out << "Recordings:" << std::endl;
-    //
-    // if (Rf_isNull(fromFile)) {
-    //     rir::recording::printRecordings(out);
-    // } else {
-    //     auto recordingsSexp = PROTECT(loadRecordings(fromFile));
-    //     rir::recording::Replay replay(recordingsSexp);
-    //
-    //     auto eventCount = replay.getEventCount();
-    //     for (size_t idx = 0; idx < eventCount; idx++) {
-    //         const auto eventEntry = replay.getEvent(idx);
-    //
-    //         const char* name = eventEntry->targetName(replay.functions);
-    //         std::string ptr_str;
-    //
-    //         // If name is empty (unknown), use a different display strategy
-    //         if (*name == 0) {
-    //             name = "<?>";
-    //         }
-    //
-    //         Prefixer prefixed(out, name);
-    //         prefixed << "    ";
-    //         eventEntry->print(replay.functions, prefixed);
-    //         prefixed << std::endl;
-    //     }
-    //
-    //     UNPROTECT(1);
-    // }
+    auto& out = std::cout;
+    out << "Recordings:" << std::endl;
+
+    if (Rf_isNull(fromFile)) {
+        rir::recording::printRecordings(out);
+    } else {
+        // auto recordingsSexp = PROTECT(loadRecordings(fromFile));
+        // rir::recording::Replay replay(recordingsSexp);
+        //
+        // auto eventCount = replay.getEventCount();
+        // for (size_t idx = 0; idx < eventCount; idx++) {
+        //     const auto eventEntry = replay.getEvent(idx);
+        //
+        //     const char* name = eventEntry->targetName(replay.functions);
+        //     std::string ptr_str;
+        //
+        //     // If name is empty (unknown), use a different display strategy
+        //     if (*name == 0) {
+        //         name = "<?>";
+        //     }
+        //
+        //     Prefixer prefixed(out, name);
+        //     prefixed << "    ";
+        //     eventEntry->print(replay.functions, prefixed);
+        //     prefixed << std::endl;
+        // }
+        //
+        // UNPROTECT(1);
+    }
 
     return R_NilValue;
 }
