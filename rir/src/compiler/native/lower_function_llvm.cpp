@@ -2977,11 +2977,20 @@ void LowerFunctionLLVM::compile() {
                     case blt("anyNA"):
                     case blt("is.na"):
                         if (irep == Rep::i32) {
-                            setVal(i,
-                                   builder.CreateSelect(
-                                       builder.CreateICmpEQ(a, c(NA_INTEGER)),
-                                       constant(R_TrueValue, orep),
-                                       constant(R_FalseValue, orep)));
+                            auto arg = i->arg(0).val();
+                            if (arg->type.maybeNAOrNaN()) {
+                                // i->print(std::cerr, true);
+                                // std::cerr << "arg: " << (uint) arg->tag << "
+                                // " <<  arg->type << " \n";
+                                // assert(i->arg(0).val()->type.maybeNAOrNaN());
+                                setVal(i, builder.CreateSelect(
+                                              builder.CreateICmpEQ(
+                                                  a, c(NA_INTEGER)),
+                                              constant(R_TrueValue, orep),
+                                              constant(R_FalseValue, orep)));
+                            } else {
+                                setVal(i, constant(R_FalseValue, orep));
+                            }
                         } else if (irep == Rep::f64) {
                             setVal(i, builder.CreateSelect(
                                           builder.CreateFCmpUNE(a, a),
@@ -4731,13 +4740,27 @@ void LowerFunctionLLVM::compile() {
                     assert(r1 == Rep::i32);
                     res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
-                        res = builder.CreateSelect(
-                            builder.CreateICmpEQ(res, c(NA_INTEGER)),
-                            c(NA_LOGICAL),
+
+                        // std::cerr << "arg: " << (uint) arg->tag << " " <<
+                        // arg->type << " \n";
+
+                        if (arg->type.maybeNAOrNaN()) {
+
+                            res = builder.CreateSelect(
+                                builder.CreateICmpEQ(res, c(NA_INTEGER)),
+                                c(NA_LOGICAL),
+                                builder.CreateSelect(
+                                    builder.CreateICmpEQ(res, c(0)),
+                                    constant(R_FalseValue, t::Int),
+                                    constant(R_TrueValue, t::Int)));
+                        } else {
+                            // std::cerr << " not NA \n";
+                            // assert(false);
                             builder.CreateSelect(
                                 builder.CreateICmpEQ(res, c(0)),
                                 constant(R_FalseValue, t::Int),
-                                constant(R_TrueValue, t::Int)));
+                                constant(R_TrueValue, t::Int));
+                        }
                     }
                 }
 
