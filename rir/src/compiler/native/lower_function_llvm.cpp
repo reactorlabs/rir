@@ -2975,31 +2975,30 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("anyNA"):
-                    case blt("is.na"):
-                        if (irep == Rep::i32) {
-                            auto arg = i->arg(0).val();
-                            if (arg->type.maybeNAOrNaN()) {
-                                // i->print(std::cerr, true);
-                                // std::cerr << "arg: " << (uint) arg->tag << "
-                                // " <<  arg->type << " \n";
-                                // assert(i->arg(0).val()->type.maybeNAOrNaN());
+                    case blt("is.na"): {
+
+                        auto arg = i->arg(0).val();
+                        if (!arg->type.maybeNAOrNaN()) {
+                            setVal(i, constant(R_FalseValue, orep));
+                        } else {
+
+                            if (irep == Rep::i32) {
                                 setVal(i, builder.CreateSelect(
                                               builder.CreateICmpEQ(
                                                   a, c(NA_INTEGER)),
                                               constant(R_TrueValue, orep),
                                               constant(R_FalseValue, orep)));
+                            } else if (irep == Rep::f64) {
+                                setVal(i, builder.CreateSelect(
+                                              builder.CreateFCmpUNE(a, a),
+                                              constant(R_TrueValue, orep),
+                                              constant(R_FalseValue, orep)));
                             } else {
-                                setVal(i, constant(R_FalseValue, orep));
+                                done = false;
                             }
-                        } else if (irep == Rep::f64) {
-                            setVal(i, builder.CreateSelect(
-                                          builder.CreateFCmpUNE(a, a),
-                                          constant(R_TrueValue, orep),
-                                          constant(R_FalseValue, orep)));
-                        } else {
-                            done = false;
                         }
                         break;
+                    }
                     case blt("is.object"):
                         if (irep == Rep::SEXP) {
                             setVal(i, builder.CreateSelect(
