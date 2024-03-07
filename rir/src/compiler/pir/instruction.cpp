@@ -887,6 +887,13 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
                            .notMissing()
                            .orNotFastVecelt();
 
+            std::cerr << "\n ASSERTION1: \n"
+                      << "current argment: " << getType(callArg(0).val())
+                      << "\n";
+            std::cerr << "\n"
+                      << "inferred: " << inferred << "\n";
+
+            // assert(false);
             if (getType(callArg(0).val()).isSimpleScalar()) {
                 inferred = inferred.simpleScalar();
                 std::cerr << "\n"
