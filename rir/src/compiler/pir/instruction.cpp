@@ -1,4 +1,6 @@
 #include "instruction.h"
+#include "compiler/pir/singleton_values.h"
+#include "compiler/pir/type.h"
 #include "pir_impl.h"
 
 #include "../analysis/query.h"
@@ -881,11 +883,18 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
         if (!getType(callArg(0).val())
                  .maybeObj()) { // TODO: is it necessary to check this?
             inferred = (PirType(RType::integer) | RType::nil)
+                           .notNAOrNaN()
                            .notMissing()
                            .orNotFastVecelt();
 
-            // if (getType(callArg(0).val()).isSimpleScalar())
-            //     inferred = inferred.simpleScalar();
+            if (getType(callArg(0).val()).isSimpleScalar()) {
+                inferred = inferred.simpleScalar();
+                std::cerr << "\n"
+                          << "current: " << getType(callArg(0).val()) << "\n";
+                std::cerr << "\n"
+                          << "inferred: " << inferred << "\n";
+                assert(false);
+            }
         }
     }
 
