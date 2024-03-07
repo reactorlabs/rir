@@ -2978,25 +2978,25 @@ void LowerFunctionLLVM::compile() {
                     case blt("is.na"): {
 
                         auto arg = i->arg(0).val();
-                        if (!arg->type.maybeNAOrNaN()) {
-                            setVal(i, constant(R_FalseValue, orep));
-                        } else {
 
-                            if (irep == Rep::i32) {
-                                setVal(i, builder.CreateSelect(
-                                              builder.CreateICmpEQ(
-                                                  a, c(NA_INTEGER)),
-                                              constant(R_TrueValue, orep),
-                                              constant(R_FalseValue, orep)));
-                            } else if (irep == Rep::f64) {
-                                setVal(i, builder.CreateSelect(
-                                              builder.CreateFCmpUNE(a, a),
-                                              constant(R_TrueValue, orep),
-                                              constant(R_FalseValue, orep)));
-                            } else {
-                                done = false;
-                            }
+                        if ((irep == Rep::i32 || irep == Rep::f64) &&
+                            !arg->type.maybeNAOrNaN()) {
+                            setVal(i, constant(R_FalseValue, orep));
+                        } else if (irep == Rep::i32) {
+                            setVal(i,
+                                   builder.CreateSelect(
+                                       builder.CreateICmpEQ(a, c(NA_INTEGER)),
+                                       constant(R_TrueValue, orep),
+                                       constant(R_FalseValue, orep)));
+                        } else if (irep == Rep::f64) {
+                            setVal(i, builder.CreateSelect(
+                                          builder.CreateFCmpUNE(a, a),
+                                          constant(R_TrueValue, orep),
+                                          constant(R_FalseValue, orep)));
+                        } else {
+                            done = false;
                         }
+
                         break;
                     }
                     case blt("is.object"):
