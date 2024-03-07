@@ -4740,25 +4740,20 @@ void LowerFunctionLLVM::compile() {
                     res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
 
-                        // std::cerr << "arg: " << (uint) arg->tag << " " <<
-                        // arg->type << " \n";
+                        auto nonNAIntegerToBool = [&]() {
+                            return builder.CreateSelect(
+                                builder.CreateICmpEQ(res, c(0)),
+                                constant(R_FalseValue, t::Int),
+                                constant(R_TrueValue, t::Int));
+                        };
 
                         if (arg->type.maybeNAOrNaN()) {
 
                             res = builder.CreateSelect(
                                 builder.CreateICmpEQ(res, c(NA_INTEGER)),
-                                c(NA_LOGICAL),
-                                builder.CreateSelect(
-                                    builder.CreateICmpEQ(res, c(0)),
-                                    constant(R_FalseValue, t::Int),
-                                    constant(R_TrueValue, t::Int)));
+                                c(NA_LOGICAL), nonNAIntegerToBool());
                         } else {
-                            // std::cerr << " not NA \n";
-                            // assert(false);
-                            builder.CreateSelect(
-                                builder.CreateICmpEQ(res, c(0)),
-                                constant(R_FalseValue, t::Int),
-                                constant(R_TrueValue, t::Int));
+                            res = nonNAIntegerToBool();
                         }
                     }
                 }
