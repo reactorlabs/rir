@@ -601,7 +601,40 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP playground() {
+REXPORT SEXP playground(SEXP what) {
+
+    Context baseContext = pir::Compiler::defaultContext;
+    baseContext.add(Assumption::StaticallyArgmatched);
+    baseContext.add(Assumption::NoExplicitlyMissingArgs);
+    baseContext.add(Assumption::CorrectOrderOfArguments);
+    baseContext.add(Assumption::NotTooManyArguments);
+    baseContext.numMissing(0);
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
+
+    // C1 (EAGER)
+    Context c1 = baseContext;
+    c1.setEager(0);
+    std::cerr << "Context: " << c1 << "\n";
+    pirCompile(what, c1, "nrow", opts);
+
+    // C2 (EAGER + NONOBJ)
+    Context c2 = c1;
+    c2.setNotObj(0);
+    std::cerr << "Context: " << c2 << "\n";
+    pirCompile(what, c2, "nrow", opts);
+
+    // C3 (EAGER + NONREFL)
+    Context c3 = c1;
+    c3.setNonRefl(0);
+    std::cerr << "Context: " << c3 << "\n";
+    pirCompile(what, c3, "nrow", opts);
+
+    // // C3 (EAGER + NONOBJ)
+    // Context c2 = c1;
+    // c2.setNotObj(0);
+    // std::cerr << "Context: " << c2 << "\n";
+    // pirCompile(what, c2, "nrow",   opts);
 
     return R_NilValue;
 }
