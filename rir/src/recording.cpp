@@ -773,7 +773,10 @@ void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
 
-    recorder_.initOrGetRecording(cls, name);
+    auto rec = recorder_.initOrGetRecording(cls, name);
+    if (rec.second.name == "" ){
+        rec.second.name = name;
+    }
 
     std::vector<SpeculativeContext> sc;
     auto dt = DispatchTable::unpack(BODY(cls));
@@ -787,7 +790,9 @@ void recordCompile(SEXP cls, const std::string& name,
 }
 
 void recordOsrCompile(const SEXP cls) {
-    recordCompile( cls, "$$", pir::Compiler::defaultContext ); // TODO
+    RECORDER_FILTER_GUARD(compile);
+
+    recordCompile( cls, "", pir::Compiler::defaultContext ); // TODO
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
