@@ -169,6 +169,7 @@ void RuntimeProfiler::initProfiler() {
 
 #else
 void RuntimeProfiler::initProfiler() {}
+bool RuntimeProfiler::enabled() { return false; }
 #endif
 
 } // namespace rir
