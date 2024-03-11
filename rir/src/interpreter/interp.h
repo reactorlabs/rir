@@ -70,8 +70,8 @@ inline bool RecompileHeuristic(Function* fun,
     if (!funMaybeDisabled)
         funMaybeDisabled = fun;
 
-    if (funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON)
-        return false;
+    auto abandon
+        = funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
 
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
@@ -82,13 +82,12 @@ inline bool RecompileHeuristic(Function* fun,
             fun->invocationTime(),
             wt
         );
-        // TODO on abadon
 
         fun->clearInvocationTime();
-        return true;
+        return !abandon;
     }
 
-    if (fun->isOptimized())
+    if (abandon || fun->isOptimized())
         return false;
 
     auto wu = pir::Parameter::PIR_WARMUP;
