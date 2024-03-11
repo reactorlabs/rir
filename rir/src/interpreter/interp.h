@@ -61,7 +61,7 @@ inline bool RecompileHeuristic(Function* fun,
 
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt)){
-        recording::recordOptMarkOpt();
+        recording::recordMarkOptReasonHeuristic();
         return true;
     }
     if (flags.contains(Function::NotOptimizable))
@@ -76,7 +76,12 @@ inline bool RecompileHeuristic(Function* fun,
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
     if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        recording::recordOptInvocation(fun->invocationCount(), fun->invocationTime());
+        recording::recordInvocationCountTimeReason(
+            fun->invocationCount(),
+            3,
+            fun->invocationTime(),
+            wt
+        );
         // TODO on abadon
 
         fun->clearInvocationTime();
@@ -88,7 +93,7 @@ inline bool RecompileHeuristic(Function* fun,
 
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0 || fun->invocationCount() == wu){
-        recording::recordOptWarmup();
+        recording::recordPirWarmupReason(wu);
         return true;
     }
 
@@ -98,23 +103,23 @@ inline bool RecompileHeuristic(Function* fun,
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     if (fun->flags.contains(Function::MarkOpt)){
-        recording::recordOptMarkOpt();
+        recording::recordMarkOptReasonCondition();
         return true;
     }
 
     if (!fun->isOptimized()) {
-        recording::recordOptNotOptimized();
+        recording::recordNotOptimizedReason();
         return true;
     }
 
     if (context.smaller(fun->context()) &&
         context.isImproving(fun) > table->size()){
-        recording::recordOptIsImproving();
+        recording::recordIsImprovingReason();
         return true;
     }
 
     if (fun->flags.contains(Function::Reoptimize)){
-        recording::recordOptIsImproving();
+        recording::recordReoptimizeFlagReason();
         return true;
     }
 

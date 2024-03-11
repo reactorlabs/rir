@@ -59,9 +59,7 @@ SEXP to_sexp(const rir::recording::FunRecording& obj);
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp);
 
-SEXP to_sexp(const rir::recording::OptReason& reason);
-
-rir::recording::OptReason opt_reason_from_sexp(SEXP sexp);
+std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sexp);
 
 template <typename T>
 SEXP to_sexp(const std::unique_ptr<T>& ptr) {

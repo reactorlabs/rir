@@ -4,6 +4,7 @@
 #include "Rdefines.h"
 #include "Rinternals.h"
 #include "api.h"
+#include "compiler/compiler.h"
 #include "compiler/pir/module.h"
 #include "compiler/pir/pir.h"
 #include "recording_serialization.h"
@@ -41,7 +42,45 @@ static int isReplayingSC = 0;
 // Don't record invocations while replaying compile events
 static bool isPlayingCompile = false;
 
-std::vector<OptReason> optReasons_;
+CompileReasons compileReasons_;
+
+SEXP InvocationCountTimeReason::toSEXP() const {
+    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
+
+    size_t i = 0;
+    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(count));
+    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(minimalCount));
+    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(time));
+    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(minimalTime));
+
+    UNPROTECT(1);
+    return vec;
+}
+
+void InvocationCountTimeReason::fromSEXP(SEXP sexp){
+    this->CompileReasonImpl::fromSEXP(sexp);
+
+    size_t i = 0;
+    this->count = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->minimalCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->time = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    this->minimalTime = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+}
+
+SEXP PirWarmupReason::toSEXP() const {
+    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
+
+    SET_VECTOR_ELT(vec, 0, serialization::to_sexp(invocationCount));
+
+    UNPROTECT(1);
+    return vec;
+}
+
+void PirWarmupReason::fromSEXP(SEXP sexp){
+    this->CompileReasonImpl::fromSEXP(sexp);
+
+    this->invocationCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+}
 
 bool Record::contains(const DispatchTable* dt) {
     return dt_to_recording_index_.count(dt);
@@ -433,17 +472,45 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
         out << "\n";
     }
     out << "        ],\n        opt_reasons=[\n";
-    for(auto& reas : this->opt_reasons){
-        out << "            "
-            << reas
-            << "\n";
+    if(this->compile_reasons.heuristic){
+        out << "            heuristic=";
+        this->compile_reasons.heuristic->print(out);
+        out << "\n";
     }
-    out << "        ]\n    }";
+
+    if(this->compile_reasons.condition){
+        out << "            condition=";
+        this->compile_reasons.condition->print(out);
+        out << "\n";
+    }
+
+
+    out << "            osr_reason=";
+    switch(this->compile_reasons.osr){
+    case OSRCompileReason::NONE:
+        out << "None";
+        break;
+    case OSRCompileReason::CALLER_CALLEE:
+        out << "Caller-Callee";
+        break;
+    case OSRCompileReason::LOOP:
+        out << "Loop";
+        break;
+    }
+
+    out << "\n        ]\n    }";
 }
 
 SEXP CompilationEvent::toSEXP() const {
-    const char* fields[] = {"closure", "dispatch_context", "name",
-                            "speculative_contexts", "opt_reasons", ""};
+    const char* fields[] = {
+        "closure",
+        "dispatch_context",
+        "name",
+        "speculative_contexts",
+        "compile_reason_heuristic",
+        "compile_reason_condition",
+        "compile_reason_osr",
+        ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
 
@@ -461,20 +528,25 @@ SEXP CompilationEvent::toSEXP() const {
                        serialization::to_sexp(speculative_context));
     }
 
-    auto opt_reason_sexp = Rf_allocVector(VECSXP, this->opt_reasons.size());
-    SET_VECTOR_ELT(sexp, i++, opt_reason_sexp);
-
-    size_t optI = 0;
-    for (auto& opt_reason : opt_reasons) {
-        SET_VECTOR_ELT(opt_reason_sexp, optI++, serialization::to_sexp(opt_reason));
+    if ( compile_reasons.heuristic ){
+        SET_VECTOR_ELT(sexp, i++, compile_reasons.heuristic->toSEXP());
+    } else {
+        i++;
     }
+
+    if ( compile_reasons.condition ){
+        SET_VECTOR_ELT(sexp, i++, compile_reasons.condition->toSEXP());
+    } else {
+        i++;
+    }
+
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp( static_cast<uint32_t>(compile_reasons.osr) ));
 
     UNPROTECT(1);
     return sexp;
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    // TODO
     assert(Rf_length(sexp) == 4);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
@@ -487,6 +559,10 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
             VECTOR_ELT(speculative_contexts_sexp, i));
         this->speculative_contexts.push_back(std::move(speculative_context));
     }
+
+    this->compile_reasons.heuristic = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 4));
+    this->compile_reasons.condition = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 5));
+    this->compile_reasons.osr = static_cast<OSRCompileReason>( serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, 6)) );
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -694,8 +770,12 @@ void recordCompile(SEXP cls, const std::string& name,
     auto dispatch_context = assumptions.toI();
 
     recorder_.record<CompilationEvent>(cls, name, dispatch_context, name,
-                                       std::move(sc), optReasons_);
-    optReasons_.clear();
+                                       std::move(sc), std::move(compileReasons_));
+    recordReasonsClear();
+}
+
+void recordOsrCompile(const SEXP cls) {
+    recordCompile( cls, "$$", pir::Compiler::defaultContext ); // TODO
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
@@ -939,51 +1019,58 @@ SEXP getEnvironment(const std::string& name) {
 
 void printRecordings(std::ostream& out) { recorder_.printRecordings(out); }
 
-
-void recordOptMarkOpt(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::MarkOpt });
+// Compile heuristics
+void recordMarkOptReasonHeuristic(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_heuristic<MarkOptReason>();
 }
 
-void recordOptWarmup(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::Warmup });
+void recordInvocationCountTimeReason( size_t count, size_t minimalCount, unsigned long time, unsigned long minimalTime ){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_heuristic<InvocationCountTimeReason>(count, minimalCount, time, minimalTime);
 }
 
-void recordOptInvocation(size_t count, unsigned long time){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({
-        .reason = OptReason::Type::Invocation,
-        .count = count,
-        .time = time,
-    });
+void recordPirWarmupReason( size_t invocation_count ){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_heuristic<PirWarmupReason>(invocation_count);
 }
 
-void recordOptNotOptimized(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::NotOptimized });
+// Compile condition
+void recordMarkOptReasonCondition(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_condition<MarkOptReason>();
 }
 
-void recordOptIsImproving(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::IsImproving });
+void recordNotOptimizedReason(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_condition<NotOptimizedReason>();
 }
 
-void recordOptReoptimize(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::Reoptimize });
+void recordIsImprovingReason(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_condition<IsImprovingReason>();
 }
 
-void recordOsrTrigger(){
-    RECORDER_FILTER_GUARD(optReason);
-    optReasons_.push_back({.reason = OptReason::Type::OsrTriggered });
+void recordReoptimizeFlagReason(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.set_condition<ReoptimizeFlagReason>();
 }
 
-void recordOptClear(){
-    for ( auto r : optReasons_ ){
-        std::cout << r << "\n";
-    }
-    optReasons_.clear();
+// OSR reason
+void recordOsrTriggerCallerCalle(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.osr = OSRCompileReason::CALLER_CALLEE;
+}
+
+void recordOsrTriggerLoop(){
+    RECORDER_FILTER_GUARD(compile)
+    compileReasons_.osr = OSRCompileReason::LOOP;
+}
+
+void recordReasonsClear(){
+    compileReasons_.heuristic = nullptr;
+    compileReasons_.condition = nullptr;
+    compileReasons_.osr = OSRCompileReason::NONE;
 }
 
 } // namespace recording

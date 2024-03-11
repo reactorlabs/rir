@@ -19,6 +19,7 @@ namespace recording {
 
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
+void recordOsrCompile(const SEXP cls);
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
@@ -29,15 +30,22 @@ void recordSC(const ObservedCallees& type);
 void recordSC(const ObservedTest& type);
 void recordSC(const ObservedValues& type);
 
-void recordOptMarkOpt();
-void recordOptWarmup();
-void recordOptInvocation(size_t count, unsigned long time);
-void recordOptNotOptimized();
-void recordOptIsImproving();
-void recordOptReoptimize();
-void recordOptClear();
+// Compile heuristics
+void recordMarkOptReasonHeuristic();
+void recordInvocationCountTimeReason( size_t count, size_t minimalCount, unsigned long time, unsigned long minimalTime );
+void recordPirWarmupReason( size_t invocation_count );
 
-void recordOsrTrigger();
+// Compile condition
+void recordMarkOptReasonCondition();
+void recordNotOptimizedReason();
+void recordIsImprovingReason();
+void recordReoptimizeFlagReason();
+
+// OSR reason
+void recordOsrTriggerCallerCalle();
+void recordOsrTriggerLoop();
+
+void recordReasonsClear();
 
 } // namespace recording
 } // namespace rir

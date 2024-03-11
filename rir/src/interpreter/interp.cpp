@@ -1008,7 +1008,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
 
-                        recording::recordOsrTrigger(); // TODO Caller-Callee
+                        recording::recordOsrTriggerCallerCalle();
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
@@ -1016,7 +1016,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                 }
             }
 
-            recording::recordOptClear();
+            recording::recordReasonsClear();
         }
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
@@ -1916,6 +1916,7 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             }
         }
     }
+    recording::recordReasonsClear();
     return nullptr;
 }
 
@@ -3218,8 +3219,10 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     loopCounter = 0;
+                    recording::recordOsrTriggerLoop();
                     if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
+                    recording::recordReasonsClear();
                 }
             }
             NEXT();

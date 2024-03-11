@@ -23,6 +23,12 @@
 namespace rir {
 namespace recording {
 
+// utilities
+SEXP setClassName(SEXP s, const char* className);
+bool stringStartsWith(const std::string& s, const std::string& prefix);
+std::string getEnvironmentName(SEXP env);
+SEXP getEnvironment(const std::string& name);
+
 class Record;
 struct FunRecording;
 
@@ -62,53 +68,116 @@ struct SpeculativeContext {
                std::ostream& out) const;
 };
 
-struct OptReason {
-    enum class Type : uint8_t {
-        MarkOpt,
-        Warmup,
-        Invocation,
-        NotOptimized,
-        IsImproving,
-        Reoptimize,
-        OsrTriggered // TODO somewhere else
-    } reason;
+struct CompileReason {
+    virtual SEXP toSEXP() const = 0;
+    virtual void fromSEXP(SEXP sexp) = 0;
+    virtual void print(std::ostream& out) const = 0;
+};
 
-    // For InvocationCountTime
+template <typename Derived, size_t FieldsCount>
+struct CompileReasonImpl : CompileReason {
+    virtual SEXP toSEXP() const override {
+        auto vec = PROTECT(Rf_allocVector(VECSXP, FieldsCount));
+        setClassName(vec, Derived::NAME);
+
+        UNPROTECT(1);
+        return vec;
+    }
+
+    virtual void fromSEXP(SEXP sexp) override {
+        assert(Rf_isVector(sexp));
+        assert(Rf_length(sexp) == FieldsCount);
+    }
+
+    virtual void print(std::ostream& out) const override {
+        out << Derived::NAME;
+    }
+};
+
+struct MarkOptReason : public CompileReasonImpl<MarkOptReason, 0> {
+    static constexpr const char * NAME = "MarkOpt";
+};
+
+struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeReason, 4> {
+    static constexpr const char * NAME = "InvocationCountTime";
+
+    InvocationCountTimeReason(size_t count, size_t minimalCount,
+                              unsigned long time, unsigned long minimalTime)
+        : count(count), minimalCount(minimalCount), time(time),
+          minimalTime(minimalTime) {}
+
+    InvocationCountTimeReason() {}
+
     size_t count = 0;
+    size_t minimalCount = 0;
     unsigned long time = 0;
+    unsigned long minimalTime = 0;
 
-    friend std::ostream& operator <<(std::ostream& out, const OptReason& reason){
-        switch (reason.reason){
-        case Type::MarkOpt:
-            out << "MarkOpt";
-            break;
+    virtual SEXP toSEXP() const override;
+    virtual void fromSEXP(SEXP sexp) override;
 
-        case Type::Warmup:
-            out << "Warmup";
-            break;
+    virtual void print(std::ostream& out) const override {
+        this->CompileReasonImpl::print(out);
 
-        case Type::Invocation:
-            out << "Invocation, count: " << reason.count << ", time: " << reason.time;
-            break;
+        out << ", count=" << count << ", minimalCount=" << minimalCount
+            << ", time=" << time << ", minimalTime=" << minimalTime;
+    }
+};
 
-        case Type::NotOptimized:
-            out << "NotOptimized";
-            break;
+struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
+    static constexpr const char * NAME = "PirWarmupReason";
 
-        case Type::IsImproving:
-            out << "IsImproving";
-            break;
+    PirWarmupReason(size_t invocationCount)
+        : invocationCount(invocationCount) {}
 
-        case Type::Reoptimize:
-            out << "Reoptimize";
-            break;
+    PirWarmupReason() {}
 
-        case OptReason::Type::OsrTriggered:
-            out << "OsrTriggered";
-            break;
-        }
+    size_t invocationCount = 0;
 
-        return out;
+    virtual SEXP toSEXP() const override;
+    virtual void fromSEXP(SEXP sexp) override;
+
+    virtual void print(std::ostream& out) const override {
+        this->CompileReasonImpl::print(out);
+
+        out << ", invocationCount=" << invocationCount;
+    }
+};
+
+struct NotOptimizedReason : public CompileReasonImpl<NotOptimizedReason, 0> {
+    static constexpr const char * NAME = "NotOptimized";
+};
+
+struct IsImprovingReason : public CompileReasonImpl<IsImprovingReason, 0> {
+    static constexpr const char * NAME = "IsImproving";
+};
+
+struct ReoptimizeFlagReason : public CompileReasonImpl<ReoptimizeFlagReason, 0> {
+    static constexpr const char * NAME = "ReoptimizeFlag";
+};
+
+enum class OSRCompileReason : uint8_t { NONE, CALLER_CALLEE, LOOP };
+
+struct CompileReasons {
+    CompileReasons()
+        : heuristic(nullptr), condition(nullptr), osr(OSRCompileReason::NONE) {}
+
+    CompileReasons(CompileReasons&& other)
+        : heuristic(std::move(other.heuristic)),
+          condition(std::move(other.condition)), osr(other.osr) {}
+
+    std::unique_ptr<CompileReason> heuristic;
+    std::unique_ptr<CompileReason> condition;
+    OSRCompileReason osr;
+
+    template <typename T, typename... Args>
+    void set_heuristic(Args&&... args) {
+        heuristic = std::make_unique<T>(std::forward<Args>(args)...);
+    }
+
+    template <typename T, typename... Args>
+    void set_condition(Args&&... args) {
+        condition = std::make_unique<T>(std::forward<Args>(args)...);
     }
 };
 
@@ -229,18 +298,14 @@ class SpeculativeContextEvent : public DtEvent {
 
 class CompilationEvent : public ClosureEvent {
   public:
-    CompilationEvent(size_t closureIndex,
-                     unsigned long dispatch_context,
+    CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
                      std::string compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     const std::vector<OptReason>& opt_reasons
-                     )
-        : ClosureEvent(closureIndex),
-        dispatch_context(dispatch_context),
-        compileName(compileName),
-        speculative_contexts(speculative_contexts),
-        opt_reasons(opt_reasons)
-        {}
+                     CompileReasons&& compile_reasons)
+        : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
+          compileName(compileName),
+          speculative_contexts(std::move(speculative_contexts)),
+          compile_reasons(std::move(compile_reasons)) {}
 
     CompilationEvent() {}
 
@@ -259,7 +324,7 @@ class CompilationEvent : public ClosureEvent {
     std::string compileName;
 
     std::vector<SpeculativeContext> speculative_contexts;
-    std::vector<OptReason> opt_reasons;
+    CompileReasons compile_reasons;
 };
 
 class DeoptEvent : public VersionEvent {
@@ -394,13 +459,11 @@ class Record {
         bool deopt : 1;
         bool typeFeedback : 1;
         bool invoke : 1;
-        bool optReason : 1;
     } filter = {
         .compile = true,
         .deopt = true,
         .typeFeedback = false,
         .invoke = false,
-        .optReason = true,
     };
 
     template <typename E, typename... Args>
@@ -458,12 +521,6 @@ class Record {
         functions.clear();
     }
 };
-
-// utilities
-SEXP setClassName(SEXP s, const char* className);
-bool stringStartsWith(const std::string& s, const std::string& prefix);
-std::string getEnvironmentName(SEXP env);
-SEXP getEnvironment(const std::string& name);
 
 } // namespace recording
 
