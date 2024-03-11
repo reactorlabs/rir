@@ -883,9 +883,9 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
         if (!getType(callArg(0).val())
                  .maybeObj()) { // TODO: is it necessary to check this?
             inferred = (PirType(RType::integer) | RType::nil)
-                           .notNAOrNaN()
                            .notMissing()
-                           .orNotFastVecelt();
+                           .orAttribsOrObj();
+
             if (!getType(callArg(0).val()).maybeHasAttrs()) {
                 inferred = PirType(RType::nil);
             }
