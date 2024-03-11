@@ -156,19 +156,41 @@ struct ReoptimizeFlagReason : public CompileReasonImpl<ReoptimizeFlagReason, 0> 
     static constexpr const char * NAME = "ReoptimizeFlag";
 };
 
-enum class OSRCompileReason : uint8_t { NONE, CALLER_CALLEE, LOOP };
+struct OSRCallerCalleeReason : public CompileReasonImpl<OSRCallerCalleeReason, 0>{
+    static constexpr const char * NAME = "OSRCallerCallee";
+};
+
+struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1>{
+    static constexpr const char * NAME = "OSRLoop";
+
+    OSRLoopReason(size_t loopCount)
+        : loopCount(loopCount) {}
+
+    OSRLoopReason() {}
+
+    size_t loopCount = 0;
+
+    virtual SEXP toSEXP() const override;
+    virtual void fromSEXP(SEXP sexp) override;
+
+    virtual void print(std::ostream& out) const override {
+        this->CompileReasonImpl::print(out);
+
+        out << ", loopCount=" << loopCount;
+    }
+};
 
 struct CompileReasons {
     CompileReasons()
-        : heuristic(nullptr), condition(nullptr), osr(OSRCompileReason::NONE) {}
+        : heuristic(nullptr), condition(nullptr), osr(nullptr) {}
 
     CompileReasons(CompileReasons&& other)
         : heuristic(std::move(other.heuristic)),
-          condition(std::move(other.condition)), osr(other.osr) {}
+          condition(std::move(other.condition)), osr(std::move(other.osr)) {}
 
     std::unique_ptr<CompileReason> heuristic;
     std::unique_ptr<CompileReason> condition;
-    OSRCompileReason osr;
+    std::unique_ptr<CompileReason> osr;
 
     template <typename T, typename... Args>
     void set_heuristic(Args&&... args) {
@@ -179,6 +201,12 @@ struct CompileReasons {
     void set_condition(Args&&... args) {
         condition = std::make_unique<T>(std::forward<Args>(args)...);
     }
+
+    template<typename T, typename... Args>
+    void set_osr(Args&&... args) {
+        osr = std::make_unique<T>(std::forward<Args>(args)...);
+    }
+
 };
 
 /**

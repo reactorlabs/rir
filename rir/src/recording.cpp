@@ -82,6 +82,21 @@ void PirWarmupReason::fromSEXP(SEXP sexp){
     this->invocationCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
 }
 
+SEXP OSRLoopReason::toSEXP() const {
+    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
+
+    SET_VECTOR_ELT(vec, 0, serialization::to_sexp(loopCount));
+
+    UNPROTECT(1);
+    return vec;
+}
+
+void OSRLoopReason::fromSEXP(SEXP sexp){
+    this->CompileReasonImpl::fromSEXP(sexp);
+
+    this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+}
+
 bool Record::contains(const DispatchTable* dt) {
     return dt_to_recording_index_.count(dt);
 }
@@ -484,21 +499,13 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
         out << "\n";
     }
 
-
-    out << "            osr_reason=";
-    switch(this->compile_reasons.osr){
-    case OSRCompileReason::NONE:
-        out << "None";
-        break;
-    case OSRCompileReason::CALLER_CALLEE:
-        out << "Caller-Callee";
-        break;
-    case OSRCompileReason::LOOP:
-        out << "Loop";
-        break;
+    if(this->compile_reasons.osr){
+        out << "            osr_reason=";
+        this->compile_reasons.osr->print(out);
+        out << "\n";
     }
 
-    out << "\n        ]\n    }";
+    out << "        ]\n    }";
 }
 
 SEXP CompilationEvent::toSEXP() const {
@@ -540,7 +547,12 @@ SEXP CompilationEvent::toSEXP() const {
         i++;
     }
 
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp( static_cast<uint32_t>(compile_reasons.osr) ));
+    if( compile_reasons.osr ){
+        SET_VECTOR_ELT(sexp, i++, compile_reasons.osr->toSEXP());
+    } else {
+        i++;
+    }
+
 
     UNPROTECT(1);
     return sexp;
@@ -562,7 +574,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
 
     this->compile_reasons.heuristic = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 4));
     this->compile_reasons.condition = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 5));
-    this->compile_reasons.osr = static_cast<OSRCompileReason>( serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, 6)) );
+    this->compile_reasons.osr = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 6));
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -1059,18 +1071,18 @@ void recordReoptimizeFlagReason(){
 // OSR reason
 void recordOsrTriggerCallerCalle(){
     RECORDER_FILTER_GUARD(compile)
-    compileReasons_.osr = OSRCompileReason::CALLER_CALLEE;
+    compileReasons_.set_osr<OSRCallerCalleeReason>();
 }
 
-void recordOsrTriggerLoop(){
+void recordOsrTriggerLoop(size_t loopCount){
     RECORDER_FILTER_GUARD(compile)
-    compileReasons_.osr = OSRCompileReason::LOOP;
+    compileReasons_.set_osr<OSRLoopReason>( loopCount );
 }
 
 void recordReasonsClear(){
     compileReasons_.heuristic = nullptr;
     compileReasons_.condition = nullptr;
-    compileReasons_.osr = OSRCompileReason::NONE;
+    compileReasons_.osr = nullptr;
 }
 
 } // namespace recording

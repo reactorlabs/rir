@@ -218,6 +218,12 @@ std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sex
         reason = std::make_unique<IsImprovingReason>();
     } else if ( Rf_inherits(sexp, ReoptimizeFlagReason::NAME) ){
         reason = std::make_unique<ReoptimizeFlagReason>();
+    } else if ( Rf_inherits(sexp, OSRLoopReason::NAME) ){
+        reason = std::make_unique<OSRLoopReason>();
+    } else if ( Rf_inherits(sexp, OSRCallerCalleeReason::NAME) ){
+        reason = std::make_unique<OSRCallerCalleeReason>();
+    } else {
+        Rf_error("can't deserialize speculative context of unknown class");
     }
 
     reason->fromSEXP(sexp);

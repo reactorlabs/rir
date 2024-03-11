@@ -3218,8 +3218,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
+                    recording::recordOsrTriggerLoop( loopCounter );
                     loopCounter = 0;
-                    recording::recordOsrTriggerLoop();
                     if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
                     recording::recordReasonsClear();

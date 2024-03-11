@@ -43,7 +43,7 @@ void recordReoptimizeFlagReason();
 
 // OSR reason
 void recordOsrTriggerCallerCalle();
-void recordOsrTriggerLoop();
+void recordOsrTriggerLoop(size_t loopCount);
 
 void recordReasonsClear();
 
