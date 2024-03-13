@@ -9,14 +9,6 @@
 namespace rir {
 namespace pir {
 
-static void checkEagerImpliesNoRef(Context& assumptions) {
-    for (int i = 0; i <= 5; i++) {
-        if (assumptions.isEager(i)) {
-            assert(assumptions.isNonRefl(i) && "non refl");
-        }
-    }
-}
-
 void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     // this is for function arguments
     auto arg = this;
@@ -30,7 +22,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
             assumptions.setEager(i);
             arg = mk->eagerArg();
         } else {
-            checkEagerImpliesNoRef(assumptions);
             return;
         }
     } else {
@@ -40,7 +31,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
 
     if (arg == MissingArg::instance()) {
         assumptions.remove(Assumption::NoExplicitlyMissingArgs);
-        checkEagerImpliesNoRef(assumptions);
         return;
     }
 
@@ -67,7 +57,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     if (!MkArg::Cast(arg))
         check(arg);
 
-    checkEagerImpliesNoRef(assumptions);
 }
 
 void Value::checkReplace(Value* replace) const {

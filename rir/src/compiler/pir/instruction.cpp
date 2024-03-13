@@ -1,6 +1,4 @@
 #include "instruction.h"
-#include "compiler/pir/singleton_values.h"
-#include "compiler/pir/type.h"
 #include "pir_impl.h"
 
 #include "../analysis/query.h"
