@@ -301,6 +301,15 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
         memcpy(types_, types.data(), types_mem_size);
     }
 }
+
+TypeFeedback * TypeFeedback::emptyCopy () {
+    std::vector<ObservedCallees> callees(callees_size_, ObservedCallees{});
+    std::vector<ObservedTest> tests(tests_size_, ObservedTest{});
+    std::vector<ObservedValues> types(types_size_, ObservedValues{});
+
+    return TypeFeedback::create(callees, tests, types);
+}
+
 const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:

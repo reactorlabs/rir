@@ -1,6 +1,8 @@
 #ifndef RIR_DISPATCH_TABLE_H
 #define RIR_DISPATCH_TABLE_H
 
+#include "GenericDispatchTable.h"
+
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
@@ -22,6 +24,8 @@ typedef SEXP DispatchTableEntry;
 #pragma pack(1)
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
+
+    static constexpr unsigned MaxFeedbacks = 64;
 
     size_t size() const { return size_; }
 
@@ -85,6 +89,26 @@ struct DispatchTable
         return b;
     }
 
+    TypeFeedback * getOrCreateTypeFeedback(const Context & ctx) {
+        auto feedbacks = typeFeedbacks();
+        auto entry = feedbacks->dispatch(ctx);
+        TypeFeedback * tf = entry.second;
+        if (entry.first != ctx || !tf) {
+            assert(baselineFeedback_);
+            if (feedbacks -> full())      // TODO: try different approaches
+                return baselineFeedback_; // table is full, default to baseline feedback
+            tf = baselineFeedback_->emptyCopy();
+            feedbacks->insert(ctx, tf);
+        }
+        return tf;
+    }
+
+    void insertTypeFeedback(const Context & ctx, TypeFeedback * tf) {
+        auto feedbacks = typeFeedbacks();
+        assert(!feedbacks->full());
+        feedbacks->insert(ctx, tf);
+    }
+
     void baseline(Function* f) {
         assert(f->signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);
@@ -94,6 +118,8 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        baselineFeedback_ = f->typeFeedback();
+        insertTypeFeedback(f->context(), f->typeFeedback());
         f->dispatchTable(this);
     }
 
@@ -130,6 +156,8 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         fun->dispatchTable(this);
         auto assumptions = fun->context();
+        TypeFeedback * typeFeedback = getOrCreateTypeFeedback(assumptions);
+        fun->typeFeedback(typeFeedback);
         size_t i;
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
@@ -192,12 +220,17 @@ struct DispatchTable
 
     static DispatchTable* create(size_t capacity = 20) {
         size_t sz =
-            sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
+            sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry)
+                                     + sizeof(DispatchTableEntry)); // last DispatchTableEntry is used for typeFeedback table
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
         return new (INTEGER(s)) DispatchTable(capacity);
     }
 
-    size_t capacity() const { return info.gc_area_length; }
+    size_t capacity() const { return info.gc_area_length - 1; }
+
+    size_t typeFeedbackCapacity() const {
+        return typeFeedbacks()->capacity();
+    }
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
         DispatchTable* table = create();
@@ -281,7 +314,17 @@ struct DispatchTable
     }
 
     size_t currentTypeFeedbackVersion() {
+        // TODO: Modify/delete method
         return baseline()->typeFeedback()->version();
+    }
+
+    GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks> * typeFeedbacks () {
+        return GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::unpack(getEntry(info.gc_area_length - 1));
+    }
+
+
+    const GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks> * typeFeedbacks () const {
+        return GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::unpack(getEntry(info.gc_area_length - 1));
     }
 
   private:
@@ -290,11 +333,17 @@ struct DispatchTable
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
               sizeof(DispatchTable),
-              // GC area is just the pointers in the entry array
-              capacity) {}
+              // GC area is just the pointers in the entry array and pointer to feedback dispatch table
+              capacity + 1)
+    {
+        // create type feedback dispatch table
+        // TODO: Different feedback table sizes
+        setEntry(info.gc_area_length - 1, GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::create()->container());
+    }
 
     size_t size_ = 0;
     Context userDefinedContext_;
+    TypeFeedback * baselineFeedback_ = nullptr;
 };
 
 #pragma pack(pop)

@@ -73,6 +73,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     TypeFeedback* typeFeedback() const {
         return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
     }
+    TypeFeedback* typeFeedback(const Context & ctx);
+
     void typeFeedback(TypeFeedback* typeFeedback) {
         typeFeedback->owner_ = this;
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());

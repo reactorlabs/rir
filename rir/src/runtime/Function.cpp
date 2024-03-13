@@ -4,6 +4,8 @@
 #include "compiler/compiler.h"
 #include "runtime/TypeFeedback.h"
 
+#include "DispatchTable.h"
+
 namespace rir {
 
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
@@ -98,6 +100,12 @@ void Function::clearDisabledAssumptions(Context& given) const {
 
     if (GLOBAL_SPECIALIZATION_LEVEL < 100)
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
+}
+
+TypeFeedback* Function::typeFeedback(const Context & ctx) {
+    if (ctx != context())
+        return dispatchTable()->getOrCreateTypeFeedback(ctx);
+    return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
 }
 
 } // namespace rir
