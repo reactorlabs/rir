@@ -955,6 +955,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
+rir::TypeFeedback* typeFeedbackImpl(rir::Function* fun, const CallContext & ctx) {
+    return fun->typeFeedback(ctx.givenContext);
+}
+
 void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
                             SEXP value) {
     feedback->record_type(idx, value);
@@ -977,6 +981,7 @@ void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
 
 void recordCallFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
                             SEXP value) {
+    // TODO: check validity of feedback->owner() when using contextual type feedbacks
     feedback->record_callee(idx, feedback->owner(), value);
 }
 
@@ -2414,6 +2419,11 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
+    get_(Id::typeFeedback) = {
+        "typeFeedback",
+        (void*)&typeFeedbackImpl,
+        llvm::FunctionType::get(t::voidPtr, {t::voidPtr, t::voidPtr}, false),
+        {}};
     get_(Id::recordTypeFeedback) = {
         "recordTypeFeedback",
         (void*)&recordTypeFeedbackImpl,
