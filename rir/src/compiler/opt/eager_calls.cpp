@@ -289,6 +289,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 // version. Maybe we should limit this at some point, to avoid
                 // version explosion.
                 if (availableAssumptions.isImproving(version)) {
+                    rir::pir::Value::checkEagerImpliesNoRef(
+                        11, availableAssumptions);
                     auto newVersion = target->cloneWithAssumptions(
                         version, availableAssumptions,
                         [&](ClosureVersion* newCls) {
@@ -399,8 +401,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             ip += forced->type.maybeMissing() ? 3 : 2;
                         }
                         eager.insert(i);
-                        if (!newAssumptions.isEager(i))
+                        if (!newAssumptions.isEager(i)) {
                             newAssumptions.setEager(i);
+                        }
                     }
                     i++;
                 });
@@ -418,8 +421,9 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (!newAssumptions.isNotObj(i) &&
                         newAssumptions.isEager(i))
                         newAssumptions.setNotObj(i);
+                rir::pir::Value::checkEagerImpliesNoRef(13, newAssumptions);
                 target->rirFunction()->clearDisabledAssumptions(newAssumptions);
-
+                rir::pir::Value::checkEagerImpliesNoRef(12, newAssumptions);
                 auto newVersion = target->cloneWithAssumptions(
                     version, newAssumptions, [&](ClosureVersion* newCls) {
                         anyChange = true;

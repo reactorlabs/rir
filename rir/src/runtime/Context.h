@@ -108,6 +108,26 @@ struct Context {
     inline bool includes(Assumption a) const { return flags.includes(a); }
     inline bool includes(const Flags& a) const { return flags.includes(a); }
 
+    static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS> EagerContext = {
+        {TypeAssumption::Arg0IsEager_, TypeAssumption::Arg1IsEager_,
+         TypeAssumption::Arg2IsEager_, TypeAssumption::Arg3IsEager_,
+         TypeAssumption::Arg4IsEager_, TypeAssumption::Arg5IsEager_}};
+
+    inline void setEager(size_t i) {
+        if (i < NUM_TYPED_ARGS) {
+            typeFlags.set(EagerContext[i]);
+            setNonRefl(i);
+        }
+    }
+
+    inline bool isEager(size_t i) const {
+
+        if (i < NUM_TYPED_ARGS)
+            if (typeFlags.includes(EagerContext[i]))
+                return true;
+        return false;
+    }
+
 #define TYPE_ASSUMPTIONS(Type)                                                 \
     static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS>                \
         Type##Context = {                                                      \
@@ -126,10 +146,12 @@ struct Context {
             typeFlags.reset(Type##Context[i]);                                 \
     }                                                                          \
     inline void set##Type(size_t i) {                                          \
-        if (i < NUM_TYPED_ARGS)                                                \
+        if (i < NUM_TYPED_ARGS) {                                              \
             typeFlags.set(Type##Context[i]);                                   \
+        }                                                                      \
     }
-    TYPE_ASSUMPTIONS(Eager);
+
+    // TYPE_ASSUMPTIONS(Eager);
     TYPE_ASSUMPTIONS(NotObj);
     TYPE_ASSUMPTIONS(SimpleInt);
     TYPE_ASSUMPTIONS(SimpleReal);

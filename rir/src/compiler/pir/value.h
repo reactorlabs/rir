@@ -21,8 +21,21 @@ class Instruction;
  * Has a tag from either value_list.h or instruction_list.h
  *
  */
+
 class Value {
   public:
+    static void checkEagerImpliesNoRef(int from, const Context& assumptions) {
+        for (int i = 0; i <= 5; i++) {
+            if (assumptions.isEager(i)) {
+                if (!assumptions.isNonRefl(i)) {
+                    std::cerr << "\n non refl" << from << "\n";
+                    std::cerr << assumptions << "\n";
+                    assert(false);
+                }
+            }
+        }
+    }
+
     Tag tag;
     PirType type;
 

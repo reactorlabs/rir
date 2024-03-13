@@ -89,6 +89,7 @@ ClosureVersion::~ClosureVersion() {
 
 ClosureVersion* ClosureVersion::clone(const Context& newAssumptions) {
     auto ctx = optimizationContext_ | newAssumptions;
+    rir::pir::Value::checkEagerImpliesNoRef(8, ctx);
     auto c = owner_->declareVersion(ctx, false, optFunction);
     c->properties = properties;
     c->entry = BBTransform::clone(entry, c, c);
@@ -122,6 +123,7 @@ ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
                                const Properties& properties)
     : root(root), optFunction(optFunction), owner_(closure),
       optimizationContext_(optimizationContext), properties(properties) {
+    rir::pir::Value::checkEagerImpliesNoRef(3, optimizationContext);
     auto id = std::stringstream();
     id << closure->name() << "[" << this << "]";
     name_ = id.str();
