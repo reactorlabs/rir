@@ -1899,12 +1899,12 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             size <= (long)pir::ContinuationContext::MAX_STACK &&
             l <= (long)pir::ContinuationContext::MAX_ENV) {
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
-            if (auto fun = pir::OSR::compile(callCtxt->callee, c, ctx)) {
+            if (auto fun = pir::OSR::compile(callCtxt->callee, c, callCtxt, ctx)) {
                 PROTECT(fun->container());
                 dt->baseline()->flags.set(Function::Flag::MarkOpt);
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                auto res = nc(code, basePtr, env, callCtxt->callee);
+                auto res = nc(code, basePtr, env, callCtxt->callee, callCtxt);
                 ostack_popn(size);
                 UNPROTECT(1);
                 return res;
@@ -1923,7 +1923,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
         return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
-                      callCtxt ? callCtxt->callee : nullptr);
+                      callCtxt ? callCtxt->callee : nullptr, callCtxt);
     }
 
 #ifdef THREADED_CODE
@@ -2001,7 +2001,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        c->function()->typeFeedback(callCtxt->givenContext)->record_type(idx, [&](auto& feedback) {
+        TypeFeedback * tf = callCtxt ? c->function()->typeFeedback(callCtxt->givenContext)
+                                     : c->function()->typeFeedback();
+        tf->record_type(idx, [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
                 feedback.stateBeforeLastForce = state;
             }
@@ -2009,7 +2011,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     };
 
     auto function = c->function();
-    auto typeFeedback = function->typeFeedback(callCtxt->givenContext);
+    auto typeFeedback = callCtxt ? function->typeFeedback(callCtxt->givenContext)
+                                                : function->typeFeedback();
 
     // main loop
     BEGIN_MACHINE {
