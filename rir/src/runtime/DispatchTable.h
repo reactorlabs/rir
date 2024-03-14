@@ -141,13 +141,6 @@ struct DispatchTable
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
             if (old->context() == assumptions) {
-                if (i != 0) {
-                    // Remember deopt counts across recompilation to avoid
-                    // deopt loops
-                    fun->dispatchTable(this);
-                    old->overridenBy = fun;
-                    old->dispatchTable(nullptr);
-                }
                 // Remember deopt counts across recompilation to avoid
                 // deopt loops
                 fun->addDeoptCount(old->deoptCount());
