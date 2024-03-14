@@ -112,8 +112,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
                               std::list<PirTypeFeedback*> outerFeedback,
                               rir::TypeFeedback* typeFeedback) {
 
-    rir::pir::Value::checkEagerImpliesNoRef(2, ctx);
-
     if (!ctx.includes(minimalContext)) {
         for (const auto a : minimalContext) {
             if (!ctx.includes(a)) {
@@ -146,7 +144,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     if (auto existing = closure->findCompatibleVersion(ctx))
         return success(existing);
 
-    rir::pir::Value::checkEagerImpliesNoRef(7, ctx);
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
