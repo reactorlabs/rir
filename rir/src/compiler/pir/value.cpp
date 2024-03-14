@@ -23,7 +23,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
             assumptions.setEager(i);
             arg = mk->eagerArg();
         } else {
-            checkEagerImpliesNoRef(4, assumptions);
             return;
         }
     } else {
@@ -33,7 +32,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
 
     if (arg == MissingArg::instance()) {
         assumptions.remove(Assumption::NoExplicitlyMissingArgs);
-        checkEagerImpliesNoRef(5, assumptions);
         return;
     }
 
@@ -59,8 +57,6 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     arg = arg->cFollowCastsAndForce();
     if (!MkArg::Cast(arg))
         check(arg);
-
-    checkEagerImpliesNoRef(6, assumptions);
 }
 
 void Value::checkReplace(Value* replace) const {

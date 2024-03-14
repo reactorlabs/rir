@@ -44,9 +44,7 @@ Closure::~Closure() {
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
                                               const Context& asmpt,
                                               const MaybeClsVersion& change) {
-    rir::pir::Value::checkEagerImpliesNoRef(9, asmpt);
     auto newCtx = version->context() | asmpt;
-    rir::pir::Value::checkEagerImpliesNoRef(10, newCtx);
     if (versions.count(newCtx))
         return versions.at(newCtx);
 
@@ -79,7 +77,6 @@ ClosureVersion* Closure::declareVersion(const Context& optimizationContext,
     assert(!versions.count(optimizationContext));
     versions[optimizationContext] = nullptr;
     auto entry = versions.find(optimizationContext);
-    rir::pir::Value::checkEagerImpliesNoRef(1, optimizationContext);
     auto v = new ClosureVersion(this, optFunction, root, entry->first);
     entry->second = v;
     return v;
