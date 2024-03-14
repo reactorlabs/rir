@@ -407,7 +407,7 @@ class InvocationEvent : public VersionEvent {
 // From names.c
 extern "C" FUNTAB R_FunTab[];
 
-constexpr size_t R_FunTab_Len_calc() {
+inline size_t R_FunTab_Len_calc() {
     for (size_t i = 0;; i++) {
         if (R_FunTab[i].name == nullptr) {
             return i;
