@@ -352,17 +352,6 @@ const char* DtEvent::targetName(std::vector<FunRecording>& mapping) const {
     return mapping[dispatchTableIndex].name.c_str();
 }
 
-Function* VersionEvent::functionVersion(const DispatchTable& dt) const {
-    for (size_t i = 0; i < dt.size(); i++) {
-        auto* fi = dt.get(i);
-        if (fi->context() == version) {
-            return fi;
-        }
-    }
-
-    return nullptr;
-}
-
 void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
                                std::ostream& out) const {
     switch (type) {

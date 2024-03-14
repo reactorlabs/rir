@@ -37,15 +37,6 @@ struct FunRecording;
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
-class CodeIndex {
-    bool promise_;
-    size_t index_;
-
-  public:
-    CodeIndex(bool promise, size_t index) : promise_(promise), index_(index) {}
-    Code* locate(Function* fun);
-};
-
 struct SpeculativeContext {
     SpeculativeContextType type;
 
@@ -288,14 +279,7 @@ class VersionEvent : public DtEvent {
     VersionEvent(size_t dispatchTableIndex, Context version)
         : DtEvent(dispatchTableIndex), version(version){};
 
-    Context version = Context(0UL);
-
-  private:
-    /**
-     * Returns the Function that this event refers to, given the enclosing
-     * DispatchTable
-     */
-    Function* functionVersion(const DispatchTable& in) const;
+    Context version = Context();
 };
 
 /**

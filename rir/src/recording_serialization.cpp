@@ -29,16 +29,6 @@ SEXP to_sexp(
     return vec;
 }
 
-// template <typename T>
-// SEXP to_sexp(const std::vector<std::unique_ptr<T>>& obj) {
-//     auto vec = PROTECT(Rf_allocVector(VECSXP, obj.size()));
-//     for (unsigned long i = 0; i < obj.size(); i++) {
-//         SET_VECTOR_ELT(vec, i, to_sexp(*obj[i].get()));
-//     }
-//     UNPROTECT(1);
-//     return vec;
-// }
-
 SEXP to_sexp(const std::string& str) { return Rf_mkString(str.c_str()); }
 
 std::string string_from_sexp(SEXP sexp) {
