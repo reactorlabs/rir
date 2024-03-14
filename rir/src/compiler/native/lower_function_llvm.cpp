@@ -2087,8 +2087,8 @@ void LowerFunctionLLVM::compile() {
 
     if (LLVMDebugInfo()) {
         DI->emitLocation(builder, 0);
-        std::array<llvm::DIType*, 4> argDITypes = {
-            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
+        std::array<llvm::DIType*, 5> argDITypes = {
+            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType, DI->VoidPtrType};
         auto arg = fun->arg_begin();
         for (size_t i = 0; i < argNames.size(); ++i) {
             auto store =
