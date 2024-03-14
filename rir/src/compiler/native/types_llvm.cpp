@@ -118,7 +118,7 @@ void initializeTypes(LLVMContext& context) {
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
     DECLARE(nativeFunction, t::SEXP, t::voidPtr, t::stackCellPtr, t::SEXP,
-            t::SEXP);
+            t::SEXP, t::voidPtr);
     t::nativeFunctionPtr = PointerType::get(t::nativeFunction, 0);
     DECLARE(builtinFunction, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     t::builtinFunctionPtr = PointerType::get(t::builtinFunction, 0);

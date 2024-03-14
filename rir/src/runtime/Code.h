@@ -45,7 +45,8 @@ typedef SEXP CodeSEXP;
 
 struct InterpreterInstance;
 struct Code;
-typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
+struct CallContext;
+typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP, const CallContext*);
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;

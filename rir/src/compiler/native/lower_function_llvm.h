@@ -271,12 +271,13 @@ class LowerFunctionLLVM {
 
     void setVisible(int i);
 
-    std::array<std::string, 4> argNames = {"code", "args", "env", "closure"};
+    std::array<std::string, 5> argNames = {"code", "args", "env", "closure", "context"};
     std::vector<llvm::Value*> args;
     llvm::Value* paramCode() { return args[0]; }
     llvm::Value* paramArgs() { return args[1]; }
     llvm::Value* paramEnv() { return args[2]; }
     llvm::Value* paramClosure() { return args[3]; }
+    llvm::Value* paramContext() { return args[4]; }
 
     std::vector<llvm::Value*> loadedArgs;
 
