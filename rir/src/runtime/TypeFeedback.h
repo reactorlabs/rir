@@ -389,7 +389,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     bool isValid(const FeedbackIndex& index) const;
 
-    Function* owner() const { return owner_; }
+    Function* owner() const { assert(owner_); return owner_; }
 
     // Type feedback is versioned. Each time new feedback
     // in any of the slot is recorded, its version increased.
