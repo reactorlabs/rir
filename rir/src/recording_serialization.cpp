@@ -144,20 +144,19 @@ SEXP to_sexp(const rir::recording::SpeculativeContext& obj) {
 rir::recording::SpeculativeContext speculative_context_from_sexp(SEXP sexp) {
     assert(TYPEOF(sexp) == RAWSXP);
 
-    SpeculativeContextType type;
+    SpeculativeContext ctx(
+        ObservedTest{}); // dummy initialization, overwritten later
+
     if (Rf_inherits(sexp, R_CLASS_CTX_CALLEES)) {
-        type = SpeculativeContextType::Callees;
+        ctx.type = SpeculativeContextType::Callees;
     } else if (Rf_inherits(sexp, R_CLASS_CTX_TEST)) {
-        type = SpeculativeContextType::Test;
+        ctx.type = SpeculativeContextType::Test;
     } else if (Rf_inherits(sexp, R_CLASS_CTX_VALUES)) {
-        type = SpeculativeContextType::Values;
+        ctx.type = SpeculativeContextType::Values;
     } else {
         Rf_error("can't deserialize speculative context of unknown class");
     }
 
-    SpeculativeContext ctx(
-        ObservedTest{}); // dummy initialization, overwritten later
-    ctx.type = type;
     constexpr size_t field_len =
         sizeof(rir::recording::SpeculativeContext::value);
     assert(LENGTH(sexp) == field_len);

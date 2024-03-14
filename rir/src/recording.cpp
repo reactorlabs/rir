@@ -154,15 +154,15 @@ void Record::recordSpeculativeContext(const Code* code,
                 callees[i] = idx;
             }
 
-            ctx.push_back(std::move(callees));
+            ctx.emplace_back(std::move(callees));
             break;
         }
         case Opcode::record_test_: {
-            ctx.push_back(feedback->test(bc.immediate.i));
+            ctx.emplace_back(feedback->test(bc.immediate.i));
             break;
         }
         case Opcode::record_type_: {
-            ctx.push_back(feedback->types(bc.immediate.i));
+            ctx.emplace_back(feedback->types(bc.immediate.i));
             break;
         }
         default: {
@@ -175,7 +175,7 @@ void Record::recordSpeculativeContext(const Code* code,
 }
 
 std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
-                                                            std::string name) {
+                                                            const std::string& name) {
     assert(Rf_isFunction(cls));
     auto& body = *BODY(cls);
 
@@ -190,7 +190,7 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
         }
 
         size_t idx = functions.size();
-        functions.emplace_back<FunRecording>(primIdx);
+        functions.emplace_back(primIdx);
         auto& body = functions.back();
         body.closure = PROTECT(
             R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
@@ -256,7 +256,7 @@ std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
 }
 
 std::pair<size_t, FunRecording&>
-Record::initOrGetRecording(const DispatchTable* dt, std::string name) {
+Record::initOrGetRecording(const DispatchTable* dt, const std::string& name) {
     // First, we check if we can find the dt in the appropriate mapping
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
@@ -311,7 +311,6 @@ SEXP Record::save() {
 void Record::printRecordings(std::ostream& out) {
     for (auto& eventEntry : log) {
         const char* name = eventEntry->targetName(functions);
-        std::string ptr_str;
 
         // If name is empty (unknown), use a different display strategy
         if (*name == 0) {
@@ -536,23 +535,18 @@ SEXP CompilationEvent::toSEXP() const {
     }
 
     if ( compile_reasons.heuristic ){
-        SET_VECTOR_ELT(sexp, i++, compile_reasons.heuristic->toSEXP());
-    } else {
-        i++;
+        SET_VECTOR_ELT(sexp, i, compile_reasons.heuristic->toSEXP());
     }
+    i++;
 
     if ( compile_reasons.condition ){
-        SET_VECTOR_ELT(sexp, i++, compile_reasons.condition->toSEXP());
-    } else {
-        i++;
+        SET_VECTOR_ELT(sexp, i, compile_reasons.condition->toSEXP());
     }
+    i++;
 
     if( compile_reasons.osr ){
-        SET_VECTOR_ELT(sexp, i++, compile_reasons.osr->toSEXP());
-    } else {
-        i++;
+        SET_VECTOR_ELT(sexp, i, compile_reasons.osr->toSEXP());
     }
-
 
     UNPROTECT(1);
     return sexp;
@@ -639,7 +633,7 @@ bool DeoptEvent::containsReference(size_t recordingIdx) const {
 
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const {
-    auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_.first];
+    const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_.first];
 
     out << "DeoptEvent{ [version=" << this->version;
     out << "]\n        reason=" << this->reason_;
@@ -919,7 +913,7 @@ inline const Code* getSCCode() {
     return next;
 }
 
-void recordSC(const Opcode* immediate, SpeculativeContext sc) {
+void recordSC(const Opcode* immediate, const SpeculativeContext& sc) {
     RECORDER_FILTER_GUARD(typeFeedback);
     auto* c = getSCCode();
     ptrdiff_t offset = immediate - c->code();

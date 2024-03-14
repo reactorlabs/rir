@@ -55,13 +55,13 @@ struct SpeculativeContext {
         ObservedValues values;
     } value;
 
-    SpeculativeContext(decltype(value.callees) callees)
+    explicit SpeculativeContext(decltype(value.callees) callees)
         : type{SpeculativeContextType::Callees}, value{.callees = callees} {}
 
-    SpeculativeContext(ObservedTest test)
+    explicit SpeculativeContext(ObservedTest test)
         : type{SpeculativeContextType::Test}, value{.test = test} {}
 
-    SpeculativeContext(ObservedValues values)
+    explicit SpeculativeContext(const ObservedValues& values)
         : type{SpeculativeContextType::Values}, value{.values = values} {}
 
     void print(const std::vector<FunRecording>& mapping,
@@ -127,7 +127,7 @@ struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeR
 struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
     static constexpr const char * NAME = "PirWarmupReason";
 
-    PirWarmupReason(size_t invocationCount)
+    explicit PirWarmupReason(size_t invocationCount)
         : invocationCount(invocationCount) {}
 
     PirWarmupReason() {}
@@ -163,7 +163,7 @@ struct OSRCallerCalleeReason : public CompileReasonImpl<OSRCallerCalleeReason, 0
 struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1>{
     static constexpr const char * NAME = "OSRLoop";
 
-    OSRLoopReason(size_t loopCount)
+    explicit OSRLoopReason(size_t loopCount)
         : loopCount(loopCount) {}
 
     OSRLoopReason() {}
@@ -244,7 +244,7 @@ class Event {
 class ClosureEvent : public Event {
   protected:
     ClosureEvent() = default;
-    ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
+    explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
 
     size_t closureIndex;
 
@@ -263,7 +263,7 @@ class ClosureEvent : public Event {
 class DtEvent : public Event {
   protected:
     DtEvent() = default;
-    DtEvent(size_t dispatchTableIndex)
+    explicit DtEvent(size_t dispatchTableIndex)
         : dispatchTableIndex(dispatchTableIndex){};
 
     size_t dispatchTableIndex;
@@ -304,7 +304,7 @@ class VersionEvent : public DtEvent {
 class SpeculativeContextEvent : public DtEvent {
   public:
     SpeculativeContextEvent(size_t dispatchTableIndex, ssize_t codeIndex,
-                            size_t offset, SpeculativeContext sc)
+                            size_t offset, const SpeculativeContext& sc)
         : DtEvent(dispatchTableIndex), codeIndex(codeIndex), offset(offset),
           sc(sc) {}
     SpeculativeContextEvent()
@@ -327,7 +327,7 @@ class SpeculativeContextEvent : public DtEvent {
 class CompilationEvent : public ClosureEvent {
   public:
     CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
-                     std::string compileName,
+                     const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
                      CompileReasons&& compile_reasons)
         : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
@@ -455,7 +455,7 @@ struct FunRecording {
                                     const FunRecording& that);
 
     FunRecording() = default;
-    FunRecording(size_t primIdx) : primIdx(primIdx) {
+    explicit FunRecording(size_t primIdx) : primIdx(primIdx) {
         assert(primIdx < R_FunTab_Len);
         name = R_FunTab[primIdx].name;
     }
@@ -530,10 +530,10 @@ class Record {
     bool contains(const DispatchTable* dt);
 
     std::pair<size_t, FunRecording&> initOrGetRecording(const DispatchTable* dt,
-                                                        std::string name = "");
+                                                        const std::string& name = "");
 
     std::pair<size_t, FunRecording&> initOrGetRecording(const SEXP cls,
-                                                        std::string name = "");
+                                                        const std::string& name = "");
 
     void recordSpeculativeContext(DispatchTable* dt,
                                   std::vector<SpeculativeContext>& ctx);
