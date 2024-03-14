@@ -829,7 +829,7 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
+void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
@@ -885,7 +885,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             DeoptContext ctx(m->frames[0].pc, envSize, le ? nullptr : env, le,
                              leakedEnv && !le, base, m->frames[0].stackSize,
                              *deoptReason, deoptTrigger);
-            fun = OSR::deoptlessDispatch(closure, c, ctx);
+            fun = OSR::deoptlessDispatch(closure, c, callContext, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
@@ -928,7 +928,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessRecursion = cls;
-                auto res = nc(code, base, env, closure);
+                auto res = nc(code, base, env, closure, callContext);
                 deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
@@ -955,8 +955,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     assert(false);
 }
 
-rir::TypeFeedback* typeFeedbackImpl(rir::Function* fun, const CallContext & ctx) {
-    return fun->typeFeedback(ctx.givenContext);
+rir::TypeFeedback* typeFeedbackImpl(rir::Function* fun, const CallContext * ctx) {
+    return ctx ? fun->typeFeedback(ctx -> givenContext) : fun->typeFeedback();
 }
 
 void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
@@ -1463,13 +1463,13 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
             fun->registerInvocation();
-            result = code->nativeCode()(code, args, env, callee);
+            result = code->nativeCode()(code, args, env, callee, &call);
             fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }
     } else {
-        result = code->nativeCode()(code, args, env, callee);
+        result = code->nativeCode()(code, args, env, callee, &call);
     }
 
     endClosureContext(&cntxt, result);
@@ -2439,7 +2439,7 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
                        llvm::FunctionType::get(t::t_void,
-                                               {t::voidPtr, t::SEXP, t::voidPtr,
+                                               {t::voidPtr, t::voidPtr, t::SEXP, t::voidPtr,
                                                 t::stackCellPtr, t::i1,
                                                 t::DeoptReasonPtr, t::SEXP},
                                                false),

@@ -3587,7 +3587,7 @@ void LowerFunctionLLVM::compile() {
 
                 withCallFrame(args, [&]() {
                     return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
-                                {paramCode(), paramClosure(),
+                                {paramCode(), paramContext(), paramClosure(),
                                  convertToPointer(m, t::i8, true), paramArgs(),
                                  c(deopt->escapedEnv, 1),
                                  load(deopt->deoptReason()),
@@ -6132,25 +6132,36 @@ void LowerFunctionLLVM::compile() {
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
+                llvm::CallInst * tf = nullptr;
                 if (i->hasTypeFeedback()) {
                     auto& origin = i->typeFeedback().feedbackOrigin;
                     if (origin.hasSlot()) {
+                        std::cerr << "lower::type::A" << std::endl;
+                        tf = call(NativeBuiltins::get(NativeBuiltins::Id::typeFeedback),
+                                  {convertToPointer(origin.function(), t::i8, true), paramContext()});
+                        std::cerr << "lower::type::B" << std::endl;
                         call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::recordTypeFeedback),
-                            {convertToPointer(origin.function()->typeFeedback(),
-                                              t::i8, true),
-                             c(origin.index().idx, 32), load(i)});
+                            {tf, c(origin.index().idx, 32), load(i)});
+                        std::cerr << "lower::type::C" << std::endl;
                     }
                 }
                 if (i->hasCallFeedback()) {
                     auto& origin = i->callFeedback().feedbackOrigin;
                     assert(origin.hasSlot());
+                    std::cerr << "lower::call::A" << std::endl;
+                    if (!tf) {
+                        tf = call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::typeFeedback),
+                            {convertToPointer(origin.function(), t::i8, true),
+                             paramContext()});
+                    }
+                    std::cerr << "lower::call::B" << std::endl;
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
-                         {convertToPointer(origin.function()->typeFeedback(),
-                                           t::i8, true),
-                          c(origin.index().idx, 32), load(i)});
+                         {tf, c(origin.index().idx, 32), load(i)});
                 }
             }
 
