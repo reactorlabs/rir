@@ -7,6 +7,8 @@
 #include "utils/Map.h"
 #include "utils/measuring.h"
 
+#include "interpreter/call_context.h"
+
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/opt/pass_definitions.h"
@@ -77,6 +79,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
+                                   const CallContext * callContext,
                                    const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
@@ -91,8 +94,9 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    // TODO: Fix typefeedback dispatch here
-    auto typeFeedback = tbl->baseline()->typeFeedback();
+    // TODO: Check validity of statement when callContext == nullptr
+    auto typeFeedback = callContext ? tbl->getOrCreateTypeFeedback(callContext->givenContext)
+                                      : curFun->typeFeedback();
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
