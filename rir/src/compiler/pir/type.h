@@ -641,7 +641,8 @@ struct PirType {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::list | RType::code | RType::nil)
+        if (isA((num() | RType::str | RType::list |
+                 RType::code /* | RType::nil  */)
                     .orAttribsOrObj())) {
             // If the index is out of bounds, NA is returned (even if both args
             // are non-NA) so we must add orNAOrNaN()
