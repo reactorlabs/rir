@@ -190,3 +190,10 @@ Replay:
 ```sh
 ./bin/R -e 'recordings.replay("/tmp/recordings.rds"); rir.disassemble(f)'
 ```
+
+Or one can specify a "RIR_RECORD" variable with the path where to save the recording, like
+
+```sh
+PIR_WARMUP=2 RIR_RECORD=output.rds ./bin/R -f test.R
+```
+

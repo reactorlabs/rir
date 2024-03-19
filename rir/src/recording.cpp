@@ -1073,6 +1073,38 @@ void recordReasonsClear(){
     compileReasons_.osr = nullptr;
 }
 
+const char * finalizerPath = nullptr;
+
+void recordFinalizer(SEXP) {
+    std::cerr << "Saving recording to \"" << finalizerPath << "\"\n";
+    stopRecordings();
+
+    SEXP filepath = PROTECT(Rf_mkString(finalizerPath));
+    saveRecordings(filepath);
+    UNPROTECT(1);
+}
+
+void recordExecution( const char* filePath ){
+    std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+    startRecordings();
+
+    finalizerPath = filePath;
+
+    // Call `loadNamespace("Base")`
+    SEXP baseStr = PROTECT(Rf_mkString("base"));
+    SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+    SEXP namespaceRes = PROTECT(Rf_eval( expr, R_GlobalEnv ));
+
+    if ( namespaceRes == R_NilValue ){
+        std::cerr << "Failed to load namespace base\n";
+        UNPROTECT(3);
+        return;
+    }
+
+    R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
+    UNPROTECT(3);
+}
+
 } // namespace recording
 } // namespace rir
 
