@@ -35,7 +35,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
             });
             if (dots)
                 return false;
-            if (SafeBuiltinsList::nonObject(blt->builtinSexp))
+            if (!SafeBuiltinsList::always(blt->builtinSexp) &&
+                SafeBuiltinsList::nonObject(blt->builtinSexp))
                 return true;
         }
         return false;
