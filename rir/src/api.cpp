@@ -601,10 +601,7 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP playground() {
-
-    return R_NilValue;
-}
+REXPORT SEXP playground() { return R_NilValue; }
 
 bool startup() {
     initializeRuntime();

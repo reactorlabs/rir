@@ -179,7 +179,7 @@ struct PirType {
     // cppcheck-suppress noExplicitConstructor
     constexpr PirType(const NativeTypeSet& t) : t_(t) {}
 
-    explicit PirType(SEXP);
+    explicit PirType(SEXP, bool exact = false);
     constexpr PirType(const PirType& other)
         : flags_(other.flags_), t_(other.t_) {}
 
@@ -641,7 +641,8 @@ struct PirType {
             // NULL
             return RType::nil;
         }
-        if (isA((num() | RType::str | RType::list | RType::code)
+        if (isA((num() | RType::str | RType::list |
+                 RType::code /* | RType::nil  */)
                     .orAttribsOrObj())) {
             // If the index is out of bounds, NA is returned (even if both args
             // are non-NA) so we must add orNAOrNaN()
@@ -750,7 +751,7 @@ struct PirType {
     }
 
     // Is val an instance of this type?
-    bool isInstance(SEXP val) const;
+    bool isInstance(SEXP val, bool exact = false) const;
 
     void print(std::ostream& out = std::cout) const;
 
