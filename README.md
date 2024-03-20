@@ -197,3 +197,10 @@ Or one can specify a "RIR_RECORD" variable with the path where to save the recor
 PIR_WARMUP=2 RIR_RECORD=output.rds ./bin/R -f test.R
 ```
 
+With the "RIR_RECORD_FILTER" environment variable, one can specify a bit-filter of the recording filter.  
+The bits are mapped as follows:
+ - 1 -> Compile events
+ - 2 -> Deopt events
+ - 4 -> Type feedback events
+ - 8 -> Invocation events
+

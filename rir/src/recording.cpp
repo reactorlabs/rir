@@ -1107,8 +1107,36 @@ void recordFinalizer(SEXP) {
     UNPROTECT(1);
 }
 
-void recordExecution( const char* filePath ){
-    std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+void recordExecution( const char* filePath, int filter ){
+    if ( filter >= 0) {
+        recorder_.filter = {
+            .compile = (filter & 1) > 0,
+            .deopt = (filter & 2) > 0,
+            .typeFeedback = (filter & 4) > 0,
+            .invoke = (filter & 8) > 0
+        };
+    }
+
+
+    std::cerr << "Recording to \"" << filePath << "\" (environment variable:";
+
+    if ( recorder_.filter.compile){
+        std::cerr << "compile,";
+    }
+
+    if ( recorder_.filter.deopt){
+        std::cerr << "deopt,";
+    }
+
+    if ( recorder_.filter.typeFeedback){
+        std::cerr << "typeFeedback,";
+    }
+
+    if ( recorder_.filter.invoke){
+        std::cerr << "invoke";
+    }
+
+    std::cerr << ")\n";
     startRecordings();
 
     finalizerPath = filePath;

@@ -48,7 +48,7 @@ void recordOsrTriggerLoop(size_t loopCount);
 void recordReasonsClear();
 
 // Record from environment
-void recordExecution( const char* filePath );
+void recordExecution( const char* filePath, int filter );
 
 } // namespace recording
 } // namespace rir
