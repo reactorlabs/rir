@@ -775,7 +775,30 @@ void recordCompile(SEXP cls, const std::string& name,
 void recordOsrCompile(const SEXP cls) {
     RECORDER_FILTER_GUARD(compile);
 
-    recordCompile( cls, "", pir::Compiler::defaultContext ); // TODO
+    auto env = PROTECT(CLOENV(cls));
+    auto symbols = PROTECT(R_lsInternal(env, TRUE));
+
+    std::string name = "";
+
+    auto size = Rf_length(symbols);
+    for( int i = 0; i < size; i++ ){
+        const char * symbol_char = CHAR( VECTOR_ELT(symbols, i) );
+        auto symbol = PROTECT( Rf_install( symbol_char ) );
+
+        auto value = PROTECT(Rf_findVarInFrame( env, symbol ));
+
+        if ( value == cls ){
+            name = symbol_char;
+            UNPROTECT(2);
+            break;
+        }
+
+        UNPROTECT(2);
+    }
+
+    UNPROTECT(2);
+
+    recordCompile( cls, name, pir::Compiler::defaultContext );
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {
