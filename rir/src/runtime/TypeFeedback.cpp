@@ -15,8 +15,8 @@ namespace rir {
 bool ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     if (!Rf_isFunction(callee)) {
-        std::cerr << "Warning: skipping recording non-callee " << callee
-                  << " of type " << Rf_type2char(TYPEOF(callee)) << std::endl;
+        // std::cerr << "Warning: skipping recording non-callee " << callee
+        //           << " of type " << Rf_type2char(TYPEOF(callee)) << std::endl;
         return false;
     }
 
