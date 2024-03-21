@@ -10,7 +10,7 @@ class Prefixer : private std::streambuf, public std::ostream {
         base.flush();
     }
 
-    inline virtual int sync(void) {
+    inline virtual int sync(void) override {
         base.flush();
         return 0;
     }

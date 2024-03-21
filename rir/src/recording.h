@@ -63,10 +63,14 @@ struct CompileReason {
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
     virtual void print(std::ostream& out) const = 0;
+
+    virtual ~CompileReason() = default;
 };
 
 template <typename Derived, size_t FieldsCount>
 struct CompileReasonImpl : CompileReason {
+    virtual ~CompileReasonImpl() = default;
+
     virtual SEXP toSEXP() const override {
         auto vec = PROTECT(Rf_allocVector(VECSXP, FieldsCount));
         setClassName(vec, Derived::NAME);
@@ -87,10 +91,12 @@ struct CompileReasonImpl : CompileReason {
 
 struct MarkOptReason : public CompileReasonImpl<MarkOptReason, 0> {
     static constexpr const char * NAME = "MarkOpt";
+    virtual ~MarkOptReason() = default;
 };
 
 struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeReason, 4> {
     static constexpr const char * NAME = "InvocationCountTime";
+    virtual ~InvocationCountTimeReason() = default;
 
     InvocationCountTimeReason(size_t count, size_t minimalCount,
                               unsigned long time, unsigned long minimalTime)
@@ -117,6 +123,7 @@ struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeR
 
 struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
     static constexpr const char * NAME = "PirWarmupReason";
+    virtual ~PirWarmupReason() = default;
 
     explicit PirWarmupReason(size_t invocationCount)
         : invocationCount(invocationCount) {}
@@ -136,22 +143,27 @@ struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
 };
 
 struct NotOptimizedReason : public CompileReasonImpl<NotOptimizedReason, 0> {
+    virtual ~NotOptimizedReason() = default;
     static constexpr const char * NAME = "NotOptimized";
 };
 
 struct IsImprovingReason : public CompileReasonImpl<IsImprovingReason, 0> {
+    virtual ~IsImprovingReason() = default;
     static constexpr const char * NAME = "IsImproving";
 };
 
 struct ReoptimizeFlagReason : public CompileReasonImpl<ReoptimizeFlagReason, 0> {
+    virtual ~ReoptimizeFlagReason() = default;
     static constexpr const char * NAME = "ReoptimizeFlag";
 };
 
 struct OSRCallerCalleeReason : public CompileReasonImpl<OSRCallerCalleeReason, 0>{
+    virtual ~OSRCallerCalleeReason() = default;
     static constexpr const char * NAME = "OSRCallerCallee";
 };
 
 struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1>{
+    virtual ~OSRLoopReason() = default;
     static constexpr const char * NAME = "OSRLoop";
 
     explicit OSRLoopReason(size_t loopCount)
@@ -207,6 +219,8 @@ struct CompileReasons {
  */
 class Event {
   public:
+    virtual ~Event() = default;
+
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
     virtual void print(const std::vector<FunRecording>& mapping,
@@ -233,6 +247,9 @@ class Event {
  * `ClosureEvent` is an abstract class.
  */
 class ClosureEvent : public Event {
+  public:
+    virtual ~ClosureEvent() = default;
+
   protected:
     ClosureEvent() = default;
     explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
@@ -252,6 +269,9 @@ class ClosureEvent : public Event {
  * `DtEvent` is an abstract class.
  */
 class DtEvent : public Event {
+  public:
+    virtual ~DtEvent() = default;
+
   protected:
     DtEvent() = default;
     explicit DtEvent(size_t dispatchTableIndex)
@@ -274,6 +294,9 @@ class DtEvent : public Event {
  * `VersionEvent` is an abstract class.
  */
 class VersionEvent : public DtEvent {
+  public:
+    virtual ~VersionEvent() = default;
+
   protected:
     VersionEvent() = default;
     VersionEvent(size_t dispatchTableIndex, Context version)
@@ -293,6 +316,9 @@ class SpeculativeContextEvent : public DtEvent {
           sc(sc) {}
     SpeculativeContextEvent()
         : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
+
+    virtual ~SpeculativeContextEvent() = default;
+
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t dispatchTable) const override;
@@ -321,6 +347,8 @@ class CompilationEvent : public ClosureEvent {
 
     CompilationEvent() {}
 
+    virtual ~CompilationEvent() = default;
+
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t recordingIdx) const override;
@@ -347,7 +375,8 @@ class DeoptEvent : public VersionEvent {
                DeoptReason::Reason reason,
                std::pair<ssize_t, ssize_t> reasonCodeIdx,
                uint32_t reasonCodeOff, SEXP trigger);
-    ~DeoptEvent();
+    virtual ~DeoptEvent();
+
     void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
@@ -372,6 +401,9 @@ class DtInitEvent : public DtEvent {
   public:
     DtInitEvent(size_t dtIndex, size_t invocations, size_t deopts)
         : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
+
+    virtual ~DtInitEvent() = default;
+
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
 
@@ -391,6 +423,8 @@ class InvocationEvent : public VersionEvent {
           deltaDeopt(deltaDeopt){};
 
     InvocationEvent() : VersionEvent(){};
+
+    virtual ~InvocationEvent() = default;
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
