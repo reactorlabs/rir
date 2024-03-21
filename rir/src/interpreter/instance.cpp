@@ -72,11 +72,7 @@ void context_init() {
     const char * recordFilter = std::getenv("RIR_RECORD_FILTER");
 
     if (recordPath != nullptr) {
-        int filter = -1;
-        if ( recordFilter != nullptr ){
-            filter = std::atoi( recordFilter );
-        }
-        recording::recordExecution( recordPath, filter );
+        recording::recordExecution( recordPath, recordFilter );
     }
 }
 

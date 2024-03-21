@@ -39,6 +39,21 @@ static Record recorder_;
 
 static int isReplayingSC = 0;
 
+/**
+ * Bitmask filter of events to record
+ */
+struct {
+    bool compile : 1;
+    bool deopt : 1;
+    bool typeFeedback : 1;
+    bool invoke : 1;
+} filter_ = {
+    .compile = true,
+    .deopt = true,
+    .typeFeedback = false,
+    .invoke = false,
+};
+
 // Don't record invocations while replaying compile events
 static bool isPlayingCompile = false;
 
@@ -733,7 +748,7 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 #define RECORDER_FILTER_GUARD(field_name)                                      \
-    if (!is_recording_ || !recorder_.filter.field_name)                        \
+    if (!is_recording_ || !filter_.field_name)                        \
         return;
 
 void recordCompile(SEXP cls, const std::string& name,
@@ -1107,36 +1122,45 @@ void recordFinalizer(SEXP) {
     UNPROTECT(1);
 }
 
-void recordExecution( const char* filePath, int filter ){
-    if ( filter >= 0) {
-        recorder_.filter = {
-            .compile = (filter & 1) > 0,
-            .deopt = (filter & 2) > 0,
-            .typeFeedback = (filter & 4) > 0,
-            .invoke = (filter & 8) > 0
+void recordExecution( const char* filePath, const char* filterArg ){
+    if ( filterArg != nullptr ) {
+        filter_ = {
+            .compile = false,
+            .deopt = false,
+            .typeFeedback = false,
+            .invoke = false
         };
+
+        std::istringstream is ( filterArg );
+        std::string str;
+
+        while( std::getline( is, str, ',' ) ){
+            std::cerr << str << "\n";
+
+            if (str == "Compile") {
+                filter_.compile = true;
+            } else if (str == "Deopt") {
+                filter_.deopt = true;
+            } else if (str == "TypeFeedback") {
+                filter_.typeFeedback = true;
+            } else if (str == "Invoke") {
+                filter_.invoke = true;
+            } else {
+                std::cerr
+                    << "Unknown recording filter type: "
+                    << str
+                    << "\nValid flags are:\n- Compile\n- Deopt\n- TypeFeedback\n- Invoke\n";
+                exit(1);
+            }
+        }
     }
 
-
-    std::cerr << "Recording to \"" << filePath << "\" (environment variable:";
-
-    if ( recorder_.filter.compile){
-        std::cerr << "compile,";
+    std::cerr << "Recording to \"" << filePath << "\" (environment variable";
+    if ( filterArg != nullptr ){
+        std::cerr << ": " << filterArg << " )\n";
+    } else {
+        std::cerr << ")\n";
     }
-
-    if ( recorder_.filter.deopt){
-        std::cerr << "deopt,";
-    }
-
-    if ( recorder_.filter.typeFeedback){
-        std::cerr << "typeFeedback,";
-    }
-
-    if ( recorder_.filter.invoke){
-        std::cerr << "invoke";
-    }
-
-    std::cerr << ")\n";
     startRecordings();
 
     finalizerPath = filePath;
@@ -1161,7 +1185,7 @@ void recordExecution( const char* filePath, int filter ){
 
 REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
                               SEXP invocation) {
-    rir::recording::recorder_.filter = {
+    rir::recording::filter_ = {
         .compile = (bool)Rf_asLogical(compile),
         .deopt = (bool)Rf_asLogical(deoptimize),
         .typeFeedback = (bool)Rf_asLogical(typeFeedback),

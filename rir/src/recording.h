@@ -499,21 +499,6 @@ public:
     Record() = default;
     ~Record();
 
-    /**
-     * Bitmask filter of events to record
-     */
-    struct {
-        bool compile : 1;
-        bool deopt : 1;
-        bool typeFeedback : 1;
-        bool invoke : 1;
-    } filter = {
-        .compile = true,
-        .deopt = true,
-        .typeFeedback = false,
-        .invoke = false,
-    };
-
     template <typename E, typename... Args>
     void record(SEXP cls, Args&&... args) {
         auto entry = initOrGetRecording(cls);
