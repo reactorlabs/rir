@@ -720,7 +720,7 @@ SEXP InvocationEvent::toSEXP() const {
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(version)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaCount)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaDeopt)));
-    UNPROTECT(i + 1);
+    UNPROTECT(5);
     return sexp;
 }
 
@@ -1188,6 +1188,8 @@ REXPORT SEXP resetRecordings() {
 
 }
 REXPORT SEXP isRecordings() {
+    // Incorrectly identified by cppcheck
+    // cppcheck-suppress constArgument
     return Rf_ScalarLogical(rir::recording::is_recording_);
 }
 
