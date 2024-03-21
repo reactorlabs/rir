@@ -238,7 +238,7 @@ class Event {
      */
     virtual bool containsReference(size_t recordingIdx) const { return false; }
     virtual const char*
-    targetName(std::vector<FunRecording>& mapping) const = 0;
+    targetName(const std::vector<FunRecording>& mapping) const = 0;
 };
 
 /**
@@ -260,7 +260,7 @@ class ClosureEvent : public Event {
         return recordingIdx == closureIndex;
     };
 
-    const char* targetName(std::vector<FunRecording>& mapping) const override;
+    const char* targetName(const std::vector<FunRecording>& mapping) const override;
 };
 
 /**
@@ -283,7 +283,7 @@ class DtEvent : public Event {
         return recordingIdx == dispatchTableIndex;
     };
 
-    const char* targetName(std::vector<FunRecording>& mapping) const override;
+    const char* targetName(const std::vector<FunRecording>& mapping) const override;
 };
 
 /**
@@ -486,6 +486,8 @@ class Record {
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
+
+public:
     std::vector<FunRecording> functions;
 
     std::vector<std::unique_ptr<Event>> log;
@@ -561,7 +563,7 @@ class Record {
 
     std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
-    void printRecordings(std::ostream& out);
+
     void reset() {
         dt_to_recording_index_.clear();
         functions.clear();
@@ -580,6 +582,6 @@ REXPORT SEXP isRecordings();
 REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
-REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile);
+REXPORT SEXP printRecordings(SEXP from);
 
 #endif

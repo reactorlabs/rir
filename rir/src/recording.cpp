@@ -308,22 +308,6 @@ SEXP Record::save() {
 // Plays along nicer with diff tools
 #define HIDE_UNKNOWN_CLOSURE_POINTER true
 
-void Record::printRecordings(std::ostream& out) {
-    for (auto& eventEntry : log) {
-        const char* name = eventEntry->targetName(functions);
-
-        // If name is empty (unknown), use a different display strategy
-        if (*name == 0) {
-            name = "<?>";
-        }
-
-        Prefixer prefixed(out, name);
-        prefixed << "    ";
-        eventEntry->print(functions, prefixed);
-        prefixed << std::endl;
-    }
-}
-
 std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     if (that.primIdx >= 0) {
         // Weird condition coming from names.c:R_Primitive
@@ -344,11 +328,11 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-const char* ClosureEvent::targetName(std::vector<FunRecording>& mapping) const {
+const char* ClosureEvent::targetName(const std::vector<FunRecording>& mapping) const {
     return mapping[closureIndex].name.c_str();
 }
 
-const char* DtEvent::targetName(std::vector<FunRecording>& mapping) const {
+const char* DtEvent::targetName(const std::vector<FunRecording>& mapping) const {
     return mapping[dispatchTableIndex].name.c_str();
 }
 
@@ -1040,7 +1024,23 @@ SEXP getEnvironment(const std::string& name) {
     return env;
 }
 
-void printRecordings(std::ostream& out) { recorder_.printRecordings(out); }
+void printRecordings(std::ostream& out,
+                     const std::vector<std::unique_ptr<rir::recording::Event>>& events,
+                     const std::vector<FunRecording>& functions){
+    for (auto& eventEntry : events) {
+        const char* name = eventEntry->targetName(functions);
+
+        // If name is empty (unknown), use a different display strategy
+        if (*name == 0) {
+            name = "<?>";
+        }
+
+        Prefixer prefixed(out, name);
+        prefixed << "    ";
+        eventEntry->print(functions, prefixed);
+        prefixed << std::endl;
+    }
+}
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic(){
@@ -1226,35 +1226,60 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
 
-REXPORT SEXP printRecordings(SEXP filename, SEXP fromFile) {
+REXPORT SEXP printRecordings(SEXP from) {
     auto& out = std::cout;
     out << "Recordings:" << std::endl;
 
-    if (Rf_isNull(fromFile)) {
-        rir::recording::printRecordings(out);
+    if (Rf_isNull(from)) {
+        rir::recording::printRecordings(out,
+                                        rir::recording::recorder_.log,
+                                        rir::recording::recorder_.functions);
     } else {
-        // auto recordingsSexp = PROTECT(loadRecordings(fromFile));
-        // rir::recording::Replay replay(recordingsSexp);
-        //
-        // auto eventCount = replay.getEventCount();
-        // for (size_t idx = 0; idx < eventCount; idx++) {
-        //     const auto eventEntry = replay.getEvent(idx);
-        //
-        //     const char* name = eventEntry->targetName(replay.functions);
-        //     std::string ptr_str;
-        //
-        //     // If name is empty (unknown), use a different display strategy
-        //     if (*name == 0) {
-        //         name = "<?>";
-        //     }
-        //
-        //     Prefixer prefixed(out, name);
-        //     prefixed << "    ";
-        //     eventEntry->print(replay.functions, prefixed);
-        //     prefixed << std::endl;
-        // }
-        //
-        // UNPROTECT(1);
+        SEXP expr;
+        if (Rf_isString(from)) {
+            expr = PROTECT(loadRecordings(from));
+        } else {
+            expr = from;
+        }
+
+        assert(Rf_isVector(expr));
+        assert(Rf_length(expr) == 2);
+
+        // Populate functions
+        auto bodies = VECTOR_ELT(expr, 0);
+        size_t bodiesLength = Rf_length(bodies);
+
+        std::vector<rir::recording::FunRecording> functions;
+        functions.reserve(bodiesLength);
+
+        for (size_t i = 0; i < bodiesLength; i++){
+            functions.push_back(
+                rir::recording::serialization::fun_recorder_from_sexp(
+                    VECTOR_ELT(bodies, i)
+                )
+            );
+        }
+
+        // Populate events
+        auto log = VECTOR_ELT( expr, 1 );
+        size_t logLength = Rf_length(log);
+
+        std::vector<std::unique_ptr<rir::recording::Event>> logVector;
+        logVector.reserve(logLength);
+
+        for (size_t i = 0; i < logLength; i++){
+            logVector.push_back(
+                rir::recording::serialization::event_from_sexp(
+                    VECTOR_ELT( log, i )
+                )
+            );
+        }
+
+        rir::recording::printRecordings( out, logVector, functions );
+
+        if (expr != from){
+            UNPROTECT(1);
+        }
     }
 
     return R_NilValue;

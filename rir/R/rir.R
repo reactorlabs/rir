@@ -259,6 +259,6 @@ recordings.eval <- function(expr, env=parent.frame()) {
     recordings.get()
 }
 
-recordings.print <- function(filename = NULL, fromFile = NULL) {
-    .Call("printRecordings", filename, fromFile)
+recordings.print <- function(from = NULL) {
+    .Call("printRecordings", from)
 }
