@@ -541,7 +541,7 @@ SEXP CompilationEvent::toSEXP() const {
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 7);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
