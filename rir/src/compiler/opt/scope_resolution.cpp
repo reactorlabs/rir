@@ -718,8 +718,9 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 });
 
-                if (!dependsOnEnv && !unsafe && noObjects &&
-                    SafeBuiltinsList::nonObject(b->builtinId)) {
+                if (SafeBuiltinsList::always(b->builtinId) ||
+                    (!dependsOnEnv && !unsafe && noObjects &&
+                     SafeBuiltinsList::nonObject(b->builtinId))) {
                     std::vector<Value*> args;
                     i->eachArg([&](Value* v) {
                         if (v != i->env()) {
