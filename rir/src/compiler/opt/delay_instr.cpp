@@ -23,7 +23,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
         if (builtinId != -1) {
             if (j->hasObservableEffects())
                 return false;
-            if (j->mergedInputType().maybeObj())
+            if (j->mergedInputType().maybeObj(true, "delayinstr"))
                 return SafeBuiltinsList::nonObjectIdempotent(builtinId);
             return SafeBuiltinsList::idempotent(builtinId);
         }

@@ -127,7 +127,7 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             switch (i->tag) {
 #define V(instr)                                                               \
     case Tag::instr:                                                           \
-        if (!i->arg(0).val()->type.maybeObj()) {                               \
+        if (!i->arg(0).val()->type.maybeObj(true, "eagercall")) {              \
             i->eachArg([&](InstrArg& arg) {                                    \
                 if (arg.val()->type.maybePromiseWrapped()) {                   \
                     ip = bb->insert(ip, new Force(arg.val(), i->env(),         \

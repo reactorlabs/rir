@@ -395,7 +395,7 @@ class Instruction : public Value {
     template <typename Result>
     Result ifNonObjectArgs(const GetType& getType, Result then,
                            Result otherwise) const {
-        if (!getType(arg(0).val()).maybeObj())
+        if (!getType(arg(0).val()).maybeObj(true, "isnonobj args"))
             return then;
         return otherwise;
     }
@@ -411,7 +411,7 @@ class Instruction : public Value {
   protected:
     PirType inferredTypeForArithmeticInstruction(const GetType& getType) const {
         auto m = mergedInputType(getType);
-        if (!m.maybeObj()) {
+        if (!m.maybeObj(true, "inferredtypeforar")) {
             auto t = PirType::bottom();
             eachArg([&](Value* v) {
                 if (!mayHaveEnv() || v != env())
@@ -461,7 +461,7 @@ class Instruction : public Value {
 
     PirType inferredTypeForLogicalInstruction(const GetType& getType) const {
         auto t = mergedInputType(getType);
-        if (!t.maybeObj()) {
+        if (!t.maybeObj(true, "inferredtypeforlo")) {
             auto res = PirType(RType::logical).orAttribsOrObj();
             if (t.isScalar())
                 res = res.scalar();
@@ -480,7 +480,7 @@ class Instruction : public Value {
     inferredEffectsForArithmeticInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
-        if (!t.maybeObj())
+        if (!t.maybeObj(true, "inferredeffectsforar"))
             e = e & errorWarnVisible;
         if (t.isA(PirType::num().notObject())) {
             // 0-sized input might error
@@ -495,7 +495,7 @@ class Instruction : public Value {
     Effects inferredEffectsForLogicalInstruction(const GetType& getType) const {
         auto e = effects;
         auto t = mergedInputType(getType);
-        if (!t.maybeObj())
+        if (!t.maybeObj(true, "inferredeffforlo"))
             e = e & errorWarnVisible;
         if (t.isA(PirType::atomOrSimpleVec().notObject())) {
             // 0-sized input might error
@@ -1045,7 +1045,7 @@ class FLIE(LdVar, 1, Effects() | Effect::Error | Effect::ReadsEnv) {
 class FLI(ToForSeq, 1, Effect::Error) {
   public:
     explicit ToForSeq(Value* val)
-        : FixedLenInstruction(val->type.maybeObj()
+        : FixedLenInstruction(val->type.maybeObj(true, "toforseq const")
                                   ? val->type.notObject().orT(RType::chr)
                                   : val->type,
                               {{PirType::val()}}, {{val}}) {}
@@ -1054,7 +1054,7 @@ class FLI(ToForSeq, 1, Effect::Error) {
 
     PirType inferType(const GetType& getType) const override final {
         auto it = getType(arg(0).val());
-        if (it.maybeObj())
+        if (it.maybeObj(true, "infertype toforseq"))
             return type & it.notObject().orT(RType::chr);
         return type & it;
     }

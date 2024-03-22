@@ -709,7 +709,8 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 bool dependsOnEnv = false;
                 i->eachArg([&](Value* v) {
                     if (v != i->env()) {
-                        if (v->cFollowCastsAndForce()->type.maybeObj())
+                        if (v->cFollowCastsAndForce()->type.maybeObj(
+                                true, "scoperes"))
                             noObjects = false;
                         if (v->type.isA(RType::expandedDots))
                             unsafe = true;

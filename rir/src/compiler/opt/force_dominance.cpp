@@ -407,7 +407,7 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 if (auto b = CallSafeBuiltin::Cast(i))
                                     builtinId = b->builtinId;
                                 if (builtinId != -1) {
-                                    if (eager->type.maybeObj())
+                                    if (eager->type.maybeObj(true, "forcedom"))
                                         if (SafeBuiltinsList::always(builtinId))
                                             return true;
                                     if (SafeBuiltinsList::nonObject(builtinId))

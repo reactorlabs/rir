@@ -116,7 +116,7 @@ bool Cleanup::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                     }
                 } else if (auto seq = ToForSeq::Cast(i)) {
                     Value* arg = seq->arg<0>().val();
-                    if (!arg->type.maybeObj()) {
+                    if (!arg->type.maybeObj(true, "cleanup")) {
                         removed = true;
                         seq->replaceUsesWith(arg);
                         next = bb->remove(ip);

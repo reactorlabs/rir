@@ -2649,7 +2649,8 @@ void LowerFunctionLLVM::compile() {
 
                     switch (b->builtinId) {
                     case blt("dim"): {
-                        if (!i->arg(0).val()->type.maybeObj()) {
+                        if (!i->arg(0).val()->type.maybeObj(true,
+                                                            "lowerf dim")) {
                             if (irep == Rep::SEXP) {
                                 setVal(
                                     i,
@@ -2722,7 +2723,7 @@ void LowerFunctionLLVM::compile() {
                                     PirJitLLVM::getContext(), "", fun);
                                 auto mightHaveNames = builder.CreateICmpNE(
                                     attr(a), constant(R_NilValue, t::SEXP));
-                                if (itype.maybeObj())
+                                if (itype.maybeObj(true, "lowerf names"))
                                     mightHaveNames = builder.CreateOr(
                                         mightHaveNames, isObj(a));
                                 builder.CreateCondBr(mightHaveNames, hasAttr,
@@ -4523,7 +4524,7 @@ void LowerFunctionLLVM::compile() {
                     if (arg->type.maybeNotFastVecelt() &&
                         !t->typeTest.maybeNotFastVecelt()) {
                         res = builder.CreateAnd(res, fastVeceltOkNative(a));
-                    } else if (arg->type.maybeObj() &&
+                    } else if (arg->type.maybeObj(true, "lowerf istype") &&
                                !t->typeTest.maybeObj()) {
                         res =
                             builder.CreateAnd(res, builder.CreateNot(isObj(a)));
@@ -5367,7 +5368,8 @@ void LowerFunctionLLVM::compile() {
                 auto fastcase =
                     idx1Type.isA(PirType::intReal().notObject().scalar()) &&
                     idx2Type.isA(PirType::intReal().notObject().scalar()) &&
-                    valType.isScalar() && !vecType.maybeObj() &&
+                    valType.isScalar() &&
+                    !vecType.maybeObj(true, "lowerf subassign2 2d") &&
                     ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
                      (vecType.isA(PirType(RType::real).orFastVecelt()) &&
@@ -5488,7 +5490,8 @@ void LowerFunctionLLVM::compile() {
                 // int vect
                 bool fastcase =
                     idxType.isA(PirType::intReal().notObject().scalar()) &&
-                    valType.isScalar() && !vecType.maybeObj() &&
+                    valType.isScalar() &&
+                    !vecType.maybeObj(true, "lowerf subassign1 1d") &&
                     (vecType.isA(PirType(RType::vec).orFastVecelt()) ||
                      (vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
@@ -5588,7 +5591,8 @@ void LowerFunctionLLVM::compile() {
                 // int vect
                 bool fastcase =
                     idxType.isA(PirType::intRealLgl().notObject().scalar()) &&
-                    valType.isScalar() && !vecType.maybeObj() &&
+                    valType.isScalar() &&
+                    !vecType.maybeObj(true, "lowerf subassign2 1d") &&
                     ((vecType.isA(PirType(RType::integer).orFastVecelt()) &&
                       valType.isA(RType::integer)) ||
                      (vecType.isA(PirType(RType::real).orFastVecelt()) &&

@@ -235,7 +235,7 @@ bool Instruction::nonObjectArgs() {
 
         if (this->hasEnv() && this->env() == arg)
             return;
-        if (!arg->followCastsAndForce()->type.maybeObj())
+        if (!arg->followCastsAndForce()->type.maybeObj(true, "nonobjectargs"))
             return;
         if (arg->type.maybePromiseWrapped()) {
             answer = false;
@@ -250,7 +250,7 @@ bool Instruction::nonObjectArgs() {
                 fb = j->typeFeedback().type;
         }
 
-        if (fb.isVoid() || fb.maybeObj())
+        if (fb.isVoid() || fb.maybeObj(true, "nonobjargs 2"))
             answer = false;
     });
     return answer;
@@ -710,7 +710,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
 
 size_t CallSafeBuiltin::gvnBase() const {
     if (!SafeBuiltinsList::idempotent(builtinId)) {
-        if (type.maybeObj() ||
+        if (type.maybeObj(true, "gvnbase") ||
             !SafeBuiltinsList::nonObjectIdempotent(builtinId))
             return 0;
     }
@@ -744,7 +744,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
             auto m = PirType::bottom();
             for (size_t i = 0; i < nCallArgs(); ++i)
                 m = m.mergeWithConversion(getType(callArg(i).val()));
-            if (!m.maybeObj()) {
+            if (!m.maybeObj(true, "callsafeb minmaxß")) {
                 auto lub = PirType::num().orAttribsOrObj();
                 // Min/max support string comparison
                 if (name == "min" || name == "max")
@@ -772,7 +772,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
             auto m = PirType::bottom();
             for (size_t i = 0; i < nCallArgs(); ++i)
                 m = m.mergeWithConversion(getType(callArg(i).val()));
-            if (!m.maybeObj()) {
+            if (!m.maybeObj(true, "callsafeb sqrt")) {
                 inferred = m & PirType::num().orAttribsOrObj();
                 inferred = inferred.orT(RType::real).notT(RType::integer);
             }
@@ -780,7 +780,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     }
 
     if ("as.integer" == name) {
-        if (!getType(callArg(0).val()).maybeObj()) {
+        if (!getType(callArg(0).val()).maybeObj(true, "callsafeb asint")) {
             inferred = PirType(RType::integer);
             if (getType(callArg(0).val()).isSimpleScalar())
                 inferred = inferred.simpleScalar();
@@ -794,7 +794,7 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     static const std::unordered_set<std::string> vecTests = {
         "is.na", "is.nan", "is.finite", "is.infinite"};
     if (vecTests.count(name)) {
-        if (!getType(callArg(0).val()).maybeObj()) {
+        if (!getType(callArg(0).val()).maybeObj(true, "callsafeb isna")) {
             inferred = PirType(RType::logical);
             if (getType(callArg(0).val()).maybeHasAttrs())
                 inferred = inferred.orAttribsOrObj().notObject();
@@ -820,7 +820,8 @@ PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
         static const std::unordered_set<std::string> maybeDispatch = {"all",
                                                                       "any"};
 
-        if (!maybeDispatch.count(name) || !getType(callArg(0).val()).maybeObj())
+        if (!maybeDispatch.count(name) ||
+            !getType(callArg(0).val()).maybeObj(true, "callsafeb isvector"))
             inferred = PirType(RType::logical).simpleScalar().notNAOrNaN();
     }
 
@@ -900,12 +901,12 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
             if (mk->isEager()) {
-                if (!mk->eagerArg()->type.maybeObj())
+                if (!mk->eagerArg()->type.maybeObj(true, "builintcallfact"))
                     continue;
                 noObj = false;
             }
         }
-        if (a->type.maybeObj()) {
+        if (a->type.maybeObj(true, "builtincalfact 2")) {
             noObj = false;
         }
         if (a->type.isA(RType::expandedDots)) {

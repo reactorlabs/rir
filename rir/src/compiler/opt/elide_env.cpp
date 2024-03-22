@@ -27,7 +27,8 @@ bool ElideEnv::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
 
                 if (envIsNeeded && i->envOnlyForObj()) {
                     envIsNeeded = i->anyArg([&](Value* v) {
-                        return v != i->env() && v->type.maybeObj();
+                        return v != i->env() &&
+                               v->type.maybeObj(true, "elideenv");
                     });
                     if (!envIsNeeded) {
                         i->elideEnv();

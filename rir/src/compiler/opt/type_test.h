@@ -40,7 +40,7 @@ class TypeTest {
 
         assert(feedback.feedbackOrigin.hasSlot());
         // First try to refine the type
-        if (!expected.maybeObj() && // TODO: Is this right?
+        if (!expected.maybeObj(true, "typetest") && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
@@ -57,7 +57,7 @@ class TypeTest {
 
         auto checkFor = i->type.notLazy().noAttribsOrObject();
         if (expected.isA(checkFor)) {
-            assert(!expected.maybeObj());
+            assert(!expected.maybeObj(true, "typetest2"));
             assert(!expected.maybeHasAttrs());
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin});
@@ -65,7 +65,7 @@ class TypeTest {
 
         checkFor = i->type.notLazy().notObject();
         if (expected.isA(checkFor)) {
-            assert(!expected.maybeObj());
+            assert(!expected.maybeObj(true, "typetest3"));
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin});
         }

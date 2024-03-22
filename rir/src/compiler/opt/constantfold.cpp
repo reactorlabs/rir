@@ -661,7 +661,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             next = bb->remove(ip);
                         }
                     } else if (builtinId == blt("as.logical") && nargs == 1 &&
-                               !i->arg(0).val()->type.maybeObj() &&
+                               !i->arg(0).val()->type.maybeObj(
+                                   true, "constantfold") &&
                                i->arg(0).val()->type.isScalar()) {
                         i->replaceUsesAndSwapWith(
                             new AsLogical(i->arg(0).val(), i->srcIdx), ip);
@@ -832,7 +833,7 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (builtinId == blt("is.object") && nargs == 1) {
                         auto t = i->arg(0).val()->type;
-                        if (!t.maybeObj()) {
+                        if (!t.maybeObj(true, "constantfold 2")) {
                             iterAnyChange = true;
                             i->replaceUsesWith(False::instance());
                             next = bb->remove(ip);

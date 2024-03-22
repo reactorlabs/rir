@@ -366,7 +366,13 @@ struct PirType {
     inline constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    inline constexpr bool maybeObj() const {
+    inline bool maybeObj(bool usedForOpt = false, std::string msg = "") const {
+
+        if (usedForOpt) {
+            std::cerr << "\n"
+                      << "maybeObj() called: " << msg;
+        }
+
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);

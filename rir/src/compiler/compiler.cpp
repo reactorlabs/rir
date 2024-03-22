@@ -19,6 +19,7 @@
 #include "bc/Compiler.h"
 
 #include <chrono>
+#include <iostream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -224,6 +225,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return fail();
     }
 
+    std::cerr << "****starting rir2pir.tryCompile()*********** \n ";
     if (rir2pir.tryCompile(builder)) {
 #ifdef FULLVERIFIER
         Verify::apply(version, "Error after initial translation", true);
@@ -363,6 +365,10 @@ void Compiler::optimizeClosureVersion(ClosureVersion* v) {
 
 void Compiler::optimizeModule() {
     logger.flushAll();
+    std::cerr.flush();
+    std::cerr
+        << "\n ************ starting optiimzeModule() **************** \n";
+
     size_t passnr = 10;
 
     PassScheduler::instance().run([&](const Pass* translation,
@@ -453,6 +459,8 @@ void Compiler::optimizeModule() {
         Measuring::countTimer("compiler.cpp: verification");
 
     logger.flushAll();
+
+    std::cerr << "\n ************ END optiimzeModule() **************** \n";
 }
 
 size_t Parameter::MAX_INPUT_SIZE =

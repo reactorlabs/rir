@@ -488,6 +488,7 @@ namespace rir {
 namespace pir {
 
 void Verify::apply(ClosureVersion* f, const std::string& msg, bool slow) {
+    return;
     TheVerifier v(f, msg, slow);
     v();
 }

@@ -56,7 +56,8 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (cp && envOnlyForObj(i) && i->nonObjectArgs()) {
                     bool successful = true;
                     i->eachArg([&](Value* arg) {
-                        if (arg == i->env() || !arg->type.maybeObj()) {
+                        if (arg == i->env() ||
+                            !arg->type.maybeObj(true, "elidenvspec")) {
                             return;
                         }
                         auto argi = Instruction::Cast(arg);

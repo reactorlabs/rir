@@ -31,6 +31,10 @@ REXPORT SEXP rirCreateSimpleIntContext();
 
 // this method is just to have an easy way to play around with the code and get
 // feedback by calling .Call('playground')
-REXPORT SEXP playground(SEXP what);
+REXPORT SEXP playground();
+
+REXPORT SEXP compile_parentFrame(SEXP what);
+REXPORT SEXP compile_isFactor(SEXP what);
+REXPORT SEXP compile_nrow(SEXP what);
 
 #endif // API_H_
