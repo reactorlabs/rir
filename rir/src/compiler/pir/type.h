@@ -1,12 +1,15 @@
 #ifndef COMPILER_TYPE_H
 #define COMPILER_TYPE_H
 
+#include "aa.h"
+
 #include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <vector>
 
 #include "R/r_incl.h"
+
 #include "runtime/Context.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
@@ -366,18 +369,24 @@ struct PirType {
     inline constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    inline bool maybeObj(bool usedForOpt = false, std::string msg = "") const {
 
-        if (usedForOpt) {
-            std::cerr << "\n"
-                      << "maybeObj() called: " << msg;
-        }
+    inline bool maybeObj(bool usedForOpt = false, std::string msg = "") const {
 
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);
         assert(!res || (flags_.includes(TypeFlags::maybeAttrib) &&
                         flags_.includes(TypeFlags::maybeNotFastVecelt)));
+
+        if (usedForOpt) {
+            // std::cerr << "\n"
+            //           << "pirtype.maybeObj() called: " << msg;
+
+            if (!res) {
+                AA::singleton().setNotObj();
+            }
+        }
+
         return res;
     }
 

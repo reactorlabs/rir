@@ -1,4 +1,5 @@
 #include "instruction.h"
+#include "compiler/pir/closure_version.h"
 #include "pir_impl.h"
 
 #include "../analysis/query.h"
@@ -895,29 +896,51 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
 
 Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
-                                     unsigned srcIdx) {
-    bool noObj = true;
+                                     unsigned srcIdx, ClosureVersion* cls) {
+
     bool unsafe = false;
     for (auto a : args) {
-        if (auto mk = MkArg::Cast(a)) {
-            if (mk->isEager()) {
-                if (!mk->eagerArg()->type.maybeObj(true, "builintcallfact"))
-                    continue;
-                noObj = false;
-            }
-        }
-        if (a->type.maybeObj(true, "builtincalfact 2")) {
-            noObj = false;
-        }
+        // if (auto mk = MkArg::Cast(a)) {
+        //     if (mk->isEager()) {
+        //         if (!mk->eagerArg()->type.maybeObj(true,false,
+        //         "builintcallfact"))
+        //             continue;
+        //         noObj = false;
+        //     }
+        // }
+        // if (a->type.maybeObj(true, false, "builtincalfact 2")) {
+        //     noObj = false;
+        // }
         if (a->type.isA(RType::expandedDots)) {
             unsafe = true;
         }
     }
 
+    auto checkNoObj = [&]() -> bool {
+        bool noObj = true;
+        for (auto a : args) {
+            if (auto mk = MkArg::Cast(a)) {
+                if (mk->isEager()) {
+                    if (!mk->eagerArg()->type.maybeObj(true, "builintcallfact"))
+                        continue;
+                    noObj = false;
+                }
+            }
+
+            if (a->type.maybeObj(true, "builtincalfact 2")) {
+                noObj = false;
+            }
+        }
+
+        return noObj;
+    };
+
     if (!unsafe && (SafeBuiltinsList::always(builtin) ||
-                    (noObj && SafeBuiltinsList::nonObject(builtin))))
+                    (SafeBuiltinsList::nonObject(builtin) && checkNoObj()))) {
+
         return new CallSafeBuiltin(builtin, args, srcIdx);
-    else
+
+    } else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);
 }
 
@@ -1038,6 +1061,10 @@ void Force::printArgs(std::ostream& out, bool tty) const {
 
 PirType Force::inferType(const GetType& getType) const {
     return type & getType(input()).forced();
+}
+
+PirType Force::inferType2(const GetType& getType) const {
+    return getType(input()).forced();
 }
 
 ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {

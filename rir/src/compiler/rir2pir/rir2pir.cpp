@@ -780,7 +780,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             popn(toPop);
             auto bt = insert(BuiltinCallFactory::New(
                 env, staticMonomorphicBuiltin ? staticCallee : ti.monomorphic,
-                args, ast));
+                args, ast, cls));
             if (!staticMonomorphicBuiltin)
                 bt->effects.set(Effect::DependsOnAssume);
             push(bt);
@@ -1000,7 +1000,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
 
         assert(TYPEOF(target) == BUILTINSXP);
-        push(insert(BuiltinCallFactory::New(env, target, args, ast)));
+        push(insert(BuiltinCallFactory::New(env, target, args, ast, cls)));
 
         if (target->u.primsxp.offset == blt("stop")) {
             insert(new Unreachable());

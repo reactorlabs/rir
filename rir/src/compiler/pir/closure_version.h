@@ -55,7 +55,7 @@ class ClosureVersion : public Code {
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;
-    const Context optimizationContext_;
+    /*const */ Context optimizationContext_;
 
     std::string name_;
     std::string nameSuffix_;
@@ -68,6 +68,15 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+    // **************
+    void eraseNonObjectFromLdArg(size_t index);
+    void updateTypeAndEffects2();
+    void setMaybeObjUsed();
+    bool notObjUsed = false;
+
+    void setContext(Context newContext) { optimizationContext_ = newContext; }
+    // ***********************
+
     ClosureVersion* clone(const Context& newContext);
 
     const Context& context() const { return optimizationContext_; }

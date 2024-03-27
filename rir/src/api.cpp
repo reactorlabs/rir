@@ -305,6 +305,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     auto compile = [&](pir::ClosureVersion* c) {
         logger.flushAll();
         cmp.optimizeModule();
+        c->owner()->reindexVersions();
 
         if (dryRun)
             return;

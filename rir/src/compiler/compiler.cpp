@@ -60,6 +60,8 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
                    success, fail, outerFeedback,
                    tbl->baseline()->typeFeedback());
+
+    // pirClosure->reindexVersions();
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -146,6 +148,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
+    AA::singleton().setCurrentVersion(version); // ***********
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
@@ -225,7 +228,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return fail();
     }
 
-    std::cerr << "****starting rir2pir.tryCompile()*********** \n ";
     if (rir2pir.tryCompile(builder)) {
 #ifdef FULLVERIFIER
         Verify::apply(version, "Error after initial translation", true);
@@ -366,8 +368,6 @@ void Compiler::optimizeClosureVersion(ClosureVersion* v) {
 void Compiler::optimizeModule() {
     logger.flushAll();
     std::cerr.flush();
-    std::cerr
-        << "\n ************ starting optiimzeModule() **************** \n";
 
     size_t passnr = 10;
 
@@ -401,6 +401,7 @@ void Compiler::optimizeModule() {
 
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
+                AA::singleton().setCurrentVersion(v); // **********
                 auto& clog = logger.get(v);
                 auto pirLog = clog.forPass(passnr, translation->getName());
                 pirLog.pirOptimizationsHeader(translation);
@@ -434,6 +435,7 @@ void Compiler::optimizeModule() {
                 Verify::apply(v, "Error after pass " + translation->getName());
 #endif
 #endif
+                AA::singleton().setCurrentVersion(nullptr);
             });
         });
         passnr++;
@@ -459,8 +461,6 @@ void Compiler::optimizeModule() {
         Measuring::countTimer("compiler.cpp: verification");
 
     logger.flushAll();
-
-    std::cerr << "\n ************ END optiimzeModule() **************** \n";
 }
 
 size_t Parameter::MAX_INPUT_SIZE =

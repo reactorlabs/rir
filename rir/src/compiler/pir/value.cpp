@@ -9,7 +9,6 @@
 namespace rir {
 namespace pir {
 
-
 void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     // this is for function arguments
     auto arg = this;

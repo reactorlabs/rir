@@ -704,14 +704,14 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
             // TODO move this to a pass where it fits...
             if (auto b = CallBuiltin::Cast(i)) {
-                bool noObjects = true;
+                // bool noObjects = true;
                 bool unsafe = false;
                 bool dependsOnEnv = false;
                 i->eachArg([&](Value* v) {
                     if (v != i->env()) {
-                        if (v->cFollowCastsAndForce()->type.maybeObj(
-                                true, "scoperes"))
-                            noObjects = false;
+                        // if (v->cFollowCastsAndForce()->type.maybeObj(
+                        //         true, "scoperes"))
+                        //     noObjects = false;
                         if (v->type.isA(RType::expandedDots))
                             unsafe = true;
                     } else {
@@ -719,8 +719,22 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
                 });
 
-                if (!dependsOnEnv && !unsafe && noObjects &&
-                    SafeBuiltinsList::nonObject(b->builtinId)) {
+                auto checkNoObj = [&]() -> bool {
+                    bool noObjects = true;
+                    i->eachArg([&](Value* v) {
+                        if (v != i->env()) {
+                            if (v->cFollowCastsAndForce()->type.maybeObj(
+                                    true, "scoperes"))
+                                noObjects = false;
+                        }
+                    });
+                    return noObjects;
+                };
+
+                if (!dependsOnEnv && !unsafe &&
+                    (SafeBuiltinsList::always(b->builtinId) ||
+                     (SafeBuiltinsList::nonObject(b->builtinId) &&
+                      checkNoObj()))) {
                     std::vector<Value*> args;
                     i->eachArg([&](Value* v) {
                         if (v != i->env()) {

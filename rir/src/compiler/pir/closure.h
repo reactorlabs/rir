@@ -51,6 +51,8 @@ class Closure {
     Context userContext_;
 
   public:
+    void reindexVersions();
+
     bool matchesUserContext(Context c) const {
         return c.smaller(this->userContext_);
     }

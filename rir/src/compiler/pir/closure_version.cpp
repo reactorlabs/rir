@@ -1,9 +1,11 @@
 #include "closure_version.h"
 #include "closure.h"
+#include "compiler/pir/instruction.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
 #include "pir_impl.h"
 
+#include <cstddef>
 #include <iostream>
 
 namespace rir {
@@ -128,6 +130,24 @@ ClosureVersion::ClosureVersion(Closure* closure, rir::Function* optFunction,
     id.str("");
     id << this;
     nameSuffix_ = id.str();
+}
+
+void ClosureVersion::eraseNonObjectFromLdArg(size_t index) {
+    Visitor::run(this->entry, [&](Instruction* i) {
+        if (auto ldarg = LdArg::Cast(i)) {
+            if (ldarg->pos == index) {
+                ldarg->type = ldarg->type.orObject();
+            }
+        }
+    });
+}
+
+void ClosureVersion::updateTypeAndEffects2() {
+    Visitor::run(this->entry, [&](Instruction* i) {
+        if (!LdArg::Cast(i)) {
+            i->updateTypeAndEffects2();
+        }
+    });
 }
 
 std::ostream& operator<<(std::ostream& out, const ClosureVersion::Property& p) {

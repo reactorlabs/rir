@@ -2,13 +2,14 @@
 #include "../pir/pir_impl.h"
 #include "../util/safe_builtins_list.h"
 #include "compiler/analysis/cfg.h"
+#include "compiler/pir/closure_version.h"
 #include "pass_definitions.h"
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-static bool taintsEnvironment(Instruction* i) {
+static bool taintsEnvironment(Instruction* i, ClosureVersion* cls) {
     // For these instructions we test later they don't change the particular
     // binding
     if (StVar::Cast(i) || StVarSuper::Cast(i) || MkEnv::Cast(i) ||
@@ -34,11 +35,12 @@ static bool taintsEnvironment(Instruction* i) {
     return i->changesEnv();
 }
 
-static bool isSafeToHoistLoads(const LoopDetection::Loop& loop) {
+static bool isSafeToHoistLoads(const LoopDetection::Loop& loop,
+                               ClosureVersion* cls) {
     for (auto bb : loop) {
         if (!bb->isDeopt()) {
             for (auto instruction : *bb) {
-                if (taintsEnvironment(instruction)) {
+                if (taintsEnvironment(instruction, cls)) {
                     return false;
                 }
             }
@@ -87,8 +89,8 @@ static bool loopOverwritesBinding(const LoopDetection::Loop& loop,
 }
 
 static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
-                                           const DominanceGraph& dom,
-                                           BB* start) {
+                                           const DominanceGraph& dom, BB* start,
+                                           ClosureVersion* cls) {
     std::vector<Instruction*> betweenLoadandLoop;
     Instruction* found = nullptr;
     auto current = start;
@@ -133,7 +135,7 @@ static bool replaceWithOuterLoopEquivalent(Instruction* instruction,
     if (found != nullptr) {
         for (auto instruction : betweenLoadandLoop) {
             if (instructionOverwritesBinding(instruction, origin, binding) ||
-                taintsEnvironment(instruction))
+                taintsEnvironment(instruction, cls))
                 return false;
         }
         instruction->replaceUsesWith(found);
@@ -153,7 +155,7 @@ bool LoopInvariant::apply(Compiler&, ClosureVersion* cls, Code* code,
         std::unordered_map<Instruction*, BB*> loads;
         BB* targetBB = loop.preheader();
         auto safeToHoist = false;
-        if (targetBB && isSafeToHoistLoads(loop)) {
+        if (targetBB && isSafeToHoistLoads(loop, cls)) {
             safeToHoist = true;
             for (auto bb : loop) {
                 auto ip = bb->begin();
@@ -188,7 +190,7 @@ bool LoopInvariant::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto bb = loadAndBB.second;
                 // The replacement should happen in the case the loop was
                 // previously peeled
-                if (!replaceWithOuterLoopEquivalent(load, dom, targetBB)) {
+                if (!replaceWithOuterLoopEquivalent(load, dom, targetBB, cls)) {
                     anyChange = true;
                     bb->moveToEnd(bb->atPosition(load), targetBB);
                 }

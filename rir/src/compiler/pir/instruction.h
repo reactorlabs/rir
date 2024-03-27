@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "bc/BC_inc.h"
+#include "compiler/pir/closure_version.h"
 #include "compiler/rir2pir/rir2pir.h"
 #include "env.h"
 #include "instruction_list.h"
@@ -350,6 +351,31 @@ class Instruction : public Value {
     }) const {
         return type;
     }
+
+    virtual PirType inferType2(const GetType& at = [](Value* v) {
+        return v->type;
+    }) const {
+        return type;
+    }
+
+    void updateTypeAndEffects2() {
+        auto isRType = type.isRType();
+        assert(!type.isVoid() || !isRType);
+
+        // if (tag == Tag::Force)
+        //     std::cerr << "before inf:" << type;
+        type = inferType2();
+
+        // if (tag == Tag::Force){
+        //     std::cerr << "after inf:" << type;
+        //     std::cerr << "\n";
+        // }
+        // Can happen in unreachable code when we have conflicting speculations
+        if (isRType && type.isVoid())
+            type = PirType::val();
+        effects = inferEffects();
+    }
+
     virtual Effects inferEffects(const GetType& at = [](Value* v) {
         return v->type;
     }) const {
@@ -359,6 +385,7 @@ class Instruction : public Value {
     void updateTypeAndEffects() {
         auto isRType = type.isRType();
         assert(!type.isVoid() || !isRType);
+
         type = inferType();
         // Can happen in unreachable code when we have conflicting speculations
         if (isRType && type.isVoid())
@@ -1339,6 +1366,7 @@ class FLIE(Force, 3, Effects::Any()) {
     void printArgs(std::ostream& out, bool tty) const override;
 
     PirType inferType(const GetType& getType) const override final;
+    PirType inferType2(const GetType& getType) const override final;
 
     Effects inferEffects(const GetType& getType) const override final {
         auto e = getType(input()).maybeLazy() ? effects : Effects();
@@ -2416,7 +2444,8 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
 class BuiltinCallFactory {
   public:
     static Instruction* New(Value* callerEnv, SEXP builtin,
-                            const std::vector<Value*>& args, unsigned srcIdx);
+                            const std::vector<Value*>& args, unsigned srcIdx,
+                            ClosureVersion* cls = nullptr);
 };
 
 class VLIE(MkEnv, Effect::LeaksArg) {
@@ -2628,6 +2657,7 @@ class VLI(Phi, Effects::None()) {
             return mergedInputType(getType);
         return Instruction::inferType(getType);
     }
+
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
     }

@@ -2,6 +2,7 @@
 #include "closure_version.h"
 #include "continuation.h"
 #include "env.h"
+#include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 
 namespace rir {
@@ -80,6 +81,64 @@ ClosureVersion* Closure::declareVersion(const Context& optimizationContext,
     auto v = new ClosureVersion(this, optFunction, root, entry->first);
     entry->second = v;
     return v;
+}
+
+static int reindexedCount = 0;
+
+void Closure::reindexVersions() {
+
+    bool DEBUG = true;
+
+    std::vector<Context> keys;
+    for (auto& v : versions) {
+        auto& ctx = v.first;
+        if (ctx.numMissing() == 0 &&
+            ctx.includes(Assumption::NoExplicitlyMissingArgs)) {
+            keys.push_back(v.first);
+        }
+    }
+
+    for (auto& k : keys) {
+        auto v = versions[k];
+
+        bool notObjInContext = false;
+        for (int i = 0; i <= 5; i++) {
+            notObjInContext |= k.isNotObj(i);
+        }
+
+        if (notObjInContext && !v->notObjUsed) {
+            auto newContext = k;
+            for (int i = 0; i <= 5; i++)
+                newContext.resetNotObj(i);
+
+            if (DEBUG) {
+                std::cerr << "reindexed " << k << " to " << newContext
+                          << "************ \n";
+                std::cerr << "FROM VERSION: \n";
+                std::cerr << v->context() << "\n";
+                v->printStandard(std::cerr, true, false);
+            }
+
+            versions.erase(k);
+
+            v->setContext(newContext);
+
+            for (int i = 0; i <= 5; i++) {
+                v->eraseNonObjectFromLdArg(i);
+            }
+            v->updateTypeAndEffects2();
+
+            versions[newContext] = v;
+            reindexedCount++;
+
+            if (DEBUG) {
+                std::cerr << "TO VERSION: \n";
+                std::cerr << v->context() << "\n";
+                v->printStandard(std::cerr, true, false);
+                std::cerr << "\n reindexed count: " << reindexedCount << "\n";
+            }
+        }
+    }
 }
 
 void Closure::print(std::ostream& out, bool tty) const {

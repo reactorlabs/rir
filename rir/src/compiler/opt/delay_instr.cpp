@@ -11,7 +11,7 @@ bool DelayInstr::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
                        size_t) const {
     bool anyChange = false;
 
-    auto isTarget = [](Instruction* j) {
+    auto isTarget = [cls](Instruction* j) {
         if (LdFun::Cast(j) || DotsList::Cast(j) || MkArg::Cast(j) ||
             FrameState::Cast(j) || CastType::Cast(j))
             return true;

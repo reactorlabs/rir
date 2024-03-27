@@ -27,6 +27,9 @@ class Value {
     Tag tag;
     PirType type;
 
+    bool maybeObj(bool usedForOpt = false, ClosureVersion* version = nullptr,
+                  std::string msg = "") const;
+
     Value(PirType type, Tag tag) : tag(tag), type(type) {}
     virtual void printRef(std::ostream& out) const = 0;
     void printRef() const { printRef(std::cerr); }
