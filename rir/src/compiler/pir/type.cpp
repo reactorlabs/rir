@@ -241,10 +241,6 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
                           unsigned nargs, bool afterForce) {
     PirType type = *this;
     auto i = arg;
-    if (!afterForce &&
-        assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
-        arg < nargs - assumptions.numMissing())
-        type = type & type.notMissing();
 
     // if (assumptions.isEager(i))
     //     type = type & type.notLazy();
@@ -261,11 +257,9 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         //     type = type & type.notMissing().notObject();
         if (assumptions.isSimpleReal(i))
             type = type & PirType::simpleScalarReal()
-                              .orMaybeMissing()
                               .orFullyPromiseWrapped();
         if (assumptions.isSimpleInt(i))
             type = type & PirType::simpleScalarInt()
-                              .orMaybeMissing()
                               .orFullyPromiseWrapped();
     } else {
 
@@ -289,6 +283,11 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         //     //assert(false && "simple int");
         // }
     }
+
+    if (!afterForce &&
+        assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
+        arg < nargs - assumptions.numMissing())
+        type = type.notMissing();
 
     // well, if the intersection of context info and current type is void, we
     // probably made a wrong speculation. it's most probably a bug somewhere,
