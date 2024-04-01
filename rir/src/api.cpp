@@ -609,14 +609,15 @@ REXPORT SEXP playground() {
     ctx.add(Assumption::NoExplicitlyMissingArgs);
     ctx.add(Assumption::CorrectOrderOfArguments);
     ctx.add(Assumption::NotTooManyArguments);
-    ctx.numMissing(0);
+    ctx.numMissing(1);
     ctx.setSimpleInt(0);
     ctx.setEager(0);
     ctx.resetNotObj(0);
+    auto nargs = 2;
 
-    rir::pir::LdArg arg(0);
+    rir::pir::LdArg arg(1);
     std::cerr << "type before: " << arg.type << "\n";
-    arg.type.fromContext(ctx, arg.pos, 1);
+    arg.type.fromContext(ctx, arg.pos, nargs);
     std::cerr << "type after: " << arg.type << "\n";
     assert(false);
 
