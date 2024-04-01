@@ -16,6 +16,7 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "utils/measuring.h"
 
@@ -602,6 +603,22 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 }
 
 REXPORT SEXP playground() {
+
+    Context ctx = pir::Compiler::defaultContext;
+    ctx.add(Assumption::StaticallyArgmatched);
+    ctx.add(Assumption::NoExplicitlyMissingArgs);
+    ctx.add(Assumption::CorrectOrderOfArguments);
+    ctx.add(Assumption::NotTooManyArguments);
+    ctx.numMissing(0);
+    ctx.setSimpleInt(0);
+    ctx.setEager(0);
+    ctx.resetNotObj(0);
+
+    rir::pir::LdArg arg(0);
+    std::cerr << "type before: " << arg.type << "\n";
+    arg.type.fromContext(ctx, arg.pos, 1);
+    std::cerr << "type after: " << arg.type << "\n";
+    assert(false);
 
     return R_NilValue;
 }

@@ -255,12 +255,17 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         type = type & type.notLazy();
         // if (assumptions.isNotObj(i))
         //     type = type & type.notMissing().notObject();
+
+        auto simpleType = [](PirType s) {
+            return s.orPromiseWrapped().orMaybeMissing();
+        };
+
         if (assumptions.isSimpleReal(i))
-            type = type & PirType::simpleScalarReal()
-                              .orFullyPromiseWrapped();
+            type = type & simpleType(PirType::simpleScalarReal());
+
         if (assumptions.isSimpleInt(i))
-            type = type & PirType::simpleScalarInt()
-                              .orFullyPromiseWrapped();
+            type = type & simpleType(PirType::simpleScalarInt());
+
     } else {
 
         // if (assumptions.isNotObj(i))
