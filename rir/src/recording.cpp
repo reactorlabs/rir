@@ -1135,8 +1135,6 @@ void recordExecution( const char* filePath, const char* filterArg ){
         std::string str;
 
         while( std::getline( is, str, ',' ) ){
-            std::cerr << str << "\n";
-
             if (str == "Compile") {
                 filter_.compile = true;
             } else if (str == "Deopt") {
@@ -1307,4 +1305,71 @@ REXPORT SEXP printRecordings(SEXP from) {
     }
 
     return R_NilValue;
+}
+
+REXPORT SEXP printEventPart(SEXP obj, SEXP type) {
+    if (Rf_isNull(obj)) {
+        return Rf_mkString("");
+    }
+
+    if (!Rf_isString(type)) {
+        std::cerr << "type parameter is not a string" << std::endl;
+        return R_NilValue;
+    }
+
+    auto type_str = std::string(CHAR(STRING_ELT(type, 0)));
+
+    std::ostringstream ss;
+
+    if (type_str == "context") { // version or dispatch context
+        auto disp = rir::recording::serialization::context_from_sexp(obj);
+        ss << disp;
+    } else if (type_str == "speculative") {
+        // auto sc =
+        //     rir::recording::serialization::speculative_context_from_sexp(obj);
+        // TODO
+        return Rf_mkString("<CTX>");
+    } else if (type_str == "reason") {
+        auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
+        ev->print(ss);
+    } else if (type_str == "deopt_reason") {
+        auto reason = rir::recording::serialization::deopt_reason_from_sexp(obj);
+
+        switch (reason) {
+        case rir::DeoptReason::Reason::Typecheck:
+            ss << "Typecheck";
+            break;
+
+        case rir::DeoptReason::Reason::DeadCall:
+            ss << "DeadCall";
+            break;
+
+        case rir::DeoptReason::Reason::CallTarget:
+            ss << "CallTarget";
+            break;
+
+        case rir::DeoptReason::Reason::ForceAndCall:
+            ss << "ForceAndCall";
+            break;
+
+        case rir::DeoptReason::Reason::EnvStubMaterialized:
+            ss << "EnvStubMaterialized";
+            break;
+
+        case rir::DeoptReason::Reason::DeadBranchReached:
+            ss << "DeadBranchReached";
+            break;
+
+        case rir::DeoptReason::Reason::Unknown:
+            ss << "Unknown";
+            break;
+        }
+    } else {
+        std::cerr << "type parameter '" << type_str
+                  << "' is not a known type (dispatch,speculative,reason)"
+                  << std::endl;
+        return R_NilValue;
+    }
+
+    return Rf_mkString(ss.str().c_str());
 }

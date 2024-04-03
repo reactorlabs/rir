@@ -262,3 +262,7 @@ recordings.eval <- function(expr, env=parent.frame()) {
 recordings.print <- function(from = NULL) {
     .Call("printRecordings", from)
 }
+
+recordings.printEventPart <- function( obj, type ) {
+    .Call("printEventPart", obj, type)
+}
