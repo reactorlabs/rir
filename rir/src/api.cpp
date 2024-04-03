@@ -602,23 +602,51 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP playground() {
+REXPORT SEXP playground(SEXP what) {
 
+    // Context ctx = pir::Compiler::defaultContext;
+    // ctx.add(Assumption::StaticallyArgmatched);
+    // ctx.add(Assumption::NoExplicitlyMissingArgs);
+    // ctx.add(Assumption::CorrectOrderOfArguments);
+    // ctx.add(Assumption::NotTooManyArguments);
+    // ctx.numMissing(1);
+    // ctx.setSimpleInt(0);
+    // ctx.setEager(0);
+    // ctx.resetNotObj(0);
+    // auto nargs = 2;
+
+    // rir::pir::LdArg arg(1);
+    // std::cerr << "type before: " << arg.type << "\n";
+    // arg.type.fromContext(ctx, arg.pos, nargs);
+    // std::cerr << "type after: " << arg.type << "\n";
+    // assert(false);
+
+    //////////////////////////////////////////////////////////////
+
+    // auto t = rir::pir::PirType::any().notLazy().notMissing().notObject();
+    // std::cerr << t;
+    // std::cerr << "\n";
+    // std::cerr << t.forced();
+    // std::cerr << "\n";
+    ///////////////////////////////////////////////////
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
     Context ctx = pir::Compiler::defaultContext;
     ctx.add(Assumption::StaticallyArgmatched);
     ctx.add(Assumption::NoExplicitlyMissingArgs);
     ctx.add(Assumption::CorrectOrderOfArguments);
     ctx.add(Assumption::NotTooManyArguments);
-    ctx.numMissing(1);
-    ctx.setSimpleInt(0);
-    ctx.setEager(0);
-    ctx.resetNotObj(0);
-    auto nargs = 2;
+    ctx.numMissing(2);
 
-    rir::pir::LdArg arg(1);
-    std::cerr << "type before: " << arg.type << "\n";
-    arg.type.fromContext(ctx, arg.pos, nargs);
-    std::cerr << "type after: " << arg.type << "\n";
+    ctx.setNonRefl(0);
+    ctx.setNonRefl(1);
+
+    ctx.setNotObj(0);
+    ctx.setNotObj(1);
+
+    std::cerr << "Context: " << ctx << "\n";
+    pirCompile(what, ctx, "aaaa", opts);
+
     assert(false);
 
     return R_NilValue;
