@@ -61,13 +61,12 @@ class ClosureVersion : public Code {
     std::string nameSuffix_;
 
   protected:
-    ClosureVersion(Closure* closure, rir::Function* optFunction, bool root,
-                   const Context& optimizationContext,
-                   const Properties& properties = Properties());
-
     friend class Closure;
 
   public:
+    ClosureVersion(Closure* closure, rir::Function* optFunction, bool root,
+                   const Context& optimizationContext,
+                   const Properties& properties = Properties());
     // **************
     void eraseNonObjectFromLdArg(size_t index);
     void updateTypeAndEffects2();

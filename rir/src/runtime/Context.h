@@ -120,6 +120,12 @@ struct Context {
         }
     }
 
+    inline void resetEager(size_t i) {
+        if (i < NUM_TYPED_ARGS) {
+            typeFlags.reset(EagerContext[i]);
+        }
+    }
+
     inline bool isEager(size_t i) const {
 
         if (i < NUM_TYPED_ARGS)

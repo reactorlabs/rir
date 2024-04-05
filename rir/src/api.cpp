@@ -12,18 +12,26 @@
 #include "compiler/log/debug.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/closure.h"
+#include "compiler/pir/closure_version.h"
+#include "compiler/pir/instruction.h"
 #include "compiler/pir/type.h"
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/RelaxContexts.h"
 #include "utils/measuring.h"
 
+#include "compiler/util/bb_transform.h"
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 #include <list>
 #include <memory>
 #include <string>
+
+#include "runtime/RelaxContexts.h"
 
 using namespace rir;
 
@@ -302,10 +310,16 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     pir::Log logger(debug);
     logger.title("Compiling " + name);
     pir::Compiler cmp(m, logger);
+
+    pir::ClosureVersion* originalVersion = nullptr;
+
     auto compile = [&](pir::ClosureVersion* c) {
         logger.flushAll();
         cmp.optimizeModule();
-        c->owner()->reindexVersions();
+        originalVersion = new pir::ClosureVersion(
+            c->owner(), c->optFunction, c->root, c->context(), c->properties);
+        originalVersion->entry =
+            pir::BBTransform::clone(c->entry, originalVersion, originalVersion);
 
         if (dryRun)
             return;
@@ -324,6 +338,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     done = fun;
             };
             m->eachPirClosureVersion([&](pir::ClosureVersion* c) {
+
                 if (c->owner()->hasOriginClosure()) {
                     auto cls = c->owner()->rirClosure();
                     auto body = BODY(cls);
@@ -358,6 +373,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                                std::cerr << "Compilation failed\n";
                        },
                        {});
+
+    RelaxContexts::tryRelaxContext(what, assumptions, name, debug,
+                                   originalVersion);
 
     delete m;
     UNPROTECT(1);
@@ -463,10 +481,14 @@ SEXP rirOptDefaultOpts(SEXP closure, const Context& assumptions, SEXP name) {
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
-    if (isValidClosureSEXP(closure))
-        return pirCompile(closure, assumptions, n,
-                          pir::DebugOptions::DefaultDebugOptions);
-    else
+    if (isValidClosureSEXP(closure)) {
+
+        auto res = pirCompile(closure, assumptions, n,
+                              pir::DebugOptions::DefaultDebugOptions);
+
+        return res;
+
+    } else
         return closure;
 }
 
