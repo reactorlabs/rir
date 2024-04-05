@@ -24,8 +24,10 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
+#include <functional>
 #include <list>
 #include <memory>
+#include <set>
 #include <string>
 
 using namespace rir;
@@ -253,14 +255,13 @@ class RelaxContexts {
             globalStats.similarCount = similarCount;
             globalStats.printStats();
 
-            // std::cerr << "*** STATS PER CLOSURE ******************";
-            // for (auto& st : statsPerClosure) {
-            //     std::cerr << "closure: " << st.first << "\n";
-            //     printStats(st.second.topLevelCompilationsCount,
-            //     st.second.functionToRelaxCount, st.second.similarCount);
-            //     std::cerr << "\n";
-            // }
-            // std::cerr << "*** END - STATS PER CLOSURE ******************";
+            std::cerr << "*** STATS PER CLOSURE " << statsPerClosure.size()
+                      << " ******************";
+            for (auto& st : statsPerClosure) {
+                std::cerr << "closure: " << st.first << "\n";
+                st.second.printStats();
+            }
+            std::cerr << "*** END - STATS PER CLOSURE ******************";
         }
     }
 };
