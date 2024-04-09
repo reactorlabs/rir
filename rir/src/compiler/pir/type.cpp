@@ -241,9 +241,13 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
                           unsigned nargs, bool afterForce) {
     PirType type = *this;
     auto i = arg;
+    if (!afterForce &&
+        assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
+        arg < nargs - assumptions.numMissing())
+        type = type & type.notMissing();
 
-    // if (assumptions.isEager(i))
-    //     type = type & type.notLazy();
+    if (assumptions.isEager(i))
+        type = type & type.notLazy();
 
     if (afterForce)
         type = type & type.forced();
@@ -255,45 +259,15 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         type = type & type.notLazy();
         // if (assumptions.isNotObj(i))
         //     type = type & type.notMissing().notObject();
-
-        auto simpleType = [](PirType s) {
-            return s.orPromiseWrapped().orMaybeMissing();
-        };
-
         if (assumptions.isSimpleReal(i))
-            type = type & simpleType(PirType::simpleScalarReal());
-
+            type = type & PirType::simpleScalarReal()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
         if (assumptions.isSimpleInt(i))
-            type = type & simpleType(PirType::simpleScalarInt());
-
-    } else {
-
-        // if (assumptions.isNotObj(i))
-        //     type = type & type.notMissing().notObject();
-
-        // if (assumptions.isSimpleReal(i))
-        //     type = type & PirType::simpleScalarReal()
-        //                       .orMaybeMissing()
-        //                       .orFullyPromiseWrapped();
-        // auto prevType = type;
-        // if (assumptions.isSimpleInt(i)) {
-        //     type = type & PirType::simpleScalarInt()
-        //                       .orMaybeMissing()
-        //                       .orFullyPromiseWrapped();
-
-        //     std::cerr << "context: " << assumptions << " for index " << i <<
-        //     "\n"; std::cerr << "type before: " << prevType <<  " maybeobj: "
-        //     << prevType.maybeObj() <<  "  ----- type after: " << type << "
-        //     maybeobj: " << type.maybeObj() <<  "\n";
-        //     //assert(false && "simple int");
-        // }
+            type = type & PirType::simpleScalarInt()
+                              .orMaybeMissing()
+                              .orFullyPromiseWrapped();
     }
-
-    if (!afterForce &&
-        assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
-        arg < nargs - assumptions.numMissing())
-        type = type.notMissing();
-
     // well, if the intersection of context info and current type is void, we
     // probably made a wrong speculation. it's most probably a bug somewhere,
     // but I don't want to make it an assert, since it can happen depending on
@@ -301,6 +275,74 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     if (!type.isVoid())
         *this = type;
 }
+
+// void PirType::fromContext(const Context& assumptions, unsigned arg,
+//                           unsigned nargs, bool afterForce) {
+//     PirType type = *this;
+//     auto i = arg;
+
+//     // if (assumptions.isEager(i))
+//     //     type = type & type.notLazy();
+
+//     if (afterForce)
+//         type = type & type.forced();
+
+//     if (assumptions.isNotObj(i))
+//         type = type.notMissing().notObject();
+
+//     if (assumptions.isEager(i) || afterForce) {
+//         type = type & type.notLazy();
+//         // if (assumptions.isNotObj(i))
+//         //     type = type & type.notMissing().notObject();
+
+//         auto simpleType = [](PirType s) {
+//             return s.orPromiseWrapped().orMaybeMissing();
+//         };
+
+//         if (assumptions.isSimpleReal(i))
+//             type = type & simpleType(PirType::simpleScalarReal());
+
+//         if (assumptions.isSimpleInt(i))
+//             type = type & simpleType(PirType::simpleScalarInt());
+
+//     } else {
+
+//         // if (assumptions.isNotObj(i))
+//         //     type = type & type.notMissing().notObject();
+
+//         // if (assumptions.isSimpleReal(i))
+//         //     type = type & PirType::simpleScalarReal()
+//         //                       .orMaybeMissing()
+//         //                       .orFullyPromiseWrapped();
+//         // auto prevType = type;
+//         // if (assumptions.isSimpleInt(i)) {
+//         //     type = type & PirType::simpleScalarInt()
+//         //                       .orMaybeMissing()
+//         //                       .orFullyPromiseWrapped();
+
+//         //     std::cerr << "context: " << assumptions << " for index " << i
+//         <<
+//         //     "\n"; std::cerr << "type before: " << prevType <<  " maybeobj:
+//         "
+//         //     << prevType.maybeObj() <<  "  ----- type after: " << type << "
+//         //     maybeobj: " << type.maybeObj() <<  "\n";
+//         //     //assert(false && "simple int");
+//         // }
+//     }
+
+//     if (!afterForce &&
+//         assumptions.includes(Assumption::NoExplicitlyMissingArgs) &&
+//         arg < nargs - assumptions.numMissing())
+//         type = type.notMissing();
+
+//     // well, if the intersection of context info and current type is void, we
+//     // probably made a wrong speculation. it's most probably a bug somewhere,
+//     // but I don't want to make it an assert, since it can happen depending
+//     on
+//     // the pass order...
+//     if (!type.isVoid())
+//         *this = type;
+// }
 
 } // namespace pir
 } // namespace rir
