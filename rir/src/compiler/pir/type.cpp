@@ -255,8 +255,8 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     // if (assumptions.isNotObj(i))
     //     type = type.notMissing().notObject();
 
-    if (assumptions.isNotObj(i))
-        type = type & type.notObject();
+    // if (assumptions.isNotObj(i))
+    //     type = type & type.notObject();
 
     if (assumptions.isEager(i) || afterForce) {
         type = type & type.notLazy();
