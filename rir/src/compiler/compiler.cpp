@@ -363,8 +363,11 @@ void Compiler::optimizeClosureVersion(ClosureVersion* v) {
 void Compiler::optimizeModule() {
     logger.flushAll();
     size_t passnr = 10;
+
     PassScheduler::instance().run([&](const Pass* translation,
                                       size_t iteration) {
+        auto newIterStarted = translation->isPhaseMarker();
+
         bool changed = false;
         if (translation->isSlow()) {
             if (MEASURE_COMPILER_PERF)
@@ -373,6 +376,22 @@ void Compiler::optimizeModule() {
             if (MEASURE_COMPILER_PERF)
                 Measuring::countTimer("compiler.cpp: module cleanup");
         }
+
+        if (newIterStarted) {
+            module->eachPirClosure([&](Closure* c) {
+                c->eachVersion([&](ClosureVersion* v) {
+                    if (iteration == 0) {
+                        // first iteration of new phase
+                        v->anyChangePreviousIter = true;
+                    } else if (iteration > 0) {
+                        v->anyChangePreviousIter = v->anyChangeCurrentIter;
+                    }
+
+                    v->anyChangeCurrentIter = false;
+                });
+            });
+        }
+
         module->eachPirClosure([&](Closure* c) {
             c->eachVersion([&](ClosureVersion* v) {
                 auto& clog = logger.get(v);
@@ -383,8 +402,16 @@ void Compiler::optimizeModule() {
                     Measuring::startTimer("compiler.cpp: " +
                                           translation->getName());
 
-                if (translation->apply(*this, v, clog, iteration))
-                    changed = true;
+                if (v->anyChangePreviousIter) {
+
+                    auto resApply =
+                        translation->apply(*this, v, clog, iteration);
+
+                    v->anyChangeCurrentIter |= resApply;
+                    changed |= resApply;
+
+                }
+
                 if (MEASURE_COMPILER_PERF)
                     Measuring::countTimer("compiler.cpp: " +
                                           translation->getName());

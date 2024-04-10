@@ -899,11 +899,11 @@ Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
     bool unsafe = false;
     for (auto a : args) {
         if (auto mk = MkArg::Cast(a)) {
-            if (mk->isEager())
+            if (mk->isEager()) {
                 if (!mk->eagerArg()->type.maybeObj())
                     continue;
-            noObj = false;
-            continue;
+                noObj = false;
+            }
         }
         if (a->type.maybeObj()) {
             noObj = false;

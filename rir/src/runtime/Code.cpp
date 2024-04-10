@@ -14,6 +14,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include "utils/measuring.h"
+
 namespace rir {
 
 // cppcheck-suppress uninitMemberVar; symbol=data
@@ -355,11 +357,20 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
 
 llvm::ExitOnError ExitOnErr;
 
+bool MEASURE_COMPILER_BACKEND_PERF =
+    getenv("PIR_MEASURE_COMPILER_BACKEND") ? true : false;
+
 NativeCode Code::lazyCompile() {
     assert(kind == Kind::Native);
     assert(*lazyCodeHandle_ != '\0');
+
+    if (MEASURE_COMPILER_BACKEND_PERF)
+        Measuring::startTimer("Code.cpp: llvmcompilation");
     auto symbol = ExitOnErr(pir::PirJitLLVM::JIT->lookup(lazyCodeHandle_));
     nativeCode_ = (NativeCode)symbol.getAddress();
+
+    if (MEASURE_COMPILER_BACKEND_PERF)
+        Measuring::countTimer("Code.cpp: llvmcompilation");
     return nativeCode_;
 }
 

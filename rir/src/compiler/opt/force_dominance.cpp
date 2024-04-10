@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <bits/stdc++.h>
+
 namespace rir {
 namespace pir {
 
@@ -39,8 +41,10 @@ namespace pir {
  *
  */
 
-bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
-                           AbstractLog& log, size_t) const {
+bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
+                           AbstractLog& log, size_t iteration) const {
+
+
     bool anyChange = false;
 
     // Do this first so dead code elimination will remove the dependencies
@@ -55,8 +59,10 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (mk->isEager() && mk->prom()->trivial()) {
                         auto eager = mk->eagerArg();
                         if (eager != MissingArg::instance()) {
-                            c->replaceUsesWith(eager);
-                            anyChange = true;
+                            c->replaceUsesWith(eager,
+                                               [&](Instruction*, size_t) {
+                                                   anyChange = true;
+                                               });
                         }
                     }
                 }
@@ -69,13 +75,14 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     i->replaceUsesWith(
                         eager,
                         [&](Instruction* j, size_t a) {
-                            if (j->arg(a).type().isA(RType::prom))
+                            if (j->arg(a).type().isA(RType::prom)) {
                                 j->arg(a).type() = eager->type;
+                                anyChange = true;
+                            }
                         },
                         [&](Instruction* j) {
                             return j->tag != Tag::CastType;
                         });
-                    anyChange = true;
                 }
             }
         }
@@ -100,26 +107,51 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
         Visitor::run(code->entry, [&](BB* bb) {
             if (!bb->isExit())
                 return;
+
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
                 auto i = *it;
                 int argnum = 0;
+
                 i->eachArg([&](InstrArg& arg) {
                     if (auto mk = MkArg::Cast(arg.val())) {
+
                         auto a = analysis.resultIgnoringUnreachableExits(
-                            i, analysis.cfg);
+                            i, analysis.cfg); // TODO move up?
+
                         if (a.isUnused(mk)) {
-                            auto repl = mk->clone();
+
+                            auto withNewPromDo =
+                                [&](std::function<void(Instruction*)> action) {
+                                    auto repl = mk->clone();
+                                    action(repl);
+                                    arg.val() = repl;
+                                    anyChange = true;
+                                };
+
                             if (auto phi = Phi::Cast(i)) {
+
                                 auto inp = phi->inputAt(argnum);
                                 assert(inp != bb);
-                                inp->append(repl);
-                            } else {
-                                it = bb->insert(it, repl);
-                                it++;
+
+                                if (inp != mk->bb()) {
+                                    assert(false && "ForceDominance. Do we "
+                                                    "ever hit this case?");
+
+                                    withNewPromDo([&](Instruction* repl) {
+                                        inp->append(repl);
+                                    });
+                                }
+
+                            } else if (mk->bb() != bb) {
+
+                                withNewPromDo([&](Instruction* repl) {
+                                    it = bb->insert(it, repl);
+                                    it++;
+                                });
                             }
-                            arg.val() = repl;
+
                             next = it + 1;
                         }
                     }
@@ -167,8 +199,10 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (auto mkarg = MkArg::Cast(u->arg(0).val())) {
                         auto a = analysis.resultIgnoringUnreachableExits(
                             mkarg, analysis.cfg);
-                        if (!a.escaped.count(mkarg))
+                        if (!a.escaped.count(mkarg)) {
                             next = bb->remove(ip);
+                            anyChange = true;
+                        }
                     }
                 }
                 ip = next;
@@ -363,7 +397,6 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (cast->kind == CastType::Upcast) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
                         if (mk->isEager()) {
-                            anyChange = true;
                             auto eager = mk->eagerArg();
                             auto allowedToReplace = [&](Instruction* i) {
                                 if (Force::Cast(i) || LdFun::Cast(i))
@@ -396,7 +429,8 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 return true;
                             };
                             cast->replaceUsesIn(
-                                eager, bb, [](Instruction*, size_t) {},
+                                eager, bb,
+                                [&](Instruction*, size_t) { anyChange = true; },
                                 allowedToReplace);
                         }
                     }
@@ -419,6 +453,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto domF = dominatingForceForForcee.find(f);
                 if (domF != dominatingForceForForcee.end() &&
                     dom.dominates(domF->second, f)) {
+                    anyChange = true;
                     assert(f != domF->second);
                     if (auto otherForce = Force::Cast(domF->second)) {
                         if (inlinedPromise.count(otherForce)) {
@@ -441,6 +476,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
     // 3. replace remaining uses of the mkarg itself
     if (!forcedMkArg.empty()) {
         for (auto m : forcedMkArg) {
+            anyChange = true;
             m.first->replaceDominatedUses(m.second.first, dom);
         }
         Visitor::run(code->entry, [&](Instruction* i) {
@@ -448,6 +484,7 @@ bool ForceDominance::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (auto m = MkArg::Cast(c->arg(0).val())) {
                     auto r = forcedMkArg.find(m);
                     if (r != forcedMkArg.end()) {
+                        anyChange = true;
                         auto repl = r->second.second;
                         repl->type = repl->type & c->type;
                         c->replaceDominatedUses(repl, dom);
