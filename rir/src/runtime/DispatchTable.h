@@ -26,7 +26,7 @@ struct DispatchTable
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
-        assert(i < size());
+        assert(i < capacity());
         auto f = Function::unpack(getEntry(i));
         assert(f->dispatchTable() == this);
         return f;
@@ -229,14 +229,16 @@ struct DispatchTable
     DispatchTable* newWithUserContext(Context udc) {
 
         auto clone = create(this->capacity());
-        clone->setEntry(0, this->getEntry(0));
-        clone->get(0)->dispatchTable(clone);
+        auto baseline = this->get(0);
+        clone->setEntry(0, getEntry(0));
+        baseline->dispatchTable(clone);
 
         auto j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
+                auto v = get(i);
                 clone->setEntry(j, getEntry(i));
-                clone->get(j)->dispatchTable(clone);
+                v->dispatchTable(clone);
                 j++;
             }
         }
