@@ -73,7 +73,7 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
     if (wu == 0)
         return true;
 
-    if (fun->invocationCount() == wu)
+    if (fun->invocationCount() % wu == 0)
         return true;
 
     if (fun->invocationCount() > wu) {
