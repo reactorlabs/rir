@@ -44,6 +44,8 @@ using namespace llvm;
 extern "C" size_t R_NSize;
 extern "C" size_t R_NodesInUse;
 
+extern SEXP deoptSentinelContainer;
+
 static_assert(sizeof(unsigned long) == sizeof(uint64_t),
               "sizeof(unsigned long) and sizeof(uint64_t) should match");
 
@@ -3402,7 +3404,7 @@ void LowerFunctionLLVM::compile() {
                 auto calli = StaticCall::Cast(i);
                 calli->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
                 auto target = calli->tryDispatch();
-                auto bestTarget = calli->tryOptimisticDispatch();
+                // auto bestTarget = calli->tryOptimisticDispatch();
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
@@ -3424,7 +3426,9 @@ void LowerFunctionLLVM::compile() {
                     break;
                 }
 
-                if (target == bestTarget) {
+                // TODO: if there is no target use the deoptsentinel
+                // if (target == bestTarget) {
+                if (true) {
                     auto callee = target->owner()->rirClosure();
                     auto dt = DispatchTable::check(BODY(callee));
                     rir::Function* nativeTarget = nullptr;
@@ -3435,19 +3439,25 @@ void LowerFunctionLLVM::compile() {
                             nativeTarget = entry;
                         }
                     }
+                    SEXP container = deoptSentinelContainer;
                     if (nativeTarget) {
-                        assert(
-                            asmpt.includes(Assumption::StaticallyArgmatched));
-                        auto idx = Pool::makeSpace();
-                        NativeBuiltins::targetCaches.push_back(idx);
-                        Pool::patch(idx, nativeTarget->container());
-                        auto missAsmptStore =
-                            Rf_allocVector(RAWSXP, sizeof(Context));
-                        auto missAsmptIdx = Pool::insert(missAsmptStore);
-                        new (DATAPTR(missAsmptStore))
-                            Context(nativeTarget->context() - asmpt);
+                        container = nativeTarget->container();
+                    }
+
+                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                    auto idx = Pool::makeSpace();
+                    NativeBuiltins::targetCaches.push_back(idx);
+                    Pool::patch(idx, container);
+                    auto missAsmptStore =
+                        Rf_allocVector(RAWSXP, sizeof(Context));
+                    auto missAsmptIdx = Pool::insert(missAsmptStore);
+                    new (DATAPTR(missAsmptStore))
+                        Context(pir::Compiler::minimalContext);
+                    if (nativeTarget) {
                         assert(asmpt.smaller(nativeTarget->context()));
-                        auto res = withCallFrame(args, [&]() {
+                    }
+                    auto res =
+                        withCallFrame(args, [&]() {
                             return call(
                                 NativeBuiltins::get(
                                     NativeBuiltins::Id::nativeCallTrampoline),
@@ -3463,27 +3473,27 @@ void LowerFunctionLLVM::compile() {
                                     c(missAsmptIdx),
                                 });
                         });
-                        setVal(i, res);
-                        break;
-                    }
+                    setVal(i, res);
+                    break;
                 }
 
-                assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                           return call(
-                               NativeBuiltins::get(NativeBuiltins::Id::call),
-                               {
-                                   c(callId),
-                                   paramCode(),
-                                   c(calli->srcIdx),
-                                   builder.CreateIntToPtr(
-                                       c(calli->cls()->rirClosure()), t::SEXP),
-                                   loadSxp(calli->env()),
-                                   c(calli->nCallArgs()),
-                                   c(asmpt.toI()),
-                               });
-                       }));
-                break;
+                // assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                // setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
+                //            return call(
+                //                NativeBuiltins::get(NativeBuiltins::Id::call),
+                //                {
+                //                    c(callId),
+                //                    paramCode(),
+                //                    c(calli->srcIdx),
+                //                    builder.CreateIntToPtr(
+                //                        c(calli->cls()->rirClosure()),
+                //                        t::SEXP),
+                //                    loadSxp(calli->env()),
+                //                    c(calli->nCallArgs()),
+                //                    c(asmpt.toI()),
+                //                });
+                //        }));
+                // break;
             }
 
             case Tag::Inc: {

@@ -816,7 +816,7 @@ static FunctionSignature
     deoptSentinelSig(FunctionSignature::Environment::CallerProvided,
                      FunctionSignature::OptimizationLevel::Optimized);
 static Function* deoptSentinel;
-static SEXP deoptSentinelContainer = []() {
+SEXP deoptSentinelContainer = []() {
     auto c = rir::Code::NewNative(0);
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
