@@ -839,19 +839,10 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
             version = fi->context();
             found = true;
             break;
-        } else if (fi->overridenBy && fi->overridenBy->body() == c) {
-            std::cerr << "found in override" << std::endl;
-            assert(fi->context() == fi->overridenBy->context());
-            version = fi->context();
-            found = true;
-            break;
         }
     }
 
     if (!found) {
-        if (!c->function()->overridenBy) {
-            std::cerr << "not found" << std::endl;
-        }
         version = c->function()->context();
     }
 
@@ -883,11 +874,6 @@ void recordInvocation(Function* f, ssize_t deltaCount,
     Context version = f->context();
     auto* dt = f->dispatchTable();
     if (!dt) {
-        if (f->overridenBy) {
-            std::cerr << "[rec invocation] function was overriden" << std::endl;
-        } else {
-            std::cerr << "[rec invocation] function not found" << std::endl;
-        }
         return;
     }
 

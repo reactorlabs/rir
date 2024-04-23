@@ -95,20 +95,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    size_t invocationCount() {
-        assert(!overridenBy);
-        return invocationCount_;
-    }
-
-    size_t deoptCount() {
-        assert(!overridenBy);
-        return deoptCount_;
-    }
+    size_t invocationCount() { return invocationCount_; }
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
         recording::recordInvocation(this, 0, n);
     }
+    size_t deoptCount() { return deoptCount_; }
 
     static inline unsigned long rdtsc() {
         unsigned low, high;
@@ -223,24 +216,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return deadCallReached_;
     }
 
-    void init(unsigned invocationCount, unsigned deoptCount) {
-        invocationCount_ = invocationCount;
-        deoptCount_ = deoptCount;
-    }
-
-    Function* overridenBy = nullptr;
-    void dispatchTable(DispatchTable* dt) {
-        dispatchTable_ = dt;
-
-        // When attaching a dispatch table, we catch up on missed
-        // recordInvocation calls. recordInvocation requires a known DT, so when
-        // a function isn't attached yet, recordInvocation is basically no-op.
-        if (dt)
-            for (size_t i = 0; i < invocationCount_; i++) {
-                std::cerr << "catching up for " << this << std::endl;
-                recording::recordInvocation(this, 1, 0);
-            }
-    }
+    void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
 
   private:

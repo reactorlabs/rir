@@ -10,8 +10,6 @@
 
 namespace rir {
 
-struct DispatchTable;
-
 #define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
 
 typedef SEXP DispatchTableEntry;
@@ -28,10 +26,8 @@ struct DispatchTable
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
-        assert(i < size());
-        auto f = Function::unpack(getEntry(i));
-        assert(f->dispatchTable() == this);
-        return f;
+        assert(i < capacity());
+        return Function::unpack(getEntry(i));
     }
 
     Function* best() const {
@@ -43,7 +39,6 @@ struct DispatchTable
         auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==
                FunctionSignature::Environment::CallerProvided);
-        assert(f->dispatchTable() == this);
         return f;
     }
 
@@ -110,7 +105,6 @@ struct DispatchTable
     }
 
     void remove(Code* funCode) {
-        std::cerr << "removing function " << funCode->function() << std::endl;
         size_t i = 1;
         for (; i < size(); ++i) {
             auto fun = get(i);
@@ -124,7 +118,6 @@ struct DispatchTable
         for (; i < size() - 1; ++i) {
             setEntry(i, getEntry(i + 1));
         }
-        get(i)->dispatchTable(nullptr);
         setEntry(i, nullptr);
         size_--;
     }
@@ -168,7 +161,6 @@ struct DispatchTable
 #endif
             // Evict one element and retry
             auto pos = 1 + (Random::singleton()() % (size() - 1));
-            get(pos)->dispatchTable(nullptr);
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));
@@ -181,7 +173,6 @@ struct DispatchTable
             setEntry(j, getEntry(j - 1));
         size_++;
         setEntry(i, fun->container());
-        fun->dispatchTable(this);
 
 #ifdef DEBUG_DISPATCH
         std::cout << "Added version to DT, new order is: \n";
@@ -215,8 +206,8 @@ struct DispatchTable
         table->size_ = InInteger(inp);
         for (size_t i = 0; i < table->size(); i++) {
             auto fun = Function::deserialize(refTable, inp);
-            table->setEntry(i, fun->container());
             fun->dispatchTable(table);
+            table->setEntry(i, fun->container());
         }
         UNPROTECT(1);
         return table;
@@ -233,13 +224,11 @@ struct DispatchTable
 
         auto clone = create(this->capacity());
         clone->setEntry(0, this->getEntry(0));
-        clone->get(0)->dispatchTable(clone);
 
         auto j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 clone->setEntry(j, getEntry(i));
-                clone->get(j)->dispatchTable(clone);
                 j++;
             }
         }

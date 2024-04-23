@@ -182,3 +182,6 @@ if(APPLE)
     # https://www.gnu.org/software/gettext/FAQ.html#integrating_undefined
     target_link_libraries(${PROJECT_NAME} -lintl)
 endif(APPLE)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS on)
+

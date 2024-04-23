@@ -14,12 +14,6 @@ namespace rir {
 
 bool ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
-    if (!Rf_isFunction(callee)) {
-        // std::cerr << "Warning: skipping recording non-callee " << callee
-        //           << " of type " << Rf_type2char(TYPEOF(callee)) << std::endl;
-        return false;
-    }
-
     if (taken < CounterOverflow)
         taken++;
 
@@ -102,7 +96,6 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        // TODO
         rir::recording::prepareRecordSC(origin.function()->body());
         auto feedback = origin.function()->typeFeedback();
         feedback->record_callee(origin.idx(), origin.function(), val, true);
