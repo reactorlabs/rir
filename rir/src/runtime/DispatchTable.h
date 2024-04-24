@@ -26,6 +26,8 @@ struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
     static constexpr unsigned MaxFeedbacks = 64;
+    typedef GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>
+        TypeFeedbackDispatchTable;
 
     size_t size() const { return size_; }
 
@@ -106,18 +108,22 @@ struct DispatchTable
     TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
-        TypeFeedback * tf = entry.second;
+        TypeFeedback* tf = entry.second;
         if (entry.first != ctx || !tf) {
-            assert(baselineFeedback_);
-            if (feedbacks -> full())      // TODO: try different approaches
-                return baselineFeedback_; // table is full, default to baseline feedback
-            tf = baselineFeedback_->emptyCopy();
+            assert(baselineFeedback());
+            // Use baseline feedback when type feedback table is full
+            // TODO: try different approaches
+            if (feedbacks->full())
+                return baselineFeedback();
+            tf = baselineFeedback()->emptyCopy();
+            PROTECT(tf->container());
             feedbacks->insert(ctx, tf);
+            UNPROTECT(1);
         }
         return tf;
     }
 
-    void insertTypeFeedback(const Context & ctx, TypeFeedback * tf) {
+    void insertTypeFeedback(const Context& ctx, TypeFeedback* tf) {
         auto feedbacks = typeFeedbacks();
         assert(!feedbacks->full());
         feedbacks->insert(ctx, tf);
@@ -132,7 +138,6 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
-        baselineFeedback_ = f->typeFeedback();
         insertTypeFeedback(f->context(), f->typeFeedback());
         f->dispatchTable(this);
     }
@@ -160,6 +165,10 @@ struct DispatchTable
         }
         setEntry(i, nullptr);
         size_--;
+    }
+
+    TypeFeedback* baselineFeedback() const {
+        return baseline()->typeFeedback();
     }
 
     // insert function ordered by increasing number of assumptions
@@ -240,10 +249,6 @@ struct DispatchTable
     }
 
     size_t capacity() const { return info.gc_area_length - 1; }
-
-    size_t typeFeedbackCapacity() const {
-        return typeFeedbacks()->capacity();
-    }
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
         DispatchTable* table = create();
@@ -326,37 +331,32 @@ struct DispatchTable
         }
     }
 
-    size_t currentTypeFeedbackVersion() {
-        // TODO: Modify/delete method
-        return baseline()->typeFeedback()->version();
-    }
-
-    GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks> * typeFeedbacks () {
-        return GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::unpack(getEntry(info.gc_area_length - 1));
-    }
-
-
-    const GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks> * typeFeedbacks () const {
-        return GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::unpack(getEntry(info.gc_area_length - 1));
-    }
-
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t capacity)
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
-              sizeof(DispatchTable),
-              // GC area is just the pointers in the entry array and pointer to feedback dispatch table
-              capacity + 1)
-    {
+              // GC area is the pointers in the entry array
+              // and pointer to TypeFeedback dispatch table
+              sizeof(DispatchTable), capacity + 1),
+          typeFeedbackPos_(info.gc_area_length - 1) {
         // create type feedback dispatch table
         // TODO: Different feedback table sizes
-        setEntry(info.gc_area_length - 1, GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>::create()->container());
+        setEntry(typeFeedbackPos_,
+                 TypeFeedbackDispatchTable::create()->container());
+    }
+
+    TypeFeedbackDispatchTable* typeFeedbacks() {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
+    const TypeFeedbackDispatchTable* typeFeedbacks() const {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
     }
 
     size_t size_ = 0;
     Context userDefinedContext_;
-    TypeFeedback * baselineFeedback_ = nullptr;
+    size_t typeFeedbackPos_;
 };
 
 #pragma pack(pop)
