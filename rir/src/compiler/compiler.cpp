@@ -59,7 +59,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
                    success, fail, outerFeedback,
-                   tbl->getOrCreateTypeFeedback(assumptions));
+                   tbl->getTypeFeedback(assumptions));
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -75,7 +75,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback, src->getOrCreateTypeFeedback(assumptions));
+                   fail, outerFeedback, src->getTypeFeedback(assumptions));
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
@@ -94,9 +94,9 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    // TODO: Check validity of statement when callContext == nullptr
-    auto typeFeedback = callContext ? tbl->getOrCreateTypeFeedback(callContext->givenContext)
-                                      : curFun->typeFeedback();
+    auto typeFeedback = callContext
+                            ? tbl->getTypeFeedback(callContext->givenContext)
+                            : curFun->typeFeedback();
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {

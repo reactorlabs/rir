@@ -94,7 +94,16 @@ struct DispatchTable
         return b;
     }
 
-    TypeFeedback * getOrCreateTypeFeedback(const Context & ctx) {
+    TypeFeedback* getTypeFeedback(const Context& ctx) {
+        auto entry = typeFeedbacks()->dispatch(ctx);
+        TypeFeedback* tf = entry.second;
+        if (entry.first != ctx || !tf || tf->version() < 1) {
+            return baselineFeedback();
+        }
+        return tf;
+    }
+
+    TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback * tf = entry.second;
