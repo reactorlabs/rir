@@ -6132,31 +6132,23 @@ void LowerFunctionLLVM::compile() {
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
-                llvm::CallInst * tf = nullptr;
                 if (i->hasTypeFeedback()) {
                     auto& origin = i->typeFeedback().feedbackOrigin;
                     if (origin.hasSlot()) {
-                        tf = call(NativeBuiltins::get(NativeBuiltins::Id::typeFeedback),
-                                  {convertToPointer(origin.function(), t::i8, true), paramContext()});
                         call(
                             NativeBuiltins::get(
                                 NativeBuiltins::Id::recordTypeFeedback),
-                            {tf, c(origin.index().idx, 32), load(i)});
+                            {convertToPointer(origin.function(), t::i8, true), paramContext(),
+                             c(origin.index().idx, 32), load(i)});
                     }
                 }
                 if (i->hasCallFeedback()) {
                     auto& origin = i->callFeedback().feedbackOrigin;
                     assert(origin.hasSlot());
-                    if (!tf) {
-                        tf = call(
-                            NativeBuiltins::get(
-                                NativeBuiltins::Id::typeFeedback),
-                            {convertToPointer(origin.function(), t::i8, true),
-                             paramContext()});
-                    }
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
-                         {tf, c(origin.index().idx, 32), load(i)});
+                         {convertToPointer(origin.function(), t::i8, true), paramContext(),
+                          c(origin.index().idx, 32), load(i)});
                 }
             }
 

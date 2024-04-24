@@ -955,15 +955,13 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
     assert(false);
 }
 
-rir::TypeFeedback* typeFeedbackImpl(rir::Function* fun, const CallContext * ctx) {
-    return ctx ? fun->typeFeedback(ctx -> givenContext) : fun->typeFeedback();
-}
-
-void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
-                            SEXP value) {
+void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
+                            uint32_t idx, SEXP value) {
+    auto feedback = callContext ? fun->typeFeedback(callContext->givenContext)
+                                : fun->typeFeedback();
     feedback->record_type(idx, value);
     // FIXME: cf. 1260
-    feedback->record_type(idx, [&](auto& slot) {
+    auto recordPromise = [&](auto& slot) {
         if (TYPEOF(value) == PROMSXP) {
             if (PRVALUE(value) == R_UnboundValue &&
                 slot.stateBeforeLastForce < ObservedValues::promise) {
@@ -976,13 +974,15 @@ void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
             if (slot.stateBeforeLastForce < ObservedValues::value)
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
-    });
+    };
+    feedback->record_type(idx, recordPromise);
 }
 
-void recordCallFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
-                            SEXP value) {
-    // TODO: check validity of feedback->owner() when using contextual type feedbacks
-    feedback->record_callee(idx, feedback->owner(), value);
+void recordCallFeedbackImpl(rir::Function* fun, const CallContext * callContext,
+                            uint32_t idx, SEXP value) {
+    auto feedback = callContext ? fun->typeFeedback(callContext->givenContext)
+                                : fun->typeFeedback();
+    feedback->record_callee(idx, fun, value);
 }
 
 void assertFailImpl(const char* msg) {
@@ -2419,21 +2419,16 @@ void NativeBuiltins::initializeBuiltins() {
                         (void*)&lengthImpl,
                         llvm::FunctionType::get(t::Int, {t::SEXP}, false),
                         {}};
-    get_(Id::typeFeedback) = {
-        "typeFeedback",
-        (void*)&typeFeedbackImpl,
-        llvm::FunctionType::get(t::voidPtr, {t::voidPtr, t::voidPtr}, false),
-        {}};
     get_(Id::recordTypeFeedback) = {
         "recordTypeFeedback",
         (void*)&recordTypeFeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
+        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::voidPtr, t::i32, t::SEXP},
                                 false),
         {}};
     get_(Id::recordCallFeedback) = {
         "recordCallFeedback",
         (void*)&recordCallFeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
+        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::voidPtr, t::i32, t::SEXP},
                                 false),
         {}};
     get_(Id::deopt) = {"deopt",
