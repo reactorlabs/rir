@@ -958,7 +958,8 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
 void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(callContext);
-    feedback->record_type(idx, value);
+    auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    feedback->record_typeInc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
         if (TYPEOF(value) == PROMSXP) {
@@ -974,14 +975,15 @@ void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
     };
-    feedback->record_type(idx, recordPromise);
+    feedback->record_typeInc(baselineFeedback, idx, recordPromise);
 }
 
 void recordCallFeedbackImpl(rir::Function* fun, const CallContext * callContext,
                             uint32_t idx, SEXP value) {
 
     auto feedback = fun->typeFeedback(callContext);
-    feedback->record_callee(idx, fun, value);
+    auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    feedback->record_calleeInc(baselineFeedback, idx, fun, value);
 }
 
 void assertFailImpl(const char* msg) {

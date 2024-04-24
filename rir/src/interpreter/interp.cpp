@@ -2009,15 +2009,18 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
         auto typeFeedback = c->function()->typeFeedback(callCtxt);
-        typeFeedback->record_type(idx, [&](auto& feedback) {
+        auto baselineFeedback = c->function()->baseline()->typeFeedback();
+        auto recordTypeFunc = [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
                 feedback.stateBeforeLastForce = state;
             }
-        });
+        };
+        typeFeedback->record_typeInc(baselineFeedback, idx, recordTypeFunc);
     };
 
     auto function = c->function();
     auto typeFeedback = function->typeFeedback(callCtxt);
+    auto baselineFeedback = function->baseline()->typeFeedback();
 
     // main loop
     BEGIN_MACHINE {
@@ -2327,7 +2330,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
-            typeFeedback->record_callee(idx, function, callee);
+            typeFeedback->record_calleeInc(baselineFeedback, idx, function,
+                                           callee);
             NEXT();
         }
 
@@ -2335,7 +2339,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->record_test(idx, t);
+            typeFeedback->record_testInc(baselineFeedback, idx, t);
             NEXT();
         }
 
@@ -2343,7 +2347,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->record_type(idx, t);
+            typeFeedback->record_typeInc(baselineFeedback, idx, t);
             NEXT();
         }
 

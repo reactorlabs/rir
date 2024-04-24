@@ -57,6 +57,9 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
 
 void DeoptReason::record(SEXP val, const CallContext* callContext) const {
     origin.function()->registerDeoptReason(reason);
+    assert(origin.function()->dispatchTable());
+    auto baselineFeedback =
+        origin.function()->dispatchTable()->baselineFeedback();
 
     switch (reason) {
     case DeoptReason::Unknown:
@@ -65,6 +68,8 @@ void DeoptReason::record(SEXP val, const CallContext* callContext) const {
         auto& feedback =
             origin.function()->typeFeedback(callContext)->test(origin.idx());
         feedback.seen = ObservedTest::Both;
+        auto& bf = baselineFeedback->test(origin.idx());
+        bf.seen = ObservedTest::Both;
         break;
     }
     case DeoptReason::Typecheck: {
@@ -76,18 +81,19 @@ void DeoptReason::record(SEXP val, const CallContext* callContext) const {
         // IMHO the one there is more correct. Would it make sense
         // to pull this into the TypeFeedback::record_type()?
         // and get rid of the overload that takes lambda?
-        feedback->record_type(origin.idx(), val);
-        feedback->record_type(origin.idx(), [&](auto& slot) {
-            if (TYPEOF(val) == PROMSXP) {
-                if (PRVALUE(val) == R_UnboundValue &&
-                    slot.stateBeforeLastForce < ObservedValues::promise)
-                    slot.stateBeforeLastForce = ObservedValues::promise;
-                else if (slot.stateBeforeLastForce <
-                         ObservedValues::evaluatedPromise)
-                    slot.stateBeforeLastForce =
-                        ObservedValues::evaluatedPromise;
-            }
-        });
+        feedback->record_typeInc(baselineFeedback, origin.idx(), val);
+        feedback->record_typeInc(
+            baselineFeedback, origin.idx(), [&](auto& slot) {
+                if (TYPEOF(val) == PROMSXP) {
+                    if (PRVALUE(val) == R_UnboundValue &&
+                        slot.stateBeforeLastForce < ObservedValues::promise)
+                        slot.stateBeforeLastForce = ObservedValues::promise;
+                    else if (slot.stateBeforeLastForce <
+                             ObservedValues::evaluatedPromise)
+                        slot.stateBeforeLastForce =
+                            ObservedValues::evaluatedPromise;
+                }
+            });
         break;
     }
     case DeoptReason::DeadCall:
@@ -96,7 +102,8 @@ void DeoptReason::record(SEXP val, const CallContext* callContext) const {
         if (val == symbol::UnknownDeoptTrigger)
             break;
         auto feedback = origin.function()->typeFeedback(callContext);
-        feedback->record_callee(origin.idx(), origin.function(), val, true);
+        feedback->record_calleeInc(baselineFeedback, origin.idx(),
+                                   origin.function(), val, true);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
@@ -304,6 +311,48 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
 
     if (types_size_) {
         memcpy(types_, types.data(), types_mem_size);
+    }
+}
+
+void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
+                                    Function* function, SEXP callee,
+                                    bool invalidateWhenFull) {
+    if (callees(idx).record(function, callee, invalidateWhenFull)) {
+        version_++;
+        if (inclusive && inclusive != this)
+            inclusive->record_callee(idx, function, callee, invalidateWhenFull);
+    }
+}
+
+void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,
+                                  const SEXP e) {
+    if (test(idx).record(e)) {
+        version_++;
+        if (inclusive && inclusive != this)
+            inclusive->record_test(idx, e);
+    }
+}
+
+void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                                  const SEXP e) {
+    if (types(idx).record(e)) {
+        version_++;
+        if (inclusive && inclusive != this)
+            inclusive->record_type(idx, e);
+    }
+}
+
+void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                                  std::function<void(ObservedValues&)> f) {
+    ObservedValues& slot = types(idx);
+    uint32_t o, n;
+    memcpy(&o, &slot, sizeof(ObservedValues));
+    f(slot);
+    memcpy(&n, &slot, sizeof(ObservedValues));
+    if (memcmp(&o, &n, sizeof(ObservedValues))) {
+        version_++;
+        if (inclusive && inclusive != this)
+            inclusive->record_type(idx, f);
     }
 }
 

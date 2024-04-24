@@ -385,6 +385,17 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         }
     }
 
+    void record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
+                          Function* function, SEXP callee,
+                          bool invalidateWhenFull = false);
+
+    void record_testInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+
+    void record_typeInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+
+    void record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                        std::function<void(ObservedValues&)> f);
+
     void print(std::ostream& out) const;
 
     void serialize(SEXP refTable, R_outpstream_t out) const;
