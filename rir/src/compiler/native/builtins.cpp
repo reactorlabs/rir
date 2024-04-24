@@ -957,8 +957,7 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
 
 void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
                             uint32_t idx, SEXP value) {
-    auto feedback = callContext ? fun->typeFeedback(callContext->givenContext)
-                                : fun->typeFeedback();
+    auto feedback = fun->typeFeedback(callContext);
     feedback->record_type(idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
@@ -980,8 +979,8 @@ void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
 
 void recordCallFeedbackImpl(rir::Function* fun, const CallContext * callContext,
                             uint32_t idx, SEXP value) {
-    auto feedback = callContext ? fun->typeFeedback(callContext->givenContext)
-                                : fun->typeFeedback();
+
+    auto feedback = fun->typeFeedback(callContext);
     feedback->record_callee(idx, fun, value);
 }
 

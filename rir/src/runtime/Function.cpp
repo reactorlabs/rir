@@ -2,6 +2,7 @@
 #include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
+#include "interpreter/call_context.h"
 #include "runtime/TypeFeedback.h"
 
 #include "DispatchTable.h"
@@ -102,10 +103,22 @@ void Function::clearDisabledAssumptions(Context& given) const {
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
 }
 
+TypeFeedback* Function::typeFeedback() const {
+    auto tf = TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+    assert(tf);
+    return tf;
+}
+
 TypeFeedback* Function::typeFeedback(const Context & ctx) {
     if (ctx != context())
         return dispatchTable()->getOrCreateTypeFeedback(ctx);
     return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+}
+
+TypeFeedback* Function::typeFeedback(const CallContext * callContext) {
+    if (!callContext)
+        return typeFeedback();
+    return typeFeedback(callContext->givenContext);
 }
 
 } // namespace rir

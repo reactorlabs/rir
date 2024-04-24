@@ -70,10 +70,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
     void body(SEXP body) { setEntry(BODY_IDX, body); }
 
-    TypeFeedback* typeFeedback() const {
-        return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
-    }
+    TypeFeedback* typeFeedback() const;
     TypeFeedback* typeFeedback(const Context & ctx);
+    // Returns TypeFeedback used for recording type feedback based on function and context
+    TypeFeedback* typeFeedback(const CallContext * callContext);
 
     void typeFeedback(TypeFeedback* typeFeedback) {
         typeFeedback->owner_ = this;
