@@ -28,7 +28,9 @@ static ClosureVersion* recompilePir(SEXP f, Module* m) {
     }
     assert(DispatchTable::check(BODY(f)));
     auto table = DispatchTable::unpack(BODY(f));
-    auto assumptions = table->best()->context() | pir::Compiler::minimalContext;
+    auto assumptions = table->bestContext() | pir::Compiler::minimalContext;
+    if (table->best() != table->baseline())
+        assumptions = table->best()->context();
 
     Log logger(DebugOptions::DefaultDebugOptions);
     logger.title("Pir Check");

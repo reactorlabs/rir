@@ -34,11 +34,16 @@ struct DispatchTable
         return Function::unpack(getEntry(i));
     }
 
+    Context bestContext() const {
+        return typeFeedbacks()->best().first;
+    }
+
     Function* best() const {
         if (size() > 1)
             return get(1);
         return get(0);
     }
+
     Function* baseline() const {
         auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==

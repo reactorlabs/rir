@@ -98,6 +98,15 @@ struct GenericDispatchTable
 
     bool full() const { return size() == capacity(); }
 
+    bool empty() const {
+        return size() == 0;
+    }
+
+    std::pair<const Key&, Value*> best() const {
+        assert(!empty());
+        return {key(0), Value::unpack(getEntry(0))};
+    }
+
   private:
     GenericDispatchTable()
         : Super(
