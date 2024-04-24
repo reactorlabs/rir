@@ -5,8 +5,6 @@
 #include "interpreter/call_context.h"
 #include "runtime/TypeFeedback.h"
 
-#include "DispatchTable.h"
-
 namespace rir {
 
 Function* Function::deserialize(SEXP refTable, R_inpstream_t inp) {
@@ -127,13 +125,13 @@ TypeFeedback* Function::typeFeedback() const {
     return tf;
 }
 
-TypeFeedback* Function::typeFeedback(const Context & ctx) {
+TypeFeedback* Function::typeFeedback(const Context& ctx) {
     if (ctx != context())
         return dispatchTable()->getOrCreateTypeFeedback(ctx);
     return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
 }
 
-TypeFeedback* Function::typeFeedback(const CallContext * callContext) {
+TypeFeedback* Function::typeFeedback(const CallContext* callContext) {
     if (!callContext)
         return typeFeedback();
     return typeFeedback(callContext->givenContext);

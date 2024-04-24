@@ -398,8 +398,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     size_t version() const { return version_; }
     void version(size_t version) { version_ = version; }
 
-    bool disabled() { return false; }
-    TypeFeedback * emptyCopy();
+    static bool disabled() { return false; }
+    TypeFeedback* emptyCopy();
 };
 
 #pragma pack(pop)

@@ -58,13 +58,14 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx) {
+          signature_(signature), context_(ctx), dispatchTable_(nullptr) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
         if (feedback) {
             typeFeedback(feedback);
-        }
+        } else
+            setEntry(TYPE_FEEDBACK_IDX, nullptr);
     }
 
     Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
@@ -73,9 +74,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     Function* baseline();
     const Function* baseline() const;
     TypeFeedback* typeFeedback() const;
-    TypeFeedback* typeFeedback(const Context & ctx);
-    // Returns TypeFeedback used for recording type feedback based on function and context
-    TypeFeedback* typeFeedback(const CallContext * callContext);
+    TypeFeedback* typeFeedback(const Context& ctx);
+    // Returns TypeFeedback used for recording type feedback based on context
+    TypeFeedback* typeFeedback(const CallContext* callContext);
 
     void typeFeedback(TypeFeedback* typeFeedback) {
         typeFeedback->owner_ = this;
