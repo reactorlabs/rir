@@ -3,6 +3,7 @@
 #include "R/Serialize.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "interpreter/call_context.h"
 #include "runtime/Code.h"
 #include "runtime/Function.h"
 
@@ -54,21 +55,22 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                          DeoptReason::Reason reason)
     : reason(reason), origin(origin) {}
 
-void DeoptReason::record(SEXP val) const {
+void DeoptReason::record(SEXP val, const CallContext* callContext) const {
     origin.function()->registerDeoptReason(reason);
 
     switch (reason) {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
+        auto& feedback =
+            origin.function()->typeFeedback(callContext)->test(origin.idx());
         feedback.seen = ObservedTest::Both;
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback();
+        auto feedback = origin.function()->typeFeedback(callContext);
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
         // IMHO the one there is more correct. Would it make sense
@@ -93,7 +95,7 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback();
+        auto feedback = origin.function()->typeFeedback(callContext);
         feedback->record_callee(origin.idx(), origin.function(), val, true);
         break;
     }

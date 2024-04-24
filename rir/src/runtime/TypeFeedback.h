@@ -244,6 +244,8 @@ class FeedbackOrigin {
     }
 };
 
+struct CallContext;
+
 struct DeoptReason {
   public:
     enum Reason : uint32_t {
@@ -296,7 +298,7 @@ struct DeoptReason {
 
     static DeoptReason unknown() { return DeoptReason({}, Unknown); }
 
-    void record(SEXP val) const;
+    void record(SEXP val, const CallContext* callContext) const;
 
     DeoptReason() = delete;
 
