@@ -156,8 +156,7 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         fun->dispatchTable(this);
         auto assumptions = fun->context();
-        TypeFeedback * typeFeedback = getOrCreateTypeFeedback(assumptions);
-        fun->typeFeedback(typeFeedback);
+        SLOWASSERT(fun->typeFeedback() == getOrCreateTypeFeedback(assumptions));
         size_t i;
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
