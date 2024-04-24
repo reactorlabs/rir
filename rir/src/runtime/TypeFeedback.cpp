@@ -19,7 +19,10 @@ bool ObservedCallees::record(Function* function, SEXP callee,
 
     if (numTargets < MaxTargets) {
         int i = 0;
-        auto caller = function->body();
+        // Because of recording type feedback even before creating function
+        // and saving callees inside function body
+        // all callees are stored inside the baseline function
+        auto caller = function->baseline()->body();
         for (; i < numTargets; ++i)
             if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
@@ -39,7 +42,7 @@ bool ObservedCallees::record(Function* function, SEXP callee,
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
     assert(pos < numTargets);
-    return function->body()->getExtraPoolEntry(targets[pos]);
+    return function->baseline()->body()->getExtraPoolEntry(targets[pos]);
 }
 
 FeedbackOrigin::FeedbackOrigin(rir::Function* function, FeedbackIndex index)

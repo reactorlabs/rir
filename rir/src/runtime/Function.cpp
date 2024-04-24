@@ -103,6 +103,24 @@ void Function::clearDisabledAssumptions(Context& given) const {
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
 }
 
+Function* Function::baseline() {
+    if (!dispatchTable_) {
+        assert(signature().optimization ==
+               FunctionSignature::OptimizationLevel::Baseline);
+        return this;
+    }
+    return dispatchTable_->baseline();
+}
+
+const Function* Function::baseline() const {
+    if (!dispatchTable_) {
+        assert(signature().optimization ==
+               FunctionSignature::OptimizationLevel::Baseline);
+        return this;
+    }
+    return dispatchTable_->baseline();
+}
+
 TypeFeedback* Function::typeFeedback() const {
     auto tf = TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
     assert(tf);
