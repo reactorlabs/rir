@@ -49,20 +49,15 @@ struct GenericDispatchTable
 
     // insert function ordered by increasing number of assumptions
     void insert(const Key& k, Value* value) {
-        size_t i = 0;
-        if (size() > 0) {
-            for (i = size() - 1; i > 0; --i) {
-                if (key(i) == k) {
-                    if (i != 0) {
-                        setEntry(i, value->container());
-                    }
-                    return;
-                }
-                if (!(k < key(i))) {
-                    i++;
-                    break;
-                }
+        // Find position to which k belongs
+        size_t i;
+        for (i = size(); i > 0; --i) {
+            if (key(i - 1) == k) {
+                setEntry(i - 1, value->container());
+                return;
             }
+            if (!(k < key(i - 1)))
+                break;
         }
         if (size() == capacity()) {
             // Evict one element and retry
@@ -75,7 +70,6 @@ struct GenericDispatchTable
             }
             return insert(k, value);
         }
-
         for (size_t j = size(); j > i; --j) {
             key(j) = key(j - 1);
             setEntry(j, getEntry(j - 1));
