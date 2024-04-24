@@ -148,7 +148,7 @@ SEXP tryFastSpecialCall(CallContext& call) {
 
         if (nargs == 2 && s && TYPEOF(s) == CHARSXP) {
             if (TYPEOF(x) == PROMSXP)
-                x = evaluatePromise(x, nullptr, true);
+                x = evaluatePromise(x, nullptr, nullptr, true);
 
             if (Rf_isObject(x)) {
                 ENSURE_NAMEDMAX(x);
@@ -177,14 +177,14 @@ SEXP tryFastSpecialCall(CallContext& call) {
 
         auto nArg = call.stackArg(0);
         if (TYPEOF(nArg) == PROMSXP)
-            nArg = evaluatePromise(nArg);
+            nArg = evaluatePromise(nArg, nullptr);
         int n = Rf_asInteger(nArg);
         if (n == NA_INTEGER)
             n = 0;
 
         auto fun = call.stackArg(1);
         if (TYPEOF(fun) == PROMSXP)
-            fun = evaluatePromise(fun);
+            fun = evaluatePromise(fun, nullptr);
         assert(call.stackArgs);
 
         // Remove the first arg and create a new CallContext for the actual
@@ -229,7 +229,7 @@ SEXP tryFastSpecialCall(CallContext& call) {
             for (int i = 0; i < n; i++) {
                 auto p = innerCall.stackArg(i);
                 if (TYPEOF(p) == PROMSXP) {
-                    auto v = evaluatePromise(p);
+                    auto v = evaluatePromise(p, &innerCall);
                     if (builtin)
                         innerCall.setStackArg(v, i);
                 } else if (p == R_MissingArg) {
@@ -1108,7 +1108,7 @@ SEXP tryFastBuiltinCall(CallContext& call) {
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
         auto arg = call.stackArg(i);
         if (TYPEOF(arg) == PROMSXP)
-            arg = evaluatePromise(arg);
+            arg = evaluatePromise(arg, nullptr);
         if (arg == R_UnboundValue || arg == R_MissingArg)
             return nullptr;
         if (ATTRIB(arg) != R_NilValue)

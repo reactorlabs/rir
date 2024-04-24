@@ -32,7 +32,7 @@ namespace rir {
 
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
-                        BindingCache* cache = nullptr);
+                        BindingCache* cache = nullptr, bool isPromise = false);
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -189,7 +189,8 @@ typedef struct RPRSTACK {
 } RPRSTACK;
 extern "C" struct RPRSTACK* R_PendingPromises;
 
-SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
+SEXP evaluatePromise(SEXP e, Opcode* pc, const CallContext* callContext,
+                     bool delayNamed) {
     // if already evaluated, return the value
     if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
         e = PRVALUE(e);
@@ -219,8 +220,8 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
         prstack.promise = e;
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
-        val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr, pc,
-                          nullptr);
+        val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), callContext, pc,
+                          nullptr, true);
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
@@ -1651,7 +1652,7 @@ void deoptFramesWithContext(const CallContext* callCtxt,
         if (inPromise) {
             SEXP p = createPromise(code, deoptEnv);
             PROTECT(p);
-            auto r = evaluatePromise(p, f.pc);
+            auto r = evaluatePromise(p, f.pc, callCtxt);
             UNPROTECT(1);
             return r;
         }
@@ -1915,10 +1916,16 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 }
 
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
-                 Opcode* initialPC, BindingCache* cache) {
-    assert(env != symbol::delayedEnv || (callCtxt != nullptr));
+                 Opcode* initialPC, BindingCache* cache, bool isPromise) {
+    assert(env != symbol::delayedEnv || (callCtxt != nullptr && !isPromise));
 
     checkUserInterrupt();
+
+    // Use null call context in promise when needed,
+    // this is needed due to passing of callCtxt with promise
+    // for contextual type feedback
+    auto usedContext = isPromise ? nullptr : callCtxt;
+
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
@@ -2087,7 +2094,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, callCtxt);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2129,7 +2136,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, callCtxt);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2158,7 +2165,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                          CHAR(PRINTNAME(sym)));
             } else if (TYPEOF(res) == PROMSXP) {
                 // if promise, evaluate & return
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, callCtxt);
             }
 
             if (res != R_NilValue)
@@ -2216,7 +2223,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, nullptr);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2241,7 +2248,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, callCtxt);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2265,7 +2272,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res);
+                res = evaluatePromise(res, callCtxt);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2365,7 +2372,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2399,7 +2406,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2452,7 +2459,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(ttt == R_PPStackTop);
 
             if (call.triggerOsr) {
-                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
+                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2547,7 +2554,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 // If the promise is already evaluated then push the value
                 // inside the promise onto the stack, otherwise push the value
                 // from forcing the promise
-                ostack_push(evaluatePromise(val));
+                ostack_push(evaluatePromise(val, callCtxt));
             }
             NEXT();
         }
@@ -3211,7 +3218,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     loopCounter = 0;
-                    if (auto res = osr(callCtxt, basePtr, env, c, pc))
+                    if (auto res = osr(usedContext, basePtr, env, c, pc))
                         return res;
                 }
             }
@@ -3878,7 +3885,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
-            loopTrampoline(c, env, callCtxt, pc, bindingCache);
+            loopTrampoline(c, env, usedContext, pc, bindingCache);
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);
