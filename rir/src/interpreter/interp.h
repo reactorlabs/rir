@@ -175,7 +175,7 @@ inline SEXP findRootPromise(SEXP p) {
 
 inline SEXP getSymbolIfTrivialPromise(SEXP val) {
     auto pr = PREXPR(val);
-    Code * ppr;
+    Code* ppr;
     if (auto p = Promise::check(pr))
         ppr = p->code();
     else

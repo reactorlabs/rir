@@ -35,10 +35,12 @@ class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
     Promise(const CallContext* context, Code* code)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
-              (intptr_t)&locals_ - (intptr_t)this,
-              NUM_PTRS), context_(context)
-//          context_(context->callId, context->caller, context->callee, context->passedArgs, context->ast, context->stackArgs, context->names, context->callerEnv,
-//                   context->suppliedvars, context->givenContext)
+              (intptr_t)&locals_ - (intptr_t)this, NUM_PTRS),
+          context_(context)
+    //          context_(context->callId, context->caller, context->callee,
+    //          context->passedArgs, context->ast, context->stackArgs,
+    //          context->names, context->callerEnv,
+    //          context->suppliedvars, context->givenContext)
     {
         setEntry(PROMISE_CODE_IDX, code->container());
     }
@@ -50,13 +52,9 @@ class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
         return new (INTEGER(s)) Promise(context, code);
     }
 
-    const CallContext* context() const {
-        return context_;
-    }
+    const CallContext* context() const { return context_; }
 
-    Code* code() const {
-        return Code::unpack(getEntry(PROMISE_CODE_IDX));
-    }
+    Code* code() const { return Code::unpack(getEntry(PROMISE_CODE_IDX)); }
 
     // TODO: Implement (de)serialize and printing
 };

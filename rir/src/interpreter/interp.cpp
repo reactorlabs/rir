@@ -178,7 +178,8 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-static inline SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
+static inline SEXP createPromise(const CallContext* context, Code* code,
+                                 SEXP env) {
     SEXP prom;
     if (!context) {
         prom = code->container();
@@ -230,7 +231,7 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
                               true);
         } else
             val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr, pc,
-                          nullptr, true);
+                              nullptr, true);
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
