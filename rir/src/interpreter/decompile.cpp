@@ -1,9 +1,13 @@
 #include "interpreter/instance.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/Promise.h"
 
 namespace rir {
 
 SEXP rirDecompile(SEXP s) {
+    if (auto p = Promise::check(s)) {
+        return src_pool_at(p->code()->src);
+    }
     if (auto c = Code::check(s)) {
         return src_pool_at(c->src);
     }

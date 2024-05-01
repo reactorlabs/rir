@@ -178,9 +178,15 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-static SEXP createPromise(Code* code, SEXP env) {
-    SEXP p = Rf_mkPROMISE(code->container(), env);
-    return p;
+static inline SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
+    SEXP prom;
+    if (!context) {
+        prom = code->container();
+    } else {
+        Promise* promise = Promise::create(context, code);
+        prom = promise->container();
+    }
+    return Rf_mkPROMISE(prom, env);
 }
 
 typedef struct RPRSTACK {
@@ -189,8 +195,7 @@ typedef struct RPRSTACK {
 } RPRSTACK;
 extern "C" struct RPRSTACK* R_PendingPromises;
 
-SEXP evaluatePromise(SEXP e, Opcode* pc, const CallContext* callContext,
-                     bool delayNamed) {
+SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
     // if already evaluated, return the value
     if (PRVALUE(e) && PRVALUE(e) != R_UnboundValue) {
         e = PRVALUE(e);
@@ -220,7 +225,11 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, const CallContext* callContext,
         prstack.promise = e;
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
-        val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), callContext, pc,
+        if (auto p = Promise::check(PRCODE(e))) {
+            val = evalRirCode(p->code(), PRENV(e), p->context(), pc, nullptr,
+                              true);
+        } else
+            val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr, pc,
                           nullptr, true);
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
@@ -228,7 +237,7 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, const CallContext* callContext,
         if (!delayNamed)
             ENSURE_NAMEDMAX(val);
         SET_PRENV(e, R_NilValue);
-
+        assert(TYPEOF(val) != EXTERNALSXP || !Promise::check(val));
         assert(TYPEOF(val) != PROMSXP && "promise returned promise");
         return val;
     }
@@ -606,7 +615,7 @@ static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist) {
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
                 assert(c != nullptr && "No more compiled formals available.");
-                SETCAR(a, createPromise(c, newrho));
+                SETCAR(a, createPromise(&call, c, newrho));
                 SET_MISSING(a, 2);
             }
             // Either just used the compiled formal or it was not needed.
@@ -1094,14 +1103,14 @@ SEXP doCall(CallContext& call, bool popArgs) {
                                 SET_FRAME(env, a);
                             }
                             if (auto dflt = fun->defaultArg(pos)) {
-                                SETCAR(a, createPromise(dflt, env));
+                                SETCAR(a, createPromise(&call, dflt, env));
                                 SET_MISSING(a, 2);
                             }
                         } else if (CAR(a) == R_MissingArg) {
                             SET_MISSING(a, 1);
                             if (auto dflt = fun->defaultArg(pos)) {
                                 SET_MISSING(a, 2);
-                                SETCAR(a, createPromise(dflt, env));
+                                SETCAR(a, createPromise(&call, dflt, env));
                             }
                         }
 
@@ -1650,9 +1659,9 @@ void deoptFramesWithContext(const CallContext* callCtxt,
         if (!innermostFrame)
             ostack_push(res);
         if (inPromise) {
-            SEXP p = createPromise(code, deoptEnv);
+            SEXP p = createPromise(callCtxt, code, deoptEnv);
             PROTECT(p);
-            auto r = evaluatePromise(p, f.pc, callCtxt);
+            auto r = evaluatePromise(p, f.pc);
             UNPROTECT(1);
             return r;
         }
@@ -2097,7 +2106,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res, callCtxt);
+                res = evaluatePromise(res);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2139,7 +2148,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res, callCtxt);
+                res = evaluatePromise(res);
 
             if (res != R_NilValue) {
                 if (isLocal)
@@ -2168,7 +2177,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                          CHAR(PRINTNAME(sym)));
             } else if (TYPEOF(res) == PROMSXP) {
                 // if promise, evaluate & return
-                res = evaluatePromise(res, callCtxt);
+                res = evaluatePromise(res);
             }
 
             if (res != R_NilValue)
@@ -2226,7 +2235,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res, nullptr);
+                res = evaluatePromise(res);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2251,7 +2260,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res, callCtxt);
+                res = evaluatePromise(res);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2275,7 +2284,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             // if promise, evaluate & return
             recordForceBehavior(res);
             if (TYPEOF(res) == PROMSXP)
-                res = evaluatePromise(res, callCtxt);
+                res = evaluatePromise(res);
 
             if (res != R_NilValue)
                 ENSURE_NAMED(res);
@@ -2535,19 +2544,21 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(mk_eager_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+            SEXP prom = createPromise(callCtxt, c->getPromise(id), env);
+            PROTECT(prom);
             SEXP val = ostack_pop();
             assert(TYPEOF(val) != PROMSXP);
             ENSURE_NAMEDMAX(val);
             SET_PRVALUE(prom, val);
             ostack_push(prom);
+            UNPROTECT(1);
             NEXT();
         }
 
         INSTRUCTION(mk_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
+            SEXP prom = createPromise(callCtxt, c->getPromise(id), env);
             ostack_push(prom);
             NEXT();
         }
@@ -2558,7 +2569,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 // If the promise is already evaluated then push the value
                 // inside the promise onto the stack, otherwise push the value
                 // from forcing the promise
-                ostack_push(evaluatePromise(val, callCtxt));
+                ostack_push(evaluatePromise(val));
             }
             NEXT();
         }

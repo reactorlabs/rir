@@ -53,15 +53,10 @@ SEXP copyBySerial(SEXP x);
 
 SEXP materialize(SEXP rirDataWrapper);
 
-SEXP evaluatePromise(SEXP e, Opcode* pc, const CallContext* callContext,
-                     bool delayNamed = false);
+SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed = false);
 
 inline SEXP evaluatePromise(SEXP e) {
-    return evaluatePromise(e, nullptr, nullptr);
-}
-
-inline SEXP evaluatePromise(SEXP e, const CallContext* callContext) {
-    return evaluatePromise(e, nullptr, callContext);
+    return evaluatePromise(e, nullptr);
 }
 
 } // namespace rir

@@ -8,6 +8,7 @@
 #include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/Deoptimization.h"
+#include "runtime/Promise.h"
 
 #include "R/BuiltinIds.h"
 
@@ -174,7 +175,11 @@ inline SEXP findRootPromise(SEXP p) {
 
 inline SEXP getSymbolIfTrivialPromise(SEXP val) {
     auto pr = PREXPR(val);
-    auto ppr = Code::check(pr);
+    Code * ppr;
+    if (auto p = Promise::check(pr))
+        ppr = p->code();
+    else
+        ppr = Code::check(pr);
     SEXP sym = nullptr;
     if (Rf_isSymbol(pr)) {
         sym = pr;
