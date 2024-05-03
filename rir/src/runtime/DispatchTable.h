@@ -59,13 +59,7 @@ struct DispatchTable
 
     Function* dispatchConsideringDisabled(Context a, Function** disabledFunc,
                                           bool ignorePending = true) const {
-        if (!a.smaller(userDefinedContext_)) {
-#ifdef DEBUG_DISPATCH
-            std::cout << "DISPATCH trying: " << a
-                      << " vs annotation: " << userDefinedContext_ << "\n";
-#endif
-            Rf_error("Provided context does not satisfy user defined context");
-        }
+        compareWithDefinedContext(a);
 
         Function* r2 = nullptr;
         auto outputDisabledFunc = (disabledFunc != nullptr);
@@ -97,6 +91,7 @@ struct DispatchTable
     }
 
     TypeFeedback* getTypeFeedback(const Context& ctx) {
+        compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback* tf = entry.second;
@@ -107,6 +102,7 @@ struct DispatchTable
     }
 
     TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
+        compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback* tf = entry.second;
@@ -283,18 +279,32 @@ struct DispatchTable
     DispatchTable* newWithUserContext(Context udc) {
 
         auto clone = create(this->capacity());
-        clone->setEntry(0, this->getEntry(0));
+        PROTECT(clone->container());
+        SEXP baseline = this->getEntry(0);
+        clone->setEntry(0, baseline);
 
-        auto j = 1;
+        auto typeFeedbacks = this->typeFeedbacks();
+        auto cloneFeedbacks = clone->typeFeedbacks();
+        size_t j = 0;
+        for (size_t i = 0; i < typeFeedbacks->size(); ++i) {
+            auto tf = TypeFeedback::unpack(typeFeedbacks->getEntry(i));
+            Context ctx = typeFeedbacks->key(i);
+            if (ctx.smaller(udc))
+                cloneFeedbacks->insert(typeFeedbacks->key(i), tf);
+        }
+        j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 clone->setEntry(j, getEntry(i));
+                get(i)->dispatchTable(clone);
                 j++;
             }
         }
 
         clone->size_ = j;
         clone->userDefinedContext_ = udc;
+        Function::unpack(baseline)->dispatchTable(clone);
+        UNPROTECT(1);
         return clone;
     }
 
@@ -360,6 +370,16 @@ struct DispatchTable
 
     void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
         setEntry(typeFeedbackPos_, tfdp->container());
+    }
+
+    void compareWithDefinedContext(const Context& ctx) const {
+        if (!ctx.smaller(userDefinedContext_)) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a
+                      << " vs annotation: " << userDefinedContext_ << "\n";
+#endif
+            Rf_error("Provided context does not satisfy user defined context");
+        }
     }
 
     size_t size_ = 0;

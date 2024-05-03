@@ -120,6 +120,8 @@ struct GenericDispatchTable
         assert(i < size());
         return keys.at(i);
     }
+
+    friend struct DispatchTable;
 };
 
 } // namespace rir
