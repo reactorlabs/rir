@@ -24,25 +24,22 @@ namespace rir {
 #pragma pack(1)
 
 class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
-    // extra pool
-    static constexpr size_t NUM_PTRS = 1;
-    // 0: promise code (Code*)
-    static constexpr size_t PROMISE_CODE_IDX = 0;
 
     const CallContext* context_;
-    SEXP locals_[NUM_PTRS];
+    SEXP code_;
+
   public:
     Promise(const CallContext* context, Code* code)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
-              (intptr_t)&locals_ - (intptr_t)this, NUM_PTRS),
-          context_(context)
+              (intptr_t)&code_ - (intptr_t)this, 1),
+          context_(context), code_(nullptr)
     //          context_(context->callId, context->caller, context->callee,
     //          context->passedArgs, context->ast, context->stackArgs,
     //          context->names, context->callerEnv,
     //          context->suppliedvars, context->givenContext)
     {
-        setEntry(PROMISE_CODE_IDX, code->container());
+        setEntry(0, code->container());
     }
     ~Promise() = default;
 
@@ -54,7 +51,7 @@ class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
 
     const CallContext* context() const { return context_; }
 
-    Code* code() const { return Code::unpack(getEntry(PROMISE_CODE_IDX)); }
+    Code* code() const { return Code::unpack(getEntry(0)); }
 
     // Serialize and deserialize only code for now
     void serialize(SEXP refTable, R_outpstream_t out) const {
