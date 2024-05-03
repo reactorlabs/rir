@@ -56,7 +56,15 @@ class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
 
     Code* code() const { return Code::unpack(getEntry(PROMISE_CODE_IDX)); }
 
-    // TODO: Implement (de)serialize and printing
+    // Serialize and deserialize only code for now
+    void serialize(SEXP refTable, R_outpstream_t out) const {
+        code()->serialize(refTable, out);
+    }
+
+    static Promise* deserialize(SEXP refTable, R_inpstream_t inp) {
+        Code* code = Code::deserialize(refTable, inp);
+        return create(nullptr, code);
+    }
 };
 
 #pragma pack(pop)
