@@ -260,10 +260,10 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         auto simpleType = [](PirType s) { return s.orPromiseWrapped(); };
 
         if (assumptions.isSimpleReal(i)) {
-            type = simpleType(PirType::simpleScalarReal());
+            type = type & simpleType(PirType::simpleScalarReal());
         }
         if (assumptions.isSimpleInt(i)) {
-            type = simpleType(PirType::simpleScalarInt());
+            type = type & simpleType(PirType::simpleScalarInt());
         }
     }
     // well, if the intersection of context info and current type is void, we
