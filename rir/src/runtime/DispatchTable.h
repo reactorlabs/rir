@@ -95,7 +95,7 @@ struct DispatchTable
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback* tf = entry.second;
-        if ((entry.first != ctx && feedbacks->full()) || !tf || tf->version() < 1) {
+        if (!tf || tf->version() < 1) {
             return baselineFeedback();
         }
         return tf;
@@ -111,7 +111,7 @@ struct DispatchTable
             // Use baseline feedback when type feedback table is full
             // TODO: try different approaches
             if (feedbacks->full())
-                return baselineFeedback();
+                return tf ? tf : baselineFeedback();
             tf = baselineFeedback()->emptyCopy();
             PROTECT(tf->container());
             feedbacks->insert(ctx, tf);
@@ -176,7 +176,8 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         fun->dispatchTable(this);
         auto assumptions = fun->context();
-        SLOWASSERT(fun->typeFeedback() == getOrCreateTypeFeedback(assumptions));
+        SLOWASSERT(fun->typeFeedback() == getTypeFeedback(assumptions) ||
+                   fun->typeFeedback()->version() < 1);
         size_t i;
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
