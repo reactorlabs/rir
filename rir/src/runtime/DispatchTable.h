@@ -246,7 +246,15 @@ struct DispatchTable
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry)
                                      + sizeof(DispatchTableEntry)); // last DispatchTableEntry is used for typeFeedback table
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
-        return new (INTEGER(s)) DispatchTable(capacity);
+        auto dp = new (INTEGER(s)) DispatchTable(capacity);
+        PROTECT(dp->container());
+        // create type feedback dispatch table
+        // TODO: Different feedback table sizes
+        auto typeFeedbackTable = TypeFeedbackDispatchTable::create();
+        PROTECT(typeFeedbackTable->container());
+        dp->typeFeedbacks(typeFeedbackTable);
+        UNPROTECT(2);
+        return dp;
     }
 
     size_t capacity() const { return info.gc_area_length - 1; }
@@ -340,12 +348,7 @@ struct DispatchTable
               // GC area is the pointers in the entry array
               // and pointer to TypeFeedback dispatch table
               sizeof(DispatchTable), capacity + 1),
-          typeFeedbackPos_(info.gc_area_length - 1) {
-        // create type feedback dispatch table
-        // TODO: Different feedback table sizes
-        setEntry(typeFeedbackPos_,
-                 TypeFeedbackDispatchTable::create()->container());
-    }
+          typeFeedbackPos_(info.gc_area_length - 1) {}
 
     TypeFeedbackDispatchTable* typeFeedbacks() {
         return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
@@ -353,6 +356,10 @@ struct DispatchTable
 
     const TypeFeedbackDispatchTable* typeFeedbacks() const {
         return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
+    void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
+        setEntry(typeFeedbackPos_, tfdp->container());
     }
 
     size_t size_ = 0;
