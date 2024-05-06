@@ -220,6 +220,16 @@ std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sex
     return reason;
 }
 
+SEXP to_sexp( CompilationEvent::Duration time ) {
+    int64_t count = time.count();
+    return to_sexp( count );
+}
+
+CompilationEvent::Duration time_from_sexp( SEXP sexp ){
+    int64_t count = int64_t_from_sexp(sexp);
+    return CompilationEvent::Duration( count );
+}
+
 } // namespace serialization
 } // namespace recording
 } // namespace rir

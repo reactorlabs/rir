@@ -56,6 +56,7 @@ struct {
 static bool isPlayingCompile = false;
 
 CompileReasons compileReasons_;
+std::stack<std::pair<CompilationEvent::Time, CompilationEvent>> compilation_stack_;
 
 SEXP InvocationCountTimeReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
@@ -494,15 +495,16 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 SEXP CompilationEvent::toSEXP() const {
-    const char* fields[] = {
-        "closure",
-        "dispatch_context",
-        "name",
-        "speculative_contexts",
-        "compile_reason_heuristic",
-        "compile_reason_condition",
-        "compile_reason_osr",
-        ""};
+    const char* fields[] = {"closure",
+                            "dispatch_context",
+                            "name",
+                            "speculative_contexts",
+                            "compile_reason_heuristic",
+                            "compile_reason_condition",
+                            "compile_reason_osr",
+                            "time",
+                            "subevents",
+                            ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
 
@@ -533,13 +535,17 @@ SEXP CompilationEvent::toSEXP() const {
     if( compile_reasons.osr ){
         SET_VECTOR_ELT(sexp, i, compile_reasons.osr->toSEXP());
     }
+    i++;
+
+    SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->time_length) );
+    SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->subevents) );
 
     UNPROTECT(1);
     return sexp;
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 7);
+    assert(Rf_length(sexp) == 9);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
@@ -555,6 +561,9 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     this->compile_reasons.heuristic = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 4));
     this->compile_reasons.condition = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 5));
     this->compile_reasons.osr = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 6));
+
+    this->time_length = serialization::time_from_sexp(VECTOR_ELT(sexp, 7));
+    this->subevents = serialization::vector_from_sexp<size_t, serialization::uint64_t_from_sexp>(VECTOR_ELT(sexp, 8));
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -764,9 +773,32 @@ void recordCompile(SEXP cls, const std::string& name,
 
     auto dispatch_context = assumptions.toI();
 
-    recorder_.record<CompilationEvent>(cls, name, dispatch_context, name,
-                                       std::move(sc), std::move(compileReasons_));
     recordReasonsClear();
+    compilation_stack_.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(CompilationEvent::Clock::now()),
+        std::forward_as_tuple(rec.first, dispatch_context, name, std::move(sc), std::move(compileReasons_))
+    );
+}
+
+void recordCompileFinish(){
+    RECORDER_FILTER_GUARD(compile);
+
+    auto end_time = CompilationEvent::Clock::now();
+
+    assert(!compilation_stack_.empty());
+    auto start_time = compilation_stack_.top().first;
+    auto event = std::make_unique<CompilationEvent>( std::move(compilation_stack_.top().second) );
+    compilation_stack_.pop();
+
+    auto duration = std::chrono::duration_cast<CompilationEvent::Duration>(end_time - start_time);
+    event->set_time(duration);
+
+    size_t idx = recorder_.push_event( std::move(event) );
+
+    if ( !compilation_stack_.empty() ){
+        compilation_stack_.top().second.add_subcompilation(idx);
+    }
 }
 
 void recordOsrCompile(const SEXP cls) {

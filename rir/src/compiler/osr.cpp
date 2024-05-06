@@ -36,6 +36,8 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
 
     delete module;
 
+    recording::recordCompileFinish();
+
     return fun;
 }
 

@@ -363,6 +363,9 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     delete m;
     UNPROTECT(1);
+
+    recording::recordCompileFinish();
+
     return what;
 }
 

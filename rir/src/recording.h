@@ -10,6 +10,7 @@
 #include "runtime/TypeFeedback.h"
 #include <R/r.h>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -336,6 +337,10 @@ class SpeculativeContextEvent : public DtEvent {
 
 class CompilationEvent : public ClosureEvent {
   public:
+    using Clock = std::chrono::steady_clock;
+    using Time = std::chrono::time_point<Clock>;
+    using Duration = std::chrono::milliseconds;
+
     CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
                      const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
@@ -343,7 +348,18 @@ class CompilationEvent : public ClosureEvent {
         : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
           compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons)) {}
+          compile_reasons(std::move(compile_reasons))
+    {}
+
+    CompilationEvent( CompilationEvent&& other )
+        : ClosureEvent( other.closureIndex ),
+        dispatch_context( other.dispatch_context ),
+        compileName( std::move(other.compileName) ),
+        speculative_contexts(std::move(other.speculative_contexts)),
+        compile_reasons(std::move(other.compile_reasons)),
+        time_length( other.time_length ),
+        subevents( std::move(other.subevents) )
+    {}
 
     CompilationEvent() {}
 
@@ -352,6 +368,14 @@ class CompilationEvent : public ClosureEvent {
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t recordingIdx) const override;
+
+    void set_time( Duration time ){
+        time_length = time;
+    }
+
+    void add_subcompilation( size_t idx ){
+        subevents.push_back(idx);
+    }
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -365,6 +389,11 @@ class CompilationEvent : public ClosureEvent {
 
     std::vector<SpeculativeContext> speculative_contexts;
     CompileReasons compile_reasons;
+
+    // Benchmarking
+    Duration time_length;
+
+    std::vector<size_t> subevents;
 };
 
 class DeoptEvent : public VersionEvent {
@@ -526,6 +555,12 @@ public:
         auto entry = initOrGetRecording(cls, name);
         log.emplace_back(
             std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+    }
+
+    size_t push_event(std::unique_ptr<Event> e){
+        size_t idx = log.size();
+        log.emplace_back(std::move(e));
+        return idx;
     }
 
     /**

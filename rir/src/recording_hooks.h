@@ -20,6 +20,8 @@ namespace recording {
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
+void recordCompileFinish();
+
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
