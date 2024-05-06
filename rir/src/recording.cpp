@@ -37,8 +37,6 @@ static bool is_recording_ = false;
 // the main recorder
 static Record recorder_;
 
-static int isReplayingSC = 0;
-
 /**
  * Bitmask filter of events to record
  */
@@ -885,7 +883,7 @@ void recordInvocation(Function* f, ssize_t deltaCount,
 }
 
 #define RECORD_SC_GUARD()                                                      \
-    if (!is_recording_ || isReplayingSC || isPlayingCompile)                   \
+    if (!is_recording_ || isPlayingCompile)                                    \
         return;
 
 const Code* nextSCcode = nullptr;
