@@ -73,10 +73,20 @@ class RelaxContexts {
         std::function<void(Context& ctx, int index)> relaxContext;
     };
 
+    class CompilationRequest {
+      public:
+        rir::DispatchTable* dt;
+        int feedbackVersion;
+        rir::Context requestedContext;
+        rir::Context relaxedContext;
+    };
+
     static void tryRelaxContext(SEXP what, const Context& assumptions,
                                 const std::string& name,
                                 const pir::DebugOptions& debug,
-                                pir::ClosureVersion*& originalVersion) {
+                                pir::ClosureVersion* originalVersion) {
+
+        static std::vector<CompilationRequest> compilationRequests;
 
         struct CompilationStats {
 
@@ -103,6 +113,13 @@ class RelaxContexts {
 
         static int topLevelCompilationsCount = 0;
         topLevelCompilationsCount++;
+
+        std::cerr << "\n\n ************************ \n";
+        std::cerr << "original VERSION: \n";
+        std::cerr << originalVersion->context() << "\n";
+        std::cerr << "topLevelCompilationsCount: " << topLevelCompilationsCount
+                  << "\n";
+
         statsPerClosure[what].topLevelCompilationsCount++;
 
         std::vector<TestAndRelaxContext> conditions;
@@ -158,8 +175,9 @@ class RelaxContexts {
         conditions.push_back(condNotRefl);
         conditions.push_back(condEager);
 
-        if (originalVersion && assumptions.numMissing() == 0 &&
-            assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
+        if (true ||
+            (originalVersion && assumptions.numMissing() == 0 &&
+             assumptions.includes(Assumption::NoExplicitlyMissingArgs))) {
 
             bool anyArgsRelaxed = false;
             bool anyArgsToRelax = false;
@@ -196,6 +214,7 @@ class RelaxContexts {
                             compileRelaxed,
                             [&]() {
                                 std::cerr << "Compilation failed for relaxed\n";
+                                assert(false && "comp failed");
                             },
                             {});
 
@@ -221,22 +240,29 @@ class RelaxContexts {
             if (anyArgsToRelax) {
                 functionToRelaxCount++;
                 statsPerClosure[what].functionToRelaxCount++;
+
+                CompilationRequest req;
+                req.dt = DispatchTable::unpack(BODY(what));
+                req.feedbackVersion =
+                    req.dt->baseline()->typeFeedback()->version();
+                req.requestedContext = assumptions;
+                req.relaxedContext = assumptions;
+                compilationRequests.push_back(req);
             }
 
             static int similarCount = 0;
-
-            std::cerr << "\n\n ************************ \n";
-            std::cerr << "original VERSION: \n";
-            std::cerr << originalVersion->context() << "\n";
-            // originalVersion->printStandard(std::cerr, true, false);
 
             if (anyArgsRelaxed) {
                 similarCount++;
                 statsPerClosure[what].similarCount++;
 
+                auto& req = compilationRequests.back();
+                req.relaxedContext = finalRelaxedContext;
+
                 std::cerr << "\n\n ------------------------ \n";
                 std::cerr << "relaxed VERSION: \n";
                 std::cerr << finalRelaxedContext << "\n";
+
                 // relaxedVersion->printStandard(std::cerr, true, false);
 
                 // std::cerr
@@ -255,13 +281,13 @@ class RelaxContexts {
             globalStats.similarCount = similarCount;
             globalStats.printStats();
 
-            std::cerr << "*** STATS PER CLOSURE " << statsPerClosure.size()
-                      << " ******************";
-            for (auto& st : statsPerClosure) {
-                std::cerr << "closure: " << st.first << "\n";
-                st.second.printStats();
-            }
-            std::cerr << "*** END - STATS PER CLOSURE ******************";
+            // std::cerr << "*** STATS PER CLOSURE " << statsPerClosure.size()
+            //           << " ******************";
+            // for (auto& st : statsPerClosure) {
+            //     std::cerr << "closure: " << st.first << "\n";
+            //     st.second.printStats();
+            // }
+            // std::cerr << "*** END - STATS PER CLOSURE ******************";
         }
     }
 };

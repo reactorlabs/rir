@@ -1,6 +1,8 @@
 #include "instance.h"
 #include "api.h"
 #include "compiler/parameter.h"
+#include "recording_hooks.h"
+#include <cstdlib>
 
 namespace rir {
 
@@ -64,6 +66,13 @@ void context_init() {
         };
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
+    }
+
+    const char* recordPath = std::getenv("RIR_RECORD");
+    const char* recordFilter = std::getenv("RIR_RECORD_FILTER");
+
+    if (recordPath != nullptr) {
+        recording::recordExecution(recordPath, recordFilter);
     }
 }
 

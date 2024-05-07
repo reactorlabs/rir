@@ -18,6 +18,7 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "recording.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/RelaxContexts.h"
@@ -304,6 +305,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     PROTECT(what);
 
+    recording::recordCompile(what, name, assumptions);
+
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -374,8 +377,14 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        },
                        {});
 
-    RelaxContexts::tryRelaxContext(what, assumptions, name, debug,
-                                   originalVersion);
+    if (originalVersion) {
+        RelaxContexts::tryRelaxContext(what, assumptions, name, debug,
+                                       originalVersion);
+    } else {
+        if (debug.includes(pir::DebugFlag::ShowWarnings)) {
+            std::cerr << "originalversion is NULL\n";
+        }
+    }
 
     delete m;
     UNPROTECT(1);
@@ -711,13 +720,29 @@ REXPORT SEXP compile_parentFrame(SEXP what) {
     // std::cerr << "Context: " << c1 << "\n";
     // pirCompile(what, c1, "parent.frame", opts);
 
-    // Context c5 = baseContext;
+    Context c3 = baseContext;
+    // c3.setEager(0);
+    c3.setNonRefl(0);
+    // c3.setNotObj(0);
+    // c3.setSimpleInt(0);
+    std::cerr << "Context: " << c3 << "\n";
+    pirCompile(what, c3, "parent.frame", opts);
+
+    Context c4 = baseContext;
+    // c4.setEager(0);
+    // c4.setNonRefl(0);
+    // c4.setNotObj(0);
+    // c4.setSimpleInt(0);
+    std::cerr << "Context: " << c4 << "\n";
+    pirCompile(what, c4, "parent.frame", opts);
+
+    Context c5 = baseContext;
     // c5.setEager(0);
     // c5.setNonRefl(0);
     // c5.setNotObj(0);
-    // c5.setSimpleInt(0);
-    // std::cerr << "Context: " << c5 << "\n";
-    // pirCompile(what, c5, "parent.frame", opts);
+    c5.setSimpleInt(0);
+    std::cerr << "Context: " << c5 << "\n";
+    pirCompile(what, c5, "parent.frame", opts);
 
     Context c6 = baseContext;
     c6.setEager(0);
@@ -726,11 +751,19 @@ REXPORT SEXP compile_parentFrame(SEXP what) {
     std::cerr << "Context: " << c6 << "\n";
     pirCompile(what, c6, "parent.frame", opts);
 
-    // Context c7 = baseContext;
-    // c7.setEager(0);
-    // c7.setNonRefl(0);
-    // std::cerr << "Context: " << c7 << "\n";
-    // pirCompile(what, c7, "parent.frame", opts);
+    Context c7 = baseContext;
+    c7.setEager(0);
+    c7.setNonRefl(0);
+    std::cerr << "Context: " << c7 << "\n";
+    pirCompile(what, c7, "parent.frame", opts);
+
+    Context c8 = baseContext;
+    c8.setEager(0);
+    c8.setNonRefl(0);
+    c8.setNotObj(0);
+    c8.setSimpleInt(0);
+    std::cerr << "Context: " << c8 << "\n";
+    pirCompile(what, c8, "parent.frame", opts);
 
     return R_NilValue;
 }

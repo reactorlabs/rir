@@ -5,6 +5,7 @@
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/GenericDispatchTable.h"
 #include "runtime/LazyArglist.h"
@@ -832,6 +833,9 @@ static SEXP deoptSentinelContainer = []() {
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
+
+    recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)), *deoptReason,
+                           deoptTrigger);
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;

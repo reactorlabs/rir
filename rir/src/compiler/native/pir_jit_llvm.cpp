@@ -444,7 +444,7 @@ void PirJitLLVM::compile(
     jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
-        bool debug = true;
+        bool debug = false;
         llvm::raw_os_ostream ro(out);
         if (debug) {
             // For debugging, print the whole module to see the debuginfo

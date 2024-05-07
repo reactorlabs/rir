@@ -5,6 +5,7 @@
 #include "Rinternals.h"
 #include "common.h"
 #include "interpreter/profiler.h"
+#include "recording_hooks.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
@@ -145,6 +146,8 @@ struct ObservedTest {
             seen = Both;
         }
 
+        recording::recordSC(*this);
+
         return memcmp(&old, this, sizeof(ObservedTest));
     }
 };
@@ -211,6 +214,7 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
+        rir::recording::recordSC(*this);
         return memcmp(&old, this, sizeof(ObservedValues));
     }
 };
