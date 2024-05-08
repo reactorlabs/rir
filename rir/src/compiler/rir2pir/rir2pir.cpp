@@ -17,6 +17,7 @@
 #include "compiler/util/visitor.h"
 #include "insert_cast.h"
 #include "runtime/ArglistOrder.h"
+#include "runtime/Promise.h"
 #include "runtime/TypeFeedback.h"
 #include "simple_instruction_list.h"
 #include "utils/FormalArgs.h"
@@ -885,6 +886,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                             auto pos = f - formals.names().begin();
                             if (formals.hasDefaultArgs() &&
                                 formals.defaultArgs()[pos] != R_NilValue) {
+                                assert(!rir::Promise::check(
+                                    formals.defaultArgs()[pos]));
                                 if (auto options = rir::Code::check(
                                         formals.defaultArgs()[pos])) {
                                     auto ast = src_pool_at(options->src);

@@ -90,7 +90,7 @@ struct DispatchTable
         return b;
     }
 
-    TypeFeedback* getTypeFeedback(const Context& ctx) {
+    TypeFeedback* getTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
@@ -108,7 +108,7 @@ struct DispatchTable
         TypeFeedback* tf = entry.second;
         if (entry.first != ctx || !tf) {
             assert(baselineFeedback());
-            // Use baseline feedback when type feedback table is full
+            // Use closest possible feedback when type feedback table is full
             // TODO: try different approaches
             if (feedbacks->full())
                 return tf ? tf : baselineFeedback();
