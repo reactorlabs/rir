@@ -4788,23 +4788,23 @@ void LowerFunctionLLVM::compile() {
                         setVal(i,
                                call(NativeBuiltins::get(
                                         NativeBuiltins::Id::createPromiseEager),
-                                    {exp, e, loadSxp(p->eagerArg())}));
+                                    {paramContext(), exp, e, loadSxp(p->eagerArg())}));
                     } else {
                         setVal(i, call(NativeBuiltins::get(
                                            NativeBuiltins::Id::createPromise),
-                                       {exp, e}));
+                                       {paramContext(), exp, e}));
                     }
                 } else {
                     if (p->isEager()) {
                         setVal(i, call(NativeBuiltins::get(
                                            NativeBuiltins::Id::
                                                createPromiseNoEnvEager),
-                                       {exp, loadSxp(p->eagerArg())}));
+                                       {paramContext(), exp, loadSxp(p->eagerArg())}));
                     } else {
                         setVal(i,
                                call(NativeBuiltins::get(
                                         NativeBuiltins::Id::createPromiseNoEnv),
-                                    {exp}));
+                                    {paramContext(), exp}));
                     }
                 }
                 break;

@@ -178,8 +178,7 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-static inline SEXP createPromise(const CallContext* context, Code* code,
-                                 SEXP env) {
+SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
     SEXP prom;
     if (!context) {
         prom = code->container();
@@ -1939,8 +1938,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
-        return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
-                      callCtxt ? callCtxt->callee : nullptr, callCtxt);
+        return native(c, usedContext ? (void*)usedContext->stackArgs : nullptr,
+                      env, usedContext ? usedContext->callee : nullptr,
+                      callCtxt);
     }
 
 #ifdef THREADED_CODE

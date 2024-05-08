@@ -367,25 +367,31 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     return res;
 }
 
-SEXP createPromiseImpl(SEXP expr, SEXP env) {
-    SEXP res = Rf_mkPROMISE(expr, env);
+SEXP createPromiseImpl(CallContext* context, SEXP expr, SEXP env) {
+    assert(context);
+    SEXP res = createPromise(context, rir::Code::check(expr), env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
 
-SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
+SEXP createPromiseNoEnvEagerImpl(CallContext* context, SEXP exp, SEXP value) {
+    assert(context);
     SLOWASSERT(TYPEOF(value) != PROMSXP);
-    SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
+    SEXP res = createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
 }
 
-SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_EmptyEnv); }
+SEXP createPromiseNoEnvImpl(CallContext* context, SEXP exp) {
+    assert(context);
+    return createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
+}
 
-SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
+SEXP createPromiseEagerImpl(CallContext* context, SEXP exp, SEXP env,
+                            SEXP value) {
     SLOWASSERT(TYPEOF(value) != PROMSXP);
-    SEXP res = Rf_mkPROMISE(exp, env);
+    SEXP res = createPromise(context, rir::Code::unpack(exp), env);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
@@ -2358,16 +2364,19 @@ void NativeBuiltins::initializeBuiltins() {
                                 false)};
     get_(Id::createPromise) = {
         "createPromise", (void*)&createPromiseImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+        llvm::FunctionType::get(t::SEXP, {t::voidPtr, t::SEXP, t::SEXP},
+                                false)};
     get_(Id::createPromiseNoEnvEager) = {
         "createPromiseNoEnvEager", (void*)&createPromiseNoEnvEagerImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+        llvm::FunctionType::get(t::SEXP, {t::voidPtr, t::SEXP, t::SEXP},
+                                false)};
     get_(Id::createPromiseNoEnv) = {
         "createPromiseNoEnv", (void*)&createPromiseNoEnvImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+        llvm::FunctionType::get(t::SEXP, {t::voidPtr, t::SEXP}, false)};
     get_(Id::createPromiseEager) = {
         "createPromiseEager", (void*)&createPromiseEagerImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP}, false)};
+        llvm::FunctionType::get(
+            t::SEXP, {t::voidPtr, t::SEXP, t::SEXP, t::SEXP}, false)};
     get_(Id::createClosure) = {
         "createClosure", (void*)&createClosureImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP},
