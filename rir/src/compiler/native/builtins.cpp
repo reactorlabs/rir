@@ -368,14 +368,12 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
 }
 
 SEXP createPromiseImpl(CallContext* context, SEXP expr, SEXP env) {
-    assert(context);
     SEXP res = createPromise(context, rir::Code::check(expr), env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
 
 SEXP createPromiseNoEnvEagerImpl(CallContext* context, SEXP exp, SEXP value) {
-    assert(context);
     SLOWASSERT(TYPEOF(value) != PROMSXP);
     SEXP res = createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
     ENSURE_NAMEDMAX(value);
@@ -384,7 +382,6 @@ SEXP createPromiseNoEnvEagerImpl(CallContext* context, SEXP exp, SEXP value) {
 }
 
 SEXP createPromiseNoEnvImpl(CallContext* context, SEXP exp) {
-    assert(context);
     return createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
 }
 
