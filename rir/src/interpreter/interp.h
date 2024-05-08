@@ -56,7 +56,7 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(Function* fun,
+inline bool RecompileHeuristic(Function* fun, const Context& context,
                                Function* funMaybeDisabled = nullptr) {
 
     auto flags = fun->flags;
@@ -73,8 +73,9 @@ inline bool RecompileHeuristic(Function* fun,
 
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        fun->clearInvocationTime();
+    if (fun->invocationCount(context) >= 3 &&
+        fun->invocationTime(context) > wt) {
+        fun->clearInvocationTime(context);
         return !abandon;
     }
 
@@ -84,7 +85,7 @@ inline bool RecompileHeuristic(Function* fun,
     if (wu == 0)
         return !abandon;
 
-    if (fun->invocationCount() == wu)
+    if (fun->invocationCount(context) == wu)
         return !abandon;
 
     return false;

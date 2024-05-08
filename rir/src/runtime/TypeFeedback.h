@@ -322,6 +322,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedCallees* callees_;
     ObservedTest* tests_;
     ObservedValues* types_;
+
+    unsigned invocationCount_ = 0;
+    unsigned long invoked = 0;
+    unsigned long execTime = 0;
+
     // All the data are stored in this array: callees, tests and types in this
     // order. The constructors sets the above pointers to point at the
     // appropriate locations.
@@ -354,6 +359,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
+
+    size_t invocationCount() { return invocationCount_; }
+    unsigned long invocationTime() { return execTime; }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {

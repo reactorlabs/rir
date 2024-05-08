@@ -449,7 +449,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            insert.function->optFunction->invocationCount() > 1 &&
+            typeFeedback->invocationCount() > 1 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
@@ -979,14 +979,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             emitGenericCall();
         }
 
-        if (ti.taken != (size_t)-1 &&
-            insert.function->optFunction->invocationCount()) {
+        if (ti.taken != (size_t)-1 && typeFeedback->invocationCount()) {
             if (auto c = CallInstruction::CastCall(top())) {
                 // invocation count is already incremented before calling jit
-                c->taken =
-                    (double)ti.taken /
-                    (double)(insert.function->optFunction->invocationCount() -
-                             1);
+                c->taken = (double)ti.taken /
+                           (double)(typeFeedback->invocationCount() - 1);
             }
         }
         break;

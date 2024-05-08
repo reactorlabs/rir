@@ -126,13 +126,13 @@ TypeFeedback* Function::typeFeedback() const {
 }
 
 TypeFeedback* Function::typeFeedback(const Context& ctx) {
-    if (ctx != context())
+    if (dispatchTable() && ctx != context())
         return dispatchTable()->getOrCreateTypeFeedback(ctx);
     return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
 }
 
 TypeFeedback* Function::typeFeedback(const CallContext* callContext) {
-    if (!callContext)
+    if (!callContext || !dispatchTable())
         return typeFeedback();
     return typeFeedback(callContext->givenContext);
 }

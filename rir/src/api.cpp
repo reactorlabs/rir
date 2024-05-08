@@ -339,7 +339,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                     // Don't lower functions that have not been called often, as
                     // they have incomplete type-feedback.
                     if (dt->size() == 1 &&
-                        dt->baseline()->invocationCount() < 2)
+                        dt->baseline()->invocationCount(c->context()) < 2)
                         return;
                     apply(body, c);
                 }

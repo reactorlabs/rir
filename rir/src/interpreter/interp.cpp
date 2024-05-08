@@ -996,9 +996,10 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
-        fun->registerInvocation();
+        fun->registerInvocation(call.givenContext);
 
-        if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
+        if (!isDeoptimizing() &&
+            RecompileHeuristic(fun, call.givenContext, disabledFun)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of
@@ -1141,7 +1142,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(call.passedArgs - call.suppliedArgs);
-        fun->registerEndInvocation();
+        fun->registerEndInvocation(call.givenContext);
         return result;
     }
     default:
@@ -3995,16 +3996,16 @@ SEXP rirEval(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
-        fun->registerInvocation();
+        fun->registerInvocation(Context());
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
+        fun->registerEndInvocation(Context());
         return res;
     }
 
     if (auto fun = Function::check(what)) {
-        fun->registerInvocation();
+        fun->registerInvocation(fun->context());
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
+        fun->registerEndInvocation(fun->context());
         return res;
     }
 

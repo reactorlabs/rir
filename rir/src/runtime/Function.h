@@ -100,6 +100,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     size_t invocationCount() { return invocationCount_; }
+    size_t invocationCount(const Context& context) {
+        return typeFeedback(context)->invocationCount_;
+    }
 
     size_t deoptCount() { return deoptCount_; }
     void addDeoptCount(size_t n) { deoptCount_ += n; }
@@ -111,32 +114,49 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
 
-    void unregisterInvocation() {
-        invoked = 0;
+    void unregisterInvocation(const Context& context) {
+        auto tf = typeFeedback(context);
+        tf->invoked = 0;
+        if (tf->invocationCount_ > 0)
+            tf->invocationCount_--;
         if (invocationCount_ > 0)
             invocationCount_--;
     }
 
-    void registerInvocation() {
-        if (execTime < MAX_TIME_MEASURE) {
+    void registerInvocation(const Context& context) {
+        auto tf = typeFeedback(context);
+        if (tf->execTime < MAX_TIME_MEASURE) {
             // constant increment for recursive functions
-            if (invoked != 0)
+            if (tf->invoked != 0) {
                 execTime += 5e5;
-            else
-                invoked = rdtsc();
+                tf->execTime += 5e5;
+            } else {
+                tf->invoked = rdtsc();
+            }
         }
 
+        if (tf->invocationCount_ < UINT_MAX)
+            tf->invocationCount_++;
         if (invocationCount_ < UINT_MAX)
             invocationCount_++;
     }
-    void registerEndInvocation() {
-        if (invoked != 0) {
-            execTime += rdtsc() - invoked;
-            invoked = 0;
+    void registerEndInvocation(const Context& context) {
+        auto tf = typeFeedback(context);
+        if (tf->invoked != 0) {
+            execTime += rdtsc() - tf->invoked;
+            tf->execTime += rdtsc() - tf->invoked;
+            tf->invoked = 0;
         }
     }
     unsigned long invocationTime() { return execTime; }
-    void clearInvocationTime() { execTime = 0; }
+    unsigned long invocationTime(const Context& context) {
+        auto tf = typeFeedback(context);
+        return tf->execTime;
+    }
+    void clearInvocationTime(const Context& context) {
+        auto tf = typeFeedback(context);
+        tf->execTime = 0;
+    }
 
     unsigned size; /// Size, in bytes, of the function and its data
 
@@ -222,7 +242,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     unsigned deoptCount_ = 0;
     unsigned deadCallReached_ = 0;
 
-    unsigned long invoked = 0;
+    // unsigned long invoked = 0;
     unsigned long execTime = 0;
 
     FunctionSignature signature_; /// pointer to this version's signature
