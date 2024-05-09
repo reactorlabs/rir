@@ -13,6 +13,9 @@
 #include "runtime/Function.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/Pool.h"
+
+#include "llvm/Support/raw_os_ostream.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -504,6 +507,7 @@ SEXP CompilationEvent::toSEXP() const {
                             "compile_reason_osr",
                             "time",
                             "subevents",
+                            "bitcode",
                             ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
@@ -539,13 +543,14 @@ SEXP CompilationEvent::toSEXP() const {
 
     SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->time_length) );
     SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->subevents) );
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->bitcode));
 
     UNPROTECT(1);
     return sexp;
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 9);
+    assert(Rf_length(sexp) == 10);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
@@ -564,6 +569,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
 
     this->time_length = serialization::time_from_sexp(VECTOR_ELT(sexp, 7));
     this->subevents = serialization::vector_from_sexp<size_t, serialization::uint64_t_from_sexp>(VECTOR_ELT(sexp, 8));
+    this->bitcode = serialization::string_from_sexp(VECTOR_ELT(sexp, 9));
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -773,12 +779,12 @@ void recordCompile(SEXP cls, const std::string& name,
 
     auto dispatch_context = assumptions.toI();
 
-    recordReasonsClear();
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
         std::forward_as_tuple(rec.first, dispatch_context, name, std::move(sc), std::move(compileReasons_))
     );
+    recordReasonsClear();
 }
 
 void recordCompileFinish(){
@@ -828,6 +834,19 @@ void recordOsrCompile(const SEXP cls) {
     UNPROTECT(2);
 
     recordCompile( cls, name, pir::Compiler::defaultContext );
+}
+
+
+void recordLLVMBitcode( llvm::Function* fun ) {
+    RECORDER_FILTER_GUARD(compile);
+
+    std::stringstream ss {};
+    llvm::raw_os_ostream os {ss};
+
+    fun->print( os );
+
+    assert(!compilation_stack_.empty());
+    compilation_stack_.top().second.set_bitcode( ss.str() );
 }
 
 size_t Record::indexOfBaseline(const rir::Code* code) {

@@ -358,7 +358,8 @@ class CompilationEvent : public ClosureEvent {
         speculative_contexts(std::move(other.speculative_contexts)),
         compile_reasons(std::move(other.compile_reasons)),
         time_length( other.time_length ),
-        subevents( std::move(other.subevents) )
+        subevents( std::move(other.subevents) ),
+        bitcode( std::move(other.bitcode) )
     {}
 
     CompilationEvent() {}
@@ -375,6 +376,10 @@ class CompilationEvent : public ClosureEvent {
 
     void add_subcompilation( size_t idx ){
         subevents.push_back(idx);
+    }
+
+    void set_bitcode( const std::string& str ){
+        bitcode = str;
     }
 
   protected:
@@ -394,6 +399,9 @@ class CompilationEvent : public ClosureEvent {
     Duration time_length;
 
     std::vector<size_t> subevents;
+
+    // The LLVM Bitcode
+    std::string bitcode;
 };
 
 class DeoptEvent : public VersionEvent {

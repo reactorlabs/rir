@@ -1,6 +1,8 @@
 #ifndef RECORDING_HOOKS_H
 #define RECORDING_HOOKS_H
 
+#include "llvm/IR/Module.h"
+
 #include <R/r.h>
 #include <string>
 
@@ -21,6 +23,7 @@ void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
 void recordCompileFinish();
+void recordLLVMBitcode( llvm::Function* fun );
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
