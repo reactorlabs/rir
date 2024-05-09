@@ -1,69 +1,147 @@
-recordings.disassemble <- function( r ){
-    if ( is.character(r) ){
-        r <- recordings.load(r)
-    }
+recordings.output <- function( r ) {
+  if ( is.character(r) ) {
+      r <- recordings.load(r)
+  }
 
-    funs <- NULL
-    for (f in r$functions) {
-        fun <- list( name = f$name, env = f$env, compilations = NULL, deopts = NULL )
-        funs <- c(funs, list(fun))
-    }
+  get_fun <- function( idx ) {
+    f <- r$functions[[ as.integer(idx) + 1 ]]
+    return(paste0( f$name, "(", f$env, ")" ))
+  }
 
-    i <- 0
-    for (in_event in r$events) {
-        event <- list( idx = i )
-        if (class(in_event) == "event_compile") {
-            event$dispatch_ctx <- in_event$dispatch_context
+  for (e in r$events) {
+    event <- ""
 
-            for (sc in in_event$speculative_contexts){
-                event$speculative <- c(event$speculative, sc)
-            }
+    if (class(e) == "event_compile") {
+      event <- paste("[Compilation]", get_fun(e$closure) )
+      event <- paste0( event, "[", recordings.printEventPart( e$dispatch_context, "context" ), "]" )
 
-            for ( cr in c( "heuristic", "condition", "osr" ) ){
-                event[[cr]] <- in_event[[ paste0("compile_reason_", cr) ]]
-            }
+      # TODO speculative context
 
-            clos <- as.integer(in_event$closure) + 1
-            funs[[clos]]$compilations <- c(funs[[clos]]$compilations, list(event))
-        } else if (class(in_event) == "event_deopt") {
-            event$version <- in_event$version
-            event$reason <- in_event$reason
-            event$offset <- in_event$reason_code_idx
-
-            clos <- as.integer(in_event$dispatchTable) + 1
-            funs[[clos]]$deopts <- c(funs[[clos]]$deopts, list(event))
+      for ( cr in c( "heuristic", "condition", "osr" ) ) {
+        reas <- e[[ paste0("compile_reason_", cr) ]]
+        if (!is.null(reas)){
+          event <- paste0( event, ", ", cr, "=", class(reas) )
         }
-        i <- i + 1
+      }
+
+    } else if (class(e) == "event_deopt") {
+      event <- paste( "[Deopt]", get_fun( e$dispatchTable ) )
+      event <- paste0( event, "[", recordings.printEventPart( e$version, "context" ), "]"  )
+
+      event <- paste0( event, ", reason=", recordings.printEventPart( e$reason, "deopt_reason" ) )
+      event <- paste0( event, "(", e$reason_code_idx, ")" )
     }
 
-    return(funs)
+    if (trimws(event) != ""){
+      cat( paste0( event, "\n" ) )
+    }
+  }
 }
 
-recordings.prettyPrint <- function( funs ) {
-    pp <- recordings.printEventPart
-    line <- function(...) cat( paste0( ..., "\n"))
+recordings.csv <- function( r ) {
+  if ( is.character(r) ) {
+      r <- recordings.load(r)
+  }
 
-    for ( fun in funs ){
-        line( "====", fun$name, "(", fun$env, ")", "====")
-        line("Compilations:")
+  result <- ""
 
-        for ( e in fun$compilations ){
-            line( " ", e$idx, ":" )
+  # intersperse a vector with commas
+  insert.commas <- function( vec ) {
+      acc <- NULL
+      flag <- TRUE
+      for ( el in vec ){
 
-            line("  ctx=", pp( e$dispatch_ctx, "context" ))
+          if ( flag ){
+            flag <- FALSE
+          } else {
+              acc <- c(acc, "," )
+          }
 
-            line("  compile_reason_heuristic=", pp( e$heuristic, "reason" ))
-            line("  compile_reason_condition=", pp( e$condition, "reason" ))
-            line("  compile_reason_osr=", pp( e$osr, "reason" ))
+          acc <- c( acc, el )
+      }
+
+      return(acc)
+  }
+
+  # output a line of vector to result
+  line <- function( vec ) {
+    vec <- lapply(vec, function(el) {
+        if (grepl(",", el)){
+            return(paste0( '"', gsub('"', '\\"', el), '"' ))
+        } else {
+            return(el)
         }
+    })
+    vec <- insert.commas( vec )
+    s <- paste( vec, collapse="" )
+    result <<- paste0( result, s, "\n" )
+  }
 
-        line("Deopts:")
+  columns <- c( "type", "fun", "env", "ctx", "reason", "bitcode_len" )
 
-        for ( e in fun$deopts ){
-            line( " ", e$idx, ":" )
+  line( columns )
 
-            line("  ver=", pp( e$version, "context" ))
-            line("  reason=", pp( e$reason, "deopt_reason" ), "(" , e$offset, ")")
+  get_fun <- function( idx ) {
+    f <- r$functions[[ as.integer(idx) + 1 ]]
+    return( c(f$name, f$env ) )
+  }
+
+  print_ctx <- function(ctx) {
+    return( recordings.printEventPart( ctx, "context" ) )
+  }
+
+  for (e in r$events) {
+    event <- NULL
+
+    if (class(e) == "event_compile") {
+      event$type <- "Compilation"
+
+      f <- get_fun( e$closure )
+      event$fun <- f[1]
+      event$env <- f[2]
+
+      event$ctx <- print_ctx( e$dispatch_context )
+
+      reasAcc <- ""
+
+      for ( cr in c( "heuristic", "condition", "osr" ) ) {
+        reas <- e[[ paste0("compile_reason_", cr) ]]
+        if (!is.null(reas)){
+          if (nchar(reasAcc) == 0) {
+            reasAcc <- paste0( cr, "=", class(reas) )
+          } else {
+            reasAcc <- paste0( reasAcc, ",", cr, "=", class(reas) )
+          }
         }
+      }
+
+      event$reason <- reasAcc
+
+      event$bitcode_len <- nchar(e$bitcode)
+
+    } else if (class(e) == "event_deopt") {
+      event$type <- "Deopt"
+
+      f <- get_fun( e$dispatchTable )
+      event$fun <- f[1]
+      event$env <- f[2]
+
+      event$ctx <- print_ctx( e$version )
+      event$reason <- paste0( recordings.printEventPart( e$reason, "deopt_reason" ), "(", e$reason_code_idx, ")")
     }
+
+    vec <- NULL
+
+    for ( col in columns ){
+      if ( is.null( event[[ col ]] ) ){
+        vec <- c(vec, "")
+      } else {
+        vec <- c( vec, event[[ col ]] )
+      }
+    }
+
+    line( vec )
+  }
+
+  return(result)
 }
