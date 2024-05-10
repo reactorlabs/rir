@@ -1342,7 +1342,7 @@ REXPORT SEXP printRecordings(SEXP from) {
     return R_NilValue;
 }
 
-REXPORT SEXP printEventPart(SEXP obj, SEXP type) {
+REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     if (Rf_isNull(obj)) {
         return Rf_mkString("");
     }
@@ -1360,10 +1360,56 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type) {
         auto disp = rir::recording::serialization::context_from_sexp(obj);
         ss << disp;
     } else if (type_str == "speculative") {
-        // auto sc =
-        //     rir::recording::serialization::speculative_context_from_sexp(obj);
-        // TODO
-        return Rf_mkString("<CTX>");
+        auto sc =
+             rir::recording::serialization::speculative_context_from_sexp(obj);
+
+        switch (sc.type) {
+        case rir::recording::SpeculativeContextType::Callees: {
+            ss << "Callees[";
+            bool first = true;
+            for (auto c : sc.value.callees) {
+                if (c == NO_INDEX)
+                    break;
+                if (first){
+                    first = false;
+                }
+                else {
+                    ss << ',';
+                }
+
+                auto fun =
+                        rir::recording::serialization::fun_recorder_from_sexp(VECTOR_ELT( functions, c ));
+                ss << fun;
+            }
+            ss << "]";
+            break;
+        }
+
+        case rir::recording::SpeculativeContextType::Test:
+            ss << "Test{";
+            switch (sc.value.test.seen) {
+            case rir::ObservedTest::None:
+                ss << "None";
+                break;
+            case rir::ObservedTest::OnlyTrue:
+                ss << "OnlyTrue";
+                break;
+            case rir::ObservedTest::OnlyFalse:
+                ss << "OnlyFalse";
+                break;
+            case rir::ObservedTest::Both:
+                ss << "Both";
+                break;
+            }
+            ss << "}";
+            break;
+
+        case rir::recording::SpeculativeContextType::Values:
+            ss << "Values{";
+            sc.value.values.print(ss);
+            ss << "}";
+            break;
+        }
     } else if (type_str == "reason") {
         auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
         ev->print(ss);
@@ -1401,7 +1447,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type) {
         }
     } else {
         std::cerr << "type parameter '" << type_str
-                  << "' is not a known type (dispatch,speculative,reason)"
+                  << "' is not a known type (context,speculative,reason,deopt_reason)"
                   << std::endl;
         return R_NilValue;
     }

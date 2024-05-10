@@ -86,8 +86,8 @@ recordings.csv <- function( r ) {
     return( c(f$name, f$env ) )
   }
 
-  print_ctx <- function(ctx) {
-    return( recordings.printEventPart( ctx, "context" ) )
+  pp <- function( obj, type ){
+    recordings.printEventPart( obj, type, r$functions )
   }
 
   for (e in r$events) {
@@ -100,7 +100,12 @@ recordings.csv <- function( r ) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$ctx <- print_ctx( e$dispatch_context )
+      event$ctx <- pp( e$dispatch_context, "context" )
+
+      event$speculative <- paste(insert.commas(lapply(
+        e$speculative_contexts,
+        function( spec ) pp( spec, "speculative" )
+      )), collapse="")
 
       reasAcc <- ""
 
@@ -126,8 +131,8 @@ recordings.csv <- function( r ) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$ctx <- print_ctx( e$version )
-      event$reason <- paste0( recordings.printEventPart( e$reason, "deopt_reason" ), "(", e$reason_code_idx, ")")
+      event$ctx <- pp( e$version, "context" )
+      event$reason <- paste0( pp( e$reason, "deopt_reason" ), "@", e$reason_code_idx)
     }
 
     vec <- NULL

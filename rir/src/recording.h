@@ -611,6 +611,6 @@ REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
 REXPORT SEXP printRecordings(SEXP from);
-REXPORT SEXP printEventPart(SEXP obj, SEXP type);
+REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
 
 #endif
