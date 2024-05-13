@@ -448,7 +448,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            typeFeedback->invocationCount() > 1 &&
+            (typeFeedback->version() > 0 ||
+             typeFeedback->invocationCount() > 1) &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());

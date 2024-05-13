@@ -3996,9 +3996,9 @@ SEXP rirEval(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
-        fun->registerInvocation(Context());
+        fun->registerInvocation(fun->context());
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation(Context());
+        fun->registerEndInvocation(fun->context());
         return res;
     }
 
