@@ -2546,7 +2546,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(mk_eager_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = createPromise(callCtxt, c->getPromise(id), env);
+            SEXP prom = createPromise(nullptr, c->getPromise(id), env);
             PROTECT(prom);
             SEXP val = ostack_pop();
             assert(TYPEOF(val) != PROMSXP);

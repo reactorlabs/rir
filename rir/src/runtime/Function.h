@@ -117,6 +117,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void unregisterInvocation(const Context& context) {
         auto tf = typeFeedback(context);
         tf->invoked = 0;
+        if (dispatchTable()) {
+            auto base = baseline();
+            auto baselineTf = base->typeFeedback();
+            if (baselineTf != tf && baselineTf->invocationCount_ > 0) {
+                baselineTf->invocationCount_--;
+            }
+        }
         if (tf->invocationCount_ > 0)
             tf->invocationCount_--;
         if (invocationCount_ > 0)
@@ -135,6 +142,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             }
         }
 
+        if (dispatchTable()) {
+            auto base = baseline();
+            auto baselineTf = base->typeFeedback();
+            if (baselineTf != tf && baselineTf->invocationCount_ < UINT_MAX) {
+                baselineTf->invocationCount_++;
+            }
+        }
         if (tf->invocationCount_ < UINT_MAX)
             tf->invocationCount_++;
         if (invocationCount_ < UINT_MAX)
