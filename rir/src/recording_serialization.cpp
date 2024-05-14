@@ -79,6 +79,14 @@ int64_t int64_t_from_sexp(SEXP sexp) {
     return std::strtoll(CHAR(STRING_ELT(sexp, 0)), nullptr, 10);
 }
 
+SEXP to_sexp(bool flag){
+    return flag ? R_TrueValue : R_FalseValue;
+}
+
+bool bool_from_sexp(SEXP sexp){
+    return sexp == R_TrueValue;
+}
+
 SEXP to_sexp(const rir::Context ctx) { return to_sexp(ctx.toI()); }
 
 Context context_from_sexp(SEXP sexp) {

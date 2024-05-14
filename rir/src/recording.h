@@ -382,6 +382,10 @@ class CompilationEvent : public ClosureEvent {
         bitcode = str;
     }
 
+    void set_success(bool succes){
+        succesful = succes;
+    }
+
   protected:
     void print(const std::vector<FunRecording>& mapping,
                std::ostream& out) const override;
@@ -402,6 +406,8 @@ class CompilationEvent : public ClosureEvent {
 
     // The LLVM Bitcode
     std::string bitcode;
+
+    bool succesful;
 };
 
 class DeoptEvent : public VersionEvent {

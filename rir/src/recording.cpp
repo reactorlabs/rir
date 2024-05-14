@@ -508,6 +508,7 @@ SEXP CompilationEvent::toSEXP() const {
                             "time",
                             "subevents",
                             "bitcode",
+                            "succesful",
                             ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_COMPILE_EVENT);
@@ -544,13 +545,14 @@ SEXP CompilationEvent::toSEXP() const {
     SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->time_length) );
     SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->subevents) );
     SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->bitcode));
+    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->succesful));
 
     UNPROTECT(1);
     return sexp;
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 10);
+    assert(Rf_length(sexp) == 11);
     this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
     this->dispatch_context =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
@@ -570,6 +572,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
     this->time_length = serialization::time_from_sexp(VECTOR_ELT(sexp, 7));
     this->subevents = serialization::vector_from_sexp<size_t, serialization::uint64_t_from_sexp>(VECTOR_ELT(sexp, 8));
     this->bitcode = serialization::string_from_sexp(VECTOR_ELT(sexp, 9));
+    this->succesful = serialization::bool_from_sexp(VECTOR_ELT(sexp, 10));
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -787,7 +790,7 @@ void recordCompile(SEXP cls, const std::string& name,
     recordReasonsClear();
 }
 
-void recordCompileFinish(){
+void recordCompileFinish(bool succesful){
     RECORDER_FILTER_GUARD(compile);
 
     auto end_time = CompilationEvent::Clock::now();
@@ -799,6 +802,7 @@ void recordCompileFinish(){
 
     auto duration = std::chrono::duration_cast<CompilationEvent::Duration>(end_time - start_time);
     event->set_time(duration);
+    event->set_success(succesful);
 
     size_t idx = recorder_.push_event( std::move(event) );
 
@@ -1190,7 +1194,7 @@ void recordExecution( const char* filePath, const char* filterArg ){
 
     std::cerr << "Recording to \"" << filePath << "\" (environment variable";
     if ( filterArg != nullptr ){
-        std::cerr << ": " << filterArg << " )\n";
+        std::cerr << ": " << filterArg << ")\n";
     } else {
         std::cerr << ")\n";
     }

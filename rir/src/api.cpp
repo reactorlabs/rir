@@ -354,8 +354,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         done->body()->nativeCode();
     };
 
+    bool successfulComp = true;
+
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
+                           successfulComp = false;
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
                        },
@@ -364,7 +367,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     delete m;
     UNPROTECT(1);
 
-    recording::recordCompileFinish();
+    recording::recordCompileFinish(successfulComp);
 
     return what;
 }

@@ -22,7 +22,7 @@ namespace recording {
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
-void recordCompileFinish();
+void recordCompileFinish(bool succesful);
 void recordLLVMBitcode( llvm::Function* fun );
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,

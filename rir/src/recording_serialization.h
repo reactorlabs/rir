@@ -39,6 +39,10 @@ SEXP to_sexp(int64_t i);
 
 int64_t int64_t_from_sexp(SEXP sexp);
 
+SEXP to_sexp(bool flag);
+
+bool bool_from_sexp(SEXP sexp);
+
 SEXP to_sexp(const rir::Context);
 
 Context context_from_sexp(SEXP sexp);
