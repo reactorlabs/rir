@@ -91,12 +91,13 @@ struct CompileReasonImpl : CompileReason {
 };
 
 struct MarkOptReason : public CompileReasonImpl<MarkOptReason, 0> {
-    static constexpr const char * NAME = "MarkOpt";
+    static constexpr const char* NAME = "MarkOpt";
     virtual ~MarkOptReason() = default;
 };
 
-struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeReason, 4> {
-    static constexpr const char * NAME = "InvocationCountTime";
+struct InvocationCountTimeReason
+    : public CompileReasonImpl<InvocationCountTimeReason, 4> {
+    static constexpr const char* NAME = "InvocationCountTime";
     virtual ~InvocationCountTimeReason() = default;
 
     InvocationCountTimeReason(size_t count, size_t minimalCount,
@@ -123,7 +124,7 @@ struct InvocationCountTimeReason : public CompileReasonImpl<InvocationCountTimeR
 };
 
 struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
-    static constexpr const char * NAME = "PirWarmupReason";
+    static constexpr const char* NAME = "PirWarmupReason";
     virtual ~PirWarmupReason() = default;
 
     explicit PirWarmupReason(size_t invocationCount)
@@ -145,30 +146,31 @@ struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
 
 struct NotOptimizedReason : public CompileReasonImpl<NotOptimizedReason, 0> {
     virtual ~NotOptimizedReason() = default;
-    static constexpr const char * NAME = "NotOptimized";
+    static constexpr const char* NAME = "NotOptimized";
 };
 
 struct IsImprovingReason : public CompileReasonImpl<IsImprovingReason, 0> {
     virtual ~IsImprovingReason() = default;
-    static constexpr const char * NAME = "IsImproving";
+    static constexpr const char* NAME = "IsImproving";
 };
 
-struct ReoptimizeFlagReason : public CompileReasonImpl<ReoptimizeFlagReason, 0> {
+struct ReoptimizeFlagReason
+    : public CompileReasonImpl<ReoptimizeFlagReason, 0> {
     virtual ~ReoptimizeFlagReason() = default;
-    static constexpr const char * NAME = "ReoptimizeFlag";
+    static constexpr const char* NAME = "ReoptimizeFlag";
 };
 
-struct OSRCallerCalleeReason : public CompileReasonImpl<OSRCallerCalleeReason, 0>{
+struct OSRCallerCalleeReason
+    : public CompileReasonImpl<OSRCallerCalleeReason, 0> {
     virtual ~OSRCallerCalleeReason() = default;
-    static constexpr const char * NAME = "OSRCallerCallee";
+    static constexpr const char* NAME = "OSRCallerCallee";
 };
 
-struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1>{
+struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1> {
     virtual ~OSRLoopReason() = default;
-    static constexpr const char * NAME = "OSRLoop";
+    static constexpr const char* NAME = "OSRLoop";
 
-    explicit OSRLoopReason(size_t loopCount)
-        : loopCount(loopCount) {}
+    explicit OSRLoopReason(size_t loopCount) : loopCount(loopCount) {}
 
     OSRLoopReason() {}
 
@@ -185,8 +187,7 @@ struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1>{
 };
 
 struct CompileReasons {
-    CompileReasons()
-        : heuristic(nullptr), condition(nullptr), osr(nullptr) {}
+    CompileReasons() : heuristic(nullptr), condition(nullptr), osr(nullptr) {}
 
     CompileReasons(CompileReasons&& other)
         : heuristic(std::move(other.heuristic)),
@@ -206,11 +207,10 @@ struct CompileReasons {
         condition = std::make_unique<T>(std::forward<Args>(args)...);
     }
 
-    template<typename T, typename... Args>
+    template <typename T, typename... Args>
     void set_osr(Args&&... args) {
         osr = std::make_unique<T>(std::forward<Args>(args)...);
     }
-
 };
 
 /**
@@ -261,7 +261,8 @@ class ClosureEvent : public Event {
         return recordingIdx == closureIndex;
     };
 
-    const char* targetName(const std::vector<FunRecording>& mapping) const override;
+    const char*
+    targetName(const std::vector<FunRecording>& mapping) const override;
 };
 
 /**
@@ -284,7 +285,8 @@ class DtEvent : public Event {
         return recordingIdx == dispatchTableIndex;
     };
 
-    const char* targetName(const std::vector<FunRecording>& mapping) const override;
+    const char*
+    targetName(const std::vector<FunRecording>& mapping) const override;
 };
 
 /**
@@ -348,19 +350,16 @@ class CompilationEvent : public ClosureEvent {
         : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
           compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons))
-    {}
+          compile_reasons(std::move(compile_reasons)) {}
 
-    CompilationEvent( CompilationEvent&& other )
-        : ClosureEvent( other.closureIndex ),
-        dispatch_context( other.dispatch_context ),
-        compileName( std::move(other.compileName) ),
-        speculative_contexts(std::move(other.speculative_contexts)),
-        compile_reasons(std::move(other.compile_reasons)),
-        time_length( other.time_length ),
-        subevents( std::move(other.subevents) ),
-        bitcode( std::move(other.bitcode) )
-    {}
+    CompilationEvent(CompilationEvent&& other)
+        : ClosureEvent(other.closureIndex),
+          dispatch_context(other.dispatch_context),
+          compileName(std::move(other.compileName)),
+          speculative_contexts(std::move(other.speculative_contexts)),
+          compile_reasons(std::move(other.compile_reasons)),
+          time_length(other.time_length), subevents(std::move(other.subevents)),
+          bitcode(std::move(other.bitcode)) {}
 
     CompilationEvent() {}
 
@@ -370,21 +369,13 @@ class CompilationEvent : public ClosureEvent {
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t recordingIdx) const override;
 
-    void set_time( Duration time ){
-        time_length = time;
-    }
+    void set_time(Duration time) { time_length = time; }
 
-    void add_subcompilation( size_t idx ){
-        subevents.push_back(idx);
-    }
+    void add_subcompilation(size_t idx) { subevents.push_back(idx); }
 
-    void set_bitcode( const std::string& str ){
-        bitcode = str;
-    }
+    void set_bitcode(const std::string& str) { bitcode = str; }
 
-    void set_success(bool succes){
-        succesful = succes;
-    }
+    void set_success(bool succes) { succesful = succes; }
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -541,7 +532,7 @@ class Record {
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
 
-public:
+  public:
     std::vector<FunRecording> functions;
 
     std::vector<std::unique_ptr<Event>> log;
@@ -582,7 +573,7 @@ public:
             std::make_unique<E>(entry.first, std::forward<Args>(args)...));
     }
 
-    size_t push_event(std::unique_ptr<Event> e){
+    size_t push_event(std::unique_ptr<Event> e) {
         size_t idx = log.size();
         log.emplace_back(std::move(e));
         return idx;
@@ -594,11 +585,11 @@ public:
      */
     bool contains(const DispatchTable* dt);
 
-    std::pair<size_t, FunRecording&> initOrGetRecording(const DispatchTable* dt,
-                                                        const std::string& name = "");
+    std::pair<size_t, FunRecording&>
+    initOrGetRecording(const DispatchTable* dt, const std::string& name = "");
 
-    std::pair<size_t, FunRecording&> initOrGetRecording(const SEXP cls,
-                                                        const std::string& name = "");
+    std::pair<size_t, FunRecording&>
+    initOrGetRecording(const SEXP cls, const std::string& name = "");
 
     void recordSpeculativeContext(DispatchTable* dt,
                                   std::vector<SpeculativeContext>& ctx);
@@ -618,16 +609,5 @@ public:
 } // namespace recording
 
 } // namespace rir
-
-// R API
-REXPORT SEXP startRecordings();
-REXPORT SEXP stopRecordings();
-REXPORT SEXP resetRecordings();
-REXPORT SEXP isRecordings();
-REXPORT SEXP saveRecordings(SEXP filename);
-REXPORT SEXP loadRecordings(SEXP filename);
-REXPORT SEXP getRecordings();
-REXPORT SEXP printRecordings(SEXP from);
-REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
 
 #endif

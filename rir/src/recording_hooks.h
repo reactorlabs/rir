@@ -1,6 +1,7 @@
 #ifndef RECORDING_HOOKS_H
 #define RECORDING_HOOKS_H
 
+#include "api.h"
 #include "llvm/IR/Module.h"
 
 #include <R/r.h>
@@ -29,6 +30,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
+
 void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
 void recordInvocationDoCall();
 void recordInvocationNativeCallTrampoline();
@@ -60,5 +62,16 @@ void recordExecution( const char* filePath, const char* filter );
 
 } // namespace recording
 } // namespace rir
+
+// R API
+REXPORT SEXP startRecordings();
+REXPORT SEXP stopRecordings();
+REXPORT SEXP resetRecordings();
+REXPORT SEXP isRecordings();
+REXPORT SEXP saveRecordings(SEXP filename);
+REXPORT SEXP loadRecordings(SEXP filename);
+REXPORT SEXP getRecordings();
+REXPORT SEXP printRecordings(SEXP from);
+REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
 
 #endif
