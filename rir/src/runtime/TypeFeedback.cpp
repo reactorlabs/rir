@@ -319,9 +319,9 @@ void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
                                     bool invalidateWhenFull) {
     if (callees(idx).record(function, callee, invalidateWhenFull)) {
         version_++;
-        if (inclusive && inclusive != this)
-            inclusive->record_callee(idx, function, callee, invalidateWhenFull);
     }
+    if (inclusive && inclusive != this)
+        inclusive->record_callee(idx, function, callee, invalidateWhenFull);
 }
 
 void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,

@@ -247,6 +247,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
+    const DispatchTable* dispatchTable() const { return dispatchTable_; }
 
   private:
     unsigned numArgs_;

@@ -977,7 +977,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             emitGenericCall();
         }
 
-        if (ti.taken != (size_t)-1 && typeFeedback->invocationCount()) {
+        if (ti.taken != (size_t)-1 && typeFeedback->invocationCount() > 2) {
             if (auto c = CallInstruction::CastCall(top())) {
                 // invocation count is already incremented before calling jit
                 c->taken = (double)ti.taken /

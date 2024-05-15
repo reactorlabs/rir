@@ -102,38 +102,39 @@ void Function::clearDisabledAssumptions(Context& given) const {
 }
 
 Function* Function::baseline() {
-    if (!dispatchTable_) {
+    if (!dispatchTable()) {
         assert(signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);
         return this;
     }
-    return dispatchTable_->baseline();
+    return dispatchTable()->baseline();
 }
 
 const Function* Function::baseline() const {
-    if (!dispatchTable_) {
+    if (!dispatchTable()) {
         assert(signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);
         return this;
     }
-    return dispatchTable_->baseline();
+    return dispatchTable()->baseline();
 }
 
 TypeFeedback* Function::typeFeedback() const {
-    auto tf = TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
-    assert(tf);
-    return tf;
+    return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
 }
 
 TypeFeedback* Function::typeFeedback(const Context& ctx) {
     if (dispatchTable() && ctx != context())
         return dispatchTable()->getOrCreateTypeFeedback(ctx);
-    return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+    return typeFeedback();
 }
 
 TypeFeedback* Function::typeFeedback(const CallContext* callContext) {
-    if (!callContext || !dispatchTable())
+    if (!callContext || !dispatchTable()) {
+        assert(signature().optimization ==
+               FunctionSignature::OptimizationLevel::Baseline);
         return typeFeedback();
+    }
     return typeFeedback(callContext->givenContext);
 }
 
