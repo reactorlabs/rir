@@ -65,7 +65,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     case Force::ArgumentKind::promise:
                         if (!localLoad) {
                             speculateOn = i;
-                            guardPos = checkpoint.next(i, i, dom);
+                            guardPos = checkpoint.next(i);
                             if (guardPos)
                                 typecheckPos = guardPos->nextBB();
                         }
@@ -86,7 +86,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
             feedback = i->typeFeedback();
-            guardPos = checkpoint.next(i, i, dom);
+            guardPos = checkpoint.next(i);
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
         }
