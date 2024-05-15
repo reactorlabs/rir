@@ -460,10 +460,19 @@ class DtInitEvent : public DtEvent {
 
 class InvocationEvent : public VersionEvent {
   public:
+    enum Source : uint8_t {
+        DoCall,
+        NativeCallTrampoline,
+        FIRST = DoCall,
+        LAST = NativeCallTrampoline
+    };
+
+    using SourceSet = EnumSet<Source, uint8_t>;
+
     InvocationEvent(size_t dispatchTableIndex, Context version,
-                    ssize_t deltaCount, size_t deltaDeopt)
+                    ssize_t deltaCount, size_t deltaDeopt, SourceSet source)
         : VersionEvent(dispatchTableIndex, version), deltaCount(deltaCount),
-          deltaDeopt(deltaDeopt){};
+          deltaDeopt(deltaDeopt), source(source){};
 
     InvocationEvent() : VersionEvent(){};
 
@@ -479,6 +488,8 @@ class InvocationEvent : public VersionEvent {
   private:
     ssize_t deltaCount = 0;
     size_t deltaDeopt = 0;
+
+    SourceSet source = SourceSet::None();
 };
 
 // From names.c

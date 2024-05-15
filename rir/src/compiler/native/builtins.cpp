@@ -1409,6 +1409,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto dt = DispatchTable::unpack(BODY(callee));
 
+    recording::recordInvocationNativeCallTrampoline();
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {

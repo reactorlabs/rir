@@ -37,6 +37,10 @@ namespace recording {
 // global state
 // a flag indicating whether the recording is active or not
 static bool is_recording_ = false;
+
+static InvocationEvent::SourceSet invocation_source_
+    = InvocationEvent::SourceSet::None();
+
 // the main recorder
 static Record recorder_;
 
@@ -726,7 +730,7 @@ void DtInitEvent::fromSEXP(SEXP sexp) {
 
 SEXP InvocationEvent::toSEXP() const {
     const char* fields[] = {"dispatchTable", "context", "deltaCount",
-                            "deltaDeopt", ""};
+                            "deltaDeopt", "source", ""};
     auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     setClassName(sexp, R_CLASS_INVOCATION_EVENT);
     int i = 0;
@@ -735,19 +739,22 @@ SEXP InvocationEvent::toSEXP() const {
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(version)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaCount)));
     SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaDeopt)));
-    UNPROTECT(5);
+    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(source)));
+    UNPROTECT(6);
+
     return sexp;
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
     assert(TYPEOF(sexp) == VECSXP);
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 5);
     int i = 0;
     dispatchTableIndex =
         serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
     version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
     deltaCount = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    source = serialization::invocation_source_set_from_sexp(VECTOR_ELT(sexp, i++));
 }
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,
@@ -934,7 +941,20 @@ void recordInvocation(Function* f, ssize_t deltaCount,
         return;
     }
 
-    recorder_.record<InvocationEvent>(dt, version, deltaCount, previousCount);
+    recorder_.record<InvocationEvent>(dt, version, deltaCount, previousCount, invocation_source_);
+    invocation_source_ = InvocationEvent::SourceSet::None();
+}
+
+void recordInvocationDoCall(){
+    RECORDER_FILTER_GUARD(invoke);
+    std::cout << "DoCall\n";
+    invocation_source_.set(InvocationEvent::DoCall);
+}
+
+void recordInvocationNativeCallTrampoline(){
+    RECORDER_FILTER_GUARD(invoke);
+    std::cout << "Trampoline\n";
+    invocation_source_.set(InvocationEvent::NativeCallTrampoline);
 }
 
 #define RECORD_SC_GUARD()                                                      \
@@ -1417,6 +1437,17 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     } else if (type_str == "reason") {
         auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
         ev->print(ss);
+    } else if ( type_str == "invocation_source" ){
+        auto src = rir::recording::serialization::invocation_source_set_from_sexp(obj);
+
+        if (src.contains(rir::recording::InvocationEvent::DoCall) && src.contains(rir::recording::InvocationEvent::NativeCallTrampoline)){
+            ss << "DoCall,NativeCallTrampoline";
+        } else if (src.contains(rir::recording::InvocationEvent::DoCall)){
+            ss << "DoCall";
+        } else if (src.contains(rir::recording::InvocationEvent::NativeCallTrampoline)){
+            ss << "NativeCallTrampoline";
+        }
+
     } else if (type_str == "deopt_reason") {
         auto reason = rir::recording::serialization::deopt_reason_from_sexp(obj);
 

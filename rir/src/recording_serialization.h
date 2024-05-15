@@ -69,6 +69,10 @@ SEXP to_sexp( CompilationEvent::Duration time );
 
 CompilationEvent::Duration time_from_sexp( SEXP sexp );
 
+SEXP to_sexp( InvocationEvent::SourceSet set );
+
+InvocationEvent::SourceSet invocation_source_set_from_sexp( SEXP sexp );
+
 template <typename T>
 SEXP to_sexp(const std::unique_ptr<T>& ptr) {
     return to_sexp(*ptr);

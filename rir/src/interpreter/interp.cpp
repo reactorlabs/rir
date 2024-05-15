@@ -987,6 +987,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
+        recording::recordInvocationDoCall();
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
