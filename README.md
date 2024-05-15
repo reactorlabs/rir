@@ -160,47 +160,22 @@ Fetch updated R:
 
 Or use `ninja setup`
 
-## Record & Replay
+## Record Events
 
 There is an R-level API for record & replay the JIT compilation.
 
 To record all function compilation, run the script as follows:
 
 ```sh
-PIR_WARMUP=2 R_PROFILE=recording.R ./bin/R -f test.R
+RIR_RECORD=output.rds ./bin/R -f test.R
 ```
 
-where `recording.R` contains:
+where `output.rds` is the destination where the recording will be saved.
 
-```r
-reg.finalizer(
-  e = loadNamespace("base"),
-  onexit = TRUE,
-  f = function(x) {
-    recordings.stop()
-    recordings.save("/tmp/recordings.rds")
-  }
-)
+With the "RIR_RECORD_FILTER" environment variable, you can also specify a recording filter, with comma separated values of:
+- Compile
+- Deopt
+- TypeFeedback
+- Invoke
 
-recordings.start()
-```
-
-Replay:
-
-```sh
-./bin/R -e 'recordings.replay("/tmp/recordings.rds"); rir.disassemble(f)'
-```
-
-Or one can specify a "RIR_RECORD" variable with the path where to save the recording, like
-
-```sh
-PIR_WARMUP=2 RIR_RECORD=output.rds ./bin/R -f test.R
-```
-
-With the "RIR_RECORD_FILTER" environment variable, one can specify a bit-filter of the recording filter.  
-The bits are mapped as follows:
- - 1 -> Compile events
- - 2 -> Deopt events
- - 4 -> Type feedback events
- - 8 -> Invocation events
 
