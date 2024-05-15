@@ -1,43 +1,3 @@
-recordings.output <- function( r ) {
-  if ( is.character(r) ) {
-      r <- recordings.load(r)
-  }
-
-  get_fun <- function( idx ) {
-    f <- r$functions[[ as.integer(idx) + 1 ]]
-    return(paste0( f$name, "(", f$env, ")" ))
-  }
-
-  for (e in r$events) {
-    event <- ""
-
-    if (class(e) == "event_compile") {
-      event <- paste("[Compilation]", get_fun(e$closure) )
-      event <- paste0( event, "[", recordings.printEventPart( e$dispatch_context, "context" ), "]" )
-
-      # TODO speculative context
-
-      for ( cr in c( "heuristic", "condition", "osr" ) ) {
-        reas <- e[[ paste0("compile_reason_", cr) ]]
-        if (!is.null(reas)){
-          event <- paste0( event, ", ", cr, "=", class(reas) )
-        }
-      }
-
-    } else if (class(e) == "event_deopt") {
-      event <- paste( "[Deopt]", get_fun( e$dispatchTable ) )
-      event <- paste0( event, "[", recordings.printEventPart( e$version, "context" ), "]"  )
-
-      event <- paste0( event, ", reason=", recordings.printEventPart( e$reason, "deopt_reason" ) )
-      event <- paste0( event, "(", e$reason_code_idx, ")" )
-    }
-
-    if (trimws(event) != ""){
-      cat( paste0( event, "\n" ) )
-    }
-  }
-}
-
 recordings.csv <- function( r ) {
   if ( is.character(r) ) {
       r <- recordings.load(r)
@@ -46,44 +6,41 @@ recordings.csv <- function( r ) {
   result <- ""
 
   # intersperse a vector with commas
-  insert.commas <- function( vec ) {
-      acc <- NULL
-      flag <- TRUE
-      for ( el in vec ){
+  insert.commas <- function( vec ){
+    flag <- TRUE
 
-          if ( flag ){
-            flag <- FALSE
-          } else {
-              acc <- c(acc, "," )
-          }
-
-          acc <- c( acc, el )
+    lapply( vec, function( el ){
+      if ( flag ){
+          flag <<- FALSE
+          el
+      } else {
+          paste0(",", el)
       }
-
-      return(acc)
+    })
   }
 
   # output a line of vector to result
   line <- function( vec ) {
+    # Surround with quotes if it contains commas
     vec <- lapply(vec, function(el) {
-        if (grepl(",", el)){
-            return(paste0( '"', gsub('"', '\\"', el), '"' ))
-        } else {
-            return(el)
-        }
+      if (grepl(",", el)){
+        paste0( '"', gsub('"', '\\"', el), '"' )
+      } else {
+        el
+      }
     })
     vec <- insert.commas( vec )
-    s <- paste( vec, collapse="" )
-    result <<- paste0( result, s, "\n" )
+    vec <- paste( vec, collapse="" )
+    result <<- paste0( result, vec, "\n" )
   }
 
-  columns <- c( "type", "fun", "env", "ctx", "reason", "bitcode_len" )
+  columns <- c( "type", "fun", "env", "ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta" )
 
   line( columns )
 
   get_fun <- function( idx ) {
     f <- r$functions[[ as.integer(idx) + 1 ]]
-    return( c(f$name, f$env ) )
+    c(f$name, f$env )
   }
 
   pp <- function( obj, type ){
@@ -94,6 +51,10 @@ recordings.csv <- function( r ) {
     event <- NULL
 
     if (class(e) == "event_compile") {
+      if ( ! e$succesful ){
+          next
+      }
+
       event$type <- "Compilation"
 
       f <- get_fun( e$closure )
@@ -133,20 +94,31 @@ recordings.csv <- function( r ) {
 
       event$ctx <- pp( e$version, "context" )
       event$reason <- paste0( pp( e$reason, "deopt_reason" ), "@", e$reason_code_idx)
+    } else if (class(e) == "event_invocation") {
+      event$type <- "Invocation"
+
+      f <- get_fun( e$dispatchTable )
+      event$fun <- f[1]
+      event$env <- f[2]
+
+      event$ctx <- pp( e$context, "context" )
+
+      event$invocation_delta <- e$deltaCount
+      event$deopt_delta <- e$deltaDeopt
+      event$reason <- pp( e$source, "invocation_source" )
+    } else {
+      event$type = paste0( "[", class(e), "]" )
     }
 
-    vec <- NULL
 
-    for ( col in columns ){
-      if ( is.null( event[[ col ]] ) ){
-        vec <- c(vec, "")
-      } else {
-        vec <- c( vec, event[[ col ]] )
-      }
-    }
+    vec <- lapply( columns, function(col){
+        if ( is.null(event[[ col ]]) )
+            ""
+        else
+            event[[ col ]]
+    })
 
     line( vec )
   }
-
-  return(result)
+  result
 }
