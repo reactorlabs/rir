@@ -1,12 +1,13 @@
+  # - Build base container
+  # - Build container
+  # - Build benchmark container
+  # - Run tests
+  # - Deploy
+  # - Cleanup
+  # - Benchmark
+  # - Report
 stages:
-  - Build base container
-  - Build container
-  - Build benchmark container
-  - Run tests
-  - Deploy
   - Cleanup
-  - Benchmark
-  - Report
 
 cache:
   paths:
