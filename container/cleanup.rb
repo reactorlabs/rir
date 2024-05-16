@@ -48,7 +48,6 @@ REPOS.each do |project, repos|
   repos[:repos].each do |repo|
     puts "== #{project} == #{repo} =="
     res = fetch(project, repo, "tags")
-    puts res
     res.each do |tag|
       if repos[:keep].include? tag['name']
         puts "keeping #{tag['name']} (whitelisted)"
