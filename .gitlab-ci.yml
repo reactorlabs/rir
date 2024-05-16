@@ -29,7 +29,7 @@ cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
   script:
-    - echo -n "glpat-T1K1VrzWpo1fHs8_aqFM" | ruby container/cleanup.rb
+    - echo -n "$CI_REGISTRY_PASSWORD" | ruby container/cleanup.rb
 
 
 # rir_container:
