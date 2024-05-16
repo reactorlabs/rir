@@ -35,7 +35,7 @@ rir_container:
     - echo "$CI_JOB_TOKEN"
     - echo "$CI_BUILD_USER"
     - echo $CI_REGISTRY_USER
-    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin registry.gitlab.com
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
