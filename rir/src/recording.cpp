@@ -23,7 +23,6 @@
 namespace rir {
 namespace recording {
 
-
 SEXP InvocationCountTimeReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
 
@@ -380,29 +379,24 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
     }
 }
 
+const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
+    "dispatchTable", "codeIndex", "offset", "sc"};
+
 SEXP SpeculativeContextEvent::toSEXP() const {
-    SEXP sexp = PROTECT(Rf_allocVector(VECSXP, 4));
-    setClassName(sexp, R_CLASS_SC_EVENT);
-    size_t i = 0;
-    assert(codeIndex != -2);
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(codeIndex));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(offset));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(sc));
-    UNPROTECT(1);
-    return sexp;
+    return serialization::fields_to_sexp<SpeculativeContextEvent>(
+        dispatchTableIndex, codeIndex, offset, sc);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 4);
-    size_t i = 0;
-    dispatchTableIndex =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    codeIndex = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
     assert(codeIndex >= -1);
-    offset = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    sc = serialization::speculative_context_from_sexp(VECTOR_ELT(sexp, i++));
+
+    return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
+                                           int64_t, uint64_t,
+                                           SpeculativeContext>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {codeIndex, serialization::int64_t_from_sexp},
+        {offset, serialization::uint64_t_from_sexp},
+        {sc, serialization::speculative_context_from_sexp});
 }
 
 bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
@@ -480,82 +474,47 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
     out << "        ]\n    }";
 }
 
+const std::vector<const char*> CompilationEvent::fieldNames = {
+    "closure",
+    "dispatch_context",
+    "name",
+    "speculative_contexts",
+    "compile_reason_heuristic",
+    "compile_reason_condition",
+    "compile_reason_osr",
+    "time",
+    "subevents",
+    "bitcode",
+    "succesful"};
+
 SEXP CompilationEvent::toSEXP() const {
-    const char* fields[] = {"closure",
-                            "dispatch_context",
-                            "name",
-                            "speculative_contexts",
-                            "compile_reason_heuristic",
-                            "compile_reason_condition",
-                            "compile_reason_osr",
-                            "time",
-                            "subevents",
-                            "bitcode",
-                            "succesful",
-                            ""};
-    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    setClassName(sexp, R_CLASS_COMPILE_EVENT);
-
-    size_t i = 0;
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(closureIndex));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->dispatch_context));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->compileName));
-
-    auto speculative_contexts_sexp = Rf_allocVector(VECSXP, this->speculative_contexts.size());
-    SET_VECTOR_ELT(sexp, i++, speculative_contexts_sexp);
-
-    size_t scI = 0;
-    for (auto& speculative_context : this->speculative_contexts) {
-        SET_VECTOR_ELT(speculative_contexts_sexp, scI++,
-                       serialization::to_sexp(speculative_context));
-    }
-
-    if ( compile_reasons.heuristic ){
-        SET_VECTOR_ELT(sexp, i, compile_reasons.heuristic->toSEXP());
-    }
-    i++;
-
-    if ( compile_reasons.condition ){
-        SET_VECTOR_ELT(sexp, i, compile_reasons.condition->toSEXP());
-    }
-    i++;
-
-    if( compile_reasons.osr ){
-        SET_VECTOR_ELT(sexp, i, compile_reasons.osr->toSEXP());
-    }
-    i++;
-
-    SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->time_length) );
-    SET_VECTOR_ELT( sexp, i++, serialization::to_sexp(this->subevents) );
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->bitcode));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->succesful));
-
-    UNPROTECT(1);
-    return sexp;
+    return serialization::fields_to_sexp<CompilationEvent>(
+        closureIndex, dispatch_context, compileName, speculative_contexts,
+        compile_reasons.heuristic, compile_reasons.condition,
+        compile_reasons.osr, time_length, subevents, bitcode, succesful);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_length(sexp) == 11);
-    this->closureIndex = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
-    this->dispatch_context =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 1));
-    this->compileName = serialization::string_from_sexp(VECTOR_ELT(sexp, 2));
-    auto speculative_contexts_sexp = VECTOR_ELT(sexp, 3);
-    assert(Rf_isVector(speculative_contexts_sexp));
-    for (auto i = 0; i < Rf_length(speculative_contexts_sexp); i++) {
-        auto speculative_context = serialization::speculative_context_from_sexp(
-            VECTOR_ELT(speculative_contexts_sexp, i));
-        this->speculative_contexts.push_back(std::move(speculative_context));
-    }
-
-    this->compile_reasons.heuristic = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 4));
-    this->compile_reasons.condition = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 5));
-    this->compile_reasons.osr = serialization::compile_reason_from_sexp(VECTOR_ELT(sexp, 6));
-
-    this->time_length = serialization::time_from_sexp(VECTOR_ELT(sexp, 7));
-    this->subevents = serialization::vector_from_sexp<size_t, serialization::uint64_t_from_sexp>(VECTOR_ELT(sexp, 8));
-    this->bitcode = serialization::string_from_sexp(VECTOR_ELT(sexp, 9));
-    this->succesful = serialization::bool_from_sexp(VECTOR_ELT(sexp, 10));
+    serialization::fields_from_sexp<
+        CompilationEvent, uint64_t, uint64_t, std::string,
+        std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
+        std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
+        Duration, std::vector<size_t>, std::string, bool>(
+        sexp, {closureIndex, serialization::uint64_t_from_sexp},
+        {dispatch_context, serialization::uint64_t_from_sexp},
+        {compileName, serialization::string_from_sexp},
+        {speculative_contexts,
+         serialization::vector_from_sexp<
+             SpeculativeContext, serialization::speculative_context_from_sexp>},
+        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
+        {compile_reasons.condition, serialization::compile_reason_from_sexp},
+        {compile_reasons.osr, serialization::compile_reason_from_sexp},
+        {time_length, serialization::time_from_sexp},
+        {subevents,
+         serialization::vector_from_sexp<size_t,
+                                         serialization::uint64_t_from_sexp>},
+        {bitcode, serialization::string_from_sexp},
+        {succesful, serialization::bool_from_sexp});
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
@@ -631,45 +590,34 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
     out << ",\n        reasonCodeOff=" << this->reasonCodeOff_ << "\n    }";
 }
 
-SEXP DeoptEvent::toSEXP() const {
-    const char* fields[] = {
-        "dispatchTable",   "version", "reason",         "reason_code_idx",
-        "reason_code_off", "trigger", "triggerClosure", ""};
-    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    setClassName(sexp, R_CLASS_DEOPT_EVENT);
+const std::vector<const char*> DeoptEvent::fieldNames = {
+    "dispatchTable",   "version", "reason",        "reason_code_idx",
+    "reason_code_off", "trigger", "triggerClosure"};
 
-    int i = 0;
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->version));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reason_));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeOff_));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->reasonCodeIdx_));
-    SET_VECTOR_ELT(sexp, i++, this->trigger_ ? this->trigger_ : R_NilValue);
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->triggerClosure_));
-    UNPROTECT(1);
-    return sexp;
+SEXP DeoptEvent::toSEXP() const {
+    return serialization::fields_to_sexp<DeoptEvent>(
+        dispatchTableIndex, version, reason_, reasonCodeOff_, reasonCodeIdx_,
+        trigger_, triggerClosure_);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 7);
+    SEXP trigger;
+    ssize_t triggerClosure;
 
-    int i = 0;
-    this->dispatchTableIndex =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
-    this->reason_ =
-        serialization::deopt_reason_from_sexp(VECTOR_ELT(sexp, i++));
-    this->reasonCodeOff_ =
-        serialization::uint32_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->reasonCodeIdx_ =
-        serialization::pair_from_sexp<int64_t, int64_t,
-                                      serialization::int64_t_from_sexp,
-                                      serialization::int64_t_from_sexp>(
-            VECTOR_ELT(sexp, i++));
-    SEXP trigger = VECTOR_ELT(sexp, i++);
-    ssize_t triggerClosure =
-        serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
+                                    DeoptReason::Reason, uint32_t,
+                                    std::pair<int64_t, int64_t>, SEXP, int64_t>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp},
+        {reason_, serialization::deopt_reason_from_sexp},
+        {reasonCodeOff_, serialization::uint32_t_from_sexp},
+        {reasonCodeIdx_,
+         serialization::pair_from_sexp<int64_t, int64_t,
+                                       serialization::int64_t_from_sexp,
+                                       serialization::int64_t_from_sexp>},
+        {trigger, serialization::sexp_from_sexp},
+        {triggerClosure, serialization::int64_t_from_sexp});
+
     if (triggerClosure >= 0) {
         triggerClosure_ = triggerClosure;
     } else {
@@ -684,46 +632,27 @@ void DtInitEvent::print(const std::vector<FunRecording>& mapping,
         << "\n        deopts=" << this->deopts << "\n    }";
 }
 
-SEXP DtInitEvent::toSEXP() const {
-    const char* fields[] = {"dispatchTable", "invocations", "deopts", ""};
-    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    setClassName(sexp, R_CLASS_DT_INIT_EVENT);
+const std::vector<const char*> DtInitEvent::fieldNames = {
+    "dispatchTable", "invocations", "deopts"};
 
-    int i = 0;
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(dispatchTableIndex));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->invocations));
-    SET_VECTOR_ELT(sexp, i++, serialization::to_sexp(this->deopts));
-    UNPROTECT(1);
-    return sexp;
+SEXP DtInitEvent::toSEXP() const {
+    return serialization::fields_to_sexp<DtInitEvent>(dispatchTableIndex,
+                                                      invocations, deopts);
 }
 
 void DtInitEvent::fromSEXP(SEXP sexp) {
-    assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 3);
-
-    int i = 0;
-    this->dispatchTableIndex =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->invocations =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->deopts = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+    serialization::fields_from_sexp<DtInitEvent, uint64_t, uint64_t, uint64_t>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {invocations, serialization::uint64_t_from_sexp},
+        {deopts, serialization::uint64_t_from_sexp});
 }
 
-SEXP InvocationEvent::toSEXP() const {
-    const char* fields[] = {"dispatchTable", "context", "deltaCount",
-                            "deltaDeopt", "source", ""};
-    auto sexp = PROTECT(Rf_mkNamed(VECSXP, fields));
-    setClassName(sexp, R_CLASS_INVOCATION_EVENT);
-    int i = 0;
-    SET_VECTOR_ELT(sexp, i++,
-                   PROTECT(serialization::to_sexp(dispatchTableIndex)));
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(version)));
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaCount)));
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(deltaDeopt)));
-    SET_VECTOR_ELT(sexp, i++, PROTECT(serialization::to_sexp(source)));
-    UNPROTECT(6);
+const std::vector<const char*> InvocationEvent::fieldNames = {
+    "dispatchTable", "context", "deltaCount", "deltaDeopt", "source"};
 
-    return sexp;
+SEXP InvocationEvent::toSEXP() const {
+    return serialization::fields_to_sexp<InvocationEvent>(
+        dispatchTableIndex, version, deltaCount, deltaDeopt, source);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {

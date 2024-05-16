@@ -7,27 +7,7 @@ namespace rir {
 namespace recording {
 namespace serialization {
 
-// TODO: fix the names
-
-SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecording>& obj) {
-    std::unique_ptr<const char*[]> keys(new const char*[obj.size() + 1]);
-    auto ki = 0;
-    for (auto& kv : obj) {
-        keys[ki++] = kv.first.c_str();
-    }
-    keys[ki] = "";
-
-    auto vec = PROTECT(Rf_mkNamed(VECSXP, (const char**)keys.get()));
-    ki = 0;
-    for (auto& kv : obj) {
-        SET_VECTOR_ELT(vec, ki++, PROTECT(to_sexp(kv.second)));
-        UNPROTECT(1);
-    }
-
-    UNPROTECT(1);
-    return vec;
-}
+/************************ Primitives **********************************/
 
 SEXP to_sexp(const std::string& str) { return Rf_mkString(str.c_str()); }
 
@@ -87,6 +67,32 @@ bool bool_from_sexp(SEXP sexp){
     return sexp == R_TrueValue;
 }
 
+SEXP to_sexp(SEXP sexp) { return sexp; }
+
+SEXP sexp_from_sexp(SEXP sexp) { return sexp; }
+
+/************************ Objects **********************************/
+
+SEXP to_sexp(
+    const std::unordered_map<std::string, rir::recording::FunRecording>& obj) {
+    std::unique_ptr<const char*[]> keys(new const char*[obj.size() + 1]);
+    auto ki = 0;
+    for (auto& kv : obj) {
+        keys[ki++] = kv.first.c_str();
+    }
+    keys[ki] = "";
+
+    auto vec = PROTECT(Rf_mkNamed(VECSXP, (const char**)keys.get()));
+    ki = 0;
+    for (auto& kv : obj) {
+        SET_VECTOR_ELT(vec, ki++, PROTECT(to_sexp(kv.second)));
+        UNPROTECT(1);
+    }
+
+    UNPROTECT(1);
+    return vec;
+}
+
 SEXP to_sexp(const rir::Context ctx) { return to_sexp(ctx.toI()); }
 
 Context context_from_sexp(SEXP sexp) {
@@ -99,17 +105,16 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
 
     std::unique_ptr<rir::recording::Event> event;
-    if (Rf_inherits(sexp, R_CLASS_COMPILE_EVENT)) {
+    if (Rf_inherits(sexp, rir::recording::CompilationEvent::className)) {
         event = std::make_unique<rir::recording::CompilationEvent>();
-    } else if (Rf_inherits(sexp, R_CLASS_DEOPT_EVENT)) {
-        event = std::make_unique<rir::recording::DeoptEvent>(
-            0, Context(0UL), DeoptReason::Reason::Unknown,
-            std::make_pair((size_t)-1, (size_t)-1), (uint32_t)0, nullptr);
-    } else if (Rf_inherits(sexp, R_CLASS_DT_INIT_EVENT)) {
-        event = std::make_unique<rir::recording::DtInitEvent>(0, -1, -1);
-    } else if (Rf_inherits(sexp, R_CLASS_INVOCATION_EVENT)) {
+    } else if (Rf_inherits(sexp, rir::recording::DeoptEvent::className)) {
+        event = std::make_unique<rir::recording::DeoptEvent>();
+    } else if (Rf_inherits(sexp, rir::recording::DtInitEvent::className)) {
+        event = std::make_unique<rir::recording::DtInitEvent>();
+    } else if (Rf_inherits(sexp, rir::recording::InvocationEvent::className)) {
         event = std::make_unique<rir::recording::InvocationEvent>();
-    } else if (Rf_inherits(sexp, R_CLASS_SC_EVENT)) {
+    } else if (Rf_inherits(
+                   sexp, rir::recording::SpeculativeContextEvent::className)) {
         event = std::make_unique<rir::recording::SpeculativeContextEvent>();
     } else {
         Rf_error("can't deserialize event of unknown class");
@@ -197,6 +202,7 @@ rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     return recorder;
 }
 
+SEXP to_sexp(CompileReason& reason) { return reason.toSEXP(); }
 std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sexp) {
     if (Rf_isNull(sexp)){
         return nullptr;

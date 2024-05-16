@@ -13,9 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -326,6 +324,9 @@ class SpeculativeContextEvent : public DtEvent {
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t dispatchTable) const override;
 
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_sc";
+
   protected:
     void print(const std::vector<FunRecording>& mapping,
                std::ostream& out) const override;
@@ -369,6 +370,9 @@ class CompilationEvent : public ClosureEvent {
     void fromSEXP(SEXP sexp) override;
     virtual bool containsReference(size_t recordingIdx) const override;
 
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile";
+
     void set_time(Duration time) { time_length = time; }
 
     void add_subcompilation(size_t idx) { subevents.push_back(idx); }
@@ -410,10 +414,15 @@ class DeoptEvent : public VersionEvent {
                std::pair<ssize_t, ssize_t> reasonCodeIdx,
                uint32_t reasonCodeOff, SEXP trigger);
     virtual ~DeoptEvent();
+    DeoptEvent() = default;
 
     void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_deopt";
+
     virtual bool containsReference(size_t recordingIdx) const override;
 
   protected:
@@ -437,9 +446,13 @@ class DtInitEvent : public DtEvent {
         : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
 
     virtual ~DtInitEvent() = default;
+    DtInitEvent() = default;
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_dt_init";
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -471,6 +484,9 @@ class InvocationEvent : public VersionEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_invocation";
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
