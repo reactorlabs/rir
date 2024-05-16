@@ -24,7 +24,7 @@ variables:
   SAVE_LOGS: "sh /opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
 
 #  before_script: []
-glpat-PDdTTGtQxCpgD3mLUJrK
+#glpat-PDdTTGtQxCpgD3mLUJrK
 cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
