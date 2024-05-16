@@ -394,10 +394,10 @@ deploy:
   only:
     - master
 
+#  before_script: []
 cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
-  before_script: []
   script:
     - echo -n "$CI_JOB_TOKEN" | ruby container/cleanup.rb
 
