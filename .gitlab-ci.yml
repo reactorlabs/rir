@@ -24,11 +24,12 @@ variables:
   SAVE_LOGS: "sh /opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
 
 #  before_script: []
+glpat-PDdTTGtQxCpgD3mLUJrK
 cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
   script:
-    - echo -n "$CI_REGISTRY_PASSWORD" | ruby container/cleanup.rb
+    - echo -n "PDdTTGtQxCpgD3mLUJrK" | ruby container/cleanup.rb
 
 
 # rir_container:
