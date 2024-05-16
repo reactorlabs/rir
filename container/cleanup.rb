@@ -32,7 +32,6 @@ TOKEN = ARGF.read.chomp
 puts TOKEN
 
 def curl(what)
-  puts `curl -s --header "PRIVATE-TOKEN: #{TOKEN}" #{what}`
   JSON.parse(`curl -s --header "PRIVATE-TOKEN: #{TOKEN}" #{what}`)
 end
 
