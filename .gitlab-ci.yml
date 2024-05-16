@@ -29,7 +29,7 @@ cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
   script:
-    - echo -n "$CI_REGISTRY_PASSWORD" | ruby container/cleanup.rb
+    - echo -n "$CI_JOB_TOKEN" | ruby container/cleanup.rb
 
 
 # rir_container:
