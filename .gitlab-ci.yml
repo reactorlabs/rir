@@ -18,6 +18,7 @@ variables:
   REBENCH_RUN_BL: "/opt/rbenchmarking/Setup/run.sh /opt/rbenchmarking/rebench.conf /opt/rbenchmarking/Benchmarks . /opt/rir/external/custom-r /opt/graal"
   SAVE_LOGS: "sh /opt/rir/tools/copy-logs.sh /opt/rir/external/custom-r/tests $CI_PROJECT_DIR/logs"
 
+#    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
 rir_container:
   stage: Build container
   image: registry.gitlab.com/rirvm/rir_mirror/dockerhub_mirror/docker:stable
@@ -33,7 +34,8 @@ rir_container:
     - echo "$CI_BUILD_TOKEN"
     - echo "$CI_JOB_TOKEN"
     - echo "$CI_BUILD_USER"
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - echo $CI_REGISTRY_USER
+    - echo "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin registry.gitlab.com
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
