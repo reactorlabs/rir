@@ -48,7 +48,9 @@ MAX_AGE_DAYS=0.6
 REPOS.each do |project, repos|
   repos[:repos].each do |repo|
     puts "== #{project} == #{repo} =="
+    puts "bef"
     res = fetch(project, repo, "tags")
+    puts "aft"
     puts res
     res.each do |tag|
       if repos[:keep].include? tag['name']
