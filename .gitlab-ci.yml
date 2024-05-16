@@ -399,7 +399,7 @@ cleanup_registry:
   image: ruby:2.5
   before_script: []
   script:
-    - echo -n "CI_REGISTRY_PASSWORD" | ruby container/cleanup.rb
+    - echo -n "$CI_REGISTRY_PASSWORD" | ruby container/cleanup.rb
 
 report_results:
   stage: Report
