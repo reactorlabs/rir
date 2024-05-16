@@ -38,14 +38,16 @@ enum class SpeculativeContextType { Callees, Test, Values };
 
 struct SpeculativeContext {
     SpeculativeContextType type;
+    using ObservedCalleesArr =
+        std::array<size_t, rir::ObservedCallees::MaxTargets>;
 
     union Value {
-        std::array<size_t, rir::ObservedCallees::MaxTargets> callees;
+        ObservedCalleesArr callees;
         ObservedTest test;
         ObservedValues values;
     } value;
 
-    explicit SpeculativeContext(decltype(value.callees) callees)
+    explicit SpeculativeContext(ObservedCalleesArr callees)
         : type{SpeculativeContextType::Callees}, value{.callees = callees} {}
 
     explicit SpeculativeContext(ObservedTest test)

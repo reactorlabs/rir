@@ -291,7 +291,7 @@ void recordSC(const Opcode* immediate, const SpeculativeContext& sc) {
 void recordSC(const ObservedCallees& callees) {
     RECORDER_FILTER_GUARD(typeFeedback);
     RECORD_SC_GUARD();
-    decltype(SpeculativeContext::Value::callees) targets;
+    SpeculativeContext::ObservedCalleesArr targets;
     targets.fill(-1);
 
     auto* code = getSCCode();

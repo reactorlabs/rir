@@ -115,7 +115,7 @@ void Record::recordSpeculativeContext(const Code* code,
         }
         case Opcode::record_call_: {
             auto observed = feedback->callees(bc.immediate.i);
-            decltype(SpeculativeContext::value.callees) callees;
+            SpeculativeContext::ObservedCalleesArr callees;
 
             for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
                 size_t idx;
