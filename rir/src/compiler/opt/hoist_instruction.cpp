@@ -75,8 +75,7 @@ bool HoistInstruction::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 }
 
             bool onlyDependsOnAssume =
-                i->effects.count() == 1 &&
-                i->effects.contains(Effect::DependsOnAssume);
+                !hasEffects || i->effects.contains(Effect::DependsOnAssume);
 
             BB* target = nullptr;
             {
