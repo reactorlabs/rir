@@ -107,24 +107,24 @@ struct DispatchTable
         return false;
     }
 
-    void remove(Code* funCode) {
-        size_t i = 1;
-        for (; i < size(); ++i) {
-            auto fun = get(i);
-            if (fun->body() == funCode) {
-                fun->dispatchTable(nullptr);
-                break;
-            }
-        }
-        if (i == size())
-            return;
-        for (; i < size() - 1; ++i) {
-            setEntry(i, getEntry(i + 1));
-        }
-        get(i)->dispatchTable(nullptr);
-        setEntry(i, nullptr);
-        size_--;
-    }
+    // void remove(Code* funCode) {
+    //     size_t i = 1;
+    //     for (; i < size(); ++i) {
+    //         auto fun = get(i);
+    //         if (fun->body() == funCode) {
+    //             fun->dispatchTable(nullptr);
+    //             break;
+    //         }
+    //     }
+    //     if (i == size())
+    //         return;
+    //     for (; i < size() - 1; ++i) {
+    //         setEntry(i, getEntry(i + 1));
+    //     }
+    //     get(i)->dispatchTable(nullptr);
+    //     setEntry(i, nullptr);
+    //     size_--;
+    // }
 
     // insert function ordered by increasing number of assumptions
     void insert(Function* fun) {
@@ -143,7 +143,7 @@ struct DispatchTable
                 fun->addDeoptCount(old->deoptCount());
                 setEntry(i, fun->container());
                 assert(get(i) == fun);
-                old->dispatchTable(nullptr);
+                old->setEvicted();
                 return;
             }
             if (!(assumptions < get(i)->context())) {
@@ -165,7 +165,7 @@ struct DispatchTable
 #endif
             // Evict one element and retry
             auto pos = 1 + (Random::singleton()() % (size() - 1));
-            get(pos)->dispatchTable(nullptr);
+            get(pos)->setEvicted();
             size_--;
             while (pos < size()) {
                 setEntry(pos, getEntry(pos + 1));

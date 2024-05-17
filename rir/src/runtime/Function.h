@@ -82,6 +82,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void serialize(SEXP refTable, R_outpstream_t out) const;
     void disassemble(std::ostream&);
 
+    void setEvicted() { this->dispatchTable(nullptr); }
+
     bool isOptimized() const {
         return signature_.optimization !=
                FunctionSignature::OptimizationLevel::Baseline;
@@ -181,7 +183,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     const FunctionSignature& signature() const { return signature_; }
     const Context& context() const { return context_; }
 
-    bool disabled() const { return flags.contains(Flag::Deopt); }
+    bool disabled() const {
+        return !dispatchTable_ || flags.contains(Flag::Deopt);
+    }
     bool pendingCompilation() const { return body()->pendingCompilation(); }
 
     void registerDeopt() {
