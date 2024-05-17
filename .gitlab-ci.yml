@@ -8,9 +8,12 @@ stages:
   - Benchmark
   - Report
 
+
 cache:
   paths:
   - apt-cache/
+
+
 
 variables:
   REBENCH_OPTIONS: "-df $CI_PROJECT_DIR/benchmarks.data -R"
@@ -30,7 +33,7 @@ rir_container:
   before_script:
     - docker info
   script:
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
   tags:
@@ -53,7 +56,7 @@ benchmark_container:
   tags:
     - dockerInDocker
   script:
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - cd container/benchmark
     - docker build --build-arg CI_COMMIT_SHA=$CI_COMMIT_SHA -t registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA .
     - docker push registry.gitlab.com/rirvm/rir_mirror/benchmark:$CI_COMMIT_SHA
@@ -382,7 +385,7 @@ deploy:
   variables:
     GIT_STRATEGY: none
   script:
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - docker pull registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA
     - docker tag registry.gitlab.com/rirvm/rir_mirror:$CI_COMMIT_SHA registry.gitlab.com/rirvm/rir_mirror:master
     - docker push registry.gitlab.com/rirvm/rir_mirror:master
@@ -394,12 +397,13 @@ deploy:
   only:
     - master
 
+
 cleanup_registry:
   stage: Cleanup
   image: ruby:2.5
   before_script: []
   script:
-    - echo -n "$CI_BUILD_TOKEN" | ruby container/cleanup.rb
+    - echo -n "$CI_JOB_TOKEN" | ruby container/cleanup.rb
 
 report_results:
   stage: Report
@@ -480,7 +484,7 @@ update_containers:
     refs:
       - schedules
   script:
-    - echo "$CI_BUILD_TOKEN" | docker login -u "$CI_BUILD_USER" --password-stdin registry.gitlab.com
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u $CI_REGISTRY_USER --password-stdin registry.gitlab.com
     - docker pull docker.io/library/docker:19.03.0-dind
     - docker pull docker.io/library/docker:stable
     - docker pull docker.io/library/ubuntu:20.04
