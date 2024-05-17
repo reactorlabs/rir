@@ -143,7 +143,7 @@ struct DispatchTable
                 fun->addDeoptCount(old->deoptCount());
                 setEntry(i, fun->container());
                 assert(get(i) == fun);
-                // old->dispatchTable(nullptr);
+                old->dispatchTable(nullptr);
                 return;
             }
             if (!(assumptions < get(i)->context())) {
