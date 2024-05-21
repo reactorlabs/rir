@@ -79,7 +79,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     TypeFeedback* typeFeedback(const CallContext* callContext);
 
     void typeFeedback(TypeFeedback* typeFeedback) {
-        typeFeedback->owner_ = this;
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
     }
 

@@ -289,9 +289,8 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
                            const std::vector<ObservedValues>& types)
-    : RirRuntimeObject(0, 0), version_(0), owner_(nullptr),
-      callees_size_(callees.size()), tests_size_(tests.size()),
-      types_size_(types.size()) {
+    : RirRuntimeObject(0, 0), version_(0), callees_size_(callees.size()),
+      tests_size_(tests.size()), types_size_(types.size()) {
 
     size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
     size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);

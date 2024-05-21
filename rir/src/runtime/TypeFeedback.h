@@ -313,7 +313,6 @@ static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
 class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
     size_t version_;
-    Function* owner_;
     size_t callees_size_;
     size_t tests_size_;
     size_t types_size_;
@@ -410,8 +409,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
     bool isValid(const FeedbackIndex& index) const;
-
-    Function* owner() const { assert(owner_); return owner_; }
 
     // Type feedback is versioned. Each time new feedback
     // in any of the slot is recorded, its version increased.
