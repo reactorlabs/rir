@@ -1415,13 +1415,13 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     inferCurrentContext(call, fun->nargs());
 
-    fun->registerInvocation(call.givenContext);
+    fun->registerInvocation();
     static int recheck = 0;
     if (fail ||
         (++recheck == 97 && RecompileHeuristic(fun, call.givenContext))) {
         recheck = 0;
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
-            fun->unregisterInvocation(call.givenContext);
+            fun->unregisterInvocation();
             auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
             Pool::patch(target, trg->container());
@@ -1467,9 +1467,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
-            fun->registerInvocation(call.givenContext);
+            fun->registerInvocation();
             result = code->nativeCode()(code, args, env, callee, &call);
-            fun->registerEndInvocation(call.givenContext);
+            fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }
@@ -1487,7 +1487,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     ostack_popn(missing);
 
     SLOWASSERT(t == R_BCNodeStackTop);
-    fun->registerEndInvocation(call.givenContext);
+    fun->registerEndInvocation();
     return result;
 }
 

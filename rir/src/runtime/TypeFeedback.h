@@ -312,8 +312,6 @@ static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
 
 class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
-    friend Function;
-
     size_t version_;
     Function* owner_;
     size_t callees_size_;
@@ -323,9 +321,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest* tests_;
     ObservedValues* types_;
 
-    unsigned invocationCount_ = 0;
-    unsigned long invoked = 0;
-    unsigned long execTime = 0;
+    // Total of runs of RIR code for this TypeFeedback
+    // i.e. how many function invocations were recording to this TypeFeedback
+    unsigned recordingCount_ = 0;
 
     // All the data are stored in this array: callees, tests and types in this
     // order. The constructors sets the above pointers to point at the
@@ -360,8 +358,11 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
-    size_t invocationCount() { return invocationCount_; }
-    unsigned long invocationTime() { return execTime; }
+    size_t recordingCount() const { return recordingCount_; }
+    void increaseRecordingCount() {
+        if (recordingCount_ < UINT_MAX)
+            ++recordingCount_;
+    }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {

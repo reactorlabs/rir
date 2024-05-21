@@ -442,13 +442,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::record_call_: {
         uint32_t idx = bc.immediate.i;
         Value* target = top();
+        // In case of OSR decrease recording count
+        unsigned finishedRecordingCount = typeFeedback->recordingCount();
+        if (finishedRecordingCount > 0 && cls->isContinuation())
+            --finishedRecordingCount;
 
         auto& feedback = typeFeedback->callees(bc.immediate.i);
 
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            typeFeedback->invocationCount() > 1 &&
+            finishedRecordingCount > 0 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
@@ -976,11 +980,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             emitGenericCall();
         }
 
-        if (ti.taken != (size_t)-1 && typeFeedback->invocationCount() > 1) {
+        unsigned finishedRecordingCount = typeFeedback->recordingCount();
+        if (finishedRecordingCount > 0 && cls->isContinuation())
+            --finishedRecordingCount;
+
+        if (ti.taken != (size_t)-1 && finishedRecordingCount > 0) {
             if (auto c = CallInstruction::CastCall(top())) {
-                // invocation count is already incremented before calling jit
-                c->taken = (double)ti.taken /
-                           (double)(typeFeedback->invocationCount() - 1);
+                c->taken = (double)ti.taken / (double)(finishedRecordingCount);
             }
         }
         break;

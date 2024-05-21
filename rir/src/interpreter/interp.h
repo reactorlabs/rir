@@ -73,9 +73,8 @@ inline bool RecompileHeuristic(Function* fun, const Context& context,
 
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount(context) >= 3 &&
-        fun->invocationTime(context) > wt) {
-        fun->clearInvocationTime(context);
+    if (fun->recordingCount(context) >= 2 && fun->invocationTime() > wt) {
+        fun->clearInvocationTime();
         return !abandon;
     }
 
@@ -85,7 +84,7 @@ inline bool RecompileHeuristic(Function* fun, const Context& context,
     if (wu == 0)
         return !abandon;
 
-    if (fun->invocationCount(context) == wu)
+    if (fun->invocationCount() == wu)
         return !abandon;
 
     return false;

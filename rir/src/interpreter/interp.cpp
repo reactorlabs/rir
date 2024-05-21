@@ -32,7 +32,8 @@ namespace rir {
 
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
                         Opcode* initialPc = nullptr,
-                        BindingCache* cache = nullptr, bool isPromise = false);
+                        BindingCache* cache = nullptr, bool isPromise = false,
+                        bool newInvocation = true);
 
 // #define PRINT_INTERP
 // #define PRINT_STACK_SIZE 10
@@ -558,7 +559,7 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
     // execute the loop body
-    SEXP res = evalRirCode(c, env, callCtxt, pc, cache);
+    SEXP res = evalRirCode(c, env, callCtxt, pc, cache, false, false);
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
@@ -996,7 +997,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
-        fun->registerInvocation(call.givenContext);
+        fun->registerInvocation();
 
         if (!isDeoptimizing() &&
             RecompileHeuristic(fun, call.givenContext, disabledFun)) {
@@ -1142,7 +1143,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(call.passedArgs - call.suppliedArgs);
-        fun->registerEndInvocation(call.givenContext);
+        fun->registerEndInvocation();
         return result;
     }
     default:
@@ -1630,7 +1631,8 @@ void deoptFramesWithContext(const CallContext* callCtxt,
                 if (R_ReturnedValue == R_RestartToken) {
                     cntxt->callflag = CTXT_RETURN; /* turn restart off */
                     R_ReturnedValue = R_NilValue;  /* remove restart token */
-                    return evalRirCode(code, cntxt->cloenv, callCtxt);
+                    return evalRirCode(code, cntxt->cloenv, callCtxt, nullptr,
+                                       nullptr, false, false);
                 } else {
                     return R_ReturnedValue;
                 }
@@ -1666,7 +1668,8 @@ void deoptFramesWithContext(const CallContext* callCtxt,
             UNPROTECT(1);
             return r;
         }
-        return evalRirCode(code, cntxt->cloenv, callCtxt, f.pc, nullptr);
+        return evalRirCode(code, cntxt->cloenv, callCtxt, f.pc, nullptr, false,
+                           false);
     };
 
     SEXP res = trampoline();
@@ -1926,7 +1929,8 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 }
 
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
-                 Opcode* initialPC, BindingCache* cache, bool isPromise) {
+                 Opcode* initialPC, BindingCache* cache, bool isPromise,
+                 bool newInvocation) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr && !isPromise));
 
     checkUserInterrupt();
@@ -1994,6 +1998,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         pc = c->code();
     }
 
+    auto function = c->function();
+
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
     // marks how this load behaved.
@@ -2019,8 +2025,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        auto typeFeedback = c->function()->typeFeedback(callCtxt);
-        auto baselineFeedback = c->function()->baseline()->typeFeedback();
+        auto typeFeedback = function->typeFeedback(callCtxt);
+        auto baselineFeedback = function->baseline()->typeFeedback();
         auto recordTypeFunc = [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
                 feedback.stateBeforeLastForce = state;
@@ -2029,9 +2035,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         typeFeedback->record_typeInc(baselineFeedback, idx, recordTypeFunc);
     };
 
-    auto function = c->function();
     auto typeFeedback = function->typeFeedback(callCtxt);
     auto baselineFeedback = function->baseline()->typeFeedback();
+    if (newInvocation && !isPromise) {
+        typeFeedback->increaseRecordingCount();
+        if (typeFeedback != baselineFeedback)
+            baselineFeedback->increaseRecordingCount();
+    }
 
     // main loop
     BEGIN_MACHINE {
@@ -3996,16 +4006,16 @@ SEXP rirEval(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
-        fun->registerInvocation(fun->context());
+        fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation(fun->context());
+        fun->registerEndInvocation();
         return res;
     }
 
     if (auto fun = Function::check(what)) {
-        fun->registerInvocation(fun->context());
+        fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation(fun->context());
+        fun->registerEndInvocation();
         return res;
     }
 

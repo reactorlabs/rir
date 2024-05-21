@@ -151,6 +151,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
+    SLOWASSERT(optFunction->baseline()->invocationCount() >=
+               typeFeedback->recordingCount());
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
                     typeFeedback);
 
