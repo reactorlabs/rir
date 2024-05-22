@@ -452,7 +452,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            finishedRecordingCount > 0 &&
+            finishedRecordingCount > 1 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
                 insert.registerFrameState(srcCode, pos, stack, inPromise());
@@ -986,6 +986,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (ti.taken != (size_t)-1 && finishedRecordingCount > 0) {
             if (auto c = CallInstruction::CastCall(top())) {
+                if (finishedRecordingCount > 2)
+                    --finishedRecordingCount;
                 c->taken = (double)ti.taken / (double)(finishedRecordingCount);
             }
         }
