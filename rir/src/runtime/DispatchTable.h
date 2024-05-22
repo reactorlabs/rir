@@ -265,6 +265,7 @@ struct DispatchTable
             auto fun = Function::deserialize(refTable, inp);
             fun->dispatchTable(table);
             table->setEntry(i, fun->container());
+            table->insertTypeFeedback(fun->context(), fun->typeFeedback());
         }
         UNPROTECT(1);
         return table;
