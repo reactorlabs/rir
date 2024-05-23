@@ -140,6 +140,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     const unsigned localsCount; /// Number of slots for local variables
 
+    unsigned promEnd; /// Extra pool index right after promises.
+
     const unsigned bindingCacheSize; /// Number of different(ldVars|stVars)
 
     unsigned codeSize; /// bytes of code (not padded)

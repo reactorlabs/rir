@@ -27,8 +27,9 @@ Code::Code(Kind kind, FunctionSEXP fun, SEXP src, unsigned srcIdx, unsigned cs,
           // GC area has only 1 pointer
           NumLocals),
       kind(kind), nativeCode_(nullptr), src(srcIdx), trivialExpr(nullptr),
-      stackLength(0), localsCount(localsCnt), bindingCacheSize(bindingsCnt),
-      codeSize(cs), srcLength(sourceLength), extraPoolSize(0) {
+      stackLength(0), localsCount(localsCnt), promEnd(0),
+      bindingCacheSize(bindingsCnt), codeSize(cs), srcLength(sourceLength),
+      extraPoolSize(0) {
     setEntry(0, R_NilValue);
     if (src && TYPEOF(src) == SYMSXP)
         trivialExpr = src;

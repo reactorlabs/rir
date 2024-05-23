@@ -395,6 +395,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
                 res->flags.set(rir::Code::NoReflection);
             res->addExtraPoolEntry(code->container());
         }
+        res->promEnd = res->extraPoolSize;
         jit.compile(res, cls, c, promMap.at(c), refcount, needsLdVarForUpdate,
                     log);
         return res;

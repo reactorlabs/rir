@@ -28,7 +28,12 @@ bool ObservedCallees::record(Function* function, SEXP callee,
             if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
-            auto idx = caller->addExtraPoolEntry(callee);
+            unsigned int idx;
+            for (idx = caller->promEnd; idx < caller->extraPoolSize; ++idx)
+                if (caller->getExtraPoolEntry(idx) == callee)
+                    break;
+            if (idx == caller->extraPoolSize)
+                idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
             return true;
         }
