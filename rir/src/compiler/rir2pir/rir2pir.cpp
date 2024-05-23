@@ -986,9 +986,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         if (ti.taken != (size_t)-1 && finishedRecordingCount > 0) {
             if (auto c = CallInstruction::CastCall(top())) {
-                if (finishedRecordingCount > 2)
-                    --finishedRecordingCount;
-                c->taken = (double)ti.taken / (double)(finishedRecordingCount);
+                double denom = finishedRecordingCount;
+                if (finishedRecordingCount <= 2)
+                    denom -= ((double)1 + finishedRecordingCount) / 4;
+                else
+                    denom -= 1;
+                c->taken = (double)ti.taken / denom;
             }
         }
         break;
