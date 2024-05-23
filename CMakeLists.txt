@@ -32,6 +32,12 @@ if(${MACOS_USE_GCC_9})
     set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
 endif()
 
+option(RECORDING_HOOKS "Enable recording hooks, which record specific events" FALSE)
+if(${RECORDING_HOOKS})
+    message(STATUS "Enabled recording hooks")
+    add_definitions(-DRECORDING_HOOKS)
+endif()
+
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")
 set(CMAKE_CXX_FLAGS_RELEASENOASSERT "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")

@@ -61,7 +61,7 @@ inline bool RecompileHeuristic(Function* fun,
 
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt)){
-        recording::recordMarkOptReasonHeuristic();
+        REC_HOOK(recording::recordMarkOptReasonHeuristic());
         return true;
     }
     if (flags.contains(Function::NotOptimizable))
@@ -76,12 +76,8 @@ inline bool RecompileHeuristic(Function* fun,
     auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
                                  : pir::Parameter::PIR_OPT_TIME;
     if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        recording::recordInvocationCountTimeReason(
-            fun->invocationCount(),
-            3,
-            fun->invocationTime(),
-            wt
-        );
+        REC_HOOK(recording::recordInvocationCountTimeReason(
+            fun->invocationCount(), 3, fun->invocationTime(), wt));
 
         fun->clearInvocationTime();
         return !abandon;
@@ -92,7 +88,7 @@ inline bool RecompileHeuristic(Function* fun,
 
     auto wu = pir::Parameter::PIR_WARMUP;
     if (wu == 0 || fun->invocationCount() == wu){
-        recording::recordPirWarmupReason(wu);
+        REC_HOOK(recording::recordPirWarmupReason(wu));
         return true;
     }
 
@@ -102,23 +98,23 @@ inline bool RecompileHeuristic(Function* fun,
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
     if (fun->flags.contains(Function::MarkOpt)){
-        recording::recordMarkOptReasonCondition();
+        REC_HOOK(recording::recordMarkOptReasonCondition());
         return true;
     }
 
     if (!fun->isOptimized()) {
-        recording::recordNotOptimizedReason();
+        REC_HOOK(recording::recordNotOptimizedReason());
         return true;
     }
 
     if (context.smaller(fun->context()) &&
         context.isImproving(fun) > table->size()){
-        recording::recordIsImprovingReason();
+        REC_HOOK(recording::recordIsImprovingReason());
         return true;
     }
 
     if (fun->flags.contains(Function::Reoptimize)){
-        recording::recordReoptimizeFlagReason();
+        REC_HOOK(recording::recordReoptimizeFlagReason());
         return true;
     }
 

@@ -16,8 +16,8 @@
 #include "compiler/test/PirCheck.h"
 #include "compiler/test/PirTests.h"
 #include "interpreter/interp_incl.h"
+#include "recording_hooks.h"
 #include "runtime/DispatchTable.h"
-#include "recording.h"
 #include "utils/measuring.h"
 
 #include <cassert>
@@ -297,7 +297,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     PROTECT(what);
 
-    recording::recordCompile(what, name, assumptions);
+    REC_HOOK(recording::recordCompile(what, name, assumptions));
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir
@@ -354,11 +354,11 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
         done->body()->nativeCode();
     };
 
-    bool successfulComp = true;
+    REC_HOOK(bool successfulComp = true);
 
     cmp.compileClosure(what, name, assumptions, true, compile,
                        [&]() {
-                           successfulComp = false;
+                           REC_HOOK(successfulComp = false);
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
                        },
@@ -367,7 +367,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     delete m;
     UNPROTECT(1);
 
-    recording::recordCompileFinish(successfulComp);
+    REC_HOOK(recording::recordCompileFinish(successfulComp));
 
     return what;
 }

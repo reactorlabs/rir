@@ -834,8 +834,8 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
-    recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)), *deoptReason,
-                           deoptTrigger);
+    REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
+                                    *deoptReason, deoptTrigger));
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
@@ -1409,7 +1409,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto dt = DispatchTable::unpack(BODY(callee));
 
-    recording::recordInvocationNativeCallTrampoline();
+    REC_HOOK(recording::recordInvocationNativeCallTrampoline());
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {

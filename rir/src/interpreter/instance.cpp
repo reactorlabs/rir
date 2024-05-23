@@ -68,12 +68,14 @@ void context_init() {
         c->closureOptimizer = rirOptDefaultOpts;
     }
 
-    const char * recordPath = std::getenv("RIR_RECORD");
-    const char * recordFilter = std::getenv("RIR_RECORD_FILTER");
+    REC_HOOK({
+        const char* recordPath = std::getenv("RIR_RECORD");
+        const char* recordFilter = std::getenv("RIR_RECORD_FILTER");
 
-    if (recordPath != nullptr) {
-        recording::recordExecution( recordPath, recordFilter );
-    }
+        if (recordPath != nullptr) {
+            recording::recordExecution(recordPath, recordFilter);
+        }
+    })
 }
 
 } // namespace rir

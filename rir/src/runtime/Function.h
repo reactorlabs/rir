@@ -99,7 +99,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
-        recording::recordInvocation(this, 0, n);
+        REC_HOOK(recording::recordInvocation(this, 0, n));
     }
     size_t deoptCount() { return deoptCount_; }
 
@@ -114,7 +114,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         invoked = 0;
         if (invocationCount_ > 0) {
             invocationCount_--;
-            recording::recordInvocation(this, -1, 0);
+            REC_HOOK(recording::recordInvocation(this, -1, 0));
         }
     }
 
@@ -129,7 +129,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
         if (invocationCount_ < UINT_MAX) {
             invocationCount_++;
-            recording::recordInvocation(this, 1, 0);
+            REC_HOOK(recording::recordInvocation(this, 1, 0));
         }
     }
     void registerEndInvocation() {
@@ -198,7 +198,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         flags.set(Flag::Deopt);
         if (deoptCount_ < UINT_MAX) {
             deoptCount_++;
-            recording::recordInvocation(this, 0, 1);
+            REC_HOOK(recording::recordInvocation(this, 0, 1));
         }
     }
 

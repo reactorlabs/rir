@@ -7,6 +7,12 @@
 #include <R/r.h>
 #include <string>
 
+#ifdef RECORDING_HOOKS
+#define REC_HOOK(code) code
+#else
+#define REC_HOOK(code)
+#endif
+
 namespace rir {
 
 struct Context;

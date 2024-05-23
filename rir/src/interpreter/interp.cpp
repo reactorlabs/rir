@@ -987,7 +987,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
-        recording::recordInvocationDoCall();
+        REC_HOOK(recording::recordInvocationDoCall());
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
@@ -1009,7 +1009,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
 
-                        recording::recordOsrTriggerCallerCalle();
+                        REC_HOOK(recording::recordOsrTriggerCallerCalle());
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
@@ -1017,7 +1017,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                 }
             }
 
-            recording::recordReasonsClear();
+            REC_HOOK(recording::recordReasonsClear());
         }
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
@@ -1917,7 +1917,7 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             }
         }
     }
-    recording::recordReasonsClear();
+    REC_HOOK(recording::recordReasonsClear());
     return nullptr;
 }
 
@@ -2326,7 +2326,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
-            rir::recording::prepareRecordSC(c);
             typeFeedback->record_callee(idx, function, callee);
             NEXT();
         }
@@ -2335,7 +2334,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            rir::recording::prepareRecordSC(c);
             typeFeedback->record_test(idx, t);
             NEXT();
         }
@@ -2344,7 +2342,6 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            rir::recording::prepareRecordSC(c);
             typeFeedback->record_type(idx, t);
             NEXT();
         }
@@ -3219,11 +3216,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
-                    recording::recordOsrTriggerLoop( loopCounter );
+                    REC_HOOK(recording::recordOsrTriggerLoop(loopCounter));
                     loopCounter = 0;
                     if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
-                    recording::recordReasonsClear();
+                    REC_HOOK(recording::recordReasonsClear());
                 }
             }
             NEXT();

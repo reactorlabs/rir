@@ -146,8 +146,6 @@ struct ObservedTest {
             seen = Both;
         }
 
-        recording::recordSC(*this);
-
         return memcmp(&old, this, sizeof(ObservedTest));
     }
 };
@@ -214,7 +212,6 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        rir::recording::recordSC(*this);
         return memcmp(&old, this, sizeof(ObservedValues));
     }
 };

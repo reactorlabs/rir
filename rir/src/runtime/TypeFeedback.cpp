@@ -35,7 +35,6 @@ bool ObservedCallees::record(Function* function, SEXP callee,
         }
     }
 
-    recording::recordSC(*this);
     return false;
 }
 
@@ -62,15 +61,12 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::DeadBranchReached: {
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
-        rir::recording::prepareRecordSC(origin.function()->body());
-        rir::recording::recordSC(feedback);
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
 
-        rir::recording::prepareRecordSC(origin.function()->body());
         auto feedback = origin.function()->typeFeedback();
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
@@ -96,7 +92,6 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        rir::recording::prepareRecordSC(origin.function()->body());
         auto feedback = origin.function()->typeFeedback();
         feedback->record_callee(origin.idx(), origin.function(), val, true);
         break;
