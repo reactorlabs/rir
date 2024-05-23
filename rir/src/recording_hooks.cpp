@@ -441,10 +441,10 @@ void recordExecution(const char* filePath, const char* filterArg) {
 
     std::cerr << "Recording to \"" << filePath << "\" (environment variable";
     if (filterArg != nullptr) {
-        std::cerr << ": " << filterArg << ")\n";
-    } else {
-        std::cerr << ")\n";
+        std::cerr << ": " << filterArg;
     }
+
+    std::cerr << ")\n";
     startRecordings();
 
     finalizerPath = filePath;
@@ -611,7 +611,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             ss << "Callees[";
             bool first = true;
             for (auto c : sc.value.callees) {
-                if (c == NO_INDEX)
+                if (c == rir::recording::NO_INDEX)
                     break;
                 if (first) {
                     first = false;

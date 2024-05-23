@@ -534,6 +534,7 @@ DeoptEvent::~DeoptEvent() {
 
 extern Record recorder_;
 
+// TODO try to maybe find some way to eliminate global
 void DeoptEvent::setTrigger(SEXP newTrigger) {
     if (trigger_) {
         R_ReleaseObject(trigger_);
@@ -591,8 +592,8 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> DeoptEvent::fieldNames = {
-    "dispatchTable",   "version", "reason",        "reason_code_idx",
-    "reason_code_off", "trigger", "triggerClosure"};
+    "dispatchTable",   "version", "reason",        "reason_code_off",
+    "reason_code_idx", "trigger", "triggerClosure"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(

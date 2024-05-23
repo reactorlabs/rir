@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+// TODO to string classes are not kept up-to-date
 namespace rir {
 namespace recording {
 
@@ -31,8 +32,8 @@ SEXP getEnvironment(const std::string& name);
 class Record;
 struct FunRecording;
 
-#define NO_INDEX ((size_t)-1)
-#define GLOBAL_ENV_NAME ".GlobalEnv"
+constexpr size_t NO_INDEX = ((size_t)-1);
+constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
@@ -60,6 +61,7 @@ struct SpeculativeContext {
                std::ostream& out) const;
 };
 
+// TODO unify serialization with event
 struct CompileReason {
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
@@ -388,7 +390,7 @@ class CompilationEvent : public ClosureEvent {
                std::ostream& out) const override;
 
   private:
-    unsigned long dispatch_context;
+    unsigned long dispatch_context; // TODO keep as a Context
 
     // Name under which the closure was compiled, to be passed to pirCompile()
     std::string compileName;
@@ -442,6 +444,7 @@ class DeoptEvent : public VersionEvent {
     ssize_t triggerClosure_ = -1; // References a FunRecorder index
 };
 
+// TODO delete, not used (?)
 class DtInitEvent : public DtEvent {
   public:
     DtInitEvent(size_t dtIndex, size_t invocations, size_t deopts)
@@ -553,6 +556,7 @@ class Record {
   public:
     std::vector<FunRecording> functions;
 
+    // TODO deque (?)
     std::vector<std::unique_ptr<Event>> log;
 
   protected:
