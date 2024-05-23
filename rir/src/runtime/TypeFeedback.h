@@ -358,18 +358,21 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
                        bool invalidateWhenFull = false) {
         if (callees(idx).record(function, callee, invalidateWhenFull)) {
             version_++;
+            REC_HOOK(recording::recordSC(callees(idx), owner_));
         }
     }
 
     void record_test(uint32_t idx, const SEXP e) {
         if (test(idx).record(e)) {
             version_++;
+            REC_HOOK(recording::recordSC(test(idx), owner_));
         }
     }
 
     void record_type(uint32_t idx, const SEXP e) {
         if (types(idx).record(e)) {
             version_++;
+            REC_HOOK(recording::recordSC(types(idx), owner_));
         }
     }
 
@@ -381,6 +384,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         memcpy(&n, &slot, sizeof(ObservedValues));
         if (memcmp(&o, &n, sizeof(ObservedValues))) {
             version_++;
+            REC_HOOK(recording::recordSC(slot, owner_));
         }
     }
 

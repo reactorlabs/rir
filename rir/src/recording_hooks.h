@@ -41,10 +41,9 @@ void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
 void recordInvocationDoCall();
 void recordInvocationNativeCallTrampoline();
 
-void prepareRecordSC(const Code* container);
-void recordSC(const ObservedCallees& type);
-void recordSC(const ObservedTest& type);
-void recordSC(const ObservedValues& type);
+void recordSC(const ObservedCallees& type, Function* fun);
+void recordSC(const ObservedTest& type, Function* fun);
+void recordSC(const ObservedValues& type, Function* fun);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();

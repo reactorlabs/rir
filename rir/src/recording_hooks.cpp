@@ -61,10 +61,6 @@ CompileReasons compileReasons_;
 std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
     compilation_stack_;
 
-const Code* nextSCcode = nullptr;
-
-int test = 0;
-
 const char* finalizerPath = nullptr;
 
 /************************ Hooks **********************************/
@@ -235,44 +231,21 @@ void recordInvocationNativeCallTrampoline() {
     invocation_source_.set(InvocationEvent::NativeCallTrampoline);
 }
 
-#define RECORD_SC_GUARD()                                                      \
-    if (!is_recording_ || isPlayingCompile)                                    \
-        return;
-
-void prepareRecordSC(const Code* container) {
+void recordSC(const SpeculativeContext& sc, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    RECORD_SC_GUARD();
-    test++;
-    if (nextSCcode) {
-        std::cerr << "prepared speculative context record twice" << std::endl;
-        abort();
-    } else {
-        nextSCcode = container;
-    }
-}
 
-inline const Code* getSCCode() {
-    assert(nextSCcode && "recordSC wasn't prepared");
-    auto* next = nextSCcode;
-    nextSCcode = nullptr;
-    return next;
-}
-
-void recordSC(const Opcode* immediate, const SpeculativeContext& sc) {
-    RECORDER_FILTER_GUARD(typeFeedback);
-    auto* c = getSCCode();
-    ptrdiff_t offset = immediate - c->code();
-    assert(offset > 0 && offset < (ptrdiff_t)c->size());
-
-    auto* dt = c->function()->dispatchTable();
+    // Find is it is a baseline (-1) or a promise
+    auto* dt = fun->dispatchTable();
     auto* baseline = dt->baseline()->body();
+
+    auto* code = fun->body();
     ssize_t codeIndex = -2;
-    if (baseline == c) {
+    if (baseline == code) {
         codeIndex = -1;
     } else {
         for (size_t i = 0; i < baseline->extraPoolSize; i++) {
             SEXP epe = baseline->getExtraPoolEntry(i);
-            if (Code::check(epe) == c) {
+            if (Code::check(epe) == code) {
                 codeIndex = i;
                 break;
             }
@@ -284,39 +257,31 @@ void recordSC(const Opcode* immediate, const SpeculativeContext& sc) {
         return;
     }
 
-    recorder_.record<SpeculativeContextEvent>(dt, codeIndex, (size_t &&) offset,
-                                              sc);
+    // TODO offset
+    recorder_.record<SpeculativeContextEvent>(dt, codeIndex, 0, sc);
 }
 
-void recordSC(const ObservedCallees& callees) {
+void recordSC(const ObservedCallees& callees, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    RECORD_SC_GUARD();
     SpeculativeContext::ObservedCalleesArr targets;
     targets.fill(-1);
 
-    auto* code = getSCCode();
-
     for (size_t i = 0; i < callees.numTargets; i++) {
         targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(code->function(), i))
-                .first;
+            recorder_.initOrGetRecording(callees.getTarget(fun, i)).first;
     }
 
-    nextSCcode = code;
-
-    recordSC((Opcode*)&callees, SpeculativeContext(targets));
+    recordSC(SpeculativeContext(targets), fun);
 }
 
-void recordSC(const ObservedTest& test) {
+void recordSC(const ObservedTest& test, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    RECORD_SC_GUARD();
-    recordSC((Opcode*)&test, SpeculativeContext(test));
+    recordSC(SpeculativeContext(test), fun);
 }
 
-void recordSC(const ObservedValues& type) {
+void recordSC(const ObservedValues& type, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    RECORD_SC_GUARD();
-    recordSC((Opcode*)&type, SpeculativeContext(type));
+    recordSC(SpeculativeContext(type), fun);
 }
 
 SEXP setClassName(SEXP s, const char* className) {

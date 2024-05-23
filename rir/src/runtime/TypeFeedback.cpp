@@ -61,6 +61,7 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::DeadBranchReached: {
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
+        REC_HOOK(recording::recordSC(feedback, origin.function()));
         break;
     }
     case DeoptReason::Typecheck: {

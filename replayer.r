@@ -51,7 +51,7 @@ recordings.csv <- function( r ) {
     event <- NULL
 
     if (class(e) == "event_compile") {
-      if ( ! e$succesful ){
+      if ( !e$succesful ){
           next
       }
 
@@ -106,6 +106,15 @@ recordings.csv <- function( r ) {
       event$invocation_delta <- e$deltaCount
       event$deopt_delta <- e$deltaDeopt
       event$reason <- pp( e$source, "invocation_source" )
+    } else if (class(e) == "event_sc") {
+      event$type <- "SpeculativeContext"
+
+      f <- get_fun( e$dispatchTable )
+      event$fun <- f[1]
+      event$env <- f[2]
+
+      event$speculative <- paste0( pp( e$sc, "speculative" ), "@", e$offset )
+
     } else {
       event$type = paste0( "[", class(e), "]" )
     }
