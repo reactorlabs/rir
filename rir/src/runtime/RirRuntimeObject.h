@@ -74,6 +74,7 @@ struct RirRuntimeObject {
     RirRuntimeObject(uint32_t gc_area_start, uint32_t gc_area_length)
         : info{gc_area_start, gc_area_length, MAGIC} {
         uint8_t* start = (uint8_t*)this + gc_area_start;
+        // cppcheck-suppress pointerSize
         memset(start, 0, gc_area_length * sizeof(SEXP));
     }
 };
