@@ -602,8 +602,8 @@ SEXP DeoptEvent::toSEXP() const {
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
-    SEXP trigger;
-    ssize_t triggerClosure;
+    SEXP trigger = nullptr;
+    ssize_t triggerClosure = -1;
 
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
                                     DeoptReason::Reason, uint32_t,

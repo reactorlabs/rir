@@ -364,7 +364,7 @@ class CompilationEvent : public ClosureEvent {
           speculative_contexts(std::move(other.speculative_contexts)),
           compile_reasons(std::move(other.compile_reasons)),
           time_length(other.time_length), subevents(std::move(other.subevents)),
-          bitcode(std::move(other.bitcode)) {}
+          bitcode(std::move(other.bitcode)), succesful(other.succesful) {}
 
     CompilationEvent() {}
 
@@ -406,7 +406,7 @@ class CompilationEvent : public ClosureEvent {
     // The LLVM Bitcode
     std::string bitcode;
 
-    bool succesful;
+    bool succesful = false;
 };
 
 class DeoptEvent : public VersionEvent {
