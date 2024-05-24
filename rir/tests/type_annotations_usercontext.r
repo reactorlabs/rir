@@ -12,6 +12,3 @@ tryCatch({
     hasRaisedError <- TRUE
 })
 stopifnot(!hasRaisedError)
-
-
-

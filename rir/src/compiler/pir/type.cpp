@@ -256,14 +256,15 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
         type = type & type.notLazy();
         if (assumptions.isNotObj(i))
             type = type & type.notMissing().notObject();
-        if (assumptions.isSimpleReal(i))
-            type = type & PirType::simpleScalarReal()
-                              .orMaybeMissing()
-                              .orFullyPromiseWrapped();
-        if (assumptions.isSimpleInt(i))
-            type = type & PirType::simpleScalarInt()
-                              .orMaybeMissing()
-                              .orFullyPromiseWrapped();
+
+        auto simpleType = [](PirType s) { return s.orPromiseWrapped(); };
+
+        if (assumptions.isSimpleReal(i)) {
+            type = type & simpleType(PirType::simpleScalarReal());
+        }
+        if (assumptions.isSimpleInt(i)) {
+            type = type & simpleType(PirType::simpleScalarInt());
+        }
     }
     // well, if the intersection of context info and current type is void, we
     // probably made a wrong speculation. it's most probably a bug somewhere,
