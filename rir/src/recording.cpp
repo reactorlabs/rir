@@ -657,15 +657,13 @@ SEXP InvocationEvent::toSEXP() const {
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
-    assert(TYPEOF(sexp) == VECSXP);
-    assert(Rf_length(sexp) == 5);
-    int i = 0;
-    dispatchTableIndex =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    version = serialization::context_from_sexp(VECTOR_ELT(sexp, i++));
-    deltaCount = serialization::int64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    deltaDeopt = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    source = serialization::invocation_source_set_from_sexp(VECTOR_ELT(sexp, i++));
+    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, int64_t,
+                                    uint64_t, SourceSet>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp},
+        {deltaCount, serialization::int64_t_from_sexp},
+        {deltaDeopt, serialization::uint64_t_from_sexp},
+        {source, serialization::invocation_source_set_from_sexp});
 }
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,
