@@ -512,8 +512,9 @@ REXPORT SEXP printRecordings(SEXP from) {
             expr = from;
         }
 
-        assert(Rf_isVector(expr));
-        assert(Rf_length(expr) == 2);
+        if (!Rf_isVector(expr) || Rf_length(expr) != 2) {
+            Rf_error("Expression is not a vector");
+        }
 
         // Populate functions
         auto bodies = VECTOR_ELT(expr, 0);
