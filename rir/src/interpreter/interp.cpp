@@ -1568,6 +1568,11 @@ void deoptFramesWithContext(const CallContext* callCtxt,
     SEXP deoptEnv = ostack_at(stackHeight);
     auto code = f.code;
 
+    CallContext call(ArglistOrder::NOT_REORDERED, callCtxt->caller,
+                     callCtxt->callee, -1, src_pool_at(callCtxt->caller->src),
+                     callCtxt->stackArgs, (Immediate*)nullptr,
+                     callCtxt->callerEnv, R_NilValue, f.context);
+
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
     bool inPromise = f.inPromise;
@@ -1631,8 +1636,7 @@ void deoptFramesWithContext(const CallContext* callCtxt,
                 if (R_ReturnedValue == R_RestartToken) {
                     cntxt->callflag = CTXT_RETURN; /* turn restart off */
                     R_ReturnedValue = R_NilValue;  /* remove restart token */
-                    return evalRirCode(code, cntxt->cloenv, callCtxt, nullptr,
-                                       nullptr, false, false);
+                    return evalRirCode(code, cntxt->cloenv, &call);
                 } else {
                     return R_ReturnedValue;
                 }
@@ -1662,14 +1666,13 @@ void deoptFramesWithContext(const CallContext* callCtxt,
         if (!innermostFrame)
             ostack_push(res);
         if (inPromise) {
-            SEXP p = createPromise(callCtxt, code, deoptEnv);
+            SEXP p = createPromise(&call, code, deoptEnv);
             PROTECT(p);
             auto r = evaluatePromise(p, f.pc);
             UNPROTECT(1);
             return r;
         }
-        return evalRirCode(code, cntxt->cloenv, callCtxt, f.pc, nullptr, false,
-                           false);
+        return evalRirCode(code, cntxt->cloenv, &call, f.pc);
     };
 
     SEXP res = trampoline();
@@ -2037,7 +2040,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     auto typeFeedback = function->typeFeedback(callCtxt);
     auto baselineFeedback = function->baseline()->typeFeedback();
-    if (newInvocation && !isPromise) {
+    if (newInvocation && pc == c->code() && !isPromise) {
         typeFeedback->increaseRecordingCount();
         if (typeFeedback != baselineFeedback)
             baselineFeedback->increaseRecordingCount();

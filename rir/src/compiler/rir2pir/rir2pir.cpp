@@ -162,7 +162,8 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     for (auto i : stack)
         if (ExpandDots::Cast(i))
             return nullptr;
-    return insert.emitCheckpoint(srcCode, pos, stack, inPromise());
+    return insert.emitCheckpoint(srcCode, pos, stack, cls->context(),
+                                 inPromise());
 }
 
 Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
@@ -260,9 +261,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // PIR LdVar corresponds to ldvar_noforce_ which does not change
         // visibility
         insert(new Visible());
-        auto fs = inlining() ? (Value*)Tombstone::framestate()
-                             : insert.registerFrameState(srcCode, nextPos,
-                                                         stack, inPromise());
+        auto fs = inlining()
+                      ? (Value*)Tombstone::framestate()
+                      : insert.registerFrameState(srcCode, nextPos, stack,
+                                                  cls->context(), inPromise());
         push(insert(new Force(v, env, fs)));
         break;
     }
@@ -454,8 +456,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
             finishedRecordingCount > 0 &&
             srcCode->function()->deadCallReached() < 3) {
-            auto sp =
-                insert.registerFrameState(srcCode, pos, stack, inPromise());
+            auto sp = insert.registerFrameState(srcCode, pos, stack,
+                                                cls->context(), inPromise());
 
             DeoptReason reason = DeoptReason(
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx)),
@@ -759,7 +761,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             popn(toPop);
             Value* fs = inlining() ? (Value*)Tombstone::framestate()
                                    : (Value*)insert.registerFrameState(
-                                         srcCode, nextPos, stack, inPromise());
+                                         srcCode, nextPos, stack,
+                                         cls->context(), inPromise());
             Instruction* res;
             if (namedArguments) {
                 res = insert(new NamedCall(env, guardedCallee, args,
@@ -945,8 +948,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     calli->typeFeedbackUsed = true;
                 popn(toPop);
                 assert(!inlining());
-                auto fs = insert.registerFrameState(srcCode, nextPos, stack,
-                                                    inPromise());
+                auto fs = insert.registerFrameState(
+                    srcCode, nextPos, stack, cls->context(), inPromise());
                 auto cl = insert(
                     new StaticCall(insert.env, f, given, matchedArgs,
                                    std::move(argOrderOrig), fs, ast,
@@ -1280,9 +1283,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::force_: {
         auto v = pop();
-        auto fs = inlining() ? (Value*)Tombstone::framestate()
-                             : insert.registerFrameState(srcCode, nextPos,
-                                                         stack, inPromise());
+        auto fs = inlining()
+                      ? (Value*)Tombstone::framestate()
+                      : insert.registerFrameState(srcCode, nextPos, stack,
+                                                  cls->context(), inPromise());
         push(insert(new Force(v, env, fs)));
         break;
     }

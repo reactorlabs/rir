@@ -927,6 +927,7 @@ class VLIE(FrameState, Effects() | Effect::ReadsEnv) {
     Opcode* pc;
     rir::Code* code;
     size_t stackSize;
+    Context context;
     bool inPromise;
 
     size_t gvnBase() const override {
@@ -937,9 +938,10 @@ class VLIE(FrameState, Effects() | Effect::ReadsEnv) {
     }
 
     FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack,
-               bool inPromise)
+               const Context& assumptions, bool inPromise)
         : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
-          code(code), stackSize(stack.size()), inPromise(inPromise) {
+          code(code), stackSize(stack.size()), context(assumptions),
+          inPromise(inPromise) {
         for (auto& v : stack)
             pushArg(v, PirType::any());
     }

@@ -3579,7 +3579,7 @@ void LowerFunctionLLVM::compile() {
                             args.push_back(fs->arg(pos).val());
                         args.push_back(fs->env());
                         m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
-                                                fs->inPromise};
+                                                fs->context, fs->inPromise};
                     }
 
                     target->addExtraPoolEntry(store);

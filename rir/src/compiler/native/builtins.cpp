@@ -833,7 +833,12 @@ static SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    deoptReason->record(deoptTrigger, callContext);
+    // Do not pass current context to inlinees
+    // TODO: Fix
+    const CallContext* deoptContext = callContext;
+    if (c->function() != deoptReason->origin.function())
+        deoptContext = nullptr;
+    deoptReason->record(deoptTrigger, deoptContext);
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
