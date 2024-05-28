@@ -10,11 +10,10 @@ namespace pir {
 
 class OSR {
   public:
-    static Function* compile(SEXP closure, rir::Code* c,
-                             const CallContext * callContext,
+    static Function* compile(SEXP closure, rir::Code* c, const Context& context,
                              const ContinuationContext& ctx);
     static Function* deoptlessDispatch(SEXP closure, rir::Code* c,
-                                       const CallContext * callContext,
+                                       const Context& context,
                                        const DeoptContext& ctx);
 };
 

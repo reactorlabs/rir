@@ -74,9 +74,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     Function* baseline();
     const Function* baseline() const;
     TypeFeedback* typeFeedback() const;
+    // Returns TypeFeedback used for recording type feedback for given context
     TypeFeedback* typeFeedback(const Context& ctx);
-    // Returns TypeFeedback used for recording type feedback based on context
-    TypeFeedback* typeFeedback(const CallContext* callContext);
 
     void typeFeedback(TypeFeedback* typeFeedback) {
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());

@@ -129,13 +129,4 @@ TypeFeedback* Function::typeFeedback(const Context& ctx) {
     return typeFeedback();
 }
 
-TypeFeedback* Function::typeFeedback(const CallContext* callContext) {
-    if (!callContext || !dispatchTable()) {
-        assert(signature().optimization ==
-               FunctionSignature::OptimizationLevel::Baseline);
-        return typeFeedback();
-    }
-    return typeFeedback(callContext->givenContext);
-}
-
 } // namespace rir

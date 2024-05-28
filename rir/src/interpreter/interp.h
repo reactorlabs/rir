@@ -131,13 +131,13 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
 void inferCurrentContext(CallContext& call, size_t formalNargs);
 SEXP getTrivialPromValue(SEXP sym, SEXP env);
 
+SEXP createPromise(const Context& context, Code* code, SEXP env);
 SEXP createPromise(const CallContext* context, Code* code, SEXP env);
 
 SEXP doCall(CallContext& call, bool popArgs = false);
 size_t expandDotDotDotCallArgs(size_t n, Immediate* names_, SEXP env,
                                bool explicitDots);
-void deoptFramesWithContext(const CallContext* callCtxt,
-                            DeoptMetadata* deoptData, SEXP sysparent,
+void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext);
 void jit(SEXP cls, SEXP name);

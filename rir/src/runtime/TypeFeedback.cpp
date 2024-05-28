@@ -60,18 +60,18 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                          DeoptReason::Reason reason)
     : reason(reason), origin(origin) {}
 
-void DeoptReason::record(SEXP val, const CallContext* callContext) const {
+void DeoptReason::record(SEXP val, const Context& context) const {
     origin.function()->registerDeoptReason(reason);
     assert(origin.function()->dispatchTable());
     auto baselineFeedback =
         origin.function()->dispatchTable()->baselineFeedback();
+    auto tf = origin.function()->typeFeedback(context);
 
     switch (reason) {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        auto& feedback =
-            origin.function()->typeFeedback(callContext)->test(origin.idx());
+        auto& feedback = tf->test(origin.idx());
         feedback.seen = ObservedTest::Both;
         auto& bf = baselineFeedback->test(origin.idx());
         bf.seen = ObservedTest::Both;
@@ -80,14 +80,13 @@ void DeoptReason::record(SEXP val, const CallContext* callContext) const {
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback(callContext);
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
         // IMHO the one there is more correct. Would it make sense
         // to pull this into the TypeFeedback::record_type()?
         // and get rid of the overload that takes lambda?
-        feedback->record_typeInc(baselineFeedback, origin.idx(), val);
-        feedback->record_typeInc(
+        tf->record_typeInc(baselineFeedback, origin.idx(), val);
+        tf->record_typeInc(
             baselineFeedback, origin.idx(), [&](auto& slot) {
                 if (TYPEOF(val) == PROMSXP) {
                     if (PRVALUE(val) == R_UnboundValue &&
@@ -106,9 +105,8 @@ void DeoptReason::record(SEXP val, const CallContext* callContext) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback(callContext);
-        feedback->record_calleeInc(baselineFeedback, origin.idx(),
-                                   origin.function(), val, true);
+        tf->record_calleeInc(baselineFeedback, origin.idx(), origin.function(),
+                             val, true);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {

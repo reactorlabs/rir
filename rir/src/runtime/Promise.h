@@ -25,42 +25,39 @@ namespace rir {
 
 class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
 
-    const CallContext* context_;
+    const Context context_;
     SEXP code_;
 
   public:
-    Promise(const CallContext* context, Code* code)
+    Promise(const Context& context, Code* code)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
               (intptr_t)&code_ - (intptr_t)this, 1),
-          context_(context), code_(nullptr)
-    //          context_(context->callId, context->caller, context->callee,
-    //          context->passedArgs, context->ast, context->stackArgs,
-    //          context->names, context->callerEnv,
-    //          context->suppliedvars, context->givenContext)
-    {
+          context_(context), code_(nullptr) {
         setEntry(0, code->container());
     }
     ~Promise() = default;
 
-    static Promise* create(const CallContext* context, Code* code) {
+    static Promise* create(const Context& context, Code* code) {
         size_t sz = sizeof(Promise);
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
         return new (INTEGER(s)) Promise(context, code);
     }
 
-    const CallContext* context() const { return context_; }
+    const Context& context() const { return context_; }
 
     Code* code() const { return Code::unpack(getEntry(0)); }
 
     // Serialize and deserialize only code for now
     void serialize(SEXP refTable, R_outpstream_t out) const {
+        context_.serialize(refTable, out);
         code()->serialize(refTable, out);
     }
 
     static Promise* deserialize(SEXP refTable, R_inpstream_t inp) {
+        Context context = Context::deserialize(refTable, inp);
         Code* code = Code::deserialize(refTable, inp);
-        return create(nullptr, code);
+        return create(context, code);
     }
 };
 

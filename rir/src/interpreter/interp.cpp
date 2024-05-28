@@ -31,6 +31,7 @@ extern Rboolean R_Visible;
 namespace rir {
 
 static SEXP evalRirCode(Code* c, SEXP env, const CallContext* callContext,
+                        Context recordingContext = Context(),
                         Opcode* initialPc = nullptr,
                         BindingCache* cache = nullptr, bool isPromise = false,
                         bool newInvocation = true);
@@ -179,15 +180,14 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
+SEXP createPromise(const Context& context, Code* code, SEXP env) {
+    return Rf_mkPROMISE(Promise::create(context, code)->container(), env);
+}
+
 SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
-    SEXP prom;
-    if (!context) {
-        prom = code->container();
-    } else {
-        Promise* promise = Promise::create(context, code);
-        prom = promise->container();
-    }
-    return Rf_mkPROMISE(prom, env);
+    if (context)
+        return createPromise(context->givenContext, code, env);
+    return Rf_mkPROMISE(code->container(), env);
 }
 
 typedef struct RPRSTACK {
@@ -227,11 +227,11 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
         if (auto p = Promise::check(PRCODE(e))) {
-            val = evalRirCode(p->code(), PRENV(e), p->context(), pc, nullptr,
-                              true);
-        } else
-            val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr, pc,
+            val = evalRirCode(p->code(), PRENV(e), nullptr, p->context(), pc,
                               nullptr, true);
+        } else
+            val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
+                              Context(), pc, nullptr, true);
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
@@ -559,7 +559,8 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
     // execute the loop body
-    SEXP res = evalRirCode(c, env, callCtxt, pc, cache, false, false);
+    SEXP res =
+        evalRirCode(c, env, callCtxt, Context(), pc, cache, false, false);
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
 }
@@ -1557,8 +1558,7 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
  * context and thus return from the R function that triggered this deopt
  * routine.
  */
-void deoptFramesWithContext(const CallContext* callCtxt,
-                            DeoptMetadata* deoptData, SEXP sysparent,
+void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext) {
     size_t excessStack = stackHeight;
@@ -1567,11 +1567,6 @@ void deoptFramesWithContext(const CallContext* callCtxt,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(stackHeight);
     auto code = f.code;
-
-    CallContext call(ArglistOrder::NOT_REORDERED, callCtxt->caller,
-                     callCtxt->callee, -1, src_pool_at(callCtxt->caller->src),
-                     callCtxt->stackArgs, (Immediate*)nullptr,
-                     callCtxt->callerEnv, R_NilValue, f.context);
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -1636,7 +1631,7 @@ void deoptFramesWithContext(const CallContext* callCtxt,
                 if (R_ReturnedValue == R_RestartToken) {
                     cntxt->callflag = CTXT_RETURN; /* turn restart off */
                     R_ReturnedValue = R_NilValue;  /* remove restart token */
-                    return evalRirCode(code, cntxt->cloenv, &call);
+                    return evalRirCode(code, cntxt->cloenv, nullptr, f.context);
                 } else {
                     return R_ReturnedValue;
                 }
@@ -1645,8 +1640,8 @@ void deoptFramesWithContext(const CallContext* callCtxt,
 
         // 2. Execute the inner frames
         if (!innermostFrame) {
-            deoptFramesWithContext(callCtxt, deoptData, deoptEnv, pos - 1,
-                                   stackHeight, cntxt);
+            deoptFramesWithContext(deoptData, deoptEnv, pos - 1, stackHeight,
+                                   cntxt);
         }
 
         // 3. Execute our frame
@@ -1666,13 +1661,13 @@ void deoptFramesWithContext(const CallContext* callCtxt,
         if (!innermostFrame)
             ostack_push(res);
         if (inPromise) {
-            SEXP p = createPromise(&call, code, deoptEnv);
+            SEXP p = createPromise(f.context, code, deoptEnv);
             PROTECT(p);
             auto r = evaluatePromise(p, f.pc);
             UNPROTECT(1);
             return r;
         }
-        return evalRirCode(code, cntxt->cloenv, &call, f.pc);
+        return evalRirCode(code, cntxt->cloenv, nullptr, f.context, f.pc);
     };
 
     SEXP res = trampoline();
@@ -1916,12 +1911,14 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             size <= (long)pir::ContinuationContext::MAX_STACK &&
             l <= (long)pir::ContinuationContext::MAX_ENV) {
             pir::ContinuationContext ctx(pc, env, true, basePtr, size);
-            if (auto fun = pir::OSR::compile(callCtxt->callee, c, callCtxt, ctx)) {
+            if (auto fun = pir::OSR::compile(callCtxt->callee, c,
+                                             callCtxt->givenContext, ctx)) {
                 PROTECT(fun->container());
                 dt->baseline()->flags.set(Function::Flag::MarkOpt);
                 auto code = fun->body();
                 auto nc = code->nativeCode();
-                auto res = nc(code, basePtr, env, callCtxt->callee, callCtxt);
+                auto res = nc(code, basePtr, env, callCtxt->callee,
+                              callCtxt->givenContext);
                 ostack_popn(size);
                 UNPROTECT(1);
                 return res;
@@ -1932,23 +1929,20 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
 }
 
 SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
-                 Opcode* initialPC, BindingCache* cache, bool isPromise,
-                 bool newInvocation) {
+                 Context recordingContext, Opcode* initialPC,
+                 BindingCache* cache, bool isPromise, bool newInvocation) {
     assert(env != symbol::delayedEnv || (callCtxt != nullptr && !isPromise));
 
     checkUserInterrupt();
 
-    // Use null call context in promise when needed,
-    // this is needed due to passing of callCtxt with promise
-    // for contextual type feedback
-    auto usedContext = isPromise ? nullptr : callCtxt;
+    if (callCtxt && callCtxt->givenContext.smaller(recordingContext))
+        recordingContext = callCtxt->givenContext;
 
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
     if (native) {
-        return native(c, usedContext ? (void*)usedContext->stackArgs : nullptr,
-                      env, usedContext ? usedContext->callee : nullptr,
-                      callCtxt);
+        return native(c, callCtxt ? (void*)callCtxt->stackArgs : nullptr, env,
+                      callCtxt ? callCtxt->callee : nullptr, recordingContext);
     }
 
 #ifdef THREADED_CODE
@@ -2028,7 +2022,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        auto typeFeedback = function->typeFeedback(callCtxt);
+        auto typeFeedback = function->typeFeedback(recordingContext);
         auto baselineFeedback = function->baseline()->typeFeedback();
         auto recordTypeFunc = [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
@@ -2038,7 +2032,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         typeFeedback->record_typeInc(baselineFeedback, idx, recordTypeFunc);
     };
 
-    auto typeFeedback = function->typeFeedback(callCtxt);
+    auto typeFeedback = function->typeFeedback(recordingContext);
     auto baselineFeedback = function->baseline()->typeFeedback();
     if (newInvocation && pc == c->code() && !isPromise) {
         typeFeedback->increaseRecordingCount();
@@ -2400,7 +2394,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2434,7 +2428,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(lll - call.suppliedArgs == ostack_length());
 
             if (call.triggerOsr) {
-                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2487,7 +2481,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(ttt == R_PPStackTop);
 
             if (call.triggerOsr) {
-                if (auto res = osr(usedContext, basePtr, env, c, pc)) {
+                if (auto res = osr(callCtxt, basePtr, env, c, pc)) {
                     return res;
                 }
             }
@@ -2573,7 +2567,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
         INSTRUCTION(mk_promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = createPromise(callCtxt, c->getPromise(id), env);
+            SEXP prom = createPromise(recordingContext, c->getPromise(id), env);
             ostack_push(prom);
             NEXT();
         }
@@ -3248,7 +3242,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
                     loopCounter = 0;
-                    if (auto res = osr(usedContext, basePtr, env, c, pc))
+                    if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
                 }
             }
@@ -3915,7 +3909,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
-            loopTrampoline(c, env, usedContext, pc, bindingCache);
+            loopTrampoline(c, env, callCtxt, pc, bindingCache);
             pc += offset;
             checkUserInterrupt();
             assert(*pc == Opcode::endloop_);

@@ -244,7 +244,7 @@ class FeedbackOrigin {
     }
 };
 
-struct CallContext;
+struct Context;
 
 struct DeoptReason {
   public:
@@ -298,7 +298,7 @@ struct DeoptReason {
 
     static DeoptReason unknown() { return DeoptReason({}, Unknown); }
 
-    void record(SEXP val, const CallContext* callContext) const;
+    void record(SEXP val, const Context& context) const;
 
     DeoptReason() = delete;
 

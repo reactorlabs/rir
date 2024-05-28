@@ -79,7 +79,7 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
-                                   const CallContext * callContext,
+                                   const Context& context,
                                    const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
@@ -94,9 +94,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    auto typeFeedback = callContext
-                            ? tbl->getTypeFeedback(callContext->givenContext)
-                            : curFun->typeFeedback();
+    auto typeFeedback = tbl->getTypeFeedback(context);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
@@ -151,8 +149,11 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
-    SLOWASSERT(optFunction->baseline()->invocationCount() >=
-               typeFeedback->recordingCount());
+    // This does not have to be a true due to deopts, while interpreting after
+    // deopts can record type feedback, its invocation count is not incremented
+    // since the invocation was not expected.
+    // SLOWASSERT(optFunction->baseline()->invocationCount() >=
+    //           typeFeedback->recordingCount());
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
                     typeFeedback);
 

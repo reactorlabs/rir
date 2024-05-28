@@ -367,7 +367,7 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     return res;
 }
 
-SEXP createPromiseImpl(CallContext* context, SEXP expr, SEXP env) {
+SEXP createPromiseImpl(const Context& context, SEXP expr, SEXP env) {
     SEXP res = createPromise(context, rir::Code::check(expr), env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
@@ -381,7 +381,7 @@ SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
     return res;
 }
 
-SEXP createPromiseNoEnvImpl(CallContext* context, SEXP exp) {
+SEXP createPromiseNoEnvImpl(const Context& context, SEXP exp) {
     return createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
 }
 
@@ -831,16 +831,13 @@ static SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
-               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    // Do not pass current context to inlinees
-    // TODO: Fix
-    const CallContext* deoptContext = callContext;
-    if (c->function() != deoptReason->origin.function())
-        deoptContext = nullptr;
-    deoptReason->record(deoptTrigger, deoptContext);
-
+void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
+               R_bcstack_t* args, bool leakedEnv, DeoptReason* deoptReason,
+               SEXP deoptTrigger) {
     assert(m->numFrames >= 1);
+    // Do not pass current context to inlinees
+    deoptReason->record(deoptTrigger, m->frames[m->numFrames - 1].context);
+
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
         stackHeight += m->frames[i].stackSize + 1;
@@ -892,7 +889,7 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
             DeoptContext ctx(m->frames[0].pc, envSize, le ? nullptr : env, le,
                              leakedEnv && !le, base, m->frames[0].stackSize,
                              *deoptReason, deoptTrigger);
-            fun = OSR::deoptlessDispatch(closure, c, callContext, ctx);
+            fun = OSR::deoptlessDispatch(closure, c, context, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
@@ -935,7 +932,7 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessRecursion = cls;
-                auto res = nc(code, base, env, closure, callContext);
+                auto res = nc(code, base, env, closure, context);
                 deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
@@ -953,18 +950,14 @@ void deoptImpl(rir::Code* c, const CallContext * callContext, SEXP cls, DeoptMet
             if (f->body() == c)
                 Pool::patch(idx, deoptSentinelContainer);
 
-    CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
-                     /* nargs */ -1, src_pool_at(c->src), args,
-                     (Immediate*)nullptr, env, R_NilValue, Context());
-
-    deoptFramesWithContext(&call, m, R_NilValue, m->numFrames - 1, stackHeight,
+    deoptFramesWithContext(m, R_NilValue, m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
 }
 
-void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
+void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
-    auto feedback = fun->typeFeedback(callContext);
+    auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
     feedback->record_typeInc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
@@ -985,10 +978,9 @@ void recordTypeFeedbackImpl(rir::Function* fun, const CallContext * callContext,
     feedback->record_typeInc(baselineFeedback, idx, recordPromise);
 }
 
-void recordCallFeedbackImpl(rir::Function* fun, const CallContext * callContext,
+void recordCallFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
-
-    auto feedback = fun->typeFeedback(callContext);
+    auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
     feedback->record_calleeInc(baselineFeedback, idx, fun, value);
 }
@@ -1473,13 +1465,14 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
             fun->registerInvocation();
-            result = code->nativeCode()(code, args, env, callee, &call);
+            result =
+                code->nativeCode()(code, args, env, callee, call.givenContext);
             fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }
     } else {
-        result = code->nativeCode()(code, args, env, callee, &call);
+        result = code->nativeCode()(code, args, env, callee, call.givenContext);
     }
 
     endClosureContext(&cntxt, result);

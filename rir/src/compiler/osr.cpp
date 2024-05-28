@@ -9,8 +9,7 @@
 namespace rir {
 namespace pir {
 
-Function* OSR::compile(SEXP closure, rir::Code* c,
-                       const CallContext * callContext,
+Function* OSR::compile(SEXP closure, rir::Code* c, const Context& context,
                        const ContinuationContext& ctx) {
     Function* fun = nullptr;
 
@@ -24,7 +23,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
     pir::Backend backend(module, logger, "continuation");
 
     cmp.compileContinuation(
-        closure, c->function(), callContext, &ctx,
+        closure, c->function(), context, &ctx,
         [&](Continuation* cnt) {
             cmp.optimizeModule();
             fun = backend.getOrCompile(cnt);
@@ -39,7 +38,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
 }
 
 Function* OSR::deoptlessDispatch(SEXP closure, rir::Code* c,
-                                 const CallContext * callContext,
+                                 const Context& context,
                                  const DeoptContext& ctx) {
     DeoptlessDispatchTable* dispatchTable = nullptr;
     if (c->extraPoolSize > 0) {
@@ -61,7 +60,7 @@ Function* OSR::deoptlessDispatch(SEXP closure, rir::Code* c,
 
     if (!fun && !dispatchTable->full()) {
         assert(ctx.asDeoptContext());
-        fun = compile(closure, c, callContext, ctx);
+        fun = compile(closure, c, context, ctx);
         if (fun)
             dispatchTable->insert(ctx, fun);
     }
