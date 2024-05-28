@@ -1,3 +1,5 @@
+#ifdef RECORDING_HOOKS
+
 #include "recording_serialization.h"
 #include "Rdefines.h"
 #include "Rinternals.h"
@@ -257,3 +259,5 @@ InvocationEvent::SourceSet invocation_source_set_from_sexp( SEXP sexp ){
 } // namespace serialization
 } // namespace recording
 } // namespace rir
+
+#endif // RECORDING_HOOKS

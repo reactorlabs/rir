@@ -1,3 +1,5 @@
+#ifdef RECORDING_HOOKS
+
 #include "recording.h"
 #include "R/Serialize.h"
 #include "R/r.h"
@@ -731,3 +733,4 @@ SEXP getEnvironment(const std::string& name) {
 } // namespace recording
 } // namespace rir
 
+#endif // RECORDING_HOOKS

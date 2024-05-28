@@ -217,52 +217,55 @@ rir.annotateDepromised <- function(closure) {
     copy
 }
 
-recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE) {
-    if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation), is.logical)))) {
-        warning("ambiguous non-logical given")
+# Only define recording functions if the recordings have been compiled
+if ( .Call("isRecordingsDefined") ){
+    recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE) {
+        if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation), is.logical)))) {
+            warning("ambiguous non-logical given")
+        }
+        .Call("filterRecordings", compile, deoptimize, type_feedback, invocation)
     }
-    .Call("filterRecordings", compile, deoptimize, type_feedback, invocation)
-}
 
-recordings.save <- function(filename) {
-    .Call("saveRecordings", filename)
-}
+    recordings.save <- function(filename) {
+        .Call("saveRecordings", filename)
+    }
 
-recordings.load <- function(filename) {
-    .Call("loadRecordings", filename)
-}
+    recordings.load <- function(filename) {
+        .Call("loadRecordings", filename)
+    }
 
-recordings.start <- function() {
-    invisible(.Call("startRecordings"))
-}
+    recordings.start <- function() {
+        invisible(.Call("startRecordings"))
+    }
 
-recordings.stop <- function() {
-    invisible(.Call("stopRecordings"))
-}
+    recordings.stop <- function() {
+        invisible(.Call("stopRecordings"))
+    }
 
-recordings.reset <- function() {
-    invisible(.Call("resetRecordings"))
-}
+    recordings.reset <- function() {
+        invisible(.Call("resetRecordings"))
+    }
 
-recordings.enabled <- function() {
-    .Call("isRecordings")
-}
+    recordings.enabled <- function() {
+        .Call("isRecordings")
+    }
 
-recordings.get <- function() {
-    .Call("getRecordings")
-}
+    recordings.get <- function() {
+        .Call("getRecordings")
+    }
 
-recordings.eval <- function(expr, env=parent.frame()) {
-    recordings.start()
-    eval(expr, env)
-    recordings.stop()
-    recordings.get()
-}
+    recordings.eval <- function(expr, env=parent.frame()) {
+        recordings.start()
+        eval(expr, env)
+        recordings.stop()
+        recordings.get()
+    }
 
-recordings.print <- function(from = NULL) {
-    .Call("printRecordings", from)
-}
+    recordings.print <- function(from = NULL) {
+        .Call("printRecordings", from)
+    }
 
-recordings.printEventPart <- function( obj, type, funs ) {
-    .Call("printEventPart", obj, type, funs)
+    recordings.printEventPart <- function( obj, type, funs ) {
+        .Call("printEventPart", obj, type, funs)
+    }
 }

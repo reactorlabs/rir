@@ -1,4 +1,7 @@
 #include "recording_hooks.h"
+
+#ifdef RECORDING_HOOKS
+
 #include "R/Serialize.h"
 #include "R/r.h"
 #include "Rinternals.h"
@@ -679,4 +682,14 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     }
 
     return Rf_mkString(ss.str().c_str());
+}
+
+#endif // RECORDING_HOOKS
+
+REXPORT SEXP isRecordingsDefined() {
+#ifdef RECORDING_HOOKS
+    return Rf_ScalarLogical(TRUE);
+#else
+    return Rf_ScalarLogical(FALSE);
+#endif
 }

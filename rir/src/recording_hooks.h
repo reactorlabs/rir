@@ -9,9 +9,6 @@
 
 #ifdef RECORDING_HOOKS
 #define REC_HOOK(code) code
-#else
-#define REC_HOOK(code)
-#endif
 
 namespace rir {
 
@@ -78,5 +75,11 @@ REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
 REXPORT SEXP printRecordings(SEXP from);
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
+
+#else
+#define REC_HOOK(code)
+#endif // RECORDING_HOOKS
+
+REXPORT SEXP isRecordingsDefined();
 
 #endif
