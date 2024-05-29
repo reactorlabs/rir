@@ -1558,7 +1558,8 @@ bool isMissing(SEXP symbol, SEXP environment, Code* code, Opcode* pc) {
  * context and thus return from the R function that triggered this deopt
  * routine.
  */
-void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
+void deoptFramesWithContext(const Function* deoptedFun, const Context& deoptCtx,
+                            DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext) {
     size_t excessStack = stackHeight;
@@ -1567,6 +1568,11 @@ void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
     stackHeight -= f.stackSize + 1;
     SEXP deoptEnv = ostack_at(stackHeight);
     auto code = f.code;
+
+    // use best possible assumption for calling context, which is falling
+    // context for deopted function and compile context for inlinees
+    Context context =
+        deoptedFun->isSameClosureAs(code->function()) ? deoptCtx : f.context;
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
@@ -1631,7 +1637,7 @@ void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
                 if (R_ReturnedValue == R_RestartToken) {
                     cntxt->callflag = CTXT_RETURN; /* turn restart off */
                     R_ReturnedValue = R_NilValue;  /* remove restart token */
-                    return evalRirCode(code, cntxt->cloenv, nullptr, f.context);
+                    return evalRirCode(code, cntxt->cloenv, nullptr, context);
                 } else {
                     return R_ReturnedValue;
                 }
@@ -1640,8 +1646,8 @@ void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
 
         // 2. Execute the inner frames
         if (!innermostFrame) {
-            deoptFramesWithContext(deoptData, deoptEnv, pos - 1, stackHeight,
-                                   cntxt);
+            deoptFramesWithContext(deoptedFun, context, deoptData, deoptEnv,
+                                   pos - 1, stackHeight, cntxt);
         }
 
         // 3. Execute our frame
@@ -1661,13 +1667,13 @@ void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
         if (!innermostFrame)
             ostack_push(res);
         if (inPromise) {
-            SEXP p = createPromise(f.context, code, deoptEnv);
+            SEXP p = createPromise(context, code, deoptEnv);
             PROTECT(p);
             auto r = evaluatePromise(p, f.pc);
             UNPROTECT(1);
             return r;
         }
-        return evalRirCode(code, cntxt->cloenv, nullptr, f.context, f.pc);
+        return evalRirCode(code, cntxt->cloenv, nullptr, context, f.pc);
     };
 
     SEXP res = trampoline();

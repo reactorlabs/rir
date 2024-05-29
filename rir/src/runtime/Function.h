@@ -112,6 +112,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
 
+    bool isSameClosureAs(const Function* b) const {
+        return dispatchTable() == b->dispatchTable();
+    }
+
     void unregisterInvocation() {
         invoked = 0;
         if (invocationCount_ > 0)

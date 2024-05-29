@@ -836,7 +836,12 @@ void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
                SEXP deoptTrigger) {
     assert(m->numFrames >= 1);
     // Do not pass current context to inlinees
-    deoptReason->record(deoptTrigger, m->frames[m->numFrames - 1].context);
+    // TODO: Is this correct? Might be FrameState outside of inlinee?
+    // TODO: is isSameClosure actually needed, would EQ operator be enough?
+    Context deoptContext = m->frames[m->numFrames - 1].context;
+    if (deoptReason->origin.function()->isSameClosureAs(c->function()))
+        deoptContext = context;
+    deoptReason->record(deoptTrigger, deoptContext);
 
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -950,7 +955,8 @@ void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
             if (f->body() == c)
                 Pool::patch(idx, deoptSentinelContainer);
 
-    deoptFramesWithContext(m, R_NilValue, m->numFrames - 1, stackHeight,
+    deoptFramesWithContext(c->function(), context, m, R_NilValue,
+                           m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
 }

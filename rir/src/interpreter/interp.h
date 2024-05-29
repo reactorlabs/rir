@@ -137,7 +137,8 @@ SEXP createPromise(const CallContext* context, Code* code, SEXP env);
 SEXP doCall(CallContext& call, bool popArgs = false);
 size_t expandDotDotDotCallArgs(size_t n, Immediate* names_, SEXP env,
                                bool explicitDots);
-void deoptFramesWithContext(DeoptMetadata* deoptData, SEXP sysparent,
+void deoptFramesWithContext(const Function* deoptedFun, const Context& context,
+                            DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext);
 void jit(SEXP cls, SEXP name);
