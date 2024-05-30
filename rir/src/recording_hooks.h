@@ -7,7 +7,7 @@
 #include <R/r.h>
 #include <string>
 
-#ifdef RECORDING_HOOKS
+#ifdef RECORDING
 #define REC_HOOK(code) code
 
 namespace rir {
@@ -27,7 +27,7 @@ void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
 void recordCompileFinish(bool succesful);
-void recordLLVMBitcode( llvm::Function* fun );
+void recordLLVMBitcode(llvm::Function* fun);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
@@ -44,8 +44,10 @@ void recordSC(const ObservedValues& type, Function* fun);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();
-void recordInvocationCountTimeReason( size_t count, size_t minimalCount, unsigned long time, unsigned long minimalTime );
-void recordPirWarmupReason( size_t invocation_count );
+void recordInvocationCountTimeReason(size_t count, size_t minimalCount,
+                                     unsigned long time,
+                                     unsigned long minimalTime);
+void recordPirWarmupReason(size_t invocation_count);
 
 // Compile condition
 void recordMarkOptReasonCondition();
@@ -54,13 +56,13 @@ void recordIsImprovingReason();
 void recordReoptimizeFlagReason();
 
 // OSR reason
-void recordOsrTriggerCallerCalle();
+void recordOsrTriggerCallerCallee();
 void recordOsrTriggerLoop(size_t loopCount);
 
 void recordReasonsClear();
 
 // Record from environment
-void recordExecution( const char* filePath, const char* filter );
+void recordExecution(const char* filePath, const char* filter);
 
 } // namespace recording
 } // namespace rir
@@ -78,7 +80,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
 
 #else
 #define REC_HOOK(code)
-#endif // RECORDING_HOOKS
+#endif // RECORDING
 
 REXPORT SEXP isRecordingsDefined();
 

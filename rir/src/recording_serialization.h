@@ -1,7 +1,7 @@
 #ifndef SERIALIZER_H
 #define SERIALIZER_H
 
-#ifdef RECORDING_HOOKS
+#ifdef RECORDING
 
 #include "recording.h"
 #include <R/r.h>
@@ -198,5 +198,5 @@ void fields_from_sexp(SEXP sexp, std::pair<Ts&, from_sexp_t<Ts>>... pairs) {
 } // namespace recording
 } // namespace rir
 
-#endif // RECORDING_HOOKS
+#endif // RECORDING
 #endif

@@ -1,6 +1,6 @@
 #include "recording_hooks.h"
 
-#ifdef RECORDING_HOOKS
+#ifdef RECORDING
 
 #include "R/Serialize.h"
 #include "R/r.h"
@@ -24,8 +24,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "prefixer.cpp"
 
 namespace rir {
 namespace recording {
@@ -294,6 +292,42 @@ SEXP setClassName(SEXP s, const char* className) {
     return s;
 }
 
+/**
+ * Output stream transformer that prefixes each line with a string
+ */
+class Prefixer : private std::streambuf, public std::ostream {
+  public:
+    Prefixer(std::ostream& base, const char* prefix)
+        : std::ostream(this), base(base), prefix(prefix) {
+        base.flush();
+    }
+
+    inline virtual int sync(void) override {
+        base.flush();
+        return 0;
+    }
+
+  private:
+    std::ostream& base;
+    const char* prefix;
+
+    bool needsPrefix = true;
+
+    int overflow(int c) override {
+        if (needsPrefix) {
+            base << prefix;
+            needsPrefix = false;
+        }
+
+        if (c == '\n') {
+            needsPrefix = true;
+        }
+
+        base.put(c);
+        return 0;
+    }
+};
+
 void printRecordings(
     std::ostream& out,
     const std::vector<std::unique_ptr<rir::recording::Event>>& events,
@@ -354,7 +388,7 @@ void recordReoptimizeFlagReason() {
 }
 
 // OSR reason
-void recordOsrTriggerCallerCalle() {
+void recordOsrTriggerCallerCallee() {
     RECORDER_FILTER_GUARD(compile)
     compileReasons_.set_osr<OSRCallerCalleeReason>();
 }
@@ -684,10 +718,10 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     return Rf_mkString(ss.str().c_str());
 }
 
-#endif // RECORDING_HOOKS
+#endif // RECORDING
 
 REXPORT SEXP isRecordingsDefined() {
-#ifdef RECORDING_HOOKS
+#ifdef RECORDING
     return Rf_ScalarLogical(TRUE);
 #else
     return Rf_ScalarLogical(FALSE);

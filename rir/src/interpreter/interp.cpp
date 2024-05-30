@@ -1009,7 +1009,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
 
-                        REC_HOOK(recording::recordOsrTriggerCallerCalle());
+                        REC_HOOK(recording::recordOsrTriggerCallerCallee());
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);

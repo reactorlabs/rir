@@ -1,7 +1,7 @@
 #ifndef RECORDING_H
 #define RECORDING_H
 
-#ifdef RECORDING_HOOKS
+#ifdef RECORDING
 
 #include "api.h"
 #include "compiler/pir/closure_version.h"
@@ -634,5 +634,5 @@ class Record {
 
 } // namespace rir
 
-#endif // RECORDING_HOOKS
+#endif // RECORDING
 #endif
