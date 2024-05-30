@@ -559,6 +559,7 @@ static void loopTrampoline(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
     // execute the loop body
+    // recording context inside evalRirCode is set based on call context
     SEXP res =
         evalRirCode(c, env, callCtxt, Context(), pc, cache, false, false);
     assert(res == loopTrampolineMarker);
@@ -2040,7 +2041,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     auto typeFeedback = function->typeFeedback(recordingContext);
     auto baselineFeedback = function->baseline()->typeFeedback();
-    if (newInvocation && pc == c->code() && !isPromise) {
+    if (newInvocation && !isPromise) {
         typeFeedback->increaseRecordingCount();
         if (typeFeedback != baselineFeedback)
             baselineFeedback->increaseRecordingCount();
