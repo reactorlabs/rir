@@ -159,3 +159,24 @@ Fetch updated R:
     cd external/custom-r && make -j4 
 
 Or use `ninja setup`
+
+## Record Events
+
+To have recording enabled, the cmake must be configured with `-DRECORDING=1`, for example
+
+    cmake -GNinja -DCMAKE_BUILD_TYPE=debug -DRECORDING=1 ..
+
+There is an R-level API for record & replay the JIT compilation, under the `recordings` namespace.
+
+To record all function compilation, run the script as follows:
+
+    RIR_RECORD=output.rds ./bin/R -f test.R
+
+where `output.rds` is the destination where the recording will be saved.
+
+With the `RIR_RECORD_FILTER` environment variable, you can also specify a recording filter, with comma separated values of:
+- Compile
+- Deopt
+- TypeFeedback
+- Invoke
+

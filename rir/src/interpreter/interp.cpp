@@ -9,6 +9,7 @@
 #include "compiler/osr.h"
 #include "compiler/parameter.h"
 #include "compiler/pir/continuation_context.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/LazyArglist.h"
 #include "runtime/LazyEnvironment.h"
@@ -986,6 +987,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
+        REC_HOOK(recording::recordInvocationDoCall());
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
@@ -1006,12 +1008,16 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
                         fun->body()->codeSize <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
+
+                        REC_HOOK(recording::recordOsrTriggerCallerCallee());
                         call.triggerOsr = true;
                     }
                     DoRecompile(fun, call.ast, call.callee, given);
                     fun = dispatch(call, table);
                 }
             }
+
+            REC_HOOK(recording::recordReasonsClear());
         }
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
@@ -1911,6 +1917,7 @@ static SEXP osr(const CallContext* callCtxt, R_bcstack_t* basePtr, SEXP env,
             }
         }
     }
+    REC_HOOK(recording::recordReasonsClear());
     return nullptr;
 }
 
@@ -3209,9 +3216,11 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             if (!pir::Parameter::RIR_SERIALIZE_CHAOS) {
                 static size_t loopCounter = 0;
                 if (offset < 0 && ++loopCounter >= osrLimit) {
+                    REC_HOOK(recording::recordOsrTriggerLoop(loopCounter));
                     loopCounter = 0;
                     if (auto res = osr(callCtxt, basePtr, env, c, pc))
                         return res;
+                    REC_HOOK(recording::recordReasonsClear());
                 }
             }
             NEXT();

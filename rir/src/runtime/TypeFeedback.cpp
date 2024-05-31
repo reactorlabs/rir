@@ -34,6 +34,7 @@ bool ObservedCallees::record(Function* function, SEXP callee,
             return true;
         }
     }
+
     return false;
 }
 
@@ -60,11 +61,13 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::DeadBranchReached: {
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
         feedback.seen = ObservedTest::Both;
+        REC_HOOK(recording::recordSC(feedback, origin.function()));
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
+
         auto feedback = origin.function()->typeFeedback();
 
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl

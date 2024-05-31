@@ -5,6 +5,7 @@
 #include "interpreter/cache.h"
 #include "interpreter/call_context.h"
 #include "interpreter/interp.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/GenericDispatchTable.h"
 #include "runtime/LazyArglist.h"
@@ -833,6 +834,9 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
     deoptReason->record(deoptTrigger);
 
+    REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
+                                    *deoptReason, deoptTrigger));
+
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
@@ -1405,6 +1409,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto dt = DispatchTable::unpack(BODY(callee));
 
+    REC_HOOK(recording::recordInvocationNativeCallTrampoline());
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {

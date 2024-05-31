@@ -5,6 +5,7 @@
 #include "FunctionSignature.h"
 #include "R/r.h"
 #include "RirRuntimeObject.h"
+#include "recording_hooks.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -96,8 +97,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     size_t invocationCount() { return invocationCount_; }
 
+    void addDeoptCount(size_t n) {
+        deoptCount_ += n;
+        REC_HOOK(recording::recordInvocation(this, 0, n));
+    }
     size_t deoptCount() { return deoptCount_; }
-    void addDeoptCount(size_t n) { deoptCount_ += n; }
 
     static inline unsigned long rdtsc() {
         unsigned low, high;
@@ -108,8 +112,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void unregisterInvocation() {
         invoked = 0;
-        if (invocationCount_ > 0)
+        if (invocationCount_ > 0) {
             invocationCount_--;
+            REC_HOOK(recording::recordInvocation(this, -1, 0));
+        }
     }
 
     void registerInvocation() {
@@ -121,8 +127,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
                 invoked = rdtsc();
         }
 
-        if (invocationCount_ < UINT_MAX)
+        if (invocationCount_ < UINT_MAX) {
             invocationCount_++;
+            REC_HOOK(recording::recordInvocation(this, 1, 0));
+        }
     }
     void registerEndInvocation() {
         if (invoked != 0) {
@@ -188,8 +196,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         // Deopt counts are kept on the optimized versions
         assert(isOptimized());
         flags.set(Flag::Deopt);
-        if (deoptCount_ < UINT_MAX)
+        if (deoptCount_ < UINT_MAX) {
             deoptCount_++;
+            REC_HOOK(recording::recordInvocation(this, 0, 1));
+        }
     }
 
     void registerDeoptReason(DeoptReason::Reason r) {
