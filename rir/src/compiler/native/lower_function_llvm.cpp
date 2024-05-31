@@ -3435,7 +3435,8 @@ void LowerFunctionLLVM::compile() {
                     for (size_t i = 0; i < dt->size(); i++) {
                         auto entry = dt->get(i);
                         if (entry->context() == target->context() &&
-                            entry->signature().numArguments >= args.size()) {
+                            entry->signature().numArguments >= args.size() &&
+                            !entry->disabled()) {
                             nativeTarget = entry;
                         }
                     }
@@ -3451,28 +3452,26 @@ void LowerFunctionLLVM::compile() {
                     auto missAsmptStore =
                         Rf_allocVector(RAWSXP, sizeof(Context));
                     auto missAsmptIdx = Pool::insert(missAsmptStore);
-                    new (DATAPTR(missAsmptStore))
-                        Context(pir::Compiler::minimalContext);
+                    new (DATAPTR(missAsmptStore)) Context();
                     if (nativeTarget) {
                         assert(asmpt.smaller(nativeTarget->context()));
                     }
-                    auto res =
-                        withCallFrame(args, [&]() {
-                            return call(
-                                NativeBuiltins::get(
-                                    NativeBuiltins::Id::nativeCallTrampoline),
-                                {
-                                    c(callId),
-                                    paramCode(),
-                                    constant(callee, t::SEXP),
-                                    c(idx),
-                                    c(calli->srcIdx),
-                                    loadSxp(calli->env()),
-                                    c(args.size()),
-                                    c(asmpt.toI()),
-                                    c(missAsmptIdx),
-                                });
-                        });
+                    auto res = withCallFrame(args, [&]() {
+                        return call(
+                            NativeBuiltins::get(
+                                NativeBuiltins::Id::nativeCallTrampoline),
+                            {
+                                c(callId),
+                                paramCode(),
+                                constant(callee, t::SEXP),
+                                c(idx),
+                                c(calli->srcIdx),
+                                loadSxp(calli->env()),
+                                c(args.size()),
+                                c(asmpt.toI()),
+                                c(missAsmptIdx),
+                            });
+                    });
                     setVal(i, res);
                     break;
                 }
