@@ -1647,7 +1647,7 @@ void deoptFramesWithContext(const Function* deoptedFun, const Context& deoptCtx,
 
         // 2. Execute the inner frames
         if (!innermostFrame) {
-            deoptFramesWithContext(deoptedFun, context, deoptData, deoptEnv,
+            deoptFramesWithContext(deoptedFun, deoptCtx, deoptData, deoptEnv,
                                    pos - 1, stackHeight, cntxt);
         }
 
