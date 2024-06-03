@@ -120,28 +120,6 @@ struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
     }
 };
 
-struct TypeFeedbackVersionUpdateReason
-    : public CompileReasonImpl<TypeFeedbackVersionUpdateReason, 1> {
-    static constexpr const char* NAME = "TypeFeedbackVersionUpdateReason";
-    virtual ~TypeFeedbackVersionUpdateReason() = default;
-
-    explicit TypeFeedbackVersionUpdateReason(size_t version)
-        : version(version) {}
-
-    TypeFeedbackVersionUpdateReason() {}
-
-    size_t version = 0;
-
-    virtual SEXP toSEXP() const override;
-    virtual void fromSEXP(SEXP sexp) override;
-
-    virtual void print(std::ostream& out) const override {
-        this->CompileReasonImpl::print(out);
-
-        out << ", version=" << version;
-    }
-};
-
 struct NotOptimizedReason : public CompileReasonImpl<NotOptimizedReason, 0> {
     virtual ~NotOptimizedReason() = default;
     static constexpr const char* NAME = "NotOptimized";

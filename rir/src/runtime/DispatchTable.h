@@ -290,10 +290,6 @@ struct DispatchTable
         }
     }
 
-    size_t currentTypeFeedbackVersion() {
-        return baseline()->typeFeedback()->version();
-    }
-
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t capacity)

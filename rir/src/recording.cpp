@@ -25,21 +25,6 @@
 namespace rir {
 namespace recording {
 
-SEXP TypeFeedbackVersionUpdateReason::toSEXP() const {
-    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-
-    SET_VECTOR_ELT(vec, 0, serialization::to_sexp(version));
-
-    UNPROTECT(1);
-    return vec;
-}
-
-void TypeFeedbackVersionUpdateReason::fromSEXP(SEXP sexp) {
-    this->CompileReasonImpl::fromSEXP(sexp);
-
-    this->version = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
-}
-
 SEXP PirWarmupReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
 

@@ -45,7 +45,6 @@ void recordSC(const ObservedValues& type, Function* fun);
 // Compile heuristics
 void recordMarkOptReasonHeuristic();
 void recordPirWarmupReason(size_t invocation_count);
-void recordTypeFeedbackVersionUpdateReason(size_t version);
 
 // Compile condition
 void recordMarkOptReasonCondition();

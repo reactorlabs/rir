@@ -68,7 +68,6 @@ void Function::disassemble(std::ostream& out) {
     if (!context_.empty())
         out << "| context: [" << context_ << "]";
     out << "\n";
-    out << "[type feedback version] " << typeFeedback()->version() << "\n";
     out << "[flags]    ";
 #define V(F)                                                                   \
     if (flags.includes(F))                                                     \

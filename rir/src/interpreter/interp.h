@@ -84,20 +84,6 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
         return true;
     }
 
-    if (fun->invocationCount() > wu) {
-        /* If the invocation count exceeds the warmup, we check if we should
-         * possibly reoptimize the function. This only makes sense if we have
-         * gathered more type feedback since the last time the fun was compiled.
-         * We use the funMaybeDisabled for the calls when fun is the baseline
-         * funMaybeDisabled is the deopted version. */
-        auto current = fun->dispatchTable()->currentTypeFeedbackVersion();
-        if (current > disabledFun->typeFeedback()->version()) {
-            REC_HOOK(recording::recordTypeFeedbackVersionUpdateReason(
-                fun->dispatchTable()->currentTypeFeedbackVersion()));
-            return true;
-        }
-    }
-
     return false;
 }
 
