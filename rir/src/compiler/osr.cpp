@@ -13,6 +13,8 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
                        const ContinuationContext& ctx) {
     Function* fun = nullptr;
 
+    REC_HOOK(recording::recordOsrCompile(closure));
+
     // compile to pir
     pir::Module* module = new pir::Module;
 
@@ -22,6 +24,8 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
 
     pir::Backend backend(module, logger, "continuation");
 
+    REC_HOOK(bool succesfulComp = true);
+
     cmp.compileContinuation(
         closure, c->function(), &ctx,
         [&](Continuation* cnt) {
@@ -30,9 +34,14 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
             auto dt = DispatchTable::unpack(BODY(closure));
             fun->dispatchTable(dt);
         },
-        [&]() { logger.warn("Continuation compilation failed"); });
+        [&]() {
+            REC_HOOK(succesfulComp = false);
+            logger.warn("Continuation compilation failed");
+        });
 
     delete module;
+
+    REC_HOOK(recording::recordCompileFinish(succesfulComp));
 
     return fun;
 }

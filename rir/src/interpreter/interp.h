@@ -7,6 +7,7 @@
 
 #include "compiler/parameter.h"
 #include "interp_incl.h"
+#include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
 
 #include "R/BuiltinIds.h"
@@ -57,9 +58,12 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 
 inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
 
-    if (fun->flags.contains(Function::MarkOpt))
+    auto flags = fun->flags;
+    if (flags.contains(Function::MarkOpt)) {
+        REC_HOOK(recording::recordMarkOptReasonHeuristic());
         return true;
-    if (fun->flags.contains(Function::NotOptimizable))
+    }
+    if (flags.contains(Function::NotOptimizable))
         return false;
 
     if (!disabledFun)
@@ -70,11 +74,15 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
     }
 
     auto wu = pir::Parameter::PIR_WARMUP;
-    if (wu == 0)
+    if (wu == 0) {
+        REC_HOOK(recording::recordPirWarmupReason(wu));
         return true;
+    }
 
-    if (fun->invocationCount() % wu == 0)
+    if (fun->invocationCount() % wu == 0) {
+        REC_HOOK(recording::recordPirWarmupReason(fun->invocationCount()));
         return true;
+    }
 
     if (fun->invocationCount() > wu) {
         /* If the invocation count exceeds the warmup, we check if we should
@@ -84,6 +92,8 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
          * funMaybeDisabled is the deopted version. */
         auto current = fun->dispatchTable()->currentTypeFeedbackVersion();
         if (current > disabledFun->typeFeedback()->version()) {
+            REC_HOOK(recording::recordTypeFeedbackVersionUpdateReason(
+                fun->dispatchTable()->currentTypeFeedbackVersion()));
             return true;
         }
     }
@@ -93,10 +103,28 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
-    return (fun->flags.contains(Function::MarkOpt) || !fun->isOptimized() ||
-            (context.smaller(fun->context()) &&
-             context.isImproving(fun) > table->size()) ||
-            fun->flags.contains(Function::Reoptimize));
+    if (fun->flags.contains(Function::MarkOpt)) {
+        REC_HOOK(recording::recordMarkOptReasonCondition());
+        return true;
+    }
+
+    if (!fun->isOptimized()) {
+        REC_HOOK(recording::recordNotOptimizedReason());
+        return true;
+    }
+
+    if (context.smaller(fun->context()) &&
+        context.isImproving(fun) > table->size()) {
+        REC_HOOK(recording::recordIsImprovingReason());
+        return true;
+    }
+
+    if (fun->flags.contains(Function::Reoptimize)) {
+        REC_HOOK(recording::recordReoptimizeFlagReason());
+        return true;
+    }
+
+    return false;
 }
 
 inline void DoRecompile(Function* fun, SEXP ast, SEXP callee, Context given) {

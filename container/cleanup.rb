@@ -31,7 +31,7 @@ REPOS = {
 TOKEN = ARGF.read.chomp
 
 def curl(what)
-  JSON.parse(`curl -s --header "PRIVATE-TOKEN: #{TOKEN}" #{what}`)
+  JSON.parse(`curl -s --header "JOB-TOKEN: #{TOKEN}" #{what}`)
 end
 
 def fetch(project, repo, what)
