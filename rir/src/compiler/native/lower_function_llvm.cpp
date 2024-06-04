@@ -3404,7 +3404,6 @@ void LowerFunctionLLVM::compile() {
                 auto calli = StaticCall::Cast(i);
                 calli->eachArg([](Value* v) { assert(!ExpandDots::Cast(v)); });
                 auto target = calli->tryDispatch();
-                // auto bestTarget = calli->tryOptimisticDispatch();
                 std::vector<Value*> args;
                 calli->eachCallArg([&](Value* v) { args.push_back(v); });
                 Context asmpt = calli->inferAvailableAssumptions();
@@ -3426,73 +3425,49 @@ void LowerFunctionLLVM::compile() {
                     break;
                 }
 
-                // TODO: if there is no target use the deoptsentinel
-                // if (target == bestTarget) {
-                if (true) {
-                    auto callee = target->owner()->rirClosure();
-                    auto dt = DispatchTable::check(BODY(callee));
-                    rir::Function* nativeTarget = nullptr;
-                    for (size_t i = 0; i < dt->size(); i++) {
-                        auto entry = dt->get(i);
-                        if (entry->context() == target->context() &&
-                            entry->signature().numArguments >= args.size() &&
-                            !entry->disabled()) {
-                            nativeTarget = entry;
-                        }
+                auto callee = target->owner()->rirClosure();
+                auto dt = DispatchTable::check(BODY(callee));
+                rir::Function* nativeTarget = nullptr;
+                for (size_t i = 0; i < dt->size(); i++) {
+                    auto entry = dt->get(i);
+                    if (entry->context() == target->context() &&
+                        entry->signature().numArguments >= args.size() &&
+                        !entry->disabled()) {
+                        nativeTarget = entry;
                     }
-                    SEXP container = deoptSentinelContainer;
-                    if (nativeTarget) {
-                        container = nativeTarget->container();
-                    }
-
-                    assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                    auto idx = Pool::makeSpace();
-                    NativeBuiltins::targetCaches.push_back(idx);
-                    Pool::patch(idx, container);
-                    auto missAsmptStore =
-                        Rf_allocVector(RAWSXP, sizeof(Context));
-                    auto missAsmptIdx = Pool::insert(missAsmptStore);
-                    new (DATAPTR(missAsmptStore)) Context();
-                    if (nativeTarget) {
-                        assert(asmpt.smaller(nativeTarget->context()));
-                    }
-                    auto res = withCallFrame(args, [&]() {
-                        return call(
-                            NativeBuiltins::get(
-                                NativeBuiltins::Id::nativeCallTrampoline),
-                            {
-                                c(callId),
-                                paramCode(),
-                                constant(callee, t::SEXP),
-                                c(idx),
-                                c(calli->srcIdx),
-                                loadSxp(calli->env()),
-                                c(args.size()),
-                                c(asmpt.toI()),
-                                c(missAsmptIdx),
-                            });
-                    });
-                    setVal(i, res);
-                    break;
+                }
+                SEXP container = deoptSentinelContainer;
+                if (nativeTarget) {
+                    container = nativeTarget->container();
                 }
 
-                // assert(asmpt.includes(Assumption::StaticallyArgmatched));
-                // setVal(i, withCallFrame(args, [&]() -> llvm::Value* {
-                //            return call(
-                //                NativeBuiltins::get(NativeBuiltins::Id::call),
-                //                {
-                //                    c(callId),
-                //                    paramCode(),
-                //                    c(calli->srcIdx),
-                //                    builder.CreateIntToPtr(
-                //                        c(calli->cls()->rirClosure()),
-                //                        t::SEXP),
-                //                    loadSxp(calli->env()),
-                //                    c(calli->nCallArgs()),
-                //                    c(asmpt.toI()),
-                //                });
-                //        }));
-                // break;
+                assert(asmpt.includes(Assumption::StaticallyArgmatched));
+                auto idx = Pool::makeSpace();
+                NativeBuiltins::targetCaches.push_back(idx);
+                Pool::patch(idx, container);
+                auto missAsmptStore = Rf_allocVector(RAWSXP, sizeof(Context));
+                auto missAsmptIdx = Pool::insert(missAsmptStore);
+                new (DATAPTR(missAsmptStore)) Context();
+                if (nativeTarget) {
+                    assert(asmpt.smaller(nativeTarget->context()));
+                }
+                auto res = withCallFrame(args, [&]() {
+                    return call(NativeBuiltins::get(
+                                    NativeBuiltins::Id::nativeCallTrampoline),
+                                {
+                                    c(callId),
+                                    paramCode(),
+                                    constant(callee, t::SEXP),
+                                    c(idx),
+                                    c(calli->srcIdx),
+                                    loadSxp(calli->env()),
+                                    c(args.size()),
+                                    c(asmpt.toI()),
+                                    c(missAsmptIdx),
+                                });
+                });
+                setVal(i, res);
+                break;
             }
 
             case Tag::Inc: {
