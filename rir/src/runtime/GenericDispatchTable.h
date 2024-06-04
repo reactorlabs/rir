@@ -90,6 +90,20 @@ struct GenericDispatchTable
         return {a, nullptr};
     }
 
+    // this dispatch method is almost identical to the previous dispatch method,
+    // but this one does return only values for which f function returns true
+    std::pair<const Key&, Value*>
+    dispatch(const Key& a, const std::function<bool(const Value*)> f) const {
+        for (size_t i = 0; i < size(); ++i) {
+            auto v = Value::unpack(getEntry(i));
+            if (a.smaller(key(i)) && f(v)) {
+                if (!v->disabled())
+                    return {key(i), v};
+            }
+        }
+        return {a, nullptr};
+    }
+
     bool full() const { return size() == capacity(); }
 
     bool empty() const {

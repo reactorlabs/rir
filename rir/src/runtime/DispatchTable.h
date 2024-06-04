@@ -93,11 +93,12 @@ struct DispatchTable
     TypeFeedback* getTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
-        auto entry = feedbacks->dispatch(ctx);
+        auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
+            return tf && tf->version() > 0;
+        });
         TypeFeedback* tf = entry.second;
-        if (!tf || tf->version() < 1) {
+        if (!tf)
             return baselineFeedback();
-        }
         return tf;
     }
 
