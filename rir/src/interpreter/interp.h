@@ -56,8 +56,7 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(Function* fun,
-                               Function* funMaybeDisabled = nullptr) {
+inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
 
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt)) {
@@ -67,28 +66,21 @@ inline bool RecompileHeuristic(Function* fun,
     if (flags.contains(Function::NotOptimizable))
         return false;
 
-    if (!funMaybeDisabled)
-        funMaybeDisabled = fun;
+    if (!disabledFun)
+        disabledFun = fun;
 
-    auto abandon =
-        funMaybeDisabled->deoptCount() >= pir::Parameter::DEOPT_ABANDON;
-
-    auto wt = fun->isOptimized() ? pir::Parameter::PIR_REOPT_TIME
-                                 : pir::Parameter::PIR_OPT_TIME;
-    if (fun->invocationCount() >= 3 && fun->invocationTime() > wt) {
-        REC_HOOK(recording::recordInvocationCountTimeReason(
-            fun->invocationCount(), 3, fun->invocationTime(), wt));
-
-        fun->clearInvocationTime();
-        return !abandon;
+    if (disabledFun->deoptCount() >= pir::Parameter::DEOPT_ABANDON) {
+        return false;
     }
 
-    if (abandon || fun->isOptimized())
-        return false;
-
     auto wu = pir::Parameter::PIR_WARMUP;
-    if (wu == 0 || fun->invocationCount() == wu) {
+    if (wu == 0) {
         REC_HOOK(recording::recordPirWarmupReason(wu));
+        return true;
+    }
+
+    if (fun->invocationCount() % wu == 0) {
+        REC_HOOK(recording::recordPirWarmupReason(fun->invocationCount()));
         return true;
     }
 

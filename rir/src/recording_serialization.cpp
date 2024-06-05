@@ -61,13 +61,9 @@ int64_t int64_t_from_sexp(SEXP sexp) {
     return std::strtoll(CHAR(STRING_ELT(sexp, 0)), nullptr, 10);
 }
 
-SEXP to_sexp(bool flag){
-    return flag ? R_TrueValue : R_FalseValue;
-}
+SEXP to_sexp(bool flag) { return flag ? R_TrueValue : R_FalseValue; }
 
-bool bool_from_sexp(SEXP sexp){
-    return sexp == R_TrueValue;
-}
+bool bool_from_sexp(SEXP sexp) { return sexp == R_TrueValue; }
 
 SEXP to_sexp(SEXP sexp) { return sexp; }
 
@@ -206,27 +202,28 @@ rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
 
 SEXP to_sexp(const CompileReason& reason) { return reason.toSEXP(); }
 
-std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sexp) {
-    if (Rf_isNull(sexp)){
+std::unique_ptr<rir::recording::CompileReason>
+compile_reason_from_sexp(SEXP sexp) {
+    if (Rf_isNull(sexp)) {
         return nullptr;
     }
 
     std::unique_ptr<rir::recording::CompileReason> reason;
-    if ( Rf_inherits(sexp, MarkOptReason::NAME) ){
+    if (Rf_inherits(sexp, MarkOptReason::NAME)) {
         reason = std::make_unique<MarkOptReason>();
-    } else if ( Rf_inherits(sexp, InvocationCountTimeReason::NAME) ){
+    } else if (Rf_inherits(sexp, InvocationCountTimeReason::NAME)) {
         reason = std::make_unique<InvocationCountTimeReason>();
-    } else if ( Rf_inherits(sexp, PirWarmupReason::NAME) ){
+    } else if (Rf_inherits(sexp, PirWarmupReason::NAME)) {
         reason = std::make_unique<PirWarmupReason>();
-    } else if ( Rf_inherits(sexp, NotOptimizedReason::NAME) ){
+    } else if (Rf_inherits(sexp, NotOptimizedReason::NAME)) {
         reason = std::make_unique<NotOptimizedReason>();
-    } else if ( Rf_inherits(sexp, IsImprovingReason::NAME) ){
+    } else if (Rf_inherits(sexp, IsImprovingReason::NAME)) {
         reason = std::make_unique<IsImprovingReason>();
-    } else if ( Rf_inherits(sexp, ReoptimizeFlagReason::NAME) ){
+    } else if (Rf_inherits(sexp, ReoptimizeFlagReason::NAME)) {
         reason = std::make_unique<ReoptimizeFlagReason>();
-    } else if ( Rf_inherits(sexp, OSRLoopReason::NAME) ){
+    } else if (Rf_inherits(sexp, OSRLoopReason::NAME)) {
         reason = std::make_unique<OSRLoopReason>();
-    } else if ( Rf_inherits(sexp, OSRCallerCalleeReason::NAME) ){
+    } else if (Rf_inherits(sexp, OSRCallerCalleeReason::NAME)) {
         reason = std::make_unique<OSRCallerCalleeReason>();
     } else {
         Rf_error("can't deserialize speculative context of unknown class");
@@ -237,23 +234,23 @@ std::unique_ptr<rir::recording::CompileReason> compile_reason_from_sexp(SEXP sex
     return reason;
 }
 
-SEXP to_sexp( CompilationEvent::Duration time ) {
+SEXP to_sexp(CompilationEvent::Duration time) {
     int64_t count = time.count();
-    return to_sexp( count );
+    return to_sexp(count);
 }
 
-CompilationEvent::Duration time_from_sexp( SEXP sexp ){
+CompilationEvent::Duration time_from_sexp(SEXP sexp) {
     int64_t count = int64_t_from_sexp(sexp);
-    return CompilationEvent::Duration( count );
+    return CompilationEvent::Duration(count);
 }
 
-SEXP to_sexp( InvocationEvent::SourceSet set ){
+SEXP to_sexp(InvocationEvent::SourceSet set) {
     return Rf_ScalarInteger(static_cast<int>(set.to_i()));
 }
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp( SEXP sexp ){
-    assert( Rf_isInteger(sexp) );
-    return InvocationEvent::SourceSet( static_cast<uint8_t>( Rf_asInteger(sexp) ) );
+InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp) {
+    assert(Rf_isInteger(sexp));
+    return InvocationEvent::SourceSet(static_cast<uint8_t>(Rf_asInteger(sexp)));
 }
 
 } // namespace serialization

@@ -25,29 +25,6 @@
 namespace rir {
 namespace recording {
 
-SEXP InvocationCountTimeReason::toSEXP() const {
-    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-
-    size_t i = 0;
-    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(count));
-    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(minimalCount));
-    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(time));
-    SET_VECTOR_ELT(vec, i++, serialization::to_sexp(minimalTime));
-
-    UNPROTECT(1);
-    return vec;
-}
-
-void InvocationCountTimeReason::fromSEXP(SEXP sexp){
-    this->CompileReasonImpl::fromSEXP(sexp);
-
-    size_t i = 0;
-    this->count = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->minimalCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->time = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-    this->minimalTime = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
-}
-
 SEXP PirWarmupReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
 
@@ -57,10 +34,11 @@ SEXP PirWarmupReason::toSEXP() const {
     return vec;
 }
 
-void PirWarmupReason::fromSEXP(SEXP sexp){
+void PirWarmupReason::fromSEXP(SEXP sexp) {
     this->CompileReasonImpl::fromSEXP(sexp);
 
-    this->invocationCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+    this->invocationCount =
+        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
 }
 
 SEXP OSRLoopReason::toSEXP() const {
@@ -72,7 +50,7 @@ SEXP OSRLoopReason::toSEXP() const {
     return vec;
 }
 
-void OSRLoopReason::fromSEXP(SEXP sexp){
+void OSRLoopReason::fromSEXP(SEXP sexp) {
     this->CompileReasonImpl::fromSEXP(sexp);
 
     this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
@@ -155,8 +133,8 @@ void Record::recordSpeculativeContext(const Code* code,
     }
 }
 
-std::pair<size_t, FunRecording&> Record::initOrGetRecording(const SEXP cls,
-                                                            const std::string& name) {
+std::pair<size_t, FunRecording&>
+Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     assert(Rf_isFunction(cls));
     auto& body = *BODY(cls);
 
@@ -329,11 +307,13 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-const char* ClosureEvent::targetName(const std::vector<FunRecording>& mapping) const {
+const char*
+ClosureEvent::targetName(const std::vector<FunRecording>& mapping) const {
     return mapping[closureIndex].name.c_str();
 }
 
-const char* DtEvent::targetName(const std::vector<FunRecording>& mapping) const {
+const char*
+DtEvent::targetName(const std::vector<FunRecording>& mapping) const {
     return mapping[dispatchTableIndex].name.c_str();
 }
 
@@ -455,19 +435,19 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
         out << "\n";
     }
     out << "        ],\n        opt_reasons=[\n";
-    if(this->compile_reasons.heuristic){
+    if (this->compile_reasons.heuristic) {
         out << "            heuristic=";
         this->compile_reasons.heuristic->print(out);
         out << "\n";
     }
 
-    if(this->compile_reasons.condition){
+    if (this->compile_reasons.condition) {
         out << "            condition=";
         this->compile_reasons.condition->print(out);
         out << "\n";
     }
 
-    if(this->compile_reasons.osr){
+    if (this->compile_reasons.osr) {
         out << "            osr_reason=";
         this->compile_reasons.osr->print(out);
         out << "\n";
@@ -680,7 +660,6 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
     }
     out << " }";
 }
-
 
 std::string getEnvironmentName(SEXP env) {
     if (env == R_GlobalEnv) {

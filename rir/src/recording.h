@@ -99,34 +99,6 @@ struct MarkOptReason : public CompileReasonImpl<MarkOptReason, 0> {
     virtual ~MarkOptReason() = default;
 };
 
-struct InvocationCountTimeReason
-    : public CompileReasonImpl<InvocationCountTimeReason, 4> {
-    static constexpr const char* NAME = "InvocationCountTime";
-    virtual ~InvocationCountTimeReason() = default;
-
-    InvocationCountTimeReason(size_t count, size_t minimalCount,
-                              unsigned long time, unsigned long minimalTime)
-        : count(count), minimalCount(minimalCount), time(time),
-          minimalTime(minimalTime) {}
-
-    InvocationCountTimeReason() {}
-
-    size_t count = 0;
-    size_t minimalCount = 0;
-    unsigned long time = 0;
-    unsigned long minimalTime = 0;
-
-    virtual SEXP toSEXP() const override;
-    virtual void fromSEXP(SEXP sexp) override;
-
-    virtual void print(std::ostream& out) const override {
-        this->CompileReasonImpl::print(out);
-
-        out << ", count=" << count << ", minimalCount=" << minimalCount
-            << ", time=" << time << ", minimalTime=" << minimalTime;
-    }
-};
-
 struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
     static constexpr const char* NAME = "PirWarmupReason";
     virtual ~PirWarmupReason() = default;

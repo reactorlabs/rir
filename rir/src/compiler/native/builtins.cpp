@@ -817,7 +817,7 @@ static FunctionSignature
     deoptSentinelSig(FunctionSignature::Environment::CallerProvided,
                      FunctionSignature::OptimizationLevel::Optimized);
 static Function* deoptSentinel;
-static SEXP deoptSentinelContainer = []() {
+SEXP deoptSentinelContainer = []() {
     auto c = rir::Code::NewNative(0);
     PROTECT(c->container());
     SEXP store = Rf_allocVector(EXTERNALSXP, sizeof(Function));
@@ -1464,7 +1464,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             R_ReturnedValue = R_NilValue; /* remove restart token */
             fun->registerInvocation();
             result = code->nativeCode()(code, args, env, callee);
-            fun->registerEndInvocation();
         } else {
             result = R_ReturnedValue;
         }
@@ -1482,7 +1481,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     ostack_popn(missing);
 
     SLOWASSERT(t == R_BCNodeStackTop);
-    fun->registerEndInvocation();
     return result;
 }
 

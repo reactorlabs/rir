@@ -977,13 +977,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
 
         if (ti.taken != (size_t)-1 &&
-            insert.function->optFunction->invocationCount()) {
+            // the reason to take the baseline version is that we only
+            // increment the taken type feedback while running baseline
+            // FIXME: refactor
+            insert.function->owner()->rirFunction()->invocationCount()) {
             if (auto c = CallInstruction::CastCall(top())) {
                 // invocation count is already incremented before calling jit
-                c->taken =
-                    (double)ti.taken /
-                    (double)(insert.function->optFunction->invocationCount() -
-                             1);
+                c->taken = (double)ti.taken / (double)(insert.function->owner()
+                                                           ->rirFunction()
+                                                           ->invocationCount() -
+                                                       1);
             }
         }
         break;

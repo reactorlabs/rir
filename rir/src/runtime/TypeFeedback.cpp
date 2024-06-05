@@ -12,7 +12,7 @@
 
 namespace rir {
 
-bool ObservedCallees::record(Function* function, SEXP callee,
+void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
@@ -26,16 +26,12 @@ bool ObservedCallees::record(Function* function, SEXP callee,
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
-            return true;
         }
     } else {
         if (invalidateWhenFull) {
             invalid = true;
-            return true;
         }
     }
-
-    return false;
 }
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
@@ -137,7 +133,6 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
     for (size_t i = 0; i < types_size_; i++) {
         OutBytes(out, types_ + i, sizeof(ObservedValues));
     }
-    OutInteger(out, version_);
 }
 
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
@@ -169,7 +164,6 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     }
 
     auto res = TypeFeedback::create(callees, tests, types);
-    res->version_ = InInteger(inp);
 
     return res;
 }
@@ -280,9 +274,8 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
                            const std::vector<ObservedValues>& types)
-    : RirRuntimeObject(0, 0), version_(0), owner_(nullptr),
-      callees_size_(callees.size()), tests_size_(tests.size()),
-      types_size_(types.size()) {
+    : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
+      tests_size_(tests.size()), types_size_(types.size()) {
 
     size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
     size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);

@@ -103,13 +103,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     size_t deoptCount() { return deoptCount_; }
 
-    static inline unsigned long rdtsc() {
-        unsigned low, high;
-        asm volatile("rdtsc" : "=a"(low), "=d"(high));
-        return ((low) | ((uint64_t)(high) << 32));
-    }
-    static constexpr unsigned long MAX_TIME_MEASURE = 1e9;
-
     void unregisterInvocation() {
         invoked = 0;
         if (invocationCount_ > 0) {
@@ -119,27 +112,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     void registerInvocation() {
-        if (execTime < MAX_TIME_MEASURE) {
-            // constant increment for recursive functions
-            if (invoked != 0)
-                execTime += 5e5;
-            else
-                invoked = rdtsc();
-        }
-
-        if (invocationCount_ < UINT_MAX) {
+        if (invocationCount_ < UINT_MAX)
             invocationCount_++;
-            REC_HOOK(recording::recordInvocation(this, 1, 0));
-        }
+        REC_HOOK(recording::recordInvocation(this, 1, 0));
     }
-    void registerEndInvocation() {
-        if (invoked != 0) {
-            execTime += rdtsc() - invoked;
-            invoked = 0;
-        }
-    }
-    unsigned long invocationTime() { return execTime; }
-    void clearInvocationTime() { execTime = 0; }
 
     unsigned size; /// Size, in bytes, of the function and its data
 

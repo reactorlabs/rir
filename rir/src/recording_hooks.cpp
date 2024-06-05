@@ -353,12 +353,9 @@ void recordMarkOptReasonHeuristic() {
     compileReasons_.set_heuristic<MarkOptReason>();
 }
 
-void recordInvocationCountTimeReason(size_t count, size_t minimalCount,
-                                     unsigned long time,
-                                     unsigned long minimalTime) {
+void recordTypeFeedbackVersionUpdateReason(size_t version) {
     RECORDER_FILTER_GUARD(compile)
-    compileReasons_.set_heuristic<InvocationCountTimeReason>(
-        count, minimalCount, time, minimalTime);
+    compileReasons_.set_heuristic<TypeFeedbackUpdate>(version);
 }
 
 void recordPirWarmupReason(size_t invocation_count) {

@@ -4,8 +4,8 @@
 #include "R/r.h"
 #include "Rinternals.h"
 #include "common.h"
-#include "recording_hooks.h"
 #include "interpreter/profiler.h"
+#include "recording_hooks.h"
 #include "runtime/RirRuntimeObject.h"
 #include <array>
 #include <cstddef>
@@ -103,7 +103,7 @@ struct ObservedCallees {
     void print(std::ostream& out, const Function* function) const;
 
   private:
-    bool record(Function* function, SEXP callee,
+    void record(Function* function, SEXP callee,
                 bool invalidateWhenFull = false);
 };
 
@@ -128,10 +128,7 @@ struct ObservedTest {
     void print(std::ostream& out) const;
 
   private:
-    inline bool record(const SEXP e) {
-        uint32_t old;
-        memcpy(&old, this, sizeof(ObservedTest));
-
+    inline void record(const SEXP e) {
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
@@ -145,8 +142,6 @@ struct ObservedTest {
         } else {
             seen = Both;
         }
-
-        return memcmp(&old, this, sizeof(ObservedTest));
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
@@ -183,10 +178,7 @@ struct ObservedValues {
     void print(std::ostream& out) const;
 
   private:
-    inline bool record(SEXP e) {
-        uint32_t old;
-        memcpy(&old, this, sizeof(ObservedValues));
-
+    inline void record(SEXP e) {
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
@@ -211,10 +203,9 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
-
-        return memcmp(&old, this, sizeof(ObservedValues));
     }
 };
+
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
@@ -313,7 +304,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
     friend Function;
 
-    size_t version_;
     Function* owner_;
     size_t callees_size_;
     size_t tests_size_;
@@ -356,36 +346,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
-        if (callees(idx).record(function, callee, invalidateWhenFull)) {
-            version_++;
-            REC_HOOK(recording::recordSC(callees(idx), owner_));
-        }
+        callees(idx).record(function, callee, invalidateWhenFull);
     }
 
-    void record_test(uint32_t idx, const SEXP e) {
-        if (test(idx).record(e)) {
-            version_++;
-            REC_HOOK(recording::recordSC(test(idx), owner_));
-        }
-    }
+    void record_test(uint32_t idx, const SEXP e) { test(idx).record(e); }
 
-    void record_type(uint32_t idx, const SEXP e) {
-        if (types(idx).record(e)) {
-            version_++;
-            REC_HOOK(recording::recordSC(types(idx), owner_));
-        }
-    }
+    void record_type(uint32_t idx, const SEXP e) { types(idx).record(e); }
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
         ObservedValues& slot = types(idx);
-        uint32_t o, n;
-        memcpy(&o, &slot, sizeof(ObservedValues));
         f(slot);
-        memcpy(&n, &slot, sizeof(ObservedValues));
-        if (memcmp(&o, &n, sizeof(ObservedValues))) {
-            version_++;
-            REC_HOOK(recording::recordSC(slot, owner_));
-        }
     }
 
     void print(std::ostream& out) const;
@@ -395,13 +365,6 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     bool isValid(const FeedbackIndex& index) const;
 
     Function* owner() const { return owner_; }
-
-    // Type feedback is versioned. Each time new feedback
-    // in any of the slot is recorded, its version increased.
-    // The new is important, if we record already known
-    // information, the version is left unchnaged.
-    size_t version() const { return version_; }
-    void version(size_t version) { version_ = version; }
 };
 
 #pragma pack(pop)

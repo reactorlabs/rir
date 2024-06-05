@@ -44,9 +44,6 @@ void recordSC(const ObservedValues& type, Function* fun);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();
-void recordInvocationCountTimeReason(size_t count, size_t minimalCount,
-                                     unsigned long time,
-                                     unsigned long minimalTime);
 void recordPirWarmupReason(size_t invocation_count);
 
 // Compile condition

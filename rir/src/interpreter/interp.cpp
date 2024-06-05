@@ -818,10 +818,6 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
 
 const unsigned pir::Parameter::PIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
-const unsigned pir::Parameter::PIR_OPT_TIME =
-    getenv("PIR_OPT_TIME") ? atoi(getenv("PIR_OPT_TIME")) : 3e6;
-const unsigned pir::Parameter::PIR_REOPT_TIME =
-    getenv("PIR_REOPT_TIME") ? atoi(getenv("PIR_REOPT_TIME")) : 5e7;
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
@@ -1137,7 +1133,6 @@ SEXP doCall(CallContext& call, bool popArgs) {
         assert(result);
         if (popArgs)
             ostack_popn(call.passedArgs - call.suppliedArgs);
-        fun->registerEndInvocation();
         return result;
     }
     default:
@@ -3982,14 +3977,12 @@ SEXP rirEval(SEXP what, SEXP env) {
         Function* fun = table->baseline();
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
         return res;
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
-        fun->registerEndInvocation();
         return res;
     }
 
