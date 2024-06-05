@@ -1713,6 +1713,7 @@ size_t expandDotDotDotCallArgs(size_t n, Immediate* names_, SEXP env,
                     auto dotArg = CAR(ellipsis);
                     if (TYPEOF(dotArg) == LANGSXP ||
                         (TYPEOF(dotArg) == SYMSXP && dotArg != R_MissingArg)) {
+                        assert(false && "ellipsis dead code");
                         arg = Rf_mkPROMISE(arg, env);
                         p(arg);
                     }
