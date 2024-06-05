@@ -817,7 +817,7 @@ static void supplyMissingArgs(CallContext& call, const Function* fun) {
 }
 
 const unsigned pir::Parameter::PIR_WARMUP =
-    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
+    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 100;
 const unsigned pir::Parameter::DEOPT_ABANDON =
     getenv("PIR_DEOPT_ABANDON") ? atoi(getenv("PIR_DEOPT_ABANDON")) : 12;
 const unsigned pir::Parameter::PIR_OPT_BC_SIZE =
