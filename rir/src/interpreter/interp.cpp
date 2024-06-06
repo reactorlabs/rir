@@ -2043,7 +2043,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     auto typeFeedback = function->typeFeedback(recordingContext);
     auto baselineFeedback = function->baseline()->typeFeedback();
-    if (newInvocation && !isPromise) {
+    if (newInvocation && pc == c->code() && !isPromise) {
         typeFeedback->increaseRecordingCount();
         if (typeFeedback != baselineFeedback)
             baselineFeedback->increaseRecordingCount();
