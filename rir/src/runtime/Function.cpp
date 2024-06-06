@@ -2,6 +2,7 @@
 #include "R/Serialize.h"
 #include "Rinternals.h"
 #include "compiler/compiler.h"
+#include "interpreter/call_context.h"
 #include "runtime/TypeFeedback.h"
 
 namespace rir {
@@ -95,6 +96,34 @@ void Function::clearDisabledAssumptions(Context& given) const {
 
     if (GLOBAL_SPECIALIZATION_LEVEL < 100)
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
+}
+
+Function* Function::baseline() {
+    if (!dispatchTable()) {
+        assert(signature().optimization ==
+               FunctionSignature::OptimizationLevel::Baseline);
+        return this;
+    }
+    return dispatchTable()->baseline();
+}
+
+const Function* Function::baseline() const {
+    if (!dispatchTable()) {
+        assert(signature().optimization ==
+               FunctionSignature::OptimizationLevel::Baseline);
+        return this;
+    }
+    return dispatchTable()->baseline();
+}
+
+TypeFeedback* Function::typeFeedback() const {
+    return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
+}
+
+TypeFeedback* Function::typeFeedback(const Context& ctx) {
+    if (dispatchTable() && ctx != context())
+        return dispatchTable()->getOrCreateTypeFeedback(ctx);
+    return typeFeedback();
 }
 
 } // namespace rir

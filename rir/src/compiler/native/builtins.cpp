@@ -368,8 +368,8 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
     return res;
 }
 
-SEXP createPromiseImpl(SEXP expr, SEXP env) {
-    SEXP res = Rf_mkPROMISE(expr, env);
+SEXP createPromiseImpl(const Context& context, SEXP expr, SEXP env) {
+    SEXP res = createPromise(context, rir::Code::check(expr), env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
@@ -382,11 +382,13 @@ SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
     return res;
 }
 
-SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_EmptyEnv); }
+SEXP createPromiseNoEnvImpl(const Context& context, SEXP exp) {
+    return createPromise(context, rir::Code::unpack(exp), R_EmptyEnv);
+}
 
 SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
     SLOWASSERT(TYPEOF(value) != PROMSXP);
-    SEXP res = Rf_mkPROMISE(exp, env);
+    SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
@@ -830,14 +832,21 @@ SEXP deoptSentinelContainer = []() {
     return store;
 }();
 
-void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
-               bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    deoptReason->record(deoptTrigger);
-
+void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
+               R_bcstack_t* args, bool leakedEnv, DeoptReason* deoptReason,
+               SEXP deoptTrigger) {
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
 
     assert(m->numFrames >= 1);
+    // Do not pass current context to inlinees
+    // TODO: Is this correct? Might be FrameState outside of inlinee?
+    // TODO: is isSameClosure actually needed, would EQ operator be enough?
+    Context deoptContext = m->frames[m->numFrames - 1].context;
+    if (deoptReason->origin.function()->isSameClosureAs(c->function()))
+        deoptContext = context;
+    deoptReason->record(deoptTrigger, deoptContext);
+
     size_t stackHeight = 0;
     for (size_t i = 0; i < m->numFrames; ++i) {
         stackHeight += m->frames[i].stackSize + 1;
@@ -889,7 +898,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             DeoptContext ctx(m->frames[0].pc, envSize, le ? nullptr : env, le,
                              leakedEnv && !le, base, m->frames[0].stackSize,
                              *deoptReason, deoptTrigger);
-            fun = OSR::deoptlessDispatch(closure, c, ctx);
+            fun = OSR::deoptlessDispatch(closure, c, context, ctx);
 
             // We have an optimized continuation, let's call it and then
             // non-local return its result.
@@ -932,7 +941,7 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                 auto code = fun->body();
                 auto nc = code->nativeCode();
                 deoptlessRecursion = cls;
-                auto res = nc(code, base, env, closure);
+                auto res = nc(code, base, env, closure, context);
                 deoptlessRecursion = nullptr;
 
                 Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
@@ -950,20 +959,19 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
             if (f->body() == c)
                 Pool::patch(idx, deoptSentinelContainer);
 
-    CallContext call(ArglistOrder::NOT_REORDERED, c, cls,
-                     /* nargs */ -1, src_pool_at(c->src), args,
-                     (Immediate*)nullptr, env, R_NilValue, Context());
-
-    deoptFramesWithContext(&call, m, R_NilValue, m->numFrames - 1, stackHeight,
+    deoptFramesWithContext(c->function(), context, m, R_NilValue,
+                           m->numFrames - 1, stackHeight,
                            (RCNTXT*)R_GlobalContext);
     assert(false);
 }
 
-void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
-                            SEXP value) {
-    feedback->record_type(idx, value);
+void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
+                            uint32_t idx, SEXP value) {
+    auto feedback = fun->typeFeedback(context);
+    auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    feedback->record_typeInc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
-    feedback->record_type(idx, [&](auto& slot) {
+    auto recordPromise = [&](auto& slot) {
         if (TYPEOF(value) == PROMSXP) {
             if (PRVALUE(value) == R_UnboundValue &&
                 slot.stateBeforeLastForce < ObservedValues::promise) {
@@ -976,12 +984,15 @@ void recordTypeFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
             if (slot.stateBeforeLastForce < ObservedValues::value)
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
-    });
+    };
+    feedback->record_typeInc(baselineFeedback, idx, recordPromise);
 }
 
-void recordCallFeedbackImpl(rir::TypeFeedback* feedback, uint32_t idx,
-                            SEXP value) {
-    feedback->record_callee(idx, feedback->owner(), value);
+void recordCallFeedbackImpl(rir::Function* fun, const Context& context,
+                            uint32_t idx, SEXP value) {
+    auto feedback = fun->typeFeedback(context);
+    auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    feedback->record_calleeInc(baselineFeedback, idx, fun, value);
 }
 
 void assertFailImpl(const char* msg) {
@@ -1412,7 +1423,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     REC_HOOK(recording::recordInvocationNativeCallTrampoline());
     fun->registerInvocation();
     static int recheck = 0;
-    if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
+    if (fail ||
+        (++recheck == 97 && RecompileHeuristic(fun, call.givenContext))) {
         recheck = 0;
         inferCurrentContext(call, fun->nargs());
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
@@ -1463,12 +1475,13 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
             fun->registerInvocation();
-            result = code->nativeCode()(code, args, env, callee);
+            result =
+                code->nativeCode()(code, args, env, callee, call.givenContext);
         } else {
             result = R_ReturnedValue;
         }
     } else {
-        result = code->nativeCode()(code, args, env, callee);
+        result = code->nativeCode()(code, args, env, callee, call.givenContext);
     }
 
     endClosureContext(&cntxt, result);
@@ -2355,13 +2368,14 @@ void NativeBuiltins::initializeBuiltins() {
                                 false)};
     get_(Id::createPromise) = {
         "createPromise", (void*)&createPromiseImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
+        llvm::FunctionType::get(t::SEXP, {t::voidPtr, t::SEXP, t::SEXP},
+                                false)};
     get_(Id::createPromiseNoEnvEager) = {
         "createPromiseNoEnvEager", (void*)&createPromiseNoEnvEagerImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false)};
     get_(Id::createPromiseNoEnv) = {
         "createPromiseNoEnv", (void*)&createPromiseNoEnvImpl,
-        llvm::FunctionType::get(t::SEXP, {t::SEXP}, false)};
+        llvm::FunctionType::get(t::SEXP, {t::voidPtr, t::SEXP}, false)};
     get_(Id::createPromiseEager) = {
         "createPromiseEager", (void*)&createPromiseEagerImpl,
         llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP}, false)};
@@ -2420,22 +2434,22 @@ void NativeBuiltins::initializeBuiltins() {
     get_(Id::recordTypeFeedback) = {
         "recordTypeFeedback",
         (void*)&recordTypeFeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
-                                false),
+        llvm::FunctionType::get(
+            t::t_void, {t::voidPtr, t::voidPtr, t::i32, t::SEXP}, false),
         {}};
     get_(Id::recordCallFeedback) = {
         "recordCallFeedback",
         (void*)&recordCallFeedbackImpl,
-        llvm::FunctionType::get(t::t_void, {t::voidPtr, t::i32, t::SEXP},
-                                false),
+        llvm::FunctionType::get(
+            t::t_void, {t::voidPtr, t::voidPtr, t::i32, t::SEXP}, false),
         {}};
     get_(Id::deopt) = {"deopt",
                        (void*)&deoptImpl,
-                       llvm::FunctionType::get(t::t_void,
-                                               {t::voidPtr, t::SEXP, t::voidPtr,
-                                                t::stackCellPtr, t::i1,
-                                                t::DeoptReasonPtr, t::SEXP},
-                                               false),
+                       llvm::FunctionType::get(
+                           t::t_void,
+                           {t::voidPtr, t::voidPtr, t::SEXP, t::voidPtr,
+                            t::stackCellPtr, t::i1, t::DeoptReasonPtr, t::SEXP},
+                           false),
                        {llvm::Attribute::NoReturn}};
     get_(Id::assertFail) = {"assertFail",
                             (void*)&assertFailImpl,

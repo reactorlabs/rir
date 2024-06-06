@@ -162,7 +162,8 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     for (auto i : stack)
         if (ExpandDots::Cast(i))
             return nullptr;
-    return insert.emitCheckpoint(srcCode, pos, stack, inPromise());
+    return insert.emitCheckpoint(srcCode, pos, stack, cls->context(),
+                                 inPromise());
 }
 
 Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
@@ -260,9 +261,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // PIR LdVar corresponds to ldvar_noforce_ which does not change
         // visibility
         insert(new Visible());
-        auto fs = inlining() ? (Value*)Tombstone::framestate()
-                             : insert.registerFrameState(srcCode, nextPos,
-                                                         stack, inPromise());
+        auto fs = inlining()
+                      ? (Value*)Tombstone::framestate()
+                      : insert.registerFrameState(srcCode, nextPos, stack,
+                                                  cls->context(), inPromise());
         push(insert(new Force(v, env, fs)));
         break;
     }
@@ -448,10 +450,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            insert.function->optFunction->invocationCount() > 1 &&
+            typeFeedback->recordingCount() > 0 &&
             srcCode->function()->deadCallReached() < 3) {
-            auto sp =
-                insert.registerFrameState(srcCode, pos, stack, inPromise());
+            auto sp = insert.registerFrameState(srcCode, pos, stack,
+                                                cls->context(), inPromise());
 
             DeoptReason reason = DeoptReason(
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx)),
@@ -755,7 +757,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             popn(toPop);
             Value* fs = inlining() ? (Value*)Tombstone::framestate()
                                    : (Value*)insert.registerFrameState(
-                                         srcCode, nextPos, stack, inPromise());
+                                         srcCode, nextPos, stack,
+                                         cls->context(), inPromise());
             Instruction* res;
             if (namedArguments) {
                 res = insert(new NamedCall(env, guardedCallee, args,
@@ -941,8 +944,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     calli->typeFeedbackUsed = true;
                 popn(toPop);
                 assert(!inlining());
-                auto fs = insert.registerFrameState(srcCode, nextPos, stack,
-                                                    inPromise());
+                auto fs = insert.registerFrameState(
+                    srcCode, nextPos, stack, cls->context(), inPromise());
                 auto cl = insert(
                     new StaticCall(insert.env, f, given, matchedArgs,
                                    std::move(argOrderOrig), fs, ast,
@@ -976,17 +979,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             emitGenericCall();
         }
 
-        if (ti.taken != (size_t)-1 &&
-            // the reason to take the baseline version is that we only
-            // increment the taken type feedback while running baseline
-            // FIXME: refactor
-            insert.function->owner()->rirFunction()->invocationCount()) {
+        unsigned finishedRecordingCount = typeFeedback->recordingCount();
+        if (finishedRecordingCount > 0 && cls->isContinuation())
+            --finishedRecordingCount;
+
+        if (ti.taken != (size_t)-1 && finishedRecordingCount > 0) {
             if (auto c = CallInstruction::CastCall(top())) {
-                // invocation count is already incremented before calling jit
-                c->taken = (double)ti.taken / (double)(insert.function->owner()
-                                                           ->rirFunction()
-                                                           ->invocationCount() -
-                                                       1);
+                double denom = finishedRecordingCount;
+                if (finishedRecordingCount <= 2)
+                    denom -= ((double)1 + finishedRecordingCount) / 4;
+                else
+                    denom -= 1;
+                c->taken = (double)ti.taken / denom;
             }
         }
         break;
@@ -1275,9 +1279,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::force_: {
         auto v = pop();
-        auto fs = inlining() ? (Value*)Tombstone::framestate()
-                             : insert.registerFrameState(srcCode, nextPos,
-                                                         stack, inPromise());
+        auto fs = inlining()
+                      ? (Value*)Tombstone::framestate()
+                      : insert.registerFrameState(srcCode, nextPos, stack,
+                                                  cls->context(), inPromise());
         push(insert(new Force(v, env, fs)));
         break;
     }

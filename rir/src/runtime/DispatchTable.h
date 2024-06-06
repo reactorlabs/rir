@@ -1,6 +1,8 @@
 #ifndef RIR_DISPATCH_TABLE_H
 #define RIR_DISPATCH_TABLE_H
 
+#include "GenericDispatchTable.h"
+
 #include "Function.h"
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
@@ -23,6 +25,10 @@ typedef SEXP DispatchTableEntry;
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
+    static constexpr unsigned MaxFeedbacks = 64;
+    typedef GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>
+        TypeFeedbackDispatchTable;
+
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {
@@ -32,11 +38,14 @@ struct DispatchTable
         return f;
     }
 
+    Context bestContext() const { return typeFeedbacks()->best().first; }
+
     Function* best() const {
         if (size() > 1)
             return get(1);
         return get(0);
     }
+
     Function* baseline() const {
         auto f = Function::unpack(getEntry(0));
         assert(f->signature().envCreation ==
@@ -51,13 +60,7 @@ struct DispatchTable
 
     Function* dispatchConsideringDisabled(Context a, Function** disabledFunc,
                                           bool ignorePending = true) const {
-        if (!a.smaller(userDefinedContext_)) {
-#ifdef DEBUG_DISPATCH
-            std::cout << "DISPATCH trying: " << a
-                      << " vs annotation: " << userDefinedContext_ << "\n";
-#endif
-            Rf_error("Provided context does not satisfy user defined context");
-        }
+        compareWithDefinedContext(a);
 
         Function* r2 = nullptr;
         auto outputDisabledFunc = (disabledFunc != nullptr);
@@ -88,6 +91,43 @@ struct DispatchTable
         return b;
     }
 
+    TypeFeedback* getTypeFeedback(const Context& ctx) const {
+        compareWithDefinedContext(ctx);
+        auto feedbacks = typeFeedbacks();
+        auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
+            return tf && tf->recordingCount() > 0;
+        });
+        TypeFeedback* tf = entry.second;
+        if (!tf)
+            return baselineFeedback();
+        return tf;
+    }
+
+    TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
+        compareWithDefinedContext(ctx);
+        auto feedbacks = typeFeedbacks();
+        auto entry = feedbacks->dispatch(ctx);
+        TypeFeedback* tf = entry.second;
+        if (entry.first != ctx || !tf) {
+            assert(baselineFeedback());
+            // Use closest possible feedback when type feedback table is full
+            // TODO: try different approaches
+            if (feedbacks->full())
+                return tf ? tf : baselineFeedback();
+            tf = baselineFeedback()->emptyCopy();
+            PROTECT(tf->container());
+            feedbacks->insert(ctx, tf);
+            UNPROTECT(1);
+        }
+        return tf;
+    }
+
+    void insertTypeFeedback(const Context& ctx, TypeFeedback* tf) {
+        auto feedbacks = typeFeedbacks();
+        assert(!feedbacks->full());
+        feedbacks->insert(ctx, tf);
+    }
+
     void baseline(Function* f) {
         assert(f->signature().optimization ==
                FunctionSignature::OptimizationLevel::Baseline);
@@ -97,6 +137,7 @@ struct DispatchTable
             assert(baseline()->signature().optimization ==
                    FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
+        insertTypeFeedback(f->context(), f->typeFeedback());
         f->dispatchTable(this);
     }
 
@@ -126,6 +167,10 @@ struct DispatchTable
         size_--;
     }
 
+    TypeFeedback* baselineFeedback() const {
+        return baseline()->typeFeedback();
+    }
+
     // insert function ordered by increasing number of assumptions
     void insert(Function* fun) {
         // TODO: we might need to grow the DT here!
@@ -134,6 +179,8 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         fun->dispatchTable(this);
         auto assumptions = fun->context();
+        SLOWASSERT(fun->typeFeedback() == getTypeFeedback(assumptions) ||
+                   fun->typeFeedback()->recordingCount() < 1);
         size_t i;
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);
@@ -197,13 +244,23 @@ struct DispatchTable
     }
 
     static DispatchTable* create(size_t capacity = 20) {
-        size_t sz =
-            sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
+        size_t sz = sizeof(DispatchTable) +
+                    (capacity * sizeof(DispatchTableEntry) +
+                     sizeof(DispatchTableEntry)); // last DispatchTableEntry is
+                                                  // used for typeFeedback table
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
-        return new (INTEGER(s)) DispatchTable(capacity);
+        auto dp = new (INTEGER(s)) DispatchTable(capacity);
+        PROTECT(dp->container());
+        // create type feedback dispatch table
+        // TODO: Different feedback table sizes
+        auto typeFeedbackTable = TypeFeedbackDispatchTable::create();
+        PROTECT(typeFeedbackTable->container());
+        dp->typeFeedbacks(typeFeedbackTable);
+        UNPROTECT(2);
+        return dp;
     }
 
-    size_t capacity() const { return info.gc_area_length; }
+    size_t capacity() const { return info.gc_area_length - 1; }
 
     static DispatchTable* deserialize(SEXP refTable, R_inpstream_t inp) {
         DispatchTable* table = create();
@@ -214,6 +271,7 @@ struct DispatchTable
             auto fun = Function::deserialize(refTable, inp);
             table->setEntry(i, fun->container());
             fun->dispatchTable(table);
+            table->insertTypeFeedback(fun->context(), fun->typeFeedback());
         }
         UNPROTECT(1);
         return table;
@@ -229,11 +287,20 @@ struct DispatchTable
     DispatchTable* newWithUserContext(Context udc) {
 
         auto clone = create(this->capacity());
-        auto baseline = this->get(0);
-        clone->setEntry(0, getEntry(0));
-        baseline->dispatchTable(clone);
+        PROTECT(clone->container());
+        SEXP baseline = this->getEntry(0);
+        clone->setEntry(0, baseline);
 
-        auto j = 1;
+        auto typeFeedbacks = this->typeFeedbacks();
+        auto cloneFeedbacks = clone->typeFeedbacks();
+        size_t j = 0;
+        for (size_t i = 0; i < typeFeedbacks->size(); ++i) {
+            auto tf = TypeFeedback::unpack(typeFeedbacks->getEntry(i));
+            Context ctx = typeFeedbacks->key(i);
+            if (ctx.smaller(udc))
+                cloneFeedbacks->insert(typeFeedbacks->key(i), tf);
+        }
+        j = 1;
         for (size_t i = 1; i < size(); i++) {
             if (get(i)->context().smaller(udc)) {
                 auto v = get(i);
@@ -245,6 +312,8 @@ struct DispatchTable
 
         clone->size_ = j;
         clone->userDefinedContext_ = udc;
+        Function::unpack(baseline)->dispatchTable(clone);
+        UNPROTECT(1);
         return clone;
     }
 
@@ -295,12 +364,36 @@ struct DispatchTable
     explicit DispatchTable(size_t capacity)
         : RirRuntimeObject(
               // GC area starts at the end of the DispatchTable
-              sizeof(DispatchTable),
-              // GC area is just the pointers in the entry array
-              capacity) {}
+              // GC area is the pointers in the entry array
+              // and pointer to TypeFeedback dispatch table
+              sizeof(DispatchTable), capacity + 1),
+          typeFeedbackPos_(info.gc_area_length - 1) {}
+
+    TypeFeedbackDispatchTable* typeFeedbacks() {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
+    const TypeFeedbackDispatchTable* typeFeedbacks() const {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
+    void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
+        setEntry(typeFeedbackPos_, tfdp->container());
+    }
+
+    void compareWithDefinedContext(const Context& ctx) const {
+        if (!ctx.smaller(userDefinedContext_)) {
+#ifdef DEBUG_DISPATCH
+            std::cout << "DISPATCH trying: " << a
+                      << " vs annotation: " << userDefinedContext_ << "\n";
+#endif
+            Rf_error("Provided context does not satisfy user defined context");
+        }
+    }
 
     size_t size_ = 0;
     Context userDefinedContext_;
+    size_t typeFeedbackPos_;
 };
 
 #pragma pack(pop)

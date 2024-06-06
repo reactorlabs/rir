@@ -2,6 +2,7 @@
 #include "compiler/parameter.h"
 #include "interp_incl.h"
 #include "runtime/DispatchTable.h"
+#include "runtime/Promise.h"
 
 namespace rir {
 
@@ -29,7 +30,8 @@ void serializeRir(SEXP s, SEXP refTable, R_outpstream_t out) {
         OutInteger(out, EXTERNALSXP);
         if (!trySerialize<DispatchTable>(s, refTable, out) &&
             !trySerialize<Code>(s, refTable, out) &&
-            !trySerialize<Function>(s, refTable, out)) {
+            !trySerialize<Function>(s, refTable, out) &&
+            !trySerialize<Promise>(s, refTable, out)) {
             std::cerr << "couldn't deserialize EXTERNALSXP: ";
             Rf_PrintValue(s);
             assert(false);
@@ -48,6 +50,8 @@ SEXP deserializeRir(SEXP refTable, R_inpstream_t inp) {
         return Code::deserialize(refTable, inp)->container();
     case FUNCTION_MAGIC:
         return Function::deserialize(refTable, inp)->container();
+    case PROMISE_MAGIC:
+        return Promise::deserialize(refTable, inp)->container();
     default:
         std::cerr << "couldn't deserialize EXTERNALSXP with code: 0x"
                   << std::hex << code << "\n";

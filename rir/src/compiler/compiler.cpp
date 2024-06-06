@@ -7,6 +7,8 @@
 #include "utils/Map.h"
 #include "utils/measuring.h"
 
+#include "interpreter/call_context.h"
+
 #include "compiler/analysis/query.h"
 #include "compiler/analysis/verifier.h"
 #include "compiler/opt/pass_definitions.h"
@@ -57,7 +59,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
                    success, fail, outerFeedback,
-                   tbl->baseline()->typeFeedback());
+                   tbl->getTypeFeedback(assumptions));
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -73,10 +75,11 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback, src->baseline()->typeFeedback());
+                   fail, outerFeedback, src->getTypeFeedback(assumptions));
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
+                                   const Context& context,
                                    const ContinuationContext* ctx,
                                    MaybeCnt success, Maybe fail) {
 
@@ -91,7 +94,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    auto typeFeedback = tbl->baseline()->typeFeedback();
+    auto typeFeedback = tbl->getTypeFeedback(context);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
@@ -146,6 +149,11 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
     auto version = closure->declareVersion(ctx, root, optFunction);
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
+    // This does not have to be a true due to deopts, while interpreting after
+    // deopts can record type feedback, its invocation count is not incremented
+    // since the invocation was not expected.
+    // SLOWASSERT(optFunction->baseline()->invocationCount() >=
+    //           typeFeedback->recordingCount());
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
                     typeFeedback);
 

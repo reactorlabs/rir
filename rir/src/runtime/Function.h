@@ -59,23 +59,26 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx) {
+          signature_(signature), context_(ctx), dispatchTable_(nullptr) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
         if (feedback) {
             typeFeedback(feedback);
-        }
+        } else
+            setEntry(TYPE_FEEDBACK_IDX, nullptr);
     }
 
     Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
     void body(SEXP body) { setEntry(BODY_IDX, body); }
 
-    TypeFeedback* typeFeedback() const {
-        return TypeFeedback::unpack(getEntry(TYPE_FEEDBACK_IDX));
-    }
+    Function* baseline();
+    const Function* baseline() const;
+    TypeFeedback* typeFeedback() const;
+    // Returns TypeFeedback used for recording type feedback for given context
+    TypeFeedback* typeFeedback(const Context& ctx);
+
     void typeFeedback(TypeFeedback* typeFeedback) {
-        typeFeedback->owner_ = this;
         setEntry(TYPE_FEEDBACK_IDX, typeFeedback->container());
     }
 
@@ -95,13 +98,20 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return Code::unpack(defaultArg_[i]);
     }
 
-    size_t invocationCount() { return invocationCount_; }
+    size_t invocationCount() const { return invocationCount_; }
+    size_t recordingCount(const Context& context) {
+        return typeFeedback(context)->recordingCount();
+    }
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
         REC_HOOK(recording::recordInvocation(this, 0, n));
     }
     size_t deoptCount() { return deoptCount_; }
+
+    bool isSameClosureAs(const Function* b) const {
+        return baseline() == b->baseline();
+    }
 
     void unregisterInvocation() {
         invoked = 0;
@@ -194,6 +204,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
     DispatchTable* dispatchTable() { return dispatchTable_; }
+    const DispatchTable* dispatchTable() const { return dispatchTable_; }
 
   private:
     unsigned numArgs_;

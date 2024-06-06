@@ -3,6 +3,7 @@
 #include "R/Serialize.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "interpreter/call_context.h"
 #include "runtime/Code.h"
 #include "runtime/Function.h"
 
@@ -19,12 +20,20 @@ void ObservedCallees::record(Function* function, SEXP callee,
 
     if (numTargets < MaxTargets) {
         int i = 0;
-        auto caller = function->body();
+        // Because of recording type feedback even before creating function
+        // and saving callees inside function body
+        // all callees are stored inside the baseline function
+        auto caller = function->baseline()->body();
         for (; i < numTargets; ++i)
             if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
-            auto idx = caller->addExtraPoolEntry(callee);
+            unsigned int idx;
+            for (idx = caller->promEnd; idx < caller->extraPoolSize; ++idx)
+                if (caller->getExtraPoolEntry(idx) == callee)
+                    break;
+            if (idx == caller->extraPoolSize)
+                idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
         }
     } else {
@@ -36,7 +45,7 @@ void ObservedCallees::record(Function* function, SEXP callee,
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
     assert(pos < numTargets);
-    return function->body()->getExtraPoolEntry(targets[pos]);
+    return function->baseline()->body()->getExtraPoolEntry(targets[pos]);
 }
 
 FeedbackOrigin::FeedbackOrigin(rir::Function* function, FeedbackIndex index)
@@ -48,30 +57,35 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
                          DeoptReason::Reason reason)
     : reason(reason), origin(origin) {}
 
-void DeoptReason::record(SEXP val) const {
+void DeoptReason::record(SEXP val, const Context& context) const {
     origin.function()->registerDeoptReason(reason);
+    assert(origin.function()->dispatchTable());
+    auto baselineFeedback =
+        origin.function()->dispatchTable()->baselineFeedback();
+    auto tf = origin.function()->typeFeedback(context);
 
     switch (reason) {
     case DeoptReason::Unknown:
         break;
     case DeoptReason::DeadBranchReached: {
-        auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
+        auto& feedback = tf->test(origin.idx());
         feedback.seen = ObservedTest::Both;
         REC_HOOK(recording::recordSC(feedback, origin.function()));
+        auto& bf = baselineFeedback->test(origin.idx());
+        bf.seen = ObservedTest::Both;
+        REC_HOOK(recording::recordSC(bf, origin.function()));
         break;
     }
     case DeoptReason::Typecheck: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
 
-        auto feedback = origin.function()->typeFeedback();
-
         // FIXME: (cf. #1260) very similar code is in the recordTypeFeedbackImpl
         // IMHO the one there is more correct. Would it make sense
         // to pull this into the TypeFeedback::record_type()?
         // and get rid of the overload that takes lambda?
-        feedback->record_type(origin.idx(), val);
-        feedback->record_type(origin.idx(), [&](auto& slot) {
+        tf->record_typeInc(baselineFeedback, origin.idx(), val);
+        tf->record_typeInc(baselineFeedback, origin.idx(), [&](auto& slot) {
             if (TYPEOF(val) == PROMSXP) {
                 if (PRVALUE(val) == R_UnboundValue &&
                     slot.stateBeforeLastForce < ObservedValues::promise)
@@ -89,8 +103,8 @@ void DeoptReason::record(SEXP val) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        auto feedback = origin.function()->typeFeedback();
-        feedback->record_callee(origin.idx(), origin.function(), val, true);
+        tf->record_calleeInc(baselineFeedback, origin.idx(), origin.function(),
+                             val, true);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
@@ -274,7 +288,7 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
                            const std::vector<ObservedValues>& types)
-    : RirRuntimeObject(0, 0), owner_(nullptr), callees_size_(callees.size()),
+    : RirRuntimeObject(0, 0), callees_size_(callees.size()),
       tests_size_(tests.size()), types_size_(types.size()) {
 
     size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
@@ -297,6 +311,44 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
         memcpy(types_, types.data(), types_mem_size);
     }
 }
+
+void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
+                                    Function* function, SEXP callee,
+                                    bool invalidateWhenFull) {
+    record_callee(idx, function, callee, invalidateWhenFull);
+    if (inclusive && inclusive != this)
+        inclusive->record_callee(idx, function, callee, invalidateWhenFull);
+}
+
+void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,
+                                  const SEXP e) {
+    record_test(idx, e);
+    if (inclusive && inclusive != this)
+        inclusive->record_test(idx, e);
+}
+
+void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                                  const SEXP e) {
+    record_type(idx, e);
+    if (inclusive && inclusive != this)
+        inclusive->record_type(idx, e);
+}
+
+void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                                  std::function<void(ObservedValues&)> f) {
+    record_type(idx, f);
+    if (inclusive && inclusive != this)
+        inclusive->record_type(idx, f);
+}
+
+TypeFeedback* TypeFeedback::emptyCopy() {
+    std::vector<ObservedCallees> callees(callees_size_, ObservedCallees{});
+    std::vector<ObservedTest> tests(tests_size_, ObservedTest{});
+    std::vector<ObservedValues> types(types_size_, ObservedValues{});
+
+    return TypeFeedback::create(callees, tests, types);
+}
+
 const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:

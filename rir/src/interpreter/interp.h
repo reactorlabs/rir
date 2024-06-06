@@ -9,6 +9,7 @@
 #include "interp_incl.h"
 #include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
+#include "runtime/Promise.h"
 
 #include "R/BuiltinIds.h"
 
@@ -56,7 +57,9 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
+inline bool RecompileHeuristic(Function* fun, const Context& context,
+                               Function* disabledFun = nullptr) {
+    // TODO: Take recordingCount of context into account
 
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt)) {
@@ -146,10 +149,13 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
 void inferCurrentContext(CallContext& call, size_t formalNargs);
 SEXP getTrivialPromValue(SEXP sym, SEXP env);
 
+SEXP createPromise(const Context& context, Code* code, SEXP env);
+SEXP createPromise(const CallContext* context, Code* code, SEXP env);
+
 SEXP doCall(CallContext& call, bool popArgs = false);
 size_t expandDotDotDotCallArgs(size_t n, Immediate* names_, SEXP env,
                                bool explicitDots);
-void deoptFramesWithContext(const CallContext* callCtxt,
+void deoptFramesWithContext(const Function* deoptedFun, const Context& context,
                             DeoptMetadata* deoptData, SEXP sysparent,
                             size_t pos, size_t stackHeight,
                             RCNTXT* currentContext);
@@ -190,7 +196,11 @@ inline SEXP findRootPromise(SEXP p) {
 
 inline SEXP getSymbolIfTrivialPromise(SEXP val) {
     auto pr = PREXPR(val);
-    auto ppr = Code::check(pr);
+    Code* ppr;
+    if (auto p = Promise::check(pr))
+        ppr = p->code();
+    else
+        ppr = Code::check(pr);
     SEXP sym = nullptr;
     if (Rf_isSymbol(pr)) {
         sym = pr;

@@ -2089,8 +2089,9 @@ void LowerFunctionLLVM::compile() {
 
     if (LLVMDebugInfo()) {
         DI->emitLocation(builder, 0);
-        std::array<llvm::DIType*, 4> argDITypes = {
-            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType};
+        std::array<llvm::DIType*, 5> argDITypes = {
+            DI->VoidPtrType, DI->VoidPtrType, DI->SEXPType, DI->SEXPType,
+            DI->VoidPtrType};
         auto arg = fun->arg_begin();
         for (size_t i = 0; i < argNames.size(); ++i) {
             auto store =
@@ -3563,7 +3564,7 @@ void LowerFunctionLLVM::compile() {
                             args.push_back(fs->arg(pos).val());
                         args.push_back(fs->env());
                         m->frames[frameNr--] = {fs->pc, fs->code, fs->stackSize,
-                                                fs->inPromise};
+                                                fs->context, fs->inPromise};
                     }
 
                     target->addExtraPoolEntry(store);
@@ -3571,7 +3572,7 @@ void LowerFunctionLLVM::compile() {
 
                 withCallFrame(args, [&]() {
                     return call(NativeBuiltins::get(NativeBuiltins::Id::deopt),
-                                {paramCode(), paramClosure(),
+                                {paramCode(), paramContext(), paramClosure(),
                                  convertToPointer(m, t::i8, true), paramArgs(),
                                  c(deopt->escapedEnv, 1),
                                  load(deopt->deoptReason()),
@@ -4776,7 +4777,7 @@ void LowerFunctionLLVM::compile() {
                     } else {
                         setVal(i, call(NativeBuiltins::get(
                                            NativeBuiltins::Id::createPromise),
-                                       {exp, e}));
+                                       {paramContext(), exp, e}));
                     }
                 } else {
                     if (p->isEager()) {
@@ -4788,7 +4789,7 @@ void LowerFunctionLLVM::compile() {
                         setVal(i,
                                call(NativeBuiltins::get(
                                         NativeBuiltins::Id::createPromiseNoEnv),
-                                    {exp}));
+                                    {paramContext(), exp}));
                     }
                 }
                 break;
@@ -6119,12 +6120,11 @@ void LowerFunctionLLVM::compile() {
                 if (i->hasTypeFeedback()) {
                     auto& origin = i->typeFeedback().feedbackOrigin;
                     if (origin.hasSlot()) {
-                        call(
-                            NativeBuiltins::get(
-                                NativeBuiltins::Id::recordTypeFeedback),
-                            {convertToPointer(origin.function()->typeFeedback(),
-                                              t::i8, true),
-                             c(origin.index().idx, 32), load(i)});
+                        call(NativeBuiltins::get(
+                                 NativeBuiltins::Id::recordTypeFeedback),
+                             {convertToPointer(origin.function(), t::i8, true),
+                              paramContext(), c(origin.index().idx, 32),
+                              load(i)});
                     }
                 }
                 if (i->hasCallFeedback()) {
@@ -6132,9 +6132,8 @@ void LowerFunctionLLVM::compile() {
                     assert(origin.hasSlot());
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
-                         {convertToPointer(origin.function()->typeFeedback(),
-                                           t::i8, true),
-                          c(origin.index().idx, 32), load(i)});
+                         {convertToPointer(origin.function(), t::i8, true),
+                          paramContext(), c(origin.index().idx, 32), load(i)});
                 }
             }
 

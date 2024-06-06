@@ -1,6 +1,7 @@
 #ifndef RIR_DEOPTIMIZATION_H
 #define RIR_DEOPTIMIZATION_H
 
+#include "Context.h"
 #include <R/r.h>
 #include <iostream>
 
@@ -15,11 +16,14 @@ struct FrameInfo {
     Opcode* pc;
     Code* code;
     size_t stackSize;
+    Context context;
     bool inPromise;
 
     FrameInfo() {}
-    FrameInfo(Opcode* pc, Code* code, size_t stackSize, bool promise)
-        : pc(pc), code(code), stackSize(stackSize), inPromise(promise) {}
+    FrameInfo(Opcode* pc, Code* code, size_t stackSize, const Context& ctx,
+              bool promise)
+        : pc(pc), code(code), stackSize(stackSize), context(ctx),
+          inPromise(promise) {}
 };
 
 struct DeoptMetadata {

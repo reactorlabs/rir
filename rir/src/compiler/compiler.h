@@ -41,6 +41,7 @@ class Compiler {
                          MaybeCls success, Maybe fail,
                          std::list<PirTypeFeedback*> outerFeedback);
     void compileContinuation(SEXP closure, rir::Function* curFun,
+                             const Context& context,
                              const ContinuationContext* ctx, MaybeCnt success,
                              Maybe fail);
 

@@ -395,6 +395,7 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
                 res->flags.set(rir::Code::NoReflection);
             res->addExtraPoolEntry(code->container());
         }
+        res->promEnd = res->extraPoolSize;
         jit.compile(res, cls, c, promMap.at(c), refcount, needsLdVarForUpdate,
                     log);
         return res;
@@ -407,17 +408,15 @@ rir::Function* Backend::doCompile(ClosureVersion* cls, ClosureLog& log) {
 
     log.finalPIR();
 
-    // the type feedback is only used at the baseline
-    // here we only set the current version used to compile this function
-    auto feedback = rir::TypeFeedback::empty();
-    PROTECT(feedback->container());
+    auto feedback = cls->optFunction->dispatchTable()->getOrCreateTypeFeedback(
+        cls->context());
 
     function.finalize(body, signature, cls->context(), feedback);
     for (auto& c : done)
         c.second->function(function.function());
 
     function.function()->inheritFlags(cls->owner()->rirFunction());
-    UNPROTECT(1);
+
     return function.function();
 }
 

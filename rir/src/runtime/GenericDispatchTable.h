@@ -49,20 +49,15 @@ struct GenericDispatchTable
 
     // insert function ordered by increasing number of assumptions
     void insert(const Key& k, Value* value) {
-        size_t i = 0;
-        if (size() > 0) {
-            for (i = size() - 1; i > 0; --i) {
-                if (key(i) == k) {
-                    if (i != 0) {
-                        setEntry(i, value->container());
-                    }
-                    return;
-                }
-                if (!(k < key(i))) {
-                    i++;
-                    break;
-                }
+        // Find position to which k belongs
+        size_t i;
+        for (i = size(); i > 0; --i) {
+            if (key(i - 1) == k) {
+                setEntry(i - 1, value->container());
+                return;
             }
+            if (!(k < key(i - 1)))
+                break;
         }
         if (size() == capacity()) {
             // Evict one element and retry
@@ -75,7 +70,6 @@ struct GenericDispatchTable
             }
             return insert(k, value);
         }
-
         for (size_t j = size(); j > i; --j) {
             key(j) = key(j - 1);
             setEntry(j, getEntry(j - 1));
@@ -96,7 +90,28 @@ struct GenericDispatchTable
         return {a, nullptr};
     }
 
+    // this dispatch method is almost identical to the previous dispatch method,
+    // but this one does return only values for which f function returns true
+    std::pair<const Key&, Value*>
+    dispatch(const Key& a, const std::function<bool(const Value*)> f) const {
+        for (size_t i = 0; i < size(); ++i) {
+            auto v = Value::unpack(getEntry(i));
+            if (a.smaller(key(i)) && f(v)) {
+                if (!v->disabled())
+                    return {key(i), v};
+            }
+        }
+        return {a, nullptr};
+    }
+
     bool full() const { return size() == capacity(); }
+
+    bool empty() const { return size() == 0; }
+
+    std::pair<const Key&, Value*> best() const {
+        assert(!empty());
+        return {key(0), Value::unpack(getEntry(0))};
+    }
 
   private:
     GenericDispatchTable()
@@ -117,6 +132,8 @@ struct GenericDispatchTable
         assert(i < size());
         return keys.at(i);
     }
+
+    friend struct DispatchTable;
 };
 
 } // namespace rir

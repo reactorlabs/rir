@@ -236,6 +236,8 @@ class FeedbackOrigin {
     }
 };
 
+struct Context;
+
 struct DeoptReason {
   public:
     enum Reason : uint32_t {
@@ -288,7 +290,7 @@ struct DeoptReason {
 
     static DeoptReason unknown() { return DeoptReason({}, Unknown); }
 
-    void record(SEXP val) const;
+    void record(SEXP val, const Context& context) const;
 
     DeoptReason() = delete;
 
@@ -302,15 +304,17 @@ static_assert(sizeof(DeoptReason) == 4 * sizeof(uint32_t),
 
 class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
   private:
-    friend Function;
-
-    Function* owner_;
     size_t callees_size_;
     size_t tests_size_;
     size_t types_size_;
     ObservedCallees* callees_;
     ObservedTest* tests_;
     ObservedValues* types_;
+
+    // Total of runs of RIR code for this TypeFeedback
+    // i.e. how many function invocations were recording to this TypeFeedback
+    unsigned recordingCount_ = 0;
+
     // All the data are stored in this array: callees, tests and types in this
     // order. The constructors sets the above pointers to point at the
     // appropriate locations.
@@ -344,6 +348,12 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
+    size_t recordingCount() const { return recordingCount_; }
+    void increaseRecordingCount() {
+        if (recordingCount_ < UINT_MAX)
+            ++recordingCount_;
+    }
+
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
         callees(idx).record(function, callee, invalidateWhenFull);
@@ -358,13 +368,25 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         f(slot);
     }
 
+    void record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
+                          Function* function, SEXP callee,
+                          bool invalidateWhenFull = false);
+
+    void record_testInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+
+    void record_typeInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+
+    void record_typeInc(TypeFeedback* inclusive, uint32_t idx,
+                        std::function<void(ObservedValues&)> f);
+
     void print(std::ostream& out) const;
 
     void serialize(SEXP refTable, R_outpstream_t out) const;
 
     bool isValid(const FeedbackIndex& index) const;
 
-    Function* owner() const { return owner_; }
+    static constexpr bool disabled() { return false; }
+    TypeFeedback* emptyCopy();
 };
 
 #pragma pack(pop)

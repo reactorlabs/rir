@@ -45,7 +45,8 @@ typedef SEXP CodeSEXP;
 
 struct InterpreterInstance;
 struct Code;
-typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP);
+struct CallContext;
+typedef SEXP (*NativeCode)(Code*, void*, SEXP, SEXP, const Context&);
 
 struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend class FunctionWriter;
@@ -138,6 +139,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned stackLength; /// Number of slots in stack required
 
     const unsigned localsCount; /// Number of slots for local variables
+
+    unsigned promEnd; /// Extra pool index right after promises.
 
     const unsigned bindingCacheSize; /// Number of different(ldVars|stVars)
 
