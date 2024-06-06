@@ -32,11 +32,8 @@ if(${MACOS_USE_GCC_9})
     set(CMAKE_CXX_COMPILER /usr/local/bin/g++-9 CACHE PATH "" FORCE)
 endif()
 
-option(RECORDING "Enable recording of specific events" FALSE)
-if(${RECORDING})
-    message(STATUS "Enabled recording")
-    add_definitions(-DRECORDING)
-endif()
+message(STATUS "Enabled recording")
+add_definitions(-DRECORDING)
 
 add_definitions(-g)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror -DSWITCH_TO_NAMED=1")

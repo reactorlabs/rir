@@ -48,8 +48,8 @@ struct {
 } filter_ = {
     .compile = true,
     .deopt = true,
-    .typeFeedback = false,
-    .invoke = false,
+    .typeFeedback = true,
+    .invoke = true,
 };
 
 CompileReasons compileReasons_;
@@ -382,56 +382,7 @@ void recordFinalizer(SEXP) {
 }
 
 void recordExecution(const char* filePath, const char* filterArg) {
-    if (filterArg != nullptr) {
-        filter_ = {.compile = false,
-                   .deopt = false,
-                   .typeFeedback = false,
-                   .invoke = false};
-
-        std::istringstream is(filterArg);
-        std::string str;
-
-        while (std::getline(is, str, ',')) {
-            if (str == "Compile") {
-                filter_.compile = true;
-            } else if (str == "Deopt") {
-                filter_.deopt = true;
-            } else if (str == "TypeFeedback") {
-                filter_.typeFeedback = true;
-            } else if (str == "Invoke") {
-                filter_.invoke = true;
-            } else {
-                std::cerr << "Unknown recording filter type: " << str
-                          << "\nValid flags are:\n- Compile\n- Deopt\n- "
-                             "TypeFeedback\n- Invoke\n";
-                exit(1);
-            }
-        }
-    }
-
-    std::cerr << "Recording to \"" << filePath << "\" (environment variable";
-    if (filterArg != nullptr) {
-        std::cerr << ": " << filterArg;
-    }
-
-    std::cerr << ")\n";
     startRecordings();
-
-    finalizerPath = filePath;
-
-    // Call `loadNamespace("Base")`
-    SEXP baseStr = PROTECT(Rf_mkString("base"));
-    SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-    SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
-
-    if (namespaceRes == R_NilValue) {
-        std::cerr << "Failed to load namespace base\n";
-        UNPROTECT(3);
-        return;
-    }
-
-    R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
-    UNPROTECT(3);
 }
 } // namespace recording
 } // namespace rir
