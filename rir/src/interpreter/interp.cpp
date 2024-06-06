@@ -1711,12 +1711,6 @@ size_t expandDotDotDotCallArgs(size_t n, Immediate* names_, SEXP env,
             if (TYPEOF(ellipsis) == DOTSXP || ellipsis == R_NilValue) {
                 while (ellipsis != R_NilValue) {
                     auto dotArg = CAR(ellipsis);
-                    if (TYPEOF(dotArg) == LANGSXP ||
-                        (TYPEOF(dotArg) == SYMSXP && dotArg != R_MissingArg)) {
-                        assert(false && "ellipsis dead code");
-                        arg = Rf_mkPROMISE(arg, env);
-                        p(arg);
-                    }
                     args.push_back(dotArg);
                     names.push_back(TAG(ellipsis));
                     if (TAG(ellipsis) != R_NilValue)
