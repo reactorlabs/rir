@@ -91,6 +91,12 @@ struct DispatchTable
         return b;
     }
 
+    std::pair<Context, TypeFeedback*>
+    dispatchTypeFeedback(const Context& ctx) const {
+        compareWithDefinedContext(ctx);
+        return typeFeedbacks()->dispatch(ctx);
+    }
+
     TypeFeedback* getTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
@@ -179,8 +185,6 @@ struct DispatchTable
                FunctionSignature::OptimizationLevel::Baseline);
         fun->dispatchTable(this);
         auto assumptions = fun->context();
-        SLOWASSERT(fun->typeFeedback() == getTypeFeedback(assumptions) ||
-                   fun->typeFeedback()->recordingCount() < 1);
         size_t i;
         for (i = size() - 1; i > 0; --i) {
             auto old = get(i);

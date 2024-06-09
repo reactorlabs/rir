@@ -126,4 +126,13 @@ TypeFeedback* Function::typeFeedback(const Context& ctx) {
     return typeFeedback();
 }
 
+size_t Function::recordingCount(const Context& ctx) {
+    auto dp = dispatchTable();
+    assert(dp);
+    auto entry = dp->dispatchTypeFeedback(ctx);
+    if (entry.first != ctx || !entry.second)
+        return 0;
+    return entry.second->recordingCount();
+}
+
 } // namespace rir

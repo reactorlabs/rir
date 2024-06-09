@@ -99,9 +99,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     size_t invocationCount() const { return invocationCount_; }
-    size_t recordingCount(const Context& context) {
-        return typeFeedback(context)->recordingCount();
-    }
+    size_t recordingCount(const Context& ctx);
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
