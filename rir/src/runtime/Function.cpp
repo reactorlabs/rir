@@ -127,8 +127,11 @@ TypeFeedback* Function::typeFeedback(const Context& ctx) {
 }
 
 size_t Function::recordingCount(const Context& ctx) {
+    if (ctx == context())
+        typeFeedback()->recordingCount();
     auto dp = dispatchTable();
-    assert(dp);
+    if (!dp)
+        return 0;
     auto entry = dp->dispatchTypeFeedback(ctx);
     if (entry.first != ctx || !entry.second)
         return 0;

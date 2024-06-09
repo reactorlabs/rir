@@ -82,6 +82,9 @@ inline bool RecompileHeuristic(Function* fun, const Context& context,
         return true;
     }
 
+    if (fun->invocationCount() != wu && fun->recordingCount(context) < 2)
+        return false;
+
     if (fun->invocationCount() % wu == 0) {
         REC_HOOK(recording::recordPirWarmupReason(fun->invocationCount()));
         return true;
