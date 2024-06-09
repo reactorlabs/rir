@@ -211,8 +211,6 @@ compile_reason_from_sexp(SEXP sexp) {
     std::unique_ptr<rir::recording::CompileReason> reason;
     if (Rf_inherits(sexp, MarkOptReason::NAME)) {
         reason = std::make_unique<MarkOptReason>();
-    } else if (Rf_inherits(sexp, InvocationCountTimeReason::NAME)) {
-        reason = std::make_unique<InvocationCountTimeReason>();
     } else if (Rf_inherits(sexp, PirWarmupReason::NAME)) {
         reason = std::make_unique<PirWarmupReason>();
     } else if (Rf_inherits(sexp, NotOptimizedReason::NAME)) {
