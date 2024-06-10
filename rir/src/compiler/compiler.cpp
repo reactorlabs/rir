@@ -57,9 +57,11 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun,
                                                      tbl->userDefinedContext());
     Context context(assumptions);
+    auto feedback = tbl->getTypeFeedback(assumptions);
+    PROTECT(feedback->container());
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
-                   success, fail, outerFeedback,
-                   tbl->getTypeFeedback(assumptions));
+                   success, fail, outerFeedback, feedback);
+    UNPROTECT(1);
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -72,10 +74,13 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     srcFunction->clearDisabledAssumptions(assumptions);
     assumptions = src->combineContextWith(assumptions);
     Context context(assumptions);
+    auto feedback = src->getTypeFeedback(assumptions);
+    PROTECT(feedback->container());
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback, src->getTypeFeedback(assumptions));
+                   fail, outerFeedback, feedback);
+    UNPROTECT(1);
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
@@ -95,6 +100,8 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
     auto typeFeedback = tbl->getTypeFeedback(context);
+    Protect p;
+    p(typeFeedback->container());
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {

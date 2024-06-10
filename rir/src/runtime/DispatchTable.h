@@ -91,35 +91,53 @@ struct DispatchTable
         return b;
     }
 
+    // simple TypeFeedback dispatch
     std::pair<Context, TypeFeedback*>
     dispatchTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         return typeFeedbacks()->dispatch(ctx);
     }
 
+    // method used to retrieve compilation TypeFeedback
     TypeFeedback* getTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
             return tf && tf->recordingCount() > 0;
         });
-        TypeFeedback* tf = entry.second;
-        if (!tf)
-            return baselineFeedback();
-        return tf;
+        std::pair<Context, TypeFeedback*> tf;
+        if (!entry.second)
+            tf = std::make_pair(baseline()->context(),
+                                baselineFeedback()->copy());
+        else
+            tf = std::make_pair(entry.first, entry.second->copy());
+        PROTECT(tf.second->container());
+        auto function = baseline();
+        auto mergeCond = [&](const Context& entryCtx) {
+            return entryCtx.smaller(ctx) && entryCtx != tf.first;
+        };
+        auto mergeImpl = [&](const TypeFeedback* feedback) {
+            tf.second->mergeWith(feedback, function);
+        };
+        feedbacks->filterForeach(mergeCond, mergeImpl);
+        UNPROTECT(1);
+        return tf.second;
     }
 
+    // method used to retrieve TypeFeedback used for feedback recording
     TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback* tf = entry.second;
         if (entry.first != ctx || !tf) {
+            // TypeFeedback for required context does not exist
             assert(baselineFeedback());
-            // Use closest possible feedback when type feedback table is full
+            // Use closest possible TypeFeedback if table is full
             // TODO: try different approaches
             if (feedbacks->full())
                 return tf ? tf : baselineFeedback();
+            // Create empty TypeFeedback otherwise
             tf = baselineFeedback()->emptyCopy();
             PROTECT(tf->container());
             feedbacks->insert(ctx, tf);

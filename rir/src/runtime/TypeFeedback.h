@@ -105,6 +105,8 @@ struct ObservedCallees {
   private:
     void record(Function* function, SEXP callee,
                 bool invalidateWhenFull = false);
+    void mergeWith(const ObservedCallees& callee, Function* function);
+    inline void addCallee(Function* function, SEXP callee);
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
@@ -143,6 +145,7 @@ struct ObservedTest {
             seen = Both;
         }
     }
+    inline void mergeWith(const ObservedTest& test);
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
@@ -194,15 +197,30 @@ struct ObservedValues {
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
 
         uint8_t type = TYPEOF(e);
-        if (numTypes < MaxTypes) {
-            int i = 0;
-            for (; i < numTypes; ++i) {
-                if (seen[i] == type)
-                    break;
-            }
-            if (i == numTypes)
-                seen[numTypes++] = type;
+        if (numTypes < MaxTypes)
+            addType(type);
+    }
+
+    inline void mergeWith(const ObservedValues& val) {
+        notScalar |= val.notScalar;
+        object |= val.object;
+        attribs |= val.attribs;
+        notFastVecelt |= val.notFastVecelt;
+        for (unsigned i = 0; i < val.numTypes; ++i) {
+            if (numTypes == MaxTypes)
+                return;
+            addType(val.seen[i]);
         }
+    }
+
+    inline void addType(const uint8_t& type) {
+        int i = 0;
+        for (; i < numTypes; ++i) {
+            if (seen[i] == type)
+                break;
+        }
+        if (i == numTypes)
+            seen[numTypes++] = type;
     }
 };
 
@@ -386,7 +404,9 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     bool isValid(const FeedbackIndex& index) const;
 
     static constexpr bool disabled() { return false; }
-    TypeFeedback* emptyCopy();
+    TypeFeedback* emptyCopy() const;
+    TypeFeedback* copy() const;
+    void mergeWith(const TypeFeedback* tf, Function* function);
 };
 
 #pragma pack(pop)
