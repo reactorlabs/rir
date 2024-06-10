@@ -113,7 +113,17 @@ struct DispatchTable
             tf = std::make_pair(entry.first, entry.second->copy());
         PROTECT(tf.second->container());
         auto function = baseline();
+        // contexts which are smaller than ctx and have compiled version
+        std::vector<Context> compiledContexts;
+        for (size_t i = 1; i < size(); ++i) {
+            auto f = get(i);
+            if (f->context().smaller(ctx) && f->context() != ctx)
+                compiledContexts.push_back(f->context());
+        }
         auto mergeCond = [&](const Context& entryCtx) {
+            for (Context& c : compiledContexts)
+                if (entryCtx.smaller(c))
+                    return false;
             return entryCtx.smaller(ctx) && entryCtx != tf.first;
         };
         auto mergeImpl = [&](const TypeFeedback* feedback) {
