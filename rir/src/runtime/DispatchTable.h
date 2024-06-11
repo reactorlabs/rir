@@ -130,6 +130,8 @@ struct DispatchTable
             tf.second->mergeWith(feedback, function);
         };
         feedbacks->filterForeach(mergeCond, mergeImpl);
+        if (tf.second != baselineFeedback())
+            tf.second->fillWith(baselineFeedback());
         UNPROTECT(1);
         return tf.second;
     }

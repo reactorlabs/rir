@@ -107,6 +107,9 @@ struct ObservedCallees {
                 bool invalidateWhenFull = false);
     void mergeWith(const ObservedCallees& callee, Function* function);
     inline void addCallee(Function* function, SEXP callee);
+    inline bool isEmpty() const {
+        return numTargets == 0 && taken == 0 && targets.empty();
+    }
 };
 
 static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
@@ -146,6 +149,7 @@ struct ObservedTest {
         }
     }
     inline void mergeWith(const ObservedTest& test);
+    inline bool isEmpty() const { return seen == None; }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
@@ -221,6 +225,13 @@ struct ObservedValues {
         }
         if (i == numTypes)
             seen[numTypes++] = type;
+    }
+
+    inline bool isEmpty() const {
+        uint32_t zero = 0;
+        static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+                      "Comparison assumes 4B size");
+        return memcmp(this, &zero, sizeof(ObservedValues));
     }
 };
 
@@ -407,6 +418,7 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     TypeFeedback* emptyCopy() const;
     TypeFeedback* copy() const;
     void mergeWith(const TypeFeedback* tf, Function* function);
+    void fillWith(const TypeFeedback* tf);
 };
 
 #pragma pack(pop)

@@ -408,6 +408,20 @@ void TypeFeedback::mergeWith(const TypeFeedback* tf, Function* function) {
         types(i).mergeWith(tf->types_[i]);
 }
 
+void TypeFeedback::fillWith(const TypeFeedback* tf) {
+    for (size_t i = 0; i < callees_size_; i++)
+        if (callees(i).isEmpty())
+            memcpy(callees_ + i, tf->callees_ + i, sizeof(ObservedCallees));
+
+    for (size_t i = 0; i < tests_size_; i++)
+        if (test(i).isEmpty())
+            memcpy(tests_ + i, tf->tests_ + i, sizeof(ObservedTest));
+
+    for (size_t i = 0; i < types_size_; i++)
+        if (types(i).isEmpty())
+            memcpy(types_ + i, tf->types_ + i, sizeof(ObservedValues));
+}
+
 const char* FeedbackIndex::name() const {
     switch (kind) {
     case FeedbackKind::Call:
