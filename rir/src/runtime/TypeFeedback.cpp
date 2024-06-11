@@ -46,7 +46,10 @@ void ObservedCallees::record(Function* function, SEXP callee,
 
 void ObservedCallees::mergeWith(const ObservedCallees& callees,
                                 Function* function) {
-    taken = std::max(taken, callees.taken);
+    if (taken <= CounterOverflow - callees.taken)
+        taken += callees.taken;
+    else
+        taken = CounterOverflow;
     auto caller = function->baseline()->body();
     for (unsigned i = 0; i < callees.numTargets; ++i) {
         if (numTargets == MaxTargets)
@@ -391,6 +394,10 @@ TypeFeedback* TypeFeedback::copy() const {
 }
 
 void TypeFeedback::mergeWith(const TypeFeedback* tf, Function* function) {
+    if (recordingCount_ <= UINT_MAX - tf->recordingCount_)
+        recordingCount_ += tf->recordingCount_;
+    else
+        recordingCount_ = UINT_MAX;
     for (size_t i = 0; i < callees_size_; i++)
         callees(i).mergeWith(tf->callees_[i], function);
 
