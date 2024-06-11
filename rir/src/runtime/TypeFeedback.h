@@ -347,11 +347,18 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
         callees(idx).record(function, callee, invalidateWhenFull);
+        REC_HOOK(recording::recordSC(callees(idx), owner_));
     }
 
-    void record_test(uint32_t idx, const SEXP e) { test(idx).record(e); }
+    void record_test(uint32_t idx, const SEXP e) {
+        test(idx).record(e);
+        REC_HOOK(recording::recordSC(test(idx), owner_));
+    }
 
-    void record_type(uint32_t idx, const SEXP e) { types(idx).record(e); }
+    void record_type(uint32_t idx, const SEXP e) {
+        types(idx).record(e);
+        REC_HOOK(recording::recordSC(types(idx), owner_));
+    }
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
         ObservedValues& slot = types(idx);

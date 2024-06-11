@@ -353,11 +353,6 @@ void recordMarkOptReasonHeuristic() {
     compileReasons_.set_heuristic<MarkOptReason>();
 }
 
-void recordTypeFeedbackVersionUpdateReason(size_t version) {
-    RECORDER_FILTER_GUARD(compile)
-    compileReasons_.set_heuristic<TypeFeedbackUpdate>(version);
-}
-
 void recordPirWarmupReason(size_t invocation_count) {
     RECORDER_FILTER_GUARD(compile)
     compileReasons_.set_heuristic<PirWarmupReason>(invocation_count);
