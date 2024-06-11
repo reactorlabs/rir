@@ -836,7 +836,7 @@ void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
                R_bcstack_t* args, bool leakedEnv, DeoptReason* deoptReason,
                SEXP deoptTrigger) {
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
-                                    *deoptReason, deoptTrigger));
+                                    context, *deoptReason, deoptTrigger));
 
     assert(m->numFrames >= 1);
     // Do not pass current context to inlinees
@@ -969,6 +969,7 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_typeInc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
@@ -992,6 +993,7 @@ void recordCallFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_calleeInc(baselineFeedback, idx, fun, value);
 }
 

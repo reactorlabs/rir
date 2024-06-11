@@ -2038,6 +2038,9 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                 feedback.stateBeforeLastForce = state;
             }
         };
+
+        REC_HOOK(
+            recording::recordSCFunctionContext(function, recordingContext));
         typeFeedback->record_typeInc(baselineFeedback, idx, recordTypeFunc);
     };
 
@@ -2357,6 +2360,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
+            REC_HOOK(
+                recording::recordSCFunctionContext(function, recordingContext));
             typeFeedback->record_calleeInc(baselineFeedback, idx, function,
                                            callee);
             NEXT();
@@ -2366,6 +2371,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
+            REC_HOOK(
+                recording::recordSCFunctionContext(function, recordingContext));
             typeFeedback->record_testInc(baselineFeedback, idx, t);
             NEXT();
         }
@@ -2374,6 +2381,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
+            REC_HOOK(
+                recording::recordSCFunctionContext(function, recordingContext));
             typeFeedback->record_typeInc(baselineFeedback, idx, t);
             NEXT();
         }

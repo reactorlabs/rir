@@ -25,12 +25,12 @@ namespace recording {
 
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
-void recordOsrCompile(const SEXP cls);
+void recordOsrCompile(const SEXP cls, const Context& assumptions);
 void recordCompileFinish(bool succesful);
 void recordLLVMBitcode(llvm::Function* fun);
 
-void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
-                 SEXP trigger);
+void recordDeopt(rir::Code* c, const DispatchTable* dt, const Context& context,
+                 DeoptReason& reason, SEXP trigger);
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
 
@@ -38,9 +38,11 @@ void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
 void recordInvocationDoCall();
 void recordInvocationNativeCallTrampoline();
 
-void recordSC(const ObservedCallees& type, Function* fun);
-void recordSC(const ObservedTest& type, Function* fun);
-void recordSC(const ObservedValues& type, Function* fun);
+void recordSCFunctionContext(Function* fun, const Context& ctx);
+void recordSC(const ObservedCallees& type, size_t idx);
+void recordSC(const ObservedTest& type, size_t idx);
+void recordSC(const ObservedValues& type, size_t idx);
+void recordSCChanged(bool changed);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();

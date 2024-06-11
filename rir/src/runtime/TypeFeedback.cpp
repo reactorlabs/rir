@@ -15,6 +15,7 @@ namespace rir {
 
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
+    REC_HOOK(bool isSuccesful = false);
     if (taken < CounterOverflow)
         taken++;
 
@@ -35,12 +36,16 @@ void ObservedCallees::record(Function* function, SEXP callee,
             if (idx == caller->extraPoolSize)
                 idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
+            REC_HOOK(isSuccesful = true);
         }
     } else {
         if (invalidateWhenFull) {
             invalid = true;
+            REC_HOOK(isSuccesful = true);
         }
     }
+
+    REC_HOOK(recording::recordSCChanged(isSuccesful));
 }
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
@@ -63,6 +68,7 @@ void DeoptReason::record(SEXP val, const Context& context) const {
     auto baselineFeedback =
         origin.function()->dispatchTable()->baselineFeedback();
     auto tf = origin.function()->typeFeedback(context);
+    REC_HOOK(recording::recordSCFunctionContext(origin.function(), context));
 
     switch (reason) {
     case DeoptReason::Unknown:
@@ -70,10 +76,13 @@ void DeoptReason::record(SEXP val, const Context& context) const {
     case DeoptReason::DeadBranchReached: {
         auto& feedback = tf->test(origin.idx());
         feedback.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSC(feedback, origin.function()));
+        REC_HOOK(recording::recordSCChanged(true));
+        REC_HOOK(recording::recordSC(feedback, origin.idx()));
+
         auto& bf = baselineFeedback->test(origin.idx());
         bf.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSC(bf, origin.function()));
+        REC_HOOK(recording::recordSCChanged(true));
+        REC_HOOK(recording::recordSC(bf, origin.idx()));
         break;
     }
     case DeoptReason::Typecheck: {
@@ -316,6 +325,7 @@ void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
                                     Function* function, SEXP callee,
                                     bool invalidateWhenFull) {
     record_callee(idx, function, callee, invalidateWhenFull);
+    REC_HOOK(recording::recordSC(callees(idx), idx));
     if (inclusive && inclusive != this)
         inclusive->record_callee(idx, function, callee, invalidateWhenFull);
 }
@@ -323,6 +333,7 @@ void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
 void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,
                                   const SEXP e) {
     record_test(idx, e);
+    REC_HOOK(recording::recordSC(test(idx), idx));
     if (inclusive && inclusive != this)
         inclusive->record_test(idx, e);
 }
@@ -330,6 +341,7 @@ void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,
 void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
                                   const SEXP e) {
     record_type(idx, e);
+    REC_HOOK(recording::recordSC(types(idx), idx));
     if (inclusive && inclusive != this)
         inclusive->record_type(idx, e);
 }
@@ -337,6 +349,9 @@ void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
 void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
                                   std::function<void(ObservedValues&)> f) {
     record_type(idx, f);
+    REC_HOOK(recording::recordSCChanged(true)); // TODO
+    REC_HOOK(recording::recordSC(types(idx), idx));
+
     if (inclusive && inclusive != this)
         inclusive->record_type(idx, f);
 }

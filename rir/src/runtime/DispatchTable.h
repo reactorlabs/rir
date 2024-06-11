@@ -363,6 +363,14 @@ struct DispatchTable
         }
     }
 
+    TypeFeedbackDispatchTable* typeFeedbacks() {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
+    const TypeFeedbackDispatchTable* typeFeedbacks() const {
+        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+    }
+
   private:
     DispatchTable() = delete;
     explicit DispatchTable(size_t capacity)
@@ -372,14 +380,6 @@ struct DispatchTable
               // and pointer to TypeFeedback dispatch table
               sizeof(DispatchTable), capacity + 1),
           typeFeedbackPos_(info.gc_area_length - 1) {}
-
-    TypeFeedbackDispatchTable* typeFeedbacks() {
-        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
-    }
-
-    const TypeFeedbackDispatchTable* typeFeedbacks() const {
-        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
-    }
 
     void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
         setEntry(typeFeedbackPos_, tfdp->container());

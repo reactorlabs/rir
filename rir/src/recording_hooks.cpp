@@ -64,33 +64,88 @@ std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
 
 const char* finalizerPath = nullptr;
 
+Function* sc_function_ = nullptr;
+Context sc_context_;
+bool sc_changed_;
+
 /************************ Hooks **********************************/
 
 #define RECORDER_FILTER_GUARD(field_name)                                      \
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
 
-void recordCompile(SEXP cls, const std::string& name,
-                   const Context& assumptions) {
-    RECORDER_FILTER_GUARD(compile);
+std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback) {
+    std::vector<SpeculativeContext> result;
 
+    auto baseline = sc_function_->baseline();
+
+    for (size_t i = 0; i < feedback->callees_size(); i++) {
+        auto observed = feedback->callees(i);
+        SpeculativeContext::ObservedCalleesArr callees;
+        callees.fill(NO_INDEX);
+
+        for (size_t j = 0; j < ObservedCallees::MaxTargets; j++) {
+            auto target = observed.getTarget(baseline, j);
+            if (Rf_isFunction(target)) {
+                callees[j] = recorder_.initOrGetRecording(target).first;
+            }
+        }
+
+        result.emplace_back(callees);
+    }
+
+    for (size_t i = 0; i < feedback->tests_size(); i++) {
+        result.emplace_back(feedback->test(i));
+    }
+
+    for (size_t i = 0; i < feedback->types_size(); i++) {
+        result.emplace_back(feedback->types(i));
+    }
+
+    return result;
+}
+
+void recordCompileCommon(SEXP cls, const std::string& name,
+                         const Context& assumptions, Context context) {
     auto rec = recorder_.initOrGetRecording(cls, name);
     if (rec.second.name == "") {
         rec.second.name = name;
     }
 
-    std::vector<SpeculativeContext> sc;
     auto dt = DispatchTable::unpack(BODY(cls));
-    recorder_.recordSpeculativeContext(dt, sc);
 
     auto dispatch_context = assumptions.toI();
+
+    // The actual context whose type feedback is used
+    // as in DispatchTable::getTypeFeedback
+    auto context_feedback =
+        dt->typeFeedbacks()->dispatch(context, [](const TypeFeedback* tf) {
+            return tf && tf->recordingCount() > 0;
+        });
+    context = context_feedback.first;
+
+    auto sc = getSpeculativeContext(context_feedback.second);
 
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
         std::forward_as_tuple(rec.first, dispatch_context, name, std::move(sc),
-                              std::move(compileReasons_)));
+                              std::move(compileReasons_), context));
     recordReasonsClear();
+}
+
+void recordCompile(SEXP cls, const std::string& name,
+                   const Context& assumptions) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto dt = DispatchTable::unpack(BODY(cls));
+
+    // As in rir::pir::Compiler::compileClosure
+    Context context = assumptions;
+    dt->baseline()->clearDisabledAssumptions(context);
+    context = dt->combineContextWith(context);
+
+    recordCompileCommon(cls, name, assumptions, context);
 }
 
 void recordCompileFinish(bool succesful) {
@@ -116,12 +171,13 @@ void recordCompileFinish(bool succesful) {
     }
 }
 
-void recordOsrCompile(const SEXP cls) {
+void recordOsrCompile(const SEXP cls, const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
 
     auto env = PROTECT(CLOENV(cls));
     auto symbols = PROTECT(R_lsInternal(env, TRUE));
 
+    // Get the name
     std::string name = "";
 
     auto size = Rf_length(symbols);
@@ -139,10 +195,11 @@ void recordOsrCompile(const SEXP cls) {
 
         UNPROTECT(2);
     }
-
     UNPROTECT(2);
 
-    recordCompile(cls, name, pir::Compiler::defaultContext);
+    // initial context is same as assumptions,
+    // as in rir::pir::Compiler::compileClosure
+    recordCompileCommon(cls, name, assumptions, assumptions);
 }
 
 void recordLLVMBitcode(llvm::Function* fun) {
@@ -162,8 +219,8 @@ size_t Record::indexOfBaseline(const rir::Code* code) {
     return initOrGetRecording(const_cast<DispatchTable*>(dt)).first;
 }
 
-void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
-                 SEXP trigger) {
+void recordDeopt(rir::Code* c, const DispatchTable* dt, const Context& context,
+                 DeoptReason& reason, SEXP trigger) {
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
@@ -190,7 +247,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
            "Could not locate deopt reason location");
 
     recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx,
-                                 reason.origin.idx(), trigger);
+                                 reason.origin.idx(), context, trigger);
 }
 
 void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
@@ -232,57 +289,48 @@ void recordInvocationNativeCallTrampoline() {
     invocation_source_.set(InvocationEvent::NativeCallTrampoline);
 }
 
-void recordSC(const SpeculativeContext& sc, Function* fun) {
+void recordSCFunctionContext(Function* fun, const Context& ctx) {
     RECORDER_FILTER_GUARD(typeFeedback);
-
-    // Find is it is a baseline (-1) or a promise
-    auto* dt = fun->dispatchTable();
-    auto* baseline = dt->baseline()->body();
-
-    auto* code = fun->body();
-    ssize_t codeIndex = -2;
-    if (baseline == code) {
-        codeIndex = -1;
-    } else {
-        for (size_t i = 0; i < baseline->extraPoolSize; i++) {
-            SEXP epe = baseline->getExtraPoolEntry(i);
-            if (Code::check(epe) == code) {
-                codeIndex = i;
-                break;
-            }
-        }
-    }
-
-    if (codeIndex == -2) {
-        std::cerr << "[rec speculative ctx] code not found" << std::endl;
-        return;
-    }
-
-    // TODO offset
-    recorder_.record<SpeculativeContextEvent>(dt, codeIndex, 0, sc);
+    sc_function_ = fun;
+    sc_context_ = ctx;
 }
 
-void recordSC(const ObservedCallees& callees, Function* fun) {
+void recordSC(const SpeculativeContext& sc, size_t idx) {
+    assert(sc_function_ != nullptr);
+
+    bool isPromise = sc_function_ != sc_function_->baseline();
+    recorder_.record<SpeculativeContextEvent>(sc_function_->dispatchTable(),
+                                              isPromise, idx, sc, sc_context_,
+                                              sc_changed_);
+}
+
+void recordSC(const ObservedCallees& callees, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
     SpeculativeContext::ObservedCalleesArr targets;
     targets.fill(-1);
 
     for (size_t i = 0; i < callees.numTargets; i++) {
         targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(fun, i)).first;
+            recorder_.initOrGetRecording(callees.getTarget(sc_function_, i))
+                .first;
     }
 
-    recordSC(SpeculativeContext(targets), fun);
+    recordSC(SpeculativeContext(targets), idx);
 }
 
-void recordSC(const ObservedTest& test, Function* fun) {
+void recordSC(const ObservedTest& test, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(test), fun);
+    recordSC(SpeculativeContext(test), idx);
 }
 
-void recordSC(const ObservedValues& type, Function* fun) {
+void recordSC(const ObservedValues& type, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(type), fun);
+    recordSC(SpeculativeContext(type), idx);
+}
+
+void recordSCChanged(bool changed) {
+    RECORDER_FILTER_GUARD(typeFeedback);
+    sc_changed_ = changed;
 }
 
 SEXP setClassName(SEXP s, const char* className) {
