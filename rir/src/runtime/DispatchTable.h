@@ -133,7 +133,7 @@ struct DispatchTable
         if (tf.second != baselineFeedback())
             tf.second->fillWith(baselineFeedback());
         UNPROTECT(1);
-        return tf.second;
+        return baselineFeedback();
     }
 
     // method used to retrieve TypeFeedback used for feedback recording
