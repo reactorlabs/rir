@@ -48,11 +48,13 @@ struct {
     bool deopt : 1;
     bool typeFeedback : 1;
     bool invoke : 1;
+    bool context : 1;
 } filter_ = {
     .compile = true,
     .deopt = true,
     .typeFeedback = false,
     .invoke = false,
+    .context = false,
 };
 
 // Don't record invocations while replaying compile events
@@ -332,6 +334,12 @@ void recordSCChanged(bool changed) {
     sc_changed_ = changed;
 }
 
+void recordContextCreated(const DispatchTable* dt, const Context& ctx) {
+    RECORDER_FILTER_GUARD(context);
+
+    recorder_.record<ContextCreatedEvent>(dt, ctx);
+}
+
 SEXP setClassName(SEXP s, const char* className) {
     SEXP t = PROTECT(Rf_mkString(className));
     Rf_setAttrib(s, R_ClassSymbol, t);
@@ -452,6 +460,7 @@ void recordFinalizer(SEXP) {
     UNPROTECT(1);
 }
 
+// TODO
 void recordExecution(const char* filePath, const char* filterArg) {
     if (filterArg != nullptr) {
         filter_ = {.compile = false,
@@ -471,6 +480,8 @@ void recordExecution(const char* filePath, const char* filterArg) {
                 filter_.typeFeedback = true;
             } else if (str == "Invoke") {
                 filter_.invoke = true;
+            } else if (str == "Context") {
+                filter_.context = true;
             } else {
                 std::cerr << "Unknown recording filter type: " << str
                           << "\nValid flags are:\n- Compile\n- Deopt\n- "
@@ -508,12 +519,13 @@ void recordExecution(const char* filePath, const char* filterArg) {
 } // namespace rir
 
 REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
-                              SEXP invocation) {
+                              SEXP invocation, SEXP context) {
     rir::recording::filter_ = {
         .compile = (bool)Rf_asLogical(compile),
         .deopt = (bool)Rf_asLogical(deoptimize),
         .typeFeedback = (bool)Rf_asLogical(typeFeedback),
         .invoke = (bool)Rf_asLogical(invocation),
+        .context = (bool)Rf_asLogical(context),
     };
 
     return R_NilValue;

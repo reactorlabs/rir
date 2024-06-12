@@ -477,6 +477,28 @@ class InvocationEvent : public VersionEvent {
     SourceSet source = SourceSet::None();
 };
 
+class ContextCreatedEvent : public DtEvent {
+  public:
+    ContextCreatedEvent() = default;
+    virtual ~ContextCreatedEvent() = default;
+
+    ContextCreatedEvent(size_t dispatchTableIndex, const Context& context)
+        : DtEvent(dispatchTableIndex), context(context) {}
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_context";
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
+
+  private:
+    Context context;
+};
+
 // From names.c
 extern "C" FUNTAB R_FunTab[];
 

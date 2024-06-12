@@ -124,6 +124,8 @@ struct DispatchTable
             PROTECT(tf->container());
             feedbacks->insert(ctx, tf);
             UNPROTECT(1);
+
+            REC_HOOK(recording::recordContextCreated(this, ctx));
         }
         return tf;
     }

@@ -587,6 +587,25 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
     out << " }";
 }
 
+const std::vector<const char*> ContextCreatedEvent::fieldNames = {
+    "dispatchTable", "context"};
+
+SEXP ContextCreatedEvent::toSEXP() const {
+    return serialization::fields_to_sexp<ContextCreatedEvent>(
+        dispatchTableIndex, context);
+}
+
+void ContextCreatedEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<ContextCreatedEvent, uint64_t, Context>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {context, serialization::context_from_sexp});
+}
+
+void ContextCreatedEvent::print(const std::vector<FunRecording>& mapping,
+                                std::ostream& out) const {
+    out << "ContextCreated";
+}
+
 std::string getEnvironmentName(SEXP env) {
     if (env == R_GlobalEnv) {
         return GLOBAL_ENV_NAME;
