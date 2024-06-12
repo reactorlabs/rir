@@ -288,11 +288,11 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "dispatchTable", "isPromise", "index", "sc", "context", "changed"};
+    "dispatchTable", "is_promise", "index", "sc", "context", "changed"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        dispatchTableIndex, isPromise, index, sc, context, changed);
+        dispatchTableIndex, is_promise, index, sc, context, changed);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
@@ -300,7 +300,7 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
                                            bool, uint64_t, SpeculativeContext,
                                            Context, bool>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
-        {isPromise, serialization::bool_from_sexp},
+        {is_promise, serialization::bool_from_sexp},
         {index, serialization::uint64_t_from_sexp},
         {sc, serialization::speculative_context_from_sexp},
         {context, serialization::context_from_sexp},
@@ -387,13 +387,15 @@ const std::vector<const char*> CompilationEvent::fieldNames = {
     "time",
     "subevents",
     "bitcode",
-    "succesful"};
+    "succesful",
+    "context"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
         closureIndex, dispatch_context, compileName, speculative_contexts,
         compile_reasons.heuristic, compile_reasons.condition,
-        compile_reasons.osr, time_length, subevents, bitcode, succesful);
+        compile_reasons.osr, time_length, subevents, bitcode, succesful,
+        context);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
@@ -401,7 +403,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
         CompilationEvent, uint64_t, uint64_t, std::string,
         std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
         std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
-        Duration, std::vector<size_t>, std::string, bool>(
+        Duration, std::vector<size_t>, std::string, bool, Context>(
         sexp, {closureIndex, serialization::uint64_t_from_sexp},
         {dispatch_context, serialization::uint64_t_from_sexp},
         {compileName, serialization::string_from_sexp},
@@ -416,7 +418,8 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
          serialization::vector_from_sexp<size_t,
                                          serialization::uint64_t_from_sexp>},
         {bitcode, serialization::string_from_sexp},
-        {succesful, serialization::bool_from_sexp});
+        {succesful, serialization::bool_from_sexp},
+        {context, serialization::context_from_sexp});
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,

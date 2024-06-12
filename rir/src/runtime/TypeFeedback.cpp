@@ -75,13 +75,14 @@ void DeoptReason::record(SEXP val, const Context& context) const {
         break;
     case DeoptReason::DeadBranchReached: {
         auto& feedback = tf->test(origin.idx());
+        REC_HOOK(
+            recording::recordSCChanged(feedback.seen != ObservedTest::Both));
         feedback.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSCChanged(true));
         REC_HOOK(recording::recordSC(feedback, origin.idx()));
 
         auto& bf = baselineFeedback->test(origin.idx());
+        REC_HOOK(recording::recordSCChanged(bf.seen != ObservedTest::Both));
         bf.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSCChanged(true));
         REC_HOOK(recording::recordSC(bf, origin.idx()));
         break;
     }
@@ -348,8 +349,9 @@ void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
 
 void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
                                   std::function<void(ObservedValues&)> f) {
+    REC_HOOK(uint32_t old; memcpy(&old, &test(idx), sizeof(old)));
     record_type(idx, f);
-    REC_HOOK(recording::recordSCChanged(true)); // TODO
+    REC_HOOK(recording::recordSCChanged(memcmp(&old, &test(idx), sizeof(old))));
     REC_HOOK(recording::recordSC(types(idx), idx));
 
     if (inclusive && inclusive != this)

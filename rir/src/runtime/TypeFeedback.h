@@ -183,11 +183,7 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
-        REC_HOOK(using U = union {
-            ObservedValues val;
-            uint32_t i;
-        });
-        REC_HOOK(U old = {*this});
+        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -214,8 +210,7 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        REC_HOOK(U next = {*this});
-        REC_HOOK(recording::recordSCChanged(old.i != next.i));
+        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 };
 

@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("type", "fun", "env", "ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta")
+  columns <- c("type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta", "changed", "is_promise")
 
   line(columns)
 
@@ -62,6 +62,7 @@ recordings.csv <- function(r) {
       event$env <- f[2]
 
       event$ctx <- pp(e$dispatch_context, "context")
+      event$speculative_ctx <- pp( e$context, "context" )
 
       event$speculative <- paste(insert.commas(lapply(
         e$speculative_contexts,
@@ -93,6 +94,7 @@ recordings.csv <- function(r) {
       event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
+      event$speculative_ctx <- pp(e$context, "context")
       event$reason <- paste0(pp(e$reason, "deopt_reason"), "@", e$reason_code_idx)
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
@@ -113,7 +115,11 @@ recordings.csv <- function(r) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$offset)
+      event$speculative_ctx <- pp(e$context, "context")
+      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
+
+      event$is_promise <- e$is_promise
+      event$changed <- e$changed
 
     } else {
       event$type = paste0("[", class(e), "]")

@@ -74,10 +74,9 @@ bool sc_changed_;
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
 
-std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback) {
+std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
+                                                      Function* baseline) {
     std::vector<SpeculativeContext> result;
-
-    auto baseline = sc_function_->baseline();
 
     for (size_t i = 0; i < feedback->callees_size(); i++) {
         auto observed = feedback->callees(i);
@@ -124,7 +123,7 @@ void recordCompileCommon(SEXP cls, const std::string& name,
         });
     context = context_feedback.first;
 
-    auto sc = getSpeculativeContext(context_feedback.second);
+    auto sc = getSpeculativeContext(context_feedback.second, dt->baseline());
 
     compilation_stack_.emplace(
         std::piecewise_construct,

@@ -292,7 +292,7 @@ class SpeculativeContextEvent : public DtEvent {
     SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
                             size_t index, const SpeculativeContext& sc,
                             const Context& context, bool changed)
-        : DtEvent(dispatchTableIndex), isPromise(isPromise), index(index),
+        : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
           sc(sc), context(context), changed(changed) {}
 
     SpeculativeContextEvent() = default;
@@ -311,7 +311,7 @@ class SpeculativeContextEvent : public DtEvent {
                std::ostream& out) const override;
 
   private:
-    bool isPromise;
+    bool is_promise;
     // Index of the slot
     size_t index;
     SpeculativeContext sc = SpeculativeContext({0});
