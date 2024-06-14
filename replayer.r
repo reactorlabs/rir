@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta", "changed", "is_promise")
+  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta", "changed", "is_promise")
 
   line(columns)
 
@@ -47,8 +47,13 @@ recordings.csv <- function(r) {
     recordings.printEventPart(obj, type, r$functions)
   }
 
+  idx <- 1
+
   for (e in r$events) {
     event <- NULL
+
+    event$idx <- idx
+    idx <- idx + 1
 
     if (class(e) == "event_compile") {
       if (!e$succesful) {
