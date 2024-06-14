@@ -616,7 +616,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
 
         switch (sc.type) {
         case rir::recording::SpeculativeContextType::Callees: {
-            ss << "Callees[";
+            ss << "[";
             bool first = true;
             for (auto c : sc.value.callees) {
                 if (c == rir::recording::NO_INDEX)
@@ -637,7 +637,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         }
 
         case rir::recording::SpeculativeContextType::Test:
-            ss << "Test{";
+            ss << "(";
             switch (sc.value.test.seen) {
             case rir::ObservedTest::None:
                 ss << "None";
@@ -652,13 +652,13 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                 ss << "Both";
                 break;
             }
-            ss << "}";
+            ss << ")";
             break;
 
         case rir::recording::SpeculativeContextType::Values:
-            ss << "Values{";
+            ss << "(";
             sc.value.values.print(ss);
-            ss << "}";
+            ss << ")";
             break;
         }
     } else if (type_str == "reason") {
