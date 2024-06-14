@@ -289,12 +289,13 @@ class VersionEvent : public DtEvent {
  */
 class SpeculativeContextEvent : public DtEvent {
   public:
-    SpeculativeContextEvent(size_t dispatchTableIndex, ssize_t codeIndex,
-                            size_t offset, const SpeculativeContext& sc)
-        : DtEvent(dispatchTableIndex), codeIndex(codeIndex), offset(offset),
-          sc(sc) {}
-    SpeculativeContextEvent()
-        : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
+    SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
+                            size_t index, const SpeculativeContext& sc,
+                            bool changed)
+        : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
+          sc(sc), changed(changed) {}
+
+    SpeculativeContextEvent() = default;
 
     virtual ~SpeculativeContextEvent() = default;
 
@@ -310,10 +311,11 @@ class SpeculativeContextEvent : public DtEvent {
                std::ostream& out) const override;
 
   private:
-    // -1 for function body itself, n≥0 for promise index
-    ssize_t codeIndex;
-    size_t offset;
-    SpeculativeContext sc;
+    bool is_promise;
+    // Index of the slot
+    size_t index;
+    SpeculativeContext sc = SpeculativeContext({0});
+    bool changed;
 };
 
 class CompilationEvent : public ClosureEvent {
@@ -331,14 +333,7 @@ class CompilationEvent : public ClosureEvent {
           speculative_contexts(std::move(speculative_contexts)),
           compile_reasons(std::move(compile_reasons)) {}
 
-    CompilationEvent(CompilationEvent&& other)
-        : ClosureEvent(other.closureIndex),
-          dispatch_context(other.dispatch_context),
-          compileName(std::move(other.compileName)),
-          speculative_contexts(std::move(other.speculative_contexts)),
-          compile_reasons(std::move(other.compile_reasons)),
-          time_length(other.time_length), subevents(std::move(other.subevents)),
-          bitcode(std::move(other.bitcode)), succesful(other.succesful) {}
+    CompilationEvent(CompilationEvent&& other) = default;
 
     CompilationEvent() {}
 
@@ -586,12 +581,6 @@ class Record {
 
     std::pair<size_t, FunRecording&>
     initOrGetRecording(const SEXP cls, const std::string& name = "");
-
-    void recordSpeculativeContext(DispatchTable* dt,
-                                  std::vector<SpeculativeContext>& ctx);
-
-    void recordSpeculativeContext(const Code* code,
-                                  std::vector<SpeculativeContext>& ctx);
 
     std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();

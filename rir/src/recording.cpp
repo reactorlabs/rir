@@ -27,7 +27,6 @@ namespace recording {
 
 SEXP PirWarmupReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-
     SET_VECTOR_ELT(vec, 0, serialization::to_sexp(invocationCount));
 
     UNPROTECT(1);
@@ -58,79 +57,6 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
 
 bool Record::contains(const DispatchTable* dt) {
     return dt_to_recording_index_.count(dt);
-}
-
-void Record::recordSpeculativeContext(DispatchTable* dt,
-                                      std::vector<SpeculativeContext>& ctx) {
-    auto fun = dt->baseline();
-    auto code = fun->body();
-    recordSpeculativeContext(code, ctx);
-}
-
-void Record::recordSpeculativeContext(const Code* code,
-                                      std::vector<SpeculativeContext>& ctx) {
-    auto feedback = code->function()->typeFeedback();
-
-    Opcode* end = code->endCode();
-    Opcode* pc = code->code();
-    Opcode* prev = NULL;
-    Opcode* pprev = NULL;
-
-    while (pc < end) {
-        auto bc = BC::decode(pc, code);
-        switch (bc.bc) {
-        case Opcode::mk_promise_:
-        case Opcode::mk_eager_promise_: {
-            auto promise = code->getPromise(bc.immediate.fun);
-            recordSpeculativeContext(promise, ctx);
-            break;
-        }
-        case Opcode::close_: {
-            // prev is the push_ of srcref
-            // pprev is the push_ of body
-            auto body = BC::decodeShallow(pprev).immediateConst();
-            auto dt = DispatchTable::unpack(body);
-            recordSpeculativeContext(dt, ctx);
-            break;
-        }
-        case Opcode::record_call_: {
-            auto observed = feedback->callees(bc.immediate.i);
-            SpeculativeContext::ObservedCalleesArr callees;
-
-            for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
-                size_t idx;
-                if (i < observed.numTargets) {
-                    auto target = observed.getTarget(code->function(), i);
-                    if (Rf_isFunction(target)) {
-                        auto rec = initOrGetRecording(target);
-                        idx = rec.first;
-                    } else {
-                        idx = NO_INDEX;
-                    }
-                } else {
-                    idx = NO_INDEX;
-                }
-                callees[i] = idx;
-            }
-
-            ctx.emplace_back(std::move(callees));
-            break;
-        }
-        case Opcode::record_test_: {
-            ctx.emplace_back(feedback->test(bc.immediate.i));
-            break;
-        }
-        case Opcode::record_type_: {
-            ctx.emplace_back(feedback->types(bc.immediate.i));
-            break;
-        }
-        default: {
-        }
-        }
-        pprev = prev;
-        prev = pc;
-        pc = bc.next(pc);
-    }
 }
 
 std::pair<size_t, FunRecording&>
@@ -362,23 +288,22 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "dispatchTable", "codeIndex", "offset", "sc"};
+    "dispatchTable", "is_promise", "index", "sc", "changed"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        dispatchTableIndex, codeIndex, offset, sc);
+        dispatchTableIndex, is_promise, index, sc, changed);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
-    assert(codeIndex >= -1);
-
     return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
-                                           int64_t, uint64_t,
-                                           SpeculativeContext>(
+                                           bool, uint64_t, SpeculativeContext,
+                                           bool>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
-        {codeIndex, serialization::int64_t_from_sexp},
-        {offset, serialization::uint64_t_from_sexp},
-        {sc, serialization::speculative_context_from_sexp});
+        {is_promise, serialization::bool_from_sexp},
+        {index, serialization::uint64_t_from_sexp},
+        {sc, serialization::speculative_context_from_sexp},
+        {changed, serialization::bool_from_sexp});
 }
 
 bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
@@ -398,13 +323,7 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
                                     std::ostream& out) const {
     out << "SpeculativeContextEvent{\n        code=";
 
-    if (codeIndex == -1) {
-        out << "<body>";
-    } else if (codeIndex >= 0) {
-        out << "<promise #" << codeIndex << ">";
-    }
-
-    out << "\n        offset=" << offset << "\n        sc=";
+    out << "\n        index=" << index << "\n        sc=";
     sc.print(mapping, out);
     out << "\n    }";
 }

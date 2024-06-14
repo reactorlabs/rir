@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("type", "fun", "env", "ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta")
+  columns <- c("type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta", "changed", "is_promise")
 
   line(columns)
 
@@ -113,8 +113,10 @@ recordings.csv <- function(r) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$offset)
+      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
 
+      event$is_promise <- e$is_promise
+      event$changed <- e$changed
     } else {
       event$type = paste0("[", class(e), "]")
     }
