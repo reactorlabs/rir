@@ -105,12 +105,10 @@ struct DispatchTable
         auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
             return tf && tf->recordingCount() > 0;
         });
-        std::pair<Context, TypeFeedback*> tf;
-        if (!entry.second)
-            tf = std::make_pair(baseline()->context(),
-                                baselineFeedback()->copy());
-        else
-            tf = std::make_pair(entry.first, entry.second->copy());
+        if (!entry.second || entry.second == baselineFeedback())
+            return baselineFeedback();
+        std::pair<Context, TypeFeedback*> tf =
+            std::make_pair(entry.first, entry.second->copy());
         PROTECT(tf.second->container());
         auto function = baseline();
         // contexts which are smaller than ctx and have compiled version
@@ -133,7 +131,7 @@ struct DispatchTable
         if (tf.second != baselineFeedback())
             tf.second->fillWith(baselineFeedback());
         UNPROTECT(1);
-        return baselineFeedback();
+        return tf.second;
     }
 
     // method used to retrieve TypeFeedback used for feedback recording

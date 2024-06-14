@@ -409,10 +409,6 @@ void TypeFeedback::mergeWith(const TypeFeedback* tf, Function* function) {
 }
 
 void TypeFeedback::fillWith(const TypeFeedback* tf) {
-    for (size_t i = 0; i < callees_size_; i++)
-        if (callees(i).isEmpty())
-            memcpy(callees_ + i, tf->callees_ + i, sizeof(ObservedCallees));
-
     for (size_t i = 0; i < tests_size_; i++)
         if (test(i).isEmpty())
             memcpy(tests_ + i, tf->tests_ + i, sizeof(ObservedTest));
