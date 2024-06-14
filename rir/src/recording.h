@@ -384,7 +384,7 @@ class DeoptEvent : public VersionEvent {
     DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
                DeoptReason::Reason reason,
-               std::pair<ssize_t, ssize_t> reasonCodeIdx,
+               size_t reasonCodeIdx, ssize_t reasonPromiseIdx,
                uint32_t reasonCodeOff, SEXP trigger);
     virtual ~DeoptEvent();
     DeoptEvent() = default;
@@ -404,8 +404,11 @@ class DeoptEvent : public VersionEvent {
 
   private:
     DeoptReason::Reason reason_;
-    /* negative indicates promise index, positive function index */
-    std::pair<ssize_t, ssize_t> reasonCodeIdx_;
+    size_t reasonCodeIdx_;
+    // If it is a promise (>= 0), this is the index
+    // in the extraEntryPools
+    ssize_t reasonPromiseIdx_;
+
     uint32_t reasonCodeOff_;
 
     // These 2 fields are mutually exclusive
@@ -528,9 +531,6 @@ class Record {
     // TODO deque (?)
     std::vector<std::unique_ptr<Event>> log;
 
-  protected:
-    size_t indexOfBaseline(const rir::Code* code);
-
   public:
     Record() = default;
     ~Record();
@@ -582,7 +582,7 @@ class Record {
     std::pair<size_t, FunRecording&>
     initOrGetRecording(const SEXP cls, const std::string& name = "");
 
-    std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
+    std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
     void reset() {

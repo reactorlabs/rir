@@ -98,7 +98,16 @@ recordings.csv <- function(r) {
       event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
-      event$reason <- paste0(pp(e$reason, "deopt_reason"), "@", e$reason_code_idx)
+
+      if ( e$reason_promise_idx >= 0 ){
+          reason <- paste0( "Promise ", e$reason_promise_idx )
+      } else {
+          reason <- "Baseline"
+      }
+
+      reason <- paste0("(", reason, ",offset=", e$reason_code_off, ")")
+
+      event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
 

@@ -190,24 +190,28 @@ SEXP Record::save() {
     return recordSexp;
 }
 
-std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
-                                              rir::Code* needle) {
+std::pair<size_t, ssize_t> Record::findIndex(rir::Code* code,
+                                             rir::Code* needle) {
+    const auto toIdx = [this](Code* c) {
+        return initOrGetRecording(c->function()->dispatchTable()).first;
+    };
+
     if (code == needle) {
-        return {indexOfBaseline(code), -1};
+        return {toIdx(code), -1};
     }
 
     // find the index of the reason source
     // 1. try promises
     for (size_t i = 0; i < code->extraPoolSize; i++) {
         auto extraEntry = code->getExtraPoolEntry(i);
-        auto prom = (Code*)STDVEC_DATAPTR(extraEntry);
-        if (prom->info.magic == CODE_MAGIC && prom == needle) {
-            return {indexOfBaseline(code), i};
+        auto prom = Code::check(extraEntry);
+        if (prom != nullptr && prom == needle) {
+            return {toIdx(code), i};
         }
     }
 
     // 2. search globally
-    return {indexOfBaseline(needle), -1};
+    return {toIdx(needle), -1};
 }
 
 // Plays along nicer with diff tools
@@ -419,11 +423,12 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
-                       DeoptReason::Reason reason,
-                       std::pair<ssize_t, ssize_t> reasonCodeIdx,
-                       uint32_t reasonCodeOff, SEXP trigger)
+                       DeoptReason::Reason reason, size_t reasonCodeIdx,
+                       ssize_t reasonPromiseIdx, uint32_t reasonCodeOff,
+                       SEXP trigger)
     : VersionEvent(dispatchTableIndex, version), reason_(reason),
-      reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff) {
+      reasonCodeIdx_(reasonCodeIdx), reasonPromiseIdx_(reasonPromiseIdx),
+      reasonCodeOff_(reasonCodeOff) {
     setTrigger(trigger);
 }
 
@@ -476,30 +481,30 @@ Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
 }
 
 bool DeoptEvent::containsReference(size_t recordingIdx) const {
-    return (size_t)reasonCodeIdx_.first == recordingIdx ||
+    return reasonCodeIdx_ == recordingIdx ||
            (size_t)triggerClosure_ == recordingIdx ||
            VersionEvent::containsReference(recordingIdx);
 }
 
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const {
-    const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_.first];
+    const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_];
 
     out << "DeoptEvent{ [version=" << this->version;
     out << "]\n        reason=" << this->reason_;
     out << ",\n        reasonCodeIdx=(" << reasonRec << ","
-        << this->reasonCodeIdx_.second << ")";
+        << this->reasonPromiseIdx_ << ")";
     out << ",\n        reasonCodeOff=" << this->reasonCodeOff_ << "\n    }";
 }
 
 const std::vector<const char*> DeoptEvent::fieldNames = {
-    "dispatchTable",   "version", "reason",        "reason_code_off",
-    "reason_code_idx", "trigger", "triggerClosure"};
+    "dispatchTable",      "version",         "reason",  "reason_code_idx",
+    "reason_promise_idx", "reason_code_off", "trigger", "triggerClosure"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
-        dispatchTableIndex, version, reason_, reasonCodeOff_, reasonCodeIdx_,
-        trigger_, triggerClosure_);
+        dispatchTableIndex, version, reason_, reasonCodeIdx_, reasonPromiseIdx_,
+        reasonCodeOff_, trigger_, triggerClosure_);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
@@ -507,16 +512,14 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     ssize_t triggerClosure = -1;
 
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
-                                    DeoptReason::Reason, uint32_t,
-                                    std::pair<int64_t, int64_t>, SEXP, int64_t>(
+                                    DeoptReason::Reason, uint64_t, int64_t,
+                                    uint32_t, SEXP, int64_t>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {reason_, serialization::deopt_reason_from_sexp},
+        {reasonCodeIdx_, serialization::uint64_t_from_sexp},
+        {reasonPromiseIdx_, serialization::int64_t_from_sexp},
         {reasonCodeOff_, serialization::uint32_t_from_sexp},
-        {reasonCodeIdx_,
-         serialization::pair_from_sexp<int64_t, int64_t,
-                                       serialization::int64_t_from_sexp,
-                                       serialization::int64_t_from_sexp>},
         {trigger, serialization::sexp_from_sexp},
         {triggerClosure, serialization::int64_t_from_sexp});
 

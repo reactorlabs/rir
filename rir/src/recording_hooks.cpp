@@ -195,11 +195,6 @@ void recordLLVMBitcode(llvm::Function* fun) {
     compilation_stack_.top().second.set_bitcode(ss.str());
 }
 
-size_t Record::indexOfBaseline(const rir::Code* code) {
-    DispatchTable* dt = code->function()->dispatchTable();
-    return initOrGetRecording(const_cast<DispatchTable*>(dt)).first;
-}
-
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger) {
     RECORDER_FILTER_GUARD(deopt);
@@ -224,10 +219,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     auto reasonCodeIdx = recorder_.findIndex(dt->baseline()->body(),
                                              reason.origin.function()->body());
 
-    assert(reasonCodeIdx.first >= 0 &&
-           "Could not locate deopt reason location");
-
-    recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx,
+    recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx.first, reasonCodeIdx.second,
                                  reason.origin.idx(), trigger);
 }
 
