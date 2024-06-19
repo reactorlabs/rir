@@ -162,22 +162,6 @@ Record::~Record() {
 }
 
 SEXP Record::save() {
-    // Check if we have dispatch tables without an associated SEXP and remove
-    // related events. Might be avoidable eventually.
-    size_t recIdx = 0;
-    for (auto& recording : functions) {
-        if (Rf_isNull(recording.closure)) {
-            auto refersToRecording =
-                [recIdx](std::unique_ptr<rir::recording::Event>& event) {
-                    return event->containsReference(recIdx);
-                };
-
-            log.erase(std::remove_if(log.begin(), log.end(), refersToRecording),
-                      log.end());
-        }
-        recIdx++;
-    }
-
     const char* fields[] = {"functions", "events", ""};
     auto recordSexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     auto bodiesSexp = PROTECT(serialization::to_sexp(functions));
