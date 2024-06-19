@@ -34,7 +34,8 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 void recordDtOverwrite(const DispatchTable* dt, size_t version,
                        size_t oldDeoptCount);
 
-void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
+void recordInvocation(Function* f);
+void recordUnregisterInvocation(Function* f);
 void recordInvocationDoCall();
 void recordInvocationNativeCallTrampoline();
 

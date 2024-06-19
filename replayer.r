@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta", "changed", "is_promise")
+  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "changed", "is_promise")
 
   line(columns)
 
@@ -54,6 +54,8 @@ recordings.csv <- function(r) {
 
     event$idx <- idx
     idx <- idx + 1
+
+    # todo common get fun
 
     if (class(e) == "event_compile") {
       if (!e$succesful) {
@@ -117,9 +119,13 @@ recordings.csv <- function(r) {
 
       event$ctx <- pp(e$context, "context")
 
-      event$invocation_delta <- e$deltaCount
-      event$deopt_delta <- e$deltaDeopt
       event$reason <- pp(e$source, "invocation_source")
+    } else if (class(e) == "event_unregister_invocation"){
+      event$type <- "UnregisterInvocation"
+
+      f <- get_fun(e$dispatchTable)
+      event$fun <- f[1]
+      event$env <- f[2]
     } else if (class(e) == "event_sc") {
       event$type <- "SpeculativeContext"
 

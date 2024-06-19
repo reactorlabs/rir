@@ -553,34 +553,45 @@ void DtInitEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {
-    "dispatchTable", "context", "deltaCount", "deltaDeopt", "source"};
+    "dispatchTable", "context", "source"};
 
 SEXP InvocationEvent::toSEXP() const {
-    return serialization::fields_to_sexp<InvocationEvent>(
-        dispatchTableIndex, version, deltaCount, deltaDeopt, source);
+    return serialization::fields_to_sexp<InvocationEvent>(dispatchTableIndex,
+                                                          version, source);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, int64_t,
-                                    uint64_t, SourceSet>(
+    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context,
+                                    SourceSet>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {deltaCount, serialization::int64_t_from_sexp},
-        {deltaDeopt, serialization::uint64_t_from_sexp},
         {source, serialization::invocation_source_set_from_sexp});
 }
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,
                             std::ostream& out) const {
     out << std::dec << "Invocation{ [version=" << version << "] ";
-    if (deltaCount > 0) {
-        out << "invocations += " << deltaCount;
-    } else if (deltaCount < 0) {
-        out << "invocations -= " << -deltaCount;
-    } else {
-        out << "deoptCount += " << deltaDeopt;
-    }
     out << " }";
+}
+
+const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
+    "dispatchTable", "context"};
+
+SEXP UnregisterInvocationEvent::toSEXP() const {
+    return serialization::fields_to_sexp<UnregisterInvocationEvent>(
+        dispatchTableIndex, version);
+}
+
+void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<UnregisterInvocationEvent, uint64_t,
+                                    Context>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp});
+}
+
+void UnregisterInvocationEvent::print(const std::vector<FunRecording>& mapping,
+                                      std::ostream& out) const {
+    out << "UnregisterInvocation { [ version=" << version << " ] }";
 }
 
 std::string getEnvironmentName(SEXP env) {

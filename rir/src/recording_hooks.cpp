@@ -219,7 +219,8 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     auto reasonCodeIdx = recorder_.findIndex(dt->baseline()->body(),
                                              reason.origin.function()->body());
 
-    recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx.first, reasonCodeIdx.second,
+    recorder_.record<DeoptEvent>(dt, version, reason.reason,
+                                 reasonCodeIdx.first, reasonCodeIdx.second,
                                  reason.origin.idx(), trigger);
 }
 
@@ -232,7 +233,7 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
     recorder_.record<DtInitEvent>(dt, funIdx, oldDeoptCount);
 }
 
-void recordInvocation(Function* f, ssize_t deltaCount, size_t previousCount) {
+void recordInvocation(Function* f) {
     RECORDER_FILTER_GUARD(invoke);
     if (!is_recording_ || isPlayingCompile)
         return;
@@ -243,13 +244,19 @@ void recordInvocation(Function* f, ssize_t deltaCount, size_t previousCount) {
         return;
     }
 
-    if (!recorder_.contains(dt)) {
+    recorder_.record<InvocationEvent>(dt, version, invocation_source_);
+    invocation_source_ = InvocationEvent::SourceSet::None();
+}
+
+void recordUnregisterInvocation(Function* f) {
+    RECORDER_FILTER_GUARD(invoke);
+    Context version = f->context();
+    auto* dt = f->dispatchTable();
+    if (!dt) {
         return;
     }
 
-    recorder_.record<InvocationEvent>(dt, version, deltaCount, previousCount,
-                                      invocation_source_);
-    invocation_source_ = InvocationEvent::SourceSet::None();
+    recorder_.record<UnregisterInvocationEvent>(dt, version);
 }
 
 void recordInvocationDoCall() {

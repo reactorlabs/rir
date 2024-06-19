@@ -383,9 +383,8 @@ class DeoptEvent : public VersionEvent {
     DeoptEvent(const DeoptEvent&) = delete;
     DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
-               DeoptReason::Reason reason,
-               size_t reasonCodeIdx, ssize_t reasonPromiseIdx,
-               uint32_t reasonCodeOff, SEXP trigger);
+               DeoptReason::Reason reason, size_t reasonCodeIdx,
+               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger);
     virtual ~DeoptEvent();
     DeoptEvent() = default;
 
@@ -451,9 +450,8 @@ class InvocationEvent : public VersionEvent {
     using SourceSet = EnumSet<Source, uint8_t>;
 
     InvocationEvent(size_t dispatchTableIndex, Context version,
-                    ssize_t deltaCount, size_t deltaDeopt, SourceSet source)
-        : VersionEvent(dispatchTableIndex, version), deltaCount(deltaCount),
-          deltaDeopt(deltaDeopt), source(source){};
+                    SourceSet source)
+        : VersionEvent(dispatchTableIndex, version), source(source) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -470,10 +468,27 @@ class InvocationEvent : public VersionEvent {
                std::ostream& out) const override;
 
   private:
-    ssize_t deltaCount = 0;
-    size_t deltaDeopt = 0;
-
     SourceSet source = SourceSet::None();
+};
+
+class UnregisterInvocationEvent : public VersionEvent {
+  public:
+    UnregisterInvocationEvent(size_t dispatchTableIndex, Context version)
+        : VersionEvent(dispatchTableIndex, version) {}
+
+    UnregisterInvocationEvent() : VersionEvent() {}
+
+    virtual ~UnregisterInvocationEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_unregister_invocation";
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
 };
 
 // From names.c
