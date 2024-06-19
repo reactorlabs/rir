@@ -55,9 +55,6 @@ struct {
     .invoke = false,
 };
 
-// Don't record invocations while replaying compile events
-static bool isPlayingCompile = false;
-
 CompileReasons compileReasons_;
 std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
     compilation_stack_;
@@ -235,8 +232,6 @@ void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
 
 void recordInvocation(Function* f) {
     RECORDER_FILTER_GUARD(invoke);
-    if (!is_recording_ || isPlayingCompile)
-        return;
 
     Context version = f->context();
     auto* dt = f->dispatchTable();
@@ -303,13 +298,6 @@ void recordSC(const ObservedValues& type, size_t idx, Function* fun) {
 void recordSCChanged(bool changed) {
     RECORDER_FILTER_GUARD(typeFeedback);
     sc_changed_ = changed;
-}
-
-SEXP setClassName(SEXP s, const char* className) {
-    SEXP t = PROTECT(Rf_mkString(className));
-    Rf_setAttrib(s, R_ClassSymbol, t);
-    UNPROTECT(1);
-    return s;
 }
 
 /**

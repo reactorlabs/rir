@@ -21,7 +21,6 @@
 #include <utility>
 #include <vector>
 
-// TODO to string classes are not kept up-to-date
 namespace rir {
 namespace recording {
 
@@ -29,7 +28,6 @@ namespace recording {
 SEXP setClassName(SEXP s, const char* className);
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
-SEXP getEnvironment(const std::string& name);
 
 class Record;
 struct FunRecording;
@@ -203,17 +201,6 @@ class Event {
     virtual void print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const = 0;
 
-    /**
-     * Returns `true` if the Event directly or indirectly stores the index of a
-     * given function recording
-     *
-     * For instance, a CompilationEvent would return `true` if its stored
-     * speculative contexts contained an ObservedCallee refering to the given
-     * `recordingIdx`.
-     *
-     * Function recordings that are never refered may be removed.
-     */
-    virtual bool containsReference(size_t recordingIdx) const { return false; }
     virtual const char*
     targetName(const std::vector<FunRecording>& mapping) const = 0;
 };
@@ -232,10 +219,6 @@ class ClosureEvent : public Event {
     explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
 
     size_t closureIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == closureIndex;
-    };
 
     const char*
     targetName(const std::vector<FunRecording>& mapping) const override;
@@ -256,10 +239,6 @@ class DtEvent : public Event {
         : dispatchTableIndex(dispatchTableIndex){};
 
     size_t dispatchTableIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == dispatchTableIndex;
-    };
 
     const char*
     targetName(const std::vector<FunRecording>& mapping) const override;
@@ -301,7 +280,6 @@ class SpeculativeContextEvent : public DtEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t dispatchTable) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_sc";
@@ -341,7 +319,6 @@ class CompilationEvent : public ClosureEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t recordingIdx) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_compile";
@@ -394,8 +371,6 @@ class DeoptEvent : public VersionEvent {
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_deopt";
-
-    virtual bool containsReference(size_t recordingIdx) const override;
 
   protected:
     void print(const std::vector<FunRecording>& mapping,
@@ -551,30 +526,8 @@ class Record {
     ~Record();
 
     template <typename E, typename... Args>
-    void record(SEXP cls, Args&&... args) {
-        auto entry = initOrGetRecording(cls);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
-    void record(SEXP cls, const std::string& name, Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
     void record(const DispatchTable* dt, Args&&... args) {
         auto entry = initOrGetRecording(dt);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
-    void record(const DispatchTable* cls, const std::string& name,
-                Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
         log.emplace_back(
             std::make_unique<E>(entry.first, std::forward<Args>(args)...));
     }
@@ -585,18 +538,15 @@ class Record {
         return idx;
     }
 
-    /**
-     * Returns `true` if the list of recorded functions contains a closure whose
-     * DispatchTable is the one given
-     */
-    bool contains(const DispatchTable* dt);
-
+    // Can return just size_t
     std::pair<size_t, FunRecording&>
     initOrGetRecording(const DispatchTable* dt, const std::string& name = "");
 
+    // Can just return size_t
     std::pair<size_t, FunRecording&>
     initOrGetRecording(const SEXP cls, const std::string& name = "");
 
+    // TODO try to get rid of this one
     std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 

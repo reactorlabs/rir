@@ -67,6 +67,8 @@ void recordExecution(const char* filePath, const char* filter);
 } // namespace rir
 
 // R API
+REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
+                              SEXP invocation);
 REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();

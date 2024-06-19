@@ -55,10 +55,6 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
     this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
 }
 
-bool Record::contains(const DispatchTable* dt) {
-    return dt_to_recording_index_.count(dt);
-}
-
 std::pair<size_t, FunRecording&>
 Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     assert(Rf_isFunction(cls));
@@ -310,19 +306,6 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
         {changed, serialization::bool_from_sexp});
 }
 
-bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
-    if (sc.type == SpeculativeContextType::Callees) {
-        const auto& callees = sc.value.callees;
-        const size_t* found =
-            std::find(callees.begin(), callees.end(), recordingIdx);
-
-        if (found != callees.end())
-            return true;
-    }
-
-    return DtEvent::containsReference(recordingIdx);
-}
-
 void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
                                     std::ostream& out) const {
     out << "SpeculativeContextEvent{\n        code=";
@@ -330,21 +313,6 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
     out << "\n        index=" << index << "\n        sc=";
     sc.print(mapping, out);
     out << "\n    }";
-}
-
-bool CompilationEvent::containsReference(size_t recordingIdx) const {
-    for (auto& sc : speculative_contexts) {
-        if (sc.type == SpeculativeContextType::Callees) {
-            const auto& callees = sc.value.callees;
-            const size_t* found =
-                std::find(callees.begin(), callees.end(), recordingIdx);
-
-            if (found != callees.end())
-                return true;
-        }
-    }
-
-    return ClosureEvent::containsReference(recordingIdx);
 }
 
 void CompilationEvent::print(const std::vector<FunRecording>& mapping,
@@ -466,26 +434,6 @@ void DeoptEvent::setTrigger(SEXP newTrigger) {
     trigger_ = newTrigger;
 }
 
-Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
-                            const std::pair<ssize_t, ssize_t> index) {
-    assert(index.first != -1);
-    SEXP closure = closures[index.first];
-    auto* dt = DispatchTable::unpack(BODY(closure));
-    Code* code = dt->baseline()->body();
-
-    if (index.second == -1) {
-        return code;
-    } else {
-        return code->getPromise(index.second);
-    }
-}
-
-bool DeoptEvent::containsReference(size_t recordingIdx) const {
-    return reasonCodeIdx_ == recordingIdx ||
-           (size_t)triggerClosure_ == recordingIdx ||
-           VersionEvent::containsReference(recordingIdx);
-}
-
 void DeoptEvent::print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const {
     const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_];
@@ -594,6 +542,13 @@ void UnregisterInvocationEvent::print(const std::vector<FunRecording>& mapping,
     out << "UnregisterInvocation { [ version=" << version << " ] }";
 }
 
+SEXP setClassName(SEXP s, const char* className) {
+    SEXP t = PROTECT(Rf_mkString(className));
+    Rf_setAttrib(s, R_ClassSymbol, t);
+    UNPROTECT(1);
+    return s;
+}
+
 std::string getEnvironmentName(SEXP env) {
     if (env == R_GlobalEnv) {
         return GLOBAL_ENV_NAME;
@@ -610,36 +565,6 @@ std::string getEnvironmentName(SEXP env) {
 
 bool stringStartsWith(const std::string& s, const std::string& prefix) {
     return s.substr(0, prefix.length()) == prefix;
-}
-
-SEXP getEnvironment(const std::string& name) {
-    if (name.empty()) {
-        return R_UnboundValue;
-    }
-
-    // try global
-    if (name == GLOBAL_ENV_NAME) {
-        return R_GlobalEnv;
-    }
-
-    SEXP env_sxp_name = PROTECT(Rf_mkString(name.c_str()));
-
-    // try package environment
-    if (stringStartsWith(name, "package:")) {
-        SEXP env = R_FindPackageEnv(env_sxp_name);
-        UNPROTECT(1);
-        if (env != R_GlobalEnv) {
-            return env;
-        } else {
-            return R_UnboundValue;
-        }
-    }
-
-    // try a namespace
-    SEXP env = R_FindNamespace(env_sxp_name);
-
-    UNPROTECT(1);
-    return env;
 }
 
 } // namespace recording
