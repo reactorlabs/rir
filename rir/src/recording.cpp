@@ -55,92 +55,104 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
     this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
 }
 
-std::pair<size_t, FunRecording&>
-Record::initOrGetRecording(const SEXP cls, const std::string& name) {
+size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     assert(Rf_isFunction(cls));
-    auto& body = *BODY(cls);
+    auto body = BODY(cls);
+
+    auto getClosure = [cls]() {
+        auto closure = PROTECT(
+            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
+        R_PreserveObject(closure);
+        UNPROTECT(1);
+        return closure;
+    };
 
     // Primitives are stored as a special case
     if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP) {
         auto primIdx = cls->u.primsxp.offset;
 
-        // Do we already have it stored?
         auto primEntry = primitive_to_body_index.find(primIdx);
         if (primEntry != primitive_to_body_index.end()) {
-            return {primEntry->second, functions[primEntry->second]};
+            // Closure is already there, we do not add the env name
+            return primEntry->second;
         }
 
         size_t idx = functions.size();
-        functions.emplace_back(primIdx);
-        auto& body = functions.back();
-        body.closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        R_PreserveObject(body.closure);
-        UNPROTECT(1);
-        return {idx, body};
+        functions.emplace_back(primIdx, getClosure());
+
+        return idx;
     }
 
     assert(TYPEOF(cls) == CLOSXP);
-    auto dt = DispatchTable::check(&body);
-    bool inserted;
-    size_t index;
-    if (dt) {
-        // Leaking for the moment
-        R_PreserveObject(dt->container());
-        auto r = dt_to_recording_index_.emplace(dt, functions.size());
-        inserted = r.second;
-        index = r.first->second;
-    } else {
-        R_PreserveObject(&body);
-        auto r = bcode_to_body_index.emplace(&body, functions.size());
-        inserted = r.second;
-        index = r.first->second;
-    }
+    auto dt = DispatchTable::check(body);
+    auto envName = getEnvironmentName(CLOENV(cls));
 
-    auto r = dt_to_recording_index_.emplace(dt, functions.size());
-    FunRecording* v;
-
-    if (inserted) {
-        // we are seeing it for the first time
-        functions.emplace_back();
-        v = &functions.back();
-        v->env = getEnvironmentName(CLOENV(cls));
-        v->closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        R_PreserveObject(v->closure);
-        UNPROTECT(1);
-    } else {
-        v = &functions[index];
-        // If closure is undefined, that means this FunRecorder was created from
-        // a DispatchTable, so we init it
-        if (Rf_isNull(v->closure)) {
-            v->env = getEnvironmentName(CLOENV(cls));
-            v->closure = PROTECT(R_serialize(cls, R_NilValue, R_NilValue,
-                                             R_NilValue, R_NilValue));
-            R_PreserveObject(v->closure);
-            UNPROTECT(1);
+    // If the function recording does not contain it, add to it the closure
+    // and environment name
+    auto fixupRecording = [&getClosure, &name, &envName](FunRecording& rec) {
+        if (Rf_isNull(rec.closure)) {
+            rec.closure = getClosure();
         }
-    }
 
-    if (v->name.empty() && !name.empty()) {
-        v->name = name;
+        if (rec.name.empty()) {
+            rec.name = name;
+        }
+
+        if (rec.env.empty()) {
+            rec.env = envName;
+        }
+    };
+
+    if (dt == nullptr) {
+        auto bcodeEntry = bcode_to_body_index.find(body);
+        if (bcodeEntry != bcode_to_body_index.end()) {
+            fixupRecording(get_recording(bcodeEntry->second));
+            return bcodeEntry->second;
+        }
+
+        R_PreserveObject(body);
+        auto idx = functions.size();
+        bcode_to_body_index.emplace(body, idx);
+
+        functions.emplace_back(name, envName, getClosure());
+
+        return idx;
+    } else {
+        auto dtEntry = dt_to_recording_index_.find(dt);
+        if (dtEntry != dt_to_recording_index_.end()) {
+            fixupRecording(get_recording(dtEntry->second));
+            return dtEntry->second;
+        }
+
+        // Container of dispatch table
+        R_PreserveObject(body);
+        auto idx = functions.size();
+        dt_to_recording_index_.emplace(dt, idx);
+
+        functions.emplace_back(name, envName, getClosure());
+        return idx;
     }
-    return {r.first->second, *v};
 }
 
-std::pair<size_t, FunRecording&>
-Record::initOrGetRecording(const DispatchTable* dt, const std::string& name) {
-    // First, we check if we can find the dt in the appropriate mapping
+size_t Record::initOrGetRecording(const DispatchTable* dt,
+                                  const std::string& name) {
+    assert(dt != nullptr);
+
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
-        return {dt_index->second, functions[dt_index->second]};
-    } else {
-        auto insertion_index = functions.size();
-        functions.emplace_back();
-        functions.back().name = name;
-        dt_to_recording_index_.emplace(dt, insertion_index);
-        return {insertion_index, functions[insertion_index]};
+        auto rec = get_recording(dt_index->second);
+        if (rec.name.empty()) {
+            rec.name = name;
+        }
+        return dt_index->second;
     }
+
+    R_PreserveObject(dt->container());
+    auto insertion_index = functions.size();
+    dt_to_recording_index_.emplace(dt, insertion_index);
+
+    functions.emplace_back(name);
+    return insertion_index;
 }
 
 Record::~Record() {
@@ -181,7 +193,7 @@ SEXP Record::save() {
 std::pair<size_t, ssize_t> Record::findIndex(rir::Code* code,
                                              rir::Code* needle) {
     const auto toIdx = [this](Code* c) {
-        return initOrGetRecording(c->function()->dispatchTable()).first;
+        return initOrGetRecording(c->function()->dispatchTable());
     };
 
     if (code == needle) {
@@ -415,7 +427,7 @@ void DeoptEvent::setTrigger(SEXP newTrigger) {
 
     if (TYPEOF(newTrigger) == CLOSXP) {
         auto rec = recorder_.initOrGetRecording(newTrigger);
-        triggerClosure_ = (ssize_t)rec.first;
+        triggerClosure_ = (ssize_t)rec;
         return;
     }
 

@@ -81,7 +81,7 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
         for (size_t j = 0; j < ObservedCallees::MaxTargets; j++) {
             auto target = observed.getTarget(baseline, j);
             if (Rf_isFunction(target)) {
-                callees[j] = recorder_.initOrGetRecording(target).first;
+                callees[j] = recorder_.initOrGetRecording(target);
             }
         }
 
@@ -101,9 +101,10 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
 
 void recordCompileCommon(SEXP cls, const std::string& name,
                          const Context& assumptions) {
-    auto rec = recorder_.initOrGetRecording(cls, name);
-    if (rec.second.name == "") {
-        rec.second.name = name;
+    auto rec_idx = recorder_.initOrGetRecording(cls, name);
+    auto rec = recorder_.get_recording(rec_idx);
+    if (rec.name == "") {
+        rec.name = name;
     }
 
     auto dt = DispatchTable::unpack(BODY(cls));
@@ -116,7 +117,7 @@ void recordCompileCommon(SEXP cls, const std::string& name,
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
-        std::forward_as_tuple(rec.first, dispatch_context, name, std::move(sc),
+        std::forward_as_tuple(rec_idx, dispatch_context, name, std::move(sc),
                               std::move(compileReasons_)));
     recordReasonsClear();
 }
@@ -269,8 +270,7 @@ void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {
     targets.fill(-1);
 
     for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(fun, i)).first;
+        targets[i] = recorder_.initOrGetRecording(callees.getTarget(fun, i));
     }
 
     recordSC(SpeculativeContext(targets), idx, fun);

@@ -478,10 +478,17 @@ struct FunRecording {
                                     const FunRecording& that);
 
     FunRecording() = default;
-    explicit FunRecording(size_t primIdx) : primIdx(primIdx) {
+    explicit FunRecording(size_t primIdx, SEXP closure)
+        : primIdx(primIdx), closure(closure) {
         assert(primIdx < R_FunTab_Len);
         name = R_FunTab[primIdx].name;
     }
+
+    explicit FunRecording(const std::string& name, const std::string& env,
+                          SEXP closure)
+        : name(name), env(env), closure(closure) {}
+
+    explicit FunRecording(const std::string& name) : name(name) {}
 };
 
 class Record {
@@ -506,7 +513,7 @@ class Record {
     void record(const DispatchTable* dt, Args&&... args) {
         auto entry = initOrGetRecording(dt);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     size_t push_event(std::unique_ptr<Event> e) {
@@ -515,15 +522,17 @@ class Record {
         return idx;
     }
 
+    FunRecording& get_recording(size_t idx) { return functions[idx]; }
+
     // Can return just size_t
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const DispatchTable* dt, const std::string& name = "");
+    size_t initOrGetRecording(const DispatchTable* dt,
+                              const std::string& name = "");
 
     // Can just return size_t
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const SEXP cls, const std::string& name = "");
+    size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
 
-    // TODO try to get rid of this one
+    // First is a fun recording index, second is -1 if it is baseline,
+    // otherwise promise idx
     std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
