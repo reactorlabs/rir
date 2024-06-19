@@ -87,15 +87,25 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     auto dt = DispatchTable::check(body);
     auto envName = getEnvironmentName(CLOENV(cls));
 
+    // Getting the closure name can be expensive
+    // -> thus it is computed lazily only when needed
+    auto getName = [&name, cls]() {
+        if (name.empty()) {
+            return getClosureName(cls);
+        }
+
+        return name;
+    };
+
     // If the function recording does not contain it, add to it the closure
     // and environment name
-    auto fixupRecording = [&getClosure, &name, &envName](FunRecording& rec) {
+    auto fixupRecording = [&getClosure, &getName, &envName](FunRecording& rec) {
         if (Rf_isNull(rec.closure)) {
             rec.closure = getClosure();
         }
 
         if (rec.name.empty()) {
-            rec.name = name;
+            rec.name = getName();
         }
 
         if (rec.env.empty()) {
@@ -114,7 +124,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
         auto idx = functions.size();
         bcode_to_body_index.emplace(body, idx);
 
-        functions.emplace_back(name, envName, getClosure());
+        functions.emplace_back(getName(), envName, getClosure());
 
         return idx;
     } else {
@@ -129,7 +139,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
         auto idx = functions.size();
         dt_to_recording_index_.emplace(dt, idx);
 
-        functions.emplace_back(name, envName, getClosure());
+        functions.emplace_back(getName(), envName, getClosure());
         return idx;
     }
 }
@@ -532,6 +542,45 @@ std::string getEnvironmentName(SEXP env) {
 
 bool stringStartsWith(const std::string& s, const std::string& prefix) {
     return s.substr(0, prefix.length()) == prefix;
+}
+
+std::string getClosureName(SEXP cls) {
+    std::string name = "";
+
+    // 1. Look trhu frames
+    auto frame = RList(FRAME(CLOENV(cls)));
+
+    for (auto e = frame.begin(); e != frame.end(); ++e) {
+        if (*e == cls) {
+            name = CHAR(PRINTNAME(e.tag()));
+            if (!name.empty()) {
+                return name;
+            }
+        }
+    }
+
+    // 2. Try to look thru symbols
+    auto env = PROTECT(CLOENV(cls));
+    auto symbols = PROTECT(R_lsInternal(env, TRUE));
+
+    auto size = Rf_length(symbols);
+    for (int i = 0; i < size; i++) {
+        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
+        auto symbol = PROTECT(Rf_install(symbol_char));
+
+        auto value = PROTECT(Rf_findVarInFrame(env, symbol));
+
+        if (value == cls) {
+            name = symbol_char;
+            UNPROTECT(2);
+            break;
+        }
+
+        UNPROTECT(2);
+    }
+    UNPROTECT(2);
+
+    return name;
 }
 
 } // namespace recording

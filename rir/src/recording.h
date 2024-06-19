@@ -28,6 +28,7 @@ namespace recording {
 SEXP setClassName(SEXP s, const char* className);
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
+std::string getClosureName(SEXP cls);
 
 class Record;
 struct FunRecording;

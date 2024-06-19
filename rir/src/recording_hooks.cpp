@@ -99,14 +99,11 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
     return result;
 }
 
-void recordCompileCommon(SEXP cls, const std::string& name,
-                         const Context& assumptions) {
-    auto rec_idx = recorder_.initOrGetRecording(cls, name);
-    auto rec = recorder_.get_recording(rec_idx);
-    if (rec.name == "") {
-        rec.name = name;
-    }
+void recordCompile(SEXP cls, const std::string& name,
+                   const Context& assumptions) {
+    RECORDER_FILTER_GUARD(compile);
 
+    auto rec_idx = recorder_.initOrGetRecording(cls, name);
     auto dt = DispatchTable::unpack(BODY(cls));
 
     auto dispatch_context = assumptions.toI();
@@ -120,13 +117,6 @@ void recordCompileCommon(SEXP cls, const std::string& name,
         std::forward_as_tuple(rec_idx, dispatch_context, name, std::move(sc),
                               std::move(compileReasons_)));
     recordReasonsClear();
-}
-
-void recordCompile(SEXP cls, const std::string& name,
-                   const Context& assumptions) {
-    RECORDER_FILTER_GUARD(compile);
-
-    recordCompileCommon(cls, name, assumptions);
 }
 
 void recordCompileFinish(bool succesful) {
@@ -153,32 +143,7 @@ void recordCompileFinish(bool succesful) {
 }
 
 void recordOsrCompile(const SEXP cls) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto env = PROTECT(CLOENV(cls));
-    auto symbols = PROTECT(R_lsInternal(env, TRUE));
-
-    // Get the name
-    std::string name = "";
-
-    auto size = Rf_length(symbols);
-    for (int i = 0; i < size; i++) {
-        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
-        auto symbol = PROTECT(Rf_install(symbol_char));
-
-        auto value = PROTECT(Rf_findVarInFrame(env, symbol));
-
-        if (value == cls) {
-            name = symbol_char;
-            UNPROTECT(2);
-            break;
-        }
-
-        UNPROTECT(2);
-    }
-    UNPROTECT(2);
-
-    recordCompileCommon(cls, name, pir::Compiler::defaultContext);
+    recordCompile(cls, "", pir::Compiler::defaultContext);
 }
 
 void recordLLVMBitcode(llvm::Function* fun) {
