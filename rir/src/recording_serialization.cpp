@@ -107,8 +107,6 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, rir::recording::DeoptEvent::className)) {
         event = std::make_unique<rir::recording::DeoptEvent>();
-    } else if (Rf_inherits(sexp, rir::recording::DtInitEvent::className)) {
-        event = std::make_unique<rir::recording::DtInitEvent>();
     } else if (Rf_inherits(sexp, rir::recording::InvocationEvent::className)) {
         event = std::make_unique<rir::recording::InvocationEvent>();
     } else if (Rf_inherits(

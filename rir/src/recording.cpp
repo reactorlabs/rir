@@ -125,14 +125,6 @@ Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     if (v->name.empty() && !name.empty()) {
         v->name = name;
     }
-
-    if (r.second && false) {
-        assert(dt->size() == 1);
-        auto* base = dt->baseline();
-        log.emplace_back(std::make_unique<DtInitEvent>(
-            r.first->second, base->invocationCount(), base->deoptCount()));
-    }
-
     return {r.first->second, *v};
 }
 
@@ -477,27 +469,6 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
         assert(trigger);
         setTrigger(trigger);
     }
-}
-
-void DtInitEvent::print(const std::vector<FunRecording>& mapping,
-                        std::ostream& out) const {
-    out << "DtInitEvent{\n        invocations=" << this->invocations
-        << "\n        deopts=" << this->deopts << "\n    }";
-}
-
-const std::vector<const char*> DtInitEvent::fieldNames = {
-    "dispatchTable", "invocations", "deopts"};
-
-SEXP DtInitEvent::toSEXP() const {
-    return serialization::fields_to_sexp<DtInitEvent>(dispatchTableIndex,
-                                                      invocations, deopts);
-}
-
-void DtInitEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<DtInitEvent, uint64_t, uint64_t, uint64_t>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
-        {invocations, serialization::uint64_t_from_sexp},
-        {deopts, serialization::uint64_t_from_sexp});
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {

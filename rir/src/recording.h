@@ -390,29 +390,6 @@ class DeoptEvent : public VersionEvent {
     ssize_t triggerClosure_ = -1; // References a FunRecorder index
 };
 
-// TODO delete, not used (?)
-class DtInitEvent : public DtEvent {
-  public:
-    DtInitEvent(size_t dtIndex, size_t invocations, size_t deopts)
-        : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
-
-    virtual ~DtInitEvent() = default;
-    DtInitEvent() = default;
-
-    SEXP toSEXP() const override;
-    void fromSEXP(SEXP file) override;
-
-    static const std::vector<const char*> fieldNames;
-    static constexpr const char* className = "event_dt_init";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
-  private:
-    size_t invocations, deopts;
-};
-
 class InvocationEvent : public VersionEvent {
   public:
     enum Source : uint8_t {

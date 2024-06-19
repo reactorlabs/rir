@@ -221,15 +221,6 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                                  reason.origin.idx(), trigger);
 }
 
-void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
-                       size_t oldDeoptCount) {
-    if (!is_recording_) {
-        return;
-    }
-
-    recorder_.record<DtInitEvent>(dt, funIdx, oldDeoptCount);
-}
-
 void recordInvocation(Function* f) {
     RECORDER_FILTER_GUARD(invoke);
 

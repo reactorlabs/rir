@@ -31,8 +31,6 @@ void recordLLVMBitcode(llvm::Function* fun);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
-void recordDtOverwrite(const DispatchTable* dt, size_t version,
-                       size_t oldDeoptCount);
 
 void recordInvocation(Function* f);
 void recordUnregisterInvocation(Function* f);
