@@ -478,19 +478,22 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {
-    "dispatchTable", "context", "source"};
+    "dispatchTable", "context", "source", "callContext", "isNative", "address"};
 
 SEXP InvocationEvent::toSEXP() const {
-    return serialization::fields_to_sexp<InvocationEvent>(dispatchTableIndex,
-                                                          version, source);
+    return serialization::fields_to_sexp<InvocationEvent>(
+        dispatchTableIndex, version, source, callContext, isNative, address);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<InvocationEvent, uint64_t, Context,
-                                    SourceSet>(
+                                    SourceSet, Context, bool, uint64_t>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {source, serialization::invocation_source_set_from_sexp});
+        {source, serialization::invocation_source_set_from_sexp},
+        {callContext, serialization::context_from_sexp},
+        {isNative, serialization::bool_from_sexp},
+        {address, serialization::uint64_t_from_sexp});
 }
 
 void InvocationEvent::print(const std::vector<FunRecording>& mapping,

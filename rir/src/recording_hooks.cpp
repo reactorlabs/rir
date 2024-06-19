@@ -37,6 +37,8 @@ bool is_recording_ = false;
 InvocationEvent::SourceSet invocation_source_ =
     InvocationEvent::SourceSet::None();
 
+Context call_context_ = Context();
+
 // the main recorder
 Record recorder_;
 
@@ -78,7 +80,7 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
         SpeculativeContext::ObservedCalleesArr callees;
         callees.fill(NO_INDEX);
 
-        for (size_t j = 0; j < ObservedCallees::MaxTargets; j++) {
+        for (size_t j = 0; j < observed.numTargets; j++) {
             auto target = observed.getTarget(baseline, j);
             if (Rf_isFunction(target)) {
                 callees[j] = recorder_.initOrGetRecording(target);
@@ -192,33 +194,36 @@ void recordInvocation(Function* f) {
 
     Context version = f->context();
     auto* dt = f->dispatchTable();
-    if (!dt) {
-        return;
-    }
 
-    recorder_.record<InvocationEvent>(dt, version, invocation_source_);
+    bool isNative = f->body()->kind == Code::Kind::Native;
+    SEXP cls = dt->container();
+
+    recorder_.record<InvocationEvent>(dt, version, invocation_source_,
+                                      call_context_, isNative,
+                                      reinterpret_cast<uintptr_t>(cls));
+
     invocation_source_ = InvocationEvent::SourceSet::None();
+    call_context_ = Context();
 }
 
 void recordUnregisterInvocation(Function* f) {
     RECORDER_FILTER_GUARD(invoke);
     Context version = f->context();
     auto* dt = f->dispatchTable();
-    if (!dt) {
-        return;
-    }
 
     recorder_.record<UnregisterInvocationEvent>(dt, version);
 }
 
-void recordInvocationDoCall() {
+void recordInvocationDoCall(Context callContext) {
     RECORDER_FILTER_GUARD(invoke);
     invocation_source_.set(InvocationEvent::DoCall);
+    call_context_ = callContext;
 }
 
-void recordInvocationNativeCallTrampoline() {
+void recordInvocationNativeCallTrampoline(Context callContext) {
     RECORDER_FILTER_GUARD(invoke);
     invocation_source_.set(InvocationEvent::NativeCallTrampoline);
+    call_context_ = callContext;
 }
 
 void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {

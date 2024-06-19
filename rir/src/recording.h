@@ -403,8 +403,10 @@ class InvocationEvent : public VersionEvent {
     using SourceSet = EnumSet<Source, uint8_t>;
 
     InvocationEvent(size_t dispatchTableIndex, Context version,
-                    SourceSet source)
-        : VersionEvent(dispatchTableIndex, version), source(source) {}
+                    SourceSet source, Context callContext, bool isNative,
+                    uintptr_t address)
+        : VersionEvent(dispatchTableIndex, version), source(source),
+          callContext(callContext), isNative(isNative), address(address) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -422,6 +424,9 @@ class InvocationEvent : public VersionEvent {
 
   private:
     SourceSet source = SourceSet::None();
+    Context callContext;
+    bool isNative;
+    uintptr_t address = 0;
 };
 
 class UnregisterInvocationEvent : public VersionEvent {

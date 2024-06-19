@@ -104,9 +104,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void unregisterInvocation() {
         invoked = 0;
-        if (invocationCount_ > 0) {
+        if (invocationCount_ > 0)
             invocationCount_--;
-        }
         REC_HOOK(recording::recordUnregisterInvocation(this));
     }
 

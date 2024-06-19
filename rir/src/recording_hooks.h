@@ -34,8 +34,8 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 
 void recordInvocation(Function* f);
 void recordUnregisterInvocation(Function* f);
-void recordInvocationDoCall();
-void recordInvocationNativeCallTrampoline();
+void recordInvocationDoCall(Context callContext);
+void recordInvocationNativeCallTrampoline(Context callContext);
 
 void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
 void recordSC(const ObservedTest& type, size_t idx, Function* fun);

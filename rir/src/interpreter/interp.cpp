@@ -983,7 +983,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
-        REC_HOOK(recording::recordInvocationDoCall());
+        REC_HOOK(recording::recordInvocationDoCall(call.givenContext));
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {

@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "reason", "bitcode_len", "changed", "is_promise")
+  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "changed", "is_promise", "is_native", "callee_address")
 
   line(columns)
 
@@ -119,7 +119,12 @@ recordings.csv <- function(r) {
 
       event$ctx <- pp(e$context, "context")
 
+      event$call_ctx <- pp(e$callContext, "context")
+      event$is_native <- e$isNative
       event$reason <- pp(e$source, "invocation_source")
+
+      event$callee_address = e$address
+
     } else if (class(e) == "event_unregister_invocation"){
       event$type <- "UnregisterInvocation"
 
