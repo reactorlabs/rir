@@ -7,6 +7,7 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 #include "TypeFeedback.h"
+#include "utils/TypeFeedbackStrategies.h"
 #include "utils/random.h"
 #include <ostream>
 
@@ -24,10 +25,6 @@ typedef SEXP DispatchTableEntry;
 #pragma pack(1)
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
-
-    static constexpr unsigned MaxFeedbacks = 64;
-    typedef GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>
-        TypeFeedbackDispatchTable;
 
     size_t size() const { return size_; }
 
@@ -91,35 +88,49 @@ struct DispatchTable
         return b;
     }
 
+    // simple TypeFeedback dispatch
     std::pair<Context, TypeFeedback*>
     dispatchTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         return typeFeedbacks()->dispatch(ctx);
     }
 
+    // method used to retrieve compilation TypeFeedback
     TypeFeedback* getCompilationTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
             return tf && tf->recordingCount() > 0;
         });
-        TypeFeedback* tf = entry.second;
-        if (!tf)
+        // Do not merge or fill baseline feedback, since no information
+        // can be added (most generic feedback possible)
+        if (!entry.second || entry.second == baselineFeedback())
             return baselineFeedback();
-        return tf;
+        std::pair<Context, TypeFeedback*> p = {entry.first,
+                                               entry.second->copy()};
+        PROTECT(p.second->container());
+        MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
+        TraversalFillingStrategy fillStrategy;
+        p.second = mergeStrategy.merge(ctx, baseline(), p, feedbacks);
+        p.second = fillStrategy.fill(ctx, p, feedbacks);
+        UNPROTECT(1);
+        return p.second;
     }
 
+    // method used to retrieve TypeFeedback used for feedback recording
     TypeFeedback* getOrCreateTypeFeedback(const Context& ctx) {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx);
         TypeFeedback* tf = entry.second;
         if (entry.first != ctx || !tf) {
+            // TypeFeedback for required context does not exist
             assert(baselineFeedback());
-            // Use closest possible feedback when type feedback table is full
+            // Use closest possible TypeFeedback if table is full
             // TODO: try different approaches
             if (feedbacks->full())
                 return tf ? tf : baselineFeedback();
+            // Create empty TypeFeedback otherwise
             tf = baselineFeedback()->emptyCopy();
             PROTECT(tf->container());
             feedbacks->insert(ctx, tf);

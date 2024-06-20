@@ -999,8 +999,8 @@ SEXP doCall(CallContext& call, bool popArgs) {
         REC_HOOK(recording::recordInvocationDoCall());
         fun->registerInvocation();
 
-        if (!isDeoptimizing() &&
-            RecompileHeuristic(fun, call.givenContext, disabledFun)) {
+        if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun) &&
+            SufficientTypeFeedbackHeuristic(fun, call.givenContext)) {
             Context given = call.givenContext;
             // addDynamicAssumptionForOneTarget compares arguments with the
             // signature of the current dispatch target. There the number of

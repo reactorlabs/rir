@@ -1424,11 +1424,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     REC_HOOK(recording::recordInvocationNativeCallTrampoline());
     fun->registerInvocation();
     static int recheck = 0;
-    if (fail ||
-        (++recheck == 97 && RecompileHeuristic(fun, call.givenContext))) {
+    if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
         recheck = 0;
         inferCurrentContext(call, fun->nargs());
-        if (fail || RecompileCondition(dt, fun, call.givenContext)) {
+        if (fail || (SufficientTypeFeedbackHeuristic(fun, call.givenContext) &&
+                     RecompileCondition(dt, fun, call.givenContext))) {
             fun->unregisterInvocation();
             auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));

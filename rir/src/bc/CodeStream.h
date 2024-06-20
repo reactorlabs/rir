@@ -152,6 +152,8 @@ class CodeStream {
         for (auto c : promises)
             res->addExtraPoolEntry(c->container());
 
+        res->promEnd = res->extraPoolSize;
+
         labels.clear();
         patchpoints.clear();
         sources.clear();

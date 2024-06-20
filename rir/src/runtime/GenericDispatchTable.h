@@ -104,6 +104,13 @@ struct GenericDispatchTable
         return {a, nullptr};
     }
 
+    void filterForeach(const std::function<bool(const Key&)> cond,
+                       const std::function<void(const Value*)> f) const {
+        for (size_t i = 0; i < size(); ++i)
+            if (cond(key(i)))
+                f(Value::unpack(getEntry(i)));
+    }
+
     bool full() const { return size() == capacity(); }
 
     bool empty() const { return size() == 0; }
@@ -111,6 +118,12 @@ struct GenericDispatchTable
     std::pair<const Key&, Value*> best() const {
         assert(!empty());
         return {key(0), Value::unpack(getEntry(0))};
+    }
+
+    std::pair<const Key&, Value*> last() const {
+        assert(!empty());
+        size_t idx = size() - 1;
+        return {key(idx), Value::unpack(getEntry(idx))};
     }
 
   private:

@@ -13,33 +13,48 @@
 
 namespace rir {
 
+void ObservedCallees::addCallee(Function* function, SEXP callee) {
+    int i = 0;
+    // Because of recording type feedback even before creating function
+    // and saving callees inside function body
+    // all callees are stored inside the baseline function
+    auto caller = function->baseline()->body();
+    for (; i < numTargets; ++i)
+        if (caller->getExtraPoolEntry(targets[i]) == callee)
+            break;
+    if (i == numTargets) {
+        unsigned int idx;
+        for (idx = caller->promEnd; idx < caller->extraPoolSize; ++idx)
+            if (caller->getExtraPoolEntry(idx) == callee)
+                break;
+        if (idx == caller->extraPoolSize)
+            idx = caller->addExtraPoolEntry(callee);
+        targets[numTargets++] = idx;
+    }
+}
+
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     if (taken < CounterOverflow)
         taken++;
 
-    if (numTargets < MaxTargets) {
-        int i = 0;
-        // Because of recording type feedback even before creating function
-        // and saving callees inside function body
-        // all callees are stored inside the baseline function
-        auto caller = function->baseline()->body();
-        for (; i < numTargets; ++i)
-            if (caller->getExtraPoolEntry(targets[i]) == callee)
-                break;
-        if (i == numTargets) {
-            unsigned int idx;
-            for (idx = caller->promEnd; idx < caller->extraPoolSize; ++idx)
-                if (caller->getExtraPoolEntry(idx) == callee)
-                    break;
-            if (idx == caller->extraPoolSize)
-                idx = caller->addExtraPoolEntry(callee);
-            targets[numTargets++] = idx;
-        }
-    } else {
-        if (invalidateWhenFull) {
-            invalid = true;
-        }
+    if (numTargets < MaxTargets)
+        addCallee(function, callee);
+    else if (invalidateWhenFull)
+        invalid = true;
+}
+
+void ObservedCallees::mergeWith(const ObservedCallees& callees,
+                                Function* function) {
+    if (taken <= CounterOverflow - callees.taken)
+        taken += callees.taken;
+    else
+        taken = CounterOverflow;
+    auto caller = function->baseline()->body();
+    for (unsigned i = 0; i < callees.numTargets; ++i) {
+        if (numTargets == MaxTargets)
+            return;
+        addCallee(function, caller->getExtraPoolEntry(callees.targets[i]));
     }
 }
 
@@ -133,6 +148,7 @@ void ObservedCallees::print(std::ostream& out, const Function* function) const {
 }
 
 void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
+    OutInteger(out, recordingCount_);
     OutInteger(out, callees_size_);
     for (size_t i = 0; i < callees_size_; i++) {
         OutBytes(out, callees_ + i, sizeof(ObservedCallees));
@@ -150,6 +166,7 @@ void TypeFeedback::serialize(SEXP refTable, R_outpstream_t out) const {
 }
 
 TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
+    auto recordingCount = InInteger(inp);
     auto size = InInteger(inp);
     std::vector<ObservedCallees> callees;
     callees.reserve(size);
@@ -178,6 +195,7 @@ TypeFeedback* TypeFeedback::deserialize(SEXP refTable, R_inpstream_t inp) {
     }
 
     auto res = TypeFeedback::create(callees, tests, types);
+    res->recordingCount_ = recordingCount;
 
     return res;
 }
@@ -203,6 +221,22 @@ void ObservedTest::print(std::ostream& out) const {
         break;
     case ObservedTest::Both:
         out << "?";
+        break;
+    }
+}
+
+void ObservedTest::mergeWith(const ObservedTest& test) {
+    switch (seen) {
+    case ObservedTest::Both:
+        break;
+    case ObservedTest::None:
+        seen = test.seen;
+        break;
+    case ObservedTest::OnlyFalse:
+    case ObservedTest::OnlyTrue:
+        if (test.seen == ObservedTest::Both ||
+            (test.seen != ObservedTest::None && test.seen != seen))
+            seen = ObservedTest::Both;
         break;
     }
 }
@@ -341,12 +375,47 @@ void TypeFeedback::record_type_inc(TypeFeedback* inclusive, uint32_t idx,
         inclusive->record_type(idx, f);
 }
 
-TypeFeedback* TypeFeedback::emptyCopy() {
+TypeFeedback* TypeFeedback::emptyCopy() const {
     std::vector<ObservedCallees> callees(callees_size_, ObservedCallees{});
     std::vector<ObservedTest> tests(tests_size_, ObservedTest{});
     std::vector<ObservedValues> types(types_size_, ObservedValues{});
 
     return TypeFeedback::create(callees, tests, types);
+}
+
+TypeFeedback* TypeFeedback::copy() const {
+    std::vector<ObservedCallees> callees(callees_, callees_ + callees_size_);
+    std::vector<ObservedTest> tests(tests_, tests_ + tests_size_);
+    std::vector<ObservedValues> types(types_, types_ + types_size_);
+
+    auto tf = TypeFeedback::create(callees, tests, types);
+    tf->recordingCount_ = recordingCount_;
+    return tf;
+}
+
+void TypeFeedback::mergeWith(const TypeFeedback* tf, Function* function) {
+    if (recordingCount_ <= UINT_MAX - tf->recordingCount_)
+        recordingCount_ += tf->recordingCount_;
+    else
+        recordingCount_ = UINT_MAX;
+    for (size_t i = 0; i < callees_size_; i++)
+        callees(i).mergeWith(tf->callees_[i], function);
+
+    for (size_t i = 0; i < tests_size_; i++)
+        test(i).mergeWith(tf->tests_[i]);
+
+    for (size_t i = 0; i < types_size_; i++)
+        types(i).mergeWith(tf->types_[i]);
+}
+
+void TypeFeedback::fillWith(const TypeFeedback* tf) {
+    for (size_t i = 0; i < tests_size_; i++)
+        if (test(i).isEmpty())
+            memcpy(tests_ + i, tf->tests_ + i, sizeof(ObservedTest));
+
+    for (size_t i = 0; i < types_size_; i++)
+        if (types(i).isEmpty())
+            memcpy(types_ + i, tf->types_ + i, sizeof(ObservedValues));
 }
 
 const char* FeedbackIndex::name() const {
