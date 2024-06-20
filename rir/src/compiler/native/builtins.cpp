@@ -1313,6 +1313,9 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
                      ostack_cell_at((long)nargs - 1), env, R_NilValue,
                      Context(available));
 
+    bool seenProm = false;
+    int seenPromAt = 0;
+
     auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
     auto fail = !missingAsmpt->empty();
     if (fail) {
@@ -1364,8 +1367,13 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     case TypeAssumption::Arg##__i__##IsNotObj_: {                              \
         auto a = loadArg(__i__);                                               \
         if (a == R_UnboundValue || a == R_MissingArg || Rf_isObject(a) ||      \
-            TYPEOF(a) == CLOSXP || TYPEOF(a) == ENVSXP)                        \
+            /*TYPEOF(a) == PROMSXP ||*/ TYPEOF(a) == CLOSXP ||                 \
+            TYPEOF(a) == ENVSXP)                                               \
             fail = true;                                                       \
+        if (TYPEOF(a) == PROMSXP) {                                            \
+            seenProm = true;                                                   \
+            seenPromAt = __i__;                                                \
+        }                                                                      \
         break;                                                                 \
     }
                         FOR_ALL_ARGS(CHECK_NON_OBJ)
@@ -1397,6 +1405,17 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
             if (!fail)
                 call.givenContext = call.givenContext | *missingAsmpt;
+        }
+
+        if (!fail && seenProm) {
+            auto forced = forcePromise(call.stackArg(seenPromAt));
+
+            // std::cerr << "type of forced: " << TYPEOF(forced) << "\n
+            // ****************************************";
+            if (Rf_isObject(forced)) {
+                Rf_PrintValue(forced);
+                assert(false && "encountered object!!");
+            }
         }
 
         if (fail) {
