@@ -1375,7 +1375,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     case TypeAssumption::Arg##__i__##IsNotObj_: {                              \
         auto a = loadArg(__i__);                                               \
         if (a == R_UnboundValue || a == R_MissingArg || Rf_isObject(a) ||      \
-            TYPEOF(a) == CLOSXP || TYPEOF(a) == ENVSXP)                        \
+            TYPEOF(a) == PROMSXP || TYPEOF(a) == CLOSXP ||                     \
+            TYPEOF(a) == ENVSXP)                                               \
             fail = true;                                                       \
         break;                                                                 \
     }
