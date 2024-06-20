@@ -120,6 +120,12 @@ struct GenericDispatchTable
         return {key(0), Value::unpack(getEntry(0))};
     }
 
+    std::pair<const Key&, Value*> last() const {
+        assert(!empty());
+        size_t idx = size() - 1;
+        return {key(idx), Value::unpack(getEntry(idx))};
+    }
+
   private:
     GenericDispatchTable()
         : Super(

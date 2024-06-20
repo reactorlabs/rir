@@ -108,7 +108,7 @@ struct ObservedCallees {
     void mergeWith(const ObservedCallees& callee, Function* function);
     inline void addCallee(Function* function, SEXP callee);
     inline bool isEmpty() const {
-        return numTargets == 0 && taken == 0 && targets.empty();
+        return !invalid && (numTargets == 0 && taken == 0 && targets.empty());
     }
 };
 

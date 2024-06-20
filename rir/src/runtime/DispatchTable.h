@@ -7,6 +7,7 @@
 #include "R/Serialize.h"
 #include "RirRuntimeObject.h"
 #include "TypeFeedback.h"
+#include "utils/TypeFeedbackStrategies.h"
 #include "utils/random.h"
 #include <ostream>
 
@@ -24,10 +25,6 @@ typedef SEXP DispatchTableEntry;
 #pragma pack(1)
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
-
-    static constexpr unsigned MaxFeedbacks = 64;
-    typedef GenericDispatchTable<Context, TypeFeedback, MaxFeedbacks>
-        TypeFeedbackDispatchTable;
 
     size_t size() const { return size_; }
 
@@ -105,33 +102,19 @@ struct DispatchTable
         auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
             return tf && tf->recordingCount() > 0;
         });
+        // Do not merge or fill baseline feedback, since no information
+        // can be added (most generic feedback possible)
         if (!entry.second || entry.second == baselineFeedback())
             return baselineFeedback();
-        std::pair<Context, TypeFeedback*> tf =
-            std::make_pair(entry.first, entry.second->copy());
-        PROTECT(tf.second->container());
-        auto function = baseline();
-        // contexts which are smaller than ctx and have compiled version
-        std::vector<Context> compiledContexts;
-        for (size_t i = 1; i < size(); ++i) {
-            auto f = get(i);
-            if (f->context().smaller(ctx) && f->context() != ctx)
-                compiledContexts.push_back(f->context());
-        }
-        auto mergeCond = [&](const Context& entryCtx) {
-            for (Context& c : compiledContexts)
-                if (entryCtx.smaller(c))
-                    return false;
-            return entryCtx.smaller(ctx) && entryCtx != tf.first;
-        };
-        auto mergeImpl = [&](const TypeFeedback* feedback) {
-            tf.second->mergeWith(feedback, function);
-        };
-        feedbacks->filterForeach(mergeCond, mergeImpl);
-        if (tf.second != baselineFeedback())
-            tf.second->fillWith(baselineFeedback());
+        std::pair<Context, TypeFeedback*> p = {entry.first,
+                                               entry.second->copy()};
+        PROTECT(p.second->container());
+        MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
+        TraversalFillingStrategy fillStrategy;
+        p.second = mergeStrategy.merge(ctx, baseline(), p, feedbacks);
+        p.second = fillStrategy.fill(ctx, baseline(), p, feedbacks);
         UNPROTECT(1);
-        return tf.second;
+        return p.second;
     }
 
     // method used to retrieve TypeFeedback used for feedback recording
