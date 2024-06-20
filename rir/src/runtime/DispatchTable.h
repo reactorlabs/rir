@@ -112,7 +112,7 @@ struct DispatchTable
         MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
         TraversalFillingStrategy fillStrategy;
         p.second = mergeStrategy.merge(ctx, baseline(), p, feedbacks);
-        p.second = fillStrategy.fill(ctx, baseline(), p, feedbacks);
+        p.second = fillStrategy.fill(ctx, p, feedbacks);
         UNPROTECT(1);
         return p.second;
     }

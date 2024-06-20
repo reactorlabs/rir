@@ -231,7 +231,7 @@ struct ObservedValues {
         uint32_t zero = 0;
         static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
                       "Comparison assumes 4B size");
-        return memcmp(this, &zero, sizeof(ObservedValues));
+        return memcmp(this, &zero, sizeof(ObservedValues)) == 0;
     }
 };
 

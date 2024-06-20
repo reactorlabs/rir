@@ -48,7 +48,6 @@ struct MergeSmallerCandidatesMergingStrategy : public MergingStrategy {
     TypeFeedback* merge(const Context& ctx, Function* function,
                         std::pair<const Context&, TypeFeedback*> e,
                         const TypeFeedbackDispatchTable* tfdp) override {
-        auto tf = e.second;
         auto compiledContexts = getCompiledContexts(ctx);
         auto mergeCondition = [&](const Context& entryCtx) {
             for (Context& c : compiledContexts)
@@ -57,10 +56,10 @@ struct MergeSmallerCandidatesMergingStrategy : public MergingStrategy {
             return entryCtx.smaller(ctx) && entryCtx != e.first;
         };
         auto mergeImplementation = [&](const TypeFeedback* feedback) {
-            tf->mergeWith(feedback, function);
+            e.second->mergeWith(feedback, function);
         };
         tfdp->filterForeach(mergeCondition, mergeImplementation);
-        return tf;
+        return e.second;
     }
     std::vector<Context> getCompiledContexts(const Context& context) const;
 
@@ -69,32 +68,33 @@ struct MergeSmallerCandidatesMergingStrategy : public MergingStrategy {
 };
 
 struct FillingStrategy {
-    virtual TypeFeedback* fill(const Context& ctx, Function* function,
+    virtual TypeFeedback* fill(const Context& ctx,
                                std::pair<const Context&, TypeFeedback*> e,
                                const TypeFeedbackDispatchTable* tfdp) = 0;
 };
 
 struct NoFillingStrategy : public FillingStrategy {
-    virtual TypeFeedback* fill(const Context& ctx, Function* function,
+    virtual TypeFeedback* fill(const Context& ctx,
                                std::pair<const Context&, TypeFeedback*> e,
-                               const TypeFeedbackDispatchTable* tfdp) {
+                               const TypeFeedbackDispatchTable* tfdp) override {
         return e.second;
     }
 };
 
 struct TopFeedbackFillingStrategy : public FillingStrategy {
-    virtual TypeFeedback* fill(const Context& ctx, Function* function,
+    virtual TypeFeedback* fill(const Context& ctx,
                                std::pair<const Context&, TypeFeedback*> e,
-                               const TypeFeedbackDispatchTable* tfdp) {
+                               const TypeFeedbackDispatchTable* tfdp) override {
+        // no need for baseline check, since baseline is not enhanced
         e.second->fillWith(tfdp->last().second);
         return e.second;
     }
 };
 
 struct TraversalFillingStrategy : public FillingStrategy {
-    virtual TypeFeedback* fill(const Context& ctx, Function* function,
+    virtual TypeFeedback* fill(const Context& ctx,
                                std::pair<const Context&, TypeFeedback*> e,
-                               const TypeFeedbackDispatchTable* tfdp) {
+                               const TypeFeedbackDispatchTable* tfdp) override {
         auto fillCond = [&](const Context& c) { return e.first.smaller(c); };
         auto fillImpl = [&](const TypeFeedback* tf) { e.second->fillWith(tf); };
         tfdp->filterForeach(fillCond, fillImpl);
