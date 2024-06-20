@@ -3629,7 +3629,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
                       (valT == REALSXP || valT == INTSXP)) || // 2
                      (vectorT == INTSXP && valT == INTSXP) ||
                      (vectorT == VECSXP && val != R_NilValue)) &&
-                    (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
+                    ((valT != S4SXP && XLENGTH(val) == 1) ||
+                     vectorT == VECSXP)) { // 3
 
                     int idx_ = -1;
 
