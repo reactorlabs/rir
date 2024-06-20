@@ -17,8 +17,8 @@ namespace rir {
 #define PROMISE_MAGIC 0xaaa0f13e
 
 /**
- * Promise class couples promise Code with CallContext
- * under which promise was created.
+ * Promise class couples promise Code
+ * with Context under which promise was created.
  */
 #pragma pack(push)
 #pragma pack(1)
@@ -31,12 +31,11 @@ class Promise : public RirRuntimeObject<Promise, PROMISE_MAGIC> {
   public:
     Promise(const Context& context, Code* code)
         : RirRuntimeObject(
-              // GC area starts at &locals and goes to the end of defaultArg_
+              // GC area contains only code
               (intptr_t)&code_ - (intptr_t)this, 1),
           context_(context), code_(nullptr) {
         setEntry(0, code->container());
     }
-    ~Promise() = default;
 
     static Promise* create(const Context& context, Code* code) {
         size_t sz = sizeof(Promise);

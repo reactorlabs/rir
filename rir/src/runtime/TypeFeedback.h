@@ -375,16 +375,16 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
         f(slot);
     }
 
-    void record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
-                          Function* function, SEXP callee,
-                          bool invalidateWhenFull = false);
+    void record_callee_inc(TypeFeedback* inclusive, uint32_t idx,
+                           Function* function, SEXP callee,
+                           bool invalidateWhenFull = false);
 
-    void record_testInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+    void record_test_inc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
 
-    void record_typeInc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
+    void record_type_inc(TypeFeedback* inclusive, uint32_t idx, const SEXP e);
 
-    void record_typeInc(TypeFeedback* inclusive, uint32_t idx,
-                        std::function<void(ObservedValues&)> f);
+    void record_type_inc(TypeFeedback* inclusive, uint32_t idx,
+                         std::function<void(ObservedValues&)> f);
 
     void print(std::ostream& out) const;
 

@@ -97,7 +97,7 @@ struct DispatchTable
         return typeFeedbacks()->dispatch(ctx);
     }
 
-    TypeFeedback* getTypeFeedback(const Context& ctx) const {
+    TypeFeedback* getCompilationTypeFeedback(const Context& ctx) const {
         compareWithDefinedContext(ctx);
         auto feedbacks = typeFeedbacks();
         auto entry = feedbacks->dispatch(ctx, [](const TypeFeedback* tf) {
@@ -258,9 +258,8 @@ struct DispatchTable
         // create type feedback dispatch table
         // TODO: Different feedback table sizes
         auto typeFeedbackTable = TypeFeedbackDispatchTable::create();
-        PROTECT(typeFeedbackTable->container());
         dp->typeFeedbacks(typeFeedbackTable);
-        UNPROTECT(2);
+        UNPROTECT(1);
         return dp;
     }
 
@@ -370,19 +369,20 @@ struct DispatchTable
               // GC area starts at the end of the DispatchTable
               // GC area is the pointers in the entry array
               // and pointer to TypeFeedback dispatch table
-              sizeof(DispatchTable), capacity + 1),
-          typeFeedbackPos_(info.gc_area_length - 1) {}
+              sizeof(DispatchTable), capacity + 1) {}
 
     TypeFeedbackDispatchTable* typeFeedbacks() {
-        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+        return TypeFeedbackDispatchTable::unpack(
+            getEntry(info.gc_area_length - 1));
     }
 
     const TypeFeedbackDispatchTable* typeFeedbacks() const {
-        return TypeFeedbackDispatchTable::unpack(getEntry(typeFeedbackPos_));
+        return TypeFeedbackDispatchTable::unpack(
+            getEntry(info.gc_area_length - 1));
     }
 
     void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
-        setEntry(typeFeedbackPos_, tfdp->container());
+        setEntry(info.gc_area_length - 1, tfdp->container());
     }
 
     void compareWithDefinedContext(const Context& ctx) const {
@@ -397,7 +397,6 @@ struct DispatchTable
 
     size_t size_ = 0;
     Context userDefinedContext_;
-    size_t typeFeedbackPos_;
 };
 
 #pragma pack(pop)

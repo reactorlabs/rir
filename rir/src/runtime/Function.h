@@ -63,16 +63,13 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
-        if (feedback) {
+        if (feedback)
             typeFeedback(feedback);
-        } else
-            setEntry(TYPE_FEEDBACK_IDX, nullptr);
     }
 
     Code* body() const { return Code::unpack(getEntry(BODY_IDX)); }
     void body(SEXP body) { setEntry(BODY_IDX, body); }
 
-    Function* baseline();
     const Function* baseline() const;
     TypeFeedback* typeFeedback() const;
     // Returns TypeFeedback used for recording type feedback for given context

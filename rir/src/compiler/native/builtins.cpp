@@ -369,7 +369,7 @@ static SEXP dotsCallImpl(ArglistOrder::CallId callId, rir::Code* c,
 }
 
 SEXP createPromiseImpl(const Context& context, SEXP expr, SEXP env) {
-    SEXP res = createPromise(context, rir::Code::check(expr), env);
+    SEXP res = createPromise(context, rir::Code::unpack(expr), env);
     SET_PRVALUE(res, R_UnboundValue);
     return res;
 }
@@ -969,7 +969,7 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
-    feedback->record_typeInc(baselineFeedback, idx, value);
+    feedback->record_type_inc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
         if (TYPEOF(value) == PROMSXP) {
@@ -985,14 +985,14 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
     };
-    feedback->record_typeInc(baselineFeedback, idx, recordPromise);
+    feedback->record_type_inc(baselineFeedback, idx, recordPromise);
 }
 
 void recordCallFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
-    feedback->record_calleeInc(baselineFeedback, idx, fun, value);
+    feedback->record_callee_inc(baselineFeedback, idx, fun, value);
 }
 
 void assertFailImpl(const char* msg) {

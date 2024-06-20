@@ -59,7 +59,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
     Context context(assumptions);
     compileClosure(pirClosure, tbl->dispatch(assumptions), context, root,
                    success, fail, outerFeedback,
-                   tbl->getTypeFeedback(assumptions));
+                   tbl->getCompilationTypeFeedback(assumptions));
 }
 
 void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
@@ -75,7 +75,8 @@ void Compiler::compileFunction(rir::DispatchTable* src, const std::string& name,
     auto closure = module->getOrDeclareRirFunction(
         name, srcFunction, formals, srcRef, src->userDefinedContext());
     compileClosure(closure, src->dispatch(assumptions), context, false, success,
-                   fail, outerFeedback, src->getTypeFeedback(assumptions));
+                   fail, outerFeedback,
+                   src->getCompilationTypeFeedback(assumptions));
 }
 
 void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
@@ -94,7 +95,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
 
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
-    auto typeFeedback = tbl->getTypeFeedback(context);
+    auto typeFeedback = tbl->getCompilationTypeFeedback(context);
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {

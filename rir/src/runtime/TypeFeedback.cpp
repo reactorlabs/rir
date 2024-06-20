@@ -84,8 +84,8 @@ void DeoptReason::record(SEXP val, const Context& context) const {
         // IMHO the one there is more correct. Would it make sense
         // to pull this into the TypeFeedback::record_type()?
         // and get rid of the overload that takes lambda?
-        tf->record_typeInc(baselineFeedback, origin.idx(), val);
-        tf->record_typeInc(baselineFeedback, origin.idx(), [&](auto& slot) {
+        tf->record_type_inc(baselineFeedback, origin.idx(), val);
+        tf->record_type_inc(baselineFeedback, origin.idx(), [&](auto& slot) {
             if (TYPEOF(val) == PROMSXP) {
                 if (PRVALUE(val) == R_UnboundValue &&
                     slot.stateBeforeLastForce < ObservedValues::promise)
@@ -103,8 +103,8 @@ void DeoptReason::record(SEXP val, const Context& context) const {
     case DeoptReason::CallTarget: {
         if (val == symbol::UnknownDeoptTrigger)
             break;
-        tf->record_calleeInc(baselineFeedback, origin.idx(), origin.function(),
-                             val, true);
+        tf->record_callee_inc(baselineFeedback, origin.idx(), origin.function(),
+                              val, true);
         break;
     }
     case DeoptReason::EnvStubMaterialized: {
@@ -312,30 +312,30 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     }
 }
 
-void TypeFeedback::record_calleeInc(TypeFeedback* inclusive, uint32_t idx,
-                                    Function* function, SEXP callee,
-                                    bool invalidateWhenFull) {
+void TypeFeedback::record_callee_inc(TypeFeedback* inclusive, uint32_t idx,
+                                     Function* function, SEXP callee,
+                                     bool invalidateWhenFull) {
     record_callee(idx, function, callee, invalidateWhenFull);
     if (inclusive && inclusive != this)
         inclusive->record_callee(idx, function, callee, invalidateWhenFull);
 }
 
-void TypeFeedback::record_testInc(TypeFeedback* inclusive, uint32_t idx,
-                                  const SEXP e) {
+void TypeFeedback::record_test_inc(TypeFeedback* inclusive, uint32_t idx,
+                                   const SEXP e) {
     record_test(idx, e);
     if (inclusive && inclusive != this)
         inclusive->record_test(idx, e);
 }
 
-void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
-                                  const SEXP e) {
+void TypeFeedback::record_type_inc(TypeFeedback* inclusive, uint32_t idx,
+                                   const SEXP e) {
     record_type(idx, e);
     if (inclusive && inclusive != this)
         inclusive->record_type(idx, e);
 }
 
-void TypeFeedback::record_typeInc(TypeFeedback* inclusive, uint32_t idx,
-                                  std::function<void(ObservedValues&)> f) {
+void TypeFeedback::record_type_inc(TypeFeedback* inclusive, uint32_t idx,
+                                   std::function<void(ObservedValues&)> f) {
     record_type(idx, f);
     if (inclusive && inclusive != this)
         inclusive->record_type(idx, f);

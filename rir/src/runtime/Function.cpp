@@ -98,21 +98,11 @@ void Function::clearDisabledAssumptions(Context& given) const {
         given.setSpecializationLevel(GLOBAL_SPECIALIZATION_LEVEL);
 }
 
-Function* Function::baseline() {
-    if (!dispatchTable()) {
-        assert(signature().optimization ==
-               FunctionSignature::OptimizationLevel::Baseline);
-        return this;
-    }
-    return dispatchTable()->baseline();
-}
-
 const Function* Function::baseline() const {
-    if (!dispatchTable()) {
-        assert(signature().optimization ==
-               FunctionSignature::OptimizationLevel::Baseline);
+    if (signature().optimization ==
+        FunctionSignature::OptimizationLevel::Baseline)
         return this;
-    }
+    assert(dispatchTable());
     return dispatchTable()->baseline();
 }
 
@@ -121,18 +111,17 @@ TypeFeedback* Function::typeFeedback() const {
 }
 
 TypeFeedback* Function::typeFeedback(const Context& ctx) {
-    if (dispatchTable() && ctx != context())
-        return dispatchTable()->getOrCreateTypeFeedback(ctx);
-    return typeFeedback();
+    if (ctx == context())
+        return typeFeedback();
+    assert(dispatchTable());
+    return dispatchTable()->getOrCreateTypeFeedback(ctx);
 }
 
 size_t Function::recordingCount(const Context& ctx) {
     if (ctx == context())
         typeFeedback()->recordingCount();
-    auto dp = dispatchTable();
-    if (!dp)
-        return 0;
-    auto entry = dp->dispatchTypeFeedback(ctx);
+    assert(dispatchTable());
+    auto entry = dispatchTable()->dispatchTypeFeedback(ctx);
     if (entry.first != ctx || !entry.second)
         return 0;
     return entry.second->recordingCount();

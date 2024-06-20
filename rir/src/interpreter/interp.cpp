@@ -2005,6 +2005,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
     }
 
     auto function = c->function();
+    auto typeFeedback = function->typeFeedback(recordingContext);
+    auto baselineFeedback = function->baseline()->typeFeedback();
 
     // This is used in loads for recording if the loaded value was a promise
     // and if it was forced. Looks at the next instruction, if it's a force,
@@ -2031,18 +2033,14 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
         auto idx = *(Immediate*)(pc + 1);
         // FIXME: cf. #1260
-        auto typeFeedback = function->typeFeedback(recordingContext);
-        auto baselineFeedback = function->baseline()->typeFeedback();
         auto recordTypeFunc = [&](auto& feedback) {
             if (feedback.stateBeforeLastForce < state) {
                 feedback.stateBeforeLastForce = state;
             }
         };
-        typeFeedback->record_typeInc(baselineFeedback, idx, recordTypeFunc);
+        typeFeedback->record_type_inc(baselineFeedback, idx, recordTypeFunc);
     };
 
-    auto typeFeedback = function->typeFeedback(recordingContext);
-    auto baselineFeedback = function->baseline()->typeFeedback();
     if (newInvocation && pc == c->code() && !isPromise) {
         typeFeedback->increaseRecordingCount();
         if (typeFeedback != baselineFeedback)
@@ -2357,8 +2355,8 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP callee = ostack_top();
-            typeFeedback->record_calleeInc(baselineFeedback, idx, function,
-                                           callee);
+            typeFeedback->record_callee_inc(baselineFeedback, idx, function,
+                                            callee);
             NEXT();
         }
 
@@ -2366,7 +2364,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->record_testInc(baselineFeedback, idx, t);
+            typeFeedback->record_test_inc(baselineFeedback, idx, t);
             NEXT();
         }
 
@@ -2374,7 +2372,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate idx = readImmediate();
             advanceImmediate();
             SEXP t = ostack_top();
-            typeFeedback->record_typeInc(baselineFeedback, idx, t);
+            typeFeedback->record_type_inc(baselineFeedback, idx, t);
             NEXT();
         }
 
