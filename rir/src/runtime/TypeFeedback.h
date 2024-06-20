@@ -349,9 +349,14 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     // appropriate locations.
     uint8_t slots_[];
 
+    // Constructs TypeFeedback with information in their vectors
     explicit TypeFeedback(const std::vector<ObservedCallees>& callees,
                           const std::vector<ObservedTest>& tests,
                           const std::vector<ObservedValues>& types);
+
+    // Construct TypeFeedback without setting any feedback information,
+    // caller should fill the slots
+    explicit TypeFeedback(size_t callees, size_t tests, size_t types);
 
   public:
     static TypeFeedback* create(const std::vector<ObservedCallees>& callees,

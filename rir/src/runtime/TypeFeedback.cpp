@@ -319,6 +319,7 @@ TypeFeedback* TypeFeedback::create(const std::vector<ObservedCallees>& callees,
     return res;
 }
 
+// cppcheck-suppress uninitMemberVarPrivate
 TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
                            const std::vector<ObservedTest>& tests,
                            const std::vector<ObservedValues>& types)
@@ -344,6 +345,19 @@ TypeFeedback::TypeFeedback(const std::vector<ObservedCallees>& callees,
     if (types_size_) {
         memcpy(types_, types.data(), types_mem_size);
     }
+}
+
+// cppcheck-suppress uninitMemberVarPrivate
+TypeFeedback::TypeFeedback(size_t callees, size_t tests, size_t types)
+    : RirRuntimeObject(0, 0), callees_size_(callees), tests_size_(tests),
+      types_size_(types) {
+
+    size_t callees_mem_size = callees_size_ * sizeof(ObservedCallees);
+    size_t tests_mem_size = tests_size_ * sizeof(ObservedTest);
+
+    callees_ = (ObservedCallees*)slots_;
+    tests_ = (ObservedTest*)(slots_ + callees_mem_size);
+    types_ = (ObservedValues*)(slots_ + callees_mem_size + tests_mem_size);
 }
 
 void TypeFeedback::record_callee_inc(TypeFeedback* inclusive, uint32_t idx,
@@ -384,13 +398,24 @@ TypeFeedback* TypeFeedback::emptyCopy() const {
 }
 
 TypeFeedback* TypeFeedback::copy() const {
-    std::vector<ObservedCallees> callees(callees_, callees_ + callees_size_);
-    std::vector<ObservedTest> tests(tests_, tests_ + tests_size_);
-    std::vector<ObservedValues> types(types_, types_ + types_size_);
+    size_t dataSize = callees_size_ * sizeof(ObservedCallees) +
+                      tests_size_ * sizeof(ObservedTest) +
+                      types_size_ * sizeof(ObservedValues);
 
-    auto tf = TypeFeedback::create(callees, tests, types);
-    tf->recordingCount_ = recordingCount_;
-    return tf;
+    size_t objSize = sizeof(TypeFeedback) + dataSize;
+    SEXP store = Rf_allocVector(EXTERNALSXP, objSize);
+    auto res = new (INTEGER(store))
+        TypeFeedback(callees_size_, tests_size_, types_size_);
+    res->recordingCount_ = recordingCount_;
+    if (callees_size_)
+        memcpy(res->callees_, callees_,
+               callees_size_ * sizeof(ObservedCallees));
+    if (tests_size_)
+        memcpy(res->tests_, tests_, tests_size_ * sizeof(ObservedTest));
+    if (types_size_)
+        memcpy(res->types_, types_, types_size_ * sizeof(ObservedValues));
+
+    return res;
 }
 
 void TypeFeedback::mergeWith(const TypeFeedback* tf, Function* function) {

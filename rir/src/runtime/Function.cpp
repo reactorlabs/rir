@@ -117,7 +117,7 @@ TypeFeedback* Function::typeFeedback(const Context& ctx) {
     return dispatchTable()->getOrCreateTypeFeedback(ctx);
 }
 
-size_t Function::recordingCount(const Context& ctx) {
+size_t Function::recordingCount(const Context& ctx) const {
     if (ctx == context())
         typeFeedback()->recordingCount();
     assert(dispatchTable());

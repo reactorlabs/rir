@@ -96,7 +96,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     size_t invocationCount() const { return invocationCount_; }
-    size_t recordingCount(const Context& ctx);
+    size_t recordingCount(const Context& ctx) const;
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
@@ -198,8 +198,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     void dispatchTable(DispatchTable* dt) { dispatchTable_ = dt; }
-    DispatchTable* dispatchTable() { return dispatchTable_; }
-    const DispatchTable* dispatchTable() const { return dispatchTable_; }
+    DispatchTable* dispatchTable() const { return dispatchTable_; }
 
   private:
     unsigned numArgs_;
