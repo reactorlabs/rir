@@ -316,7 +316,7 @@ void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
 void CompilationEvent::print(const std::vector<FunRecording>& mapping,
                              std::ostream& out) const {
     out << "CompilationEvent{\n        dispatch_context="
-        << Context(this->dispatch_context) << ",\n        name=" << compileName
+        << this->version << ",\n        name=" << compileName
         << ",\n        speculative_contexts=[\n";
     for (auto& spec : this->speculative_contexts) {
         out << "            ";
@@ -347,7 +347,7 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
     "closure",
-    "dispatch_context",
+    "version",
     "name",
     "speculative_contexts",
     "compile_reason_heuristic",
@@ -360,19 +360,19 @@ const std::vector<const char*> CompilationEvent::fieldNames = {
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        closureIndex, dispatch_context, compileName, speculative_contexts,
+        closureIndex, version, compileName, speculative_contexts,
         compile_reasons.heuristic, compile_reasons.condition,
         compile_reasons.osr, time_length, subevents, bitcode, succesful);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<
-        CompilationEvent, uint64_t, uint64_t, std::string,
+        CompilationEvent, uint64_t, Context, std::string,
         std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
         std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
         Duration, std::vector<size_t>, std::string, bool>(
         sexp, {closureIndex, serialization::uint64_t_from_sexp},
-        {dispatch_context, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp},
         {compileName, serialization::string_from_sexp},
         {speculative_contexts,
          serialization::vector_from_sexp<

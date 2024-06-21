@@ -303,11 +303,11 @@ class CompilationEvent : public ClosureEvent {
     using Time = std::chrono::time_point<Clock>;
     using Duration = std::chrono::milliseconds;
 
-    CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
+    CompilationEvent(size_t closureIndex, Context version,
                      const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
                      CompileReasons&& compile_reasons)
-        : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
+        : ClosureEvent(closureIndex), version(version),
           compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
           compile_reasons(std::move(compile_reasons)) {}
@@ -337,7 +337,7 @@ class CompilationEvent : public ClosureEvent {
                std::ostream& out) const override;
 
   private:
-    unsigned long dispatch_context; // TODO keep as a Context
+    Context version;
 
     // Name under which the closure was compiled, to be passed to pirCompile()
     std::string compileName;

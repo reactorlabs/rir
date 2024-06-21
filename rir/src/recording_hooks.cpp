@@ -108,15 +108,13 @@ void recordCompile(SEXP cls, const std::string& name,
     auto rec_idx = recorder_.initOrGetRecording(cls, name);
     auto dt = DispatchTable::unpack(BODY(cls));
 
-    auto dispatch_context = assumptions.toI();
-
     auto baseline = dt->baseline();
     auto sc = getSpeculativeContext(baseline->typeFeedback(), baseline);
 
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
-        std::forward_as_tuple(rec_idx, dispatch_context, name, std::move(sc),
+        std::forward_as_tuple(rec_idx, assumptions, name, std::move(sc),
                               std::move(compileReasons_)));
     recordReasonsClear();
 }

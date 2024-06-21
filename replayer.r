@@ -55,8 +55,6 @@ recordings.csv <- function(r) {
     event$idx <- idx
     idx <- idx + 1
 
-    # todo common get fun
-
     if (class(e) == "event_compile") {
       if (!e$succesful) {
           next
@@ -68,7 +66,7 @@ recordings.csv <- function(r) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$ctx <- pp(e$dispatch_context, "context")
+      event$ctx <- pp(e$version, "context")
 
       event$speculative <- paste(insert.commas(lapply(
         e$speculative_contexts,
