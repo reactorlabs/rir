@@ -36,6 +36,7 @@ void recordInvocation(Function* f);
 void recordUnregisterInvocation(Function* f);
 void recordInvocationDoCall(Context callContext);
 void recordInvocationNativeCallTrampoline(Context callContext);
+void recordInvocationRirEval();
 
 void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
 void recordSC(const ObservedTest& type, size_t idx, Function* fun);

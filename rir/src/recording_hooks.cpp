@@ -34,8 +34,7 @@ namespace recording {
 // a flag indicating whether the recording is active or not
 bool is_recording_ = false;
 
-InvocationEvent::SourceSet invocation_source_ =
-    InvocationEvent::SourceSet::None();
+InvocationEvent::Source invocation_source_ = InvocationEvent::Source::Unknown;
 
 Context call_context_ = Context();
 
@@ -200,7 +199,7 @@ void recordInvocation(Function* f) {
                                       call_context_, isNative,
                                       reinterpret_cast<uintptr_t>(cls));
 
-    invocation_source_ = InvocationEvent::SourceSet::None();
+    invocation_source_ = InvocationEvent::Source::Unknown;
     call_context_ = Context();
 }
 
@@ -214,14 +213,19 @@ void recordUnregisterInvocation(Function* f) {
 
 void recordInvocationDoCall(Context callContext) {
     RECORDER_FILTER_GUARD(invoke);
-    invocation_source_.set(InvocationEvent::DoCall);
+    invocation_source_ = InvocationEvent::DoCall;
     call_context_ = callContext;
 }
 
 void recordInvocationNativeCallTrampoline(Context callContext) {
     RECORDER_FILTER_GUARD(invoke);
-    invocation_source_.set(InvocationEvent::NativeCallTrampoline);
+    invocation_source_ = InvocationEvent::NativeCallTrampoline;
     call_context_ = callContext;
+}
+
+void recordInvocationRirEval() {
+    RECORDER_FILTER_GUARD(invoke);
+    invocation_source_ = InvocationEvent::RirEval;
 }
 
 void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
@@ -620,19 +624,22 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         ev->print(ss);
     } else if (type_str == "invocation_source") {
         auto src =
-            rir::recording::serialization::invocation_source_set_from_sexp(obj);
+            rir::recording::serialization::invocation_source_from_sexp(obj);
 
-        if (src.contains(rir::recording::InvocationEvent::DoCall) &&
-            src.contains(
-                rir::recording::InvocationEvent::NativeCallTrampoline)) {
-            ss << "DoCall,NativeCallTrampoline";
-        } else if (src.contains(rir::recording::InvocationEvent::DoCall)) {
+        switch (src) {
+        case rir::recording::InvocationEvent::Unknown:
+            ss << "Unknown";
+            break;
+        case rir::recording::InvocationEvent::DoCall:
             ss << "DoCall";
-        } else if (src.contains(
-                       rir::recording::InvocationEvent::NativeCallTrampoline)) {
+            break;
+        case rir::recording::InvocationEvent::NativeCallTrampoline:
             ss << "NativeCallTrampoline";
+            break;
+        case rir::recording::InvocationEvent::RirEval:
+            ss << "RirEval";
+            break;
         }
-
     } else if (type_str == "deopt_reason") {
         auto reason =
             rir::recording::serialization::deopt_reason_from_sexp(obj);

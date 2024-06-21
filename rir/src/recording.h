@@ -394,16 +394,14 @@ class DeoptEvent : public VersionEvent {
 class InvocationEvent : public VersionEvent {
   public:
     enum Source : uint8_t {
+        Unknown,
         DoCall,
         NativeCallTrampoline,
-        FIRST = DoCall,
-        LAST = NativeCallTrampoline
+        RirEval
     };
 
-    using SourceSet = EnumSet<Source, uint8_t>;
-
     InvocationEvent(size_t dispatchTableIndex, Context version,
-                    SourceSet source, Context callContext, bool isNative,
+                    Source source, Context callContext, bool isNative,
                     uintptr_t address)
         : VersionEvent(dispatchTableIndex, version), source(source),
           callContext(callContext), isNative(isNative), address(address) {}
@@ -423,7 +421,7 @@ class InvocationEvent : public VersionEvent {
                std::ostream& out) const override;
 
   private:
-    SourceSet source = SourceSet::None();
+    Source source = Unknown;
     Context callContext;
     bool isNative;
     uintptr_t address = 0;

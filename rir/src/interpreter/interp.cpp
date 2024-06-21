@@ -3975,12 +3975,14 @@ SEXP rirEval(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
+        REC_HOOK( recording::recordInvocationRirEval() );
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
         return res;
     }
 
     if (auto fun = Function::check(what)) {
+        REC_HOOK( recording::recordInvocationRirEval() );
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
         return res;

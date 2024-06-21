@@ -240,13 +240,13 @@ CompilationEvent::Duration time_from_sexp(SEXP sexp) {
     return CompilationEvent::Duration(count);
 }
 
-SEXP to_sexp(InvocationEvent::SourceSet set) {
-    return Rf_ScalarInteger(static_cast<int>(set.to_i()));
+SEXP to_sexp(InvocationEvent::Source set) {
+    return Rf_ScalarInteger(static_cast<int>(set));
 }
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp) {
+InvocationEvent::Source invocation_source_from_sexp(SEXP sexp) {
     assert(Rf_isInteger(sexp));
-    return InvocationEvent::SourceSet(static_cast<uint8_t>(Rf_asInteger(sexp)));
+    return static_cast<InvocationEvent::Source>(Rf_asInteger(sexp));
 }
 
 } // namespace serialization
