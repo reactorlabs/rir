@@ -417,7 +417,7 @@ class InvocationEvent : public VersionEvent {
   private:
     Source source = Unknown;
     Context callContext;
-    bool isNative;
+    bool isNative = false;
     uintptr_t address = 0;
 };
 
