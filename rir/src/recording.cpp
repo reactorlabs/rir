@@ -522,6 +522,25 @@ void UnregisterInvocationEvent::print(const std::vector<FunRecording>& mapping,
     out << "UnregisterInvocation { [ version=" << version << " ] }";
 }
 
+const std::vector<const char*> ContextCreatedEvent::fieldNames = {
+    "dispatchTable", "context"};
+
+SEXP ContextCreatedEvent::toSEXP() const {
+    return serialization::fields_to_sexp<ContextCreatedEvent>(
+        dispatchTableIndex, context);
+}
+
+void ContextCreatedEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<ContextCreatedEvent, uint64_t, Context>(
+        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        {context, serialization::context_from_sexp});
+}
+
+void ContextCreatedEvent::print(const std::vector<FunRecording>& mapping,
+                                std::ostream& out) const {
+    out << "ContextCreated";
+}
+
 SEXP setClassName(SEXP s, const char* className) {
     SEXP t = PROTECT(Rf_mkString(className));
     Rf_setAttrib(s, R_ClassSymbol, t);

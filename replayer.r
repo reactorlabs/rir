@@ -140,6 +140,14 @@ recordings.csv <- function(r) {
 
       event$is_promise <- e$is_promise
       event$changed <- e$changed
+    } else if (class(e) == "event_context") {
+      event$type <- "ContextCreated"
+
+      f <- get_fun(e$dispatchTable)
+      event$fun <- f[1]
+      event$env <- f[2]
+
+      event$speculative_ctx <- pp(e$context, "context")
     } else {
       event$type = paste0("[", class(e), "]")
     }

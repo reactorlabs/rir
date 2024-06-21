@@ -59,6 +59,8 @@ void recordOsrTriggerLoop(size_t loopCount);
 
 void recordReasonsClear();
 
+void recordContextCreated(const DispatchTable* dt, const Context& ctx);
+
 // Record from environment
 void recordExecution(const char* filePath, const char* filter);
 
@@ -67,7 +69,7 @@ void recordExecution(const char* filePath, const char* filter);
 
 // R API
 REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
-                              SEXP invocation);
+                              SEXP invocation, SEXP context);
 REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();
