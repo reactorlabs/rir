@@ -34,10 +34,6 @@ namespace recording {
 // a flag indicating whether the recording is active or not
 bool is_recording_ = false;
 
-InvocationEvent::Source invocation_source_ = InvocationEvent::Source::Unknown;
-
-Context call_context_ = Context();
-
 // the main recorder
 Record recorder_;
 
@@ -186,46 +182,44 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                                  reason.origin.idx(), trigger);
 }
 
-void recordInvocation(Function* f) {
+void recordInvocation(SEXP cls, Function* f, Context callContext,
+                      InvocationEvent::Source source) {
     RECORDER_FILTER_GUARD(invoke);
 
     Context version = f->context();
-    auto* dt = f->dispatchTable();
 
     bool isNative = f->body()->kind == Code::Kind::Native;
-    SEXP cls = dt->container();
 
-    recorder_.record<InvocationEvent>(dt, version, invocation_source_,
-                                      call_context_, isNative,
-                                      reinterpret_cast<uintptr_t>(cls));
-
-    invocation_source_ = InvocationEvent::Source::Unknown;
-    call_context_ = Context();
+    if (cls != nullptr) {
+        recorder_.record<InvocationEvent>(cls, version, source, callContext,
+                                          isNative,
+                                          reinterpret_cast<uintptr_t>(cls));
+    } else {
+        auto* dt = f->dispatchTable();
+        recorder_.record<InvocationEvent>(dt, version, source, callContext,
+                                          isNative, 0);
+    }
 }
 
-void recordUnregisterInvocation(Function* f) {
+void recordInvocationDoCall(SEXP cls, Function* f, Context callContext) {
+    recordInvocation(cls, f, callContext, InvocationEvent::DoCall);
+}
+
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
+                                          Context callContext) {
+    recordInvocation(cls, f, callContext,
+                     InvocationEvent::NativeCallTrampoline);
+}
+
+void recordInvocationRirEval(Function* f) {
+    recordInvocation(nullptr, f, Context(), InvocationEvent::RirEval);
+}
+
+void recordUnregisterInvocation(SEXP cls, Function* f) {
     RECORDER_FILTER_GUARD(invoke);
     Context version = f->context();
-    auto* dt = f->dispatchTable();
 
-    recorder_.record<UnregisterInvocationEvent>(dt, version);
-}
-
-void recordInvocationDoCall(Context callContext) {
-    RECORDER_FILTER_GUARD(invoke);
-    invocation_source_ = InvocationEvent::DoCall;
-    call_context_ = callContext;
-}
-
-void recordInvocationNativeCallTrampoline(Context callContext) {
-    RECORDER_FILTER_GUARD(invoke);
-    invocation_source_ = InvocationEvent::NativeCallTrampoline;
-    call_context_ = callContext;
-}
-
-void recordInvocationRirEval() {
-    RECORDER_FILTER_GUARD(invoke);
-    invocation_source_ = InvocationEvent::RirEval;
+    recorder_.record<UnregisterInvocationEvent>(cls, version);
 }
 
 void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {

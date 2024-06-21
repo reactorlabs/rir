@@ -393,16 +393,10 @@ class DeoptEvent : public VersionEvent {
 
 class InvocationEvent : public VersionEvent {
   public:
-    enum Source : uint8_t {
-        Unknown,
-        DoCall,
-        NativeCallTrampoline,
-        RirEval
-    };
+    enum Source : uint8_t { Unknown, DoCall, NativeCallTrampoline, RirEval };
 
-    InvocationEvent(size_t dispatchTableIndex, Context version,
-                    Source source, Context callContext, bool isNative,
-                    uintptr_t address)
+    InvocationEvent(size_t dispatchTableIndex, Context version, Source source,
+                    Context callContext, bool isNative, uintptr_t address)
         : VersionEvent(dispatchTableIndex, version), source(source),
           callContext(callContext), isNative(isNative), address(address) {}
 
@@ -512,6 +506,14 @@ class Record {
   public:
     Record() = default;
     ~Record();
+
+    template <typename E, typename... Args>
+    void record(SEXP cls, Args&&... args) {
+        assert(cls != nullptr);
+        auto entry = initOrGetRecording(cls);
+        log.emplace_back(
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
+    }
 
     template <typename E, typename... Args>
     void record(const DispatchTable* dt, Args&&... args) {

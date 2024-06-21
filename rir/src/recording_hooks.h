@@ -32,11 +32,10 @@ void recordLLVMBitcode(llvm::Function* fun);
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 
-void recordInvocation(Function* f);
-void recordUnregisterInvocation(Function* f);
-void recordInvocationDoCall(Context callContext);
-void recordInvocationNativeCallTrampoline(Context callContext);
-void recordInvocationRirEval();
+void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callContext);
+void recordInvocationRirEval(Function* f);
+void recordUnregisterInvocation(SEXP cls, Function* f);
 
 void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
 void recordSC(const ObservedTest& type, size_t idx, Function* fun);

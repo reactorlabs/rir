@@ -106,13 +106,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         invoked = 0;
         if (invocationCount_ > 0)
             invocationCount_--;
-        REC_HOOK(recording::recordUnregisterInvocation(this));
     }
 
     void registerInvocation() {
         if (invocationCount_ < UINT_MAX)
             invocationCount_++;
-        REC_HOOK(recording::recordInvocation(this));
     }
 
     unsigned size; /// Size, in bytes, of the function and its data
