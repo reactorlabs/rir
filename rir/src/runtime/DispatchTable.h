@@ -110,7 +110,7 @@ struct DispatchTable
                                                entry.second->copy()};
         PROTECT(p.second->container());
         MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
-        NoFillingStrategy fillStrategy;
+        TopFeedbackFillingStrategy fillStrategy;
         p.second = mergeStrategy.merge(ctx, baseline(), p, feedbacks);
         p.second = fillStrategy.fill(ctx, p, feedbacks);
         UNPROTECT(1);
