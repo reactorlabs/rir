@@ -134,6 +134,8 @@ struct ObservedTest {
 
   private:
     inline void record(const SEXP e) {
+        REC_HOOK(uint32_t old = seen);
+
         if (e == R_TrueValue) {
             if (seen == None)
                 seen = OnlyTrue;
@@ -147,6 +149,8 @@ struct ObservedTest {
         } else {
             seen = Both;
         }
+
+        REC_HOOK(recording::recordSCChanged((old & 3) != (seen & 3)));
     }
     inline void mergeWith(const ObservedTest& test);
     inline bool isEmpty() const { return seen == None; }
@@ -186,6 +190,8 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
+        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
+
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
         // attributes implies that it is not an object, but this is not
@@ -203,6 +209,7 @@ struct ObservedValues {
         uint8_t type = TYPEOF(e);
         if (numTypes < MaxTypes)
             addType(type);
+        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 
     inline void mergeWith(const ObservedValues& val) {
@@ -391,17 +398,17 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {
         callees(idx).record(function, callee, invalidateWhenFull);
-        REC_HOOK(recording::recordSC(callees(idx), owner_));
+        REC_HOOK(recording::recordSC(callees(idx), idx, owner_));
     }
 
     void record_test(uint32_t idx, const SEXP e) {
         test(idx).record(e);
-        REC_HOOK(recording::recordSC(test(idx), owner_));
+        REC_HOOK(recording::recordSC(test(idx), idx, owner_));
     }
 
     void record_type(uint32_t idx, const SEXP e) {
         types(idx).record(e);
-        REC_HOOK(recording::recordSC(types(idx), owner_));
+        REC_HOOK(recording::recordSC(types(idx), idx, owner_));
     }
 
     void record_type(uint32_t idx, std::function<void(ObservedValues&)> f) {
@@ -419,6 +426,10 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
 
     void record_type_inc(TypeFeedback* inclusive, uint32_t idx,
                          std::function<void(ObservedValues&)> f);
+
+    size_t callees_size() { return callees_size_; }
+    size_t tests_size() { return tests_size_; }
+    size_t types_size() { return types_size_; }
 
     void print(std::ostream& out) const;
 

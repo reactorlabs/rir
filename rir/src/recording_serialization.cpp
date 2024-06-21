@@ -107,8 +107,6 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, rir::recording::DeoptEvent::className)) {
         event = std::make_unique<rir::recording::DeoptEvent>();
-    } else if (Rf_inherits(sexp, rir::recording::DtInitEvent::className)) {
-        event = std::make_unique<rir::recording::DtInitEvent>();
     } else if (Rf_inherits(sexp, rir::recording::InvocationEvent::className)) {
         event = std::make_unique<rir::recording::InvocationEvent>();
     } else if (Rf_inherits(
@@ -242,13 +240,13 @@ CompilationEvent::Duration time_from_sexp(SEXP sexp) {
     return CompilationEvent::Duration(count);
 }
 
-SEXP to_sexp(InvocationEvent::SourceSet set) {
-    return Rf_ScalarInteger(static_cast<int>(set.to_i()));
+SEXP to_sexp(InvocationEvent::Source set) {
+    return Rf_ScalarInteger(static_cast<int>(set));
 }
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp) {
+InvocationEvent::Source invocation_source_from_sexp(SEXP sexp) {
     assert(Rf_isInteger(sexp));
-    return InvocationEvent::SourceSet(static_cast<uint8_t>(Rf_asInteger(sexp)));
+    return static_cast<InvocationEvent::Source>(Rf_asInteger(sexp));
 }
 
 } // namespace serialization

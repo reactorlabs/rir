@@ -35,6 +35,7 @@ void ObservedCallees::addCallee(Function* function, SEXP callee) {
 
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
+    REC_HOOK(bool isSuccesful = false);
     if (taken < CounterOverflow)
         taken++;
 
@@ -42,6 +43,8 @@ void ObservedCallees::record(Function* function, SEXP callee,
         addCallee(function, callee);
     else if (invalidateWhenFull)
         invalid = true;
+
+    REC_HOOK(recording::recordSCChanged(isSuccesful));
 }
 
 void ObservedCallees::mergeWith(const ObservedCallees& callees,
@@ -56,6 +59,7 @@ void ObservedCallees::mergeWith(const ObservedCallees& callees,
             return;
         addCallee(function, caller->getExtraPoolEntry(callees.targets[i]));
     }
+
 }
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
@@ -84,11 +88,18 @@ void DeoptReason::record(SEXP val, const Context& context) const {
         break;
     case DeoptReason::DeadBranchReached: {
         auto& feedback = tf->test(origin.idx());
+        REC_HOOK(
+            recording::recordSCChanged(feedback.seen != ObservedTest::Both));
         feedback.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSC(feedback, origin.function()));
+        REC_HOOK(
+            recording::recordSC(feedback, origin.idx(), origin.function()));
+
         auto& bf = baselineFeedback->test(origin.idx());
+        REC_HOOK(
+            recording::recordSCChanged(bf.seen != ObservedTest::Both));
         bf.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSC(bf, origin.function()));
+        REC_HOOK(
+            recording::recordSC(bf, origin.idx(), origin.function()));
         break;
     }
     case DeoptReason::Typecheck: {

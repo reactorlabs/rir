@@ -31,16 +31,16 @@ void recordLLVMBitcode(llvm::Function* fun);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
-void recordDtOverwrite(const DispatchTable* dt, size_t version,
-                       size_t oldDeoptCount);
 
-void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
-void recordInvocationDoCall();
-void recordInvocationNativeCallTrampoline();
+void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callContext);
+void recordInvocationRirEval(Function* f);
+void recordUnregisterInvocation(SEXP cls, Function* f);
 
-void recordSC(const ObservedCallees& type, Function* fun);
-void recordSC(const ObservedTest& type, Function* fun);
-void recordSC(const ObservedValues& type, Function* fun);
+void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
+void recordSC(const ObservedTest& type, size_t idx, Function* fun);
+void recordSC(const ObservedValues& type, size_t idx, Function* fun);
+void recordSCChanged(bool changed);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();
@@ -65,6 +65,8 @@ void recordExecution(const char* filePath, const char* filter);
 } // namespace rir
 
 // R API
+REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
+                              SEXP invocation);
 REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();

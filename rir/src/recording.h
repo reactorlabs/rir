@@ -21,7 +21,6 @@
 #include <utility>
 #include <vector>
 
-// TODO to string classes are not kept up-to-date
 namespace rir {
 namespace recording {
 
@@ -29,7 +28,7 @@ namespace recording {
 SEXP setClassName(SEXP s, const char* className);
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
-SEXP getEnvironment(const std::string& name);
+std::string getClosureName(SEXP cls);
 
 class Record;
 struct FunRecording;
@@ -203,17 +202,6 @@ class Event {
     virtual void print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const = 0;
 
-    /**
-     * Returns `true` if the Event directly or indirectly stores the index of a
-     * given function recording
-     *
-     * For instance, a CompilationEvent would return `true` if its stored
-     * speculative contexts contained an ObservedCallee refering to the given
-     * `recordingIdx`.
-     *
-     * Function recordings that are never refered may be removed.
-     */
-    virtual bool containsReference(size_t recordingIdx) const { return false; }
     virtual const char*
     targetName(const std::vector<FunRecording>& mapping) const = 0;
 };
@@ -232,10 +220,6 @@ class ClosureEvent : public Event {
     explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
 
     size_t closureIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == closureIndex;
-    };
 
     const char*
     targetName(const std::vector<FunRecording>& mapping) const override;
@@ -256,10 +240,6 @@ class DtEvent : public Event {
         : dispatchTableIndex(dispatchTableIndex){};
 
     size_t dispatchTableIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == dispatchTableIndex;
-    };
 
     const char*
     targetName(const std::vector<FunRecording>& mapping) const override;
@@ -289,18 +269,18 @@ class VersionEvent : public DtEvent {
  */
 class SpeculativeContextEvent : public DtEvent {
   public:
-    SpeculativeContextEvent(size_t dispatchTableIndex, ssize_t codeIndex,
-                            size_t offset, const SpeculativeContext& sc)
-        : DtEvent(dispatchTableIndex), codeIndex(codeIndex), offset(offset),
-          sc(sc) {}
-    SpeculativeContextEvent()
-        : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
+    SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
+                            size_t index, const SpeculativeContext& sc,
+                            bool changed)
+        : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
+          sc(sc), changed(changed) {}
+
+    SpeculativeContextEvent() = default;
 
     virtual ~SpeculativeContextEvent() = default;
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t dispatchTable) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_sc";
@@ -310,10 +290,11 @@ class SpeculativeContextEvent : public DtEvent {
                std::ostream& out) const override;
 
   private:
-    // -1 for function body itself, n≥0 for promise index
-    ssize_t codeIndex;
-    size_t offset;
-    SpeculativeContext sc;
+    bool is_promise;
+    // Index of the slot
+    size_t index;
+    SpeculativeContext sc = SpeculativeContext({0});
+    bool changed;
 };
 
 class CompilationEvent : public ClosureEvent {
@@ -322,23 +303,16 @@ class CompilationEvent : public ClosureEvent {
     using Time = std::chrono::time_point<Clock>;
     using Duration = std::chrono::milliseconds;
 
-    CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
+    CompilationEvent(size_t closureIndex, Context version,
                      const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
                      CompileReasons&& compile_reasons)
-        : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
+        : ClosureEvent(closureIndex), version(version),
           compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
           compile_reasons(std::move(compile_reasons)) {}
 
-    CompilationEvent(CompilationEvent&& other)
-        : ClosureEvent(other.closureIndex),
-          dispatch_context(other.dispatch_context),
-          compileName(std::move(other.compileName)),
-          speculative_contexts(std::move(other.speculative_contexts)),
-          compile_reasons(std::move(other.compile_reasons)),
-          time_length(other.time_length), subevents(std::move(other.subevents)),
-          bitcode(std::move(other.bitcode)), succesful(other.succesful) {}
+    CompilationEvent(CompilationEvent&& other) = default;
 
     CompilationEvent() {}
 
@@ -346,7 +320,6 @@ class CompilationEvent : public ClosureEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t recordingIdx) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_compile";
@@ -364,7 +337,7 @@ class CompilationEvent : public ClosureEvent {
                std::ostream& out) const override;
 
   private:
-    unsigned long dispatch_context; // TODO keep as a Context
+    Context version;
 
     // Name under which the closure was compiled, to be passed to pirCompile()
     std::string compileName;
@@ -388,9 +361,8 @@ class DeoptEvent : public VersionEvent {
     DeoptEvent(const DeoptEvent&) = delete;
     DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
-               DeoptReason::Reason reason,
-               std::pair<ssize_t, ssize_t> reasonCodeIdx,
-               uint32_t reasonCodeOff, SEXP trigger);
+               DeoptReason::Reason reason, size_t reasonCodeIdx,
+               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger);
     virtual ~DeoptEvent();
     DeoptEvent() = default;
 
@@ -401,16 +373,17 @@ class DeoptEvent : public VersionEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_deopt";
 
-    virtual bool containsReference(size_t recordingIdx) const override;
-
   protected:
     void print(const std::vector<FunRecording>& mapping,
                std::ostream& out) const override;
 
   private:
     DeoptReason::Reason reason_;
-    /* negative indicates promise index, positive function index */
-    std::pair<ssize_t, ssize_t> reasonCodeIdx_;
+    size_t reasonCodeIdx_;
+    // If it is a promise (>= 0), this is the index
+    // in the extraEntryPools
+    ssize_t reasonPromiseIdx_;
+
     uint32_t reasonCodeOff_;
 
     // These 2 fields are mutually exclusive
@@ -418,44 +391,14 @@ class DeoptEvent : public VersionEvent {
     ssize_t triggerClosure_ = -1; // References a FunRecorder index
 };
 
-// TODO delete, not used (?)
-class DtInitEvent : public DtEvent {
-  public:
-    DtInitEvent(size_t dtIndex, size_t invocations, size_t deopts)
-        : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
-
-    virtual ~DtInitEvent() = default;
-    DtInitEvent() = default;
-
-    SEXP toSEXP() const override;
-    void fromSEXP(SEXP file) override;
-
-    static const std::vector<const char*> fieldNames;
-    static constexpr const char* className = "event_dt_init";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
-  private:
-    size_t invocations, deopts;
-};
-
 class InvocationEvent : public VersionEvent {
   public:
-    enum Source : uint8_t {
-        DoCall,
-        NativeCallTrampoline,
-        FIRST = DoCall,
-        LAST = NativeCallTrampoline
-    };
+    enum Source : uint8_t { Unknown, DoCall, NativeCallTrampoline, RirEval };
 
-    using SourceSet = EnumSet<Source, uint8_t>;
-
-    InvocationEvent(size_t dispatchTableIndex, Context version,
-                    ssize_t deltaCount, size_t deltaDeopt, SourceSet source)
-        : VersionEvent(dispatchTableIndex, version), deltaCount(deltaCount),
-          deltaDeopt(deltaDeopt), source(source){};
+    InvocationEvent(size_t dispatchTableIndex, Context version, Source source,
+                    Context callContext, bool isNative, uintptr_t address)
+        : VersionEvent(dispatchTableIndex, version), source(source),
+          callContext(callContext), isNative(isNative), address(address) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -472,10 +415,30 @@ class InvocationEvent : public VersionEvent {
                std::ostream& out) const override;
 
   private:
-    ssize_t deltaCount = 0;
-    size_t deltaDeopt = 0;
+    Source source = Unknown;
+    Context callContext;
+    bool isNative;
+    uintptr_t address = 0;
+};
 
-    SourceSet source = SourceSet::None();
+class UnregisterInvocationEvent : public VersionEvent {
+  public:
+    UnregisterInvocationEvent(size_t dispatchTableIndex, Context version)
+        : VersionEvent(dispatchTableIndex, version) {}
+
+    UnregisterInvocationEvent() : VersionEvent() {}
+
+    virtual ~UnregisterInvocationEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_unregister_invocation";
+
+  protected:
+    void print(const std::vector<FunRecording>& mapping,
+               std::ostream& out) const override;
 };
 
 // From names.c
@@ -513,10 +476,17 @@ struct FunRecording {
                                     const FunRecording& that);
 
     FunRecording() = default;
-    explicit FunRecording(size_t primIdx) : primIdx(primIdx) {
+    explicit FunRecording(size_t primIdx, SEXP closure)
+        : primIdx(primIdx), closure(closure) {
         assert(primIdx < R_FunTab_Len);
         name = R_FunTab[primIdx].name;
     }
+
+    explicit FunRecording(const std::string& name, const std::string& env,
+                          SEXP closure)
+        : name(name), env(env), closure(closure) {}
+
+    explicit FunRecording(const std::string& name) : name(name) {}
 };
 
 class Record {
@@ -533,40 +503,23 @@ class Record {
     // TODO deque (?)
     std::vector<std::unique_ptr<Event>> log;
 
-  protected:
-    size_t indexOfBaseline(const rir::Code* code);
-
   public:
     Record() = default;
     ~Record();
 
     template <typename E, typename... Args>
     void record(SEXP cls, Args&&... args) {
+        assert(cls != nullptr);
         auto entry = initOrGetRecording(cls);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
-    void record(SEXP cls, const std::string& name, Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     template <typename E, typename... Args>
     void record(const DispatchTable* dt, Args&&... args) {
         auto entry = initOrGetRecording(dt);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
-    void record(const DispatchTable* cls, const std::string& name,
-                Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     size_t push_event(std::unique_ptr<Event> e) {
@@ -575,25 +528,18 @@ class Record {
         return idx;
     }
 
-    /**
-     * Returns `true` if the list of recorded functions contains a closure whose
-     * DispatchTable is the one given
-     */
-    bool contains(const DispatchTable* dt);
+    FunRecording& get_recording(size_t idx) { return functions[idx]; }
 
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const DispatchTable* dt, const std::string& name = "");
+    // Can return just size_t
+    size_t initOrGetRecording(const DispatchTable* dt,
+                              const std::string& name = "");
 
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const SEXP cls, const std::string& name = "");
+    // Can just return size_t
+    size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
 
-    void recordSpeculativeContext(DispatchTable* dt,
-                                  std::vector<SpeculativeContext>& ctx);
-
-    void recordSpeculativeContext(const Code* code,
-                                  std::vector<SpeculativeContext>& ctx);
-
-    std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
+    // First is a fun recording index, second is -1 if it is baseline,
+    // otherwise promise idx
+    std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
     void reset() {

@@ -34,7 +34,7 @@ recordings.csv <- function(r) {
     result <<- paste0(result, vec, "\n")
   }
 
-  columns <- c("type", "fun", "env", "ctx", "speculative", "reason", "bitcode_len", "invocation_delta", "deopt_delta")
+  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "changed", "is_promise", "is_native", "callee_address")
 
   line(columns)
 
@@ -47,8 +47,13 @@ recordings.csv <- function(r) {
     recordings.printEventPart(obj, type, r$functions)
   }
 
+  idx <- 1
+
   for (e in r$events) {
     event <- NULL
+
+    event$idx <- idx
+    idx <- idx + 1
 
     if (class(e) == "event_compile") {
       if (!e$succesful) {
@@ -61,7 +66,7 @@ recordings.csv <- function(r) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$ctx <- pp(e$dispatch_context, "context")
+      event$ctx <- pp(e$version, "context")
 
       event$speculative <- paste(insert.commas(lapply(
         e$speculative_contexts,
@@ -93,7 +98,16 @@ recordings.csv <- function(r) {
       event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
-      event$reason <- paste0(pp(e$reason, "deopt_reason"), "@", e$reason_code_idx)
+
+      if ( e$reason_promise_idx >= 0 ){
+          reason <- paste0( "Promise ", e$reason_promise_idx )
+      } else {
+          reason <- "Baseline"
+      }
+
+      reason <- paste0("(", reason, ",offset=", e$reason_code_off, ")")
+
+      event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
 
@@ -103,9 +117,18 @@ recordings.csv <- function(r) {
 
       event$ctx <- pp(e$context, "context")
 
-      event$invocation_delta <- e$deltaCount
-      event$deopt_delta <- e$deltaDeopt
+      event$call_ctx <- pp(e$callContext, "context")
+      event$is_native <- e$isNative
       event$reason <- pp(e$source, "invocation_source")
+
+      event$callee_address <- pp(e$address, "address")
+
+    } else if (class(e) == "event_unregister_invocation"){
+      event$type <- "UnregisterInvocation"
+
+      f <- get_fun(e$dispatchTable)
+      event$fun <- f[1]
+      event$env <- f[2]
     } else if (class(e) == "event_sc") {
       event$type <- "SpeculativeContext"
 
@@ -113,8 +136,10 @@ recordings.csv <- function(r) {
       event$fun <- f[1]
       event$env <- f[2]
 
-      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$offset)
+      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
 
+      event$is_promise <- e$is_promise
+      event$changed <- e$changed
     } else {
       event$type = paste0("[", class(e), "]")
     }

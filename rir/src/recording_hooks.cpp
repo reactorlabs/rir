@@ -34,9 +34,6 @@ namespace recording {
 // a flag indicating whether the recording is active or not
 bool is_recording_ = false;
 
-InvocationEvent::SourceSet invocation_source_ =
-    InvocationEvent::SourceSet::None();
-
 // the main recorder
 Record recorder_;
 
@@ -55,14 +52,13 @@ struct {
     .invoke = false,
 };
 
-// Don't record invocations while replaying compile events
-static bool isPlayingCompile = false;
-
 CompileReasons compileReasons_;
 std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
     compilation_stack_;
 
 const char* finalizerPath = nullptr;
+
+bool sc_changed_;
 
 /************************ Hooks **********************************/
 
@@ -70,25 +66,50 @@ const char* finalizerPath = nullptr;
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
 
+std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
+                                                      Function* baseline) {
+    std::vector<SpeculativeContext> result;
+
+    for (size_t i = 0; i < feedback->callees_size(); i++) {
+        auto observed = feedback->callees(i);
+        SpeculativeContext::ObservedCalleesArr callees;
+        callees.fill(NO_INDEX);
+
+        for (size_t j = 0; j < observed.numTargets; j++) {
+            auto target = observed.getTarget(baseline, j);
+            if (Rf_isFunction(target)) {
+                callees[j] = recorder_.initOrGetRecording(target);
+            }
+        }
+
+        result.emplace_back(callees);
+    }
+
+    for (size_t i = 0; i < feedback->tests_size(); i++) {
+        result.emplace_back(feedback->test(i));
+    }
+
+    for (size_t i = 0; i < feedback->types_size(); i++) {
+        result.emplace_back(feedback->types(i));
+    }
+
+    return result;
+}
+
 void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
 
-    auto rec = recorder_.initOrGetRecording(cls, name);
-    if (rec.second.name == "") {
-        rec.second.name = name;
-    }
-
-    std::vector<SpeculativeContext> sc;
+    auto rec_idx = recorder_.initOrGetRecording(cls, name);
     auto dt = DispatchTable::unpack(BODY(cls));
-    recorder_.recordSpeculativeContext(dt, sc);
 
-    auto dispatch_context = assumptions.toI();
+    auto baseline = dt->baseline();
+    auto sc = getSpeculativeContext(baseline->typeFeedback(), baseline);
 
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
-        std::forward_as_tuple(rec.first, dispatch_context, name, std::move(sc),
+        std::forward_as_tuple(rec_idx, assumptions, name, std::move(sc),
                               std::move(compileReasons_)));
     recordReasonsClear();
 }
@@ -117,32 +138,7 @@ void recordCompileFinish(bool succesful) {
 }
 
 void recordOsrCompile(const SEXP cls) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto env = PROTECT(CLOENV(cls));
-    auto symbols = PROTECT(R_lsInternal(env, TRUE));
-
-    std::string name = "";
-
-    auto size = Rf_length(symbols);
-    for (int i = 0; i < size; i++) {
-        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
-        auto symbol = PROTECT(Rf_install(symbol_char));
-
-        auto value = PROTECT(Rf_findVarInFrame(env, symbol));
-
-        if (value == cls) {
-            name = symbol_char;
-            UNPROTECT(2);
-            break;
-        }
-
-        UNPROTECT(2);
-    }
-
-    UNPROTECT(2);
-
-    recordCompile(cls, name, pir::Compiler::defaultContext);
+    recordCompile(cls, "", pir::Compiler::defaultContext);
 }
 
 void recordLLVMBitcode(llvm::Function* fun) {
@@ -155,11 +151,6 @@ void recordLLVMBitcode(llvm::Function* fun) {
 
     assert(!compilation_stack_.empty());
     compilation_stack_.top().second.set_bitcode(ss.str());
-}
-
-size_t Record::indexOfBaseline(const rir::Code* code) {
-    DispatchTable* dt = code->function()->dispatchTable();
-    return initOrGetRecording(const_cast<DispatchTable*>(dt)).first;
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
@@ -186,110 +177,84 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     auto reasonCodeIdx = recorder_.findIndex(dt->baseline()->body(),
                                              reason.origin.function()->body());
 
-    assert(reasonCodeIdx.first >= 0 &&
-           "Could not locate deopt reason location");
-
-    recorder_.record<DeoptEvent>(dt, version, reason.reason, reasonCodeIdx,
+    recorder_.record<DeoptEvent>(dt, version, reason.reason,
+                                 reasonCodeIdx.first, reasonCodeIdx.second,
                                  reason.origin.idx(), trigger);
 }
 
-void recordDtOverwrite(const DispatchTable* dt, size_t funIdx,
-                       size_t oldDeoptCount) {
-    if (!is_recording_) {
-        return;
-    }
-
-    recorder_.record<DtInitEvent>(dt, funIdx, oldDeoptCount);
-}
-
-void recordInvocation(Function* f, ssize_t deltaCount, size_t previousCount) {
+void recordInvocation(SEXP cls, Function* f, Context callContext,
+                      InvocationEvent::Source source) {
     RECORDER_FILTER_GUARD(invoke);
-    if (!is_recording_ || isPlayingCompile)
-        return;
 
     Context version = f->context();
-    auto* dt = f->dispatchTable();
-    if (!dt) {
-        return;
-    }
 
-    if (!recorder_.contains(dt)) {
-        return;
-    }
+    bool isNative = f->body()->kind == Code::Kind::Native;
 
-    recorder_.record<InvocationEvent>(dt, version, deltaCount, previousCount,
-                                      invocation_source_);
-    invocation_source_ = InvocationEvent::SourceSet::None();
-}
-
-void recordInvocationDoCall() {
-    RECORDER_FILTER_GUARD(invoke);
-    invocation_source_.set(InvocationEvent::DoCall);
-}
-
-void recordInvocationNativeCallTrampoline() {
-    RECORDER_FILTER_GUARD(invoke);
-    invocation_source_.set(InvocationEvent::NativeCallTrampoline);
-}
-
-void recordSC(const SpeculativeContext& sc, Function* fun) {
-    RECORDER_FILTER_GUARD(typeFeedback);
-
-    // Find is it is a baseline (-1) or a promise
-    auto* dt = fun->dispatchTable();
-    auto* baseline = dt->baseline()->body();
-
-    auto* code = fun->body();
-    ssize_t codeIndex = -2;
-    if (baseline == code) {
-        codeIndex = -1;
+    if (cls != nullptr) {
+        recorder_.record<InvocationEvent>(cls, version, source, callContext,
+                                          isNative,
+                                          reinterpret_cast<uintptr_t>(cls));
     } else {
-        for (size_t i = 0; i < baseline->extraPoolSize; i++) {
-            SEXP epe = baseline->getExtraPoolEntry(i);
-            if (Code::check(epe) == code) {
-                codeIndex = i;
-                break;
-            }
-        }
+        auto* dt = f->dispatchTable();
+        recorder_.record<InvocationEvent>(dt, version, source, callContext,
+                                          isNative, 0);
     }
-
-    if (codeIndex == -2) {
-        std::cerr << "[rec speculative ctx] code not found" << std::endl;
-        return;
-    }
-
-    // TODO offset
-    recorder_.record<SpeculativeContextEvent>(dt, codeIndex, 0, sc);
 }
 
-void recordSC(const ObservedCallees& callees, Function* fun) {
+void recordInvocationDoCall(SEXP cls, Function* f, Context callContext) {
+    recordInvocation(cls, f, callContext, InvocationEvent::DoCall);
+}
+
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
+                                          Context callContext) {
+    recordInvocation(cls, f, callContext,
+                     InvocationEvent::NativeCallTrampoline);
+}
+
+void recordInvocationRirEval(Function* f) {
+    recordInvocation(nullptr, f, Context(), InvocationEvent::RirEval);
+}
+
+void recordUnregisterInvocation(SEXP cls, Function* f) {
+    RECORDER_FILTER_GUARD(invoke);
+    Context version = f->context();
+
+    recorder_.record<UnregisterInvocationEvent>(cls, version);
+}
+
+void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
+    auto dt = fun->dispatchTable();
+    bool isPromise = fun != dt->baseline();
+
+    recorder_.record<SpeculativeContextEvent>(dt, isPromise, idx, sc,
+                                              sc_changed_);
+}
+
+void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
     SpeculativeContext::ObservedCalleesArr targets;
     targets.fill(-1);
 
     for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(fun, i)).first;
+        targets[i] = recorder_.initOrGetRecording(callees.getTarget(fun, i));
     }
 
-    recordSC(SpeculativeContext(targets), fun);
+    recordSC(SpeculativeContext(targets), idx, fun);
 }
 
-void recordSC(const ObservedTest& test, Function* fun) {
+void recordSC(const ObservedTest& test, size_t idx, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(test), fun);
+    recordSC(SpeculativeContext(test), idx, fun);
 }
 
-void recordSC(const ObservedValues& type, Function* fun) {
+void recordSC(const ObservedValues& type, size_t idx, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(type), fun);
+    recordSC(SpeculativeContext(type), idx, fun);
 }
 
-SEXP setClassName(SEXP s, const char* className) {
-    SEXP t = PROTECT(Rf_mkString(className));
-    Rf_setAttrib(s, R_ClassSymbol, t);
-    UNPROTECT(1);
-    return s;
+void recordSCChanged(bool changed) {
+    RECORDER_FILTER_GUARD(typeFeedback);
+    sc_changed_ = changed;
 }
 
 /**
@@ -603,7 +568,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
 
         switch (sc.type) {
         case rir::recording::SpeculativeContextType::Callees: {
-            ss << "Callees[";
+            ss << "[";
             bool first = true;
             for (auto c : sc.value.callees) {
                 if (c == rir::recording::NO_INDEX)
@@ -624,7 +589,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         }
 
         case rir::recording::SpeculativeContextType::Test:
-            ss << "Test{";
+            ss << "(";
             switch (sc.value.test.seen) {
             case rir::ObservedTest::None:
                 ss << "None";
@@ -639,13 +604,13 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                 ss << "Both";
                 break;
             }
-            ss << "}";
+            ss << ")";
             break;
 
         case rir::recording::SpeculativeContextType::Values:
-            ss << "Values{";
+            ss << "(";
             sc.value.values.print(ss);
-            ss << "}";
+            ss << ")";
             break;
         }
     } else if (type_str == "reason") {
@@ -653,19 +618,22 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         ev->print(ss);
     } else if (type_str == "invocation_source") {
         auto src =
-            rir::recording::serialization::invocation_source_set_from_sexp(obj);
+            rir::recording::serialization::invocation_source_from_sexp(obj);
 
-        if (src.contains(rir::recording::InvocationEvent::DoCall) &&
-            src.contains(
-                rir::recording::InvocationEvent::NativeCallTrampoline)) {
-            ss << "DoCall,NativeCallTrampoline";
-        } else if (src.contains(rir::recording::InvocationEvent::DoCall)) {
+        switch (src) {
+        case rir::recording::InvocationEvent::Unknown:
+            ss << "Unknown";
+            break;
+        case rir::recording::InvocationEvent::DoCall:
             ss << "DoCall";
-        } else if (src.contains(
-                       rir::recording::InvocationEvent::NativeCallTrampoline)) {
+            break;
+        case rir::recording::InvocationEvent::NativeCallTrampoline:
             ss << "NativeCallTrampoline";
+            break;
+        case rir::recording::InvocationEvent::RirEval:
+            ss << "RirEval";
+            break;
         }
-
     } else if (type_str == "deopt_reason") {
         auto reason =
             rir::recording::serialization::deopt_reason_from_sexp(obj);
@@ -699,11 +667,14 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             ss << "Unknown";
             break;
         }
+    } else if (type_str == "address") {
+        ss << "0x" << std::hex
+           << rir::recording::serialization::uint64_t_from_sexp(obj);
     } else {
-        std::cerr
-            << "type parameter '" << type_str
-            << "' is not a known type (context,speculative,reason,deopt_reason)"
-            << std::endl;
+        std::cerr << "type parameter '" << type_str
+                  << "' is not a known type "
+                     "(context,speculative,reason,deopt_reason,address)"
+                  << std::endl;
         return R_NilValue;
     }
 
