@@ -59,6 +59,8 @@ std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
 const char* finalizerPath = nullptr;
 
 bool sc_changed_;
+Function* sc_function_ = nullptr;
+Context sc_context_;
 
 /************************ Hooks **********************************/
 
@@ -222,39 +224,45 @@ void recordUnregisterInvocation(SEXP cls, Function* f) {
     recorder_.record<UnregisterInvocationEvent>(cls, version);
 }
 
-void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
-    auto dt = fun->dispatchTable();
-    bool isPromise = fun != dt->baseline();
+void recordSC(const SpeculativeContext& sc, size_t idx) {
+    auto dt = sc_function_->dispatchTable();
+    bool isPromise = sc_function_ != dt->baseline();
 
     recorder_.record<SpeculativeContextEvent>(dt, isPromise, idx, sc,
                                               sc_changed_);
 }
 
-void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {
+void recordSC(const ObservedCallees& callees, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
     SpeculativeContext::ObservedCalleesArr targets;
     targets.fill(-1);
 
     for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] = recorder_.initOrGetRecording(callees.getTarget(fun, i));
+        targets[i] =
+            recorder_.initOrGetRecording(callees.getTarget(sc_function_, i));
     }
 
-    recordSC(SpeculativeContext(targets), idx, fun);
+    recordSC(SpeculativeContext(targets), idx);
 }
 
-void recordSC(const ObservedTest& test, size_t idx, Function* fun) {
+void recordSC(const ObservedTest& test, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(test), idx, fun);
+    recordSC(SpeculativeContext(test), idx);
 }
 
-void recordSC(const ObservedValues& type, size_t idx, Function* fun) {
+void recordSC(const ObservedValues& type, size_t idx) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    recordSC(SpeculativeContext(type), idx, fun);
+    recordSC(SpeculativeContext(type), idx);
 }
 
 void recordSCChanged(bool changed) {
     RECORDER_FILTER_GUARD(typeFeedback);
     sc_changed_ = changed;
+}
+
+void recordSCFunctionContext(Function* fun, const Context& ctx){
+    sc_function_ = fun;
+    sc_context_ = ctx;
 }
 
 /**

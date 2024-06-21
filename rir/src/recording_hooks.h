@@ -37,10 +37,11 @@ void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callCon
 void recordInvocationRirEval(Function* f);
 void recordUnregisterInvocation(SEXP cls, Function* f);
 
-void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
-void recordSC(const ObservedTest& type, size_t idx, Function* fun);
-void recordSC(const ObservedValues& type, size_t idx, Function* fun);
+void recordSC(const ObservedCallees& type, size_t idx);
+void recordSC(const ObservedTest& type, size_t idx);
+void recordSC(const ObservedValues& type, size_t idx);
 void recordSCChanged(bool changed);
+void recordSCFunctionContext(Function* fun, const Context& ctx);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();

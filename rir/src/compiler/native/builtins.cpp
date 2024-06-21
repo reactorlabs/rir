@@ -969,6 +969,7 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_type_inc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
@@ -985,6 +986,8 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
     };
+
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_type_inc(baselineFeedback, idx, recordPromise);
 }
 
