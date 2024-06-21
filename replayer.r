@@ -67,6 +67,7 @@ recordings.csv <- function(r) {
       event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
+      event$speculative_ctx <- pp( e$context, "context" )
 
       event$speculative <- paste(insert.commas(lapply(
         e$speculative_contexts,
@@ -108,6 +109,8 @@ recordings.csv <- function(r) {
       reason <- paste0("(", reason, ",offset=", e$reason_code_off, ")")
 
       event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
+
+      event$speculative_ctx <- pp(e$context, "context")
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
 
@@ -122,7 +125,6 @@ recordings.csv <- function(r) {
       event$reason <- pp(e$source, "invocation_source")
 
       event$callee_address <- pp(e$address, "address")
-
     } else if (class(e) == "event_unregister_invocation"){
       event$type <- "UnregisterInvocation"
 
@@ -140,6 +142,8 @@ recordings.csv <- function(r) {
 
       event$is_promise <- e$is_promise
       event$changed <- e$changed
+
+      event$speculative_ctx <- pp(e$context, "context")
     } else if (class(e) == "event_context") {
       event$type <- "ContextCreated"
 

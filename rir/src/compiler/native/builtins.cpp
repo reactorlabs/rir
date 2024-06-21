@@ -836,7 +836,7 @@ void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
                R_bcstack_t* args, bool leakedEnv, DeoptReason* deoptReason,
                SEXP deoptTrigger) {
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
-                                    *deoptReason, deoptTrigger));
+                                    *deoptReason, context, deoptTrigger));
 
     assert(m->numFrames >= 1);
     // Do not pass current context to inlinees

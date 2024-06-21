@@ -286,22 +286,23 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "dispatchTable", "is_promise", "index", "sc", "changed"};
+    "dispatchTable", "is_promise", "index", "sc", "changed", "context"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        dispatchTableIndex, is_promise, index, sc, changed);
+        dispatchTableIndex, is_promise, index, sc, changed, context);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
                                            bool, uint64_t, SpeculativeContext,
-                                           bool>(
+                                           bool, Context>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
         {is_promise, serialization::bool_from_sexp},
         {index, serialization::uint64_t_from_sexp},
         {sc, serialization::speculative_context_from_sexp},
-        {changed, serialization::bool_from_sexp});
+        {changed, serialization::bool_from_sexp},
+        {context, serialization::context_from_sexp});
 }
 
 void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
@@ -356,13 +357,14 @@ const std::vector<const char*> CompilationEvent::fieldNames = {
     "time",
     "subevents",
     "bitcode",
-    "succesful"};
+    "succesful",
+    "context"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
         closureIndex, version, compileName, speculative_contexts,
         compile_reasons.heuristic, compile_reasons.condition,
-        compile_reasons.osr, time_length, subevents, bitcode, succesful);
+        compile_reasons.osr, time_length, subevents, bitcode, succesful, context);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
@@ -370,7 +372,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
         CompilationEvent, uint64_t, Context, std::string,
         std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
         std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
-        Duration, std::vector<size_t>, std::string, bool>(
+        Duration, std::vector<size_t>, std::string, bool, Context>(
         sexp, {closureIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {compileName, serialization::string_from_sexp},
@@ -385,16 +387,16 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
          serialization::vector_from_sexp<size_t,
                                          serialization::uint64_t_from_sexp>},
         {bitcode, serialization::string_from_sexp},
-        {succesful, serialization::bool_from_sexp});
+        {succesful, serialization::bool_from_sexp},
+        {context, serialization::context_from_sexp});
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
-                       DeoptReason::Reason reason, size_t reasonCodeIdx,
-                       ssize_t reasonPromiseIdx, uint32_t reasonCodeOff,
-                       SEXP trigger)
+               DeoptReason::Reason reason, size_t reasonCodeIdx,
+               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger, Context context)
     : VersionEvent(dispatchTableIndex, version), reason_(reason),
       reasonCodeIdx_(reasonCodeIdx), reasonPromiseIdx_(reasonPromiseIdx),
-      reasonCodeOff_(reasonCodeOff) {
+      reasonCodeOff_(reasonCodeOff), context(context) {
     setTrigger(trigger);
 }
 
@@ -445,12 +447,12 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
 
 const std::vector<const char*> DeoptEvent::fieldNames = {
     "dispatchTable",      "version",         "reason",  "reason_code_idx",
-    "reason_promise_idx", "reason_code_off", "trigger", "triggerClosure"};
+    "reason_promise_idx", "reason_code_off", "trigger", "triggerClosure", "context"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
         dispatchTableIndex, version, reason_, reasonCodeIdx_, reasonPromiseIdx_,
-        reasonCodeOff_, trigger_, triggerClosure_);
+        reasonCodeOff_, trigger_, triggerClosure_, context);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
@@ -459,7 +461,7 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
 
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
                                     DeoptReason::Reason, uint64_t, int64_t,
-                                    uint32_t, SEXP, int64_t>(
+                                    uint32_t, SEXP, int64_t, Context>(
         sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {reason_, serialization::deopt_reason_from_sexp},
@@ -467,7 +469,8 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
         {reasonPromiseIdx_, serialization::int64_t_from_sexp},
         {reasonCodeOff_, serialization::uint32_t_from_sexp},
         {trigger, serialization::sexp_from_sexp},
-        {triggerClosure, serialization::int64_t_from_sexp});
+        {triggerClosure, serialization::int64_t_from_sexp},
+        {context, serialization::context_from_sexp});
 
     if (triggerClosure >= 0) {
         triggerClosure_ = triggerClosure;

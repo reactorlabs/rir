@@ -25,12 +25,12 @@ namespace recording {
 
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
-void recordOsrCompile(const SEXP cls);
+void recordOsrCompile(const SEXP cls, const Context& context);
 void recordCompileFinish(bool succesful);
 void recordLLVMBitcode(llvm::Function* fun);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
-                 SEXP trigger);
+                 const Context& context, SEXP trigger);
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
 void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callContext);

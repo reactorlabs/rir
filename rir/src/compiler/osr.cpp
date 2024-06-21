@@ -13,7 +13,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c, const Context& context,
                        const ContinuationContext& ctx) {
     Function* fun = nullptr;
 
-    REC_HOOK(recording::recordOsrCompile(closure));
+    REC_HOOK(recording::recordOsrCompile(closure, context));
 
     // compile to pir
     pir::Module* module = new pir::Module;

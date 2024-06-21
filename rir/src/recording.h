@@ -271,9 +271,9 @@ class SpeculativeContextEvent : public DtEvent {
   public:
     SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
                             size_t index, const SpeculativeContext& sc,
-                            bool changed)
+                            bool changed, Context context)
         : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
-          sc(sc), changed(changed) {}
+          sc(sc), changed(changed), context(context) {}
 
     SpeculativeContextEvent() = default;
 
@@ -295,6 +295,7 @@ class SpeculativeContextEvent : public DtEvent {
     size_t index;
     SpeculativeContext sc = SpeculativeContext({0});
     bool changed;
+    Context context;
 };
 
 class CompilationEvent : public ClosureEvent {
@@ -306,11 +307,12 @@ class CompilationEvent : public ClosureEvent {
     CompilationEvent(size_t closureIndex, Context version,
                      const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     CompileReasons&& compile_reasons)
+                     CompileReasons&& compile_reasons, Context context)
         : ClosureEvent(closureIndex), version(version),
           compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons)) {}
+          compile_reasons(std::move(compile_reasons)),
+        context(context){}
 
     CompilationEvent(CompilationEvent&& other) = default;
 
@@ -354,6 +356,8 @@ class CompilationEvent : public ClosureEvent {
     std::string bitcode;
 
     bool succesful = false;
+
+    Context context;
 };
 
 class DeoptEvent : public VersionEvent {
@@ -362,7 +366,7 @@ class DeoptEvent : public VersionEvent {
     DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
                DeoptReason::Reason reason, size_t reasonCodeIdx,
-               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger);
+               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger, Context context);
     virtual ~DeoptEvent();
     DeoptEvent() = default;
 
@@ -389,6 +393,8 @@ class DeoptEvent : public VersionEvent {
     // These 2 fields are mutually exclusive
     SEXP trigger_ = nullptr;
     ssize_t triggerClosure_ = -1; // References a FunRecorder index
+
+    Context context;
 };
 
 class InvocationEvent : public VersionEvent {

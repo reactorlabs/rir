@@ -100,22 +100,51 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
     return result;
 }
 
-void recordCompile(SEXP cls, const std::string& name,
-                   const Context& assumptions) {
-    RECORDER_FILTER_GUARD(compile);
-
+void recordCompileCommon(SEXP cls, const std::string& name,
+                         const Context& assumptions, Context context) {
     auto rec_idx = recorder_.initOrGetRecording(cls, name);
     auto dt = DispatchTable::unpack(BODY(cls));
 
     auto baseline = dt->baseline();
-    auto sc = getSpeculativeContext(baseline->typeFeedback(), baseline);
+
+    // Dispatch as in DispatchTable::getCompilationTypeFeedback
+    auto tf_entry =
+        dt->typeFeedbacks()->dispatch(context, [](const TypeFeedback* tf) {
+            return tf && tf->recordingCount() > 0;
+        });
+    // Actual context used
+    context = tf_entry.first;
+
+    auto sc = getSpeculativeContext(tf_entry.second, baseline);
 
     compilation_stack_.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(CompilationEvent::Clock::now()),
         std::forward_as_tuple(rec_idx, assumptions, name, std::move(sc),
-                              std::move(compileReasons_)));
+                              std::move(compileReasons_), context));
     recordReasonsClear();
+}
+
+void recordCompile(SEXP cls, const std::string& name,
+                   const Context& assumptions) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto dt = DispatchTable::unpack(BODY(cls));
+
+    // As in rir::pir::Compiler::compileClosure
+    Context context = assumptions;
+    dt->baseline()->clearDisabledAssumptions(context);
+    context = dt->combineContextWith(context);
+
+    recordCompileCommon(cls, name, assumptions, context);
+}
+
+void recordOsrCompile(const SEXP cls, const Context& context) {
+    RECORDER_FILTER_GUARD(compile);
+
+    // Initial context for type feedback is the same as context
+    // as in rir::pir::Compiler::compileContinuation
+    recordCompileCommon(cls, "", context, context);
 }
 
 void recordCompileFinish(bool succesful) {
@@ -141,10 +170,6 @@ void recordCompileFinish(bool succesful) {
     }
 }
 
-void recordOsrCompile(const SEXP cls) {
-    recordCompile(cls, "", pir::Compiler::defaultContext);
-}
-
 void recordLLVMBitcode(llvm::Function* fun) {
     RECORDER_FILTER_GUARD(compile);
 
@@ -158,7 +183,7 @@ void recordLLVMBitcode(llvm::Function* fun) {
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
-                 SEXP trigger) {
+                 const Context& context, SEXP trigger) {
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
@@ -183,7 +208,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 
     recorder_.record<DeoptEvent>(dt, version, reason.reason,
                                  reasonCodeIdx.first, reasonCodeIdx.second,
-                                 reason.origin.idx(), trigger);
+                                 reason.origin.idx(), trigger, context);
 }
 
 void recordInvocation(SEXP cls, Function* f, Context callContext,
@@ -231,7 +256,7 @@ void recordSC(const SpeculativeContext& sc, size_t idx) {
     bool isPromise = sc_function_ != dt->baseline();
 
     recorder_.record<SpeculativeContextEvent>(dt, isPromise, idx, sc,
-                                              sc_changed_);
+                                              sc_changed_, sc_context_);
 }
 
 void recordSC(const ObservedCallees& callees, size_t idx) {
@@ -262,7 +287,7 @@ void recordSCChanged(bool changed) {
     sc_changed_ = changed;
 }
 
-void recordSCFunctionContext(Function* fun, const Context& ctx){
+void recordSCFunctionContext(Function* fun, const Context& ctx) {
     sc_function_ = fun;
     sc_context_ = ctx;
 }
