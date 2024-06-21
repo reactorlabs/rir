@@ -109,8 +109,8 @@ struct DispatchTable
         std::pair<Context, TypeFeedback*> p = {entry.first,
                                                entry.second->copy()};
         PROTECT(p.second->container());
-        MergeAllSmallerMergingStrategy mergeStrategy;
-        TraversalFillingStrategy fillStrategy;
+        MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
+        NoFillingStrategy fillStrategy;
         p.second = mergeStrategy.merge(ctx, baseline(), p, feedbacks);
         p.second = fillStrategy.fill(ctx, p, feedbacks);
         UNPROTECT(1);
