@@ -121,7 +121,7 @@ recordings.csv <- function(r) {
       event$is_native <- e$isNative
       event$reason <- pp(e$source, "invocation_source")
 
-      event$callee_address = e$address
+      event$callee_address <- pp(e$address, "address")
 
     } else if (class(e) == "event_unregister_invocation"){
       event$type <- "UnregisterInvocation"

@@ -673,11 +673,14 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             ss << "Unknown";
             break;
         }
+    } else if (type_str == "address") {
+        ss << "0x" << std::hex
+           << rir::recording::serialization::uint64_t_from_sexp(obj);
     } else {
-        std::cerr
-            << "type parameter '" << type_str
-            << "' is not a known type (context,speculative,reason,deopt_reason)"
-            << std::endl;
+        std::cerr << "type parameter '" << type_str
+                  << "' is not a known type "
+                     "(context,speculative,reason,deopt_reason,address)"
+                  << std::endl;
         return R_NilValue;
     }
 
