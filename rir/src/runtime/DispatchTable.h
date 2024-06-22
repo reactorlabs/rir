@@ -108,6 +108,7 @@ struct DispatchTable
             return baselineFeedback();
         std::pair<Context, TypeFeedback*> p = {entry.first,
                                                entry.second->copy()};
+        return baselineFeedback();
         PROTECT(p.second->container());
         MergeSmallerCandidatesMergingStrategy mergeStrategy(this);
         TraversalFillingStrategy fillStrategy;
