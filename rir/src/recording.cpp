@@ -144,16 +144,11 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     }
 }
 
-size_t Record::initOrGetRecording(const DispatchTable* dt,
-                                  const std::string& name) {
+size_t Record::initOrGetRecording(const DispatchTable* dt) {
     assert(dt != nullptr);
 
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
-        auto& rec = get_recording(dt_index->second);
-        if (rec.name.empty()) {
-            rec.name = name;
-        }
         return dt_index->second;
     }
 
@@ -161,7 +156,7 @@ size_t Record::initOrGetRecording(const DispatchTable* dt,
     auto insertion_index = functions.size();
     dt_to_recording_index_.emplace(dt, insertion_index);
 
-    functions.emplace_back(name);
+    functions.emplace_back("");
     return insertion_index;
 }
 

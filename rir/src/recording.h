@@ -530,11 +530,7 @@ class Record {
 
     FunRecording& get_recording(size_t idx) { return functions[idx]; }
 
-    // Can return just size_t
-    size_t initOrGetRecording(const DispatchTable* dt,
-                              const std::string& name = "");
-
-    // Can just return size_t
+    size_t initOrGetRecording(const DispatchTable* dt);
     size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
 
     // First is a fun recording index, second is -1 if it is baseline,
