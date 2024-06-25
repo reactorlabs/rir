@@ -160,7 +160,24 @@ size_t Record::initOrGetRecording(const DispatchTable* dt) {
     return insertion_index;
 }
 
+size_t Record::initOrGetRecording(Function* fun) {
+    assert(fun != nullptr);
+
+    auto fun_entry = expr_to_body_index.find(fun);
+    if (fun_entry != expr_to_body_index.end()) {
+        return fun_entry->second;
     }
+
+    R_PreserveObject(fun->container());
+    auto insertion_index = functions.size();
+    expr_to_body_index.emplace(fun, insertion_index);
+
+    // Make the address the name
+    std::stringstream ss;
+    ss << "<" << std::hex << fun << ">";
+
+    functions.emplace_back(ss.str());
+    return insertion_index;
 }
 
 SEXP Record::save() {

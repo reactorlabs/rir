@@ -496,6 +496,7 @@ class Record {
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
+    std::unordered_map<Function*, size_t> expr_to_body_index;
 
   public:
     std::vector<FunRecording> functions;
@@ -523,6 +524,13 @@ class Record {
             std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
+    template <typename E, typename... Args>
+    void record(Function* fun, Args&&... args) {
+        auto entry = initOrGetRecording(fun);
+        log.emplace_back(
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
+    }
+
     size_t push_event(std::unique_ptr<Event> e) {
         size_t idx = log.size();
         log.emplace_back(std::move(e));
@@ -533,6 +541,7 @@ class Record {
 
     size_t initOrGetRecording(const DispatchTable* dt);
     size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
+    size_t initOrGetRecording(Function* fun);
 
     // First is a fun recording index, second is -1 if it is baseline,
     // otherwise promise idx
@@ -546,6 +555,10 @@ class Record {
 
         for (auto bcode : bcode_to_body_index) {
             R_ReleaseObject(bcode.first);
+        }
+
+        for (auto expr : expr_to_body_index) {
+            R_ReleaseObject(expr.first->container());
         }
 
         for (auto fun : functions) {
@@ -562,6 +575,7 @@ class Record {
         primitive_to_body_index.clear();
         bcode_to_body_index.clear();
         functions.clear();
+        expr_to_body_index.clear();
         log.clear();
     }
 };
