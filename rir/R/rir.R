@@ -223,11 +223,11 @@ if (.Call("isRecordingsDefined")) {
         if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation), is.logical)))) {
             warning("ambiguous non-logical given")
         }
-        .Call("filterRecordings", compile, deoptimize, type_feedback, invocation)
+        invisible(.Call("filterRecordings", compile, deoptimize, type_feedback, invocation))
     }
 
     recordings.save <- function(filename) {
-        .Call("saveRecordings", filename)
+        invisible(.Call("saveRecordings", filename))
     }
 
     recordings.load <- function(filename) {
