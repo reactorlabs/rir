@@ -56,6 +56,17 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
 }
 
 size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
+    if (TYPEOF(cls) == EXTERNALSXP) {
+        auto dt = DispatchTable::unpack(cls);
+        size_t idx = initOrGetRecording(dt);
+        auto& entry = get_recording(idx);
+        if (entry.name.empty()) {
+            entry.name = name;
+        }
+
+        return idx;
+    }
+
     assert(Rf_isFunction(cls));
     auto body = BODY(cls);
 

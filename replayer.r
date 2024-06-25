@@ -54,7 +54,6 @@ recordings.csv <- function(r, out = "") {
     event <- NULL
 
     event$idx <- idx
-    print(idx)
     idx <- idx + 1
 
     if (class(e) == "event_compile") {
