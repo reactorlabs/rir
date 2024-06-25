@@ -59,7 +59,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx) {
+          signature_(signature), context_(ctx), dispatchTable_(nullptr) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
