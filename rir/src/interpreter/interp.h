@@ -152,7 +152,7 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
 void inferCurrentContext(CallContext& call, size_t formalNargs);
 SEXP getTrivialPromValue(SEXP sym, SEXP env);
 
-SEXP createPromise(const Context& context, Code* code, SEXP env);
+SEXP createPromise(const Context& recordingContext, Code* code, SEXP env);
 SEXP createPromise(const CallContext* context, Code* code, SEXP env);
 
 SEXP doCall(CallContext& call, bool popArgs = false);

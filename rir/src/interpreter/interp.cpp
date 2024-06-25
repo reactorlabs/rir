@@ -181,8 +181,12 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-SEXP createPromise(const Context& context, Code* code, SEXP env) {
-    return Rf_mkPROMISE(Promise::create(context, code)->container(), env);
+SEXP createPromise(const Context& recordingContext, Code* code, SEXP env) {
+    // return  Rf_mkPROMISE(Promise::create(context, code)->container(), env);
+
+    auto p = Rf_mkPROMISE(code->container(), env);
+    SET_PRCALLCTX(p, recordingContext.toI());
+    return p;
 }
 
 SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
@@ -227,12 +231,21 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
         prstack.promise = e;
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
-        if (auto p = Promise::check(PRCODE(e))) {
-            val = evalRirCode(p->code(), PRENV(e), nullptr, p->context(), pc,
-                              nullptr, true);
-        } else
-            val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
-                              Context(), pc, nullptr, true);
+
+        auto callCtxSerialized = PRCALLCTX(e); // Context().toI() == 0
+        val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
+                          Context(callCtxSerialized), pc, nullptr, true);
+
+        // if (callCtxSerialized != 0) {
+        //     //auto callCtx = reinterpret_cast<Context*>(&callCtxSerialized);
+        //     auto callCtx = Context(callCtxSerialized);
+        //     val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
+        //     callCtx , pc,
+        //                         nullptr, true);
+        // } else {
+        //     val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
+        //                       Context(), pc, nullptr, true);
+        // }
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
