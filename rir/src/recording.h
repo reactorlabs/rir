@@ -505,7 +505,8 @@ class Record {
 
   public:
     Record() = default;
-    ~Record();
+
+    ~Record() { release(); }
 
     template <typename E, typename... Args>
     void record(SEXP cls, Args&&... args) {
@@ -538,9 +539,30 @@ class Record {
     std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
+    void release() {
+        for (auto dt : dt_to_recording_index_) {
+            R_ReleaseObject(dt.first->container());
+        }
+
+        for (auto bcode : bcode_to_body_index) {
+            R_ReleaseObject(bcode.first);
+        }
+
+        for (auto fun : functions) {
+            auto clos = fun.closure;
+            if (!Rf_isNull(clos)) {
+                R_ReleaseObject(clos);
+            }
+        }
+    }
+
     void reset() {
+        release();
         dt_to_recording_index_.clear();
+        primitive_to_body_index.clear();
+        bcode_to_body_index.clear();
         functions.clear();
+        log.clear();
     }
 };
 

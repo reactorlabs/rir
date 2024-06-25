@@ -160,9 +160,6 @@ size_t Record::initOrGetRecording(const DispatchTable* dt) {
     return insertion_index;
 }
 
-Record::~Record() {
-    for (auto& v : functions) {
-        R_ReleaseObject(v.closure);
     }
 }
 
