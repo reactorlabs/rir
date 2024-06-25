@@ -1,4 +1,4 @@
-recordings.csv <- function(r) {
+recordings.csv <- function(r, out = "") {
   if (is.character(r)) {
       r <- recordings.load(r)
   }
@@ -31,7 +31,8 @@ recordings.csv <- function(r) {
     })
     vec <- insert.commas(vec)
     vec <- paste(vec, collapse="")
-    result <<- paste0(result, vec, "\n")
+    vec <- paste0(vec, "\n")
+    cat( vec, file = out, append = TRUE )
   }
 
   columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "changed", "is_promise", "is_native", "callee_address")
@@ -53,6 +54,7 @@ recordings.csv <- function(r) {
     event <- NULL
 
     event$idx <- idx
+    print(idx)
     idx <- idx + 1
 
     if (class(e) == "event_compile") {
