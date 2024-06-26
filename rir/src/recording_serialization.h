@@ -77,9 +77,9 @@ SEXP to_sexp(CompilationEvent::Duration time);
 
 CompilationEvent::Duration time_from_sexp(SEXP sexp);
 
-SEXP to_sexp(InvocationEvent::SourceSet set);
+SEXP to_sexp(InvocationEvent::Source set);
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp);
+InvocationEvent::Source invocation_source_from_sexp(SEXP sexp);
 
 /************************ Generics **********************************/
 template <typename T>

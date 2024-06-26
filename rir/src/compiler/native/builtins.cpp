@@ -836,7 +836,7 @@ void deoptImpl(rir::Code* c, const Context& context, SEXP cls, DeoptMetadata* m,
                R_bcstack_t* args, bool leakedEnv, DeoptReason* deoptReason,
                SEXP deoptTrigger) {
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
-                                    *deoptReason, deoptTrigger));
+                                    *deoptReason, context, deoptTrigger));
 
     assert(m->numFrames >= 1);
     // Do not pass current context to inlinees
@@ -969,6 +969,7 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_type_inc(baselineFeedback, idx, value);
     // FIXME: cf. 1260
     auto recordPromise = [&](auto& slot) {
@@ -985,6 +986,8 @@ void recordTypeFeedbackImpl(rir::Function* fun, const Context& context,
                 slot.stateBeforeLastForce = ObservedValues::value;
         }
     };
+
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_type_inc(baselineFeedback, idx, recordPromise);
 }
 
@@ -1421,7 +1424,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto dt = DispatchTable::unpack(BODY(callee));
 
-    REC_HOOK(recording::recordInvocationNativeCallTrampoline());
+    REC_HOOK(recording::recordInvocationNativeCallTrampoline(
+        callee, fun, call.givenContext));
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
@@ -1429,6 +1433,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         inferCurrentContext(call, fun->nargs());
         if (fail || (SufficientTypeFeedbackHeuristic(fun, call.givenContext) &&
                      RecompileCondition(dt, fun, call.givenContext))) {
+            REC_HOOK(recording::recordUnregisterInvocation(callee, fun));
             fun->unregisterInvocation();
             auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));

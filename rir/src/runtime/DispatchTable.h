@@ -135,6 +135,8 @@ struct DispatchTable
             PROTECT(tf->container());
             feedbacks->insert(ctx, tf);
             UNPROTECT(1);
+
+            REC_HOOK(recording::recordContextCreated(this, ctx));
         }
         return tf;
     }
@@ -373,15 +375,6 @@ struct DispatchTable
         }
     }
 
-  private:
-    DispatchTable() = delete;
-    explicit DispatchTable(size_t capacity)
-        : RirRuntimeObject(
-              // GC area starts at the end of the DispatchTable
-              // GC area is the pointers in the entry array
-              // and pointer to TypeFeedback dispatch table
-              sizeof(DispatchTable), capacity + 1) {}
-
     TypeFeedbackDispatchTable* typeFeedbacks() {
         return TypeFeedbackDispatchTable::unpack(
             getEntry(info.gc_area_length - 1));
@@ -391,6 +384,15 @@ struct DispatchTable
         return TypeFeedbackDispatchTable::unpack(
             getEntry(info.gc_area_length - 1));
     }
+
+  private:
+    DispatchTable() = delete;
+    explicit DispatchTable(size_t capacity)
+        : RirRuntimeObject(
+              // GC area starts at the end of the DispatchTable
+              // GC area is the pointers in the entry array
+              // and pointer to TypeFeedback dispatch table
+              sizeof(DispatchTable), capacity + 1) {}
 
     void typeFeedbacks(TypeFeedbackDispatchTable* tfdp) {
         setEntry(info.gc_area_length - 1, tfdp->container());
