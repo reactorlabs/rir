@@ -1946,8 +1946,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     checkUserInterrupt();
 
-    if (callCtxt && callCtxt->givenContext.smaller(recordingContext))
+    if (callCtxt) {
+        assert((recordingContext.empty() ||
+                callCtxt->givenContext == recordingContext) &&
+               "callCtxt->givenContext does not match recordingContext");
         recordingContext = callCtxt->givenContext;
+    }
 
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");
