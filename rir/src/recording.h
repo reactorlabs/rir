@@ -33,7 +33,8 @@ std::string getClosureName(SEXP cls);
 class Record;
 struct FunRecording;
 
-constexpr size_t NO_INDEX = ((size_t)-1);
+constexpr size_t NO_INDEX = (size_t)-1;
+constexpr size_t PROMISE_INDEX = (size_t)-2;
 constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
 
 enum class SpeculativeContextType { Callees, Test, Values };
