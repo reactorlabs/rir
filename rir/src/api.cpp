@@ -80,6 +80,11 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
         }
+
+        if (TYPEOF(what) == LANGSXP) {
+            Rf_PrintValue(what);
+        }
+
         SEXP result = Compiler::compileExpression(what);
         return result;
     }

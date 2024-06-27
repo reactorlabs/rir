@@ -2070,7 +2070,13 @@ SEXP Compiler::finalize() {
     CodeVerifier::verifyFunctionLayout(function.function()->container());
 #endif
 
-    return function.function()->container();
+    auto f = function.function();
+    if (TYPEOF(exp) == LANGSXP) {
+        f->disassemble(std::cout);
+        assert(false);
+    }
+
+    return f->container();
 }
 
 bool Compiler::unsoundOpts =
