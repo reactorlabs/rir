@@ -49,7 +49,7 @@ struct {
     .compile = true,
     .deopt = true,
     .typeFeedback = true,
-    .invoke = true,
+    .invoke = false,
 };
 
 CompileReasons compileReasons_;
