@@ -70,23 +70,30 @@ Context sc_context_;
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
 
+SpeculativeContext::ObservedCalleesArr
+getCallees(const ObservedCallees& callees, Function* baseline) {
+    SpeculativeContext::ObservedCalleesArr res;
+    res.fill(NO_INDEX);
+
+    for (size_t j = 0; j < callees.numTargets; j++) {
+        auto target = callees.getTarget(baseline, j);
+        if (Rf_isFunction(target)) {
+            res[j] = recorder_.initOrGetRecording(target);
+        } else if (TYPEOF(target) == PROMSXP) {
+            res[j] = PROMISE_INDEX;
+        }
+    }
+
+    return res;
+}
+
 std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
                                                       Function* baseline) {
     std::vector<SpeculativeContext> result;
 
     for (size_t i = 0; i < feedback->callees_size(); i++) {
         auto observed = feedback->callees(i);
-        SpeculativeContext::ObservedCalleesArr callees;
-        callees.fill(NO_INDEX);
-
-        for (size_t j = 0; j < observed.numTargets; j++) {
-            auto target = observed.getTarget(baseline, j);
-            if (Rf_isFunction(target)) {
-                callees[j] = recorder_.initOrGetRecording(target);
-            }
-        }
-
-        result.emplace_back(callees);
+        result.emplace_back(getCallees(observed, baseline));
     }
 
     for (size_t i = 0; i < feedback->tests_size(); i++) {
@@ -256,6 +263,11 @@ void recordUnregisterInvocation(SEXP cls, Function* f) {
     recorder_.record<UnregisterInvocationEvent>(cls, version);
 }
 
+#define RECORDER_SC_GUARD()                                                    \
+    RECORDER_FILTER_GUARD(typeFeedback);                                       \
+    if (!sc_changed_)                                                          \
+        return;
+
 void recordSC(const SpeculativeContext& sc, size_t idx) {
     auto dt = sc_function_->dispatchTable();
 
@@ -271,25 +283,18 @@ void recordSC(const SpeculativeContext& sc, size_t idx) {
 }
 
 void recordSC(const ObservedCallees& callees, size_t idx) {
-    RECORDER_FILTER_GUARD(typeFeedback);
-    SpeculativeContext::ObservedCalleesArr targets;
-    targets.fill(-1);
-
-    for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] =
-            recorder_.initOrGetRecording(callees.getTarget(sc_function_, i));
-    }
-
+    RECORDER_SC_GUARD();
+    auto targets = getCallees(callees, sc_function_);
     recordSC(SpeculativeContext(targets), idx);
 }
 
 void recordSC(const ObservedTest& test, size_t idx) {
-    RECORDER_FILTER_GUARD(typeFeedback);
+    RECORDER_SC_GUARD();
     recordSC(SpeculativeContext(test), idx);
 }
 
 void recordSC(const ObservedValues& type, size_t idx) {
-    RECORDER_FILTER_GUARD(typeFeedback);
+    RECORDER_SC_GUARD();
     recordSC(SpeculativeContext(type), idx);
 }
 
@@ -631,6 +636,11 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                     first = false;
                 } else {
                     ss << ',';
+                }
+
+                if (c == rir::recording::PROMISE_INDEX) {
+                    ss << "<promise>";
+                    continue;
                 }
 
                 auto fun =

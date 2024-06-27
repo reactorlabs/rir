@@ -3,7 +3,9 @@ recordings.csv <- function(r, out = "") {
       r <- recordings.load(r)
   }
 
-  result <- ""
+  if (out != "" && file.exists(out)){
+    file.remove(out)
+  }
 
   # intersperse a vector with commas
   insert.commas <- function(vec) {
@@ -166,5 +168,4 @@ recordings.csv <- function(r, out = "") {
 
     line(vec)
   }
-  result
 }
