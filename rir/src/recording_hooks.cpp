@@ -48,7 +48,7 @@ struct {
 } filter_ = {
     .compile = true,
     .deopt = true,
-    .typeFeedback = true,
+    .typeFeedback = false,
     .invoke = false,
 };
 
