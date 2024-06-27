@@ -48,8 +48,8 @@ struct {
 } filter_ = {
     .compile = true,
     .deopt = true,
-    .typeFeedback = false,
-    .invoke = false,
+    .typeFeedback = true,
+    .invoke = true,
 };
 
 CompileReasons compileReasons_;
