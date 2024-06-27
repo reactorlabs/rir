@@ -66,23 +66,30 @@ bool sc_changed_;
     if (!is_recording_ || !filter_.field_name)                                 \
         return;
 
+SpeculativeContext::ObservedCalleesArr
+getCallees(const ObservedCallees& callees, Function* baseline) {
+    SpeculativeContext::ObservedCalleesArr res;
+    res.fill(NO_INDEX);
+
+    for (size_t j = 0; j < callees.numTargets; j++) {
+        auto target = callees.getTarget(baseline, j);
+        if (Rf_isFunction(target)) {
+            res[j] = recorder_.initOrGetRecording(target);
+        } else if (TYPEOF(target) == PROMSXP) {
+            res[j] = PROMISE_INDEX;
+        }
+    }
+
+    return res;
+}
+
 std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
                                                       Function* baseline) {
     std::vector<SpeculativeContext> result;
 
     for (size_t i = 0; i < feedback->callees_size(); i++) {
         auto observed = feedback->callees(i);
-        SpeculativeContext::ObservedCalleesArr callees;
-        callees.fill(NO_INDEX);
-
-        for (size_t j = 0; j < observed.numTargets; j++) {
-            auto target = observed.getTarget(baseline, j);
-            if (Rf_isFunction(target)) {
-                callees[j] = recorder_.initOrGetRecording(target);
-            }
-        }
-
-        result.emplace_back(callees);
+        result.emplace_back(getCallees(observed, baseline));
     }
 
     for (size_t i = 0; i < feedback->tests_size(); i++) {
@@ -243,13 +250,7 @@ void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
 
 void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {
     RECORDER_FILTER_GUARD(typeFeedback);
-    SpeculativeContext::ObservedCalleesArr targets;
-    targets.fill(-1);
-
-    for (size_t i = 0; i < callees.numTargets; i++) {
-        targets[i] = recorder_.initOrGetRecording(callees.getTarget(fun, i));
-    }
-
+    auto targets = getCallees(callees, fun);
     recordSC(SpeculativeContext(targets), idx, fun);
 }
 
@@ -587,6 +588,11 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                     first = false;
                 } else {
                     ss << ',';
+                }
+
+                if (c == rir::recording::PROMISE_INDEX) {
+                    ss << "<promise>";
+                    continue;
                 }
 
                 auto fun =
