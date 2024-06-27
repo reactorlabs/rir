@@ -359,7 +359,6 @@ class CompilationEvent : public ClosureEvent {
 class DeoptEvent : public VersionEvent {
   public:
     DeoptEvent(const DeoptEvent&) = delete;
-    DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
                DeoptReason::Reason reason, size_t reasonCodeIdx,
                ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger);
