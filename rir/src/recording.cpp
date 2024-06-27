@@ -56,6 +56,17 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
 }
 
 size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
+    if (TYPEOF(cls) == EXTERNALSXP) {
+        auto dt = DispatchTable::unpack(cls);
+        size_t idx = initOrGetRecording(dt);
+        auto& entry = get_recording(idx);
+        if (entry.name.empty()) {
+            entry.name = name;
+        }
+
+        return idx;
+    }
+
     assert(Rf_isFunction(cls));
     auto body = BODY(cls);
 
@@ -144,16 +155,11 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     }
 }
 
-size_t Record::initOrGetRecording(const DispatchTable* dt,
-                                  const std::string& name) {
+size_t Record::initOrGetRecording(const DispatchTable* dt) {
     assert(dt != nullptr);
 
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
-        auto& rec = get_recording(dt_index->second);
-        if (rec.name.empty()) {
-            rec.name = name;
-        }
         return dt_index->second;
     }
 
@@ -161,14 +167,28 @@ size_t Record::initOrGetRecording(const DispatchTable* dt,
     auto insertion_index = functions.size();
     dt_to_recording_index_.emplace(dt, insertion_index);
 
-    functions.emplace_back(name);
+    functions.emplace_back("");
     return insertion_index;
 }
 
-Record::~Record() {
-    for (auto& v : functions) {
-        R_ReleaseObject(v.closure);
+size_t Record::initOrGetRecording(Function* fun) {
+    assert(fun != nullptr);
+
+    auto fun_entry = expr_to_body_index.find(fun);
+    if (fun_entry != expr_to_body_index.end()) {
+        return fun_entry->second;
     }
+
+    R_PreserveObject(fun->container());
+    auto insertion_index = functions.size();
+    expr_to_body_index.emplace(fun, insertion_index);
+
+    // Make the address the name
+    std::stringstream ss;
+    ss << "<" << std::hex << fun << ">";
+
+    functions.emplace_back(ss.str());
+    return insertion_index;
 }
 
 SEXP Record::save() {

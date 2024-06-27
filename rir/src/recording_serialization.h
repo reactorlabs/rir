@@ -9,9 +9,9 @@
 #include <memory>
 #include <vector>
 
-#define R_CLASS_CTX_CALLEES "ctx_callees"
-#define R_CLASS_CTX_TEST "ctx_test"
-#define R_CLASS_CTX_VALUES "ctx_values"
+constexpr const char* R_CLASS_CTX_CALLEES = "ctx_callees";
+constexpr const char* R_CLASS_CTX_TEST = "ctx_test";
+constexpr const char* R_CLASS_CTX_VALUES = "ctx_values";
 
 namespace rir {
 namespace recording {

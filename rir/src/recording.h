@@ -363,7 +363,6 @@ class CompilationEvent : public ClosureEvent {
 class DeoptEvent : public VersionEvent {
   public:
     DeoptEvent(const DeoptEvent&) = delete;
-    DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
                DeoptReason::Reason reason, size_t reasonCodeIdx,
                ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger, Context context);
@@ -524,6 +523,7 @@ class Record {
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
+    std::unordered_map<Function*, size_t> expr_to_body_index;
 
   public:
     std::vector<FunRecording> functions;
@@ -533,7 +533,8 @@ class Record {
 
   public:
     Record() = default;
-    ~Record();
+
+    ~Record() { release(); }
 
     template <typename E, typename... Args>
     void record(SEXP cls, Args&&... args) {
@@ -550,6 +551,13 @@ class Record {
             std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
+    template <typename E, typename... Args>
+    void record(Function* fun, Args&&... args) {
+        auto entry = initOrGetRecording(fun);
+        log.emplace_back(
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
+    }
+
     size_t push_event(std::unique_ptr<Event> e) {
         size_t idx = log.size();
         log.emplace_back(std::move(e));
@@ -558,21 +566,44 @@ class Record {
 
     FunRecording& get_recording(size_t idx) { return functions[idx]; }
 
-    // Can return just size_t
-    size_t initOrGetRecording(const DispatchTable* dt,
-                              const std::string& name = "");
-
-    // Can just return size_t
+    size_t initOrGetRecording(const DispatchTable* dt);
     size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
+    size_t initOrGetRecording(Function* fun);
 
     // First is a fun recording index, second is -1 if it is baseline,
     // otherwise promise idx
     std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
+    void release() {
+        for (auto dt : dt_to_recording_index_) {
+            R_ReleaseObject(dt.first->container());
+        }
+
+        for (auto bcode : bcode_to_body_index) {
+            R_ReleaseObject(bcode.first);
+        }
+
+        for (auto expr : expr_to_body_index) {
+            R_ReleaseObject(expr.first->container());
+        }
+
+        for (auto fun : functions) {
+            auto clos = fun.closure;
+            if (!Rf_isNull(clos)) {
+                R_ReleaseObject(clos);
+            }
+        }
+    }
+
     void reset() {
+        release();
         dt_to_recording_index_.clear();
+        primitive_to_body_index.clear();
+        bcode_to_body_index.clear();
         functions.clear();
+        expr_to_body_index.clear();
+        log.clear();
     }
 };
 

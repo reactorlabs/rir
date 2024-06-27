@@ -225,8 +225,13 @@ void recordInvocation(SEXP cls, Function* f, Context callContext,
                                           reinterpret_cast<uintptr_t>(cls));
     } else {
         auto* dt = f->dispatchTable();
-        recorder_.record<InvocationEvent>(dt, version, source, callContext,
-                                          isNative, 0);
+        if (dt == nullptr) {
+            recorder_.record<InvocationEvent>(f, version, source, callContext,
+                                              isNative, 0);
+        } else {
+            recorder_.record<InvocationEvent>(dt, version, source, callContext,
+                                              isNative, 0);
+        }
     }
 }
 
@@ -253,8 +258,14 @@ void recordUnregisterInvocation(SEXP cls, Function* f) {
 
 void recordSC(const SpeculativeContext& sc, size_t idx) {
     auto dt = sc_function_->dispatchTable();
-    bool isPromise = sc_function_ != dt->baseline();
 
+    if (dt == nullptr) {
+        recorder_.record<SpeculativeContextEvent>(sc_function_, false, idx, sc,
+                                                  sc_changed_, sc_context_);
+        return;
+    }
+
+    bool isPromise = sc_function_ != dt->baseline();
     recorder_.record<SpeculativeContextEvent>(dt, isPromise, idx, sc,
                                               sc_changed_, sc_context_);
 }
@@ -483,7 +494,6 @@ REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
 
 REXPORT SEXP startRecordings() {
     rir::recording::is_recording_ = true;
-    rir::recording::recorder_.reset();
     return R_NilValue;
 }
 
