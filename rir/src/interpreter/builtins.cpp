@@ -139,9 +139,7 @@ SEXP tryFastSpecialCall(CallContext& call) {
         if (TYPEOF(s) != PROMSXP)
             return nullptr;
         s = PREXPR(s);
-        if (auto p = Promise::check(s))
-            s = p->code()->trivialExpr;
-        else if (auto c = Code::check(s))
+        if (auto c = Code::check(s))
             s = c->trivialExpr;
         if (TYPEOF(s) == SYMSXP)
             s = PRINTNAME(s);

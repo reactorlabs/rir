@@ -181,8 +181,10 @@ static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-SEXP createPromise(const Context& context, Code* code, SEXP env) {
-    return Rf_mkPROMISE(Promise::create(context, code)->container(), env);
+SEXP createPromise(const Context& recordingContext, Code* code, SEXP env) {
+    auto p = Rf_mkPROMISE(code->container(), env);
+    SET_PRCALLCTX(p, recordingContext.toI());
+    return p;
 }
 
 SEXP createPromise(const CallContext* context, Code* code, SEXP env) {
@@ -227,19 +229,19 @@ SEXP evaluatePromise(SEXP e, Opcode* pc, bool delayNamed) {
         prstack.promise = e;
         prstack.next = R_PendingPromises;
         R_PendingPromises = &prstack;
-        if (auto p = Promise::check(PRCODE(e))) {
-            val = evalRirCode(p->code(), PRENV(e), nullptr, p->context(), pc,
-                              nullptr, true);
-        } else
-            val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
-                              Context(), pc, nullptr, true);
+
+        auto callCtxSerialized =
+            PRCALLCTX(e); // PRCALLCTX(e) == 0  <-> Context().toI() == 0
+        val = evalRirCode(Code::unpack(PRCODE(e)), PRENV(e), nullptr,
+                          Context(callCtxSerialized), pc, nullptr, true);
+
         R_PendingPromises = prstack.next;
         SET_PRSEEN(e, 0);
         SET_PRVALUE(e, val);
         if (!delayNamed)
             ENSURE_NAMEDMAX(val);
         SET_PRENV(e, R_NilValue);
-        assert(TYPEOF(val) != EXTERNALSXP || !Promise::check(val));
+
         assert(TYPEOF(val) != PROMSXP && "promise returned promise");
         return val;
     }
@@ -1944,8 +1946,12 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
 
     checkUserInterrupt();
 
-    if (callCtxt && callCtxt->givenContext.smaller(recordingContext))
+    if (callCtxt) {
+        assert((recordingContext.empty() ||
+                callCtxt->givenContext == recordingContext) &&
+               "callCtxt->givenContext does not match recordingContext");
         recordingContext = callCtxt->givenContext;
+    }
 
     auto native = c->nativeCode();
     assert((!initialPC || !native) && "Cannot jump into native code");

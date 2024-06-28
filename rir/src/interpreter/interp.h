@@ -9,7 +9,6 @@
 #include "interp_incl.h"
 #include "recording_hooks.h"
 #include "runtime/Deoptimization.h"
-#include "runtime/Promise.h"
 
 #include "R/BuiltinIds.h"
 
@@ -152,7 +151,7 @@ inline Function* dispatch(const CallContext& call, DispatchTable* vt) {
 void inferCurrentContext(CallContext& call, size_t formalNargs);
 SEXP getTrivialPromValue(SEXP sym, SEXP env);
 
-SEXP createPromise(const Context& context, Code* code, SEXP env);
+SEXP createPromise(const Context& recordingContext, Code* code, SEXP env);
 SEXP createPromise(const CallContext* context, Code* code, SEXP env);
 
 SEXP doCall(CallContext& call, bool popArgs = false);
@@ -199,11 +198,7 @@ inline SEXP findRootPromise(SEXP p) {
 
 inline SEXP getSymbolIfTrivialPromise(SEXP val) {
     auto pr = PREXPR(val);
-    Code* ppr;
-    if (auto p = Promise::check(pr))
-        ppr = p->code();
-    else
-        ppr = Code::check(pr);
+    auto ppr = Code::check(pr);
     SEXP sym = nullptr;
     if (Rf_isSymbol(pr)) {
         sym = pr;
