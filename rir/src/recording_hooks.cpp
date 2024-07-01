@@ -234,6 +234,11 @@ void recordUnregisterInvocation(SEXP cls, Function* f) {
     recorder_.record<UnregisterInvocationEvent>(cls, version);
 }
 
+#define RECORDER_SC_GUARD()                                                    \
+    RECORDER_FILTER_GUARD(typeFeedback);                                       \
+    if (!sc_changed_)                                                          \
+        return;
+
 void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
     auto dt = fun->dispatchTable();
 
@@ -249,18 +254,18 @@ void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
 }
 
 void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {
-    RECORDER_FILTER_GUARD(typeFeedback);
+    RECORDER_SC_GUARD();
     auto targets = getCallees(callees, fun);
     recordSC(SpeculativeContext(targets), idx, fun);
 }
 
 void recordSC(const ObservedTest& test, size_t idx, Function* fun) {
-    RECORDER_FILTER_GUARD(typeFeedback);
+    RECORDER_SC_GUARD();
     recordSC(SpeculativeContext(test), idx, fun);
 }
 
 void recordSC(const ObservedValues& type, size_t idx, Function* fun) {
-    RECORDER_FILTER_GUARD(typeFeedback);
+    RECORDER_SC_GUARD();
     recordSC(SpeculativeContext(type), idx, fun);
 }
 
