@@ -995,6 +995,8 @@ void recordCallFeedbackImpl(rir::Function* fun, const Context& context,
                             uint32_t idx, SEXP value) {
     auto feedback = fun->typeFeedback(context);
     auto baselineFeedback = fun->dispatchTable()->baselineFeedback();
+
+    REC_HOOK(recording::recordSCFunctionContext(fun, context));
     feedback->record_callee_inc(baselineFeedback, idx, fun, value);
 }
 
