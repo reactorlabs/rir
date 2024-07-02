@@ -251,50 +251,6 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
-                               std::ostream& out) const {
-    switch (type) {
-    case SpeculativeContextType::Callees: {
-        out << "Callees[";
-        bool first = true;
-        for (auto c : value.callees) {
-            if (c == NO_INDEX)
-                break;
-            if (first)
-                first = false;
-            else
-                out << ',';
-            out << mapping[c];
-        }
-        out << "]";
-        return;
-    }
-    case SpeculativeContextType::Test:
-        out << "Test{";
-        switch (value.test.seen) {
-        case ObservedTest::None:
-            out << "None";
-            break;
-        case ObservedTest::OnlyTrue:
-            out << "OnlyTrue";
-            break;
-        case ObservedTest::OnlyFalse:
-            out << "OnlyFalse";
-            break;
-        case ObservedTest::Both:
-            out << "Both";
-            break;
-        }
-        out << "}";
-        return;
-    case SpeculativeContextType::Values:
-        out << "Values{";
-        value.values.print(out);
-        out << "}";
-        return;
-    }
-}
-
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
     "funIdx", "is_promise", "index", "sc", "changed"};
 
@@ -312,47 +268,6 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
         {index, serialization::uint64_t_from_sexp},
         {sc, serialization::speculative_context_from_sexp},
         {changed, serialization::bool_from_sexp});
-}
-
-void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
-                                    std::ostream& out) const {
-    out << "SpeculativeContextEvent{\n        code=";
-
-    out << "\n        index=" << index << "\n        sc=";
-    sc.print(mapping, out);
-    out << "\n    }";
-}
-
-void CompilationEvent::print(const std::vector<FunRecording>& mapping,
-                             std::ostream& out) const {
-    out << "CompilationEvent{\n        dispatch_context="
-        << this->version << ",\n        name=" << compileName
-        << ",\n        speculative_contexts=[\n";
-    for (auto& spec : this->speculative_contexts) {
-        out << "            ";
-        spec.print(mapping, out);
-        out << "\n";
-    }
-    out << "        ],\n        opt_reasons=[\n";
-    if (this->compile_reasons.heuristic) {
-        out << "            heuristic=";
-        this->compile_reasons.heuristic->print(out);
-        out << "\n";
-    }
-
-    if (this->compile_reasons.condition) {
-        out << "            condition=";
-        this->compile_reasons.condition->print(out);
-        out << "\n";
-    }
-
-    if (this->compile_reasons.osr) {
-        out << "            osr_reason=";
-        this->compile_reasons.osr->print(out);
-        out << "\n";
-    }
-
-    out << "        ]\n    }";
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
@@ -438,17 +353,6 @@ void DeoptEvent::setTrigger(SEXP newTrigger) {
     trigger_ = newTrigger;
 }
 
-void DeoptEvent::print(const std::vector<FunRecording>& mapping,
-                       std::ostream& out) const {
-    const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_];
-
-    out << "DeoptEvent{ [version=" << this->version;
-    out << "]\n        reason=" << this->reason_;
-    out << ",\n        reasonCodeIdx=(" << reasonRec << ","
-        << this->reasonPromiseIdx_ << ")";
-    out << ",\n        reasonCodeOff=" << this->reasonCodeOff_ << "\n    }";
-}
-
 const std::vector<const char*> DeoptEvent::fieldNames = {"funIdx",
                                                          "version",
                                                          "reason",
@@ -507,12 +411,6 @@ void InvocationEvent::fromSEXP(SEXP sexp) {
         {address, serialization::uint64_t_from_sexp});
 }
 
-void InvocationEvent::print(const std::vector<FunRecording>& mapping,
-                            std::ostream& out) const {
-    out << std::dec << "Invocation{ [version=" << version << "] ";
-    out << " }";
-}
-
 const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
     "funIdx", "context"};
 
@@ -526,11 +424,6 @@ void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
                                     Context>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp});
-}
-
-void UnregisterInvocationEvent::print(const std::vector<FunRecording>& mapping,
-                                      std::ostream& out) const {
-    out << "UnregisterInvocation { [ version=" << version << " ] }";
 }
 
 SEXP setClassName(SEXP s, const char* className) {

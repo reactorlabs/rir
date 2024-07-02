@@ -265,62 +265,6 @@ void recordSCChanged(bool changed) {
     sc_changed_ = changed;
 }
 
-/**
- * Output stream transformer that prefixes each line with a string
- */
-class Prefixer : private std::streambuf, public std::ostream {
-  public:
-    Prefixer(std::ostream& base, const char* prefix)
-        : std::ostream(this), base(base), prefix(prefix) {
-        base.flush();
-    }
-
-    inline virtual int sync(void) override {
-        base.flush();
-        return 0;
-    }
-
-  private:
-    std::ostream& base;
-    const char* prefix;
-
-    bool needsPrefix = true;
-
-    int overflow(int c) override {
-        if (needsPrefix) {
-            base << prefix;
-            needsPrefix = false;
-        }
-
-        if (c == '\n') {
-            needsPrefix = true;
-        }
-
-        base.put(c);
-        return 0;
-    }
-};
-
-void printRecordings(
-    std::ostream& out,
-    const std::vector<std::unique_ptr<rir::recording::Event>>& events,
-    const std::vector<FunRecording>& functions) {
-    for (auto& eventEntry : events) {
-        size_t idx = eventEntry->funRecIndex();
-        auto name = functions[idx].name;
-
-        // If name is empty (unknown), use a different display strategy
-        if (name.empty()) {
-            name = "<?>";
-        }
-
-        Prefixer prefixed(out, name.c_str());
-        prefixed << "    ";
-        eventEntry->print(functions, prefixed);
-        prefixed << std::endl;
-    }
-}
-
 // Compile heuristics
 void recordMarkOptReasonHeuristic() {
     RECORDER_FILTER_GUARD(compile)
@@ -498,60 +442,6 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 }
 
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
-
-REXPORT SEXP printRecordings(SEXP from) {
-    auto& out = std::cout;
-    out << "Recordings:" << std::endl;
-
-    if (Rf_isNull(from)) {
-        rir::recording::printRecordings(out, rir::recording::recorder_.log,
-                                        rir::recording::recorder_.functions);
-    } else {
-        SEXP expr;
-        if (Rf_isString(from)) {
-            expr = PROTECT(loadRecordings(from));
-        } else {
-            expr = from;
-        }
-
-        if (!Rf_isVector(expr) || Rf_length(expr) != 2) {
-            Rf_error("Expression is not a vector");
-        }
-
-        // Populate functions
-        auto bodies = VECTOR_ELT(expr, 0);
-        size_t bodiesLength = Rf_length(bodies);
-
-        std::vector<rir::recording::FunRecording> functions;
-        functions.reserve(bodiesLength);
-
-        for (size_t i = 0; i < bodiesLength; i++) {
-            functions.push_back(
-                rir::recording::serialization::fun_recorder_from_sexp(
-                    VECTOR_ELT(bodies, i)));
-        }
-
-        // Populate events
-        auto log = VECTOR_ELT(expr, 1);
-        size_t logLength = Rf_length(log);
-
-        std::vector<std::unique_ptr<rir::recording::Event>> logVector;
-        logVector.reserve(logLength);
-
-        for (size_t i = 0; i < logLength; i++) {
-            logVector.push_back(rir::recording::serialization::event_from_sexp(
-                VECTOR_ELT(log, i)));
-        }
-
-        rir::recording::printRecordings(out, logVector, functions);
-
-        if (expr != from) {
-            UNPROTECT(1);
-        }
-    }
-
-    return R_NilValue;
-}
 
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     if (Rf_isNull(obj)) {

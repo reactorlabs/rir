@@ -58,9 +58,6 @@ struct SpeculativeContext {
 
     explicit SpeculativeContext(const ObservedValues& values)
         : type{SpeculativeContextType::Values}, value{.values = values} {}
-
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const;
 };
 
 // TODO unify serialization with event
@@ -203,8 +200,6 @@ class Event {
 
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
-    virtual void print(const std::vector<FunRecording>& mapping,
-                       std::ostream& out) const = 0;
 
     size_t funRecIndex() const { return funRecIndex_; }
 
@@ -251,10 +246,6 @@ class SpeculativeContextEvent : public Event {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_sc";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
     bool is_promise;
     // Index of the slot
@@ -295,10 +286,6 @@ class CompilationEvent : public VersionEvent {
 
     void set_success(bool succes) { succesful = succes; }
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
     // Name under which the closure was compiled, to be passed to pirCompile()
     std::string compileName;
@@ -330,10 +317,6 @@ class DeoptEvent : public VersionEvent {
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_deopt";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
 
   private:
     DeoptReason::Reason reason_;
@@ -368,10 +351,6 @@ class InvocationEvent : public VersionEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_invocation";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
     Source source = Unknown;
     Context callContext;
@@ -393,10 +372,6 @@ class UnregisterInvocationEvent : public VersionEvent {
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_unregister_invocation";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
 };
 
 // From names.c
