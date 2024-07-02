@@ -251,16 +251,6 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-const char*
-ClosureEvent::targetName(const std::vector<FunRecording>& mapping) const {
-    return mapping[closureIndex].name.c_str();
-}
-
-const char*
-DtEvent::targetName(const std::vector<FunRecording>& mapping) const {
-    return mapping[dispatchTableIndex].name.c_str();
-}
-
 void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
                                std::ostream& out) const {
     switch (type) {
@@ -306,18 +296,18 @@ void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "dispatchTable", "is_promise", "index", "sc", "changed"};
+    "funIdx", "is_promise", "index", "sc", "changed"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        dispatchTableIndex, is_promise, index, sc, changed);
+        funRecIndex_, is_promise, index, sc, changed);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
                                            bool, uint64_t, SpeculativeContext,
                                            bool>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {is_promise, serialization::bool_from_sexp},
         {index, serialization::uint64_t_from_sexp},
         {sc, serialization::speculative_context_from_sexp},
@@ -366,7 +356,7 @@ void CompilationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
-    "closure",
+    "funIdx",
     "version",
     "name",
     "speculative_contexts",
@@ -379,7 +369,7 @@ const std::vector<const char*> CompilationEvent::fieldNames = {
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        closureIndex, version, compileName, speculative_contexts,
+        funRecIndex_, version, compileName, speculative_contexts,
         compile_reasons.heuristic, compile_reasons.condition,
         compile_reasons.osr, time_length, bitcode, succesful);
 }
@@ -390,7 +380,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
         std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
         std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
         Duration, std::string, bool>(
-        sexp, {closureIndex, serialization::uint64_t_from_sexp},
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {compileName, serialization::string_from_sexp},
         {speculative_contexts,
@@ -459,13 +449,18 @@ void DeoptEvent::print(const std::vector<FunRecording>& mapping,
     out << ",\n        reasonCodeOff=" << this->reasonCodeOff_ << "\n    }";
 }
 
-const std::vector<const char*> DeoptEvent::fieldNames = {
-    "dispatchTable",      "version",         "reason",  "reason_code_idx",
-    "reason_promise_idx", "reason_code_off", "trigger", "triggerClosure"};
+const std::vector<const char*> DeoptEvent::fieldNames = {"funIdx",
+                                                         "version",
+                                                         "reason",
+                                                         "reason_code_idx",
+                                                         "reason_promise_idx",
+                                                         "reason_code_off",
+                                                         "trigger",
+                                                         "triggerClosure"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
-        dispatchTableIndex, version, reason_, reasonCodeIdx_, reasonPromiseIdx_,
+        funRecIndex_, version, reason_, reasonCodeIdx_, reasonPromiseIdx_,
         reasonCodeOff_, trigger_, triggerClosure_);
 }
 
@@ -476,7 +471,7 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
                                     DeoptReason::Reason, uint64_t, int64_t,
                                     uint32_t, SEXP, int64_t>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {reason_, serialization::deopt_reason_from_sexp},
         {reasonCodeIdx_, serialization::uint64_t_from_sexp},
@@ -494,17 +489,17 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {
-    "dispatchTable", "context", "source", "callContext", "isNative", "address"};
+    "funIdx", "context", "source", "callContext", "isNative", "address"};
 
 SEXP InvocationEvent::toSEXP() const {
     return serialization::fields_to_sexp<InvocationEvent>(
-        dispatchTableIndex, version, source, callContext, isNative, address);
+        funRecIndex_, version, source, callContext, isNative, address);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context,
-                                    Source, Context, bool, uint64_t>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, Source,
+                                    Context, bool, uint64_t>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {source, serialization::invocation_source_from_sexp},
         {callContext, serialization::context_from_sexp},
@@ -519,17 +514,17 @@ void InvocationEvent::print(const std::vector<FunRecording>& mapping,
 }
 
 const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
-    "dispatchTable", "context"};
+    "funIdx", "context"};
 
 SEXP UnregisterInvocationEvent::toSEXP() const {
     return serialization::fields_to_sexp<UnregisterInvocationEvent>(
-        dispatchTableIndex, version);
+        funRecIndex_, version);
 }
 
 void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<UnregisterInvocationEvent, uint64_t,
                                     Context>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp});
 }
 

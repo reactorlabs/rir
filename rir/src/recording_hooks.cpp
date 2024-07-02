@@ -306,14 +306,15 @@ void printRecordings(
     const std::vector<std::unique_ptr<rir::recording::Event>>& events,
     const std::vector<FunRecording>& functions) {
     for (auto& eventEntry : events) {
-        const char* name = eventEntry->targetName(functions);
+        size_t idx = eventEntry->funRecIndex();
+        auto name = functions[idx].name;
 
         // If name is empty (unknown), use a different display strategy
-        if (*name == 0) {
+        if (name.empty()) {
             name = "<?>";
         }
 
-        Prefixer prefixed(out, name);
+        Prefixer prefixed(out, name.c_str());
         prefixed << "    ";
         eventEntry->print(functions, prefixed);
         prefixed << std::endl;

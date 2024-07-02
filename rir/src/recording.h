@@ -196,6 +196,9 @@ struct CompileReasons {
  */
 class Event {
   public:
+    Event() = default;
+    Event(size_t funRecIndex) : funRecIndex_(funRecIndex) {}
+
     virtual ~Event() = default;
 
     virtual SEXP toSEXP() const = 0;
@@ -203,64 +206,26 @@ class Event {
     virtual void print(const std::vector<FunRecording>& mapping,
                        std::ostream& out) const = 0;
 
-    virtual const char*
-    targetName(const std::vector<FunRecording>& mapping) const = 0;
-};
-
-/**
- * Recorded event that is implicitly attached to a CLOSXP-typed SEXP
- *
- * `ClosureEvent` is an abstract class.
- */
-class ClosureEvent : public Event {
-  public:
-    virtual ~ClosureEvent() = default;
+    size_t funRecIndex() const { return funRecIndex_; }
 
   protected:
-    ClosureEvent() = default;
-    explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
-
-    size_t closureIndex;
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
+    size_t funRecIndex_;
 };
 
 /**
- * Recorded event that is implicitly attached to a CLOSXP's dispatch table
- *
- * `DtEvent` is an abstract class.
- */
-class DtEvent : public Event {
-  public:
-    virtual ~DtEvent() = default;
-
-  protected:
-    DtEvent() = default;
-    explicit DtEvent(size_t dispatchTableIndex)
-        : dispatchTableIndex(dispatchTableIndex){};
-
-    size_t dispatchTableIndex;
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
-};
-
-/**
- * `FunctionEvent`s are `Event`s that relate to a closure (instead of any of the
- * 3 function kinds), but also to a specific function version inside its
- * DispatchTable.
+ * `VersionEvent`s are `Event`s that relate to a closure and also to a specific
+ * function version inside its DispatchTable.
  *
  * `VersionEvent` is an abstract class.
  */
-class VersionEvent : public DtEvent {
+class VersionEvent : public Event {
   public:
     virtual ~VersionEvent() = default;
 
   protected:
     VersionEvent() = default;
     VersionEvent(size_t dispatchTableIndex, Context version)
-        : DtEvent(dispatchTableIndex), version(version){};
+        : Event(dispatchTableIndex), version(version){};
 
     Context version = Context();
 };
@@ -268,12 +233,12 @@ class VersionEvent : public DtEvent {
 /**
  * Notifies an update to a speculative context
  */
-class SpeculativeContextEvent : public DtEvent {
+class SpeculativeContextEvent : public Event {
   public:
     SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
                             size_t index, const SpeculativeContext& sc,
                             bool changed)
-        : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
+        : Event(dispatchTableIndex), is_promise(isPromise), index(index),
           sc(sc), changed(changed) {}
 
     SpeculativeContextEvent() = default;
@@ -298,18 +263,17 @@ class SpeculativeContextEvent : public DtEvent {
     bool changed;
 };
 
-class CompilationEvent : public ClosureEvent {
+class CompilationEvent : public VersionEvent {
   public:
     using Clock = std::chrono::steady_clock;
     using Time = std::chrono::time_point<Clock>;
     using Duration = std::chrono::milliseconds;
 
-    CompilationEvent(size_t closureIndex, Context version,
+    CompilationEvent(size_t funRecIndex, Context version,
                      const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
                      CompileReasons&& compile_reasons)
-        : ClosureEvent(closureIndex), version(version),
-          compileName(compileName),
+        : VersionEvent(funRecIndex, version), compileName(compileName),
           speculative_contexts(std::move(speculative_contexts)),
           compile_reasons(std::move(compile_reasons)) {}
 
@@ -336,8 +300,6 @@ class CompilationEvent : public ClosureEvent {
                std::ostream& out) const override;
 
   private:
-    Context version;
-
     // Name under which the closure was compiled, to be passed to pirCompile()
     std::string compileName;
 

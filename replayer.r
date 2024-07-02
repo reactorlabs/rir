@@ -41,11 +41,6 @@ recordings.csv <- function(r, out = "") {
 
   line(columns)
 
-  get_fun <- function(idx) {
-    f <- r$functions[[ as.integer(idx) + 1 ]]
-    c(f$name, f$env)
-  }
-
   pp <- function(obj, type) {
     recordings.printEventPart(obj, type, r$functions)
   }
@@ -58,16 +53,16 @@ recordings.csv <- function(r, out = "") {
     event$idx <- idx
     idx <- idx + 1
 
+    f <- r$functions[[ as.integer(e$funIdx) + 1 ]]
+    event$fun <- f$name
+    event$env <- f$env
+
     if (class(e) == "event_compile") {
       if (!e$succesful) {
           next
       }
 
       event$type <- "Compilation"
-
-      f <- get_fun(e$closure)
-      event$fun <- f[1]
-      event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
 
@@ -96,10 +91,6 @@ recordings.csv <- function(r, out = "") {
     } else if (class(e) == "event_deopt") {
       event$type <- "Deopt"
 
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
-
       event$ctx <- pp(e$version, "context")
 
       if ( e$reason_promise_idx >= 0 ){
@@ -113,10 +104,6 @@ recordings.csv <- function(r, out = "") {
       event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
-
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
 
       event$ctx <- pp(e$context, "context")
 
@@ -134,10 +121,6 @@ recordings.csv <- function(r, out = "") {
       event$env <- f[2]
     } else if (class(e) == "event_sc") {
       event$type <- "SpeculativeContext"
-
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
 
       event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
 
