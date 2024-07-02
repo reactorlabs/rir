@@ -53,8 +53,8 @@ struct {
 };
 
 CompileReasons compileReasons_;
-std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
-    compilation_stack_;
+CompilationEvent::Time compilation_time_start_;
+std::unique_ptr<CompilationEvent> compilation_event_ = nullptr;
 
 const char* finalizerPath = nullptr;
 
@@ -113,11 +113,10 @@ void recordCompile(SEXP cls, const std::string& name,
     auto baseline = dt->baseline();
     auto sc = getSpeculativeContext(baseline->typeFeedback(), baseline);
 
-    compilation_stack_.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(CompilationEvent::Clock::now()),
-        std::forward_as_tuple(rec_idx, assumptions, name, std::move(sc),
-                              std::move(compileReasons_)));
+    compilation_time_start_ = CompilationEvent::Clock::now();
+    compilation_event_ = std::make_unique<CompilationEvent>(
+        rec_idx, assumptions, name, std::move(sc), std::move(compileReasons_));
+
     recordReasonsClear();
 }
 
@@ -126,22 +125,14 @@ void recordCompileFinish(bool succesful) {
 
     auto end_time = CompilationEvent::Clock::now();
 
-    assert(!compilation_stack_.empty());
-    auto start_time = compilation_stack_.top().first;
-    auto event = std::make_unique<CompilationEvent>(
-        std::move(compilation_stack_.top().second));
-    compilation_stack_.pop();
+    assert(compilation_event_);
 
     auto duration = std::chrono::duration_cast<CompilationEvent::Duration>(
-        end_time - start_time);
-    event->set_time(duration);
-    event->set_success(succesful);
+        end_time - compilation_time_start_);
+    compilation_event_->set_time(duration);
+    compilation_event_->set_success(succesful);
 
-    size_t idx = recorder_.push_event(std::move(event));
-
-    if (!compilation_stack_.empty()) {
-        compilation_stack_.top().second.add_subcompilation(idx);
-    }
+    recorder_.push_event(std::move(compilation_event_));
 }
 
 void recordOsrCompile(const SEXP cls) {
@@ -156,8 +147,8 @@ void recordLLVMBitcode(llvm::Function* fun) {
 
     fun->print(os);
 
-    assert(!compilation_stack_.empty());
-    compilation_stack_.top().second.set_bitcode(ss.str());
+    assert(compilation_event_);
+    compilation_event_->set_bitcode(ss.str());
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,

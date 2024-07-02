@@ -327,8 +327,6 @@ class CompilationEvent : public ClosureEvent {
 
     void set_time(Duration time) { time_length = time; }
 
-    void add_subcompilation(size_t idx) { subevents.push_back(idx); }
-
     void set_bitcode(const std::string& str) { bitcode = str; }
 
     void set_success(bool succes) { succesful = succes; }
@@ -348,8 +346,6 @@ class CompilationEvent : public ClosureEvent {
 
     // Benchmarking
     Duration time_length;
-
-    std::vector<size_t> subevents;
 
     // The LLVM Bitcode
     std::string bitcode;

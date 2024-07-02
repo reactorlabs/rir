@@ -374,7 +374,6 @@ const std::vector<const char*> CompilationEvent::fieldNames = {
     "compile_reason_condition",
     "compile_reason_osr",
     "time",
-    "subevents",
     "bitcode",
     "succesful"};
 
@@ -382,7 +381,7 @@ SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
         closureIndex, version, compileName, speculative_contexts,
         compile_reasons.heuristic, compile_reasons.condition,
-        compile_reasons.osr, time_length, subevents, bitcode, succesful);
+        compile_reasons.osr, time_length, bitcode, succesful);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
@@ -390,7 +389,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
         CompilationEvent, uint64_t, Context, std::string,
         std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
         std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
-        Duration, std::vector<size_t>, std::string, bool>(
+        Duration, std::string, bool>(
         sexp, {closureIndex, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {compileName, serialization::string_from_sexp},
@@ -401,9 +400,6 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
         {compile_reasons.condition, serialization::compile_reason_from_sexp},
         {compile_reasons.osr, serialization::compile_reason_from_sexp},
         {time_length, serialization::time_from_sexp},
-        {subevents,
-         serialization::vector_from_sexp<size_t,
-                                         serialization::uint64_t_from_sexp>},
         {bitcode, serialization::string_from_sexp},
         {succesful, serialization::bool_from_sexp});
 }
