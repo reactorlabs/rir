@@ -58,9 +58,6 @@ struct SpeculativeContext {
 
     explicit SpeculativeContext(const ObservedValues& values)
         : type{SpeculativeContextType::Values}, value{.values = values} {}
-
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const;
 };
 
 // TODO unify serialization with event
@@ -196,71 +193,34 @@ struct CompileReasons {
  */
 class Event {
   public:
+    Event() = default;
+    Event(size_t funRecIndex) : funRecIndex_(funRecIndex) {}
+
     virtual ~Event() = default;
 
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
-    virtual void print(const std::vector<FunRecording>& mapping,
-                       std::ostream& out) const = 0;
 
-    virtual const char*
-    targetName(const std::vector<FunRecording>& mapping) const = 0;
-};
-
-/**
- * Recorded event that is implicitly attached to a CLOSXP-typed SEXP
- *
- * `ClosureEvent` is an abstract class.
- */
-class ClosureEvent : public Event {
-  public:
-    virtual ~ClosureEvent() = default;
+    size_t funRecIndex() const { return funRecIndex_; }
 
   protected:
-    ClosureEvent() = default;
-    explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
-
-    size_t closureIndex;
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
+    size_t funRecIndex_;
 };
 
 /**
- * Recorded event that is implicitly attached to a CLOSXP's dispatch table
- *
- * `DtEvent` is an abstract class.
- */
-class DtEvent : public Event {
-  public:
-    virtual ~DtEvent() = default;
-
-  protected:
-    DtEvent() = default;
-    explicit DtEvent(size_t dispatchTableIndex)
-        : dispatchTableIndex(dispatchTableIndex){};
-
-    size_t dispatchTableIndex;
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
-};
-
-/**
- * `FunctionEvent`s are `Event`s that relate to a closure (instead of any of the
- * 3 function kinds), but also to a specific function version inside its
- * DispatchTable.
+ * `VersionEvent`s are `Event`s that relate to a closure and also to a specific
+ * function version inside its DispatchTable.
  *
  * `VersionEvent` is an abstract class.
  */
-class VersionEvent : public DtEvent {
+class VersionEvent : public Event {
   public:
     virtual ~VersionEvent() = default;
 
   protected:
     VersionEvent() = default;
     VersionEvent(size_t dispatchTableIndex, Context version)
-        : DtEvent(dispatchTableIndex), version(version){};
+        : Event(dispatchTableIndex), version(version){};
 
     Context version = Context();
 };
@@ -268,13 +228,13 @@ class VersionEvent : public DtEvent {
 /**
  * Notifies an update to a speculative context
  */
-class SpeculativeContextEvent : public DtEvent {
+class SpeculativeContextEvent : public Event {
   public:
     SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
                             size_t index, const SpeculativeContext& sc,
                             bool changed, Context context)
-        : DtEvent(dispatchTableIndex), is_promise(isPromise), index(index),
-          sc(sc), changed(changed), context(context) {}
+        : Event(dispatchTableIndex), is_promise(isPromise), index(index),
+          sc(sc), changed(changed), context(context){}
 
     SpeculativeContextEvent() = default;
 
@@ -286,10 +246,6 @@ class SpeculativeContextEvent : public DtEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_sc";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
     bool is_promise;
     // Index of the slot
@@ -299,23 +255,37 @@ class SpeculativeContextEvent : public DtEvent {
     Context context;
 };
 
-class CompilationEvent : public ClosureEvent {
+class CompilationStartEvent : public Event {
   public:
-    using Clock = std::chrono::steady_clock;
-    using Time = std::chrono::time_point<Clock>;
-    using Duration = std::chrono::milliseconds;
+    CompilationStartEvent(size_t funRecIndex, const std::string& compileName,
+                          CompileReasons&& reasons)
+        : Event(funRecIndex), compileName(compileName),
+          compile_reasons(std::move(reasons)) {}
 
-    CompilationEvent(size_t closureIndex, Context version,
-                     const std::string& compileName,
+    CompilationStartEvent(){};
+
+    virtual ~CompilationStartEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_start";
+
+  private:
+    // Name under which the closure was compiled, to be passed to pirCompile()
+    std::string compileName;
+    CompileReasons compile_reasons;
+};
+
+class CompilationEvent : public VersionEvent {
+  public:
+    CompilationEvent(size_t funRecIndex, Context version,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     CompileReasons&& compile_reasons, Context context)
-        : ClosureEvent(closureIndex), version(version),
-          compileName(compileName),
+                     const std::string& bitcode, const std::string& pir_code, Context context)
+        : VersionEvent(funRecIndex, version),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons)),
-        context(context){}
-
-    CompilationEvent(CompilationEvent&& other) = default;
+          bitcode(bitcode), pir_code(pir_code), context(context) {}
 
     CompilationEvent() {}
 
@@ -327,38 +297,37 @@ class CompilationEvent : public ClosureEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_compile";
 
-    void set_time(Duration time) { time_length = time; }
-
-    void add_subcompilation(size_t idx) { subevents.push_back(idx); }
-
-    void set_bitcode(const std::string& str) { bitcode = str; }
-
-    void set_success(bool succes) { succesful = succes; }
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
-    Context version;
-
-    // Name under which the closure was compiled, to be passed to pirCompile()
-    std::string compileName;
-
     std::vector<SpeculativeContext> speculative_contexts;
-    CompileReasons compile_reasons;
-
-    // Benchmarking
-    Duration time_length;
-
-    std::vector<size_t> subevents;
 
     // The LLVM Bitcode
     std::string bitcode;
-
-    bool succesful = false;
+    std::string pir_code;
 
     Context context;
+};
+
+class CompilationEndEvent : public Event {
+  public:
+    using Clock = std::chrono::steady_clock;
+    using Time = std::chrono::time_point<Clock>;
+    using Duration = std::chrono::milliseconds;
+
+    CompilationEndEvent(){};
+    CompilationEndEvent(size_t funRecIndex, Duration duration, bool succesful)
+        : Event(funRecIndex), time_length(duration), succesful(succesful){};
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_end";
+
+  private:
+    // Benchmarking
+    Duration time_length;
+
+    bool succesful;
 };
 
 class DeoptEvent : public VersionEvent {
@@ -376,10 +345,6 @@ class DeoptEvent : public VersionEvent {
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_deopt";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
 
   private:
     DeoptReason::Reason reason_;
@@ -416,10 +381,6 @@ class InvocationEvent : public VersionEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_invocation";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
     Source source = Unknown;
     Context callContext;
@@ -441,29 +402,21 @@ class UnregisterInvocationEvent : public VersionEvent {
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_unregister_invocation";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
 };
 
-class ContextCreatedEvent : public DtEvent {
+class ContextCreatedEvent : public Event {
   public:
     ContextCreatedEvent() = default;
     virtual ~ContextCreatedEvent() = default;
 
     ContextCreatedEvent(size_t dispatchTableIndex, const Context& context)
-        : DtEvent(dispatchTableIndex), context(context) {}
+        : Event(dispatchTableIndex), context(context) {}
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_context";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
 
   private:
     Context context;

@@ -7,6 +7,8 @@
 #include "Rinternals.h"
 #include "api.h"
 #include "compiler/compiler.h"
+#include "compiler/pir/closure.h"
+#include "compiler/pir/module.h"
 #include "recording_serialization.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
@@ -55,8 +57,14 @@ struct {
 };
 
 CompileReasons compileReasons_;
-std::stack<std::pair<CompilationEvent::Time, CompilationEvent>>
-    compilation_stack_;
+CompilationEndEvent::Time compilation_time_start_;
+
+std::unordered_map<pir::ClosureVersion*, std::vector<SpeculativeContext>>
+    inner_compilations_sc_;
+std::unordered_map<pir::ClosureVersion*, std::string>
+    inner_compilations_bitcode_;
+
+size_t compilation_idx_ = -1;
 
 const char* finalizerPath = nullptr;
 
@@ -107,77 +115,80 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
     return result;
 }
 
-void recordCompileCommon(SEXP cls, const std::string& name,
-                         const Context& assumptions, Context context) {
-    auto rec_idx = recorder_.initOrGetRecording(cls, name);
-    auto dt = DispatchTable::unpack(BODY(cls));
-
-    auto baseline = dt->baseline();
-
-    // Dispatch as in DispatchTable::getCompilationTypeFeedback
-    auto tf_entry =
-        dt->typeFeedbacks()->dispatch(context, [](const TypeFeedback* tf) {
-            return tf && tf->recordingCount() > 0;
-        });
-    // Actual context used
-    context = tf_entry.first;
-
-    auto sc = getSpeculativeContext(tf_entry.second, baseline);
-
-    compilation_stack_.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(CompilationEvent::Clock::now()),
-        std::forward_as_tuple(rec_idx, assumptions, name, std::move(sc),
-                              std::move(compileReasons_), context));
-    recordReasonsClear();
-}
-
 void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
+    compilation_time_start_ = CompilationEndEvent::Clock::now();
 
-    auto dt = DispatchTable::unpack(BODY(cls));
+    auto rec_idx = recorder_.initOrGetRecording(cls, name);
 
-    // As in rir::pir::Compiler::compileClosure
-    Context context = assumptions;
-    dt->baseline()->clearDisabledAssumptions(context);
-    context = dt->combineContextWith(context);
+    recorder_.push_event(std::make_unique<CompilationStartEvent>(
+        rec_idx, name, std::move(compileReasons_)));
 
-    recordCompileCommon(cls, name, assumptions, context);
+    compilation_idx_ = rec_idx;
+
+    recordReasonsClear();
 }
 
-void recordOsrCompile(const SEXP cls, const Context& context) {
+void recordOsrCompile(const SEXP cls) {
+    recordCompile(cls, "", pir::Compiler::defaultContext);
+}
+
+void recordCompileFinish(bool succesful, pir::Module* module) {
     RECORDER_FILTER_GUARD(compile);
 
-    // Initial context for type feedback is the same as context
-    // as in rir::pir::Compiler::compileContinuation
-    recordCompileCommon(cls, "", context, context);
+    // Inner complations
+    module->eachPirClosure([&](pir::Closure* clos) {
+        clos->eachVersion([&](pir::ClosureVersion* ver) {
+            size_t rec_idx;
+            if (clos->hasOriginClosure()) {
+                rec_idx = recorder_.initOrGetRecording(clos->rirClosure(),
+                                                       clos->name());
+            } else {
+                rec_idx = recorder_.initOrGetRecording(
+                    clos->rirFunction()->dispatchTable());
+
+                auto& entry = recorder_.get_recording(rec_idx);
+                if (entry.name.empty()) {
+                    entry.name = clos->name();
+                }
+            }
+
+            Context version = ver->context();
+
+            std::stringstream pir_code;
+            ver->printCode(pir_code, false, false);
+
+            auto sc_entry = inner_compilations_sc_.find(ver);
+            assert(sc_entry != inner_compilations_sc_.end());
+
+            auto bitcode_entry = inner_compilations_bitcode_.find(ver);
+            std::string bitcode;
+
+            if (bitcode_entry != inner_compilations_bitcode_.end()) {
+                bitcode = bitcode_entry->second;
+            }
+
+            recorder_.push_event(std::make_unique<CompilationEvent>(
+                rec_idx, version, std::move(sc_entry->second), bitcode,
+                pir_code.str()));
+        });
+    });
+
+    inner_compilations_bitcode_.clear();
+    inner_compilations_sc_.clear();
+
+    // Compilation end
+    auto end_time = CompilationEndEvent::Clock::now();
+    auto duration = std::chrono::duration_cast<CompilationEndEvent::Duration>(
+        end_time - compilation_time_start_);
+
+    recorder_.push_event(std::make_unique<CompilationEndEvent>(
+        compilation_idx_, duration, succesful));
 }
 
-void recordCompileFinish(bool succesful) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto end_time = CompilationEvent::Clock::now();
-
-    assert(!compilation_stack_.empty());
-    auto start_time = compilation_stack_.top().first;
-    auto event = std::make_unique<CompilationEvent>(
-        std::move(compilation_stack_.top().second));
-    compilation_stack_.pop();
-
-    auto duration = std::chrono::duration_cast<CompilationEvent::Duration>(
-        end_time - start_time);
-    event->set_time(duration);
-    event->set_success(succesful);
-
-    size_t idx = recorder_.push_event(std::move(event));
-
-    if (!compilation_stack_.empty()) {
-        compilation_stack_.top().second.add_subcompilation(idx);
-    }
-}
-
-void recordLLVMBitcode(llvm::Function* fun) {
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun) {
     RECORDER_FILTER_GUARD(compile);
 
     std::stringstream ss{};
@@ -185,8 +196,27 @@ void recordLLVMBitcode(llvm::Function* fun) {
 
     fun->print(os);
 
-    assert(!compilation_stack_.empty());
-    compilation_stack_.top().second.set_bitcode(ss.str());
+    inner_compilations_bitcode_.emplace(version, ss.str());
+}
+
+void addCompilationSC(pir::ClosureVersion* version,
+                      TypeFeedback* typeFeedback) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto baseline = version->owner()->rirFunction();
+    auto sc = getSpeculativeContext(typeFeedback, baseline);
+
+    inner_compilations_sc_.emplace(version, std::move(sc));
+}
+
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto sc_entry = inner_compilations_sc_.find(prevVersion);
+    assert(sc_entry != inner_compilations_sc_.end());
+
+    inner_compilations_sc_.emplace(newVersion, sc_entry->second);
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
@@ -306,61 +336,6 @@ void recordSCChanged(bool changed) {
 void recordSCFunctionContext(Function* fun, const Context& ctx) {
     sc_function_ = fun;
     sc_context_ = ctx;
-}
-
-/**
- * Output stream transformer that prefixes each line with a string
- */
-class Prefixer : private std::streambuf, public std::ostream {
-  public:
-    Prefixer(std::ostream& base, const char* prefix)
-        : std::ostream(this), base(base), prefix(prefix) {
-        base.flush();
-    }
-
-    inline virtual int sync(void) override {
-        base.flush();
-        return 0;
-    }
-
-  private:
-    std::ostream& base;
-    const char* prefix;
-
-    bool needsPrefix = true;
-
-    int overflow(int c) override {
-        if (needsPrefix) {
-            base << prefix;
-            needsPrefix = false;
-        }
-
-        if (c == '\n') {
-            needsPrefix = true;
-        }
-
-        base.put(c);
-        return 0;
-    }
-};
-
-void printRecordings(
-    std::ostream& out,
-    const std::vector<std::unique_ptr<rir::recording::Event>>& events,
-    const std::vector<FunRecording>& functions) {
-    for (auto& eventEntry : events) {
-        const char* name = eventEntry->targetName(functions);
-
-        // If name is empty (unknown), use a different display strategy
-        if (*name == 0) {
-            name = "<?>";
-        }
-
-        Prefixer prefixed(out, name);
-        prefixed << "    ";
-        eventEntry->print(functions, prefixed);
-        prefixed << std::endl;
-    }
 }
 
 // Compile heuristics
@@ -549,60 +524,6 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 }
 
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
-
-REXPORT SEXP printRecordings(SEXP from) {
-    auto& out = std::cout;
-    out << "Recordings:" << std::endl;
-
-    if (Rf_isNull(from)) {
-        rir::recording::printRecordings(out, rir::recording::recorder_.log,
-                                        rir::recording::recorder_.functions);
-    } else {
-        SEXP expr;
-        if (Rf_isString(from)) {
-            expr = PROTECT(loadRecordings(from));
-        } else {
-            expr = from;
-        }
-
-        if (!Rf_isVector(expr) || Rf_length(expr) != 2) {
-            Rf_error("Expression is not a vector");
-        }
-
-        // Populate functions
-        auto bodies = VECTOR_ELT(expr, 0);
-        size_t bodiesLength = Rf_length(bodies);
-
-        std::vector<rir::recording::FunRecording> functions;
-        functions.reserve(bodiesLength);
-
-        for (size_t i = 0; i < bodiesLength; i++) {
-            functions.push_back(
-                rir::recording::serialization::fun_recorder_from_sexp(
-                    VECTOR_ELT(bodies, i)));
-        }
-
-        // Populate events
-        auto log = VECTOR_ELT(expr, 1);
-        size_t logLength = Rf_length(log);
-
-        std::vector<std::unique_ptr<rir::recording::Event>> logVector;
-        logVector.reserve(logLength);
-
-        for (size_t i = 0; i < logLength; i++) {
-            logVector.push_back(rir::recording::serialization::event_from_sexp(
-                VECTOR_ELT(log, i)));
-        }
-
-        rir::recording::printRecordings(out, logVector, functions);
-
-        if (expr != from) {
-            UNPROTECT(1);
-        }
-    }
-
-    return R_NilValue;
-}
 
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     if (Rf_isNull(obj)) {

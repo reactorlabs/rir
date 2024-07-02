@@ -13,7 +13,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c, const Context& context,
                        const ContinuationContext& ctx) {
     Function* fun = nullptr;
 
-    REC_HOOK(recording::recordOsrCompile(closure, context));
+    REC_HOOK(recording::recordOsrCompile(closure));
 
     // compile to pir
     pir::Module* module = new pir::Module;
@@ -39,9 +39,8 @@ Function* OSR::compile(SEXP closure, rir::Code* c, const Context& context,
             logger.warn("Continuation compilation failed");
         });
 
+    REC_HOOK(recording::recordCompileFinish(succesfulComp, module));
     delete module;
-
-    REC_HOOK(recording::recordCompileFinish(succesfulComp));
 
     return fun;
 }

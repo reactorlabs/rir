@@ -443,7 +443,7 @@ void PirJitLLVM::compile(
         target->arglistOrder(ArglistOrder::New(funCompiler.getArgReordering()));
     jitFixup.emplace(code, std::make_pair(target, funCompiler.fun->getName()));
 
-    REC_HOOK(recording::recordLLVMBitcode(funCompiler.fun));
+    REC_HOOK(recording::addCompilationLLVMBitcode(closure, funCompiler.fun));
 
     log.LLVMBitcode([&](std::ostream& out, bool tty) {
         bool debug = true;

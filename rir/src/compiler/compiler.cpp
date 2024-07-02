@@ -100,6 +100,7 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
     auto typeFeedback = tbl->getCompilationTypeFeedback(context);
+    REC_HOOK(recording::addCompilationSC(version, typeFeedback));
     Protect p;
     p(typeFeedback->container());
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
@@ -154,6 +155,9 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
+
+    REC_HOOK(recording::addCompilationSC(version, typeFeedback));
+
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
     // This does not have to be a true due to deopts, while interpreting after
@@ -424,7 +428,6 @@ void Compiler::optimizeModule() {
 
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
-
                 }
 
                 if (MEASURE_COMPILER_PERF)

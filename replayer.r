@@ -21,7 +21,7 @@ recordings.csv <- function(r, out = "") {
     })
   }
 
-  # output a line of vector to result
+  # output a line of vector
   line <- function(vec) {
     # Surround with quotes if it contains commas
     vec <- lapply(vec, function(el) {
@@ -37,14 +37,9 @@ recordings.csv <- function(r, out = "") {
     cat( vec, file = out, append = TRUE )
   }
 
-  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "changed", "is_promise", "is_native", "callee_address")
+  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "pir_len", "changed", "is_promise", "is_native", "callee_address")
 
   line(columns)
-
-  get_fun <- function(idx) {
-    f <- r$functions[[ as.integer(idx) + 1 ]]
-    c(f$name, f$env)
-  }
 
   pp <- function(obj, type) {
     recordings.printEventPart(obj, type, r$functions)
@@ -58,24 +53,12 @@ recordings.csv <- function(r, out = "") {
     event$idx <- idx
     idx <- idx + 1
 
-    if (class(e) == "event_compile") {
-      if (!e$succesful) {
-          next
-      }
+    f <- r$functions[[ as.integer(e$funIdx) + 1 ]]
+    event$fun <- f$name
+    event$env <- f$env
 
-      event$type <- "Compilation"
-
-      f <- get_fun(e$closure)
-      event$fun <- f[1]
-      event$env <- f[2]
-
-      event$ctx <- pp(e$version, "context")
-      event$speculative_ctx <- pp( e$context, "context" )
-
-      event$speculative <- paste(insert.commas(lapply(
-        e$speculative_contexts,
-        function(spec) pp(spec, "speculative")
-      )), collapse="")
+    if (class(e) == "event_compile_start") {
+      event$type <- "CompilationStart"
 
       reasAcc <- ""
 
@@ -92,14 +75,29 @@ recordings.csv <- function(r, out = "") {
 
       event$reason <- reasAcc
 
+    } else if (class(e) == "event_compile_end") {
+      if (e$succesful){
+          event$type <- "CompilationEnd"
+      } else {
+          event$type <- "CompilationAborted"
+      }
+
+    } else if (class(e) == "event_compile") {
+      event$type <- "Compilation"
+
+      event$ctx <- pp(e$version, "context")
+      event$speculative_ctx <- pp( e$context, "context" )
+
+      event$speculative <- paste(insert.commas(lapply(
+        e$speculative_contexts,
+        function(spec) pp(spec, "speculative")
+      )), collapse="")
+
       event$bitcode_len <- nchar(e$bitcode)
+      event$pir_len <- nchar(e$pir_code)
 
     } else if (class(e) == "event_deopt") {
       event$type <- "Deopt"
-
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
 
       event$ctx <- pp(e$version, "context")
 
@@ -117,10 +115,6 @@ recordings.csv <- function(r, out = "") {
     } else if (class(e) == "event_invocation") {
       event$type <- "Invocation"
 
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
-
       event$ctx <- pp(e$context, "context")
 
       event$call_ctx <- pp(e$callContext, "context")
@@ -131,15 +125,8 @@ recordings.csv <- function(r, out = "") {
     } else if (class(e) == "event_unregister_invocation"){
       event$type <- "UnregisterInvocation"
 
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
     } else if (class(e) == "event_sc") {
       event$type <- "SpeculativeContext"
-
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
 
       event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
 
@@ -156,7 +143,7 @@ recordings.csv <- function(r, out = "") {
 
       event$speculative_ctx <- pp(e$context, "context")
     } else {
-      event$type = paste0("[", class(e), "]")
+      event$type <- paste0("[", class(e), "]")
     }
 
     vec <- lapply(columns, function(col) {

@@ -261,10 +261,6 @@ if (.Call("isRecordingsDefined")) {
         recordings.get()
     }
 
-    recordings.print <- function(from = NULL) {
-        .Call("printRecordings", from)
-    }
-
     recordings.printEventPart <- function( obj, type, funs ) {
         .Call("printEventPart", obj, type, funs)
     }

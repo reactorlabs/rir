@@ -73,9 +73,9 @@ SEXP to_sexp(const CompileReason& reason);
 std::unique_ptr<rir::recording::CompileReason>
 compile_reason_from_sexp(SEXP sexp);
 
-SEXP to_sexp(CompilationEvent::Duration time);
+SEXP to_sexp(CompilationEndEvent::Duration time);
 
-CompilationEvent::Duration time_from_sexp(SEXP sexp);
+CompilationEndEvent::Duration time_from_sexp(SEXP sexp);
 
 SEXP to_sexp(InvocationEvent::Source set);
 

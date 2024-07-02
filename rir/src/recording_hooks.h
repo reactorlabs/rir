@@ -3,7 +3,6 @@
 
 #include "api.h"
 #include "llvm/IR/Module.h"
-
 #include <R/r.h>
 #include <string>
 
@@ -20,20 +19,31 @@ struct DeoptReason;
 struct ObservedCallees;
 struct ObservedTest;
 struct ObservedValues;
+class TypeFeedback;
+
+namespace pir {
+class Module;
+}
 
 namespace recording {
 
-void recordCompile(const SEXP cls, const std::string& name,
+void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions);
-void recordOsrCompile(const SEXP cls, const Context& context);
-void recordCompileFinish(bool succesful);
-void recordLLVMBitcode(llvm::Function* fun);
+void recordOsrCompile(const SEXP cls);
+void recordCompileFinish(bool succesful, pir::Module* module);
+
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun);
+void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  const Context& context, SEXP trigger);
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
-void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callContext);
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
+                                          Context callContext);
 void recordInvocationRirEval(Function* f);
 void recordUnregisterInvocation(SEXP cls, Function* f);
 
@@ -77,7 +87,6 @@ REXPORT SEXP isRecordings();
 REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
-REXPORT SEXP printRecordings(SEXP from);
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
 
 #else
