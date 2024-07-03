@@ -7,6 +7,8 @@
 #include "Rinternals.h"
 #include "api.h"
 #include "compiler/compiler.h"
+#include "compiler/pir/closure.h"
+#include "compiler/pir/module.h"
 #include "recording_serialization.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
@@ -53,8 +55,14 @@ struct {
 };
 
 CompileReasons compileReasons_;
-CompilationEvent::Time compilation_time_start_;
-std::unique_ptr<CompilationEvent> compilation_event_ = nullptr;
+CompilationEndEvent::Time compilation_time_start_;
+
+std::unordered_map<pir::ClosureVersion*, std::vector<SpeculativeContext>>
+    inner_compilations_sc_;
+std::unordered_map<pir::ClosureVersion*, std::string>
+    inner_compilations_bitcode_;
+
+size_t compilation_idx_ = -1;
 
 const char* finalizerPath = nullptr;
 
@@ -106,40 +114,35 @@ std::vector<SpeculativeContext> getSpeculativeContext(TypeFeedback* feedback,
 void recordCompile(SEXP cls, const std::string& name,
                    const Context& assumptions) {
     RECORDER_FILTER_GUARD(compile);
+    compilation_time_start_ = CompilationEndEvent::Clock::now();
 
     auto rec_idx = recorder_.initOrGetRecording(cls, name);
-    auto dt = DispatchTable::unpack(BODY(cls));
 
-    auto baseline = dt->baseline();
-    auto sc = getSpeculativeContext(baseline->typeFeedback(), baseline);
+    recorder_.push_event(std::make_unique<CompilationStartEvent>(
+        rec_idx, name, std::move(compileReasons_)));
 
-    compilation_time_start_ = CompilationEvent::Clock::now();
-    compilation_event_ = std::make_unique<CompilationEvent>(
-        rec_idx, assumptions, name, std::move(sc), std::move(compileReasons_));
+    compilation_idx_ = rec_idx;
 
     recordReasonsClear();
-}
-
-void recordCompileFinish(bool succesful) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto end_time = CompilationEvent::Clock::now();
-
-    assert(compilation_event_);
-
-    auto duration = std::chrono::duration_cast<CompilationEvent::Duration>(
-        end_time - compilation_time_start_);
-    compilation_event_->set_time(duration);
-    compilation_event_->set_success(succesful);
-
-    recorder_.push_event(std::move(compilation_event_));
 }
 
 void recordOsrCompile(const SEXP cls) {
     recordCompile(cls, "", pir::Compiler::defaultContext);
 }
 
-void recordLLVMBitcode(llvm::Function* fun) {
+void recordCompileFinish(bool succesful) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto end_time = CompilationEndEvent::Clock::now();
+    auto duration = std::chrono::duration_cast<CompilationEndEvent::Duration>(
+        end_time - compilation_time_start_);
+
+    recorder_.push_event(std::make_unique<CompilationEndEvent>(
+        compilation_idx_, duration, succesful));
+}
+
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun) {
     RECORDER_FILTER_GUARD(compile);
 
     std::stringstream ss{};
@@ -147,8 +150,57 @@ void recordLLVMBitcode(llvm::Function* fun) {
 
     fun->print(os);
 
-    assert(compilation_event_);
-    compilation_event_->set_bitcode(ss.str());
+    inner_compilations_bitcode_.emplace(version, ss.str());
+}
+
+void addCompilationSC(pir::ClosureVersion* version,
+                      TypeFeedback* typeFeedback) {
+    auto baseline = version->owner()->rirFunction();
+    auto sc = getSpeculativeContext(typeFeedback, baseline);
+
+    inner_compilations_sc_.emplace(version, std::move(sc));
+}
+
+void recordInnerCompilations(pir::Module* module) {
+    module->eachPirClosure([&](pir::Closure* clos) {
+        clos->eachVersion([&](pir::ClosureVersion* ver) {
+            size_t rec_idx;
+            if (clos->hasOriginClosure()) {
+                rec_idx = recorder_.initOrGetRecording(clos->rirClosure(),
+                                                       clos->name());
+            } else {
+                rec_idx = recorder_.initOrGetRecording(
+                    clos->rirFunction()->dispatchTable());
+
+                auto& entry = recorder_.get_recording(rec_idx);
+                if (entry.name.empty()) {
+                    entry.name = clos->name();
+                }
+            }
+
+            Context version = ver->context();
+
+            std::stringstream pir_code;
+            ver->printCode(pir_code, false, false);
+
+            auto sc_entry = inner_compilations_sc_.find(ver);
+            assert(sc_entry != inner_compilations_sc_.end());
+
+            auto bitcode_entry = inner_compilations_bitcode_.find(ver);
+            std::string bitcode;
+
+            if (bitcode_entry != inner_compilations_bitcode_.end()) {
+                bitcode = bitcode_entry->second;
+            }
+
+            // assert(bitcode_entry != inner_compilations_bitcode_.end());
+            // bitcode = bitcode_entry->second;
+
+            recorder_.push_event(std::make_unique<CompilationEvent>(
+                rec_idx, version, std::move(sc_entry->second), bitcode,
+                pir_code.str()));
+        });
+    });
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,

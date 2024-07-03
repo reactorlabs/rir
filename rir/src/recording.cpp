@@ -270,42 +270,62 @@ void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
         {changed, serialization::bool_from_sexp});
 }
 
+const std::vector<const char*> CompilationStartEvent::fieldNames = {
+    "funIdx", "name", "compile_reason_heuristic", "compile_reason_condition",
+    "compile_reason_osr"};
+
+SEXP CompilationStartEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CompilationStartEvent>(
+        funRecIndex_, compileName, compile_reasons.heuristic,
+        compile_reasons.condition, compile_reasons.osr);
+}
+
+void CompilationStartEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CompilationStartEvent, uint64_t,
+                                    std::string, std::unique_ptr<CompileReason>,
+                                    std::unique_ptr<CompileReason>,
+                                    std::unique_ptr<CompileReason>>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {compileName, serialization::string_from_sexp},
+        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
+        {compile_reasons.condition, serialization::compile_reason_from_sexp},
+        {compile_reasons.osr, serialization::compile_reason_from_sexp});
+}
+
 const std::vector<const char*> CompilationEvent::fieldNames = {
-    "funIdx",
-    "version",
-    "name",
-    "speculative_contexts",
-    "compile_reason_heuristic",
-    "compile_reason_condition",
-    "compile_reason_osr",
-    "time",
-    "bitcode",
-    "succesful"};
+    "funIdx", "version", "speculative_contexts", "bitcode", "pir_code"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        funRecIndex_, version, compileName, speculative_contexts,
-        compile_reasons.heuristic, compile_reasons.condition,
-        compile_reasons.osr, time_length, bitcode, succesful);
+        funRecIndex_, version, speculative_contexts, bitcode, pir_code);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<
-        CompilationEvent, uint64_t, Context, std::string,
-        std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
-        std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
-        Duration, std::string, bool>(
+    serialization::fields_from_sexp<CompilationEvent, uint64_t, Context,
+                                    std::vector<SpeculativeContext>,
+                                    std::string, std::string>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {compileName, serialization::string_from_sexp},
         {speculative_contexts,
          serialization::vector_from_sexp<
              SpeculativeContext, serialization::speculative_context_from_sexp>},
-        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
-        {compile_reasons.condition, serialization::compile_reason_from_sexp},
-        {compile_reasons.osr, serialization::compile_reason_from_sexp},
-        {time_length, serialization::time_from_sexp},
         {bitcode, serialization::string_from_sexp},
+        {pir_code, serialization::string_from_sexp});
+}
+
+const std::vector<const char*> CompilationEndEvent::fieldNames = {
+    "funIdx", "time_length", "succesful"};
+
+SEXP CompilationEndEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CompilationEndEvent>(
+        funRecIndex_, time_length, succesful);
+}
+
+void CompilationEndEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CompilationEndEvent, uint64_t, Duration,
+                                    bool>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {time_length, serialization::time_from_sexp},
         {succesful, serialization::bool_from_sexp});
 }
 

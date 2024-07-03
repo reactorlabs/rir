@@ -254,21 +254,37 @@ class SpeculativeContextEvent : public Event {
     bool changed;
 };
 
+class CompilationStartEvent : public Event {
+  public:
+    CompilationStartEvent(size_t funRecIndex, const std::string& compileName,
+                          CompileReasons&& reasons)
+        : Event(funRecIndex), compileName(compileName),
+          compile_reasons(std::move(reasons)) {}
+
+    CompilationStartEvent(){};
+
+    virtual ~CompilationStartEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_start";
+
+  private:
+    // Name under which the closure was compiled, to be passed to pirCompile()
+    std::string compileName;
+    CompileReasons compile_reasons;
+};
+
 class CompilationEvent : public VersionEvent {
   public:
-    using Clock = std::chrono::steady_clock;
-    using Time = std::chrono::time_point<Clock>;
-    using Duration = std::chrono::milliseconds;
-
     CompilationEvent(size_t funRecIndex, Context version,
-                     const std::string& compileName,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     CompileReasons&& compile_reasons)
-        : VersionEvent(funRecIndex, version), compileName(compileName),
+                     const std::string& bitcode, const std::string& pir_code)
+        : VersionEvent(funRecIndex, version),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons)) {}
-
-    CompilationEvent(CompilationEvent&& other) = default;
+          bitcode(bitcode), pir_code(pir_code) {}
 
     CompilationEvent() {}
 
@@ -280,26 +296,35 @@ class CompilationEvent : public VersionEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_compile";
 
-    void set_time(Duration time) { time_length = time; }
-
-    void set_bitcode(const std::string& str) { bitcode = str; }
-
-    void set_success(bool succes) { succesful = succes; }
-
   private:
-    // Name under which the closure was compiled, to be passed to pirCompile()
-    std::string compileName;
-
     std::vector<SpeculativeContext> speculative_contexts;
-    CompileReasons compile_reasons;
-
-    // Benchmarking
-    Duration time_length;
 
     // The LLVM Bitcode
     std::string bitcode;
+    std::string pir_code;
+};
 
-    bool succesful = false;
+class CompilationEndEvent : public Event {
+  public:
+    using Clock = std::chrono::steady_clock;
+    using Time = std::chrono::time_point<Clock>;
+    using Duration = std::chrono::milliseconds;
+
+    CompilationEndEvent(){};
+    CompilationEndEvent(size_t funRecIndex, Duration duration, bool succesful)
+        : Event(funRecIndex), time_length(duration), succesful(succesful){};
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_end";
+
+  private:
+    // Benchmarking
+    Duration time_length;
+
+    bool succesful;
 };
 
 class DeoptEvent : public VersionEvent {

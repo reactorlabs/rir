@@ -144,6 +144,9 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
+
+    REC_HOOK(recording::addCompilationSC(version, typeFeedback));
+
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,

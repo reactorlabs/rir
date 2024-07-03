@@ -230,14 +230,14 @@ compile_reason_from_sexp(SEXP sexp) {
     return reason;
 }
 
-SEXP to_sexp(CompilationEvent::Duration time) {
+SEXP to_sexp(CompilationEndEvent::Duration time) {
     int64_t count = time.count();
     return to_sexp(count);
 }
 
-CompilationEvent::Duration time_from_sexp(SEXP sexp) {
+CompilationEndEvent::Duration time_from_sexp(SEXP sexp) {
     int64_t count = int64_t_from_sexp(sexp);
-    return CompilationEvent::Duration(count);
+    return CompilationEndEvent::Duration(count);
 }
 
 SEXP to_sexp(InvocationEvent::Source set) {

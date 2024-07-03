@@ -3,7 +3,6 @@
 
 #include "api.h"
 #include "llvm/IR/Module.h"
-
 #include <R/r.h>
 #include <string>
 
@@ -20,6 +19,11 @@ struct DeoptReason;
 struct ObservedCallees;
 struct ObservedTest;
 struct ObservedValues;
+class TypeFeedback;
+
+namespace pir {
+class Module;
+}
 
 namespace recording {
 
@@ -27,13 +31,18 @@ void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
 void recordCompileFinish(bool succesful);
-void recordLLVMBitcode(llvm::Function* fun);
+
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun);
+void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
+void recordInnerCompilations(pir::Module* module);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
-void recordInvocationNativeCallTrampoline(SEXP cls, Function* f, Context callContext);
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
+                                          Context callContext);
 void recordInvocationRirEval(Function* f);
 void recordUnregisterInvocation(SEXP cls, Function* f);
 
