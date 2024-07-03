@@ -34,7 +34,8 @@ void recordCompileFinish(bool succesful, pir::Module* module);
 
 void addCompilationLLVMBitcode(pir::ClosureVersion* version,
                                llvm::Function* fun);
-void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
+void addCompilationSC(pir::ClosureVersion* version, Context context,
+                      TypeFeedback* typeFeedback);
 void addCompilationSCCloned(pir::ClosureVersion* newVersion,
                             pir::ClosureVersion* prevVersion);
 

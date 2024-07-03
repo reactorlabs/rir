@@ -59,7 +59,8 @@ struct {
 CompileReasons compileReasons_;
 CompilationEndEvent::Time compilation_time_start_;
 
-std::unordered_map<pir::ClosureVersion*, std::vector<SpeculativeContext>>
+std::unordered_map<pir::ClosureVersion*,
+                   std::pair<std::vector<SpeculativeContext>, Context>>
     inner_compilations_sc_;
 std::unordered_map<pir::ClosureVersion*, std::string>
     inner_compilations_bitcode_;
@@ -159,8 +160,11 @@ void recordCompileFinish(bool succesful, pir::Module* module) {
             std::stringstream pir_code;
             ver->printCode(pir_code, false, false);
 
-            auto sc_entry = inner_compilations_sc_.find(ver);
-            assert(sc_entry != inner_compilations_sc_.end());
+            auto sc_ctx_entry = inner_compilations_sc_.find(ver);
+            assert(sc_ctx_entry != inner_compilations_sc_.end());
+
+            auto& sc = sc_ctx_entry->second.first;
+            auto& ctx = sc_ctx_entry->second.second;
 
             auto bitcode_entry = inner_compilations_bitcode_.find(ver);
             std::string bitcode;
@@ -170,8 +174,7 @@ void recordCompileFinish(bool succesful, pir::Module* module) {
             }
 
             recorder_.push_event(std::make_unique<CompilationEvent>(
-                rec_idx, version, std::move(sc_entry->second), bitcode,
-                pir_code.str()));
+                rec_idx, version, std::move(sc), bitcode, pir_code.str(), ctx));
         });
     });
 
@@ -199,14 +202,16 @@ void addCompilationLLVMBitcode(pir::ClosureVersion* version,
     inner_compilations_bitcode_.emplace(version, ss.str());
 }
 
-void addCompilationSC(pir::ClosureVersion* version,
+void addCompilationSC(pir::ClosureVersion* version, Context context,
                       TypeFeedback* typeFeedback) {
     RECORDER_FILTER_GUARD(compile);
 
     auto baseline = version->owner()->rirFunction();
     auto sc = getSpeculativeContext(typeFeedback, baseline);
 
-    inner_compilations_sc_.emplace(version, std::move(sc));
+    inner_compilations_sc_.emplace(
+        std::piecewise_construct, std::forward_as_tuple(version),
+        std::forward_as_tuple(std::move(sc), context));
 }
 
 void addCompilationSCCloned(pir::ClosureVersion* newVersion,
