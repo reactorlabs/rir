@@ -163,6 +163,16 @@ void addCompilationSC(pir::ClosureVersion* version,
     inner_compilations_sc_.emplace(version, std::move(sc));
 }
 
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto sc_entry = inner_compilations_sc_.find(prevVersion);
+    assert(sc_entry != inner_compilations_sc_.end());
+
+    inner_compilations_sc_.emplace(newVersion, sc_entry->second);
+}
+
 void recordInnerCompilations(pir::Module* module) {
     RECORDER_FILTER_GUARD(compile);
 

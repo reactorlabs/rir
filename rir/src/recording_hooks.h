@@ -35,6 +35,8 @@ void recordCompileFinish(bool succesful);
 void addCompilationLLVMBitcode(pir::ClosureVersion* version,
                                llvm::Function* fun);
 void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion);
 void recordInnerCompilations(pir::Module* module);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
