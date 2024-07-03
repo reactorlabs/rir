@@ -30,14 +30,13 @@ namespace recording {
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
-void recordCompileFinish(bool succesful);
+void recordCompileFinish(bool succesful, pir::Module* module);
 
 void addCompilationLLVMBitcode(pir::ClosureVersion* version,
                                llvm::Function* fun);
 void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
 void addCompilationSCCloned(pir::ClosureVersion* newVersion,
                             pir::ClosureVersion* prevVersion);
-void recordInnerCompilations(pir::Module* module);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);

@@ -130,52 +130,10 @@ void recordOsrCompile(const SEXP cls) {
     recordCompile(cls, "", pir::Compiler::defaultContext);
 }
 
-void recordCompileFinish(bool succesful) {
+void recordCompileFinish(bool succesful, pir::Module* module) {
     RECORDER_FILTER_GUARD(compile);
 
-    auto end_time = CompilationEndEvent::Clock::now();
-    auto duration = std::chrono::duration_cast<CompilationEndEvent::Duration>(
-        end_time - compilation_time_start_);
-
-    recorder_.push_event(std::make_unique<CompilationEndEvent>(
-        compilation_idx_, duration, succesful));
-}
-
-void addCompilationLLVMBitcode(pir::ClosureVersion* version,
-                               llvm::Function* fun) {
-    RECORDER_FILTER_GUARD(compile);
-
-    std::stringstream ss{};
-    llvm::raw_os_ostream os{ss};
-
-    fun->print(os);
-
-    inner_compilations_bitcode_.emplace(version, ss.str());
-}
-
-void addCompilationSC(pir::ClosureVersion* version,
-                      TypeFeedback* typeFeedback) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto baseline = version->owner()->rirFunction();
-    auto sc = getSpeculativeContext(typeFeedback, baseline);
-
-    inner_compilations_sc_.emplace(version, std::move(sc));
-}
-
-void addCompilationSCCloned(pir::ClosureVersion* newVersion,
-                            pir::ClosureVersion* prevVersion) {
-    RECORDER_FILTER_GUARD(compile);
-
-    auto sc_entry = inner_compilations_sc_.find(prevVersion);
-    assert(sc_entry != inner_compilations_sc_.end());
-
-    inner_compilations_sc_.emplace(newVersion, sc_entry->second);
-}
-
-void recordInnerCompilations(pir::Module* module) {
-    RECORDER_FILTER_GUARD(compile);
-
+    // Inner complations
     module->eachPirClosure([&](pir::Closure* clos) {
         clos->eachVersion([&](pir::ClosureVersion* ver) {
             size_t rec_idx;
@@ -215,6 +173,46 @@ void recordInnerCompilations(pir::Module* module) {
 
     inner_compilations_bitcode_.clear();
     inner_compilations_sc_.clear();
+
+    // Compilation end
+    auto end_time = CompilationEndEvent::Clock::now();
+    auto duration = std::chrono::duration_cast<CompilationEndEvent::Duration>(
+        end_time - compilation_time_start_);
+
+    recorder_.push_event(std::make_unique<CompilationEndEvent>(
+        compilation_idx_, duration, succesful));
+}
+
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun) {
+    RECORDER_FILTER_GUARD(compile);
+
+    std::stringstream ss{};
+    llvm::raw_os_ostream os{ss};
+
+    fun->print(os);
+
+    inner_compilations_bitcode_.emplace(version, ss.str());
+}
+
+void addCompilationSC(pir::ClosureVersion* version,
+                      TypeFeedback* typeFeedback) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto baseline = version->owner()->rirFunction();
+    auto sc = getSpeculativeContext(typeFeedback, baseline);
+
+    inner_compilations_sc_.emplace(version, std::move(sc));
+}
+
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion) {
+    RECORDER_FILTER_GUARD(compile);
+
+    auto sc_entry = inner_compilations_sc_.find(prevVersion);
+    assert(sc_entry != inner_compilations_sc_.end());
+
+    inner_compilations_sc_.emplace(newVersion, sc_entry->second);
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
