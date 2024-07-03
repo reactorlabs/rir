@@ -155,6 +155,8 @@ void addCompilationLLVMBitcode(pir::ClosureVersion* version,
 
 void addCompilationSC(pir::ClosureVersion* version,
                       TypeFeedback* typeFeedback) {
+    RECORDER_FILTER_GUARD(compile);
+
     auto baseline = version->owner()->rirFunction();
     auto sc = getSpeculativeContext(typeFeedback, baseline);
 
@@ -162,6 +164,8 @@ void addCompilationSC(pir::ClosureVersion* version,
 }
 
 void recordInnerCompilations(pir::Module* module) {
+    RECORDER_FILTER_GUARD(compile);
+
     module->eachPirClosure([&](pir::Closure* clos) {
         clos->eachVersion([&](pir::ClosureVersion* ver) {
             size_t rec_idx;
@@ -193,14 +197,14 @@ void recordInnerCompilations(pir::Module* module) {
                 bitcode = bitcode_entry->second;
             }
 
-            // assert(bitcode_entry != inner_compilations_bitcode_.end());
-            // bitcode = bitcode_entry->second;
-
             recorder_.push_event(std::make_unique<CompilationEvent>(
                 rec_idx, version, std::move(sc_entry->second), bitcode,
                 pir_code.str()));
         });
     });
+
+    inner_compilations_bitcode_.clear();
+    inner_compilations_sc_.clear();
 }
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
