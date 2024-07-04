@@ -47,7 +47,15 @@ recordings.csv <- function(r, out = "") {
 
   idx <- 1
 
+
+  cat(paste0("total events: ", length(r$events),"\n"))
+
   for (e in r$events) {
+
+    if (idx %% 1000 == 0) {
+      cat(paste0("ev idx: ", idx, "\n"))
+    }
+
     event <- NULL
 
     event$idx <- idx
