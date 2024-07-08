@@ -58,8 +58,7 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
 
 inline bool SufficientTypeFeedbackHeuristic(Function* fun,
                                             const Context& context) {
-    return fun->invocationCount() == pir::Parameter::PIR_WARMUP ||
-           fun->recordingCount(context) >= 2;
+    return fun->recordingCount(context) >= 2;
 }
 
 inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
@@ -88,6 +87,11 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
         REC_HOOK(recording::recordPirWarmupReason(fun->invocationCount()));
         return true;
     }
+
+    // insufficient feedback delays the compilation
+    // without this if it would skip the compilation
+    if (fun->dispatchTable()->size() == 1 && fun->invocationCount() >= wu)
+        return true;
 
     return false;
 }
