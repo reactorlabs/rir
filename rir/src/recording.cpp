@@ -341,8 +341,8 @@ DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
 }
 
 DeoptEvent::~DeoptEvent() {
-    if (trigger_) {
-        setTrigger(nullptr);
+    if (trigger_ != R_NilValue) {
+        R_ReleaseObject(trigger_);
     }
 }
 
@@ -350,11 +350,11 @@ extern Record recorder_;
 
 // TODO try to maybe find some way to eliminate global
 void DeoptEvent::setTrigger(SEXP newTrigger) {
-    if (trigger_) {
+    if (trigger_ != R_NilValue) {
         R_ReleaseObject(trigger_);
     }
 
-    trigger_ = nullptr;
+    trigger_ = R_NilValue;
     triggerClosure_ = -1;
 
     if (newTrigger == nullptr) {
