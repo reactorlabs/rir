@@ -353,7 +353,7 @@ class DeoptEvent : public VersionEvent {
     uint32_t reasonCodeOff_;
 
     // These 2 fields are mutually exclusive
-    SEXP trigger_ = nullptr;
+    SEXP trigger_ = R_NilValue;
     ssize_t triggerClosure_ = -1; // References a FunRecorder index
 };
 
