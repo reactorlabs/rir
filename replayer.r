@@ -156,7 +156,7 @@ recordings.csv <- function(r, out = "") {
     } else if (cl == "event_sc") {
       event$type <- "SpeculativeContext"
 
-      event$speculative <- paste0(pp(e$sc, "speculative"), "@", e$index)
+      event$speculative <- paste0(pp(e$sc, "speculative"), "#", e$index)
 
       event$is_promise <- toString(e$is_promise)
       event$changed <- toString(e$changed)

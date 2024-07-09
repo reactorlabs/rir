@@ -526,9 +526,9 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         auto sc =
             rir::recording::serialization::speculative_context_from_sexp(obj);
 
+        ss << "[ ";
         switch (sc.type) {
         case rir::recording::SpeculativeContextType::Callees: {
-            ss << "[";
             bool first = true;
             for (auto c : sc.value.callees) {
                 if (c == rir::recording::NO_INDEX)
@@ -549,35 +549,21 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                         VECTOR_ELT(functions, c));
                 ss << fun;
             }
-            ss << "]";
+            ss << " ] Call";
             break;
         }
 
         case rir::recording::SpeculativeContextType::Test:
-            ss << "(";
-            switch (sc.value.test.seen) {
-            case rir::ObservedTest::None:
-                ss << "None";
-                break;
-            case rir::ObservedTest::OnlyTrue:
-                ss << "OnlyTrue";
-                break;
-            case rir::ObservedTest::OnlyFalse:
-                ss << "OnlyFalse";
-                break;
-            case rir::ObservedTest::Both:
-                ss << "Both";
-                break;
-            }
-            ss << ")";
+            sc.value.test.print(ss);
+            ss << " ] Test";
             break;
 
         case rir::recording::SpeculativeContextType::Values:
-            ss << "(";
             sc.value.values.print(ss);
-            ss << ")";
+            ss << " ] Type";
             break;
         }
+
     } else if (type_str == "reason") {
         auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
         ev->print(ss);
