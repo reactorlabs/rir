@@ -413,31 +413,29 @@ void recordExecution(const char* filePath, const char* filterArg) {
                 exit(1);
             }
         }
+
+        std::cerr << "Recording filter: " << filterArg << "(environment variable)\n";
     }
 
-    std::cerr << "Recording to \"" << filePath << "\" (environment variable";
-    if (filterArg != nullptr) {
-        std::cerr << ": " << filterArg;
-    }
+    if (filePath != nullptr) {
+        std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+        startRecordings();
 
-    std::cerr << ")\n";
-    startRecordings();
+        finalizerPath = filePath;
 
-    finalizerPath = filePath;
+        // Call `loadNamespace("Base")`
+        SEXP baseStr = PROTECT(Rf_mkString("base"));
+        SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+        SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
 
-    // Call `loadNamespace("Base")`
-    SEXP baseStr = PROTECT(Rf_mkString("base"));
-    SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-    SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+        if (namespaceRes == R_NilValue) {
+            std::cerr << "Failed to load namespace base\n";
+        } else {
+            R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
+        }
 
-    if (namespaceRes == R_NilValue) {
-        std::cerr << "Failed to load namespace base\n";
         UNPROTECT(3);
-        return;
     }
-
-    R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
-    UNPROTECT(3);
 }
 } // namespace recording
 } // namespace rir
