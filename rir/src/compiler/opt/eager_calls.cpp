@@ -435,6 +435,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             }
                         });
                     });
+                REC_HOOK(
+                    recording::addCompilationSCCloned(newVersion, version));
                 call->hint = newVersion;
             }
             ip = next;

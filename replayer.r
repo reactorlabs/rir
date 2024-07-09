@@ -1,78 +1,97 @@
 recordings.csv <- function(r, out = "") {
+  startT <- Sys.time()
+
+  library(parallel)
+
   if (is.character(r)) {
-      r <- recordings.load(r)
+    r <- recordings.load(r)
   }
 
-  if (out != "" && file.exists(out)){
-    file.remove(out)
+  # Define the catf
+  if (out != "") {
+    file_conn <- file(out, open = "wt")
+    catf <- function(str)
+      cat(str, file = file_conn, append = TRUE)
+    on.exit(close(file_conn))
+  } else {
+    catf <- function(str) cat(str)
   }
 
   # intersperse a vector with commas
-  insert.commas <- function(vec) {
-    flag <- TRUE
-
-    lapply(vec, function(el) {
-      if (flag){
-          flag <<- FALSE
-          el
-      } else {
-          paste0(",", el)
-      }
-    })
-  }
-
-  # output a line of vector
-  line <- function(vec) {
-    # Surround with quotes if it contains commas
+  format.vector <- function(vec) {
+    first <- TRUE
     vec <- lapply(vec, function(el) {
-      if (grepl(",", el)) {
-        paste0('"', gsub('"', '\\"', el), '"')
-      } else {
+      if (first) {
+        first <<- FALSE
         el
+      } else {
+        paste0(",", el)
       }
     })
-    vec <- insert.commas(vec)
-    vec <- paste(vec, collapse="")
-    vec <- paste0(vec, "\n")
-    cat( vec, file = out, append = TRUE )
+
+    paste( vec, collapse="" )
   }
 
-  columns <- c("idx", "type", "fun", "env", "ctx", "speculative_ctx", "speculative", "call_ctx", "reason", "bitcode_len", "pir_len", "changed", "is_promise", "is_native", "callee_address")
+  # Surround with quotes if it contains commas
+  quote.comma <- function(str) {
+    if (grepl(",", str)) {
+      paste0('"', gsub('"', '\\"', str), '"')
+    } else {
+      str
+    }
+  }
 
-  line(columns)
+  # output a line of CSV - one event
+  line <- function(event) {
+    first <- TRUE
+    lapply(event, function(el)
+      if (first) {
+        first <<- FALSE
+        catf(quote.comma(el))
+      } else {
+        catf(paste0(",", quote.comma(el)))
+      }
+    )
+
+    catf("\n")
+  }
 
   pp <- function(obj, type) {
     recordings.printEventPart(obj, type, r$functions)
   }
 
-  idx <- 1
+  columns <- c("idx", "type", "fun", "env", "ctx",
+               "speculative_ctx", "speculative", "call_ctx",
+               "reason", "bitcode_len", "pir_len", "changed",
+               "is_promise", "is_native", "callee_address")
 
+  line(columns)
 
-  cat(paste0("total events: ", length(r$events),"\n"))
+  cores <- detectCores()
 
-  for (e in r$events) {
+  pb <- txtProgressBar(min = 0, max = length(r$events), style = 3)
+  on.exit(close(pb))
 
-    if (idx %% 1000 == 0) {
-      cat(paste0("ev idx: ", idx, "\n"))
-    }
+  events <- mclapply(seq_along(r$events), function(idx) {
+    e <- r$events[[ idx ]]
 
-    event <- NULL
+    event <- setNames(as.list(rep("", length(columns))), columns)
+    event$idx <- toString(idx)
 
-    event$idx <- idx
-    idx <- idx + 1
-
-    f <- r$functions[[ as.integer(e$funIdx) + 1 ]]
+    f <- r$functions[[as.integer(e$funIdx) + 1]]
     event$fun <- f$name
     event$env <- f$env
 
-    if (class(e) == "event_compile_start") {
+    cl <- class(e)
+
+    if (cl == "event_compile_start") {
       event$type <- "CompilationStart"
 
       reasAcc <- ""
 
       for (cr in c("heuristic", "condition", "osr" )) {
         reas <- e[[ paste0("compile_reason_", cr) ]]
-        if (!is.null(reas)){
+        if (!is.null(reas)) {
           if (nchar(reasAcc) == 0) {
             reasAcc <- paste0(cr, "=", class(reas))
           } else {
@@ -83,84 +102,87 @@ recordings.csv <- function(r, out = "") {
 
       event$reason <- reasAcc
 
-    } else if (class(e) == "event_compile_end") {
-      if (e$succesful){
-          event$type <- "CompilationEnd"
+    } else if (cl == "event_compile_end") {
+      if (e$succesful) {
+        event$type <- "CompilationEnd"
       } else {
-          event$type <- "CompilationAborted"
+        event$type <- "CompilationAborted"
       }
 
-    } else if (class(e) == "event_compile") {
+    } else if (cl == "event_compile") {
       event$type <- "Compilation"
 
       event$ctx <- pp(e$version, "context")
-      event$speculative_ctx <- pp( e$context, "context" )
+      event$speculative_ctx <- pp(e$context, "context")
 
-      event$speculative <- paste(insert.commas(lapply(
-        e$speculative_contexts,
-        function(spec) pp(spec, "speculative")
-      )), collapse="")
+      if (length(e$speculative_contexts) != 0) {
+        event$speculative <- format.vector(
+          lapply(e$speculative_contexts,
+                 function(spec) pp(spec, "speculative"))
+        )
+      }
 
       event$bitcode_len <- nchar(e$bitcode)
       event$pir_len <- nchar(e$pir_code)
 
-    } else if (class(e) == "event_deopt") {
+    } else if (cl == "event_deopt") {
       event$type <- "Deopt"
 
       event$ctx <- pp(e$version, "context")
+      event$speculative_ctx <- pp(e$context, "context")
 
-      if ( e$reason_promise_idx >= 0 ){
-          reason <- paste0( "Promise ", e$reason_promise_idx )
+      if (e$reason_promise_idx >= 0) {
+        mbyPromise <- paste0("Promise ", e$reason_promise_idx)
       } else {
-          reason <- "Baseline"
+        mbyPromise <- "Baseline"
       }
 
-      reason <- paste0("(", reason, ",offset=", e$reason_code_off, ")")
-
+      reason <- paste0("(", mbyPromise, ",offset=", e$reason_code_off, ")")
       event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
 
-      event$speculative_ctx <- pp(e$context, "context")
-    } else if (class(e) == "event_invocation") {
+    } else if (cl == "event_invocation") {
       event$type <- "Invocation"
 
       event$ctx <- pp(e$context, "context")
-
       event$call_ctx <- pp(e$callContext, "context")
-      event$is_native <- e$isNative
+
+      event$is_native <- toString(e$isNative)
       event$reason <- pp(e$source, "invocation_source")
 
       event$callee_address <- pp(e$address, "address")
-    } else if (class(e) == "event_unregister_invocation"){
-      event$type <- "UnregisterInvocation"
 
-    } else if (class(e) == "event_sc") {
+    } else if (cl == "event_unregister_invocation") {
+      event$type <- "UnregisterInvocation"
+      event$ctx <- pp(e$context, "context")
+
+    } else if (cl == "event_sc") {
       event$type <- "SpeculativeContext"
 
-      event$speculative <- paste0(pp( e$sc, "speculative" ), "@", e$index)
-
-      event$is_promise <- e$is_promise
-      event$changed <- e$changed
-
       event$speculative_ctx <- pp(e$context, "context")
-    } else if (class(e) == "event_context") {
+      event$speculative <- paste0(pp(e$sc, "speculative"), "#", e$index)
+
+      event$is_promise <- toString(e$is_promise)
+      event$changed <- toString(e$changed)
+
+    } else if (cl == "event_context") {
       event$type <- "ContextCreated"
-
-      f <- get_fun(e$dispatchTable)
-      event$fun <- f[1]
-      event$env <- f[2]
-
       event$speculative_ctx <- pp(e$context, "context")
+
     } else {
-      event$type <- paste0("[", class(e), "]")
+      event$type <- paste0("[", cl, "]")
     }
 
-    vec <- lapply(columns, function(col) {
-        if (is.null(event[[ col ]]))
-            ""
-        else
-            event[[ col ]]
-    })
+    setTxtProgressBar(pb, idx)
 
-    line(vec)
-  }
+    event
+  }, mc.cores = cores)
+
+  setTxtProgressBar(pb, length(r$events))
+
+  lapply(events, line)
+
+  endT <- Sys.time()
+  cat(" (", difftime(endT, startT, units = "secs"), " secs)", sep="")
+
+  invisible(NULL)
 }
