@@ -362,9 +362,12 @@ class InvocationEvent : public VersionEvent {
     enum Source : uint8_t { Unknown, DoCall, NativeCallTrampoline, RirEval };
 
     InvocationEvent(size_t dispatchTableIndex, Context version, Source source,
-                    Context callContext, bool isNative, uintptr_t address)
+                    Context callContext, bool isNative, uintptr_t address,
+                    bool missingAsmptPresent, bool missingAsmptRecovered)
         : VersionEvent(dispatchTableIndex, version), source(source),
-          callContext(callContext), isNative(isNative), address(address) {}
+          callContext(callContext), isNative(isNative), address(address),
+          missingAsmptPresent(missingAsmptPresent),
+          missingAsmptRecovered(missingAsmptRecovered) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -381,6 +384,8 @@ class InvocationEvent : public VersionEvent {
     Context callContext;
     bool isNative = false;
     uintptr_t address = 0;
+    bool missingAsmptPresent = false;
+    bool missingAsmptRecovered = false;
 };
 
 class UnregisterInvocationEvent : public VersionEvent {

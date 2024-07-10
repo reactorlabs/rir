@@ -63,7 +63,8 @@ recordings.csv <- function(r, out = "") {
   columns <- c("idx", "type", "fun", "env", "ctx",
                "speculative_ctx", "speculative", "call_ctx",
                "reason", "bitcode_len", "pir_len", "changed",
-               "is_promise", "is_native", "callee_address")
+               "is_promise", "is_native", "callee_address",
+               "missing_asmpt")
 
 
   cores <- detectCores()
@@ -147,6 +148,14 @@ recordings.csv <- function(r, out = "") {
       event$reason <- pp(e$source, "invocation_source")
 
       event$callee_address <- pp(e$address, "address")
+
+      event$missing_asmpt <- if (!e$missing_asmpt_present) {
+        "NotPresent"
+      } else if (!e$missing_asmpt_recovered) {
+        "NotRecovered"
+      } else {
+        "Recovered"
+      }
 
     } else if (cl == "event_unregister_invocation") {
       event$type <- "UnregisterInvocation"

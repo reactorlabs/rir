@@ -132,4 +132,5 @@ The individual meanings of printed columns:
 - is_promise - is the type feedback inside of a promise
 - is_native - is the invoked function a native one
 - callee_address - address of called function
+- missing_asmpt - in a nativeCallTrampoline, were there any missing assumptions and if they were recovered
 

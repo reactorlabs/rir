@@ -43,7 +43,9 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
 void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
-                                          Context callContext);
+                                          Context callContext,
+                                          bool missingAsmptPresent,
+                                          bool missingAsmptRecovered);
 void recordInvocationRirEval(Function* f);
 void recordUnregisterInvocation(SEXP cls, Function* f);
 

@@ -413,22 +413,32 @@ void DeoptEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {
-    "funIdx", "context", "source", "callContext", "isNative", "address"};
+    "funIdx",
+    "context",
+    "source",
+    "callContext",
+    "isNative",
+    "address",
+    "missing_asmpt_present",
+    "missing_asmpt_recovered"};
 
 SEXP InvocationEvent::toSEXP() const {
     return serialization::fields_to_sexp<InvocationEvent>(
-        funRecIndex_, version, source, callContext, isNative, address);
+        funRecIndex_, version, source, callContext, isNative, address,
+        missingAsmptPresent, missingAsmptRecovered);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, Source,
-                                    Context, bool, uint64_t>(
+                                    Context, bool, uint64_t, bool, bool>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {source, serialization::invocation_source_from_sexp},
         {callContext, serialization::context_from_sexp},
         {isNative, serialization::bool_from_sexp},
-        {address, serialization::uint64_t_from_sexp});
+        {address, serialization::uint64_t_from_sexp},
+        {missingAsmptPresent, serialization::bool_from_sexp},
+        {missingAsmptRecovered, serialization::bool_from_sexp});
 }
 
 const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
