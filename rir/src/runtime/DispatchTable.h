@@ -136,7 +136,7 @@ struct DispatchTable
             feedbacks->insert(ctx, tf);
             UNPROTECT(1);
 
-            REC_HOOK(recording::recordContextCreated(this, ctx));
+            REC_HOOK(recording::recordTypeFeedbackCreated(this, ctx));
         }
         return tf;
     }

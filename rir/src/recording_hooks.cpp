@@ -47,13 +47,13 @@ struct {
     bool deopt : 1;
     bool typeFeedback : 1;
     bool invoke : 1;
-    bool context : 1;
+    bool context_tf : 1;
 } filter_ = {
     .compile = true,
     .deopt = true,
     .typeFeedback = false,
     .invoke = false,
-    .context = false,
+    .context_tf = false,
 };
 
 CompileReasons compileReasons_;
@@ -392,10 +392,10 @@ void recordReasonsClear() {
     compileReasons_.osr = nullptr;
 }
 
-void recordContextCreated(const DispatchTable* dt, const Context& ctx) {
-    RECORDER_FILTER_GUARD(context);
+void recordTypeFeedbackCreated(const DispatchTable* dt, const Context& ctx) {
+    RECORDER_FILTER_GUARD(context_tf);
 
-    recorder_.record<ContextCreatedEvent>(dt, ctx);
+    recorder_.record<ContextualTFCreatedEvent>(dt, ctx);
 }
 
 void recordFinalizer(SEXP) {
@@ -412,7 +412,8 @@ void recordExecution(const char* filePath, const char* filterArg) {
         filter_ = {.compile = false,
                    .deopt = false,
                    .typeFeedback = false,
-                   .invoke = false};
+                   .invoke = false,
+                   .context_tf = false};
 
         std::istringstream is(filterArg);
         std::string str;
@@ -426,12 +427,12 @@ void recordExecution(const char* filePath, const char* filterArg) {
                 filter_.typeFeedback = true;
             } else if (str == "Invoke") {
                 filter_.invoke = true;
-            } else if (str == "Context") {
-                filter_.context = true;
+            } else if (str == "ContextualTypeFeedback") {
+                filter_.context_tf = true;
             } else {
                 std::cerr << "Unknown recording filter type: " << str
                           << "\nValid flags are:\n- Compile\n- Deopt\n- "
-                             "TypeFeedback\n- Invoke\n";
+                             "TypeFeedback\n- Invoke\n- ContextualTypeFeedback";
                 exit(1);
             }
         }
@@ -463,13 +464,13 @@ void recordExecution(const char* filePath, const char* filterArg) {
 } // namespace rir
 
 REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
-                              SEXP invocation, SEXP context) {
+                              SEXP invocation, SEXP context_tf) {
     rir::recording::filter_ = {
         .compile = (bool)Rf_asLogical(compile),
         .deopt = (bool)Rf_asLogical(deoptimize),
         .typeFeedback = (bool)Rf_asLogical(typeFeedback),
         .invoke = (bool)Rf_asLogical(invocation),
-        .context = (bool)Rf_asLogical(context),
+        .context_tf = (bool)Rf_asLogical(context_tf),
     };
 
     return R_NilValue;

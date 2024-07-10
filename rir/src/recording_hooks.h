@@ -70,7 +70,7 @@ void recordOsrTriggerLoop(size_t loopCount);
 
 void recordReasonsClear();
 
-void recordContextCreated(const DispatchTable* dt, const Context& ctx);
+void recordTypeFeedbackCreated(const DispatchTable* dt, const Context& ctx);
 
 // Record from environment
 void recordExecution(const char* filePath, const char* filter);

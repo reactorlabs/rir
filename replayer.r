@@ -164,8 +164,8 @@ recordings.csv <- function(r, out = "") {
       event$is_promise <- toString(e$is_promise)
       event$changed <- toString(e$changed)
 
-    } else if (cl == "event_context") {
-      event$type <- "ContextCreated"
+    } else if (cl == "event_contextual_tf") {
+      event$type <- "ContextualTypeFeedbackCreated"
       event$speculative_ctx <- pp(e$context, "context")
 
     } else {

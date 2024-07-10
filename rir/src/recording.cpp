@@ -449,16 +449,16 @@ void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
         {version, serialization::context_from_sexp});
 }
 
-const std::vector<const char*> ContextCreatedEvent::fieldNames = {"funIdx",
+const std::vector<const char*> ContextualTFCreatedEvent::fieldNames = {"funIdx",
                                                                   "context"};
 
-SEXP ContextCreatedEvent::toSEXP() const {
-    return serialization::fields_to_sexp<ContextCreatedEvent>(funRecIndex_,
+SEXP ContextualTFCreatedEvent::toSEXP() const {
+    return serialization::fields_to_sexp<ContextualTFCreatedEvent>(funRecIndex_,
                                                               context);
 }
 
-void ContextCreatedEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<ContextCreatedEvent, uint64_t, Context>(
+void ContextualTFCreatedEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<ContextualTFCreatedEvent, uint64_t, Context>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {context, serialization::context_from_sexp});
 }

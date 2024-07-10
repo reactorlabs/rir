@@ -34,6 +34,9 @@ An invocation of a function has been rolled back.
 *SpeculativeContext*  
 A type feedback has been updated in a function on a given slot.
 
+*ContextualTypeFeedback*  
+A new contextual type feedback slot has been created.
+
 ### Event filtering
 
 By default, only *compilations* and *deopts* are recorded.  
@@ -44,6 +47,7 @@ The options then correspond as follows:
 - deopt - deopt events
 - invoke - invocation and unregister invocation events
 - type feedback - the speculative context events
+- contextual type feedback - the contextual type feedback creation events
 
 ## Enabling recording
 
@@ -63,7 +67,7 @@ There is an R-level API for recording:
 `recordings.reset()` - clear the logged functions, closures and events  
 `recordings.enabled()` - boolean representing if we are recording right now  
 
-`recordings.setFilter(compile, deoptimize, type_feedback, invocation)` - set the filtering of individual events  
+`recordings.setFilter(compile, deoptimize, type_feedback, invocation, context_tf)` - set the filtering of individual events  
 
 ### Recording flags
 
@@ -79,6 +83,7 @@ with comma separated values of:
 - Deopt
 - TypeFeedback
 - Invoke
+- ContextualTypeFeedback
 
 As an example:
 

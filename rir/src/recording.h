@@ -404,19 +404,19 @@ class UnregisterInvocationEvent : public VersionEvent {
     static constexpr const char* className = "event_unregister_invocation";
 };
 
-class ContextCreatedEvent : public Event {
+class ContextualTFCreatedEvent : public Event {
   public:
-    ContextCreatedEvent() = default;
-    virtual ~ContextCreatedEvent() = default;
+    ContextualTFCreatedEvent() = default;
+    virtual ~ContextualTFCreatedEvent() = default;
 
-    ContextCreatedEvent(size_t dispatchTableIndex, const Context& context)
+    ContextualTFCreatedEvent(size_t dispatchTableIndex, const Context& context)
         : Event(dispatchTableIndex), context(context) {}
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
 
     static const std::vector<const char*> fieldNames;
-    static constexpr const char* className = "event_context";
+    static constexpr const char* className = "event_contextual_tf";
 
   private:
     Context context;

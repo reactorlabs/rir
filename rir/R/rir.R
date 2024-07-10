@@ -219,11 +219,11 @@ rir.annotateDepromised <- function(closure) {
 
 # Only define recording functions if the recordings have been compiled
 if (.Call("isRecordingsDefined")) {
-    recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE, context = FALSE) {
-        if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation, context), is.logical)))) {
+    recordings.setFilter <- function(compile = TRUE, deoptimize = TRUE, type_feedback = FALSE, invocation = FALSE, context_tf = FALSE) {
+        if (!all(as.logical(lapply(c(compile, deoptimize, type_feedback, invocation, context_tf), is.logical)))) {
             warning("ambiguous non-logical given")
         }
-        invisible(.Call("filterRecordings", compile, deoptimize, type_feedback, invocation, context))
+        invisible(.Call("filterRecordings", compile, deoptimize, type_feedback, invocation, context_tf))
     }
 
     recordings.save <- function(filename) {
