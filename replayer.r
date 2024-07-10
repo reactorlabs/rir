@@ -63,9 +63,9 @@ recordings.csv <- function(r, out = "") {
   columns <- c("idx", "type", "fun", "env", "ctx",
                "speculative_ctx", "speculative", "call_ctx",
                "reason", "bitcode_len", "pir_len", "changed",
-               "is_promise", "is_native", "callee_address")
+               "is_promise", "is_native", "callee_address",
+               "missing_asmpt")
 
-  line(columns)
 
   cores <- detectCores()
 
@@ -78,9 +78,11 @@ recordings.csv <- function(r, out = "") {
     event <- setNames(as.list(rep("", length(columns))), columns)
     event$idx <- toString(idx)
 
-    f <- r$functions[[as.integer(e$funIdx) + 1]]
-    event$fun <- f$name
-    event$env <- f$env
+    if (!is.null(e$funIdx)) {
+      f <- r$functions[[as.integer(e$funIdx) + 1]]
+      event$fun <- f$name
+      event$env <- f$env
+    }
 
     cl <- class(e)
 
@@ -151,6 +153,14 @@ recordings.csv <- function(r, out = "") {
 
       event$callee_address <- pp(e$address, "address")
 
+      event$missing_asmpt <- if (!e$missing_asmpt_present) {
+        "NotPresent"
+      } else if (!e$missing_asmpt_recovered) {
+        "NotRecovered"
+      } else {
+        "Recovered"
+      }
+
     } else if (cl == "event_unregister_invocation") {
       event$type <- "UnregisterInvocation"
       event$ctx <- pp(e$context, "context")
@@ -168,6 +178,8 @@ recordings.csv <- function(r, out = "") {
       event$type <- "ContextualTypeFeedbackCreated"
       event$speculative_ctx <- pp(e$context, "context")
 
+    } else if (cl == "event_custom") {
+      event$type <- e$name
     } else {
       event$type <- paste0("[", cl, "]")
     }
@@ -179,10 +191,32 @@ recordings.csv <- function(r, out = "") {
 
   setTxtProgressBar(pb, length(r$events))
 
+  cat("\n")
+  line(columns)
   lapply(events, line)
 
   endT <- Sys.time()
   cat(" (", difftime(endT, startT, units = "secs"), " secs)", sep="")
 
+  invisible(NULL)
+}
+
+
+if (sys.nframe() == 0) {
+  args <- commandArgs(trailingOnly=TRUE)
+  if (length(args) == 0) {
+      return()
+  }
+
+  rds <- args[1]
+  csv <- if (length(args) < 2) {
+    paste0(tools::file_path_sans_ext(rds), ".csv")
+  } else {
+    args[2]
+  }
+
+  cat("Processing:", rds, "to", csv,"\n");
+
+  recordings.csv(rds, csv)
   invisible(NULL)
 }

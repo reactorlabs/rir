@@ -254,41 +254,52 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 }
 
 void recordInvocation(SEXP cls, Function* f, Context callContext,
-                      InvocationEvent::Source source) {
+                      InvocationEvent::Source source, bool missingAsmptPresent,
+                      bool missingAsmptRecovered) {
     RECORDER_FILTER_GUARD(invoke);
 
     Context version = f->context();
 
     bool isNative = f->body()->kind == Code::Kind::Native;
 
+    size_t funIdx;
+    uintptr_t address;
+
     if (cls != nullptr) {
-        recorder_.record<InvocationEvent>(cls, version, source, callContext,
-                                          isNative,
-                                          reinterpret_cast<uintptr_t>(cls));
+        funIdx = recorder_.initOrGetRecording(cls);
+        address = reinterpret_cast<uintptr_t>(cls);
     } else {
+        address = 0;
+
         auto* dt = f->dispatchTable();
         if (dt == nullptr) {
-            recorder_.record<InvocationEvent>(f, version, source, callContext,
-                                              isNative, 0);
+            funIdx = recorder_.initOrGetRecording(f);
         } else {
-            recorder_.record<InvocationEvent>(dt, version, source, callContext,
-                                              isNative, 0);
+            funIdx = recorder_.initOrGetRecording(dt);
         }
     }
+
+    recorder_.push_event(std::make_unique<InvocationEvent>(
+        funIdx, version, source, callContext, isNative, address,
+        missingAsmptPresent, missingAsmptRecovered));
 }
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext) {
-    recordInvocation(cls, f, callContext, InvocationEvent::DoCall);
+    recordInvocation(cls, f, callContext, InvocationEvent::DoCall, false,
+                     false);
 }
 
 void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
-                                          Context callContext) {
-    recordInvocation(cls, f, callContext,
-                     InvocationEvent::NativeCallTrampoline);
+                                          Context callContext,
+                                          bool missingAsmptPresent,
+                                          bool missingAsmptRecovered) {
+    recordInvocation(cls, f, callContext, InvocationEvent::NativeCallTrampoline,
+                     missingAsmptPresent, missingAsmptRecovered);
 }
 
 void recordInvocationRirEval(Function* f) {
-    recordInvocation(nullptr, f, Context(), InvocationEvent::RirEval);
+    recordInvocation(nullptr, f, Context(), InvocationEvent::RirEval, false,
+                     false);
 }
 
 void recordUnregisterInvocation(SEXP cls, Function* f) {
@@ -437,11 +448,13 @@ void recordExecution(const char* filePath, const char* filterArg) {
             }
         }
 
-        std::cerr << "Recording filter: " << filterArg << "(environment variable)\n";
+        std::cerr << "Recording filter: " << filterArg
+                  << "(environment variable)\n";
     }
 
     if (filePath != nullptr) {
-        std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+        std::cerr << "Recording to \"" << filePath
+                  << "\" (environment variable)\n";
         startRecordings();
 
         finalizerPath = filePath;
@@ -654,6 +667,20 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     }
 
     return Rf_mkString(ss.str().c_str());
+}
+
+REXPORT SEXP recordCustomEvent(SEXP message) {
+    if (!Rf_isString(message)) {
+        std::cerr << "message is not a string" << std::endl;
+        return R_NilValue;
+    }
+
+    auto message_str = std::string(CHAR(STRING_ELT(message, 0)));
+
+    rir::recording::recorder_.push_event(
+        std::make_unique<rir::recording::CustomEvent>(message_str));
+
+    return R_NilValue;
 }
 
 #endif // RECORDING

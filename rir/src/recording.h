@@ -367,9 +367,12 @@ class InvocationEvent : public VersionEvent {
     enum Source : uint8_t { Unknown, DoCall, NativeCallTrampoline, RirEval };
 
     InvocationEvent(size_t dispatchTableIndex, Context version, Source source,
-                    Context callContext, bool isNative, uintptr_t address)
+                    Context callContext, bool isNative, uintptr_t address,
+                    bool missingAsmptPresent, bool missingAsmptRecovered)
         : VersionEvent(dispatchTableIndex, version), source(source),
-          callContext(callContext), isNative(isNative), address(address) {}
+          callContext(callContext), isNative(isNative), address(address),
+          missingAsmptPresent(missingAsmptPresent),
+          missingAsmptRecovered(missingAsmptRecovered) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -386,6 +389,8 @@ class InvocationEvent : public VersionEvent {
     Context callContext;
     bool isNative = false;
     uintptr_t address = 0;
+    bool missingAsmptPresent = false;
+    bool missingAsmptRecovered = false;
 };
 
 class UnregisterInvocationEvent : public VersionEvent {
@@ -412,6 +417,7 @@ class ContextualTFCreatedEvent : public Event {
     ContextualTFCreatedEvent(size_t dispatchTableIndex, const Context& context)
         : Event(dispatchTableIndex), context(context) {}
 
+
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
 
@@ -420,6 +426,24 @@ class ContextualTFCreatedEvent : public Event {
 
   private:
     Context context;
+};
+
+class CustomEvent : public Event {
+  public:
+    explicit CustomEvent(const std::string& name) : Event(), name(name) {}
+
+    CustomEvent() = default;
+
+    virtual ~CustomEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_custom";
+
+  private:
+    std::string name;
 };
 
 // From names.c

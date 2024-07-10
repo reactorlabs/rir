@@ -264,4 +264,8 @@ if (.Call("isRecordingsDefined")) {
     recordings.printEventPart <- function( obj, type, funs ) {
         .Call("printEventPart", obj, type, funs)
     }
+
+    recordings.customEvent <- function(message) {
+        invisible(.Call("recordCustomEvent", message))
+    }
 }

@@ -1331,6 +1331,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
     auto fail = !missingAsmpt->empty();
+    REC_HOOK( bool recoveredMA = false );
     if (fail) {
         if (missingAsmpt->numMissing() == 0 &&
             missingAsmpt->getFlags().empty()) {
@@ -1420,6 +1421,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             inferCurrentContext(call, fun->nargs());
             fail = !call.givenContext.smaller(fun->context());
         }
+
+        REC_HOOK( recoveredMA = !fail );
     }
     if (!fun->body()->nativeCode() || fun->disabled())
         fail = true;
@@ -1427,7 +1430,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
     auto dt = DispatchTable::unpack(BODY(callee));
 
     REC_HOOK(recording::recordInvocationNativeCallTrampoline(
-        callee, fun, call.givenContext));
+        callee, fun, call.givenContext, !missingAsmpt->empty(), recoveredMA));
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {

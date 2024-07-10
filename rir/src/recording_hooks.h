@@ -44,7 +44,9 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
 void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
-                                          Context callContext);
+                                          Context callContext,
+                                          bool missingAsmptPresent,
+                                          bool missingAsmptRecovered);
 void recordInvocationRirEval(Function* f);
 void recordUnregisterInvocation(SEXP cls, Function* f);
 
@@ -89,6 +91,7 @@ REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
+REXPORT SEXP recordCustomEvent(SEXP message);
 
 #else
 #define REC_HOOK(code)
