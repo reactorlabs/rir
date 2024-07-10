@@ -94,6 +94,12 @@ inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
 
 inline bool RecompileCondition(DispatchTable* table, Function* fun,
                                const Context& context) {
+
+    if (!context.includes(Assumption::StaticallyArgmatched) &&
+        table->baseline()->signature().hasDotsFormals) {
+        return false;
+    }
+
     if (fun->flags.contains(Function::MarkOpt)) {
         REC_HOOK(recording::recordMarkOptReasonCondition());
         return true;
