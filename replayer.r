@@ -65,7 +65,6 @@ recordings.csv <- function(r, out = "") {
                "reason", "bitcode_len", "pir_len", "changed",
                "is_promise", "is_native", "callee_address")
 
-  line(columns)
 
   cores <- detectCores()
 
@@ -172,6 +171,8 @@ recordings.csv <- function(r, out = "") {
 
   setTxtProgressBar(pb, length(r$events))
 
+  cat("\n")
+  line(columns)
   lapply(events, line)
 
   endT <- Sys.time()
