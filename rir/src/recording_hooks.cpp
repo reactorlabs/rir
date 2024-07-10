@@ -435,31 +435,29 @@ void recordExecution(const char* filePath, const char* filterArg) {
                 exit(1);
             }
         }
+
+        std::cerr << "Recording filter: " << filterArg << "(environment variable)\n";
     }
 
-    std::cerr << "Recording to \"" << filePath << "\" (environment variable";
-    if (filterArg != nullptr) {
-        std::cerr << ": " << filterArg;
-    }
+    if (filePath != nullptr) {
+        std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+        startRecordings();
 
-    std::cerr << ")\n";
-    startRecordings();
+        finalizerPath = filePath;
 
-    finalizerPath = filePath;
+        // Call `loadNamespace("Base")`
+        SEXP baseStr = PROTECT(Rf_mkString("base"));
+        SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+        SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
 
-    // Call `loadNamespace("Base")`
-    SEXP baseStr = PROTECT(Rf_mkString("base"));
-    SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-    SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+        if (namespaceRes == R_NilValue) {
+            std::cerr << "Failed to load namespace base\n";
+        } else {
+            R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
+        }
 
-    if (namespaceRes == R_NilValue) {
-        std::cerr << "Failed to load namespace base\n";
         UNPROTECT(3);
-        return;
     }
-
-    R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
-    UNPROTECT(3);
 }
 } // namespace recording
 } // namespace rir
@@ -551,9 +549,9 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         auto sc =
             rir::recording::serialization::speculative_context_from_sexp(obj);
 
+        ss << "[ ";
         switch (sc.type) {
         case rir::recording::SpeculativeContextType::Callees: {
-            ss << "[";
             bool first = true;
             for (auto c : sc.value.callees) {
                 if (c == rir::recording::NO_INDEX)
@@ -574,35 +572,21 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                         VECTOR_ELT(functions, c));
                 ss << fun;
             }
-            ss << "]";
+            ss << " ] Call";
             break;
         }
 
         case rir::recording::SpeculativeContextType::Test:
-            ss << "(";
-            switch (sc.value.test.seen) {
-            case rir::ObservedTest::None:
-                ss << "None";
-                break;
-            case rir::ObservedTest::OnlyTrue:
-                ss << "OnlyTrue";
-                break;
-            case rir::ObservedTest::OnlyFalse:
-                ss << "OnlyFalse";
-                break;
-            case rir::ObservedTest::Both:
-                ss << "Both";
-                break;
-            }
-            ss << ")";
+            sc.value.test.print(ss);
+            ss << " ] Test";
             break;
 
         case rir::recording::SpeculativeContextType::Values:
-            ss << "(";
             sc.value.values.print(ss);
-            ss << ")";
+            ss << " ] Type";
             break;
         }
+
     } else if (type_str == "reason") {
         auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
         ev->print(ss);
