@@ -193,3 +193,23 @@ recordings.csv <- function(r, out = "") {
 
   invisible(NULL)
 }
+
+
+if (sys.nframe() == 0) {
+  args <- commandArgs(trailingOnly=TRUE)
+  if (length(args) == 0) {
+      return()
+  }
+
+  rds <- args[1]
+  csv <- if (length(args) < 2) {
+    paste0(tools::file_path_sans_ext(rds), ".csv")
+  } else {
+    args[2]
+  }
+
+  cat("Processing:", rds, "to", csv,"\n");
+
+  recordings.csv(rds, csv)
+  invisible(NULL)
+}

@@ -121,6 +121,13 @@ It can be used from R as follows:
     require("replayer.r")
     recordings.csv("output.rds", out="log.csv")
 
+The script can be also used directly:
+
+    R -f ./replayer.r --args output.rds log.csv
+
+The first argument passed is the RDS file and the second one the output CSV file.
+If no CSV is specified, the script creates a file with the exact name as the input file,
+only with the `.csv` suffix.
 
 ### CSV Columns
 The individual meanings of printed columns:
