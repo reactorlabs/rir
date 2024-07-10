@@ -404,6 +404,24 @@ class UnregisterInvocationEvent : public VersionEvent {
     static constexpr const char* className = "event_unregister_invocation";
 };
 
+class CustomEvent : public Event {
+  public:
+    CustomEvent(const std::string& name) : Event(), name(name) {}
+
+    CustomEvent() = default;
+
+    virtual ~CustomEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_custom";
+
+  private:
+    std::string name;
+};
+
 // From names.c
 extern "C" FUNTAB R_FunTab[];
 

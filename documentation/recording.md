@@ -11,7 +11,7 @@ To disable it afterwards, use the `-DRECORDING=0` flag.
 Curently, there are five different events:
 
 *CompilationStart*  
-Start of a compilation session, with the reason (ORS/condition and heuristic)
+Start of a compilation session, with the reason (ORS/condition and heuristic).
 
 *Compilation*  
 A compilation of function from RIR to PIR was invoked.
@@ -34,6 +34,9 @@ An invocation of a function has been rolled back.
 *SpeculativeContext*  
 A type feedback has been updated in a function on a given slot.
 
+There are also custom events, that are recorded with the `recordings.customEvent` function and have a custom
+message associated with them.
+
 ### Event filtering
 
 By default, only *compilations* and *deopts* are recorded.  
@@ -44,6 +47,8 @@ The options then correspond as follows:
 - deopt - deopt events
 - invoke - invocation and unregister invocation events
 - type feedback - the speculative context events
+
+Custom events are always recorded.
 
 ## Enabling recording
 
@@ -64,6 +69,8 @@ There is an R-level API for recording:
 `recordings.enabled()` - boolean representing if we are recording right now  
 
 `recordings.setFilter(compile, deoptimize, type_feedback, invocation)` - set the filtering of individual events  
+
+`recordings.customEvent(message)` - create a custom event with the associated message
 
 ### Recording flags
 
@@ -134,3 +141,4 @@ The individual meanings of printed columns:
 - callee_address - address of called function
 - missing_asmpt - in a nativeCallTrampoline, were there any missing assumptions and if they were recovered
 
+Custom events are present as with only the `type` filled with the associated message

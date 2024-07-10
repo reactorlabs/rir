@@ -456,6 +456,17 @@ void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
         {version, serialization::context_from_sexp});
 }
 
+const std::vector<const char*> CustomEvent::fieldNames = {"name"};
+
+SEXP CustomEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CustomEvent>(name);
+}
+
+void CustomEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CustomEvent, std::string>(
+        sexp, {name, serialization::string_from_sexp});
+}
+
 SEXP setClassName(SEXP s, const char* className) {
     SEXP t = PROTECT(Rf_mkString(className));
     Rf_setAttrib(s, R_ClassSymbol, t);

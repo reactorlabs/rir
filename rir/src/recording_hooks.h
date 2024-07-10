@@ -87,6 +87,7 @@ REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
+REXPORT SEXP recordCustomEvent(SEXP message);
 
 #else
 #define REC_HOOK(code)

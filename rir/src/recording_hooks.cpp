@@ -425,11 +425,13 @@ void recordExecution(const char* filePath, const char* filterArg) {
             }
         }
 
-        std::cerr << "Recording filter: " << filterArg << "(environment variable)\n";
+        std::cerr << "Recording filter: " << filterArg
+                  << "(environment variable)\n";
     }
 
     if (filePath != nullptr) {
-        std::cerr << "Recording to \"" << filePath << "\" (environment variable)\n";
+        std::cerr << "Recording to \"" << filePath
+                  << "\" (environment variable)\n";
         startRecordings();
 
         finalizerPath = filePath;
@@ -641,6 +643,20 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     }
 
     return Rf_mkString(ss.str().c_str());
+}
+
+REXPORT SEXP recordCustomEvent(SEXP message) {
+    if (!Rf_isString(message)) {
+        std::cerr << "message is not a string" << std::endl;
+        return R_NilValue;
+    }
+
+    auto message_str = std::string(CHAR(STRING_ELT(message, 0)));
+
+    rir::recording::recorder_.push_event(
+        std::make_unique<rir::recording::CustomEvent>(message_str));
+
+    return R_NilValue;
 }
 
 #endif // RECORDING

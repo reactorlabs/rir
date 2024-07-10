@@ -78,9 +78,11 @@ recordings.csv <- function(r, out = "") {
     event <- setNames(as.list(rep("", length(columns))), columns)
     event$idx <- toString(idx)
 
-    f <- r$functions[[as.integer(e$funIdx) + 1]]
-    event$fun <- f$name
-    event$env <- f$env
+    if (!is.null(e$funIdx)) {
+      f <- r$functions[[as.integer(e$funIdx) + 1]]
+      event$fun <- f$name
+      event$env <- f$env
+    }
 
     cl <- class(e)
 
@@ -169,6 +171,8 @@ recordings.csv <- function(r, out = "") {
       event$is_promise <- toString(e$is_promise)
       event$changed <- toString(e$changed)
 
+    } else if (cl == "event_custom") {
+      event$type <- e$name
     } else {
       event$type <- paste0("[", cl, "]")
     }
