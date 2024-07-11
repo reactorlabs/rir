@@ -56,12 +56,6 @@ inline RCNTXT* findFunctionContextFor(SEXP e) {
     return nullptr;
 }
 
-inline bool SufficientTypeFeedbackHeuristic(Function* fun,
-                                            const Context& context) {
-    return fun->invocationCount() == pir::Parameter::PIR_WARMUP ||
-           fun->recordingCount(context) >= 2;
-}
-
 inline bool RecompileHeuristic(Function* fun, Function* disabledFun = nullptr) {
     auto flags = fun->flags;
     if (flags.contains(Function::MarkOpt)) {
