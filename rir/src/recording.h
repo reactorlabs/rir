@@ -406,7 +406,7 @@ class UnregisterInvocationEvent : public VersionEvent {
 
 class CustomEvent : public Event {
   public:
-    CustomEvent(const std::string& name) : Event(), name(name) {}
+    explicit CustomEvent(const std::string& name) : Event(), name(name) {}
 
     CustomEvent() = default;
 
