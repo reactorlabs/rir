@@ -388,7 +388,7 @@ SEXP createPromiseNoEnvImpl(const Context& context, SEXP exp) {
 
 SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
     SLOWASSERT(TYPEOF(value) != PROMSXP);
-    SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
+    SEXP res = Rf_mkPROMISE(exp, env);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;

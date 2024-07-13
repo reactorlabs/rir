@@ -2574,13 +2574,13 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = createPromise(nullptr, c->getPromise(id), env);
-            PROTECT(prom);
+            // PROTECT(prom);
             SEXP val = ostack_pop();
             assert(TYPEOF(val) != PROMSXP);
             ENSURE_NAMEDMAX(val);
             SET_PRVALUE(prom, val);
             ostack_push(prom);
-            UNPROTECT(1);
+            // UNPROTECT(1);
             NEXT();
         }
 
