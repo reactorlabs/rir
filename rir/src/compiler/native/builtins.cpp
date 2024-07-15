@@ -376,13 +376,13 @@ SEXP createPromiseImpl(SEXP expr, SEXP env) {
 
 SEXP createPromiseNoEnvEagerImpl(SEXP exp, SEXP value) {
     SLOWASSERT(TYPEOF(value) != PROMSXP);
-    SEXP res = Rf_mkPROMISE(exp, R_EmptyEnv);
+    SEXP res = Rf_mkPROMISE(exp, R_NilValue);
     ENSURE_NAMEDMAX(value);
     SET_PRVALUE(res, value);
     return res;
 }
 
-SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_EmptyEnv); }
+SEXP createPromiseNoEnvImpl(SEXP exp) { return Rf_mkPROMISE(exp, R_NilValue); }
 
 SEXP createPromiseEagerImpl(SEXP exp, SEXP env, SEXP value) {
     SLOWASSERT(TYPEOF(value) != PROMSXP);
