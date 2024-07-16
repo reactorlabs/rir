@@ -1012,9 +1012,10 @@ SEXP doCall(CallContext& call, bool popArgs) {
                     fun = dispatch(call, table);
                 }
             }
-
-            REC_HOOK(recording::recordReasonsClear());
         }
+
+        REC_HOOK(recording::recordReasonsClear());
+
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
 

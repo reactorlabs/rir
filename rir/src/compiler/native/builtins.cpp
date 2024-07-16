@@ -1422,6 +1422,11 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         inferCurrentContext(call, fun->nargs());
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
             REC_HOOK(recording::recordUnregisterInvocation(callee, fun));
+            REC_HOOK({
+                recording::recordReasonsClear();
+                recording::recordUnregisterInvocation(callee, fun);
+            })
+
             fun->unregisterInvocation();
             auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
@@ -1430,6 +1435,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             return res;
         }
     }
+
+    REC_HOOK(recording::recordReasonsClear());
 
     R_CheckStack();
 #ifdef ENABLE_SLOWASSERT
