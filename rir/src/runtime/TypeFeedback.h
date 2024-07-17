@@ -213,6 +213,8 @@ struct ObservedValues {
     }
 
     inline void mergeWith(const ObservedValues& val) {
+        if (stateBeforeLastForce < val.stateBeforeLastForce)
+            stateBeforeLastForce = val.stateBeforeLastForce;
         notScalar |= val.notScalar;
         object |= val.object;
         attribs |= val.attribs;
