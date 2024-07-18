@@ -6117,23 +6117,35 @@ void LowerFunctionLLVM::compile() {
             if (cls->isContinuation() && Rep::Of(i) == Rep::SEXP &&
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
+                // TODO: Improve the recording for inlinees
+                static Context emptyContext;
                 if (i->hasTypeFeedback()) {
                     auto& origin = i->typeFeedback().feedbackOrigin;
+                    llvm::Value* recordingContext = paramContext();
+                    // context differs for inlinees
+                    if (!origin.function()->isSameClosureAs(cls->optFunction))
+                        recordingContext =
+                            convertToPointer(&emptyContext, t::i8, true);
                     if (origin.hasSlot()) {
                         call(NativeBuiltins::get(
                                  NativeBuiltins::Id::recordTypeFeedback),
                              {convertToPointer(origin.function(), t::i8, true),
-                              paramContext(), c(origin.index().idx, 32),
+                              recordingContext, c(origin.index().idx, 32),
                               load(i)});
                     }
                 }
                 if (i->hasCallFeedback()) {
                     auto& origin = i->callFeedback().feedbackOrigin;
                     assert(origin.hasSlot());
+                    llvm::Value* recordingContext = paramContext();
+                    if (!origin.function()->isSameClosureAs(cls->optFunction))
+                        recordingContext =
+                            convertToPointer(&emptyContext, t::i8, true);
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
                          {convertToPointer(origin.function(), t::i8, true),
-                          paramContext(), c(origin.index().idx, 32), load(i)});
+                          recordingContext, c(origin.index().idx, 32),
+                          load(i)});
                 }
             }
 
