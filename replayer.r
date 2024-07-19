@@ -62,8 +62,8 @@ recordings.csv <- function(r, out = "") {
 
   columns <- c("idx", "type", "fun", "env", "ctx",
                "speculative_ctx", "speculative", "call_ctx",
-               "reason", "bitcode_len", "pir_len", "changed",
-               "is_promise", "is_native", "callee_address",
+               "reason", "bitcode_len", "pir_len", "deopt_count",
+               "changed", "is_promise", "is_native", "callee_address",
                "missing_asmpt")
 
 
@@ -125,6 +125,8 @@ recordings.csv <- function(r, out = "") {
 
       event$bitcode_len <- nchar(e$bitcode)
       event$pir_len <- nchar(e$pir_code)
+
+      event$deopt_count <- toString(e$deopt_count)
 
     } else if (cl == "event_deopt") {
       event$type <- "Deopt"

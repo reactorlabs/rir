@@ -281,10 +281,11 @@ class CompilationEvent : public VersionEvent {
   public:
     CompilationEvent(size_t funRecIndex, Context version,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     const std::string& bitcode, const std::string& pir_code)
+                     const std::string& bitcode, const std::string& pir_code,
+                     size_t deopt_count)
         : VersionEvent(funRecIndex, version),
           speculative_contexts(std::move(speculative_contexts)),
-          bitcode(bitcode), pir_code(pir_code) {}
+          bitcode(bitcode), pir_code(pir_code), deopt_count(deopt_count) {}
 
     CompilationEvent() {}
 
@@ -302,6 +303,7 @@ class CompilationEvent : public VersionEvent {
     // The LLVM Bitcode
     std::string bitcode;
     std::string pir_code;
+    size_t deopt_count;
 };
 
 class CompilationEndEvent : public Event {

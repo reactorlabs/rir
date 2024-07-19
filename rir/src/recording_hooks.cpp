@@ -9,6 +9,8 @@
 #include "compiler/compiler.h"
 #include "compiler/pir/closure.h"
 #include "compiler/pir/module.h"
+#include "compiler/util/visitor.h"
+
 #include "recording_serialization.h"
 #include "runtime/Context.h"
 #include "runtime/DispatchTable.h"
@@ -165,9 +167,16 @@ void recordCompileFinish(bool succesful, pir::Module* module) {
                 bitcode = bitcode_entry->second;
             }
 
+            size_t deopt_count = 0;
+            pir::Visitor::run(ver->entry, [&deopt_count](pir::Instruction* i) {
+                if (pir::Deopt::Cast(i)) {
+                    deopt_count++;
+                }
+            });
+
             recorder_.push_event(std::make_unique<CompilationEvent>(
                 rec_idx, version, std::move(sc_entry->second), bitcode,
-                pir_code.str()));
+                pir_code.str(), deopt_count));
         });
     });
 

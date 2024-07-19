@@ -293,24 +293,27 @@ void CompilationStartEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
-    "funIdx", "version", "speculative_contexts", "bitcode", "pir_code"};
+    "funIdx",  "version",  "speculative_contexts",
+    "bitcode", "pir_code", "deopt_count"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        funRecIndex_, version, speculative_contexts, bitcode, pir_code);
+        funRecIndex_, version, speculative_contexts, bitcode, pir_code,
+        deopt_count);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<CompilationEvent, uint64_t, Context,
                                     std::vector<SpeculativeContext>,
-                                    std::string, std::string>(
+                                    std::string, std::string, uint64_t>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {speculative_contexts,
          serialization::vector_from_sexp<
              SpeculativeContext, serialization::speculative_context_from_sexp>},
         {bitcode, serialization::string_from_sexp},
-        {pir_code, serialization::string_from_sexp});
+        {pir_code, serialization::string_from_sexp},
+        {deopt_count, serialization::uint64_t_from_sexp});
 }
 
 const std::vector<const char*> CompilationEndEvent::fieldNames = {
