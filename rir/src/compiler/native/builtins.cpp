@@ -1437,7 +1437,6 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
         recheck = 0;
         inferCurrentContext(call, fun->nargs());
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
-            REC_HOOK(recording::recordUnregisterInvocation(callee, fun));
             REC_HOOK({
                 recording::recordReasonsClear();
                 recording::recordUnregisterInvocation(callee, fun);

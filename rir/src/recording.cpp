@@ -294,17 +294,19 @@ void CompilationStartEvent::fromSEXP(SEXP sexp) {
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
-    "funIdx", "version", "speculative_contexts", "bitcode", "pir_code", "context"};
+    "funIdx",      "version", "speculative_contexts", "bitcode", "pir_code",
+    "deopt_count", "context"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        funRecIndex_, version, speculative_contexts, bitcode, pir_code, context);
+        funRecIndex_, version, speculative_contexts, bitcode, pir_code,
+        deopt_count, context);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<CompilationEvent, uint64_t, Context,
-                                    std::vector<SpeculativeContext>,
-                                    std::string, std::string, Context>(
+    serialization::fields_from_sexp<
+        CompilationEvent, uint64_t, Context, std::vector<SpeculativeContext>,
+        std::string, std::string, uint64_t, Context>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {speculative_contexts,
@@ -312,6 +314,7 @@ void CompilationEvent::fromSEXP(SEXP sexp) {
              SpeculativeContext, serialization::speculative_context_from_sexp>},
         {bitcode, serialization::string_from_sexp},
         {pir_code, serialization::string_from_sexp},
+        {deopt_count, serialization::uint64_t_from_sexp},
         {context, serialization::context_from_sexp});
 }
 
@@ -332,8 +335,9 @@ void CompilationEndEvent::fromSEXP(SEXP sexp) {
 }
 
 DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
-               DeoptReason::Reason reason, size_t reasonCodeIdx,
-               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger, Context context)
+                       DeoptReason::Reason reason, size_t reasonCodeIdx,
+                       ssize_t reasonPromiseIdx, uint32_t reasonCodeOff,
+                       SEXP trigger, Context context)
     : VersionEvent(dispatchTableIndex, version), reason_(reason),
       reasonCodeIdx_(reasonCodeIdx), reasonPromiseIdx_(reasonPromiseIdx),
       reasonCodeOff_(reasonCodeOff), context(context) {
@@ -453,16 +457,17 @@ void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
         {version, serialization::context_from_sexp});
 }
 
-const std::vector<const char*> ContextualTFCreatedEvent::fieldNames = {"funIdx",
-                                                                  "context"};
+const std::vector<const char*> ContextualTFCreatedEvent::fieldNames = {
+    "funIdx", "context"};
 
 SEXP ContextualTFCreatedEvent::toSEXP() const {
     return serialization::fields_to_sexp<ContextualTFCreatedEvent>(funRecIndex_,
-                                                              context);
+                                                                   context);
 }
 
 void ContextualTFCreatedEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<ContextualTFCreatedEvent, uint64_t, Context>(
+    serialization::fields_from_sexp<ContextualTFCreatedEvent, uint64_t,
+                                    Context>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {context, serialization::context_from_sexp});
 }

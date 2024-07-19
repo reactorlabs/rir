@@ -234,7 +234,7 @@ class SpeculativeContextEvent : public Event {
                             size_t index, const SpeculativeContext& sc,
                             bool changed, Context context)
         : Event(dispatchTableIndex), is_promise(isPromise), index(index),
-          sc(sc), changed(changed), context(context){}
+          sc(sc), changed(changed), context(context) {}
 
     SpeculativeContextEvent() = default;
 
@@ -282,10 +282,12 @@ class CompilationEvent : public VersionEvent {
   public:
     CompilationEvent(size_t funRecIndex, Context version,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     const std::string& bitcode, const std::string& pir_code, Context context)
+                     const std::string& bitcode, const std::string& pir_code,
+                     size_t deopt_count, Context context)
         : VersionEvent(funRecIndex, version),
           speculative_contexts(std::move(speculative_contexts)),
-          bitcode(bitcode), pir_code(pir_code), context(context) {}
+          bitcode(bitcode), pir_code(pir_code), deopt_count(deopt_count),
+          context(context) {}
 
     CompilationEvent() {}
 
@@ -303,6 +305,7 @@ class CompilationEvent : public VersionEvent {
     // The LLVM Bitcode
     std::string bitcode;
     std::string pir_code;
+    size_t deopt_count;
 
     Context context;
 };
@@ -335,7 +338,8 @@ class DeoptEvent : public VersionEvent {
     DeoptEvent(const DeoptEvent&) = delete;
     DeoptEvent(size_t dispatchTableIndex, Context version,
                DeoptReason::Reason reason, size_t reasonCodeIdx,
-               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger, Context context);
+               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger,
+               Context context);
     virtual ~DeoptEvent();
     DeoptEvent() = default;
 
@@ -416,7 +420,6 @@ class ContextualTFCreatedEvent : public Event {
 
     ContextualTFCreatedEvent(size_t dispatchTableIndex, const Context& context)
         : Event(dispatchTableIndex), context(context) {}
-
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;

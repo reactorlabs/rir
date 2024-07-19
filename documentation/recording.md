@@ -147,6 +147,7 @@ The individual meanings of printed columns:
 - reason - deopt reason / compilation reason and heuristic / invocation source
 - bitcode_len - lenght of compiled LLVM bitcode
 - pir_len - length of compiled and optimized PIR code
+- deopt_count - number of PIR deopt instructions in the compiled code
 - changed - is the type feedback actually changed
 - is_promise - is the type feedback inside of a promise
 - is_native - is the invoked function a native one
