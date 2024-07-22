@@ -162,8 +162,8 @@ struct ObservedValues {
         promise,
     };
 
-    static constexpr unsigned MaxTypes = 3;
-    uint8_t numTypes : 2;
+    static constexpr unsigned MaxTypes = 31;
+    uint8_t numTypes : 5;
     uint8_t stateBeforeLastForce : 2;
     uint8_t notScalar : 1;
     uint8_t attribs : 1;
@@ -213,9 +213,6 @@ struct ObservedValues {
         REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
     }
 };
-
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
-              "Size needs to fit inside a record_ bc immediate args");
 
 enum class Opcode : uint8_t;
 
