@@ -28,7 +28,7 @@ if [ ! -d "llvm-8.0.0.src" ]; then
     mkdir build
     cd build
     cmake -DCMAKE_BUILD_TYPE=Debug -GNinja ..
-    ninja
+    ninja -j `ncores`
 else
     cd llvm-8.0.0.src/build
 fi
