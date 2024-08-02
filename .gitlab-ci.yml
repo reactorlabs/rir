@@ -422,7 +422,7 @@ benchmark_llvm:
   tags:
     - benchmarks
   script:
-    - sed -i '305s/1000/10000/' /opt/rbenchmarking/rebench.conf
+    - sed -i '331s/\/usr/PIR_DEBUG=DryRun \/usr/' /opt/rbenchmarking/rebench.conf
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - cp /tmp/memory.data $CI_PROJECT_DIR/
   artifacts:
