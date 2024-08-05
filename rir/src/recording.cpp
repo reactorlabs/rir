@@ -506,25 +506,24 @@ std::string getClosureName(SEXP cls) {
 
     // 2. Try to look thru symbols
     auto env = PROTECT(CLOENV(cls));
-    auto symbols = PROTECT(R_lsInternal(env, TRUE));
+    auto symbols = PROTECT(R_lsInternal3(env, TRUE, FALSE));
 
     auto size = Rf_length(symbols);
     for (int i = 0; i < size; i++) {
         const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
+
+        // TODO check parity with R_findVarInFrame
         auto symbol = PROTECT(Rf_install(symbol_char));
+        R_varloc_t loc = R_findVarLocInFrame(env, symbol);
+        UNPROTECT(1);
 
-        auto value = PROTECT(Rf_findVarInFrame(env, symbol));
-
-        if (value == cls) {
+        if (loc.cell == cls) {
             name = symbol_char;
-            UNPROTECT(2);
             break;
         }
-
-        UNPROTECT(2);
     }
-    UNPROTECT(2);
 
+    UNPROTECT(2);
     return name;
 }
 
