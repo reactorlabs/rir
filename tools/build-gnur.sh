@@ -99,7 +99,7 @@ function build_r {
         rm -f non-tarball
     fi
 
-    echo "-> building $NAME"
+    echo "-> building $NAME with $(ncores) cores"
     make -j `ncores`
 }
 
