@@ -150,3 +150,8 @@ The individual meanings of printed columns:
 - missing_asmpt - in a nativeCallTrampoline, were there any missing assumptions and if they were recovered
 
 Custom events are present as with only the `type` filled with the associated message
+
+## Replaying
+WIP
+
+The command line flag `RIR_RECORD_SERIALIZE` controlls serialization of closures (values `1`, `0`)

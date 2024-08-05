@@ -71,11 +71,14 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     auto body = BODY(cls);
 
     auto getClosure = [cls]() {
-        auto closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        R_PreserveObject(closure);
-        UNPROTECT(1);
-        return closure;
+        if (SERIALIZE_SEXP_CLOS) {
+            auto closure = R_serialize(cls, R_NilValue, R_NilValue, R_NilValue,
+                                       R_NilValue);
+            R_PreserveObject(closure);
+            return closure;
+        } else {
+            return R_NilValue;
+        }
     };
 
     // Primitives are stored as a special case
@@ -111,7 +114,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     // If the function recording does not contain it, add to it the closure
     // and environment name
     auto fixupRecording = [&getClosure, &getName, &envName](FunRecording& rec) {
-        if (Rf_isNull(rec.closure)) {
+        if (SERIALIZE_SEXP_CLOS && Rf_isNull(rec.closure)) {
             rec.closure = getClosure();
         }
 
@@ -356,24 +359,18 @@ void DeoptEvent::setTrigger(SEXP newTrigger) {
         R_ReleaseObject(trigger_);
     }
 
-    trigger_ = R_NilValue;
-    triggerClosure_ = -1;
-
-    if (newTrigger == nullptr) {
-        return;
-    }
-
-    if (TYPEOF(newTrigger) == CLOSXP) {
-        auto rec = recorder_.initOrGetRecording(newTrigger);
-        triggerClosure_ = (ssize_t)rec;
-        return;
-    }
-
-    if (newTrigger) {
+    if (TYPEOF(newTrigger) == CLOSXP || TYPEOF(newTrigger) == EXTERNALSXP) {
+        if (SERIALIZE_SEXP_CLOS) {
+            trigger_ = R_serialize(newTrigger, R_NilValue, R_NilValue,
+                                   R_NilValue, R_NilValue);
+            R_PreserveObject(trigger_);
+        } else {
+            trigger_ = R_NilValue;
+        }
+    } else {
         R_PreserveObject(newTrigger);
+        trigger_ = newTrigger;
     }
-
-    trigger_ = newTrigger;
 }
 
 const std::vector<const char*> DeoptEvent::fieldNames = {"funIdx",
