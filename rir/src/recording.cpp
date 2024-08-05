@@ -368,6 +368,12 @@ void DeoptEvent::setTrigger(SEXP newTrigger) {
         triggerClosure_ = (ssize_t)rec;
         return;
     }
+
+    if (newTrigger) {
+        R_PreserveObject(newTrigger);
+    }
+
+    trigger_ = newTrigger;
 }
 
 const std::vector<const char*> DeoptEvent::fieldNames = {"funIdx",
