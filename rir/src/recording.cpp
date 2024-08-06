@@ -235,22 +235,23 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
 }
 
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "funIdx", "is_promise", "index", "sc", "changed"};
+    "funIdx", "is_promise", "index", "sc", "changed", "deopt"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        funRecIndex_, is_promise, index, sc, changed);
+        funRecIndex_, is_promise, index, sc, changed, deopt);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
     return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
                                            bool, uint64_t, SpeculativeContext,
-                                           bool>(
+                                           bool, bool>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {is_promise, serialization::bool_from_sexp},
         {index, serialization::uint64_t_from_sexp},
         {sc, serialization::speculative_context_from_sexp},
-        {changed, serialization::bool_from_sexp});
+        {changed, serialization::bool_from_sexp},
+        {deopt, serialization::bool_from_sexp});
 }
 
 const std::vector<const char*> CompilationStartEvent::fieldNames = {
@@ -321,14 +322,14 @@ const std::vector<const char*> DeoptEvent::fieldNames = {
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
-        funRecIndex_, version, reason, origin_function, index,
-        trigger, trigger_index);
+        funRecIndex_, version, reason, origin_function, index, trigger,
+        trigger_index);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
-                                    DeoptReason::Reason, uint64_t, FeedbackIndex,
-                                    SEXP, int64_t>(
+                                    DeoptReason::Reason, uint64_t,
+                                    FeedbackIndex, SEXP, int64_t>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
         {reason, serialization::deopt_reason_from_sexp},

@@ -237,9 +237,9 @@ class SpeculativeContextEvent : public Event {
   public:
     SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
                             size_t index, const SpeculativeContext& sc,
-                            bool changed)
+                            bool changed, bool deopt)
         : Event(dispatchTableIndex), is_promise(isPromise), index(index),
-          sc(sc), changed(changed) {}
+          sc(sc), changed(changed), deopt(deopt) {}
 
     SpeculativeContextEvent() = default;
 
@@ -257,6 +257,7 @@ class SpeculativeContextEvent : public Event {
     size_t index;
     SpeculativeContext sc = SpeculativeContext({0});
     bool changed;
+    bool deopt;
 };
 
 class CompilationStartEvent : public Event {

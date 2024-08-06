@@ -40,6 +40,7 @@ void addCompilationSCCloned(pir::ClosureVersion* newVersion,
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
+void recordSCDeoptFinish();
 
 void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
 void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,

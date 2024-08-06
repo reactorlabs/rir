@@ -168,6 +168,10 @@ recordings.csv <- function(r, out = "") {
       event$is_promise <- toString(e$is_promise)
       event$changed <- toString(e$changed)
 
+      if (e$deopt){
+        event$reason <- "Deopt"
+      }
+
     } else if (cl == "event_custom") {
       event$type <- e$name
     } else {

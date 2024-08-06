@@ -69,6 +69,7 @@ size_t compilation_idx_ = -1;
 const char* finalizerPath = nullptr;
 
 bool sc_changed_;
+bool in_deopt_ = false;
 
 /************************ Hooks **********************************/
 
@@ -226,6 +227,9 @@ void addCompilationSCCloned(pir::ClosureVersion* newVersion,
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger) {
+    assert(!in_deopt_);
+    in_deopt_ = true;
+
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
@@ -248,6 +252,11 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
 
     recorder_.record<DeoptEvent>(dt, version, reason.reason, origin_function,
                                  reason.origin.index(), trigger, trigger_index);
+}
+
+void recordSCDeoptFinish (){
+    assert(in_deopt_);
+    in_deopt_ = false;
 }
 
 void recordInvocation(SEXP cls, Function* f, Context callContext,
@@ -316,13 +325,13 @@ void recordSC(const SpeculativeContext& sc, size_t idx, Function* fun) {
 
     if (dt == nullptr) {
         recorder_.record<SpeculativeContextEvent>(fun, false, idx, sc,
-                                                  sc_changed_);
+                                                  sc_changed_, in_deopt_);
         return;
     }
 
     bool isPromise = fun != dt->baseline();
     recorder_.record<SpeculativeContextEvent>(dt, isPromise, idx, sc,
-                                              sc_changed_);
+                                              sc_changed_, in_deopt_);
 }
 
 void recordSC(const ObservedCallees& callees, size_t idx, Function* fun) {

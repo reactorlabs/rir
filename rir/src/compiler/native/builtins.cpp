@@ -832,10 +832,12 @@ SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    deoptReason->record(deoptTrigger);
-
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
+
+    deoptReason->record(deoptTrigger);
+
+    REC_HOOK(recording::recordSCDeoptFinish());
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
