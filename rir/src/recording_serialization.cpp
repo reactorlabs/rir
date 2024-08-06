@@ -249,6 +249,17 @@ InvocationEvent::Source invocation_source_from_sexp(SEXP sexp) {
     return static_cast<InvocationEvent::Source>(Rf_asInteger(sexp));
 }
 
+SEXP to_sexp(FeedbackIndex index){
+    return to_sexp( index.asInteger() );
+}
+
+FeedbackIndex feedback_index_from_sexp(SEXP sexp){
+    auto u = uint32_t_from_sexp(sexp);
+    // Going thru void* to go around the compiler
+    void* asv = &u;
+    return *((FeedbackIndex*)(asv));
+}
+
 } // namespace serialization
 } // namespace recording
 } // namespace rir

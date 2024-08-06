@@ -338,12 +338,24 @@ class DeoptEvent : public VersionEvent {
   public:
     DeoptEvent(const DeoptEvent&) = delete;
     DeoptEvent(size_t dispatchTableIndex, Context version,
-               DeoptReason::Reason reason, size_t reasonCodeIdx,
-               ssize_t reasonPromiseIdx, uint32_t reasonCodeOff, SEXP trigger);
-    virtual ~DeoptEvent();
+               DeoptReason::Reason reason, size_t origin_function,
+               FeedbackIndex index, SEXP trigger, ssize_t trigger_index)
+        : VersionEvent(dispatchTableIndex, version), reason(reason),
+          origin_function(origin_function), index(index), trigger(trigger),
+          trigger_index(trigger_index) {
+        if (trigger != R_NilValue) {
+            R_PreserveObject(trigger);
+        }
+    }
+
+    virtual ~DeoptEvent() {
+        if (trigger != R_NilValue) {
+            R_ReleaseObject(trigger);
+        }
+    }
+
     DeoptEvent() = default;
 
-    void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
 
@@ -351,17 +363,13 @@ class DeoptEvent : public VersionEvent {
     static constexpr const char* className = "event_deopt";
 
   private:
-    DeoptReason::Reason reason_;
-    size_t reasonCodeIdx_;
-    // If it is a promise (>= 0), this is the index
-    // in the extraEntryPools
-    ssize_t reasonPromiseIdx_;
+    DeoptReason::Reason reason = DeoptReason::Reason::Unknown;
+    size_t origin_function;
+    FeedbackIndex index;
 
-    uint32_t reasonCodeOff_;
-
-    // These 2 fields are mutually exclusive
-    SEXP trigger_ = R_NilValue;
-    ssize_t triggerClosure_ = -1; // References a FunRecorder index
+    // Either trigger is R_NilValue or trigger_index is -1
+    SEXP trigger = R_NilValue;
+    ssize_t trigger_index = -1;
 };
 
 class InvocationEvent : public VersionEvent {
@@ -531,9 +539,6 @@ class Record {
     size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
     size_t initOrGetRecording(Function* fun);
 
-    // First is a fun recording index, second is -1 if it is baseline,
-    // otherwise promise idx
-    std::pair<size_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
     void release() {

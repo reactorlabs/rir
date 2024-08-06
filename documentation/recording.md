@@ -137,7 +137,7 @@ The individual meanings of printed columns:
 - env - name of the environment of the function/expression
 - ctx - the context of function that was compiled/deopted/invoked
 - speculative_ctx - (on the the multiple type feedbacks branch) the context, by which the type feedback was dispatched
-- speculative - the type feedback when compiling, or the new state and slot index of updated type feedback
+- speculative - the type feedback when compiling, the new state and slot index of updated type feedback, or the feedback index on deopt
 - call_ctx - the context the function was called with, but not the one actually used
 - reason - deopt reason / compilation reason and heuristic / invocation source
 - bitcode_len - lenght of compiled LLVM bitcode

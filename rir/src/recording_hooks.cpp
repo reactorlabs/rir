@@ -229,28 +229,25 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     RECORDER_FILTER_GUARD(deopt);
 
     // find the affected version
-    Context version;
-    bool found = false;
-    // it deopts from native so it cannot be the baseline RIR
-    for (size_t i = 1; i < dt->size(); i++) {
-        auto* fi = dt->get(i);
-        if (fi->body() == c) {
-            version = fi->context();
-            found = true;
-            break;
-        }
+    Context version = c->function()->context();
+
+    auto origin_function =
+        recorder_.initOrGetRecording(reason.origin.function());
+
+    ssize_t trigger_index = -1;
+
+    if (auto dt = DispatchTable::check(trigger)) {
+        trigger_index = recorder_.initOrGetRecording(dt);
+        trigger = R_NilValue;
+    } else if (Rf_isFunction(trigger)) {
+        trigger_index = recorder_.initOrGetRecording(trigger);
+        trigger = R_NilValue;
+    } else if (!SERIALIZE_SEXP){
+        trigger = R_NilValue;
     }
 
-    if (!found) {
-        version = c->function()->context();
-    }
-
-    auto reasonCodeIdx = recorder_.findIndex(dt->baseline()->body(),
-                                             reason.origin.function()->body());
-
-    recorder_.record<DeoptEvent>(dt, version, reason.reason,
-                                 reasonCodeIdx.first, reasonCodeIdx.second,
-                                 reason.origin.idx(), trigger);
+    recorder_.record<DeoptEvent>(dt, version, reason.reason, origin_function,
+                                 reason.origin.index(), trigger, trigger_index);
 }
 
 void recordInvocation(SEXP cls, Function* f, Context callContext,
@@ -640,6 +637,8 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             ss << "Unknown";
             break;
         }
+    } else if (type_str == "feedback_index") {
+        ss << rir::recording::serialization::feedback_index_from_sexp(obj);
     } else if (type_str == "address") {
         ss << "0x" << std::hex
            << rir::recording::serialization::uint64_t_from_sexp(obj);

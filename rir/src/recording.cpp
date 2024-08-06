@@ -207,30 +207,6 @@ SEXP Record::save() {
     return recordSexp;
 }
 
-std::pair<size_t, ssize_t> Record::findIndex(rir::Code* code,
-                                             rir::Code* needle) {
-    const auto toIdx = [this](Code* c) {
-        return initOrGetRecording(c->function()->dispatchTable());
-    };
-
-    if (code == needle) {
-        return {toIdx(code), -1};
-    }
-
-    // find the index of the reason source
-    // 1. try promises
-    for (size_t i = 0; i < code->extraPoolSize; i++) {
-        auto extraEntry = code->getExtraPoolEntry(i);
-        auto prom = Code::check(extraEntry);
-        if (prom != nullptr && prom == needle) {
-            return {toIdx(code), i};
-        }
-    }
-
-    // 2. search globally
-    return {toIdx(needle), -1};
-}
-
 // Plays along nicer with diff tools
 #define HIDE_UNKNOWN_CLOSURE_POINTER true
 
@@ -335,80 +311,30 @@ void CompilationEndEvent::fromSEXP(SEXP sexp) {
         {succesful, serialization::bool_from_sexp});
 }
 
-DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
-                       DeoptReason::Reason reason, size_t reasonCodeIdx,
-                       ssize_t reasonPromiseIdx, uint32_t reasonCodeOff,
-                       SEXP trigger)
-    : VersionEvent(dispatchTableIndex, version), reason_(reason),
-      reasonCodeIdx_(reasonCodeIdx), reasonPromiseIdx_(reasonPromiseIdx),
-      reasonCodeOff_(reasonCodeOff) {
-    setTrigger(trigger);
-}
-
-DeoptEvent::~DeoptEvent() {
-    if (trigger_ != R_NilValue) {
-        R_ReleaseObject(trigger_);
-    }
-}
-
-extern Record recorder_;
-
-// TODO try to maybe find some way to eliminate global
-void DeoptEvent::setTrigger(SEXP newTrigger) {
-    if (trigger_ != R_NilValue) {
-        R_ReleaseObject(trigger_);
-    }
-
-    if (TYPEOF(newTrigger) == CLOSXP || TYPEOF(newTrigger) == EXTERNALSXP) {
-        if (SERIALIZE_SEXP_CLOS) {
-            trigger_ = R_serialize(newTrigger, R_NilValue, R_NilValue,
-                                   R_NilValue, R_NilValue);
-            R_PreserveObject(trigger_);
-        } else {
-            trigger_ = R_NilValue;
-        }
-    } else {
-        R_PreserveObject(newTrigger);
-        trigger_ = newTrigger;
-    }
-}
-
-const std::vector<const char*> DeoptEvent::fieldNames = {"funIdx",
-                                                         "version",
-                                                         "reason",
-                                                         "reason_code_idx",
-                                                         "reason_promise_idx",
-                                                         "reason_code_off",
-                                                         "trigger",
-                                                         "triggerClosure"};
+const std::vector<const char*> DeoptEvent::fieldNames = {
+    "funIdx", "version", "reason",       "origin_function",
+    "index",  "trigger", "trigger_index"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
-        funRecIndex_, version, reason_, reasonCodeIdx_, reasonPromiseIdx_,
-        reasonCodeOff_, trigger_, triggerClosure_);
+        funRecIndex_, version, reason, origin_function, index,
+        trigger, trigger_index);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
-    SEXP trigger = nullptr;
-    ssize_t triggerClosure = -1;
-
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
-                                    DeoptReason::Reason, uint64_t, int64_t,
-                                    uint32_t, SEXP, int64_t>(
+                                    DeoptReason::Reason, uint64_t, FeedbackIndex,
+                                    SEXP, int64_t>(
         sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {reason_, serialization::deopt_reason_from_sexp},
-        {reasonCodeIdx_, serialization::uint64_t_from_sexp},
-        {reasonPromiseIdx_, serialization::int64_t_from_sexp},
-        {reasonCodeOff_, serialization::uint32_t_from_sexp},
+        {reason, serialization::deopt_reason_from_sexp},
+        {origin_function, serialization::uint64_t_from_sexp},
+        {index, serialization::feedback_index_from_sexp},
         {trigger, serialization::sexp_from_sexp},
-        {triggerClosure, serialization::int64_t_from_sexp});
+        {trigger_index, serialization::int64_t_from_sexp});
 
-    if (triggerClosure >= 0) {
-        triggerClosure_ = triggerClosure;
-    } else {
-        assert(trigger);
-        setTrigger(trigger);
+    if (trigger != R_NilValue) {
+        R_PreserveObject(trigger);
     }
 }
 

@@ -133,14 +133,9 @@ recordings.csv <- function(r, out = "") {
 
       event$ctx <- pp(e$version, "context")
 
-      if (e$reason_promise_idx >= 0) {
-        mbyPromise <- paste0("Promise ", e$reason_promise_idx)
-      } else {
-        mbyPromise <- "Baseline"
-      }
+      event$speculative <- pp(e$index, "feedback_index")
 
-      reason <- paste0("(", mbyPromise, ",offset=", e$reason_code_off, ")")
-      event$reason <- paste0(pp(e$reason, "deopt_reason"), reason)
+      event$reason <- pp(e$reason, "deopt_reason")
 
     } else if (cl == "event_invocation") {
       event$type <- "Invocation"

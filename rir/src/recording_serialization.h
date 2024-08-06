@@ -81,6 +81,10 @@ SEXP to_sexp(InvocationEvent::Source set);
 
 InvocationEvent::Source invocation_source_from_sexp(SEXP sexp);
 
+SEXP to_sexp(FeedbackIndex index);
+
+FeedbackIndex feedback_index_from_sexp(SEXP sexp);
+
 /************************ Generics **********************************/
 template <typename T>
 using from_sexp_t = T (*)(SEXP);
