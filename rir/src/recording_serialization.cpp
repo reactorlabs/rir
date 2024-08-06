@@ -71,26 +71,6 @@ SEXP sexp_from_sexp(SEXP sexp) { return sexp; }
 
 /************************ Objects **********************************/
 
-SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecording>& obj) {
-    std::unique_ptr<const char*[]> keys(new const char*[obj.size() + 1]);
-    auto ki = 0;
-    for (auto& kv : obj) {
-        keys[ki++] = kv.first.c_str();
-    }
-    keys[ki] = "";
-
-    auto vec = PROTECT(Rf_mkNamed(VECSXP, (const char**)keys.get()));
-    ki = 0;
-    for (auto& kv : obj) {
-        SET_VECTOR_ELT(vec, ki++, PROTECT(to_sexp(kv.second)));
-        UNPROTECT(1);
-    }
-
-    UNPROTECT(1);
-    return vec;
-}
-
 SEXP to_sexp(const rir::Context ctx) { return to_sexp(ctx.toI()); }
 
 Context context_from_sexp(SEXP sexp) {

@@ -45,9 +45,6 @@ SEXP sexp_from_sexp(SEXP sexp);
 
 /************************ Objects **********************************/
 
-SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecording>& obj);
-
 SEXP to_sexp(const rir::Context);
 
 Context context_from_sexp(SEXP sexp);
