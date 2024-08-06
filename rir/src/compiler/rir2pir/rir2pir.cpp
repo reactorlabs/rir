@@ -447,10 +447,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         auto& feedback = typeFeedback->callees(bc.immediate.i);
 
+        unsigned finishedRecordingCount = typeFeedback->recordingCount();
+        if (finishedRecordingCount > 0 && cls->isContinuation())
+            --finishedRecordingCount;
+	
         // If this call was never executed we might as well compile an
         // unconditional deopt.
         if (!inPromise() && !inlining() && feedback.taken == 0 &&
-            typeFeedback->recordingCount() > 0 &&
+            finishedRecordingCount > 0 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp = insert.registerFrameState(srcCode, pos, stack,
                                                 cls->context(), inPromise());
