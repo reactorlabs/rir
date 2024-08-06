@@ -437,9 +437,6 @@ class CustomEvent : public Event {
     std::string name;
 };
 
-// From names.c
-extern "C" FUNTAB R_FunTab[];
-
 inline size_t R_FunTab_Len_calc() {
     for (size_t i = 0;; i++) {
         if (R_FunTab[i].name == nullptr) {
