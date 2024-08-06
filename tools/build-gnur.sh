@@ -100,7 +100,7 @@ function build_r {
     fi
 
     echo "-> building $NAME"
-    make -j8
+    make -j `ncores`
 }
 
 build_r custom-r
