@@ -300,7 +300,6 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     REC_HOOK(recording::recordCompile(what, name, assumptions));
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    dryRun = true;
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::Log logger(debug);
