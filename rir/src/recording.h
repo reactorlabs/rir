@@ -65,7 +65,7 @@ struct SpeculativeContext {
         : type{SpeculativeContextType::Values}, value{.values = values} {}
 };
 
-// TODO unify serialization with event
+// TODO: unify serialization with event
 struct CompileReason {
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
@@ -494,7 +494,7 @@ class Record {
   public:
     std::vector<FunRecording> functions;
 
-    // TODO deque (?)
+    // TODO: deque (?)
     std::vector<std::unique_ptr<Event>> log;
 
   public:

@@ -441,7 +441,7 @@ std::string getClosureName(SEXP cls) {
     for (int i = 0; i < size; i++) {
         const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
 
-        // TODO check parity with R_findVarInFrame
+        // TODO: check parity with R_findVarInFrame
         auto symbol = PROTECT(Rf_install(symbol_char));
         R_varloc_t loc = R_findVarLocInFrame(env, symbol);
         UNPROTECT(1);
