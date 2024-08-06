@@ -71,7 +71,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     auto body = BODY(cls);
 
     auto getClosure = [cls]() {
-        if (SERIALIZE_SEXP_CLOS) {
+        if (SERIALIZE_SEXP) {
             auto closure = R_serialize(cls, R_NilValue, R_NilValue, R_NilValue,
                                        R_NilValue);
             R_PreserveObject(closure);
@@ -114,7 +114,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     // If the function recording does not contain it, add to it the closure
     // and environment name
     auto fixupRecording = [&getClosure, &getName, &envName](FunRecording& rec) {
-        if (SERIALIZE_SEXP_CLOS && Rf_isNull(rec.closure)) {
+        if (SERIALIZE_SEXP && Rf_isNull(rec.closure)) {
             rec.closure = getClosure();
         }
 

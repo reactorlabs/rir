@@ -38,7 +38,7 @@ constexpr size_t PROMISE_INDEX = (size_t)-2;
 constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
 
 // Controls if SEXP closures should be serialized
-const bool SERIALIZE_SEXP_CLOS = getenv("RIR_RECORD_SERIALIZE")
+const bool SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
                                      ? atoi(getenv("RIR_RECORD_SERIALIZE"))
                                      : false;
 
