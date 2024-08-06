@@ -152,20 +152,22 @@ DeoptReason::Reason deopt_reason_from_sexp(SEXP sexp) {
 }
 
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
-    const char* fields[] = {"primIdx", "name", "env", "closure", ""};
+    const char* fields[] = {"primIdx", "name", "env", "closure", "address", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
+
     size_t i = 0;
-    SET_VECTOR_ELT(vec, i++, PROTECT(to_sexp(obj.primIdx)));
-    SET_VECTOR_ELT(vec, i++, PROTECT(Rf_mkString(obj.name.c_str())));
-    SET_VECTOR_ELT(vec, i++, PROTECT(Rf_mkString(obj.env.c_str())));
+    SET_VECTOR_ELT(vec, i++, to_sexp(obj.primIdx));
+    SET_VECTOR_ELT(vec, i++, Rf_mkString(obj.name.c_str()));
+    SET_VECTOR_ELT(vec, i++, Rf_mkString(obj.env.c_str()));
     SET_VECTOR_ELT(vec, i++, obj.closure);
-    UNPROTECT(i);
+    SET_VECTOR_ELT(vec, i++, to_sexp(obj.address));
+
     return vec;
 }
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 5);
 
     rir::recording::FunRecording recorder;
     size_t i = 0;
@@ -173,6 +175,8 @@ rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, i++));
     recorder.env = serialization::string_from_sexp(VECTOR_ELT(sexp, i++));
     recorder.closure = VECTOR_ELT(sexp, i++);
+    recorder.address = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+
     assert(Rf_isNull(recorder.closure) || TYPEOF(recorder.closure) == RAWSXP);
 
     return recorder;

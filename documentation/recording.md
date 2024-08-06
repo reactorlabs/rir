@@ -133,8 +133,9 @@ only with the `.csv` suffix.
 The individual meanings of printed columns:
 - idx - the index of the event
 - type - type (name) of the event
-- fun - the function name it is connected with (or address for simple expressions)
+- fun - the function name it is connected with
 - env - name of the environment of the function/expression
+- address - address of the function/expression, on InvokeEvent the callee address
 - ctx - the context of function that was compiled/deopted/invoked
 - speculative_ctx - (on the the multiple type feedbacks branch) the context, by which the type feedback was dispatched
 - speculative - the type feedback when compiling, the new state and slot index of updated type feedback, or the feedback index on deopt
@@ -146,7 +147,6 @@ The individual meanings of printed columns:
 - changed - is the type feedback actually changed
 - is_promise - is the type feedback inside of a promise
 - is_native - is the invoked function a native one
-- callee_address - address of called function
 - missing_asmpt - in a nativeCallTrampoline, were there any missing assumptions and if they were recovered
 
 Custom events are present as with only the `type` filled with the associated message

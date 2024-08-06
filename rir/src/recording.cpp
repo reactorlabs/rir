@@ -56,13 +56,17 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
 }
 
 size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
+    auto address = reinterpret_cast<uintptr_t>(cls);
+
     if (TYPEOF(cls) == EXTERNALSXP) {
         auto dt = DispatchTable::unpack(cls);
         size_t idx = initOrGetRecording(dt);
+
         auto& entry = get_recording(idx);
         if (entry.name.empty()) {
             entry.name = name;
         }
+        entry.address = address;
 
         return idx;
     }
@@ -138,7 +142,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
         auto idx = functions.size();
         bcode_to_body_index.emplace(body, idx);
 
-        functions.emplace_back(getName(), envName, getClosure());
+        functions.emplace_back(getName(), envName, getClosure(), address);
 
         return idx;
     } else {
@@ -153,7 +157,7 @@ size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
         auto idx = functions.size();
         dt_to_recording_index_.emplace(dt, idx);
 
-        functions.emplace_back(getName(), envName, getClosure());
+        functions.emplace_back(getName(), envName, getClosure(), address);
         return idx;
     }
 }
@@ -170,7 +174,7 @@ size_t Record::initOrGetRecording(const DispatchTable* dt) {
     auto insertion_index = functions.size();
     dt_to_recording_index_.emplace(dt, insertion_index);
 
-    functions.emplace_back("");
+    functions.emplace_back("", reinterpret_cast<uintptr_t>(dt));
     return insertion_index;
 }
 
@@ -190,7 +194,7 @@ size_t Record::initOrGetRecording(Function* fun) {
     std::stringstream ss;
     ss << "<" << std::hex << fun << ">";
 
-    functions.emplace_back(ss.str());
+    functions.emplace_back(ss.str(), reinterpret_cast<uintptr_t>(fun));
     return insertion_index;
 }
 

@@ -464,6 +464,8 @@ struct FunRecording {
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue */
     SEXP closure = R_NilValue;
 
+    uintptr_t address = 0;
+
     // Just prints the name if the closure (or pointer if it has no name)
     friend std::ostream& operator<<(std::ostream& out,
                                     const FunRecording& that);
@@ -476,10 +478,10 @@ struct FunRecording {
     }
 
     explicit FunRecording(const std::string& name, const std::string& env,
-                          SEXP closure)
-        : name(name), env(env), closure(closure) {}
+                          SEXP closure, uintptr_t address)
+        : name(name), env(env), closure(closure), address(address) {}
 
-    explicit FunRecording(const std::string& name) : name(name) {}
+    explicit FunRecording(const std::string& name, uintptr_t address) : name(name), address(address) {}
 };
 
 class Record {

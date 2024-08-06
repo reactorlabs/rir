@@ -60,11 +60,10 @@ recordings.csv <- function(r, out = "") {
     recordings.printEventPart(obj, type, r$functions)
   }
 
-  columns <- c("idx", "type", "fun", "env", "ctx",
+  columns <- c("idx", "type", "fun", "env", "address", "ctx",
                "speculative_ctx", "speculative", "call_ctx",
                "reason", "bitcode_len", "pir_len", "deopt_count",
-               "changed", "is_promise", "is_native", "callee_address",
-               "missing_asmpt")
+               "changed", "is_promise", "is_native", "missing_asmpt")
 
 
   cores <- detectCores()
@@ -82,6 +81,7 @@ recordings.csv <- function(r, out = "") {
       f <- r$functions[[as.integer(e$funIdx) + 1]]
       event$fun <- f$name
       event$env <- f$env
+      event$address <- pp(f$address, "address")
     }
 
     cl <- class(e)
@@ -146,7 +146,7 @@ recordings.csv <- function(r, out = "") {
       event$is_native <- toString(e$isNative)
       event$reason <- pp(e$source, "invocation_source")
 
-      event$callee_address <- pp(e$address, "address")
+      event$address <- pp(e$address, "address")
 
       event$missing_asmpt <- if (!e$missing_asmpt_present) {
         "NotPresent"
