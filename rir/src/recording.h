@@ -39,8 +39,8 @@ constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
 
 // Controls if SEXP closures should be serialized
 const bool SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
-                                     ? atoi(getenv("RIR_RECORD_SERIALIZE"))
-                                     : false;
+                                ? atoi(getenv("RIR_RECORD_SERIALIZE"))
+                                : false;
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
@@ -65,7 +65,6 @@ struct SpeculativeContext {
         : type{SpeculativeContextType::Values}, value{.values = values} {}
 };
 
-// TODO: unify serialization with event
 struct CompileReason {
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
@@ -74,13 +73,13 @@ struct CompileReason {
     virtual ~CompileReason() = default;
 };
 
-template <typename Derived, size_t FieldsCount>
-struct CompileReasonImpl : CompileReason {
-    virtual ~CompileReasonImpl() = default;
+template <typename Derived>
+struct EmptyCompileReason : CompileReason {
+    virtual ~EmptyCompileReason() = default;
 
     virtual SEXP toSEXP() const override {
-        auto vec = PROTECT(Rf_allocVector(VECSXP, FieldsCount));
-        setClassName(vec, Derived::NAME);
+        auto vec = PROTECT(Rf_allocVector(VECSXP, 0));
+        setClassName(vec, Derived::className);
 
         UNPROTECT(1);
         return vec;
@@ -88,21 +87,22 @@ struct CompileReasonImpl : CompileReason {
 
     virtual void fromSEXP(SEXP sexp) override {
         assert(Rf_isVector(sexp));
-        assert(Rf_length(sexp) == FieldsCount);
+        assert(Rf_length(sexp) == 0);
     }
 
     virtual void print(std::ostream& out) const override {
-        out << Derived::NAME;
+        out << Derived::className;
     }
 };
 
-struct MarkOptReason : public CompileReasonImpl<MarkOptReason, 0> {
-    static constexpr const char* NAME = "MarkOpt";
+struct MarkOptReason : public EmptyCompileReason<MarkOptReason> {
+    static constexpr const char* className = "MarkOpt";
     virtual ~MarkOptReason() = default;
 };
 
-struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
-    static constexpr const char* NAME = "PirWarmupReason";
+struct PirWarmupReason : public CompileReason {
+    static constexpr const char* className = "PirWarmupReason";
+    static const std::vector<const char*> fieldNames;
     virtual ~PirWarmupReason() = default;
 
     explicit PirWarmupReason(size_t invocationCount)
@@ -116,37 +116,35 @@ struct PirWarmupReason : public CompileReasonImpl<PirWarmupReason, 1> {
     virtual void fromSEXP(SEXP sexp) override;
 
     virtual void print(std::ostream& out) const override {
-        this->CompileReasonImpl::print(out);
-
-        out << ", invocationCount=" << invocationCount;
+        out << "PirWarmupReason, invocationCount=" << invocationCount;
     }
 };
 
-struct NotOptimizedReason : public CompileReasonImpl<NotOptimizedReason, 0> {
+struct NotOptimizedReason : public EmptyCompileReason<NotOptimizedReason> {
     virtual ~NotOptimizedReason() = default;
-    static constexpr const char* NAME = "NotOptimized";
+    static constexpr const char* className = "NotOptimized";
 };
 
-struct IsImprovingReason : public CompileReasonImpl<IsImprovingReason, 0> {
+struct IsImprovingReason : public EmptyCompileReason<IsImprovingReason> {
     virtual ~IsImprovingReason() = default;
-    static constexpr const char* NAME = "IsImproving";
+    static constexpr const char* className = "IsImproving";
 };
 
-struct ReoptimizeFlagReason
-    : public CompileReasonImpl<ReoptimizeFlagReason, 0> {
+struct ReoptimizeFlagReason : public EmptyCompileReason<ReoptimizeFlagReason> {
     virtual ~ReoptimizeFlagReason() = default;
-    static constexpr const char* NAME = "ReoptimizeFlag";
+    static constexpr const char* className = "ReoptimizeFlag";
 };
 
 struct OSRCallerCalleeReason
-    : public CompileReasonImpl<OSRCallerCalleeReason, 0> {
+    : public EmptyCompileReason<OSRCallerCalleeReason> {
     virtual ~OSRCallerCalleeReason() = default;
-    static constexpr const char* NAME = "OSRCallerCallee";
+    static constexpr const char* className = "OSRCallerCallee";
 };
 
-struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1> {
+struct OSRLoopReason : public CompileReason {
     virtual ~OSRLoopReason() = default;
-    static constexpr const char* NAME = "OSRLoop";
+    static constexpr const char* className = "OSRLoop";
+    static const std::vector<const char*> fieldNames;
 
     explicit OSRLoopReason(size_t loopCount) : loopCount(loopCount) {}
 
@@ -158,9 +156,7 @@ struct OSRLoopReason : public CompileReasonImpl<OSRLoopReason, 1> {
     virtual void fromSEXP(SEXP sexp) override;
 
     virtual void print(std::ostream& out) const override {
-        this->CompileReasonImpl::print(out);
-
-        out << ", loopCount=" << loopCount;
+        out << "OSRLoop, loopCount=" << loopCount;
     }
 };
 
@@ -453,6 +449,9 @@ const size_t R_FunTab_Len = R_FunTab_Len_calc();
  * session
  */
 struct FunRecording {
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "";
+
     // For CLOSXP:      -1
     // For primitives:  index into "names.c"'s array of primitive functions
     ssize_t primIdx = -1;
@@ -482,7 +481,8 @@ struct FunRecording {
                           SEXP closure, uintptr_t address)
         : name(name), env(env), closure(closure), address(address) {}
 
-    explicit FunRecording(const std::string& name, uintptr_t address) : name(name), address(address) {}
+    explicit FunRecording(const std::string& name, uintptr_t address)
+        : name(name), address(address) {}
 };
 
 class Record {
