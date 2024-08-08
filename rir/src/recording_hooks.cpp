@@ -414,7 +414,24 @@ void recordFinalizer(SEXP) {
 }
 
 void recordExecution(const char* filePath, const char* filterArg) {
-    startRecordings();
+    if (filePath != nullptr) {
+        startRecordings();
+
+        finalizerPath = filePath;
+
+        // Call `loadNamespace("Base")`
+        SEXP baseStr = PROTECT(Rf_mkString("base"));
+        SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+        SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+
+        if (namespaceRes == R_NilValue) {
+            std::cerr << "Failed to load namespace base\n";
+        } else {
+            R_RegisterCFinalizerEx(namespaceRes, &recordFinalizer, TRUE);
+        }
+
+        UNPROTECT(3);
+    }
 }
 } // namespace recording
 } // namespace rir
