@@ -405,7 +405,6 @@ void recordReasonsClear() {
 }
 
 void recordFinalizer(SEXP) {
-    std::cerr << "Saving recording to \"" << finalizerPath << "\"\n";
     stopRecordings();
 
     SEXP filepath = PROTECT(Rf_mkString(finalizerPath));
