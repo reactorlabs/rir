@@ -145,7 +145,7 @@ struct ObservedTest {
             seen = Both;
         }
 
-        REC_HOOK(recording::recordSCChanged((old & 3) != (seen & 3)));
+        REC_HOOK(recording::recordSCChanged(old != seen));
     }
 };
 static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
