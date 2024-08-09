@@ -39,9 +39,8 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
             logger.warn("Continuation compilation failed");
         });
 
+    REC_HOOK(recording::recordCompileFinish(succesfulComp, module));
     delete module;
-
-    REC_HOOK(recording::recordCompileFinish(succesfulComp));
 
     return fun;
 }

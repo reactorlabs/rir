@@ -27,7 +27,6 @@ namespace recording {
 
 SEXP PirWarmupReason::toSEXP() const {
     auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-
     SET_VECTOR_ELT(vec, 0, serialization::to_sexp(invocationCount));
 
     UNPROTECT(1);
@@ -56,202 +55,150 @@ void OSRLoopReason::fromSEXP(SEXP sexp) {
     this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
 }
 
-bool Record::contains(const DispatchTable* dt) {
-    return dt_to_recording_index_.count(dt);
-}
+size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
+    auto address = reinterpret_cast<uintptr_t>(cls);
 
-void Record::recordSpeculativeContext(DispatchTable* dt,
-                                      std::vector<SpeculativeContext>& ctx) {
-    auto fun = dt->baseline();
-    auto code = fun->body();
-    recordSpeculativeContext(code, ctx);
-}
+    if (TYPEOF(cls) == EXTERNALSXP) {
+        auto dt = DispatchTable::unpack(cls);
+        size_t idx = initOrGetRecording(dt);
 
-void Record::recordSpeculativeContext(const Code* code,
-                                      std::vector<SpeculativeContext>& ctx) {
-    auto feedback = code->function()->typeFeedback();
+        auto& entry = get_recording(idx);
+        if (entry.name.empty()) {
+            entry.name = name;
+        }
+        entry.address = address;
 
-    Opcode* end = code->endCode();
-    Opcode* pc = code->code();
-    Opcode* prev = NULL;
-    Opcode* pprev = NULL;
-
-    while (pc < end) {
-        auto bc = BC::decode(pc, code);
-        switch (bc.bc) {
-        case Opcode::mk_promise_:
-        case Opcode::mk_eager_promise_: {
-            auto promise = code->getPromise(bc.immediate.fun);
-            recordSpeculativeContext(promise, ctx);
-            break;
-        }
-        case Opcode::close_: {
-            // prev is the push_ of srcref
-            // pprev is the push_ of body
-            auto body = BC::decodeShallow(pprev).immediateConst();
-            auto dt = DispatchTable::unpack(body);
-            recordSpeculativeContext(dt, ctx);
-            break;
-        }
-        case Opcode::record_call_: {
-            auto observed = feedback->callees(bc.immediate.i);
-            SpeculativeContext::ObservedCalleesArr callees;
-
-            for (unsigned int i = 0; i < ObservedCallees::MaxTargets; i++) {
-                size_t idx;
-                if (i < observed.numTargets) {
-                    auto target = observed.getTarget(code->function(), i);
-                    if (Rf_isFunction(target)) {
-                        auto rec = initOrGetRecording(target);
-                        idx = rec.first;
-                    } else {
-                        idx = NO_INDEX;
-                    }
-                } else {
-                    idx = NO_INDEX;
-                }
-                callees[i] = idx;
-            }
-
-            ctx.emplace_back(std::move(callees));
-            break;
-        }
-        case Opcode::record_test_: {
-            ctx.emplace_back(feedback->test(bc.immediate.i));
-            break;
-        }
-        case Opcode::record_type_: {
-            ctx.emplace_back(feedback->types(bc.immediate.i));
-            break;
-        }
-        default: {
-        }
-        }
-        pprev = prev;
-        prev = pc;
-        pc = bc.next(pc);
+        return idx;
     }
-}
 
-std::pair<size_t, FunRecording&>
-Record::initOrGetRecording(const SEXP cls, const std::string& name) {
     assert(Rf_isFunction(cls));
-    auto& body = *BODY(cls);
+    auto body = BODY(cls);
+
+    auto getClosure = [cls]() {
+        if (SERIALIZE_SEXP) {
+            auto closure = R_serialize(cls, R_NilValue, R_NilValue, R_NilValue,
+                                       R_NilValue);
+            R_PreserveObject(closure);
+            return closure;
+        } else {
+            return R_NilValue;
+        }
+    };
 
     // Primitives are stored as a special case
     if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP) {
         auto primIdx = cls->u.primsxp.offset;
 
-        // Do we already have it stored?
         auto primEntry = primitive_to_body_index.find(primIdx);
         if (primEntry != primitive_to_body_index.end()) {
-            return {primEntry->second, functions[primEntry->second]};
+            // Closure is already there, we do not add the env name
+            return primEntry->second;
         }
 
         size_t idx = functions.size();
-        functions.emplace_back(primIdx);
-        auto& body = functions.back();
-        body.closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        R_PreserveObject(body.closure);
-        UNPROTECT(1);
-        return {idx, body};
+        functions.emplace_back(primIdx, getClosure());
+
+        return idx;
     }
 
     assert(TYPEOF(cls) == CLOSXP);
-    auto dt = DispatchTable::check(&body);
-    bool inserted;
-    size_t index;
-    if (dt) {
-        // Leaking for the moment
-        R_PreserveObject(dt->container());
-        auto r = dt_to_recording_index_.emplace(dt, functions.size());
-        inserted = r.second;
-        index = r.first->second;
-    } else {
-        R_PreserveObject(&body);
-        auto r = bcode_to_body_index.emplace(&body, functions.size());
-        inserted = r.second;
-        index = r.first->second;
-    }
+    auto dt = DispatchTable::check(body);
+    auto envName = getEnvironmentName(CLOENV(cls));
 
-    auto r = dt_to_recording_index_.emplace(dt, functions.size());
-    FunRecording* v;
-
-    if (inserted) {
-        // we are seeing it for the first time
-        functions.emplace_back();
-        v = &functions.back();
-        v->env = getEnvironmentName(CLOENV(cls));
-        v->closure = PROTECT(
-            R_serialize(cls, R_NilValue, R_NilValue, R_NilValue, R_NilValue));
-        R_PreserveObject(v->closure);
-        UNPROTECT(1);
-    } else {
-        v = &functions[index];
-        // If closure is undefined, that means this FunRecorder was created from
-        // a DispatchTable, so we init it
-        if (Rf_isNull(v->closure)) {
-            v->env = getEnvironmentName(CLOENV(cls));
-            v->closure = PROTECT(R_serialize(cls, R_NilValue, R_NilValue,
-                                             R_NilValue, R_NilValue));
-            R_PreserveObject(v->closure);
-            UNPROTECT(1);
+    // Getting the closure name can be expensive
+    // -> thus it is computed lazily only when needed
+    auto getName = [&name, cls]() {
+        if (name.empty()) {
+            return getClosureName(cls);
         }
-    }
 
-    if (v->name.empty() && !name.empty()) {
-        v->name = name;
-    }
+        return name;
+    };
 
-    if (r.second && false) {
-        assert(dt->size() == 1);
-        auto* base = dt->baseline();
-        log.emplace_back(std::make_unique<DtInitEvent>(
-            r.first->second, base->invocationCount(), base->deoptCount()));
-    }
+    // If the function recording does not contain it, add to it the closure
+    // and environment name
+    auto fixupRecording = [&getClosure, &getName, &envName](FunRecording& rec) {
+        if (SERIALIZE_SEXP && Rf_isNull(rec.closure)) {
+            rec.closure = getClosure();
+        }
 
-    return {r.first->second, *v};
+        if (rec.name.empty()) {
+            rec.name = getName();
+        }
+
+        if (rec.env.empty()) {
+            rec.env = envName;
+        }
+    };
+
+    if (dt == nullptr) {
+        auto bcodeEntry = bcode_to_body_index.find(body);
+        if (bcodeEntry != bcode_to_body_index.end()) {
+            fixupRecording(get_recording(bcodeEntry->second));
+            return bcodeEntry->second;
+        }
+
+        R_PreserveObject(body);
+        auto idx = functions.size();
+        bcode_to_body_index.emplace(body, idx);
+
+        functions.emplace_back(getName(), envName, getClosure(), address);
+
+        return idx;
+    } else {
+        auto dtEntry = dt_to_recording_index_.find(dt);
+        if (dtEntry != dt_to_recording_index_.end()) {
+            fixupRecording(get_recording(dtEntry->second));
+            return dtEntry->second;
+        }
+
+        // Container of dispatch table
+        R_PreserveObject(body);
+        auto idx = functions.size();
+        dt_to_recording_index_.emplace(dt, idx);
+
+        functions.emplace_back(getName(), envName, getClosure(), address);
+        return idx;
+    }
 }
 
-std::pair<size_t, FunRecording&>
-Record::initOrGetRecording(const DispatchTable* dt, const std::string& name) {
-    // First, we check if we can find the dt in the appropriate mapping
+size_t Record::initOrGetRecording(const DispatchTable* dt) {
+    assert(dt != nullptr);
+
     auto dt_index = dt_to_recording_index_.find(dt);
     if (dt_index != dt_to_recording_index_.end()) {
-        return {dt_index->second, functions[dt_index->second]};
-    } else {
-        auto insertion_index = functions.size();
-        functions.emplace_back();
-        functions.back().name = name;
-        dt_to_recording_index_.emplace(dt, insertion_index);
-        return {insertion_index, functions[insertion_index]};
+        return dt_index->second;
     }
+
+    R_PreserveObject(dt->container());
+    auto insertion_index = functions.size();
+    dt_to_recording_index_.emplace(dt, insertion_index);
+
+    functions.emplace_back("", reinterpret_cast<uintptr_t>(dt));
+    return insertion_index;
 }
 
-Record::~Record() {
-    for (auto& v : functions) {
-        R_ReleaseObject(v.closure);
+size_t Record::initOrGetRecording(Function* fun) {
+    assert(fun != nullptr);
+
+    auto fun_entry = expr_to_body_index.find(fun);
+    if (fun_entry != expr_to_body_index.end()) {
+        return fun_entry->second;
     }
+
+    R_PreserveObject(fun->container());
+    auto insertion_index = functions.size();
+    expr_to_body_index.emplace(fun, insertion_index);
+
+    // Make the address the name
+    std::stringstream ss;
+    ss << "<" << std::hex << fun << ">";
+
+    functions.emplace_back(ss.str(), reinterpret_cast<uintptr_t>(fun));
+    return insertion_index;
 }
 
 SEXP Record::save() {
-    // Check if we have dispatch tables without an associated SEXP and remove
-    // related events. Might be avoidable eventually.
-    size_t recIdx = 0;
-    for (auto& recording : functions) {
-        if (Rf_isNull(recording.closure)) {
-            auto refersToRecording =
-                [recIdx](std::unique_ptr<rir::recording::Event>& event) {
-                    return event->containsReference(recIdx);
-                };
-
-            log.erase(std::remove_if(log.begin(), log.end(), refersToRecording),
-                      log.end());
-        }
-        recIdx++;
-    }
-
     const char* fields[] = {"functions", "events", ""};
     auto recordSexp = PROTECT(Rf_mkNamed(VECSXP, fields));
     auto bodiesSexp = PROTECT(serialization::to_sexp(functions));
@@ -262,26 +209,6 @@ SEXP Record::save() {
 
     UNPROTECT(3);
     return recordSexp;
-}
-
-std::pair<ssize_t, ssize_t> Record::findIndex(rir::Code* code,
-                                              rir::Code* needle) {
-    if (code == needle) {
-        return {indexOfBaseline(code), -1};
-    }
-
-    // find the index of the reason source
-    // 1. try promises
-    for (size_t i = 0; i < code->extraPoolSize; i++) {
-        auto extraEntry = code->getExtraPoolEntry(i);
-        auto prom = (Code*)STDVEC_DATAPTR(extraEntry);
-        if (prom->info.magic == CODE_MAGIC && prom == needle) {
-            return {indexOfBaseline(code), i};
-        }
-    }
-
-    // 2. search globally
-    return {indexOfBaseline(needle), -1};
 }
 
 // Plays along nicer with diff tools
@@ -307,358 +234,175 @@ std::ostream& operator<<(std::ostream& out, const FunRecording& that) {
     return out;
 }
 
-const char*
-ClosureEvent::targetName(const std::vector<FunRecording>& mapping) const {
-    return mapping[closureIndex].name.c_str();
-}
-
-const char*
-DtEvent::targetName(const std::vector<FunRecording>& mapping) const {
-    return mapping[dispatchTableIndex].name.c_str();
-}
-
-void SpeculativeContext::print(const std::vector<FunRecording>& mapping,
-                               std::ostream& out) const {
-    switch (type) {
-    case SpeculativeContextType::Callees: {
-        out << "Callees[";
-        bool first = true;
-        for (auto c : value.callees) {
-            if (c == NO_INDEX)
-                break;
-            if (first)
-                first = false;
-            else
-                out << ',';
-            out << mapping[c];
-        }
-        out << "]";
-        return;
-    }
-    case SpeculativeContextType::Test:
-        out << "Test{";
-        switch (value.test.seen) {
-        case ObservedTest::None:
-            out << "None";
-            break;
-        case ObservedTest::OnlyTrue:
-            out << "OnlyTrue";
-            break;
-        case ObservedTest::OnlyFalse:
-            out << "OnlyFalse";
-            break;
-        case ObservedTest::Both:
-            out << "Both";
-            break;
-        }
-        out << "}";
-        return;
-    case SpeculativeContextType::Values:
-        out << "Values{";
-        value.values.print(out);
-        out << "}";
-        return;
-    }
-}
-
 const std::vector<const char*> SpeculativeContextEvent::fieldNames = {
-    "dispatchTable", "codeIndex", "offset", "sc"};
+    "funIdx", "is_promise", "index", "sc", "changed", "deopt"};
 
 SEXP SpeculativeContextEvent::toSEXP() const {
     return serialization::fields_to_sexp<SpeculativeContextEvent>(
-        dispatchTableIndex, codeIndex, offset, sc);
+        funRecIndex_, is_promise, index, sc, changed, deopt);
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
-    assert(codeIndex >= -1);
-
     return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
-                                           int64_t, uint64_t,
-                                           SpeculativeContext>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
-        {codeIndex, serialization::int64_t_from_sexp},
-        {offset, serialization::uint64_t_from_sexp},
-        {sc, serialization::speculative_context_from_sexp});
+                                           bool, uint64_t, SpeculativeContext,
+                                           bool, bool>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {is_promise, serialization::bool_from_sexp},
+        {index, serialization::uint64_t_from_sexp},
+        {sc, serialization::speculative_context_from_sexp},
+        {changed, serialization::bool_from_sexp},
+        {deopt, serialization::bool_from_sexp});
 }
 
-bool SpeculativeContextEvent::containsReference(size_t recordingIdx) const {
-    if (sc.type == SpeculativeContextType::Callees) {
-        const auto& callees = sc.value.callees;
-        const size_t* found =
-            std::find(callees.begin(), callees.end(), recordingIdx);
+const std::vector<const char*> CompilationStartEvent::fieldNames = {
+    "funIdx", "name", "compile_reason_heuristic", "compile_reason_condition",
+    "compile_reason_osr"};
 
-        if (found != callees.end())
-            return true;
-    }
-
-    return DtEvent::containsReference(recordingIdx);
+SEXP CompilationStartEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CompilationStartEvent>(
+        funRecIndex_, compileName, compile_reasons.heuristic,
+        compile_reasons.condition, compile_reasons.osr);
 }
 
-void SpeculativeContextEvent::print(const std::vector<FunRecording>& mapping,
-                                    std::ostream& out) const {
-    out << "SpeculativeContextEvent{\n        code=";
-
-    if (codeIndex == -1) {
-        out << "<body>";
-    } else if (codeIndex >= 0) {
-        out << "<promise #" << codeIndex << ">";
-    }
-
-    out << "\n        offset=" << offset << "\n        sc=";
-    sc.print(mapping, out);
-    out << "\n    }";
-}
-
-bool CompilationEvent::containsReference(size_t recordingIdx) const {
-    for (auto& sc : speculative_contexts) {
-        if (sc.type == SpeculativeContextType::Callees) {
-            const auto& callees = sc.value.callees;
-            const size_t* found =
-                std::find(callees.begin(), callees.end(), recordingIdx);
-
-            if (found != callees.end())
-                return true;
-        }
-    }
-
-    return ClosureEvent::containsReference(recordingIdx);
-}
-
-void CompilationEvent::print(const std::vector<FunRecording>& mapping,
-                             std::ostream& out) const {
-    out << "CompilationEvent{\n        dispatch_context="
-        << Context(this->dispatch_context) << ",\n        name=" << compileName
-        << ",\n        speculative_contexts=[\n";
-    for (auto& spec : this->speculative_contexts) {
-        out << "            ";
-        spec.print(mapping, out);
-        out << "\n";
-    }
-    out << "        ],\n        opt_reasons=[\n";
-    if (this->compile_reasons.heuristic) {
-        out << "            heuristic=";
-        this->compile_reasons.heuristic->print(out);
-        out << "\n";
-    }
-
-    if (this->compile_reasons.condition) {
-        out << "            condition=";
-        this->compile_reasons.condition->print(out);
-        out << "\n";
-    }
-
-    if (this->compile_reasons.osr) {
-        out << "            osr_reason=";
-        this->compile_reasons.osr->print(out);
-        out << "\n";
-    }
-
-    out << "        ]\n    }";
+void CompilationStartEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CompilationStartEvent, uint64_t,
+                                    std::string, std::unique_ptr<CompileReason>,
+                                    std::unique_ptr<CompileReason>,
+                                    std::unique_ptr<CompileReason>>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {compileName, serialization::string_from_sexp},
+        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
+        {compile_reasons.condition, serialization::compile_reason_from_sexp},
+        {compile_reasons.osr, serialization::compile_reason_from_sexp});
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
-    "closure",
-    "dispatch_context",
-    "name",
-    "speculative_contexts",
-    "compile_reason_heuristic",
-    "compile_reason_condition",
-    "compile_reason_osr",
-    "time",
-    "subevents",
-    "bitcode",
-    "succesful"};
+    "funIdx",  "version",  "speculative_contexts",
+    "bitcode", "pir_code", "deopt_count"};
 
 SEXP CompilationEvent::toSEXP() const {
     return serialization::fields_to_sexp<CompilationEvent>(
-        closureIndex, dispatch_context, compileName, speculative_contexts,
-        compile_reasons.heuristic, compile_reasons.condition,
-        compile_reasons.osr, time_length, subevents, bitcode, succesful);
+        funRecIndex_, version, speculative_contexts, bitcode, pir_code,
+        deopt_count);
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<
-        CompilationEvent, uint64_t, uint64_t, std::string,
-        std::vector<SpeculativeContext>, std::unique_ptr<CompileReason>,
-        std::unique_ptr<CompileReason>, std::unique_ptr<CompileReason>,
-        Duration, std::vector<size_t>, std::string, bool>(
-        sexp, {closureIndex, serialization::uint64_t_from_sexp},
-        {dispatch_context, serialization::uint64_t_from_sexp},
-        {compileName, serialization::string_from_sexp},
+    serialization::fields_from_sexp<CompilationEvent, uint64_t, Context,
+                                    std::vector<SpeculativeContext>,
+                                    std::string, std::string, uint64_t>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp},
         {speculative_contexts,
          serialization::vector_from_sexp<
              SpeculativeContext, serialization::speculative_context_from_sexp>},
-        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
-        {compile_reasons.condition, serialization::compile_reason_from_sexp},
-        {compile_reasons.osr, serialization::compile_reason_from_sexp},
-        {time_length, serialization::time_from_sexp},
-        {subevents,
-         serialization::vector_from_sexp<size_t,
-                                         serialization::uint64_t_from_sexp>},
         {bitcode, serialization::string_from_sexp},
+        {pir_code, serialization::string_from_sexp},
+        {deopt_count, serialization::uint64_t_from_sexp});
+}
+
+const std::vector<const char*> CompilationEndEvent::fieldNames = {
+    "funIdx", "time_length", "succesful"};
+
+SEXP CompilationEndEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CompilationEndEvent>(
+        funRecIndex_, time_length, succesful);
+}
+
+void CompilationEndEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CompilationEndEvent, uint64_t, Duration,
+                                    bool>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {time_length, serialization::time_from_sexp},
         {succesful, serialization::bool_from_sexp});
 }
 
-DeoptEvent::DeoptEvent(size_t dispatchTableIndex, Context version,
-                       DeoptReason::Reason reason,
-                       std::pair<ssize_t, ssize_t> reasonCodeIdx,
-                       uint32_t reasonCodeOff, SEXP trigger)
-    : VersionEvent(dispatchTableIndex, version), reason_(reason),
-      reasonCodeIdx_(std::move(reasonCodeIdx)), reasonCodeOff_(reasonCodeOff) {
-    setTrigger(trigger);
-}
-
-DeoptEvent::~DeoptEvent() {
-    if (trigger_) {
-        setTrigger(nullptr);
-    }
-}
-
-extern Record recorder_;
-
-// TODO try to maybe find some way to eliminate global
-void DeoptEvent::setTrigger(SEXP newTrigger) {
-    if (trigger_) {
-        R_ReleaseObject(trigger_);
-    }
-
-    trigger_ = nullptr;
-    triggerClosure_ = -1;
-
-    if (newTrigger == nullptr) {
-        return;
-    }
-
-    if (TYPEOF(newTrigger) == CLOSXP) {
-        auto rec = recorder_.initOrGetRecording(newTrigger);
-        triggerClosure_ = (ssize_t)rec.first;
-        return;
-    }
-
-    if (newTrigger) {
-        R_PreserveObject(newTrigger);
-    }
-
-    trigger_ = newTrigger;
-}
-
-Code* retrieveCodeFromIndex(const std::vector<SEXP>& closures,
-                            const std::pair<ssize_t, ssize_t> index) {
-    assert(index.first != -1);
-    SEXP closure = closures[index.first];
-    auto* dt = DispatchTable::unpack(BODY(closure));
-    Code* code = dt->baseline()->body();
-
-    if (index.second == -1) {
-        return code;
-    } else {
-        return code->getPromise(index.second);
-    }
-}
-
-bool DeoptEvent::containsReference(size_t recordingIdx) const {
-    return (size_t)reasonCodeIdx_.first == recordingIdx ||
-           (size_t)triggerClosure_ == recordingIdx ||
-           VersionEvent::containsReference(recordingIdx);
-}
-
-void DeoptEvent::print(const std::vector<FunRecording>& mapping,
-                       std::ostream& out) const {
-    const auto& reasonRec = mapping[(size_t)this->reasonCodeIdx_.first];
-
-    out << "DeoptEvent{ [version=" << this->version;
-    out << "]\n        reason=" << this->reason_;
-    out << ",\n        reasonCodeIdx=(" << reasonRec << ","
-        << this->reasonCodeIdx_.second << ")";
-    out << ",\n        reasonCodeOff=" << this->reasonCodeOff_ << "\n    }";
-}
-
 const std::vector<const char*> DeoptEvent::fieldNames = {
-    "dispatchTable",   "version", "reason",        "reason_code_off",
-    "reason_code_idx", "trigger", "triggerClosure"};
+    "funIdx", "version", "reason",       "origin_function",
+    "index",  "trigger", "trigger_index"};
 
 SEXP DeoptEvent::toSEXP() const {
     return serialization::fields_to_sexp<DeoptEvent>(
-        dispatchTableIndex, version, reason_, reasonCodeOff_, reasonCodeIdx_,
-        trigger_, triggerClosure_);
+        funRecIndex_, version, reason, origin_function, index, trigger,
+        trigger_index);
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
-    SEXP trigger = nullptr;
-    ssize_t triggerClosure = -1;
-
     serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
-                                    DeoptReason::Reason, uint32_t,
-                                    std::pair<int64_t, int64_t>, SEXP, int64_t>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+                                    DeoptReason::Reason, uint64_t,
+                                    FeedbackIndex, SEXP, int64_t>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {reason_, serialization::deopt_reason_from_sexp},
-        {reasonCodeOff_, serialization::uint32_t_from_sexp},
-        {reasonCodeIdx_,
-         serialization::pair_from_sexp<int64_t, int64_t,
-                                       serialization::int64_t_from_sexp,
-                                       serialization::int64_t_from_sexp>},
+        {reason, serialization::deopt_reason_from_sexp},
+        {origin_function, serialization::uint64_t_from_sexp},
+        {index, serialization::feedback_index_from_sexp},
         {trigger, serialization::sexp_from_sexp},
-        {triggerClosure, serialization::int64_t_from_sexp});
+        {trigger_index, serialization::int64_t_from_sexp});
 
-    if (triggerClosure >= 0) {
-        triggerClosure_ = triggerClosure;
-    } else {
-        assert(trigger);
-        setTrigger(trigger);
+    if (trigger != R_NilValue) {
+        R_PreserveObject(trigger);
     }
-}
-
-void DtInitEvent::print(const std::vector<FunRecording>& mapping,
-                        std::ostream& out) const {
-    out << "DtInitEvent{\n        invocations=" << this->invocations
-        << "\n        deopts=" << this->deopts << "\n    }";
-}
-
-const std::vector<const char*> DtInitEvent::fieldNames = {
-    "dispatchTable", "invocations", "deopts"};
-
-SEXP DtInitEvent::toSEXP() const {
-    return serialization::fields_to_sexp<DtInitEvent>(dispatchTableIndex,
-                                                      invocations, deopts);
-}
-
-void DtInitEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<DtInitEvent, uint64_t, uint64_t, uint64_t>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
-        {invocations, serialization::uint64_t_from_sexp},
-        {deopts, serialization::uint64_t_from_sexp});
 }
 
 const std::vector<const char*> InvocationEvent::fieldNames = {
-    "dispatchTable", "context", "deltaCount", "deltaDeopt", "source"};
+    "funIdx",
+    "context",
+    "source",
+    "callContext",
+    "isNative",
+    "address",
+    "missing_asmpt_present",
+    "missing_asmpt_recovered"};
 
 SEXP InvocationEvent::toSEXP() const {
     return serialization::fields_to_sexp<InvocationEvent>(
-        dispatchTableIndex, version, deltaCount, deltaDeopt, source);
+        funRecIndex_, version, source, callContext, isNative, address,
+        missingAsmptPresent, missingAsmptRecovered);
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, int64_t,
-                                    uint64_t, SourceSet>(
-        sexp, {dispatchTableIndex, serialization::uint64_t_from_sexp},
+    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, Source,
+                                    Context, bool, uint64_t, bool, bool>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
         {version, serialization::context_from_sexp},
-        {deltaCount, serialization::int64_t_from_sexp},
-        {deltaDeopt, serialization::uint64_t_from_sexp},
-        {source, serialization::invocation_source_set_from_sexp});
+        {source, serialization::invocation_source_from_sexp},
+        {callContext, serialization::context_from_sexp},
+        {isNative, serialization::bool_from_sexp},
+        {address, serialization::uint64_t_from_sexp},
+        {missingAsmptPresent, serialization::bool_from_sexp},
+        {missingAsmptRecovered, serialization::bool_from_sexp});
 }
 
-void InvocationEvent::print(const std::vector<FunRecording>& mapping,
-                            std::ostream& out) const {
-    out << std::dec << "Invocation{ [version=" << version << "] ";
-    if (deltaCount > 0) {
-        out << "invocations += " << deltaCount;
-    } else if (deltaCount < 0) {
-        out << "invocations -= " << -deltaCount;
-    } else {
-        out << "deoptCount += " << deltaDeopt;
-    }
-    out << " }";
+const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
+    "funIdx", "context"};
+
+SEXP UnregisterInvocationEvent::toSEXP() const {
+    return serialization::fields_to_sexp<UnregisterInvocationEvent>(
+        funRecIndex_, version);
+}
+
+void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<UnregisterInvocationEvent, uint64_t,
+                                    Context>(
+        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
+        {version, serialization::context_from_sexp});
+}
+
+const std::vector<const char*> CustomEvent::fieldNames = {"name"};
+
+SEXP CustomEvent::toSEXP() const {
+    return serialization::fields_to_sexp<CustomEvent>(name);
+}
+
+void CustomEvent::fromSEXP(SEXP sexp) {
+    serialization::fields_from_sexp<CustomEvent, std::string>(
+        sexp, {name, serialization::string_from_sexp});
+}
+
+SEXP setClassName(SEXP s, const char* className) {
+    SEXP t = PROTECT(Rf_mkString(className));
+    Rf_setAttrib(s, R_ClassSymbol, t);
+    UNPROTECT(1);
+    return s;
 }
 
 std::string getEnvironmentName(SEXP env) {
@@ -679,34 +423,42 @@ bool stringStartsWith(const std::string& s, const std::string& prefix) {
     return s.substr(0, prefix.length()) == prefix;
 }
 
-SEXP getEnvironment(const std::string& name) {
-    if (name.empty()) {
-        return R_UnboundValue;
-    }
+std::string getClosureName(SEXP cls) {
+    std::string name = "";
 
-    // try global
-    if (name == GLOBAL_ENV_NAME) {
-        return R_GlobalEnv;
-    }
+    // 1. Look trhu frames
+    auto frame = RList(FRAME(CLOENV(cls)));
 
-    SEXP env_sxp_name = PROTECT(Rf_mkString(name.c_str()));
-
-    // try package environment
-    if (stringStartsWith(name, "package:")) {
-        SEXP env = R_FindPackageEnv(env_sxp_name);
-        UNPROTECT(1);
-        if (env != R_GlobalEnv) {
-            return env;
-        } else {
-            return R_UnboundValue;
+    for (auto e = frame.begin(); e != frame.end(); ++e) {
+        if (*e == cls) {
+            name = CHAR(PRINTNAME(e.tag()));
+            if (!name.empty()) {
+                return name;
+            }
         }
     }
 
-    // try a namespace
-    SEXP env = R_FindNamespace(env_sxp_name);
+    // 2. Try to look thru symbols
+    auto env = PROTECT(CLOENV(cls));
+    auto symbols = PROTECT(R_lsInternal3(env, TRUE, FALSE));
 
-    UNPROTECT(1);
-    return env;
+    auto size = Rf_length(symbols);
+    for (int i = 0; i < size; i++) {
+        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
+
+        // TODO: check parity with R_findVarInFrame
+        auto symbol = PROTECT(Rf_install(symbol_char));
+        R_varloc_t loc = R_findVarLocInFrame(env, symbol);
+        UNPROTECT(1);
+
+        if (loc.cell == cls) {
+            name = symbol_char;
+            break;
+        }
+    }
+
+    UNPROTECT(2);
+    return name;
 }
 
 } // namespace recording

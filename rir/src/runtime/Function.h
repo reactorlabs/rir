@@ -59,7 +59,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               sizeof(Function) - NUM_PTRS * sizeof(SEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), numArgs_(defaultArgs.size()),
-          signature_(signature), context_(ctx) {
+          signature_(signature), context_(ctx), dispatchTable_(nullptr) {
         for (size_t i = 0; i < numArgs_; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
@@ -99,22 +99,18 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     void addDeoptCount(size_t n) {
         deoptCount_ += n;
-        REC_HOOK(recording::recordInvocation(this, 0, n));
     }
     size_t deoptCount() { return deoptCount_; }
 
     void unregisterInvocation() {
         invoked = 0;
-        if (invocationCount_ > 0) {
+        if (invocationCount_ > 0)
             invocationCount_--;
-            REC_HOOK(recording::recordInvocation(this, -1, 0));
-        }
     }
 
     void registerInvocation() {
         if (invocationCount_ < UINT_MAX)
             invocationCount_++;
-        REC_HOOK(recording::recordInvocation(this, 1, 0));
     }
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -174,7 +170,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         flags.set(Flag::Deopt);
         if (deoptCount_ < UINT_MAX) {
             deoptCount_++;
-            REC_HOOK(recording::recordInvocation(this, 0, 1));
         }
     }
 

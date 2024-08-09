@@ -14,6 +14,7 @@ namespace rir {
 
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
+    REC_HOOK(bool isSuccesful = false);
     if (taken < CounterOverflow)
         taken++;
 
@@ -26,12 +27,16 @@ void ObservedCallees::record(Function* function, SEXP callee,
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);
             targets[numTargets++] = idx;
+            REC_HOOK(isSuccesful = true);
         }
     } else {
         if (invalidateWhenFull) {
             invalid = true;
+            REC_HOOK(isSuccesful = true);
         }
     }
+
+    REC_HOOK(recording::recordSCChanged(isSuccesful));
 }
 
 SEXP ObservedCallees::getTarget(const Function* function, size_t pos) const {
@@ -56,8 +61,11 @@ void DeoptReason::record(SEXP val) const {
         break;
     case DeoptReason::DeadBranchReached: {
         auto& feedback = origin.function()->typeFeedback()->test(origin.idx());
+        REC_HOOK(
+            recording::recordSCChanged(feedback.seen != ObservedTest::Both));
         feedback.seen = ObservedTest::Both;
-        REC_HOOK(recording::recordSC(feedback, origin.function()));
+        REC_HOOK(
+            recording::recordSC(feedback, origin.idx(), origin.function()));
         break;
     }
     case DeoptReason::Typecheck: {

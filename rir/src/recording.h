@@ -21,7 +21,6 @@
 #include <utility>
 #include <vector>
 
-// TODO to string classes are not kept up-to-date
 namespace rir {
 namespace recording {
 
@@ -29,13 +28,19 @@ namespace recording {
 SEXP setClassName(SEXP s, const char* className);
 bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
-SEXP getEnvironment(const std::string& name);
+std::string getClosureName(SEXP cls);
 
 class Record;
 struct FunRecording;
 
-constexpr size_t NO_INDEX = ((size_t)-1);
+constexpr size_t NO_INDEX = (size_t)-1;
+constexpr size_t PROMISE_INDEX = (size_t)-2;
 constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
+
+// Controls if SEXP closures should be serialized
+const bool SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
+                                     ? atoi(getenv("RIR_RECORD_SERIALIZE"))
+                                     : false;
 
 enum class SpeculativeContextType { Callees, Test, Values };
 
@@ -58,12 +63,9 @@ struct SpeculativeContext {
 
     explicit SpeculativeContext(const ObservedValues& values)
         : type{SpeculativeContextType::Values}, value{.values = values} {}
-
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const;
 };
 
-// TODO unify serialization with event
+// TODO: unify serialization with event
 struct CompileReason {
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
@@ -196,90 +198,34 @@ struct CompileReasons {
  */
 class Event {
   public:
+    Event() = default;
+    Event(size_t funRecIndex) : funRecIndex_(funRecIndex) {}
+
     virtual ~Event() = default;
 
     virtual SEXP toSEXP() const = 0;
     virtual void fromSEXP(SEXP sexp) = 0;
-    virtual void print(const std::vector<FunRecording>& mapping,
-                       std::ostream& out) const = 0;
 
-    /**
-     * Returns `true` if the Event directly or indirectly stores the index of a
-     * given function recording
-     *
-     * For instance, a CompilationEvent would return `true` if its stored
-     * speculative contexts contained an ObservedCallee refering to the given
-     * `recordingIdx`.
-     *
-     * Function recordings that are never refered may be removed.
-     */
-    virtual bool containsReference(size_t recordingIdx) const { return false; }
-    virtual const char*
-    targetName(const std::vector<FunRecording>& mapping) const = 0;
-};
-
-/**
- * Recorded event that is implicitly attached to a CLOSXP-typed SEXP
- *
- * `ClosureEvent` is an abstract class.
- */
-class ClosureEvent : public Event {
-  public:
-    virtual ~ClosureEvent() = default;
+    size_t funRecIndex() const { return funRecIndex_; }
 
   protected:
-    ClosureEvent() = default;
-    explicit ClosureEvent(size_t closureIndex) : closureIndex(closureIndex){};
-
-    size_t closureIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == closureIndex;
-    };
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
+    size_t funRecIndex_;
 };
 
 /**
- * Recorded event that is implicitly attached to a CLOSXP's dispatch table
- *
- * `DtEvent` is an abstract class.
- */
-class DtEvent : public Event {
-  public:
-    virtual ~DtEvent() = default;
-
-  protected:
-    DtEvent() = default;
-    explicit DtEvent(size_t dispatchTableIndex)
-        : dispatchTableIndex(dispatchTableIndex){};
-
-    size_t dispatchTableIndex;
-
-    virtual bool containsReference(size_t recordingIdx) const override {
-        return recordingIdx == dispatchTableIndex;
-    };
-
-    const char*
-    targetName(const std::vector<FunRecording>& mapping) const override;
-};
-
-/**
- * `FunctionEvent`s are `Event`s that relate to a closure (instead of any of the
- * 3 function kinds), but also to a specific function version inside its
- * DispatchTable.
+ * `VersionEvent`s are `Event`s that relate to a closure and also to a specific
+ * function version inside its DispatchTable.
  *
  * `VersionEvent` is an abstract class.
  */
-class VersionEvent : public DtEvent {
+class VersionEvent : public Event {
   public:
     virtual ~VersionEvent() = default;
 
   protected:
     VersionEvent() = default;
     VersionEvent(size_t dispatchTableIndex, Context version)
-        : DtEvent(dispatchTableIndex), version(version){};
+        : Event(dispatchTableIndex), version(version){};
 
     Context version = Context();
 };
@@ -287,58 +233,65 @@ class VersionEvent : public DtEvent {
 /**
  * Notifies an update to a speculative context
  */
-class SpeculativeContextEvent : public DtEvent {
+class SpeculativeContextEvent : public Event {
   public:
-    SpeculativeContextEvent(size_t dispatchTableIndex, ssize_t codeIndex,
-                            size_t offset, const SpeculativeContext& sc)
-        : DtEvent(dispatchTableIndex), codeIndex(codeIndex), offset(offset),
-          sc(sc) {}
-    SpeculativeContextEvent()
-        : codeIndex(-2), offset(0), sc(SpeculativeContext({0, 0, 0})) {}
+    SpeculativeContextEvent(size_t dispatchTableIndex, bool isPromise,
+                            size_t index, const SpeculativeContext& sc,
+                            bool changed, bool deopt)
+        : Event(dispatchTableIndex), is_promise(isPromise), index(index),
+          sc(sc), changed(changed), deopt(deopt) {}
+
+    SpeculativeContextEvent() = default;
 
     virtual ~SpeculativeContextEvent() = default;
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t dispatchTable) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_sc";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
-    // -1 for function body itself, n≥0 for promise index
-    ssize_t codeIndex;
-    size_t offset;
-    SpeculativeContext sc;
+    bool is_promise;
+    // Index of the slot
+    size_t index;
+    SpeculativeContext sc = SpeculativeContext({0});
+    bool changed;
+    bool deopt;
 };
 
-class CompilationEvent : public ClosureEvent {
+class CompilationStartEvent : public Event {
   public:
-    using Clock = std::chrono::steady_clock;
-    using Time = std::chrono::time_point<Clock>;
-    using Duration = std::chrono::milliseconds;
+    CompilationStartEvent(size_t funRecIndex, const std::string& compileName,
+                          CompileReasons&& reasons)
+        : Event(funRecIndex), compileName(compileName),
+          compile_reasons(std::move(reasons)) {}
 
-    CompilationEvent(size_t closureIndex, unsigned long dispatch_context,
-                     const std::string& compileName,
+    CompilationStartEvent(){};
+
+    virtual ~CompilationStartEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_start";
+
+  private:
+    // Name under which the closure was compiled, to be passed to pirCompile()
+    std::string compileName;
+    CompileReasons compile_reasons;
+};
+
+class CompilationEvent : public VersionEvent {
+  public:
+    CompilationEvent(size_t funRecIndex, Context version,
                      std::vector<SpeculativeContext>&& speculative_contexts,
-                     CompileReasons&& compile_reasons)
-        : ClosureEvent(closureIndex), dispatch_context(dispatch_context),
-          compileName(compileName),
+                     const std::string& bitcode, const std::string& pir_code,
+                     size_t deopt_count)
+        : VersionEvent(funRecIndex, version),
           speculative_contexts(std::move(speculative_contexts)),
-          compile_reasons(std::move(compile_reasons)) {}
-
-    CompilationEvent(CompilationEvent&& other)
-        : ClosureEvent(other.closureIndex),
-          dispatch_context(other.dispatch_context),
-          compileName(std::move(other.compileName)),
-          speculative_contexts(std::move(other.speculative_contexts)),
-          compile_reasons(std::move(other.compile_reasons)),
-          time_length(other.time_length), subevents(std::move(other.subevents)),
-          bitcode(std::move(other.bitcode)), succesful(other.succesful) {}
+          bitcode(bitcode), pir_code(pir_code), deopt_count(deopt_count) {}
 
     CompilationEvent() {}
 
@@ -346,116 +299,91 @@ class CompilationEvent : public ClosureEvent {
 
     SEXP toSEXP() const override;
     void fromSEXP(SEXP sexp) override;
-    virtual bool containsReference(size_t recordingIdx) const override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_compile";
 
-    void set_time(Duration time) { time_length = time; }
-
-    void add_subcompilation(size_t idx) { subevents.push_back(idx); }
-
-    void set_bitcode(const std::string& str) { bitcode = str; }
-
-    void set_success(bool succes) { succesful = succes; }
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
-    unsigned long dispatch_context; // TODO keep as a Context
-
-    // Name under which the closure was compiled, to be passed to pirCompile()
-    std::string compileName;
-
     std::vector<SpeculativeContext> speculative_contexts;
-    CompileReasons compile_reasons;
-
-    // Benchmarking
-    Duration time_length;
-
-    std::vector<size_t> subevents;
 
     // The LLVM Bitcode
     std::string bitcode;
+    std::string pir_code;
+    size_t deopt_count;
+};
 
-    bool succesful = false;
+class CompilationEndEvent : public Event {
+  public:
+    using Clock = std::chrono::steady_clock;
+    using Time = std::chrono::time_point<Clock>;
+    using Duration = std::chrono::milliseconds;
+
+    CompilationEndEvent(){};
+    CompilationEndEvent(size_t funRecIndex, Duration duration, bool succesful)
+        : Event(funRecIndex), time_length(duration), succesful(succesful){};
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_compile_end";
+
+  private:
+    // Benchmarking
+    Duration time_length;
+
+    bool succesful;
 };
 
 class DeoptEvent : public VersionEvent {
   public:
     DeoptEvent(const DeoptEvent&) = delete;
-    DeoptEvent& operator=(DeoptEvent const&);
     DeoptEvent(size_t dispatchTableIndex, Context version,
-               DeoptReason::Reason reason,
-               std::pair<ssize_t, ssize_t> reasonCodeIdx,
-               uint32_t reasonCodeOff, SEXP trigger);
-    virtual ~DeoptEvent();
+               DeoptReason::Reason reason, size_t origin_function,
+               FeedbackIndex index, SEXP trigger, ssize_t trigger_index)
+        : VersionEvent(dispatchTableIndex, version), reason(reason),
+          origin_function(origin_function), index(index), trigger(trigger),
+          trigger_index(trigger_index) {
+        if (trigger != R_NilValue) {
+            R_PreserveObject(trigger);
+        }
+    }
+
+    virtual ~DeoptEvent() {
+        if (trigger != R_NilValue) {
+            R_ReleaseObject(trigger);
+        }
+    }
+
     DeoptEvent() = default;
 
-    void setTrigger(SEXP newTrigger);
     SEXP toSEXP() const override;
     void fromSEXP(SEXP file) override;
 
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_deopt";
 
-    virtual bool containsReference(size_t recordingIdx) const override;
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
-    DeoptReason::Reason reason_;
-    /* negative indicates promise index, positive function index */
-    std::pair<ssize_t, ssize_t> reasonCodeIdx_;
-    uint32_t reasonCodeOff_;
+    DeoptReason::Reason reason = DeoptReason::Reason::Unknown;
+    size_t origin_function;
+    FeedbackIndex index;
 
-    // These 2 fields are mutually exclusive
-    SEXP trigger_ = nullptr;
-    ssize_t triggerClosure_ = -1; // References a FunRecorder index
-};
-
-// TODO delete, not used (?)
-class DtInitEvent : public DtEvent {
-  public:
-    DtInitEvent(size_t dtIndex, size_t invocations, size_t deopts)
-        : DtEvent(dtIndex), invocations(invocations), deopts(deopts){};
-
-    virtual ~DtInitEvent() = default;
-    DtInitEvent() = default;
-
-    SEXP toSEXP() const override;
-    void fromSEXP(SEXP file) override;
-
-    static const std::vector<const char*> fieldNames;
-    static constexpr const char* className = "event_dt_init";
-
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
-  private:
-    size_t invocations, deopts;
+    // Either trigger is R_NilValue or trigger_index is -1
+    SEXP trigger = R_NilValue;
+    ssize_t trigger_index = -1;
 };
 
 class InvocationEvent : public VersionEvent {
   public:
-    enum Source : uint8_t {
-        DoCall,
-        NativeCallTrampoline,
-        FIRST = DoCall,
-        LAST = NativeCallTrampoline
-    };
+    enum Source : uint8_t { Unknown, DoCall, NativeCallTrampoline, RirEval };
 
-    using SourceSet = EnumSet<Source, uint8_t>;
-
-    InvocationEvent(size_t dispatchTableIndex, Context version,
-                    ssize_t deltaCount, size_t deltaDeopt, SourceSet source)
-        : VersionEvent(dispatchTableIndex, version), deltaCount(deltaCount),
-          deltaDeopt(deltaDeopt), source(source){};
+    InvocationEvent(size_t dispatchTableIndex, Context version, Source source,
+                    Context callContext, bool isNative, uintptr_t address,
+                    bool missingAsmptPresent, bool missingAsmptRecovered)
+        : VersionEvent(dispatchTableIndex, version), source(source),
+          callContext(callContext), isNative(isNative), address(address),
+          missingAsmptPresent(missingAsmptPresent),
+          missingAsmptRecovered(missingAsmptRecovered) {}
 
     InvocationEvent() : VersionEvent(){};
 
@@ -467,19 +395,48 @@ class InvocationEvent : public VersionEvent {
     static const std::vector<const char*> fieldNames;
     static constexpr const char* className = "event_invocation";
 
-  protected:
-    void print(const std::vector<FunRecording>& mapping,
-               std::ostream& out) const override;
-
   private:
-    ssize_t deltaCount = 0;
-    size_t deltaDeopt = 0;
-
-    SourceSet source = SourceSet::None();
+    Source source = Unknown;
+    Context callContext;
+    bool isNative = false;
+    uintptr_t address = 0;
+    bool missingAsmptPresent = false;
+    bool missingAsmptRecovered = false;
 };
 
-// From names.c
-extern "C" FUNTAB R_FunTab[];
+class UnregisterInvocationEvent : public VersionEvent {
+  public:
+    UnregisterInvocationEvent(size_t dispatchTableIndex, Context version)
+        : VersionEvent(dispatchTableIndex, version) {}
+
+    UnregisterInvocationEvent() : VersionEvent() {}
+
+    virtual ~UnregisterInvocationEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_unregister_invocation";
+};
+
+class CustomEvent : public Event {
+  public:
+    explicit CustomEvent(const std::string& name) : Event(), name(name) {}
+
+    CustomEvent() = default;
+
+    virtual ~CustomEvent() = default;
+
+    SEXP toSEXP() const override;
+    void fromSEXP(SEXP sexp) override;
+
+    static const std::vector<const char*> fieldNames;
+    static constexpr const char* className = "event_custom";
+
+  private:
+    std::string name;
+};
 
 inline size_t R_FunTab_Len_calc() {
     for (size_t i = 0;; i++) {
@@ -508,15 +465,24 @@ struct FunRecording {
     /* the CLOSXP serialized into RAWSXP using the R_SerializeValue */
     SEXP closure = R_NilValue;
 
+    uintptr_t address = 0;
+
     // Just prints the name if the closure (or pointer if it has no name)
     friend std::ostream& operator<<(std::ostream& out,
                                     const FunRecording& that);
 
     FunRecording() = default;
-    explicit FunRecording(size_t primIdx) : primIdx(primIdx) {
+    explicit FunRecording(size_t primIdx, SEXP closure)
+        : primIdx(primIdx), closure(closure) {
         assert(primIdx < R_FunTab_Len);
         name = R_FunTab[primIdx].name;
     }
+
+    explicit FunRecording(const std::string& name, const std::string& env,
+                          SEXP closure, uintptr_t address)
+        : name(name), env(env), closure(closure), address(address) {}
+
+    explicit FunRecording(const std::string& name, uintptr_t address) : name(name), address(address) {}
 };
 
 class Record {
@@ -526,47 +492,39 @@ class Record {
     std::unordered_map<const DispatchTable*, size_t> dt_to_recording_index_;
     std::unordered_map<int, size_t> primitive_to_body_index;
     std::unordered_map<SEXP, size_t> bcode_to_body_index;
+    std::unordered_map<Function*, size_t> expr_to_body_index;
 
   public:
     std::vector<FunRecording> functions;
 
-    // TODO deque (?)
+    // TODO: deque (?)
     std::vector<std::unique_ptr<Event>> log;
-
-  protected:
-    size_t indexOfBaseline(const rir::Code* code);
 
   public:
     Record() = default;
-    ~Record();
+
+    ~Record() { release(); }
 
     template <typename E, typename... Args>
     void record(SEXP cls, Args&&... args) {
+        assert(cls != nullptr);
         auto entry = initOrGetRecording(cls);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
-    }
-
-    template <typename E, typename... Args>
-    void record(SEXP cls, const std::string& name, Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
-        log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     template <typename E, typename... Args>
     void record(const DispatchTable* dt, Args&&... args) {
         auto entry = initOrGetRecording(dt);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     template <typename E, typename... Args>
-    void record(const DispatchTable* cls, const std::string& name,
-                Args&&... args) {
-        auto entry = initOrGetRecording(cls, name);
+    void record(Function* fun, Args&&... args) {
+        auto entry = initOrGetRecording(fun);
         log.emplace_back(
-            std::make_unique<E>(entry.first, std::forward<Args>(args)...));
+            std::make_unique<E>(entry, std::forward<Args>(args)...));
     }
 
     size_t push_event(std::unique_ptr<Event> e) {
@@ -575,30 +533,43 @@ class Record {
         return idx;
     }
 
-    /**
-     * Returns `true` if the list of recorded functions contains a closure whose
-     * DispatchTable is the one given
-     */
-    bool contains(const DispatchTable* dt);
+    FunRecording& get_recording(size_t idx) { return functions[idx]; }
 
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const DispatchTable* dt, const std::string& name = "");
+    size_t initOrGetRecording(const DispatchTable* dt);
+    size_t initOrGetRecording(const SEXP cls, const std::string& name = "");
+    size_t initOrGetRecording(Function* fun);
 
-    std::pair<size_t, FunRecording&>
-    initOrGetRecording(const SEXP cls, const std::string& name = "");
-
-    void recordSpeculativeContext(DispatchTable* dt,
-                                  std::vector<SpeculativeContext>& ctx);
-
-    void recordSpeculativeContext(const Code* code,
-                                  std::vector<SpeculativeContext>& ctx);
-
-    std::pair<ssize_t, ssize_t> findIndex(rir::Code* code, rir::Code* needle);
     SEXP save();
 
+    void release() {
+        for (auto dt : dt_to_recording_index_) {
+            R_ReleaseObject(dt.first->container());
+        }
+
+        for (auto bcode : bcode_to_body_index) {
+            R_ReleaseObject(bcode.first);
+        }
+
+        for (auto expr : expr_to_body_index) {
+            R_ReleaseObject(expr.first->container());
+        }
+
+        for (auto fun : functions) {
+            auto clos = fun.closure;
+            if (!Rf_isNull(clos)) {
+                R_ReleaseObject(clos);
+            }
+        }
+    }
+
     void reset() {
+        release();
         dt_to_recording_index_.clear();
+        primitive_to_body_index.clear();
+        bcode_to_body_index.clear();
         functions.clear();
+        expr_to_body_index.clear();
+        log.clear();
     }
 };
 

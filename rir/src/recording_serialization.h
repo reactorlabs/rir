@@ -9,9 +9,9 @@
 #include <memory>
 #include <vector>
 
-#define R_CLASS_CTX_CALLEES "ctx_callees"
-#define R_CLASS_CTX_TEST "ctx_test"
-#define R_CLASS_CTX_VALUES "ctx_values"
+constexpr const char* R_CLASS_CTX_CALLEES = "ctx_callees";
+constexpr const char* R_CLASS_CTX_TEST = "ctx_test";
+constexpr const char* R_CLASS_CTX_VALUES = "ctx_values";
 
 namespace rir {
 namespace recording {
@@ -45,9 +45,6 @@ SEXP sexp_from_sexp(SEXP sexp);
 
 /************************ Objects **********************************/
 
-SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecording>& obj);
-
 SEXP to_sexp(const rir::Context);
 
 Context context_from_sexp(SEXP sexp);
@@ -73,13 +70,17 @@ SEXP to_sexp(const CompileReason& reason);
 std::unique_ptr<rir::recording::CompileReason>
 compile_reason_from_sexp(SEXP sexp);
 
-SEXP to_sexp(CompilationEvent::Duration time);
+SEXP to_sexp(CompilationEndEvent::Duration time);
 
-CompilationEvent::Duration time_from_sexp(SEXP sexp);
+CompilationEndEvent::Duration time_from_sexp(SEXP sexp);
 
-SEXP to_sexp(InvocationEvent::SourceSet set);
+SEXP to_sexp(InvocationEvent::Source set);
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp);
+InvocationEvent::Source invocation_source_from_sexp(SEXP sexp);
+
+SEXP to_sexp(FeedbackIndex index);
+
+FeedbackIndex feedback_index_from_sexp(SEXP sexp);
 
 /************************ Generics **********************************/
 template <typename T>

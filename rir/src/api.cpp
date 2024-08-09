@@ -364,10 +364,10 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        },
                        {});
 
+    REC_HOOK(recording::recordCompileFinish(successfulComp, m));
+
     delete m;
     UNPROTECT(1);
-
-    REC_HOOK(recording::recordCompileFinish(successfulComp));
 
     return what;
 }

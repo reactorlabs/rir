@@ -3,7 +3,6 @@
 
 #include "api.h"
 #include "llvm/IR/Module.h"
-
 #include <R/r.h>
 #include <string>
 
@@ -20,27 +19,41 @@ struct DeoptReason;
 struct ObservedCallees;
 struct ObservedTest;
 struct ObservedValues;
+class TypeFeedback;
+
+namespace pir {
+class Module;
+}
 
 namespace recording {
 
 void recordCompile(const SEXP cls, const std::string& name,
                    const Context& assumptions);
 void recordOsrCompile(const SEXP cls);
-void recordCompileFinish(bool succesful);
-void recordLLVMBitcode(llvm::Function* fun);
+void recordCompileFinish(bool succesful, pir::Module* module);
+
+void addCompilationLLVMBitcode(pir::ClosureVersion* version,
+                               llvm::Function* fun);
+void addCompilationSC(pir::ClosureVersion* version, TypeFeedback* typeFeedback);
+void addCompilationSCCloned(pir::ClosureVersion* newVersion,
+                            pir::ClosureVersion* prevVersion);
 
 void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                  SEXP trigger);
-void recordDtOverwrite(const DispatchTable* dt, size_t version,
-                       size_t oldDeoptCount);
+void recordSCDeoptFinish();
 
-void recordInvocation(Function* f, ssize_t deltaCount, size_t deltaDeopt);
-void recordInvocationDoCall();
-void recordInvocationNativeCallTrampoline();
+void recordInvocationDoCall(SEXP cls, Function* f, Context callContext);
+void recordInvocationNativeCallTrampoline(SEXP cls, Function* f,
+                                          Context callContext,
+                                          bool missingAsmptPresent,
+                                          bool missingAsmptRecovered);
+void recordInvocationRirEval(Function* f);
+void recordUnregisterInvocation(SEXP cls, Function* f);
 
-void recordSC(const ObservedCallees& type, Function* fun);
-void recordSC(const ObservedTest& type, Function* fun);
-void recordSC(const ObservedValues& type, Function* fun);
+void recordSC(const ObservedCallees& type, size_t idx, Function* fun);
+void recordSC(const ObservedTest& type, size_t idx, Function* fun);
+void recordSC(const ObservedValues& type, size_t idx, Function* fun);
+void recordSCChanged(bool changed);
 
 // Compile heuristics
 void recordMarkOptReasonHeuristic();
@@ -65,6 +78,8 @@ void recordExecution(const char* filePath, const char* filter);
 } // namespace rir
 
 // R API
+REXPORT SEXP filterRecordings(SEXP compile, SEXP deoptimize, SEXP typeFeedback,
+                              SEXP invocation);
 REXPORT SEXP startRecordings();
 REXPORT SEXP stopRecordings();
 REXPORT SEXP resetRecordings();
@@ -72,8 +87,8 @@ REXPORT SEXP isRecordings();
 REXPORT SEXP saveRecordings(SEXP filename);
 REXPORT SEXP loadRecordings(SEXP filename);
 REXPORT SEXP getRecordings();
-REXPORT SEXP printRecordings(SEXP from);
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions);
+REXPORT SEXP recordCustomEvent(SEXP message);
 
 #else
 #define REC_HOOK(code)

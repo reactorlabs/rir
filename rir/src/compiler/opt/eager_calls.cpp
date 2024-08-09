@@ -311,6 +311,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                 }
                             });
                         });
+                    REC_HOOK(
+                        recording::addCompilationSCCloned(newVersion, version));
                     call->hint = newVersion;
                     assert(call->tryDispatch() == newVersion);
                     ip = next;
@@ -433,6 +435,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             }
                         });
                     });
+                REC_HOOK(
+                    recording::addCompilationSCCloned(newVersion, version));
                 call->hint = newVersion;
             }
             ip = next;

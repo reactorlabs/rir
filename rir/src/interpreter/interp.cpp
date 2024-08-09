@@ -983,7 +983,7 @@ SEXP doCall(CallContext& call, bool popArgs) {
         auto fun =
             table->dispatchConsideringDisabled(call.givenContext, &disabledFun);
 
-        REC_HOOK(recording::recordInvocationDoCall());
+        REC_HOOK(recording::recordInvocationDoCall(call.callee, fun, call.givenContext));
         fun->registerInvocation();
 
         if (!isDeoptimizing() && RecompileHeuristic(fun, disabledFun)) {
@@ -1012,9 +1012,10 @@ SEXP doCall(CallContext& call, bool popArgs) {
                     fun = dispatch(call, table);
                 }
             }
-
-            REC_HOOK(recording::recordReasonsClear());
         }
+
+        REC_HOOK(recording::recordReasonsClear());
+
         bool needsEnv = fun->signature().envCreation ==
                         FunctionSignature::Environment::CallerProvided;
 
@@ -3372,7 +3373,7 @@ SEXP evalRirCode(Code* c, SEXP env, const CallContext* callCtxt,
             NEXT();
 
         // ---------
-        fallback : {
+        fallback: {
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(args);
             if (Rf_isObject(val)) {
@@ -3976,12 +3977,14 @@ SEXP rirEval(SEXP what, SEXP env) {
         // TODO: add an adapter frame to be able to call something else than
         // the baseline version!
         Function* fun = table->baseline();
+        REC_HOOK(recording::recordInvocationRirEval(fun));
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
         return res;
     }
 
     if (auto fun = Function::check(what)) {
+        REC_HOOK(recording::recordInvocationRirEval(fun));
         fun->registerInvocation();
         auto res = evalRirCodeExtCaller(fun->body(), env);
         return res;

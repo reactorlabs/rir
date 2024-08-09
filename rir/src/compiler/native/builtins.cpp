@@ -832,10 +832,12 @@ SEXP deoptSentinelContainer = []() {
 
 void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
                bool leakedEnv, DeoptReason* deoptReason, SEXP deoptTrigger) {
-    deoptReason->record(deoptTrigger);
-
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
+
+    deoptReason->record(deoptTrigger);
+
+    REC_HOOK(recording::recordSCDeoptFinish());
 
     assert(m->numFrames >= 1);
     size_t stackHeight = 0;
@@ -1315,6 +1317,7 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
 
     auto missingAsmpt = (Context*)(DATAPTR(cp_pool_at(missingAsmpt_)));
     auto fail = !missingAsmpt->empty();
+    REC_HOOK( bool recoveredMA = false );
     if (fail) {
         if (missingAsmpt->numMissing() == 0 &&
             missingAsmpt->getFlags().empty()) {
@@ -1404,19 +1407,27 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             inferCurrentContext(call, fun->nargs());
             fail = !call.givenContext.smaller(fun->context());
         }
+
+        REC_HOOK( recoveredMA = !fail );
     }
     if (!fun->body()->nativeCode() || fun->disabled())
         fail = true;
 
     auto dt = DispatchTable::unpack(BODY(callee));
 
-    REC_HOOK(recording::recordInvocationNativeCallTrampoline());
+    REC_HOOK(recording::recordInvocationNativeCallTrampoline(
+        callee, fun, call.givenContext, !missingAsmpt->empty(), recoveredMA));
     fun->registerInvocation();
     static int recheck = 0;
     if (fail || (++recheck == 97 && RecompileHeuristic(fun))) {
         recheck = 0;
         inferCurrentContext(call, fun->nargs());
         if (fail || RecompileCondition(dt, fun, call.givenContext)) {
+            REC_HOOK({
+                recording::recordReasonsClear();
+                recording::recordUnregisterInvocation(callee, fun);
+            })
+
             fun->unregisterInvocation();
             auto res = doCall(call, true);
             auto trg = dispatch(call, DispatchTable::unpack(BODY(call.callee)));
@@ -1425,6 +1436,8 @@ static SEXP nativeCallTrampolineImpl(ArglistOrder::CallId callId, rir::Code* c,
             return res;
         }
     }
+
+    REC_HOOK(recording::recordReasonsClear());
 
     R_CheckStack();
 #ifdef ENABLE_SLOWASSERT

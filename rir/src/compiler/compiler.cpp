@@ -92,6 +92,9 @@ void Compiler::compileContinuation(SEXP closure, rir::Function* curFun,
     Builder builder(version, pirClosure->closureEnv());
     auto& log = logger.open(version);
     auto typeFeedback = tbl->baseline()->typeFeedback();
+
+    REC_HOOK(recording::addCompilationSC(version, typeFeedback));
+
     Rir2Pir rir2pir(*this, version, log, pirClosure->name(), {}, typeFeedback);
 
     if (rir2pir.tryCompileContinuation(builder, ctx->pc(), ctx->stack())) {
@@ -144,6 +147,9 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
+
+    REC_HOOK(recording::addCompilationSC(version, typeFeedback));
+
     Builder builder(version, closure->closureEnv());
     auto& log = logger.open(version);
     Rir2Pir rir2pir(*this, version, log, closure->name(), outerFeedback,
@@ -409,7 +415,6 @@ void Compiler::optimizeModule() {
 
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
-
                 }
 
                 if (MEASURE_COMPILER_PERF)

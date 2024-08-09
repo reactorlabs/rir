@@ -71,26 +71,6 @@ SEXP sexp_from_sexp(SEXP sexp) { return sexp; }
 
 /************************ Objects **********************************/
 
-SEXP to_sexp(
-    const std::unordered_map<std::string, rir::recording::FunRecording>& obj) {
-    std::unique_ptr<const char*[]> keys(new const char*[obj.size() + 1]);
-    auto ki = 0;
-    for (auto& kv : obj) {
-        keys[ki++] = kv.first.c_str();
-    }
-    keys[ki] = "";
-
-    auto vec = PROTECT(Rf_mkNamed(VECSXP, (const char**)keys.get()));
-    ki = 0;
-    for (auto& kv : obj) {
-        SET_VECTOR_ELT(vec, ki++, PROTECT(to_sexp(kv.second)));
-        UNPROTECT(1);
-    }
-
-    UNPROTECT(1);
-    return vec;
-}
-
 SEXP to_sexp(const rir::Context ctx) { return to_sexp(ctx.toI()); }
 
 Context context_from_sexp(SEXP sexp) {
@@ -107,8 +87,6 @@ std::unique_ptr<rir::recording::Event> event_from_sexp(SEXP sexp) {
         event = std::make_unique<rir::recording::CompilationEvent>();
     } else if (Rf_inherits(sexp, rir::recording::DeoptEvent::className)) {
         event = std::make_unique<rir::recording::DeoptEvent>();
-    } else if (Rf_inherits(sexp, rir::recording::DtInitEvent::className)) {
-        event = std::make_unique<rir::recording::DtInitEvent>();
     } else if (Rf_inherits(sexp, rir::recording::InvocationEvent::className)) {
         event = std::make_unique<rir::recording::InvocationEvent>();
     } else if (Rf_inherits(
@@ -174,20 +152,22 @@ DeoptReason::Reason deopt_reason_from_sexp(SEXP sexp) {
 }
 
 SEXP to_sexp(const rir::recording::FunRecording& obj) {
-    const char* fields[] = {"primIdx", "name", "env", "closure", ""};
+    const char* fields[] = {"primIdx", "name", "env", "closure", "address", ""};
     auto vec = PROTECT(Rf_mkNamed(VECSXP, fields));
+
     size_t i = 0;
-    SET_VECTOR_ELT(vec, i++, PROTECT(to_sexp(obj.primIdx)));
-    SET_VECTOR_ELT(vec, i++, PROTECT(Rf_mkString(obj.name.c_str())));
-    SET_VECTOR_ELT(vec, i++, PROTECT(Rf_mkString(obj.env.c_str())));
+    SET_VECTOR_ELT(vec, i++, to_sexp(obj.primIdx));
+    SET_VECTOR_ELT(vec, i++, Rf_mkString(obj.name.c_str()));
+    SET_VECTOR_ELT(vec, i++, Rf_mkString(obj.env.c_str()));
     SET_VECTOR_ELT(vec, i++, obj.closure);
-    UNPROTECT(i);
+    SET_VECTOR_ELT(vec, i++, to_sexp(obj.address));
+
     return vec;
 }
 
 rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     assert(Rf_isVector(sexp));
-    assert(Rf_length(sexp) == 4);
+    assert(Rf_length(sexp) == 5);
 
     rir::recording::FunRecording recorder;
     size_t i = 0;
@@ -195,6 +175,8 @@ rir::recording::FunRecording fun_recorder_from_sexp(SEXP sexp) {
     recorder.name = serialization::string_from_sexp(VECTOR_ELT(sexp, i++));
     recorder.env = serialization::string_from_sexp(VECTOR_ELT(sexp, i++));
     recorder.closure = VECTOR_ELT(sexp, i++);
+    recorder.address = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, i++));
+
     assert(Rf_isNull(recorder.closure) || TYPEOF(recorder.closure) == RAWSXP);
 
     return recorder;
@@ -232,23 +214,34 @@ compile_reason_from_sexp(SEXP sexp) {
     return reason;
 }
 
-SEXP to_sexp(CompilationEvent::Duration time) {
+SEXP to_sexp(CompilationEndEvent::Duration time) {
     int64_t count = time.count();
     return to_sexp(count);
 }
 
-CompilationEvent::Duration time_from_sexp(SEXP sexp) {
+CompilationEndEvent::Duration time_from_sexp(SEXP sexp) {
     int64_t count = int64_t_from_sexp(sexp);
-    return CompilationEvent::Duration(count);
+    return CompilationEndEvent::Duration(count);
 }
 
-SEXP to_sexp(InvocationEvent::SourceSet set) {
-    return Rf_ScalarInteger(static_cast<int>(set.to_i()));
+SEXP to_sexp(InvocationEvent::Source set) {
+    return Rf_ScalarInteger(static_cast<int>(set));
 }
 
-InvocationEvent::SourceSet invocation_source_set_from_sexp(SEXP sexp) {
+InvocationEvent::Source invocation_source_from_sexp(SEXP sexp) {
     assert(Rf_isInteger(sexp));
-    return InvocationEvent::SourceSet(static_cast<uint8_t>(Rf_asInteger(sexp)));
+    return static_cast<InvocationEvent::Source>(Rf_asInteger(sexp));
+}
+
+SEXP to_sexp(FeedbackIndex index){
+    return to_sexp( index.asInteger() );
+}
+
+FeedbackIndex feedback_index_from_sexp(SEXP sexp){
+    auto u = uint32_t_from_sexp(sexp);
+    // Going thru void* to go around the compiler
+    void* asv = &u;
+    return *((FeedbackIndex*)(asv));
 }
 
 } // namespace serialization
