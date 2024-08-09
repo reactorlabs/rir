@@ -146,14 +146,8 @@ else()
     )
 endif()
 
-add_custom_target(default-gnur
-    DEPENDS dependencies
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/build-gnur.sh custom-r
-)
-
 add_custom_target(setup
     DEPENDS dependencies
-    DEPENDS default-gnur
 )
 
 add_custom_target(tests
