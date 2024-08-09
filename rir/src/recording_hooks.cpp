@@ -246,7 +246,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
     } else if (Rf_isFunction(trigger)) {
         trigger_index = recorder_.initOrGetRecording(trigger);
         trigger = R_NilValue;
-    } else if (!SERIALIZE_SEXP){
+    } else if (!SERIALIZE_SEXP) {
         trigger = R_NilValue;
     }
 
@@ -254,7 +254,7 @@ void recordDeopt(rir::Code* c, const DispatchTable* dt, DeoptReason& reason,
                                  reason.origin.index(), trigger, trigger_index);
 }
 
-void recordSCDeoptFinish (){
+void recordSCDeoptFinish() {
     assert(in_deopt_);
     in_deopt_ = false;
 }
@@ -413,7 +413,13 @@ void recordFinalizer(SEXP) {
     UNPROTECT(1);
 }
 
+bool SERIALIZE_SEXP;
+
 void recordExecution(const char* filePath, const char* filterArg) {
+    SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
+                         ? atoi(getenv("RIR_RECORD_SERIALIZE"))
+                         : false;
+
     if (filterArg != nullptr) {
         filter_ = {.compile = false,
                    .deopt = false,
