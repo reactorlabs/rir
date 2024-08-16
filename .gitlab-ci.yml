@@ -427,8 +427,9 @@ benchmark_llvm:
     - sed -i '182s/50000/100000/' /opt/rbenchmarking/rebench.conf
     - sed -i '77s/60000/200000/' /opt/rbenchmarking/rebench.conf
     - sed -i '89s/80000/150000/' /opt/rbenchmarking/rebench.conf
-    - sed -i '81s/60000/100000/' /opt/rbenchmarking/rebench.conf
+    - sed -i '81s/60000/200000/' /opt/rbenchmarking/rebench.conf
     - sed -i '134s/200/800/' /opt/rbenchmarking/rebench.conf
+    - sed -i '93s/80000/200000/' /opt/rbenchmarking/rebench.conf
     - $REBENCH_RUN "e:PIR-LLVM $REBENCH_OPTIONS"
     - cp /tmp/memory.data $CI_PROJECT_DIR/
   artifacts:
