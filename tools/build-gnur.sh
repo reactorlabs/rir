@@ -20,10 +20,12 @@ if [[ "$1" == "--macos_gcc9" ]]; then
     MACOS_GCC9=1
 fi
 
-if test -d ${SRC_DIR}/.git; then
+if test -e ${SRC_DIR}/.git; then
     echo "-> update submodules"
     git submodule update --init
+fi
 
+if test -d ${SRC_DIR}/.git; then
     echo "-> install git hooks"
     ${SRC_DIR}/tools/install_hooks.sh
 fi
