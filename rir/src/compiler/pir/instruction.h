@@ -1073,6 +1073,11 @@ class FLI(LdArg, 0, Effects::None()) {
   public:
     size_t pos;
 
+    // relax ctx ///////
+    bool notObj = false;
+
+    //////////////
+
     explicit LdArg(size_t pos)
         : FixedLenInstruction(PirType::any()), pos(pos) {}
 

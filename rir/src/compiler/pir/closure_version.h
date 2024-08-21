@@ -6,8 +6,10 @@
 #include "pir.h"
 #include "runtime/Function.h"
 #include <functional>
+#include <map>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -18,6 +20,9 @@ namespace pir {
  */
 class ClosureVersion : public Code {
   public:
+    std::map<PirType*, std::unordered_set<rir::pir::LdArg*>>
+        relatedInstructions;
+
     enum class Property {
         IsEager,
         NoReflection,

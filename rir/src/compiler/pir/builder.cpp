@@ -166,6 +166,9 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         if (depromiseArgs) {
             args[i]->type = args[i]->type.notPromiseWrapped();
         }
+
+        version->relatedInstructions[&args[i]->type].insert(
+            LdArg::Cast(args[i]));
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {
         args[i] = MissingArg::instance();

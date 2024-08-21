@@ -11,6 +11,8 @@
 #include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
+#include "aa.h"
+
 namespace rir {
 namespace pir {
 
@@ -370,6 +372,10 @@ struct PirType {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);
+
+        if (!res) {
+        }
+
         assert(!res || (flags_.includes(TypeFlags::maybeAttrib) &&
                         flags_.includes(TypeFlags::maybeNotFastVecelt)));
         return res;
