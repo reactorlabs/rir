@@ -156,7 +156,7 @@ struct PirType {
         return FlagSet() | TypeFlags::rtype;
     }
 
-    static constexpr PirType optimistic() {
+    static PirType optimistic() {
         PirType t;
         t.flags_ = optimisticRTypeFlags();
         return t;
@@ -188,6 +188,11 @@ struct PirType {
 
         // relax ctx
         AA::singleton().copyInfo(&other, this);
+    }
+
+    ~PirType() {
+        // relax ctx
+        AA::singleton().unregisterType(this);
     }
 
     explicit PirType(uint64_t);
@@ -237,7 +242,7 @@ struct PirType {
         return res;
     }
 
-    constexpr PirType orSexpTypes(const PirType& other) const {
+    PirType orSexpTypes(const PirType& other) const {
         assert(isRType() && other.isRType());
         auto ret = PirType(t_.r | other.t_.r, flags_);
 
@@ -272,7 +277,7 @@ struct PirType {
     static PirType closure() {
         return PirType(RType::closure).orAttribsOrObj();
     }
-    static constexpr PirType special() {
+    static PirType special() {
         return PirType(RType::special).orAttribsOrObj();
     }
     static PirType builtin() {
@@ -364,7 +369,7 @@ struct PirType {
     inline constexpr bool isRType(const RType& o) const {
         return isRType() && t_.r == o;
     }
-    inline constexpr bool maybe(PirType type) const {
+    inline bool maybe(PirType type) const {
         auto inter = (*this & type);
         return !inter.isVoid();
     }
@@ -460,12 +465,12 @@ struct PirType {
             ensureMissingInvariant(r.t_.r, r.flags_);
 
         // relax ctx
-        // AA::singleton().copyInfo(&o, &r);
+        AA::singleton().copyInfo(&o, &r);
 
         return r;
     }
 
-    inline constexpr PirType operator&(const PirType& o) const {
+    inline PirType operator&(const PirType& o) const {
         assert(isRType() == o.isRType());
 
         PirType r;
@@ -480,7 +485,7 @@ struct PirType {
             ensureMissingInvariant(r.t_.r, r.flags_);
 
         // relax ctx
-        // AA::singleton().copyInfo(&o, &r);
+        AA::singleton().copyInfo(&o, &r);
 
         return r;
     }
@@ -492,17 +497,17 @@ struct PirType {
         return isRType() && t_.r.intersects(refcount);
     }
 
-    PirType constexpr notObject() const {
+    PirType notObject() const {
         assert(isRType());
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeObject));
 
         // relax ctx
-        // AA::singleton().copyInfo(this, &ret);
+        AA::singleton().copyInfo(this, &ret);
 
         return ret;
     }
 
-    PirType constexpr noAttribsOrObject() const {
+    PirType noAttribsOrObject() const {
         assert(isRType());
         auto ret =
             PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeNotFastVecelt |
@@ -510,12 +515,12 @@ struct PirType {
                 .notObject();
 
         // relax ctx
-        // AA::singleton().copyInfo(this, &ret);
+        AA::singleton().copyInfo(this, &ret);
 
         return ret;
     }
 
-    PirType constexpr notMissing() const {
+    PirType notMissing() const {
         assert(isRType());
 
         auto newType = t_.r;
@@ -526,135 +531,191 @@ struct PirType {
         auto ret = PirType(newType, flags_ & ~FlagSet(TypeFlags::maybeMissing));
 
         // relax ctx
-        // AA::singleton().copyInfo(this, &ret);
+        AA::singleton().copyInfo(this, &ret);
 
         return ret;
     }
 
-    inline constexpr PirType notNAOrNaN() const {
+    inline PirType notNAOrNaN() const {
         assert(isRType());
 
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNAOrNaN));
         // relax ctx
-        // AA::singleton().copyInfo(this, &ret);
+        AA::singleton().copyInfo(this, &ret);
 
         return ret;
     }
 
-    inline constexpr PirType scalar() const {
+    inline PirType scalar() const {
         assert(isRType());
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
 
         // relax ctx
-        // AA::singleton().copyInfo(this, &ret);
+        AA::singleton().copyInfo(this, &ret);
         return ret;
     }
 
-    inline constexpr PirType simpleScalar() const {
-        return scalar().noAttribsOrObject();
-    }
+    inline PirType simpleScalar() const { return scalar().noAttribsOrObject(); }
 
-    inline constexpr PirType notT(RType t) const {
+    inline PirType notT(RType t) const {
         assert(isRType());
-        return PirType(t_.r & ~RTypeSet(t), flags_);
+        auto ret = PirType(t_.r & ~RTypeSet(t), flags_);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+
+        return ret;
     }
 
-    inline constexpr PirType orT(RType t) const {
+    inline PirType orT(RType t) const {
         assert(isRType());
-        return PirType(t_.r | t, flags_);
+        auto ret = PirType(t_.r | t, flags_);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orNAOrNaN() const {
+    inline PirType orNAOrNaN() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeNAOrNaN);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeNAOrNaN);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orNotScalar() const {
+    inline PirType orNotScalar() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orPromiseWrapped() const {
+    inline PirType orPromiseWrapped() const {
         assert(isRType());
 
         if (maybePromiseWrapped())
             return *this;
 
-        return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-
-    inline constexpr PirType orFullyPromiseWrapped() const {
+    inline PirType orFullyPromiseWrapped() const {
         assert(isRType());
 
         if (maybePromiseWrapped())
             return *this;
 
-        return PirType(t_.r, (flags_ | TypeFlags::promiseWrapped) &
-                                 ~(FlagSet() | TypeFlags::maybeMissing));
+        auto ret = PirType(t_.r, (flags_ | TypeFlags::promiseWrapped) &
+                                     ~(FlagSet() | TypeFlags::maybeMissing));
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orLazy() const {
+    inline PirType orLazy() const {
         assert(isRType());
-        return PirType(t_.r,
-                       flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
+        auto ret =
+            PirType(t_.r, flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orObject() const {
+    inline PirType orObject() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeObject |
-                                 TypeFlags::maybeAttrib |
-                                 TypeFlags::maybeNotFastVecelt);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeObject |
+                                     TypeFlags::maybeAttrib |
+                                     TypeFlags::maybeNotFastVecelt);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orNotFastVecelt() const {
+    inline PirType orNotFastVecelt() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeNotFastVecelt |
-                                 TypeFlags::maybeAttrib);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeNotFastVecelt |
+                                     TypeFlags::maybeAttrib);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orAttribsOrObj() const {
+    inline PirType orAttribsOrObj() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
-                                 TypeFlags::maybeNotFastVecelt |
-                                 TypeFlags::maybeObject);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
+                                     TypeFlags::maybeNotFastVecelt |
+                                     TypeFlags::maybeObject);
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orNameAttrs() const {
+    inline PirType orNameAttrs() const {
         assert(isRType());
-        return PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
-                                 TypeFlags::maybeNotFastVecelt);
+        auto ret = PirType(t_.r, flags_ | TypeFlags::maybeAttrib |
+                                     TypeFlags::maybeNotFastVecelt);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orMaybeMissing() const {
+    inline PirType orMaybeMissing() const {
         assert(isRType());
         auto newType = t_.r;
         auto newFlags = flags_ | TypeFlags::maybeMissing;
         ensureMissingInvariant(newType, newFlags);
-        return PirType(newType, newFlags);
+        auto ret = PirType(newType, newFlags);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType orFastVecelt() const {
+    inline PirType orFastVecelt() const {
         assert(isRType());
         return orAttribsOrObj().fastVecelt();
     }
 
-    inline constexpr PirType fastVecelt() const {
+    inline PirType fastVecelt() const {
         assert(isRType());
-        return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeObject |
-                                        TypeFlags::maybeNotFastVecelt));
+        auto ret = PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::maybeObject |
+                                            TypeFlags::maybeNotFastVecelt));
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    PirType constexpr notPromiseWrapped() const {
-        return PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::lazy |
-                                        TypeFlags::promiseWrapped));
+    PirType notPromiseWrapped() const {
+        auto ret = PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::lazy |
+                                            TypeFlags::promiseWrapped));
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    PirType constexpr notLazy() const {
-        return PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+    PirType notLazy() const {
+        auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    PirType constexpr forced() const {
+    PirType forced() const {
         if (!maybePromiseWrapped())
             return *this;
 
@@ -666,12 +727,20 @@ struct PirType {
 
         ensureMissingInvariant(newType, newFlags);
 
-        return PirType(newType, newFlags);
+        auto ret = PirType(newType, newFlags);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
-    inline constexpr PirType baseType() const {
+    inline PirType baseType() const {
         assert(isRType());
-        return PirType(t_.r);
+        auto ret = PirType(t_.r);
+
+        // relax ctx
+        AA::singleton().copyInfo(this, &ret);
+        return ret;
     }
 
     // Type of <this>[<idx>] or <this>[<idx>, <idx>]

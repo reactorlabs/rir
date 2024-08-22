@@ -16,6 +16,7 @@ class AA {
   public:
     AA() {}
 
+    void unregisterType(PirType* type);
     void recordNotObject(const PirType* type);
     void setCurrentVersion(ClosureVersion* v);
     void copyInfo(const PirType* fromType, const PirType* toType);

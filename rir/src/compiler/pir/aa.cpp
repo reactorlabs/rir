@@ -6,9 +6,20 @@ namespace rir {
 namespace pir {
 
 void AA::copyInfo(const PirType* fromType, const PirType* toType) {
+
+    if (!currentVersion)
+        return;
+
     auto& ldArgsFrom = currentVersion->relatedInstructions[fromType];
     auto& ldArgsTo = currentVersion->relatedInstructions[toType];
     ldArgsTo.insert(ldArgsFrom.begin(), ldArgsFrom.end());
+}
+
+void AA::unregisterType(PirType* type) {
+    if (!currentVersion)
+        return;
+
+    currentVersion->relatedInstructions.erase(type);
 }
 
 void AA::recordNotObject(const PirType* type) {

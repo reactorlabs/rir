@@ -95,6 +95,7 @@ struct AAssumption {
 
     union Content {
         Content() {}
+        ~Content() {}
         std::pair<Value*, PirType> typecheck;
         std::pair<Value*, Value*> equality;
         Value* env;
