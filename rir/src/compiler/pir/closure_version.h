@@ -20,7 +20,7 @@ namespace pir {
  */
 class ClosureVersion : public Code {
   public:
-    std::map<PirType*, std::unordered_set<rir::pir::LdArg*>>
+    std::map<const PirType*, std::unordered_set<rir::pir::LdArg*>>
         relatedInstructions;
 
     enum class Property {

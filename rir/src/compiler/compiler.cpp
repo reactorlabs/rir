@@ -147,6 +147,7 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
+    AA::singleton().setCurrentVersion(version); // ***********
 
     REC_HOOK(recording::addCompilationSC(version, typeFeedback));
 
@@ -409,9 +410,10 @@ void Compiler::optimizeModule() {
                                           translation->getName());
 
                 if (v->anyChangePreviousIter) {
-
+                    AA::singleton().setCurrentVersion(v); // **********
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
+                    AA::singleton().setCurrentVersion(nullptr); // **********
 
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;

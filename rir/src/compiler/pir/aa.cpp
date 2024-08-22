@@ -5,7 +5,13 @@
 namespace rir {
 namespace pir {
 
-void AA::notMaybeObject(PirType* type) {
+void AA::copyInfo(const PirType* fromType, const PirType* toType) {
+    auto& ldArgsFrom = currentVersion->relatedInstructions[fromType];
+    auto& ldArgsTo = currentVersion->relatedInstructions[toType];
+    ldArgsTo.insert(ldArgsFrom.begin(), ldArgsFrom.end());
+}
+
+void AA::recordNotObject(const PirType* type) {
 
     if (!currentVersion)
         return;

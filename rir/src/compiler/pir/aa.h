@@ -4,7 +4,7 @@
 #include <map>
 #include <unordered_set>
 
-//#include "pir.h"
+#include "pir.h"
 
 namespace rir {
 namespace pir {
@@ -16,8 +16,9 @@ class AA {
   public:
     AA() {}
 
-    void notMaybeObject(PirType* type);
+    void recordNotObject(const PirType* type);
     void setCurrentVersion(ClosureVersion* v);
+    void copyInfo(const PirType* fromType, const PirType* toType);
 
     static AA& singleton() {
         if (!singleInstance)
