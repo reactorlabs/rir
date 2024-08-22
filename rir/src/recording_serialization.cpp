@@ -162,6 +162,8 @@ SEXP to_sexp(const rir::recording::FunRecording& obj) {
     SET_VECTOR_ELT(vec, i++, obj.closure);
     SET_VECTOR_ELT(vec, i++, to_sexp(obj.address));
 
+    UNPROTECT(1);
+
     return vec;
 }
 
