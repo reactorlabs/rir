@@ -250,15 +250,13 @@ struct PirType {
     void merge(const ObservedValues& other);
     void merge(SEXPTYPE t);
 
-    static constexpr PirType intReal() {
-        return PirType(RType::integer) | RType::real;
-    }
-    static constexpr PirType intRealLgl() { return intReal() | RType::logical; }
-    static constexpr PirType num() { return intRealLgl() | RType::cplx; }
-    static constexpr PirType atomOrSimpleVec() {
+    static PirType intReal() { return PirType(RType::integer) | RType::real; }
+    static PirType intRealLgl() { return intReal() | RType::logical; }
+    static PirType num() { return intRealLgl() | RType::cplx; }
+    static PirType atomOrSimpleVec() {
         return num() | RType::sym | RType::chr | RType::str | RType::code;
     }
-    static constexpr PirType val() {
+    static PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::special | RType::builtin |
                        RType::prom | RType::code | RType::env | RType::unbound |
@@ -267,78 +265,70 @@ struct PirType {
             .orNAOrNaN()
             .orAttribsOrObj();
     }
-    static constexpr PirType vecs() {
+    static PirType vecs() {
         return num() | RType::str | RType::raw | RType::vec |
                RType::expressions;
     }
-    static constexpr PirType closure() {
+    static PirType closure() {
         return PirType(RType::closure).orAttribsOrObj();
     }
     static constexpr PirType special() {
         return PirType(RType::special).orAttribsOrObj();
     }
-    static constexpr PirType builtin() {
+    static PirType builtin() {
         return PirType(RType::builtin).orAttribsOrObj();
     }
-    static constexpr PirType function() {
+    static PirType function() {
         return closure() | RType::special | RType::builtin;
     }
 
-    static constexpr PirType env() {
-        return PirType(RType::env).orAttribsOrObj();
-    }
+    static PirType env() { return PirType(RType::env).orAttribsOrObj(); }
 
-    static constexpr PirType theMissingValue() {
+    static PirType theMissingValue() {
         return PirType(RType::missing).orMaybeMissing();
     }
 
-    static constexpr PirType dotsArg() {
+    static PirType dotsArg() {
         return (PirType() | RType::dots).notPromiseWrapped().orMaybeMissing();
     }
 
-    static constexpr PirType simpleScalarInt() {
+    static PirType simpleScalarInt() {
         return PirType(RType::integer).simpleScalar();
     }
 
-    static constexpr PirType simpleScalarReal() {
+    static PirType simpleScalarReal() {
         return PirType(RType::real).simpleScalar();
     }
 
-    static constexpr PirType simpleScalarLogical() {
+    static PirType simpleScalarLogical() {
         return PirType(RType::logical).simpleScalar();
     }
-    static constexpr PirType test() {
-        return simpleScalarLogical().notNAOrNaN();
-    }
+    static PirType test() { return simpleScalarLogical().notNAOrNaN(); }
 
-    static constexpr PirType simpleScalarString() {
+    static PirType simpleScalarString() {
         return PirType(RType::str).simpleScalar();
     }
 
-    static constexpr PirType anySimpleScalar() {
+    static PirType anySimpleScalar() {
         return (PirType(RType::integer) | RType::real | RType::logical)
             .simpleScalar();
     }
 
-    static constexpr PirType simpleVector() { return PirType(RType::vec); }
+    static PirType simpleVector() { return PirType(RType::vec); }
 
-    constexpr bool unboxable() const {
+    bool unboxable() const {
         return isA(simpleScalarLogical()) || isA(simpleScalarInt()) ||
                isA(simpleScalarReal());
     }
 
-    static constexpr PirType promiseWrappedVal() {
-        return val().orPromiseWrapped();
-    }
+    static PirType promiseWrappedVal() { return val().orPromiseWrapped(); }
 
-    static constexpr PirType valOrLazy() { return val().orLazy(); }
-    static constexpr PirType list() {
-        return PirType(RType::list) | RType::nil;
-    }
+    static PirType valOrLazy() { return val().orLazy(); }
+    static PirType list() { return PirType(RType::list) | RType::nil; }
     // Note: This includes any R type, but not native types
-    static constexpr PirType any() { return val().orLazy(); }
+    static PirType any() { return val().orLazy(); }
 
-    inline constexpr bool maybeMissing() const {
+    inline bool maybeMissing() const {
         if (!isRType())
             return false;
         return flags_.includes(TypeFlags::maybeMissing);
@@ -454,7 +444,7 @@ struct PirType {
         }
     }
 
-    inline constexpr PirType operator|(const PirType& o) const {
+    inline PirType operator|(const PirType& o) const {
 
         assert(isRType() == o.isRType());
 
