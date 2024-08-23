@@ -247,7 +247,7 @@ struct PirType {
         auto ret = PirType(t_.r | other.t_.r, flags_);
 
         // relax ctx
-        // AA::singleton().copyInfo(&other, &ret);
+        AA::singleton().copyInfo(&other, &ret);
 
         return ret;
     }
@@ -376,12 +376,12 @@ struct PirType {
     inline constexpr bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
-    inline constexpr bool maybeObj() const {
+    inline constexpr bool maybeObj(bool record = true) const {
         if (!isRType())
             return false;
         auto res = flags_.includes(TypeFlags::maybeObject);
 
-        if (!res) {
+        if (record && !res) {
             AA::singleton().recordNotObject(this);
         }
 
@@ -844,7 +844,7 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
-            (!maybeObj() && o.maybeObj()) ||
+            (!maybeObj(false) && o.maybeObj(false)) ||
             (!maybeNotFastVecelt() && o.maybeNotFastVecelt()) ||
             (!maybeHasAttrs() && o.maybeHasAttrs()) ||
             (!maybeNAOrNaN() && o.maybeNAOrNaN()) ||

@@ -458,6 +458,62 @@ void Compiler::optimizeModule() {
     if (MEASURE_COMPILER_PERF)
         Measuring::countTimer("compiler.cpp: verification");
 
+    // relax ctx
+    static int totalCompilations = 0;
+    static int totalRelaxed = 0;
+
+    std::stringstream ss;
+
+    std::cerr << "\n\n\n ------------- New compilation session "
+                 "-----------------\n\n\n";
+
+    module->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            totalCompilations++;
+
+            ss << "\n\n\n";
+            ss << "**************************************";
+            ss << "\n";
+
+            ss << "Function '" << c->name() << "' context '";
+            ss << v->context() << "' can relax: \n";
+
+            auto anyRelaxed = false;
+
+            Visitor::run(v->entry, [&](Instruction* i) {
+                if (auto ldArg = LdArg::Cast(i)) {
+                    if (v->context().isNotObj(ldArg->pos) && !ldArg->notObj) {
+                        ldArg->print(std::cerr, true);
+                        ss << "\n";
+                        ss << "LdArg" << ldArg->pos << " !notObj was not used";
+
+                        ss << "\n\n";
+                        anyRelaxed = true;
+                    }
+                }
+            });
+
+            if (anyRelaxed) {
+
+                totalRelaxed++;
+
+                ss << "\n";
+                ss << "****************************************";
+                ss << "\n\n\n";
+                std::cerr << ss.str();
+            }
+        });
+    });
+
+    std::cerr << "============================================================="
+                 "========\n";
+    std::cerr << "Relaxed " << totalRelaxed << " out of " << totalCompilations
+              << " compilations (";
+    std::cerr << round((float)totalRelaxed * 100 / totalCompilations);
+    std::cerr << "%) in total \n";
+    std::cerr << "============================================================="
+                 "========\n\n";
+
     logger.flushAll();
 }
 

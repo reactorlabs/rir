@@ -57,7 +57,7 @@ class TypeTest {
 
         auto checkFor = i->type.notLazy().noAttribsOrObject();
         if (expected.isA(checkFor)) {
-            assert(!expected.maybeObj());
+            assert(!expected.maybeObj(false));
             assert(!expected.maybeHasAttrs());
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin});
@@ -65,7 +65,7 @@ class TypeTest {
 
         checkFor = i->type.notLazy().notObject();
         if (expected.isA(checkFor)) {
-            assert(!expected.maybeObj());
+            assert(!expected.maybeObj(false));
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin});
         }
