@@ -1,11 +1,11 @@
-#include "aa.h"
+#include "relax_context.h"
 
 #include "pir_impl.h"
 
 namespace rir {
 namespace pir {
 
-void AA::copyInfo(const PirType* fromType, const PirType* toType) {
+void RelaxContext::copyInfo(const PirType* fromType, const PirType* toType) {
 
     if (!currentVersion)
         return;
@@ -15,14 +15,14 @@ void AA::copyInfo(const PirType* fromType, const PirType* toType) {
     ldArgsTo.insert(ldArgsFrom.begin(), ldArgsFrom.end());
 }
 
-void AA::unregisterType(PirType* type) {
+void RelaxContext::unregisterType(PirType* type) {
     if (!currentVersion)
         return;
 
     currentVersion->relatedInstructions.erase(type);
 }
 
-void AA::recordNotObject(const PirType* type) {
+void RelaxContext::recordNotObject(const PirType* type) {
 
     if (!currentVersion)
         return;
@@ -32,7 +32,7 @@ void AA::recordNotObject(const PirType* type) {
         ldArg->notObj = true;
     }
 }
-void AA::recordEager(const PirType* type) {
+void RelaxContext::recordEager(const PirType* type) {
 
     if (!currentVersion)
         return;
@@ -43,7 +43,7 @@ void AA::recordEager(const PirType* type) {
     }
 }
 
-void AA::recordSimpleScalar(const PirType* type) {
+void RelaxContext::recordSimpleScalar(const PirType* type) {
 
     if (!currentVersion)
         return;
@@ -54,9 +54,9 @@ void AA::recordSimpleScalar(const PirType* type) {
     }
 }
 
-void AA::setCurrentVersion(ClosureVersion* v) { currentVersion = v; }
+void RelaxContext::setCurrentVersion(ClosureVersion* v) { currentVersion = v; }
 
-AA* AA::singleInstance{nullptr};
+RelaxContext* RelaxContext::singleInstance{nullptr};
 
 } // namespace pir
 } // namespace rir

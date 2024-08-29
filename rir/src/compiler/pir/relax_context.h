@@ -1,5 +1,5 @@
-#ifndef COMPILER_AA_H
-#define COMPILER_AA_H
+#ifndef COMPILER_RELAX_CONTEXT_H
+#define COMPILER_RELAX_CONTEXT_H
 
 #include <map>
 #include <unordered_set>
@@ -12,9 +12,9 @@ namespace pir {
 class LdArg;
 class PirType;
 
-class AA {
+class RelaxContext {
   public:
-    AA() {}
+    RelaxContext() {}
 
     void unregisterType(PirType* type);
     void recordNotObject(const PirType* type);
@@ -25,16 +25,16 @@ class AA {
     void setCurrentVersion(ClosureVersion* v);
     void copyInfo(const PirType* fromType, const PirType* toType);
 
-    static AA& singleton() {
+    static RelaxContext& singleton() {
         if (!singleInstance)
-            singleInstance = new AA();
+            singleInstance = new RelaxContext();
 
         return *singleInstance;
     }
 
   private:
     ClosureVersion* currentVersion = nullptr;
-    static AA* singleInstance;
+    static RelaxContext* singleInstance;
 };
 
 } // namespace pir

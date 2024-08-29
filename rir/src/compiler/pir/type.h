@@ -11,7 +11,7 @@
 #include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
-#include "aa.h"
+#include "relax_context.h"
 
 namespace rir {
 namespace pir {
@@ -187,12 +187,12 @@ struct PirType {
         : flags_(other.flags_), t_(other.t_) {
 
         // relax ctx
-        AA::singleton().copyInfo(&other, this);
+        RelaxContext::singleton().copyInfo(&other, this);
     }
 
     ~PirType() {
         // relax ctx
-        AA::singleton().unregisterType(this);
+        RelaxContext::singleton().unregisterType(this);
     }
 
     explicit PirType(uint64_t);
@@ -211,7 +211,7 @@ struct PirType {
             t_.n = o.t_.n;
 
         // relax ctx
-        AA::singleton().copyInfo(&o, this);
+        RelaxContext::singleton().copyInfo(&o, this);
         return *this;
     }
 
@@ -247,7 +247,7 @@ struct PirType {
         auto ret = PirType(t_.r | other.t_.r, flags_);
 
         // relax ctx
-        AA::singleton().copyInfo(&other, &ret);
+        RelaxContext::singleton().copyInfo(&other, &ret);
 
         return ret;
     }
@@ -345,7 +345,7 @@ struct PirType {
         auto res = flags_.includes(TypeFlags::lazy);
 
         if (record && !res) {
-            AA::singleton().recordEager(this);
+            RelaxContext::singleton().recordEager(this);
         }
 
         return res;
@@ -365,7 +365,7 @@ struct PirType {
         auto res = isScalar() && !maybeHasAttrs();
 
         if (record && res) {
-            AA::singleton().recordSimpleScalar(this);
+            RelaxContext::singleton().recordSimpleScalar(this);
         }
 
         return res;
@@ -395,7 +395,7 @@ struct PirType {
         auto res = flags_.includes(TypeFlags::maybeObject);
 
         if (record && !res) {
-            AA::singleton().recordNotObject(this);
+            RelaxContext::singleton().recordNotObject(this);
         }
 
         assert(!res || (flags_.includes(TypeFlags::maybeAttrib) &&
@@ -478,7 +478,7 @@ struct PirType {
             ensureMissingInvariant(r.t_.r, r.flags_);
 
         // relax ctx
-        AA::singleton().copyInfo(&o, &r);
+        RelaxContext::singleton().copyInfo(&o, &r);
 
         return r;
     }
@@ -498,7 +498,7 @@ struct PirType {
             ensureMissingInvariant(r.t_.r, r.flags_);
 
         // relax ctx
-        AA::singleton().copyInfo(&o, &r);
+        RelaxContext::singleton().copyInfo(&o, &r);
 
         return r;
     }
@@ -515,7 +515,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeObject));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
 
         return ret;
     }
@@ -528,7 +528,7 @@ struct PirType {
                 .notObject();
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
 
         return ret;
     }
@@ -544,7 +544,7 @@ struct PirType {
         auto ret = PirType(newType, flags_ & ~FlagSet(TypeFlags::maybeMissing));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
 
         return ret;
     }
@@ -554,7 +554,7 @@ struct PirType {
 
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNAOrNaN));
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
 
         return ret;
     }
@@ -564,7 +564,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::maybeNotScalar));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -575,7 +575,7 @@ struct PirType {
         auto ret = PirType(t_.r & ~RTypeSet(t), flags_);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
 
         return ret;
     }
@@ -585,7 +585,7 @@ struct PirType {
         auto ret = PirType(t_.r | t, flags_);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -594,7 +594,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ | TypeFlags::maybeNAOrNaN);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -603,7 +603,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ | TypeFlags::maybeNotScalar);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -616,7 +616,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -630,7 +630,7 @@ struct PirType {
                                      ~(FlagSet() | TypeFlags::maybeMissing));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -640,7 +640,7 @@ struct PirType {
             PirType(t_.r, flags_ | TypeFlags::lazy | TypeFlags::promiseWrapped);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -651,7 +651,7 @@ struct PirType {
                                      TypeFlags::maybeNotFastVecelt);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -661,7 +661,7 @@ struct PirType {
                                      TypeFlags::maybeAttrib);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -671,7 +671,7 @@ struct PirType {
                                      TypeFlags::maybeNotFastVecelt |
                                      TypeFlags::maybeObject);
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -681,7 +681,7 @@ struct PirType {
                                      TypeFlags::maybeNotFastVecelt);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -693,7 +693,7 @@ struct PirType {
         auto ret = PirType(newType, newFlags);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -708,7 +708,7 @@ struct PirType {
                                             TypeFlags::maybeNotFastVecelt));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -716,7 +716,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ & ~(FlagSet() | TypeFlags::lazy |
                                             TypeFlags::promiseWrapped));
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -724,7 +724,7 @@ struct PirType {
         auto ret = PirType(t_.r, flags_ & ~FlagSet(TypeFlags::lazy));
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -743,7 +743,7 @@ struct PirType {
         auto ret = PirType(newType, newFlags);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
@@ -752,7 +752,7 @@ struct PirType {
         auto ret = PirType(t_.r);
 
         // relax ctx
-        AA::singleton().copyInfo(this, &ret);
+        RelaxContext::singleton().copyInfo(this, &ret);
         return ret;
     }
 
