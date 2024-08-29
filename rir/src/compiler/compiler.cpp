@@ -482,14 +482,38 @@ void Compiler::optimizeModule() {
 
             Visitor::run(v->entry, [&](Instruction* i) {
                 if (auto ldArg = LdArg::Cast(i)) {
+                    auto anyRelaxedLdArg = false;
                     if (v->context().isNotObj(ldArg->pos) && !ldArg->notObj) {
-                        ldArg->print(std::cerr, true);
+                        ldArg->print(ss, true);
                         ss << "\n";
                         ss << "LdArg" << ldArg->pos << " !notObj was not used";
-
-                        ss << "\n\n";
-                        anyRelaxed = true;
+                        ss << "\n";
+                        anyRelaxedLdArg = true;
                     }
+
+                    if ((v->context().isSimpleInt(ldArg->pos) ||
+                         v->context().isSimpleReal(ldArg->pos)) &&
+                        !ldArg->simpleScalar) {
+                        ldArg->print(ss, true);
+                        ss << "\n";
+                        ss << "LdArg" << ldArg->pos
+                           << " simpleScalar was not used";
+                        ss << "\n";
+                        anyRelaxedLdArg = true;
+                    }
+
+                    if (v->context().isEager(ldArg->pos) && !ldArg->eager) {
+                        ldArg->print(ss, true);
+                        ss << "\n";
+                        ss << "LdArg" << ldArg->pos << " eager was not used";
+                        ss << "\n";
+                        anyRelaxedLdArg = true;
+                    }
+
+                    if (anyRelaxedLdArg)
+                        ss << "\n";
+
+                    anyRelaxed |= anyRelaxedLdArg;
                 }
             });
 

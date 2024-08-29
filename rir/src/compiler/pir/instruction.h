@@ -1075,6 +1075,8 @@ class FLI(LdArg, 0, Effects::None()) {
 
     // relax ctx ///////
     bool notObj = false;
+    bool simpleScalar = false;
+    bool eager = false;
 
     //////////////
 

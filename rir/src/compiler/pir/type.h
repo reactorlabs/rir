@@ -338,10 +338,17 @@ struct PirType {
             return false;
         return flags_.includes(TypeFlags::maybeMissing);
     }
-    inline constexpr bool maybeLazy() const {
+    inline constexpr bool maybeLazy(bool record = true) const {
         if (!isRType())
             return false;
-        return flags_.includes(TypeFlags::lazy);
+
+        auto res = flags_.includes(TypeFlags::lazy);
+
+        if (record && !res) {
+            AA::singleton().recordEager(this);
+        }
+
+        return res;
     }
     inline constexpr bool maybePromiseWrapped() const {
         if (!isRType())
@@ -354,8 +361,14 @@ struct PirType {
             return false;
         return flags_.includes(TypeFlags::maybeNAOrNaN);
     }
-    inline constexpr bool isSimpleScalar() const {
-        return isScalar() && !maybeHasAttrs();
+    inline constexpr bool isSimpleScalar(bool record = true) const {
+        auto res = isScalar() && !maybeHasAttrs();
+
+        if (record && res) {
+            AA::singleton().recordSimpleScalar(this);
+        }
+
+        return res;
     }
 
     inline constexpr bool isScalar() const {

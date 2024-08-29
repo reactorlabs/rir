@@ -32,6 +32,27 @@ void AA::recordNotObject(const PirType* type) {
         ldArg->notObj = true;
     }
 }
+void AA::recordEager(const PirType* type) {
+
+    if (!currentVersion)
+        return;
+
+    auto& ldArgs = currentVersion->relatedInstructions[type];
+    for (auto ldArg : ldArgs) {
+        ldArg->eager = true;
+    }
+}
+
+void AA::recordSimpleScalar(const PirType* type) {
+
+    if (!currentVersion)
+        return;
+
+    auto& ldArgs = currentVersion->relatedInstructions[type];
+    for (auto ldArg : ldArgs) {
+        ldArg->simpleScalar = true;
+    }
+}
 
 void AA::setCurrentVersion(ClosureVersion* v) { currentVersion = v; }
 

@@ -18,6 +18,10 @@ class AA {
 
     void unregisterType(PirType* type);
     void recordNotObject(const PirType* type);
+    void recordEager(const PirType* type);
+
+    void recordSimpleScalar(const PirType* type);
+
     void setCurrentVersion(ClosureVersion* v);
     void copyInfo(const PirType* fromType, const PirType* toType);
 
