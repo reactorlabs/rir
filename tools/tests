@@ -58,7 +58,7 @@ function run_test {
 
   function status {
     done=`wc -l < $STATUS`
-    echo -e "[${done}/${NUM_TESTS}] ${name} "
+    echo -ne "\e[0K\r[${done}/${NUM_TESTS}] ${name} "
   }
   status
 
@@ -109,7 +109,7 @@ TESTS_PATH="${ROOT_DIR}/rir/tests"
 NUM_TESTS=`find ${TESTS_PATH} -name '*.[Rr]' | wc -l`
 export NUM_TESTS
 
-find ${TESTS_PATH} -name '*.[Rr]' | xargs -n 1 -P 1 bash -c 'run_test $@'
+find ${TESTS_PATH} -name '*.[Rr]' | xargs -n 1 -P `ncores` bash -c 'run_test $@'
 
 rm -rf $STATUS
 echo ""
