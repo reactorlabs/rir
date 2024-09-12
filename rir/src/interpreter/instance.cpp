@@ -68,7 +68,7 @@ void context_init() {
         c->closureOptimizer = rirOptDefaultOpts;
     }
 
-    REC_HOOK({ recording::recordExecution("/tmp/rec.rds", ""); })
+    REC_HOOK({ recording::recordExecution(std::tmpnam(nullptr), ""); })
 }
 
 } // namespace rir
