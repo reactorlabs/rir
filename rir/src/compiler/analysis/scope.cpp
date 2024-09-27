@@ -18,7 +18,7 @@ void ScopeAnalysis::lookup(Value* v, const LoadMaybe& action,
         if (ld->pos < args.size())
             return lookup(args[ld->pos], action, notFound);
 
-    // If the this is a call instruction or force we might have some result
+    // If this is a call instruction or force we might have some result
     // value from the inter-procedural analysis.
     // Since the "returnValues" and the "cache" are indexed by SSA variables,
     // they are always valid, even if "state" does not correspond with the
