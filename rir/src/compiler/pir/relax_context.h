@@ -2,6 +2,7 @@
 #define COMPILER_RELAX_CONTEXT_H
 
 #include <map>
+#include <stack>
 #include <unordered_set>
 
 #include "pir.h"
@@ -22,8 +23,19 @@ class RelaxContext {
 
     void recordSimpleScalar(const PirType* type);
 
-    void setCurrentVersion(ClosureVersion* v);
+    void recordNonRefl(int pos);
+
+    void startRecording(ClosureVersion* v);
+    void stopRecording();
+
     void copyInfo(const PirType* fromType, const PirType* toType);
+
+    ClosureVersion* currentVersion();
+    bool hasCurrentVersion();
+
+    void pauseRecording();
+    void resumeRecording();
+    bool shouldRecord();
 
     static RelaxContext& singleton() {
         if (!singleInstance)
@@ -33,7 +45,9 @@ class RelaxContext {
     }
 
   private:
-    ClosureVersion* currentVersion = nullptr;
+    bool recordingPaused = false;
+    std::stack<ClosureVersion*> recordingStack;
+
     static RelaxContext* singleInstance;
 };
 

@@ -321,7 +321,7 @@ Value* BBTransform::insertCalleeGuard(Compiler& compiler,
         // The "bodyCode" builtin will return R_NilValue for promises.
         // It is therefore safe (ie. conservative with respect to the
         // guard) to avoid forcing the result by casting it to a value.
-        if (calleeForGuard->type.maybeLazy()) {
+        if (calleeForGuard->type.maybeLazy(false)) {
             auto casted = new CastType(calleeForGuard, CastType::Downcast,
                                        PirType::any(), PirType::function());
             calleeForGuard = casted;

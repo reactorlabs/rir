@@ -1417,13 +1417,28 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         worklist.push_back(State(cur, false, bb, pos));
     };
 
+    if (!inPromise())
+        RelaxContext::singleton().pauseRecording();
+    // relax ctx ABSTRACT PAUSE AND RESUME
+
     bool anyReflective = false;
     for (size_t i = 0; i < cls->nargs(); ++i)
         if (!cls->context().isNonRefl(i) && !cls->context().isEager(i))
             anyReflective = true;
+
+    if (!inPromise())
+        RelaxContext::singleton().resumeRecording();
+
+    if (!anyReflective) {
+        for (size_t i = 0; i < cls->nargs(); ++i)
+            if (!cls->context().isNonRefl(i) && !cls->context().isEager(i))
+                anyReflective = true;
+    }
+
     // If there are args that might be reflective it is helpful to have a
     // checkpoint before forcing the first arg. Otherwise it is typically just
     // inhibiting.
+
     if (cls->rirSrc() == srcCode && anyReflective && start == srcCode->code()) {
         addCheckpoint(srcCode, finger, cur.stack, insert);
     }

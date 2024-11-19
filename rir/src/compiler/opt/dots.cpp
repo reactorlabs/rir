@@ -85,7 +85,7 @@ bool DotDotDots::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                     a = mk->eagerArg();
                             }
                             auto mk = MkArg::Cast(a);
-                            if (a->type.maybeLazy() || mk) {
+                            if (a->type.maybeLazy(false) || mk) {
                                 Value* env = nullptr;
                                 if (mk && mk->noReflection)
                                     env = Env::elided();

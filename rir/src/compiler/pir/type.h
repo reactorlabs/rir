@@ -11,7 +11,6 @@
 #include "runtime/TypeFeedback.h"
 #include "utils/EnumSet.h"
 
-#include "relax_context.h"
 
 namespace rir {
 namespace pir {

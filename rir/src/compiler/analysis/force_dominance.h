@@ -407,7 +407,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         bool forceHandled = false;
         if (auto f = Force::Cast(i)) {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
-                if (arg->type.maybeLazy()) {
+                if (arg->type.maybeLazy(false)) {
                     forceHandled = true;
                     if (state.forcedAt(arg, f))
                         res.update();
@@ -421,7 +421,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 auto instruction =
                     Instruction::Cast(f->arg<0>().val()->followCasts());
                 if (MkArg::Cast(f->arg<0>().val()->followCasts()) ||
-                    (instruction && instruction->type.maybeLazy())) {
+                    (instruction && instruction->type.maybeLazy(false))) {
                     forceHandled = true;
                     if (state.forcedAt(instruction, f))
                         res.update();
@@ -477,7 +477,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             });
         };
         if (auto phi = Phi::Cast(i)) {
-            if (phi->type.maybeLazy()) {
+            if (phi->type.maybeLazy(false)) {
                 if (state.forcedBy.count(phi) == 0 && state.declare(phi)) {
                     res.update();
                 }
@@ -489,7 +489,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             // Do nothing...
             // FrameState is handled when used (see traceEscapes)
         } else {
-            if (i->type.maybeLazy()) {
+            if (i->type.maybeLazy(false)) {
                 if (state.declare(i))
                     res.update();
             }

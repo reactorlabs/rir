@@ -8,6 +8,8 @@
 #include <cstring>
 #include <iostream>
 
+#include "compiler/pir/relax_context.h"
+
 namespace rir {
 
 enum class TypeAssumption {
@@ -133,8 +135,34 @@ struct Context {
     TYPE_ASSUMPTIONS(NotObj);
     TYPE_ASSUMPTIONS(SimpleInt);
     TYPE_ASSUMPTIONS(SimpleReal);
-    TYPE_ASSUMPTIONS(NonRefl);
+    // TYPE_ASSUMPTIONS(NonRefl);
 #undef TYPE_ASSUMPTIONS
+
+    // relaxctx %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    static constexpr std::array<TypeAssumption, NUM_TYPED_ARGS> NonReflContext =
+        {TypeAssumption::Arg0IsNonRefl_, TypeAssumption::Arg1IsNonRefl_,
+         TypeAssumption::Arg2IsNonRefl_, TypeAssumption::Arg3IsNonRefl_,
+         TypeAssumption::Arg4IsNonRefl_, TypeAssumption::Arg5IsNonRefl_};
+
+    inline bool isNonRefl(size_t i) const {
+        if (i < NUM_TYPED_ARGS) {
+            if (typeFlags.includes(NonReflContext[i])) {
+                rir::pir::RelaxContext::singleton().recordNonRefl(i);
+                return true;
+            }
+        }
+        return false;
+    }
+    inline void resetNonRefl(size_t i) {
+        if (i < NUM_TYPED_ARGS)
+            typeFlags.reset(NonReflContext[i]);
+    }
+    inline void setNonRefl(size_t i) {
+        if (i < NUM_TYPED_ARGS)
+            typeFlags.set(NonReflContext[i]);
+    }
+
+    //  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
     static TypeFlags allEagerArgsFlags() {
         Context a;

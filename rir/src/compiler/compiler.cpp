@@ -147,7 +147,6 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return success(existing);
 
     auto version = closure->declareVersion(ctx, root, optFunction);
-    RelaxContext::singleton().setCurrentVersion(version); // ***********
 
     REC_HOOK(recording::addCompilationSC(version, typeFeedback));
 
@@ -230,6 +229,8 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
         return fail();
     }
 
+    RelaxContext::singleton().startRecording(version);
+
     if (rir2pir.tryCompile(builder)) {
 #ifdef FULLVERIFIER
         Verify::apply(version, "Error after initial translation", true);
@@ -239,8 +240,11 @@ void Compiler::compileClosure(Closure* closure, rir::Function* optFunction,
 #endif
 #endif
         log.flush();
+        RelaxContext::singleton().stopRecording();
+
         return success(version);
     }
+    RelaxContext::singleton().stopRecording();
 
     log.failed("rir2pir aborted");
     log.flush();
@@ -410,12 +414,10 @@ void Compiler::optimizeModule() {
                                           translation->getName());
 
                 if (v->anyChangePreviousIter) {
-                    RelaxContext::singleton().setCurrentVersion(
-                        v); // **********
+                    RelaxContext::singleton().startRecording(v); // **********
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
-                    RelaxContext::singleton().setCurrentVersion(
-                        nullptr); // **********
+                    RelaxContext::singleton().stopRecording(); // **********
 
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
@@ -478,44 +480,56 @@ void Compiler::optimizeModule() {
             ss << "\n";
 
             ss << "Function '" << c->name() << "' context '";
-            ss << v->context() << "' can relax: \n";
+            ss << v->context() << "' can relax: \n\n";
 
             auto anyRelaxed = false;
 
             Visitor::run(v->entry, [&](Instruction* i) {
                 if (auto ldArg = LdArg::Cast(i)) {
+                    std::stringstream ldss;
+
                     auto anyRelaxedLdArg = false;
                     if (v->context().isNotObj(ldArg->pos) && !ldArg->notObj) {
-                        ldArg->print(ss, true);
-                        ss << "\n";
-                        ss << "LdArg" << ldArg->pos << " !notObj was not used";
-                        ss << "\n";
+                        ldss << "!Obj";
+                        ldss << ", ";
                         anyRelaxedLdArg = true;
                     }
 
                     if ((v->context().isSimpleInt(ldArg->pos) ||
                          v->context().isSimpleReal(ldArg->pos)) &&
                         !ldArg->simpleScalar) {
-                        ldArg->print(ss, true);
-                        ss << "\n";
-                        ss << "LdArg" << ldArg->pos
-                           << " simpleScalar was not used";
-                        ss << "\n";
+                        ldss << "simpleScalar";
+                        ldss << ", ";
                         anyRelaxedLdArg = true;
                     }
 
                     if (v->context().isEager(ldArg->pos) && !ldArg->eager) {
-                        ldArg->print(ss, true);
-                        ss << "\n";
-                        ss << "LdArg" << ldArg->pos << " eager was not used";
-                        ss << "\n";
+                        // ldArg->print(ss, true);
+                        // ss << "\n";
+                        ldss << "eager";
+                        ldss << ", ";
                         anyRelaxedLdArg = true;
                     }
 
-                    if (anyRelaxedLdArg)
+                    // std::cerr << v->nonReflArgsQueried;
+                    if (v->context().isNonRefl(ldArg->pos) &&
+                        !v->nonReflArgsQueried.count(ldArg->pos)) {
+                        ldss << "nonRefl";
+                        ldss << ", ";
+                        anyRelaxedLdArg = true;
+                        // assert(false);
+                    }
+
+                    if (anyRelaxedLdArg) {
+                        ldArg->print(ss, true);
                         ss << "\n";
+                        ss << ldss.rdbuf();
+                        ss << "\n";
+                    }
 
                     anyRelaxed |= anyRelaxedLdArg;
+
+                    ss << "\n";
                 }
             });
 

@@ -615,6 +615,121 @@ REXPORT SEXP playground() {
     return R_NilValue;
 }
 
+REXPORT SEXP compile_c3(SEXP what) {
+
+    Context baseContext = pir::Compiler::defaultContext;
+    baseContext.add(Assumption::StaticallyArgmatched);
+    baseContext.add(Assumption::NoExplicitlyMissingArgs);
+    baseContext.add(Assumption::CorrectOrderOfArguments);
+    baseContext.add(Assumption::NotTooManyArguments);
+    baseContext.numMissing(0);
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
+
+    Context c = baseContext;
+    c.setEager(0);
+    c.setNonRefl(0);
+    c.setNotObj(0);
+    c.setSimpleInt(0);
+
+    c.setNotObj(1);
+    c.setSimpleInt(1);
+
+    std::cerr << "Context: " << c << "\n";
+    pirCompile(what, c, "c3", opts);
+
+    return R_NilValue;
+}
+
+REXPORT SEXP compile_c2(SEXP what) {
+
+    Context baseContext = pir::Compiler::defaultContext;
+    baseContext.add(Assumption::StaticallyArgmatched);
+    baseContext.add(Assumption::NoExplicitlyMissingArgs);
+    baseContext.add(Assumption::CorrectOrderOfArguments);
+    baseContext.add(Assumption::NotTooManyArguments);
+    baseContext.numMissing(0);
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
+
+    // // C1 (EAGER + NONREFL + NONOBJ)
+    Context c = baseContext;
+    c.setEager(0);
+    c.setNonRefl(0);
+
+    std::cerr << "Context: " << c << "\n";
+    pirCompile(what, c, "c2", opts);
+
+    return R_NilValue;
+}
+
+REXPORT SEXP compile_c1(SEXP what) {
+
+    Context baseContext = pir::Compiler::defaultContext;
+    baseContext.add(Assumption::StaticallyArgmatched);
+    baseContext.add(Assumption::NoExplicitlyMissingArgs);
+    baseContext.add(Assumption::CorrectOrderOfArguments);
+    baseContext.add(Assumption::NotTooManyArguments);
+    baseContext.numMissing(0);
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
+
+    // // C1 (EAGER + NONREFL + NONOBJ)
+    Context c1 = baseContext;
+    c1.setEager(0);
+    c1.setNonRefl(0);
+    c1.setNotObj(0);
+    std::cerr << "Context: " << c1 << "\n";
+    pirCompile(what, c1, "foo", opts);
+
+    // Context c3 = baseContext;
+    // // c3.setEager(0);
+    // c3.setNonRefl(0);
+    // // c3.setNotObj(0);
+    // // c3.setSimpleInt(0);
+    // std::cerr << "Context: " << c3 << "\n";
+    // pirCompile(what, c3, "parent.frame", opts);
+
+    // Context c4 = baseContext;
+    // // c4.setEager(0);
+    // // c4.setNonRefl(0);
+    // // c4.setNotObj(0);
+    // // c4.setSimpleInt(0);
+    // std::cerr << "Context: " << c4 << "\n";
+    // pirCompile(what, c4, "parent.frame", opts);
+
+    // Context c5 = baseContext;
+    // // c5.setEager(0);
+    // // c5.setNonRefl(0);
+    // // c5.setNotObj(0);
+    // c5.setSimpleInt(0);
+    // std::cerr << "Context: " << c5 << "\n";
+    // pirCompile(what, c5, "parent.frame", opts);
+
+    // Context c6 = baseContext;
+    // c6.setEager(0);
+    // c6.setNonRefl(0);
+    // c6.setNotObj(0);
+    // std::cerr << "Context: " << c6 << "\n";
+    // pirCompile(what, c6, "parent.frame", opts);
+
+    // Context c7 = baseContext;
+    // c7.setEager(0);
+    // c7.setNonRefl(0);
+    // std::cerr << "Context: " << c7 << "\n";
+    // pirCompile(what, c7, "parent.frame", opts);
+
+    // Context c8 = baseContext;
+    // c8.setEager(0);
+    // c8.setNonRefl(0);
+    // c8.setNotObj(0);
+    // c8.setSimpleInt(0);
+    // std::cerr << "Context: " << c8 << "\n";
+    // pirCompile(what, c8, "parent.frame", opts);
+
+    return R_NilValue;
+}
+
 bool startup() {
     initializeRuntime();
     return true;

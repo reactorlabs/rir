@@ -371,6 +371,9 @@ void PirJitLLVM::compile(
 
     std::string mangledName = JIT->mangle(makeName(code));
 
+    // relax ctx
+    RelaxContext::singleton().startRecording(closure); // **********
+
     LowerFunctionLLVM funCompiler(
         target, mangledName, closure, code, promMap, refcount,
         needsLdVarForUpdate,
@@ -422,6 +425,8 @@ void PirJitLLVM::compile(
     }
 
     funCompiler.compile();
+    // relax ctx
+    RelaxContext::singleton().stopRecording(); // **********
 
     assert(jitFixup.count(code) == 0);
 

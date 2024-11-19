@@ -7,6 +7,8 @@
 #include "runtime/Function.h"
 #include <functional>
 #include <map>
+#include <set>
+
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,6 +24,8 @@ class ClosureVersion : public Code {
   public:
     std::map<const PirType*, std::unordered_set<rir::pir::LdArg*>>
         relatedInstructions;
+
+    std::set<int> nonReflArgsQueried;
 
     enum class Property {
         IsEager,
