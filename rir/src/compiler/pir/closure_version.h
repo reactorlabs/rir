@@ -22,7 +22,7 @@ namespace pir {
  */
 class ClosureVersion : public Code {
   public:
-    std::map<const PirType*, std::unordered_set<rir::pir::LdArg*>>
+    std::map<const PirType*, std::unordered_set<rir::pir::Instruction*>>
         relatedInstructions;
 
     std::set<int> nonReflArgsQueried;

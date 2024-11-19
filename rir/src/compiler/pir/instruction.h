@@ -174,6 +174,13 @@ class Instruction : public Value {
 
     Effects effects;
 
+    // relax ctx ///////
+    bool notObj = false;
+    bool simpleScalar = false;
+    bool eager = false;
+
+    //////////////
+
   public:
     bool deleted = false;
     bool typeFeedbackUsed = false;
@@ -1073,12 +1080,6 @@ class FLI(LdArg, 0, Effects::None()) {
   public:
     size_t pos;
 
-    // relax ctx ///////
-    bool notObj = false;
-    bool simpleScalar = false;
-    bool eager = false;
-
-    //////////////
 
     explicit LdArg(size_t pos)
         : FixedLenInstruction(PirType::any()), pos(pos) {}

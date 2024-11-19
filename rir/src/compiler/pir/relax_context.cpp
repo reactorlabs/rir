@@ -9,9 +9,9 @@ void RelaxContext::copyInfo(const PirType* fromType, const PirType* toType) {
     if (!shouldRecord())
         return;
 
-    auto& ldArgsFrom = currentVersion()->relatedInstructions[fromType];
-    auto& ldArgsTo = currentVersion()->relatedInstructions[toType];
-    ldArgsTo.insert(ldArgsFrom.begin(), ldArgsFrom.end());
+    auto& instructionsFrom = currentVersion()->relatedInstructions[fromType];
+    auto& instructionsTo = currentVersion()->relatedInstructions[toType];
+    instructionsTo.insert(instructionsFrom.begin(), instructionsFrom.end());
 }
 
 void RelaxContext::unregisterType(PirType* type) {
@@ -32,18 +32,18 @@ void RelaxContext::recordNotObject(const PirType* type) {
     if (!shouldRecord())
         return;
 
-    auto& ldArgs = currentVersion()->relatedInstructions[type];
-    for (auto ldArg : ldArgs) {
-        ldArg->notObj = true;
+    auto& instructions = currentVersion()->relatedInstructions[type];
+    for (auto i : instructions) {
+        i->notObj = true;
     }
 }
 void RelaxContext::recordEager(const PirType* type) {
     if (!shouldRecord())
         return;
 
-    auto& ldArgs = currentVersion()->relatedInstructions[type];
-    for (auto ldArg : ldArgs) {
-        ldArg->eager = true;
+    auto& instructions = currentVersion()->relatedInstructions[type];
+    for (auto i : instructions) {
+        i->eager = true;
     }
 }
 
@@ -56,9 +56,9 @@ void RelaxContext::recordSimpleScalar(const PirType* type) {
     if (!shouldRecord())
         return;
 
-    auto& ldArgs = currentVersion()->relatedInstructions[type];
-    for (auto ldArg : ldArgs) {
-        ldArg->simpleScalar = true;
+    auto& instructions = currentVersion()->relatedInstructions[type];
+    for (auto i : instructions) {
+        i->simpleScalar = true;
     }
 }
 
