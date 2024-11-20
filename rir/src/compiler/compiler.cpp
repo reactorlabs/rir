@@ -462,6 +462,87 @@ void Compiler::optimizeModule() {
     if (MEASURE_COMPILER_PERF)
         Measuring::countTimer("compiler.cpp: verification");
 
+    // printRelaxResults();
+
+    printFeedbackResults();
+
+    logger.flushAll();
+}
+
+void Compiler::printFeedbackResults() {
+    std::stringstream ss;
+
+    std::cerr
+        << "\n\n\n ------------- FEEDBACK RESULTS -  New compilation session "
+           "-----------------\n\n\n";
+
+    module->eachPirClosure([&](Closure* c) {
+        c->eachVersion([&](ClosureVersion* v) {
+            // bool hasUnused = false;
+
+            std::cerr << "\n\n\n ------------- New version ----------\n\n";
+
+            if (v->owner()->hasOriginClosure()) {
+                auto rirFunction = v->owner()->rirFunction();
+
+                std::cerr << "#type slots: "
+                          << rirFunction->typeFeedback()->types_size() << "\n";
+                int emptySlotsCount = 0;
+                for (size_t i = 0;
+                     i < rirFunction->typeFeedback()->types_size(); i++) {
+                    auto ov = rirFunction->typeFeedback()->types(i);
+                    auto emptyOV = ObservedValues();
+                    if (memcmp(&ov, &emptyOV, sizeof(ObservedValues))) {
+                        emptySlotsCount++;
+                    }
+                }
+                std::cerr << "#type slots EMPTY: " << emptySlotsCount << "\n";
+                bool anySlotsToReport = false;
+                // v->withEachPromise([&](Code* c) {
+
+                //     Visitor::run(c->entry, [&](Instruction* i) {
+                //         if (i->hasTypeFeedback() && (!i->typeFeedbackUsed ||
+                //         i->typeFeedback().defaultFeedback)) {
+
+                //             std::string unusedType = "";
+                //             if (!i->typeFeedbackUsed)
+                //                 unusedType += "!used ";
+
+                //             if (i->typeFeedback().defaultFeedback)
+                //                 unusedType += "defaultFeedback ";
+
+                //             auto fb = i->typeFeedback();
+                //             if (fb.feedbackOrigin.function() == rirFunction
+                //             &&
+                //                 fb.feedbackOrigin.hasSlot() &&
+                //                 fb.feedbackOrigin.index().kind ==
+                //                 FeedbackKind::Type
+                //             ) {
+                //                 std::cerr <<  fb.feedbackOrigin.index() << "
+                //                 - " << unusedType <<  "\n"; anySlotsToReport
+                //                 = true;
+                //             }
+                //         }
+                //     });
+                // });
+
+                std::cerr << "\n";
+
+                rirFunction->disassemble(std::cerr);
+
+                if (anySlotsToReport) {
+                    std::cerr << "\n";
+                    v->print(std::cerr, true);
+                }
+            }
+
+            std::cerr << "\n\n\n ------------- END New version ---------- \n";
+        });
+    });
+}
+
+void Compiler::printRelaxResults() {
+
     // relax ctx
     static int totalCompilations = 0;
     static int totalRelaxed = 0;
@@ -553,8 +634,6 @@ void Compiler::optimizeModule() {
     std::cerr << "%) in total \n";
     std::cerr << "============================================================="
                  "========\n\n";
-
-    logger.flushAll();
 }
 
 size_t Parameter::MAX_INPUT_SIZE =

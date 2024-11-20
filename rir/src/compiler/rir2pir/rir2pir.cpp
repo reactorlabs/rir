@@ -430,10 +430,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
                 }
+
             } else if (t.type.isVoid() &&
                        (!insert.function->optFunction->isOptimized() ||
                         insert.function->optFunction->deoptCount() == 0)) {
                 t.type = PirType::val().notObject().fastVecelt();
+                t.defaultFeedback = true;
             }
         }
         break;

@@ -46,6 +46,8 @@ class Compiler {
 
     void optimizeModule();
     void optimizeClosureVersion(ClosureVersion*);
+    void printRelaxResults();
+    void printFeedbackResults();
 
     bool seenC = false;
 

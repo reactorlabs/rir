@@ -147,6 +147,7 @@ struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
+    bool defaultFeedback = false;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;

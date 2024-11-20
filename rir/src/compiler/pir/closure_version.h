@@ -108,10 +108,26 @@ class ClosureVersion : public Code {
     void erasePromise(unsigned id);
 
     typedef std::function<void(Promise*)> PromiseIterator;
+    typedef std::function<void(Code*)> CodeIterator;
+
     void eachPromise(PromiseIterator it) const {
         for (auto p : promises_)
             if (p)
                 it(p);
+    }
+
+    // void aa() {
+    //     rir::pir::Promise* p = promises_.at(0);
+    //     rir::pir::Code* c =  static_cast<rir::pir::Code*>(p);
+    // }
+
+    void withEachPromise(std::function<void(Code*)> it) {
+        it(this);
+        for (auto p : promises_)
+            if (p) {
+                Code* c = static_cast<Code*>(p);
+                it(c);
+            }
     }
 
     size_t numNonDeoptInstrs() const;
