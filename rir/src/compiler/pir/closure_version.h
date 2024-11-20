@@ -121,14 +121,14 @@ class ClosureVersion : public Code {
     //     rir::pir::Code* c =  static_cast<rir::pir::Code*>(p);
     // }
 
-    void withEachPromise(std::function<void(Code*)> it) {
-        it(this);
-        for (auto p : promises_)
-            if (p) {
-                Code* c = static_cast<Code*>(p);
-                it(c);
-            }
-    }
+    // void withEachPromise(std::function<void(Code*)> it) {
+    //     it(this);
+    //     for (auto p : promises_)
+    //         if (p) {
+    //             Code* c = static_cast<Code*>(p);
+    //             it(c);
+    //         }
+    // }
 
     size_t numNonDeoptInstrs() const;
 
