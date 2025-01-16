@@ -37,6 +37,7 @@ void Compiler::compileClosure(SEXP closure, const std::string& name,
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto fun = tbl->baseline();
+    tbl->closureName = name;
 
     Context assumptions = assumptions_;
     fun->clearDisabledAssumptions(assumptions);

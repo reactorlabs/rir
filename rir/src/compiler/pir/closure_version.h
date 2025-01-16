@@ -68,6 +68,7 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+    void scanForSpeculation();
     ClosureVersion* clone(const Context& newContext);
 
     const Context& context() const { return optimizationContext_; }

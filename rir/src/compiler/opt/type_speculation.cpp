@@ -134,6 +134,15 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                                       info.feedbackOrigin,
                                       DeoptReason::Typecheck, bb, ip);
 
+            auto assume = Assume::Cast(*(ip - 1));
+            assume->defaultFeedback = info.defaultFeedback;
+            assume->typeFeedbackNarrowedWithStaticType =
+                info.typeFeedbackNarrowedWithStaticType;
+            assume->exactMatch = info.exactMatch;
+
+            // std::cerr <<  " ************************* FROM TYPE SPECULATION"
+            // << "\n"; assume->print(std::cerr, true); std::cerr << "\n";
+
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);
             cast->effects.set(Effect::DependsOnAssume);

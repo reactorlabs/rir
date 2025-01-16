@@ -92,6 +92,17 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     info.feedbackOrigin, DeoptReason::Typecheck,
                                     bb, ip);
 
+                                auto assume = Assume::Cast(*(ip - 1));
+                                assume->defaultFeedback = info.defaultFeedback;
+                                assume->typeFeedbackNarrowedWithStaticType =
+                                    info.typeFeedbackNarrowedWithStaticType;
+                                assume->exactMatch = info.exactMatch;
+
+                                // std::cerr <<  " *************************
+                                // FROM elide env" << "\n";
+                                // assume->print(std::cerr, true);
+                                // std::cerr << "\n";
+
                                 if (argi) {
                                     auto cast = new CastType(
                                         argi, CastType::Downcast,

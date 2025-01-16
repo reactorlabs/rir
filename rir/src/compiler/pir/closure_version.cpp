@@ -9,6 +9,56 @@
 namespace rir {
 namespace pir {
 
+void ClosureVersion::scanForSpeculation() {
+
+    // this->print(std::cerr, true);
+    Visitor::run(this->entry, [&](Instruction* i) {
+        if (auto assume = Assume::Cast(i)) {
+
+            auto fo = assume->reason.origin;
+            auto function = fo.function();
+
+            if (!assume->defaultFeedback) {
+                function->slotsUsed.insert(fo.index());
+
+                if (fo.index().kind == FeedbackKind::Type) {
+
+                    if (assume->typeFeedbackNarrowedWithStaticType) {
+
+                        // std::cerr <<
+                        // "***************************************************************";
+                        // //std::cerr << "expected: " << expected << " -
+                        // feedback.type: " << feedback.type << "\n"; std::cerr
+                        // << "\n"; Instruction::Cast(i)->print(std::cerr,
+                        // true); std::cerr << "\n";
+
+                        function->slotsNarrowedWithStaticType.insert(
+                            fo.index());
+                    }
+                    if (assume->exactMatch)
+                        function->slotsUsedExactMatch.insert(fo.index());
+
+                    else {
+
+                        // std::cerr << "WIDENED
+                        // ***************************************************************";
+                        // //std::cerr << "expected: " << expected << " -
+                        // feedback.type: " << feedback.type << "\n"; std::cerr
+                        // << "\n"; if (auto arg =
+                        // Instruction::Cast(assume->arg(0).val())) {
+                        //     arg->print(std::cerr, true);
+                        //     std::cerr << "\n";
+
+                        // }
+
+                        function->slotsUsedWidened.insert(fo.index());
+                    }
+                }
+            }
+        }
+    });
+}
+
 void ClosureVersion::print(std::ostream& out, bool tty) const {
     print(DebugStyle::Standard, out, tty, false);
 }

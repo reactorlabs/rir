@@ -147,6 +147,7 @@ struct TypeFeedback {
     PirType type = PirType::optimistic();
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
+    bool defaultFeedback = false;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;
@@ -189,32 +190,54 @@ class Instruction : public Value {
     std::shared_ptr<TypeFeedback> typeFeedback_;
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
     bool hasCallFeedback() const { return callFeedback_.get(); }
-    const TypeFeedback& typeFeedback() const {
-        if (typeFeedback_.get())
+
+    void slotRead(FeedbackOrigin& fo) const {
+        if (fo.hasSlot()) {
+            fo.function()->slotsRead.insert(fo.index());
+        }
+    }
+
+    const TypeFeedback& typeFeedback(bool recordSlotRead = true) const {
+        if (typeFeedback_.get()) {
+            if (recordSlotRead)
+                slotRead(typeFeedback_->feedbackOrigin);
             return *typeFeedback_;
+        }
+
         const static TypeFeedback none;
         return none;
     }
-    TypeFeedback& updateTypeFeedback() {
-        if (typeFeedback_.get())
+    TypeFeedback& updateTypeFeedback(bool recordSlotRead = true) {
+        if (typeFeedback_.get()) {
+            if (recordSlotRead)
+                slotRead(typeFeedback_->feedbackOrigin);
             return *typeFeedback_;
+        }
+
         typeFeedback_.reset(new TypeFeedback());
         return updateTypeFeedback();
     }
+
     void typeFeedback(const TypeFeedback& feedback) {
         typeFeedback_.reset(new TypeFeedback(feedback));
     }
 
     std::shared_ptr<CallFeedback> callFeedback_;
-    const CallFeedback& callFeedback() const {
-        if (callFeedback_.get())
+    const CallFeedback& callFeedback(bool recordSlotRead = true) const {
+        if (callFeedback_.get()) {
+            if (recordSlotRead)
+                slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
+        }
         const static CallFeedback none;
         return none;
     }
-    CallFeedback& updateCallFeedback() {
-        if (callFeedback_.get())
+    CallFeedback& updateCallFeedback(bool recordSlotRead = true) {
+        if (callFeedback_.get()) {
+            if (recordSlotRead)
+                slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
+        }
         callFeedback_.reset(new CallFeedback());
         return updateCallFeedback();
     }
@@ -2724,6 +2747,10 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
     bool assumeTrue = true;
     const DeoptReason reason;
+
+    bool defaultFeedback = false;
+    bool typeFeedbackNarrowedWithStaticType = false;
+    bool exactMatch = false;
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)

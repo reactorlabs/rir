@@ -200,6 +200,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
 
+    srcCode->function()->involvedInCompilation = true;
+
     Value* v;
     Value* x;
     Value* y;
@@ -381,12 +383,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 auto v = feedback.seen == ObservedTest::OnlyTrue
                              ? (Value*)True::instance()
                              : (Value*)False::instance();
-                if (!i->typeFeedback().value) {
-                    auto& t = i->updateTypeFeedback();
+                if (!i->typeFeedback(false).value) {
+                    auto& t = i->updateTypeFeedback(false);
                     t.value = v;
                     t.feedbackOrigin = FeedbackOrigin(srcCode->function(),
                                                       FeedbackIndex::test(idx));
-                } else if (i->typeFeedback().value != v) {
+                } else if (i->typeFeedback(false).value != v) {
+                    assert(false && "aa");
                     i->updateTypeFeedback().value = nullptr;
                 }
             }
@@ -394,7 +397,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // To communicate to the backend that feedback is missing that
             // should still be collected.
             if (auto i = Instruction::Cast(at(0)))
-                i->updateTypeFeedback();
+                i->updateTypeFeedback(false);
         }
         break;
     }
@@ -421,7 +424,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     break;
             }
             // TODO: deal with multiple locations
-            auto& t = i->updateTypeFeedback();
+            auto& t = i->updateTypeFeedback(false);
             t.feedbackOrigin =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
@@ -434,6 +437,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                        (!insert.function->optFunction->isOptimized() ||
                         insert.function->optFunction->deoptCount() == 0)) {
                 t.type = PirType::val().notObject().fastVecelt();
+                t.defaultFeedback = true;
             }
         }
         break;
@@ -460,6 +464,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             auto d = insert(new Deopt(sp));
             d->setDeoptReason(compiler.module->deoptReasonValue(reason),
                               target);
+
+            // FEEDBACKINFO
+            auto fo =
+                FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
+            fo.function()->slotsRead.insert(fo.index());
+            fo.function()->slotsUsed.insert(fo.index());
+
             stack.clear();
         } else if (auto i = Instruction::Cast(target)) {
             // See if the call feedback suggests a monomorphic target
@@ -467,7 +478,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // inliner. So currently it does not pay off to put any deopts
             // in there.
             //
-            auto& f = i->updateCallFeedback();
+            auto& f = i->updateCallFeedback(false);
             f.taken = feedback.taken;
             f.feedbackOrigin =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));

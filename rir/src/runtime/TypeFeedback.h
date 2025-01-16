@@ -23,6 +23,12 @@ struct Code;
 struct Function;
 class TypeFeedback;
 
+template <typename T>
+bool isEmpty2(const T* thiss) {
+    auto empty = T();
+    return !memcmp(thiss, &empty, sizeof(T));
+}
+
 enum class FeedbackKind : uint8_t {
     Call,
     Test,
@@ -101,6 +107,7 @@ struct ObservedCallees {
 
     SEXP getTarget(const Function* function, size_t pos) const;
     void print(std::ostream& out, const Function* function) const;
+    bool isEmpty() const;
 
   private:
     void record(Function* function, SEXP callee,
@@ -126,6 +133,7 @@ struct ObservedTest {
     ObservedTest() : seen(0), unused(0) {}
 
     void print(std::ostream& out) const;
+    bool isEmpty() const;
 
   private:
     inline void record(const SEXP e) {
@@ -176,6 +184,8 @@ struct ObservedValues {
         // implicitly happens when writing bytecode stream...
         memset(this, 0, sizeof(ObservedValues));
     }
+
+    bool isEmpty() const;
 
     void reset() { *this = ObservedValues(); }
 
@@ -351,6 +361,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedCallees& callees(uint32_t idx);
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
+
+    size_t slotsSize() { return tests_size() + callees_size() + types_size(); }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {

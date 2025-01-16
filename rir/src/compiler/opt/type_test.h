@@ -13,6 +13,10 @@ class TypeTest {
         Instruction* test;
         bool expectation;
         FeedbackOrigin feedbackOrigin;
+
+        bool defaultFeedback;
+        bool typeFeedbackNarrowedWithStaticType;
+        bool exactMatch;
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
@@ -39,13 +43,18 @@ class TypeTest {
             return failed();
 
         assert(feedback.feedbackOrigin.hasSlot());
+
+        auto typeFeedbackNarrowedWithStaticType = expected != feedback.type;
+
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
+
             return action({expected, new IsType(expected, i), true,
-                           feedback.feedbackOrigin});
+                           feedback.feedbackOrigin, feedback.defaultFeedback,
+                           typeFeedbackNarrowedWithStaticType, true});
         }
 
         // Second try to test for object-ness, or attribute-ness.
@@ -56,18 +65,40 @@ class TypeTest {
             return;
 
         auto checkFor = i->type.notLazy().noAttribsOrObject();
+        assert(i->type != checkFor);
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
             assert(!expected.maybeHasAttrs());
+
+            // if (!feedback.defaultFeedback) {
+            //     std::cerr << "WIDENED notLazy notAttribOrObj
+            //     ***************************************************************";
+            //     std::cerr << "expected: " << expected << " - feedback.type: "
+            //     << feedback.type << "\n\n\n";
+            // }
+
             return action({checkFor, new IsType(checkFor, i), true,
-                           feedback.feedbackOrigin});
+                           feedback.feedbackOrigin, feedback.defaultFeedback,
+                           typeFeedbackNarrowedWithStaticType, false
+
+            });
         }
 
         checkFor = i->type.notLazy().notObject();
+        assert(i->type != checkFor);
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
+
+            // if (!feedback.defaultFeedback) {
+            //     std::cerr << "WIDENED notLazy notObj
+            //     ***************************************************************";
+            //     std::cerr << "expected: " << expected << " - feedback.type: "
+            //     << feedback.type << "\n\n\n";
+            // }
+
             return action({checkFor, new IsType(checkFor, i), true,
-                           feedback.feedbackOrigin});
+                           feedback.feedbackOrigin, feedback.defaultFeedback,
+                           typeFeedbackNarrowedWithStaticType, false});
         }
 
         if (i->type.isA(required))

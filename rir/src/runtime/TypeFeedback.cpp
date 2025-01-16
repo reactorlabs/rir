@@ -12,6 +12,10 @@
 
 namespace rir {
 
+bool ObservedCallees::isEmpty() const {
+    return isEmpty2<ObservedCallees>(this);
+}
+
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     REC_HOOK(bool isSuccesful = false);
@@ -55,6 +59,8 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
 
 void DeoptReason::record(SEXP val) const {
     origin.function()->registerDeoptReason(reason);
+
+    origin.function()->slotsDeopted.insert(origin.index());
 
     switch (reason) {
     case DeoptReason::Unknown:
@@ -180,9 +186,13 @@ ObservedCallees& TypeFeedback::callees(uint32_t idx) {
     return this->callees_[idx];
 }
 
+bool ObservedTest::isEmpty() const { return isEmpty2<ObservedTest>(this); }
+
 ObservedTest& TypeFeedback::test(uint32_t idx) { return this->tests_[idx]; }
 
 ObservedValues& TypeFeedback::types(uint32_t idx) { return this->types_[idx]; }
+
+bool ObservedValues::isEmpty() const { return isEmpty2<ObservedValues>(this); }
 
 void ObservedTest::print(std::ostream& out) const {
     switch (seen) {

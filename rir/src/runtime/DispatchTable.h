@@ -23,6 +23,8 @@ typedef SEXP DispatchTableEntry;
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
+    std::string closureName;
+
     size_t size() const { return size_; }
 
     Function* get(size_t i) const {

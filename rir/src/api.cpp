@@ -26,6 +26,12 @@
 #include <memory>
 #include <string>
 
+#include <fstream>
+#include <iostream>
+#include <numeric>
+
+extern "C" SEXP R_GetVarLocValue(R_varloc_t);
+
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
@@ -66,6 +72,353 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+bool finalizerSet = false;
+SEXP DTsSymbol = Rf_install("__DTs");
+
+void showPercent(double percent, std::ostream& ss) {
+    ss << percent * 100 << "%";
+}
+
+void showMetricPercent(std::string metricDescription, std::string nameNumerator,
+                       std::string nameDenominator, int num, int den,
+                       std::ostream& ss) {
+    ss << metricDescription << " (" << nameNumerator << " / " << nameDenominator
+       << "): " << num << " / " << den << " (";
+
+    if (den)
+        showPercent(static_cast<double>(num) / den, ss);
+    else
+        ss << "-";
+
+    ss << ")"
+       << " \n";
+}
+
+void showMetricPercent(std::string metricDescription, double percent,
+                       std::ostream& ss) {
+    ss << metricDescription << ": ";
+    showPercent(percent, ss);
+    ss << " \n";
+}
+
+double computeAverage(const std::vector<double>& numbers) {
+    if (numbers.empty()) {
+        return 0.0; // Return 0.0 for an empty vector to avoid division by zero
+    }
+
+    double sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
+    return sum / numbers.size();
+}
+
+double computeMedian(std::vector<double>& vec) {
+    // Sort the vector
+    std::sort(vec.begin(), vec.end());
+
+    // Find the median
+    size_t size = vec.size();
+    if (size % 2 == 0) {
+        // Even number of elements, take the average of the two middle elements
+        return (vec[size / 2 - 1] + vec[size / 2]) / 2.0;
+    } else {
+        // Odd number of elements, take the middle element
+        return vec[size / 2];
+    }
+}
+
+void myFinalizer(SEXP) {
+    std::ofstream null_stream("/dev/null");
+    std::ostream* defaultOutput = &std::cerr;
+    // std::ostream* defaultOutput = &null_stream;
+
+    std::ostream* outputInFunction = defaultOutput;
+
+    SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
+
+    unsigned int totalSlots = 0;
+    unsigned int referencedSlotsCount = 0;
+    unsigned int readSlotsCount = 0;
+    unsigned int readNonEmptySlotsCount = 0;
+    unsigned int usedSlotsCount = 0;
+    unsigned int usedSlotsOfKindTypeCount = 0;
+    unsigned int exactMatchUsedSlotsCount = 0;
+    unsigned int widenedUsedSlotsCount = 0;
+
+    unsigned int narrowedSlotsCount = 0;
+
+    unsigned int compiledFunctions = 0;
+    unsigned int emptySlotsCount = 0;
+
+    auto list = RList(DTs);
+    unsigned int totalFunctions = list.length();
+    unsigned int totalFunctionsWithSlots = 0;
+
+    // double emptySlotsPercentAvg = 0;
+    std::vector<double> emptySlotsOverTotalSlots;
+    std::vector<double> slotsReadOverReferencedPerFunction;
+    std::vector<double> slotsUsedOverReadNonEmptyPerFunction;
+
+    for (auto a = list.begin(); a != list.end(); ++a) {
+
+        DispatchTable* dt = DispatchTable::unpack(*a);
+        auto baseline = dt->baseline();
+
+        *outputInFunction << "--------------------------------------- \n\n";
+        *outputInFunction << "DT " << dt << " - name: " << dt->closureName
+                          << " " << (baseline->involvedInCompilation ? "*" : "")
+                          << "\n";
+        *outputInFunction << "baseline function: " << dt->baseline() << "\n";
+
+        auto feedback = baseline->typeFeedback();
+        auto slotsInFunction = feedback->slotsSize();
+        totalSlots += slotsInFunction;
+        if (slotsInFunction) {
+            totalFunctionsWithSlots++;
+        }
+
+        readSlotsCount += baseline->slotsRead.size();
+
+        unsigned int readNonEmptySlotsInFunction = 0;
+        for (auto& slot : baseline->slotsRead) {
+            switch (slot.kind) {
+            case rir::FeedbackKind::Type:
+                if (!feedback->types(slot.idx).isEmpty())
+                    readNonEmptySlotsInFunction++;
+                break;
+
+            case rir::FeedbackKind::Call:
+                if (!feedback->callees(slot.idx).isEmpty())
+                    readNonEmptySlotsInFunction++;
+                break;
+
+            case rir::FeedbackKind::Test:
+                if (!feedback->test(slot.idx).isEmpty())
+                    readNonEmptySlotsInFunction++;
+                break;
+
+            default:
+                assert(false);
+            }
+        }
+        readNonEmptySlotsCount += readNonEmptySlotsInFunction;
+
+        usedSlotsCount += baseline->slotsUsed.size();
+        narrowedSlotsCount += baseline->slotsNarrowedWithStaticType.size();
+        exactMatchUsedSlotsCount += baseline->slotsUsedExactMatch.size();
+        widenedUsedSlotsCount += baseline->slotsUsedWidened.size();
+
+        for (auto& s : baseline->slotsUsed) {
+            if (s.kind == rir::FeedbackKind::Type)
+                usedSlotsOfKindTypeCount++;
+        }
+
+        unsigned int emptySlotsCountInFunction = 0;
+
+        for (size_t i = 0; i < feedback->tests_size(); i++) {
+            if (feedback->test(i).isEmpty())
+                emptySlotsCountInFunction++;
+        }
+
+        for (size_t i = 0; i < feedback->callees_size(); i++) {
+            if (feedback->callees(i).isEmpty())
+                emptySlotsCountInFunction++;
+        }
+
+        for (size_t i = 0; i < feedback->types_size(); i++) {
+            if (feedback->types(i).isEmpty())
+                emptySlotsCountInFunction++;
+        }
+        emptySlotsCount += emptySlotsCountInFunction;
+
+        if (slotsInFunction) {
+            // showMetricPercent("empty slots per function", "empty slots",
+            // "slots in function",  emptySlotsCountInFunction, slotsInFunction,
+            // std::cerr);
+            unsigned int nonEmptySlotsCountInFunction =
+                slotsInFunction - emptySlotsCountInFunction;
+
+            showMetricPercent("non-empty slots", "non-empty slots",
+                              "slots in function", nonEmptySlotsCountInFunction,
+                              slotsInFunction, *outputInFunction);
+
+            emptySlotsOverTotalSlots.push_back(
+                static_cast<double>(emptySlotsCountInFunction) /
+                slotsInFunction);
+        }
+
+        if (dt->baseline()->involvedInCompilation) {
+            compiledFunctions++;
+            referencedSlotsCount += slotsInFunction;
+
+            if (slotsInFunction) {
+                auto p = static_cast<double>(baseline->slotsRead.size()) /
+                         slotsInFunction;
+                showMetricPercent("slots read", "read",
+                                  "referenced (slots in function)",
+                                  baseline->slotsRead.size(), slotsInFunction,
+                                  *outputInFunction);
+                slotsReadOverReferencedPerFunction.push_back(p);
+            }
+
+            //  slots read
+            // *outputInFunction << "SLOTS READ:\n";
+            // for (auto x : dt->baseline()->slotsRead) {
+            //     *outputInFunction << x << "\n";
+            // }
+
+            //  slots used
+            // *outputInFunction << "SLOTS USED:\n";
+            // for (auto x : dt->baseline()->slotsUsed) {
+            //     *outputInFunction << x << "\n";
+            // }
+
+            showMetricPercent(
+                "slots used", "used", "read", dt->baseline()->slotsUsed.size(),
+                dt->baseline()->slotsRead.size(), *outputInFunction);
+
+            auto usedOverReadNonEmpty =
+                static_cast<double>(dt->baseline()->slotsUsed.size()) /
+                readNonEmptySlotsInFunction;
+            showMetricPercent("used non-empty slots", "used", "read non-empty",
+                              dt->baseline()->slotsUsed.size(),
+                              readNonEmptySlotsInFunction, *outputInFunction);
+            slotsUsedOverReadNonEmptyPerFunction.push_back(
+                usedOverReadNonEmpty);
+
+            showMetricPercent("deopted slots", "deopted", "used",
+                              baseline->slotsDeopted.size(),
+                              dt->baseline()->slotsUsed.size(),
+                              *outputInFunction);
+        }
+
+        *outputInFunction << "\n";
+    }
+
+    constexpr bool printSummaryToFile = false;
+    std::ostream* ss = defaultOutput;
+    if (printSummaryToFile) {
+        static std::ofstream fileStream("summary.txt", std::ios::app);
+        ss = &fileStream;
+    }
+
+    *ss << "\n\n"
+        << " ********** SUMMARY ************* \n\n";
+    *ss << "totalFunctions (RIR compiled): " << totalFunctions << "\n";
+
+    *ss << "compiledFunctions (PIR compiled): " << compiledFunctions << "\n";
+
+    // auto notReferencedSlots = totalSlots - referencedSlotsCount;
+
+    *ss << "TOTAL  Slots: " << totalSlots << " - "
+        << "\n";
+    *ss << "\n";
+    showMetricPercent("empty slots (never filled)", "empty", "total",
+                      emptySlotsCount, totalSlots, *ss);
+
+    if (!emptySlotsOverTotalSlots.empty()) {
+
+        auto emptySlotsPercentAvg = computeAverage(emptySlotsOverTotalSlots);
+        showMetricPercent("empty slots (avg per function)",
+                          emptySlotsPercentAvg, *ss);
+
+        double nonEmptySlotsPercentAvg = 1 - emptySlotsPercentAvg;
+        showMetricPercent("non-empty slots (avg per function)",
+                          nonEmptySlotsPercentAvg, *ss);
+    }
+    *ss << "\n";
+
+    showMetricPercent("referenced Slots in compilation", "referenced", "total",
+                      referencedSlotsCount, totalSlots, *ss);
+    // showMetricPercent("slots NOT referenced in compilation", "not
+    // referenced", "total",  notReferencedSlots, totalSlots, *ss);
+    showMetricPercent("slots read", "read", "referenced", readSlotsCount,
+                      referencedSlotsCount, *ss);
+
+    if (!slotsReadOverReferencedPerFunction.empty()) {
+        showMetricPercent("slots read / referenced  (avg per function)",
+                          computeAverage(slotsReadOverReferencedPerFunction),
+                          *ss);
+    }
+    *ss << "\n";
+
+    // used slots
+    *ss << "--- USED SLOTS ---"
+        << "\n";
+    showMetricPercent("slots used in speculation", "used", "total",
+                      usedSlotsCount, totalSlots, *ss);
+    showMetricPercent("referenced slots used in speculation", "used",
+                      "referenced", usedSlotsCount, referencedSlotsCount, *ss);
+    showMetricPercent("read slots used in speculation ", "used", "read",
+                      usedSlotsCount, readSlotsCount, *ss);
+    showMetricPercent("read non-empty slots used in speculation ", "used",
+                      "read non-empty", usedSlotsCount, readNonEmptySlotsCount,
+                      *ss);
+
+    if (!slotsUsedOverReadNonEmptyPerFunction.empty()) {
+        showMetricPercent("read non-empty slots / used (avg per function)",
+                          computeAverage(slotsUsedOverReadNonEmptyPerFunction),
+                          *ss);
+    }
+
+    *ss << "\n";
+
+    *ss << "used (kind type): " << usedSlotsOfKindTypeCount << "\n";
+    showMetricPercent("narrowed with static type", "narrowed",
+                      "used (kind type)", narrowedSlotsCount,
+                      usedSlotsOfKindTypeCount, *ss);
+    showMetricPercent("exact match", "exact", "used (kind type)",
+                      exactMatchUsedSlotsCount, usedSlotsOfKindTypeCount, *ss);
+    showMetricPercent("widened", "widened", "used (kind type)",
+                      widenedUsedSlotsCount, usedSlotsOfKindTypeCount, *ss);
+
+    *ss << "\n";
+
+    ss->flush();
+
+    // if (narrowedSlotsCount)
+    //     assert(false);
+
+    // assert(false);
+}
+
+std::string getClosureName(SEXP cls) {
+    std::string name = "";
+
+    // 1. Look trhu frames
+    auto frame = RList(FRAME(CLOENV(cls)));
+
+    for (auto e = frame.begin(); e != frame.end(); ++e) {
+        if (*e == cls) {
+            name = CHAR(PRINTNAME(e.tag()));
+            if (!name.empty()) {
+                return name;
+            }
+        }
+    }
+
+    // 2. Try to look thru symbols
+    auto env = PROTECT(CLOENV(cls));
+    auto symbols = PROTECT(R_lsInternal3(env, TRUE, FALSE));
+
+    auto size = Rf_length(symbols);
+    for (int i = 0; i < size; i++) {
+        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
+
+        // TODO: check parity with R_findVarInFrame
+        auto symbol = PROTECT(Rf_install(symbol_char));
+        R_varloc_t loc = R_findVarLocInFrame(env, symbol);
+        UNPROTECT(1);
+        auto cellValue = R_GetVarLocValue(loc);
+
+        if (cellValue == cls) {
+            name = symbol_char;
+            break;
+        }
+    }
+
+    UNPROTECT(2);
+    return name;
+}
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
@@ -74,6 +427,30 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
 
         // Change the input closure inplace
         Compiler::compileClosure(what);
+        body = BODY(what);
+
+        auto dt = DispatchTable::unpack(body);
+        dt->closureName = getClosureName(what);
+
+        // register rir closures
+        SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
+        if (DTs == R_UnboundValue) {
+            DTs = R_NilValue;
+
+            if (!finalizerSet) {
+                // Call `loadNamespace("Base")`
+                SEXP baseStr = PROTECT(Rf_mkString("base"));
+                SEXP expr =
+                    PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+                SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+                R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
+                UNPROTECT(3);
+
+                finalizerSet = true;
+            }
+        }
+        DTs = Rf_cons(body, DTs);
+        Rf_setVar(DTsSymbol, DTs, R_GlobalEnv);
 
         return what;
     } else {
@@ -319,6 +696,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             // body
             pir::Backend backend(m, logger, name);
             auto apply = [&](SEXP body, pir::ClosureVersion* c) {
+                c->scanForSpeculation();
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
                 DispatchTable::unpack(body)->insert(fun);
@@ -610,8 +988,9 @@ REXPORT SEXP rirCreateSimpleIntContext() {
     return res;
 }
 
-REXPORT SEXP playground() {
-
+REXPORT SEXP playground(SEXP what) {
+    auto symbol = getClosureName(what);
+    std::cerr << symbol << "\n";
     return R_NilValue;
 }
 

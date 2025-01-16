@@ -8,6 +8,8 @@
 #include "recording_hooks.h"
 #include "runtime/TypeFeedback.h"
 
+#include <unordered_set>
+
 namespace rir {
 
 struct DispatchTable;
@@ -112,6 +114,14 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         if (invocationCount_ < UINT_MAX)
             invocationCount_++;
     }
+    bool involvedInCompilation = false;
+    std::unordered_set<FeedbackIndex> slotsRead;
+    std::unordered_set<FeedbackIndex> slotsUsed;
+    std::unordered_set<FeedbackIndex> slotsDeopted;
+
+    std::unordered_set<FeedbackIndex> slotsUsedExactMatch;
+    std::unordered_set<FeedbackIndex> slotsUsedWidened;
+    std::unordered_set<FeedbackIndex> slotsNarrowedWithStaticType;
 
     unsigned size; /// Size, in bytes, of the function and its data
 

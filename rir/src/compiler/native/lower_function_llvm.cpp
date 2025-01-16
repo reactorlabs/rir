@@ -6117,7 +6117,7 @@ void LowerFunctionLLVM::compile() {
                 variables_.count(i) &&
                 !cls->isContinuation()->continuationContext->asDeoptContext()) {
                 if (i->hasTypeFeedback()) {
-                    auto& origin = i->typeFeedback().feedbackOrigin;
+                    auto& origin = i->typeFeedback(false).feedbackOrigin;
                     if (origin.hasSlot()) {
                         call(
                             NativeBuiltins::get(
@@ -6128,7 +6128,7 @@ void LowerFunctionLLVM::compile() {
                     }
                 }
                 if (i->hasCallFeedback()) {
-                    auto& origin = i->callFeedback().feedbackOrigin;
+                    auto& origin = i->callFeedback(false).feedbackOrigin;
                     assert(origin.hasSlot());
                     call(NativeBuiltins::get(
                              NativeBuiltins::Id::recordCallFeedback),
