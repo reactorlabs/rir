@@ -460,17 +460,17 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         if (DTs == R_UnboundValue) {
             DTs = R_NilValue;
 
-            // if (!finalizerSet) {
-            //     // Call `loadNamespace("Base")`
-            //     SEXP baseStr = PROTECT(Rf_mkString("base"));
-            //     SEXP expr =
-            //         PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-            //     SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
-            //     R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
-            //     UNPROTECT(3);
+            if (!finalizerSet) {
+                // Call `loadNamespace("Base")`
+                SEXP baseStr = PROTECT(Rf_mkString("base"));
+                SEXP expr =
+                    PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+                SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+                R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
+                UNPROTECT(3);
 
-            //     finalizerSet = true;
-            // }
+                finalizerSet = true;
+            }
         }
         DTs = Rf_cons(body, DTs);
         Rf_setVar(DTsSymbol, DTs, R_GlobalEnv);
