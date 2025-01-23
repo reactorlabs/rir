@@ -428,6 +428,10 @@ std::string getClosureName(SEXP cls) {
         UNPROTECT(1);
         auto cellValue = R_GetVarLocValue(loc);
 
+        if (TYPEOF(cellValue) == PROMSXP){
+            cellValue = PRVALUE(cellValue);
+        }
+
         if (cellValue == cls) {
             name = symbol_char;
             break;
