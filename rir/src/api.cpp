@@ -146,6 +146,8 @@ void myFinalizer(SEXP) {
     unsigned int narrowedSlotsCount = 0;
 
     unsigned int compiledFunctions = 0;
+    unsigned int functionsUsingFeedback = 0;
+
     unsigned int emptySlotsCount = 0;
 
     auto list = RList(DTs);
@@ -228,13 +230,13 @@ void myFinalizer(SEXP) {
                 emptySlotsCountInFunction++;
         }
         emptySlotsCount += emptySlotsCountInFunction;
+        unsigned int nonEmptySlotsCountInFunction =
+            slotsInFunction - emptySlotsCountInFunction;
 
         if (slotsInFunction) {
             // showMetricPercent("empty slots per function", "empty slots",
             // "slots in function",  emptySlotsCountInFunction, slotsInFunction,
             // std::cerr);
-            unsigned int nonEmptySlotsCountInFunction =
-                slotsInFunction - emptySlotsCountInFunction;
 
             showMetricPercent("non-empty slots", "non-empty slots",
                               "slots in function", nonEmptySlotsCountInFunction,
@@ -245,8 +247,12 @@ void myFinalizer(SEXP) {
                 slotsInFunction);
         }
 
-        if (dt->baseline()->involvedInCompilation) {
+        if (baseline->involvedInCompilation) {
             compiledFunctions++;
+            if (baseline->slotsUsed.size()) {
+                functionsUsingFeedback++;
+            }
+
             referencedSlotsCount += slotsInFunction;
 
             if (slotsInFunction) {
@@ -271,16 +277,23 @@ void myFinalizer(SEXP) {
             //     *outputInFunction << x << "\n";
             // }
 
-            showMetricPercent(
-                "slots used", "used", "read", dt->baseline()->slotsUsed.size(),
-                dt->baseline()->slotsRead.size(), *outputInFunction);
+            // showMetricPercent(
+            //     "slots used", "used", "read",
+            //     dt->baseline()->slotsUsed.size(),
+            //     dt->baseline()->slotsRead.size(), *outputInFunction);
 
             auto usedOverReadNonEmpty =
                 static_cast<double>(dt->baseline()->slotsUsed.size()) /
                 readNonEmptySlotsInFunction;
-            showMetricPercent("used non-empty slots", "used", "read non-empty",
+
+            showMetricPercent("used 1", "used", "read non-empty",
                               dt->baseline()->slotsUsed.size(),
                               readNonEmptySlotsInFunction, *outputInFunction);
+
+            showMetricPercent("used 2", "used", "non-empty",
+                              dt->baseline()->slotsUsed.size(),
+                              nonEmptySlotsCountInFunction, *outputInFunction);
+
             slotsUsedOverReadNonEmptyPerFunction.push_back(
                 usedOverReadNonEmpty);
 
@@ -372,6 +385,12 @@ void myFinalizer(SEXP) {
 
     *ss << "\n";
 
+    // benefit
+    showMetricPercent("benefited from feedback", "used feedback", "compiled",
+                      functionsUsingFeedback, compiledFunctions, *ss);
+
+    *ss << "\n";
+
     ss->flush();
 
     // if (narrowedSlotsCount)
@@ -437,17 +456,17 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         if (DTs == R_UnboundValue) {
             DTs = R_NilValue;
 
-            if (!finalizerSet) {
-                // Call `loadNamespace("Base")`
-                SEXP baseStr = PROTECT(Rf_mkString("base"));
-                SEXP expr =
-                    PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-                SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
-                R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
-                UNPROTECT(3);
+            // if (!finalizerSet) {
+            //     // Call `loadNamespace("Base")`
+            //     SEXP baseStr = PROTECT(Rf_mkString("base"));
+            //     SEXP expr =
+            //         PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+            //     SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+            //     R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
+            //     UNPROTECT(3);
 
-                finalizerSet = true;
-            }
+            //     finalizerSet = true;
+            // }
         }
         DTs = Rf_cons(body, DTs);
         Rf_setVar(DTsSymbol, DTs, R_GlobalEnv);

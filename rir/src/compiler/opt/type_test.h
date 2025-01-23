@@ -72,9 +72,11 @@ class TypeTest {
 
             // if (!feedback.defaultFeedback) {
             //     std::cerr << "WIDENED notLazy notAttribOrObj
-            //     ***************************************************************";
-            //     std::cerr << "expected: " << expected << " - feedback.type: "
-            //     << feedback.type << "\n\n\n";
+            //     ***************************************************************"
+            //     << "\n"; std::cerr << "type: " << i->type <<  " - expected: "
+            //     << expected << "\n"
+            //     << "checkFor: " << checkFor << "\n\n\n";
+
             // }
 
             return action({checkFor, new IsType(checkFor, i), true,
@@ -91,9 +93,11 @@ class TypeTest {
 
             // if (!feedback.defaultFeedback) {
             //     std::cerr << "WIDENED notLazy notObj
-            //     ***************************************************************";
-            //     std::cerr << "expected: " << expected << " - feedback.type: "
-            //     << feedback.type << "\n\n\n";
+            //     ***************************************************************"
+            //     << "\n"; std::cerr << "type: " << i->type <<  " - expected: "
+            //     << expected << "\n"
+            //     << "checkFor: " << checkFor << "\n\n\n";
+
             // }
 
             return action({checkFor, new IsType(checkFor, i), true,

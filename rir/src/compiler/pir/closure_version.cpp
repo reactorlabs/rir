@@ -11,6 +11,8 @@ namespace pir {
 
 void ClosureVersion::scanForSpeculation() {
 
+    bool hasSpeculationFromTF = false;
+
     // this->print(std::cerr, true);
     Visitor::run(this->entry, [&](Instruction* i) {
         if (auto assume = Assume::Cast(i)) {
@@ -18,7 +20,8 @@ void ClosureVersion::scanForSpeculation() {
             auto fo = assume->reason.origin;
             auto function = fo.function();
 
-            if (!assume->defaultFeedback) {
+            if (!fo.index().isUndefined() && !assume->defaultFeedback) {
+                hasSpeculationFromTF = true;
                 function->slotsUsed.insert(fo.index());
 
                 if (fo.index().kind == FeedbackKind::Type) {
@@ -57,6 +60,11 @@ void ClosureVersion::scanForSpeculation() {
             }
         }
     });
+
+    if (hasSpeculationFromTF) {
+        // std::cerr << "\n\n ===========  SPECULATION FROM TF ===========
+        // \n\n"; this->print(std::cerr, true); std::cerr << "\n\n";
+    }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {
