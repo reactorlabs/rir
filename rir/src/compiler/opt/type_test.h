@@ -70,14 +70,15 @@ class TypeTest {
             assert(!expected.maybeObj());
             assert(!expected.maybeHasAttrs());
 
-            // if (!feedback.defaultFeedback) {
-            //     std::cerr << "WIDENED notLazy notAttribOrObj
-            //     ***************************************************************"
-            //     << "\n"; std::cerr << "type: " << i->type <<  " - expected: "
-            //     << expected << "\n"
-            //     << "checkFor: " << checkFor << "\n\n\n";
-
-            // }
+            if (!feedback.defaultFeedback) {
+                std::cerr << "WIDENED notLazy notAttribOrObj "
+                             "*************************************************"
+                             "**************"
+                          << "\n";
+                std::cerr << "type: " << i->type << " - expected: " << expected
+                          << "\n"
+                          << "checkFor: " << checkFor << "\n\n\n";
+            }
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
@@ -91,14 +92,15 @@ class TypeTest {
         if (expected.isA(checkFor)) {
             assert(!expected.maybeObj());
 
-            // if (!feedback.defaultFeedback) {
-            //     std::cerr << "WIDENED notLazy notObj
-            //     ***************************************************************"
-            //     << "\n"; std::cerr << "type: " << i->type <<  " - expected: "
-            //     << expected << "\n"
-            //     << "checkFor: " << checkFor << "\n\n\n";
-
-            // }
+            if (!feedback.defaultFeedback) {
+                std::cerr << "WIDENED notLazy notObj "
+                             "*************************************************"
+                             "**************"
+                          << "\n";
+                std::cerr << "type: " << i->type << " - expected: " << expected
+                          << "\n"
+                          << "checkFor: " << checkFor << "\n\n\n";
+            }
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,

@@ -94,12 +94,6 @@ void showMetricPercent(std::string metricDescription, std::string nameNumerator,
        << " \n";
 }
 
-void showMetricPercent(std::string metricDescription, double percent,
-                       std::ostream& ss) {
-    ss << metricDescription << ": ";
-    showPercent(percent, ss);
-    ss << " \n";
-}
 
 double computeAverage(const std::vector<double>& numbers) {
     if (numbers.empty()) {
@@ -108,6 +102,21 @@ double computeAverage(const std::vector<double>& numbers) {
 
     double sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
     return sum / numbers.size();
+}
+void showMetricPercent(std::string metricDescription, double percent,
+                       std::ostream& ss) {
+    ss << metricDescription << ": ";
+    showPercent(percent, ss);
+    ss << " \n";
+}
+
+void showMetricPercentAvg(std::string metricDescription,
+                          const std::vector<double>& numbers,
+                          std::ostream& ss) {
+    ss << metricDescription << " (avg / " << numbers.size() << " elements): ";
+    auto avg = computeAverage(numbers);
+    showPercent(avg, ss);
+    ss << " \n";
 }
 
 double computeMedian(std::vector<double>& vec) {
@@ -149,6 +158,7 @@ void myFinalizer(SEXP) {
     unsigned int functionsUsingFeedback = 0;
 
     unsigned int emptySlotsCount = 0;
+    unsigned int nonEmptySlotsCount = 0;
 
     auto list = RList(DTs);
     unsigned int totalFunctions = list.length();
@@ -158,6 +168,7 @@ void myFinalizer(SEXP) {
     std::vector<double> emptySlotsOverTotalSlots;
     std::vector<double> slotsReadOverReferencedPerFunction;
     std::vector<double> slotsUsedOverReadNonEmptyPerFunction;
+    std::vector<double> slotsUsedOverNonEmptyPerFunction;
 
     for (auto a = list.begin(); a != list.end(); ++a) {
 
@@ -232,6 +243,7 @@ void myFinalizer(SEXP) {
         emptySlotsCount += emptySlotsCountInFunction;
         unsigned int nonEmptySlotsCountInFunction =
             slotsInFunction - emptySlotsCountInFunction;
+        nonEmptySlotsCount += nonEmptySlotsCountInFunction;
 
         if (slotsInFunction) {
             // showMetricPercent("empty slots per function", "empty slots",
@@ -282,20 +294,32 @@ void myFinalizer(SEXP) {
             //     dt->baseline()->slotsUsed.size(),
             //     dt->baseline()->slotsRead.size(), *outputInFunction);
 
-            auto usedOverReadNonEmpty =
-                static_cast<double>(dt->baseline()->slotsUsed.size()) /
-                readNonEmptySlotsInFunction;
-
-            showMetricPercent("used 1", "used", "read non-empty",
-                              dt->baseline()->slotsUsed.size(),
-                              readNonEmptySlotsInFunction, *outputInFunction);
-
-            showMetricPercent("used 2", "used", "non-empty",
+            // USED / NON-EMPTY
+            showMetricPercent("used 1", "used", "non-empty",
                               dt->baseline()->slotsUsed.size(),
                               nonEmptySlotsCountInFunction, *outputInFunction);
 
-            slotsUsedOverReadNonEmptyPerFunction.push_back(
-                usedOverReadNonEmpty);
+            if (nonEmptySlotsCountInFunction) {
+                auto usedOverNonEmpty =
+                    static_cast<double>(dt->baseline()->slotsUsed.size()) /
+                    nonEmptySlotsCountInFunction;
+
+                slotsUsedOverNonEmptyPerFunction.push_back(usedOverNonEmpty);
+            }
+
+            // USED / READ NON-EMPTY
+            showMetricPercent("used 2", "used", "read non-empty",
+                              dt->baseline()->slotsUsed.size(),
+                              readNonEmptySlotsInFunction, *outputInFunction);
+
+            if (readNonEmptySlotsInFunction) {
+                auto usedOverReadNonEmpty =
+                    static_cast<double>(dt->baseline()->slotsUsed.size()) /
+                    readNonEmptySlotsInFunction;
+
+                slotsUsedOverReadNonEmptyPerFunction.push_back(
+                    usedOverReadNonEmpty);
+            }
 
             showMetricPercent("deopted slots", "deopted", "used",
                               baseline->slotsDeopted.size(),
@@ -329,10 +353,9 @@ void myFinalizer(SEXP) {
 
     if (!emptySlotsOverTotalSlots.empty()) {
 
-        auto emptySlotsPercentAvg = computeAverage(emptySlotsOverTotalSlots);
-        showMetricPercent("empty slots (avg per function)",
-                          emptySlotsPercentAvg, *ss);
+        showMetricPercentAvg("empty slots", emptySlotsOverTotalSlots, *ss);
 
+        auto emptySlotsPercentAvg = computeAverage(emptySlotsOverTotalSlots);
         double nonEmptySlotsPercentAvg = 1 - emptySlotsPercentAvg;
         showMetricPercent("non-empty slots (avg per function)",
                           nonEmptySlotsPercentAvg, *ss);
@@ -347,9 +370,8 @@ void myFinalizer(SEXP) {
                       referencedSlotsCount, *ss);
 
     if (!slotsReadOverReferencedPerFunction.empty()) {
-        showMetricPercent("slots read / referenced  (avg per function)",
-                          computeAverage(slotsReadOverReferencedPerFunction),
-                          *ss);
+        showMetricPercentAvg("slots read / referenced",
+                             slotsReadOverReferencedPerFunction, *ss);
     }
     *ss << "\n";
 
@@ -362,18 +384,32 @@ void myFinalizer(SEXP) {
                       "referenced", usedSlotsCount, referencedSlotsCount, *ss);
     showMetricPercent("read slots used in speculation ", "used", "read",
                       usedSlotsCount, readSlotsCount, *ss);
+
+    *ss << "\n";
+    // USED / READ non-empty
     showMetricPercent("read non-empty slots used in speculation ", "used",
                       "read non-empty", usedSlotsCount, readNonEmptySlotsCount,
                       *ss);
 
     if (!slotsUsedOverReadNonEmptyPerFunction.empty()) {
-        showMetricPercent("read non-empty slots / used (avg per function)",
-                          computeAverage(slotsUsedOverReadNonEmptyPerFunction),
-                          *ss);
+        showMetricPercentAvg("used / read non-empty slots",
+                             slotsUsedOverReadNonEmptyPerFunction, *ss);
     }
 
     *ss << "\n";
 
+    // USED /  non-empty
+    showMetricPercent("non-empty slots used in speculation ", "used",
+                      "non-empty", usedSlotsCount, nonEmptySlotsCount, *ss);
+
+    if (!slotsUsedOverReadNonEmptyPerFunction.empty()) {
+        showMetricPercentAvg("used / non-empty slots",
+                             slotsUsedOverNonEmptyPerFunction, *ss);
+    }
+
+    *ss << "\n";
+
+    // USED MATCH
     *ss << "used (kind type): " << usedSlotsOfKindTypeCount << "\n";
     showMetricPercent("narrowed with static type", "narrowed",
                       "used (kind type)", narrowedSlotsCount,
