@@ -79,118 +79,146 @@ void showPercent(double percent, std::ostream& ss) {
     ss << percent * 100 << "%";
 }
 
-void showMetricPercent(std::string metricDescription, std::string nameNumerator,
-                       std::string nameDenominator, int num, int den,
-                       std::ostream& ss) {
-    ss << metricDescription << " (" << nameNumerator << " / " << nameDenominator
-       << "): " << num << " / " << den << " (";
+struct Stat {
+    std::string name;
+    size_t value = 0;
 
-    if (den)
-        showPercent(static_cast<double>(num) / den, ss);
-    else
-        ss << "-";
+    void operator++(int) { value++; }
+    void operator+=(size_t add) { value += add; }
+    void operator+=(const Stat& other) { value += other.value; }
+};
 
-    ss << ")"
-       << " \n";
+std::ostream& operator<<(std::ostream& os, const Stat& st) {
+    os << st.value;
+    return os;
 }
 
+struct MetricPercent {
+    Stat* numerator;
+    Stat* denominator;
+    std::string name = "";
 
-double computeAverage(const std::vector<double>& numbers) {
-    if (numbers.empty()) {
-        return 0.0; // Return 0.0 for an empty vector to avoid division by zero
+    double value() const {
+        if (denominator->value == 0) {
+            return 0;
+        }
+
+        return static_cast<double>(numerator->value) / denominator->value;
     }
 
-    double sum = std::accumulate(numbers.begin(), numbers.end(), 0.0);
-    return sum / numbers.size();
-}
-void showMetricPercent(std::string metricDescription, double percent,
-                       std::ostream& ss) {
-    ss << metricDescription << ": ";
-    showPercent(percent, ss);
-    ss << " \n";
-}
-
-void showMetricPercentAvg(std::string metricDescription,
-                          const std::vector<double>& numbers,
-                          std::ostream& ss) {
-    ss << metricDescription << " (avg / " << numbers.size() << " elements): ";
-    auto avg = computeAverage(numbers);
-    showPercent(avg, ss);
-    ss << " \n";
-}
-
-double computeMedian(std::vector<double>& vec) {
-    // Sort the vector
-    std::sort(vec.begin(), vec.end());
-
-    // Find the median
-    size_t size = vec.size();
-    if (size % 2 == 0) {
-        // Even number of elements, take the average of the two middle elements
-        return (vec[size / 2 - 1] + vec[size / 2]) / 2.0;
-    } else {
-        // Odd number of elements, take the middle element
-        return vec[size / 2];
+    MetricPercent& named(const std::string& name) {
+        this->name = name;
+        return *this;
     }
+};
+
+MetricPercent operator/(Stat& lhs, Stat& rhs) {
+    return MetricPercent{.numerator = &lhs, .denominator = &rhs};
+}
+
+std::ostream& operator<<(std::ostream& os, const MetricPercent& metric) {
+    if (metric.name != "") {
+        os << metric.name << " ";
+    }
+
+    os << "(" << metric.numerator->name << " / " << metric.denominator->name
+       << "): " << metric.numerator->value << " / " << metric.denominator->value
+       << " (";
+
+    showPercent(metric.value(), os);
+
+    os << ")\n";
+
+    return os;
+};
+
+struct FunctionAggregate {
+    std::string name;
+    std::vector<double> values{};
+
+    void add(double value) { values.push_back(value); }
+    void add(const MetricPercent& metric) { values.push_back(metric.value()); }
+
+    double average() const {
+        if (values.empty()) {
+            return 0.0;
+        }
+
+        double sum = std::accumulate(values.begin(), values.end(), 0.0);
+        return sum / values.size();
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
+    if (agg.values.empty()) {
+        return os;
+    }
+
+    os << agg.name << " (on average of " << agg.values.size() << " function): ";
+
+    showPercent(agg.average(), os);
+
+    os << "\n";
+
+    return os;
 }
 
 void myFinalizer(SEXP) {
     std::ofstream null_stream("/dev/null");
-    std::ostream* defaultOutput = &std::cerr;
-    // std::ostream* defaultOutput = &null_stream;
+    std::ostream& defaultOutput = std::cerr;
 
-    std::ostream* outputInFunction = defaultOutput;
+    std::ostream& outputInFunction = defaultOutput;
 
     SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
 
-    unsigned int totalSlots = 0;
-    unsigned int referencedSlotsCount = 0;
-    unsigned int readSlotsCount = 0;
-    unsigned int readNonEmptySlotsCount = 0;
-    unsigned int usedSlotsCount = 0;
-    unsigned int usedSlotsOfKindTypeCount = 0;
-    unsigned int exactMatchUsedSlotsCount = 0;
-    unsigned int widenedUsedSlotsCount = 0;
+    Stat totalSlots{"total"};
+    Stat referencedSlots{"referenced"};
+    Stat readSlots{"read"};
+    Stat readNonEmptySlots{"read non-empty"};
+    Stat usedSlots{"used"};
 
-    unsigned int narrowedSlotsCount = 0;
+    Stat usedSlotsOfKindType{"used (kind type)"};
+    Stat exactMatchUsedSlots{"exact match"};
+    Stat widenedUsedSlots{"widened"};
+    Stat narrowedSlots{"narrowed"};
 
-    unsigned int compiledFunctions = 0;
-    unsigned int functionsUsingFeedback = 0;
+    Stat compiledFunctions{"compiled functions"};
+    Stat functionsUsingFeedback{"functions using feedback"};
 
-    unsigned int emptySlotsCount = 0;
-    unsigned int nonEmptySlotsCount = 0;
+    Stat emptySlots{"empty"};
 
     auto list = RList(DTs);
     unsigned int totalFunctions = list.length();
     unsigned int totalFunctionsWithSlots = 0;
 
-    // double emptySlotsPercentAvg = 0;
-    std::vector<double> emptySlotsOverTotalSlots;
-    std::vector<double> slotsReadOverReferencedPerFunction;
-    std::vector<double> slotsUsedOverReadNonEmptyPerFunction;
-    std::vector<double> slotsUsedOverNonEmptyPerFunction;
+    FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
+    FunctionAggregate slotsReadOverReferencedPerFunction{
+        "read / referenced slots"};
+    FunctionAggregate slotsUsedOverReadNonEmptyPerFunction{
+        "used / read non-empty slots"};
+    FunctionAggregate slotsUsedOverNonEmptyPerFunction{
+        "used / non-empty slots"};
 
     for (auto a = list.begin(); a != list.end(); ++a) {
-
         DispatchTable* dt = DispatchTable::unpack(*a);
         auto baseline = dt->baseline();
-
-        *outputInFunction << "--------------------------------------- \n\n";
-        *outputInFunction << "DT " << dt << " - name: " << dt->closureName
-                          << " " << (baseline->involvedInCompilation ? "*" : "")
-                          << "\n";
-        *outputInFunction << "baseline function: " << dt->baseline() << "\n";
-
         auto feedback = baseline->typeFeedback();
-        auto slotsInFunction = feedback->slotsSize();
+
+        outputInFunction << "--------------------------------------- \n\n";
+        outputInFunction << "DT " << dt << " - name: " << dt->closureName
+                          << (baseline->involvedInCompilation ? " (compiled)" : "")
+                          << "\n";
+        outputInFunction << "baseline function: " << dt->baseline() << "\n";
+
+        Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
         totalSlots += slotsInFunction;
-        if (slotsInFunction) {
+        if (slotsInFunction.value != 0) {
             totalFunctionsWithSlots++;
         }
 
-        readSlotsCount += baseline->slotsRead.size();
+        readSlots += baseline->slotsRead.size();
 
-        unsigned int readNonEmptySlotsInFunction = 0;
+        Stat readNonEmptySlotsInFunction{"read non-empty"};
         for (auto& slot : baseline->slotsRead) {
             switch (slot.kind) {
             case rir::FeedbackKind::Type:
@@ -212,19 +240,19 @@ void myFinalizer(SEXP) {
                 assert(false);
             }
         }
-        readNonEmptySlotsCount += readNonEmptySlotsInFunction;
+        readNonEmptySlots += readNonEmptySlotsInFunction;
 
-        usedSlotsCount += baseline->slotsUsed.size();
-        narrowedSlotsCount += baseline->slotsNarrowedWithStaticType.size();
-        exactMatchUsedSlotsCount += baseline->slotsUsedExactMatch.size();
-        widenedUsedSlotsCount += baseline->slotsUsedWidened.size();
+        usedSlots += baseline->slotsUsed.size();
+        narrowedSlots += baseline->slotsNarrowedWithStaticType.size();
+        exactMatchUsedSlots += baseline->slotsUsedExactMatch.size();
+        widenedUsedSlots += baseline->slotsUsedWidened.size();
 
         for (auto& s : baseline->slotsUsed) {
             if (s.kind == rir::FeedbackKind::Type)
-                usedSlotsOfKindTypeCount++;
+                usedSlotsOfKindType++;
         }
 
-        unsigned int emptySlotsCountInFunction = 0;
+        Stat emptySlotsCountInFunction{"empty slots in function"};
 
         for (size_t i = 0; i < feedback->tests_size(); i++) {
             if (feedback->test(i).isEmpty())
@@ -240,23 +268,19 @@ void myFinalizer(SEXP) {
             if (feedback->types(i).isEmpty())
                 emptySlotsCountInFunction++;
         }
-        emptySlotsCount += emptySlotsCountInFunction;
-        unsigned int nonEmptySlotsCountInFunction =
-            slotsInFunction - emptySlotsCountInFunction;
-        nonEmptySlotsCount += nonEmptySlotsCountInFunction;
+        emptySlots += emptySlotsCountInFunction;
 
-        if (slotsInFunction) {
-            // showMetricPercent("empty slots per function", "empty slots",
-            // "slots in function",  emptySlotsCountInFunction, slotsInFunction,
-            // std::cerr);
+        Stat nonEmptySlotsCountInFunction = {
+            "non-empty slots",
+            slotsInFunction.value - emptySlotsCountInFunction.value};
 
-            showMetricPercent("non-empty slots", "non-empty slots",
-                              "slots in function", nonEmptySlotsCountInFunction,
-                              slotsInFunction, *outputInFunction);
+        if (slotsInFunction.value != 0) {
+            auto p = (nonEmptySlotsCountInFunction / slotsInFunction)
+                         .named("non-empty slots");
 
-            emptySlotsOverTotalSlots.push_back(
-                static_cast<double>(emptySlotsCountInFunction) /
-                slotsInFunction);
+            outputInFunction << p;
+
+            emptySlotsOverTotalSlots.add(p);
         }
 
         if (baseline->involvedInCompilation) {
@@ -265,174 +289,162 @@ void myFinalizer(SEXP) {
                 functionsUsingFeedback++;
             }
 
-            referencedSlotsCount += slotsInFunction;
+            referencedSlots += slotsInFunction;
 
-            if (slotsInFunction) {
-                auto p = static_cast<double>(baseline->slotsRead.size()) /
-                         slotsInFunction;
-                showMetricPercent("slots read", "read",
-                                  "referenced (slots in function)",
-                                  baseline->slotsRead.size(), slotsInFunction,
-                                  *outputInFunction);
-                slotsReadOverReferencedPerFunction.push_back(p);
+            if (slotsInFunction.value != 0) {
+                Stat slotsRead{"read", baseline->slotsRead.size()};
+                auto p = (slotsRead / slotsInFunction).named("slots read");
+
+                outputInFunction << p;
+                slotsReadOverReferencedPerFunction.add(p);
             }
 
-            //  slots read
-            // *outputInFunction << "SLOTS READ:\n";
-            // for (auto x : dt->baseline()->slotsRead) {
-            //     *outputInFunction << x << "\n";
-            // }
-
-            //  slots used
-            // *outputInFunction << "SLOTS USED:\n";
-            // for (auto x : dt->baseline()->slotsUsed) {
-            //     *outputInFunction << x << "\n";
-            // }
-
-            // showMetricPercent(
-            //     "slots used", "used", "read",
-            //     dt->baseline()->slotsUsed.size(),
-            //     dt->baseline()->slotsRead.size(), *outputInFunction);
-
             // USED / NON-EMPTY
-            showMetricPercent("used 1", "used", "non-empty",
-                              dt->baseline()->slotsUsed.size(),
-                              nonEmptySlotsCountInFunction, *outputInFunction);
+            Stat usedSlots = {"used", baseline->slotsUsed.size()};
 
-            if (nonEmptySlotsCountInFunction) {
-                auto usedOverNonEmpty =
-                    static_cast<double>(dt->baseline()->slotsUsed.size()) /
-                    nonEmptySlotsCountInFunction;
+            outputInFunction
+                << (usedSlots / nonEmptySlotsCountInFunction).named("used 1");
 
-                slotsUsedOverNonEmptyPerFunction.push_back(usedOverNonEmpty);
+            if (nonEmptySlotsCountInFunction.value != 0) {
+                slotsUsedOverNonEmptyPerFunction.add(
+                    usedSlots / nonEmptySlotsCountInFunction);
             }
 
             // USED / READ NON-EMPTY
-            showMetricPercent("used 2", "used", "read non-empty",
-                              dt->baseline()->slotsUsed.size(),
-                              readNonEmptySlotsInFunction, *outputInFunction);
+            outputInFunction
+                << (usedSlots / readNonEmptySlotsInFunction).named("used 2");
 
-            if (readNonEmptySlotsInFunction) {
-                auto usedOverReadNonEmpty =
-                    static_cast<double>(dt->baseline()->slotsUsed.size()) /
-                    readNonEmptySlotsInFunction;
-
-                slotsUsedOverReadNonEmptyPerFunction.push_back(
-                    usedOverReadNonEmpty);
+            if (readNonEmptySlotsInFunction.value != 0) {
+                slotsUsedOverReadNonEmptyPerFunction.add(
+                    usedSlots / readNonEmptySlotsInFunction);
             }
 
-            showMetricPercent("deopted slots", "deopted", "used",
-                              baseline->slotsDeopted.size(),
-                              dt->baseline()->slotsUsed.size(),
-                              *outputInFunction);
+            Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
+
+            outputInFunction
+                << (deoptedSlots / usedSlots).named("deopted slots");
         }
 
-        *outputInFunction << "\n";
+        outputInFunction << "\n";
     }
+
+    Stat nonEmptySlots{"non-empty", totalSlots.value - emptySlots.value};
 
     constexpr bool printSummaryToFile = false;
-    std::ostream* ss = defaultOutput;
-    if (printSummaryToFile) {
-        static std::ofstream fileStream("summary.txt", std::ios::app);
-        ss = &fileStream;
-    }
+    std::ofstream fileStream("summary.txt", std::ios::app);
+    std::ostream& ss = printSummaryToFile ? fileStream : defaultOutput;
 
-    *ss << "\n\n"
-        << " ********** SUMMARY ************* \n\n";
-    *ss << "totalFunctions (RIR compiled): " << totalFunctions << "\n";
+    ss << "\n\n********** SUMMARY *************\n\n";
+    ss << "Total functions (RIR compiled): " << totalFunctions << "\n";
 
-    *ss << "compiledFunctions (PIR compiled): " << compiledFunctions << "\n";
+    ss << "Compiled functions (PIR compiled): " << compiledFunctions
+       << "\n";
 
-    // auto notReferencedSlots = totalSlots - referencedSlotsCount;
+    ss << "Total slots: " << totalSlots << "\n";
+    ss << "\n";
 
-    *ss << "TOTAL  Slots: " << totalSlots << " - "
-        << "\n";
-    *ss << "\n";
-    showMetricPercent("empty slots (never filled)", "empty", "total",
-                      emptySlotsCount, totalSlots, *ss);
+    ss << (emptySlots / totalSlots).named("empty slots (never filled)");
+    ss << emptySlotsOverTotalSlots;
+    ss << "non-empty slots (on average of "
+       << emptySlotsOverTotalSlots.values.size() << " functions)";
+    showPercent(1 - emptySlotsOverTotalSlots.average(), ss);
+    ss << "\n";
+    ss << "\n";
 
-    if (!emptySlotsOverTotalSlots.empty()) {
-
-        showMetricPercentAvg("empty slots", emptySlotsOverTotalSlots, *ss);
-
-        auto emptySlotsPercentAvg = computeAverage(emptySlotsOverTotalSlots);
-        double nonEmptySlotsPercentAvg = 1 - emptySlotsPercentAvg;
-        showMetricPercent("non-empty slots (avg per function)",
-                          nonEmptySlotsPercentAvg, *ss);
-    }
-    *ss << "\n";
-
-    showMetricPercent("referenced Slots in compilation", "referenced", "total",
-                      referencedSlotsCount, totalSlots, *ss);
-    // showMetricPercent("slots NOT referenced in compilation", "not
-    // referenced", "total",  notReferencedSlots, totalSlots, *ss);
-    showMetricPercent("slots read", "read", "referenced", readSlotsCount,
-                      referencedSlotsCount, *ss);
-
-    if (!slotsReadOverReferencedPerFunction.empty()) {
-        showMetricPercentAvg("slots read / referenced",
-                             slotsReadOverReferencedPerFunction, *ss);
-    }
-    *ss << "\n";
+    ss << (referencedSlots / totalSlots)
+              .named("referenced slots in compilation");
+    ss << (readSlots / referencedSlots).named("slots read");
+    ss << slotsReadOverReferencedPerFunction;
+    ss << "\n";
 
     // used slots
-    *ss << "--- USED SLOTS ---"
-        << "\n";
-    showMetricPercent("slots used in speculation", "used", "total",
-                      usedSlotsCount, totalSlots, *ss);
-    showMetricPercent("referenced slots used in speculation", "used",
-                      "referenced", usedSlotsCount, referencedSlotsCount, *ss);
-    showMetricPercent("read slots used in speculation ", "used", "read",
-                      usedSlotsCount, readSlotsCount, *ss);
+    ss << "--- USED SLOTS ---\n";
 
-    *ss << "\n";
+    ss << (usedSlots / totalSlots).named("slots used in speculation");
+    ss << (usedSlots / referencedSlots)
+              .named("referenced slots used in speculation");
+    ss << (usedSlots / readSlots).named("read slots used in speculation");
+    ss << "\n";
+
     // USED / READ non-empty
-    showMetricPercent("read non-empty slots used in speculation ", "used",
-                      "read non-empty", usedSlotsCount, readNonEmptySlotsCount,
-                      *ss);
-
-    if (!slotsUsedOverReadNonEmptyPerFunction.empty()) {
-        showMetricPercentAvg("used / read non-empty slots",
-                             slotsUsedOverReadNonEmptyPerFunction, *ss);
-    }
-
-    *ss << "\n";
+    ss << (usedSlots / readNonEmptySlots)
+              .named("read non-empty slots used in speculation ");
+    ss << slotsUsedOverReadNonEmptyPerFunction;
+    ss << "\n";
 
     // USED /  non-empty
-    showMetricPercent("non-empty slots used in speculation ", "used",
-                      "non-empty", usedSlotsCount, nonEmptySlotsCount, *ss);
-
-    if (!slotsUsedOverReadNonEmptyPerFunction.empty()) {
-        showMetricPercentAvg("used / non-empty slots",
-                             slotsUsedOverNonEmptyPerFunction, *ss);
-    }
-
-    *ss << "\n";
+    ss << (usedSlots / nonEmptySlots)
+              .named("non-empty slots used in speculation");
+    ss << slotsUsedOverNonEmptyPerFunction;
+    ss << "\n";
 
     // USED MATCH
-    *ss << "used (kind type): " << usedSlotsOfKindTypeCount << "\n";
-    showMetricPercent("narrowed with static type", "narrowed",
-                      "used (kind type)", narrowedSlotsCount,
-                      usedSlotsOfKindTypeCount, *ss);
-    showMetricPercent("exact match", "exact", "used (kind type)",
-                      exactMatchUsedSlotsCount, usedSlotsOfKindTypeCount, *ss);
-    showMetricPercent("widened", "widened", "used (kind type)",
-                      widenedUsedSlotsCount, usedSlotsOfKindTypeCount, *ss);
+    ss << "used (of kind type): " << usedSlotsOfKindType << "\n";
 
-    *ss << "\n";
+    ss << (narrowedSlots / usedSlotsOfKindType)
+              .named("narrowed with static type");
+    ss << (exactMatchUsedSlots / usedSlotsOfKindType).named("exact match");
+    ss << (widenedUsedSlots / usedSlotsOfKindType).named("widened");
+    ss << "\n";
 
     // benefit
-    showMetricPercent("benefited from feedback", "used feedback", "compiled",
-                      functionsUsingFeedback, compiledFunctions, *ss);
+    ss << (functionsUsingFeedback / compiledFunctions)
+              .named("benefited from feedback");
+    ss << "\n";
 
-    *ss << "\n";
+    ss.flush();
 
-    ss->flush();
+    auto csv_file = getenv("STATS_CSV");
+    if (csv_file != nullptr) {
+        std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
 
-    // if (narrowedSlotsCount)
-    //     assert(false);
+        ofs.seekp(0, std::ios::end);
+        if (ofs.tellp() == 0) {
+            // clang-format off
+            ofs << "name,total functions,compiled functions,benefited functions,"
+                << "total slots,empty slots,referenced slots,read slots,read non-empty slots,used slots,"
+                << "avg empty slots (per function),avg read slots (per function),"
+                << "avg used slots (per function),avg used slots from read (per function),"
+                << "used type slots,narrowed,exact match,widened\n";
+            // clang-format on
+        }
 
-    // assert(false);
+        const char* stats_name = getenv("STATS_NAME");
+        if (stats_name == nullptr) {
+            stats_name = "?";
+        }
+
+        auto out = [&ofs](auto x) { ofs << x << ","; };
+
+        auto qout = [&ofs](auto x) {
+            ofs << "\"" << x << "\""
+                << ",";
+        };
+
+        qout(stats_name);
+
+        out(totalFunctions);
+        out(compiledFunctions);
+        out(functionsUsingFeedback);
+
+        out(totalSlots);
+        out(emptySlots);
+        out(referencedSlots);
+        out(readSlots);
+        out(readNonEmptySlots);
+        out(usedSlots);
+
+        out(emptySlotsOverTotalSlots.average());
+        out(slotsReadOverReferencedPerFunction.average());
+
+        out(slotsUsedOverNonEmptyPerFunction.average());
+        out(slotsUsedOverReadNonEmptyPerFunction.average());
+
+        out(usedSlotsOfKindType);
+        out(narrowedSlots);
+        out(exactMatchUsedSlots);
+        ofs << widenedUsedSlots << "\n";
+    }
 }
 
 std::string getClosureName(SEXP cls) {
@@ -464,7 +476,7 @@ std::string getClosureName(SEXP cls) {
         UNPROTECT(1);
         auto cellValue = R_GetVarLocValue(loc);
 
-        if (TYPEOF(cellValue) == PROMSXP){
+        if (TYPEOF(cellValue) == PROMSXP) {
             cellValue = PRVALUE(cellValue);
         }
 
