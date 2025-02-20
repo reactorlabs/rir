@@ -48,7 +48,7 @@ class Builder {
                                    const RirStack& stack, bool inPromise);
     Checkpoint* emitCheckpoint(rir::Code* srcCode, Opcode* pos,
                                const RirStack& stack, bool inPromise);
-    Checkpoint* emitCheckpoint(FrameState* fs);
+    // Checkpoint* emitCheckpoint(FrameState* fs);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

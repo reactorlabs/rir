@@ -378,8 +378,8 @@ void myFinalizer(SEXP) {
     // used slots
     *ss << "--- USED SLOTS ---"
         << "\n";
-    showMetricPercent("slots used in speculation", "used", "total",
-                      usedSlotsCount, totalSlots, *ss);
+    // showMetricPercent("slots used in speculation", "used", "total",
+    //                   usedSlotsCount, totalSlots, *ss);
     showMetricPercent("referenced slots used in speculation", "used",
                       "referenced", usedSlotsCount, referencedSlotsCount, *ss);
     showMetricPercent("read slots used in speculation ", "used", "read",
@@ -484,17 +484,17 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
-        // Change the input closure inplace
-        Compiler::compileClosure(what);
-        body = BODY(what);
 
-        auto dt = DispatchTable::unpack(body);
-        dt->closureName = getClosureName(what);
 
         // register rir closures
         SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
         if (DTs == R_UnboundValue) {
-            DTs = R_NilValue;
+            Rf_setVar(DTsSymbol, R_NilValue, R_GlobalEnv);
+            Compiler::setOnNewDT([&](SEXP sexpDT) {
+                SEXP currentDTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
+                currentDTs = Rf_cons(sexpDT, currentDTs);
+                Rf_setVar(DTsSymbol, currentDTs, R_GlobalEnv);
+            });
 
             if (!finalizerSet) {
                 // Call `loadNamespace("Base")`
@@ -508,8 +508,15 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
                 finalizerSet = true;
             }
         }
-        DTs = Rf_cons(body, DTs);
-        Rf_setVar(DTsSymbol, DTs, R_GlobalEnv);
+
+        // Change the input closure inplace
+
+        Compiler::compileClosure(what);
+        auto outerDT = DispatchTable::unpack(BODY(what));
+        auto name = getClosureName(what);
+        if (name != "") {
+            outerDT->closureName = getClosureName(what);
+        }
 
         return what;
     } else {
