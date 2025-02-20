@@ -360,7 +360,7 @@ void myFinalizer(SEXP) {
     // used slots
     ss << "--- USED SLOTS ---\n";
 
-    ss << (usedSlots / totalSlots).named("slots used in speculation");
+    // ss << (usedSlots / totalSlots).named("slots used in speculation");
     ss << (usedSlots / referencedSlots)
               .named("referenced slots used in speculation");
     ss << (usedSlots / readSlots).named("read slots used in speculation");
