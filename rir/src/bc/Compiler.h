@@ -21,7 +21,6 @@ class Compiler {
     SEXP exp;
     SEXP formals;
     SEXP closureEnv;
-    static std::function<void(SEXP)> onNewDt;
 
     Preserve preserve;
 
@@ -43,6 +42,7 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
+    static std::function<void(SEXP)> onNewDt;
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);

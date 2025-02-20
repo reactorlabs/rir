@@ -490,11 +490,11 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
         if (DTs == R_UnboundValue) {
             Rf_setVar(DTsSymbol, R_NilValue, R_GlobalEnv);
-            Compiler::setOnNewDT([&](SEXP sexpDT) {
+            Compiler::onNewDt = [&](SEXP sexpDT) {
                 SEXP currentDTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
                 currentDTs = Rf_cons(sexpDT, currentDTs);
                 Rf_setVar(DTsSymbol, currentDTs, R_GlobalEnv);
-            });
+            };
 
             if (!finalizerSet) {
                 // Call `loadNamespace("Base")`
