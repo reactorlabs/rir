@@ -167,7 +167,8 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
         return os;
     }
 
-    os << agg.name << " (on average of " << agg.values.size() << " function): ";
+    os << agg.name << " (on average of " << agg.values.size()
+       << " functions): ";
 
     showPercent(agg.average(), os);
 
