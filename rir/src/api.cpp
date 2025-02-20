@@ -347,9 +347,10 @@ void myFinalizer(SEXP) {
 
     Stat nonEmptySlots{"non-empty", totalSlots.value - emptySlots.value};
 
-    constexpr bool printSummaryToFile = false;
-    std::ofstream fileStream("summary.txt", std::ios::app);
-    std::ostream& ss = printSummaryToFile ? fileStream : defaultOutput;
+    // std::ofstream fileStream("summary.txt", std::ios::app);
+    // std::ostream& ss = fileStream;
+
+    std::ostream& ss = defaultOutput;
 
     ss << "\n\n********** SUMMARY *************\n\n";
     ss << "Total functions (RIR compiled): " << totalFunctions << "\n";
