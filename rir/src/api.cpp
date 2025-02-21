@@ -100,7 +100,8 @@ struct MetricPercent {
 
     double value() const {
         if (denominator->value == 0) {
-            return 0;
+            assert(false && "cannot divide by 0");
+            // return 0;
         }
 
         return static_cast<double>(numerator->value) / denominator->value;
@@ -125,7 +126,11 @@ std::ostream& operator<<(std::ostream& os, const MetricPercent& metric) {
        << "): " << metric.numerator->value << " / " << metric.denominator->value
        << " (";
 
-    showPercent(metric.value(), os);
+    if (metric.denominator->value) {
+        showPercent(metric.value(), os);
+    } else {
+        os << "-";
+    }
 
     os << ")\n";
 
@@ -141,6 +146,7 @@ struct FunctionAggregate {
 
     double average() const {
         if (values.empty()) {
+            assert(false && "empty aggregate");
             return 0.0;
         }
 
