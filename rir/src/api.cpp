@@ -89,7 +89,14 @@ struct Stat {
 };
 
 std::ostream& operator<<(std::ostream& os, const Stat& st) {
+    if (st.name != "") {
+        os << st.name;
+        os << ": ";
+    }
+
     os << st.value;
+    os << "\n";
+
     return os;
 }
 
@@ -326,8 +333,10 @@ void myFinalizer(SEXP) {
                     usedSlots / readNonEmptySlotsInFunction);
             }
 
-            Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
+            Stat versions{"#versions", dt->size()};
+            outputInFunction << versions;
 
+            Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
             outputInFunction
                 << (deoptedSlots / usedSlots).named("deopted slots");
         }
