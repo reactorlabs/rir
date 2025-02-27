@@ -835,6 +835,10 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
     REC_HOOK(recording::recordDeopt(c, DispatchTable::unpack(BODY(cls)),
                                     *deoptReason, deoptTrigger));
 
+    deoptReason->origin.function()->contextsDeopted.insert(
+        c->function()->context());
+    deoptReason->origin.function()->otherVersionDeopted++;
+
     deoptReason->record(deoptTrigger);
 
     REC_HOOK(recording::recordSCDeoptFinish());

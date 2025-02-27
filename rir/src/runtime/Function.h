@@ -123,6 +123,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     std::unordered_set<FeedbackIndex> slotsUsedWidened;
     std::unordered_set<FeedbackIndex> slotsNarrowedWithStaticType;
 
+    std::unordered_set<Context> contextsDeopted;
+    unsigned otherVersionDeopted = 0;
+
     unsigned size; /// Size, in bytes, of the function and its data
 
 #define RIR_FUNCTION_FLAGS(V)                                                  \

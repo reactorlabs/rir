@@ -204,6 +204,7 @@ void myFinalizer(SEXP) {
     auto list = RList(DTs);
     Stat totalFunctions = {"Total functions (RIR compiled)", list.length()};
     Stat totalVersions = {"Total versions", 0};
+    Stat totalDeopts = {"Total deopts", 0};
 
     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
     FunctionAggregate nonEmptySlotsOverTotalSlots{"non-empty slots"};
@@ -371,6 +372,10 @@ void myFinalizer(SEXP) {
             // ---------
             // Deopts
             // ---------
+            Stat deopts{"deopt count", baseline->otherVersionDeopted};
+            outputInFunction << deopts;
+
+            totalDeopts += deopts;
 
             Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
             outputInFunction
@@ -392,6 +397,7 @@ void myFinalizer(SEXP) {
     ss << "Compiled functions (PIR compiled): " << compiledFunctions.value
        << "\n";
     ss << totalVersions;
+    ss << totalDeopts;
 
     ss << "Total slots: " << totalSlots.value << "\n";
     ss << "\n";
