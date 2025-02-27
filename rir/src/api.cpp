@@ -203,7 +203,6 @@ void myFinalizer(SEXP) {
 
     auto list = RList(DTs);
     unsigned int totalFunctions = list.length();
-    unsigned int totalFunctionsWithSlots = 0;
 
     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
     FunctionAggregate slotsReadOverReferencedPerFunction{
@@ -227,9 +226,6 @@ void myFinalizer(SEXP) {
 
         Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
         totalSlots += slotsInFunction;
-        if (slotsInFunction.value != 0) {
-            totalFunctionsWithSlots++;
-        }
 
         readSlots += baseline->slotsRead.size();
 
