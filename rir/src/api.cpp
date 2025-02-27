@@ -462,11 +462,10 @@ void myFinalizer(SEXP) {
         ofs.seekp(0, std::ios::end);
         if (ofs.tellp() == 0) {
             // clang-format off
-            ofs << "name,total functions,compiled functions,benefited functions,"
-                << "total slots,empty slots,referenced slots,read slots,read non-empty slots,used slots,"
-                << "avg empty slots (per function),avg read slots (per function),"
-                << "avg used slots (per function),avg used slots from read (per function),"
-                << "used type slots,narrowed,exact match,widened\n";
+            ofs << "name,total functions,compiled functions,benefited functions,total versions,total deopts,"
+                << "total slots,empty slots,empty referenced slots,referenced slots,read slots,read non-empty slots,used slots,"
+                // << "used type slots,narrowed,exact match,widened"
+                << "\n";
             // clang-format on
         }
 
@@ -475,11 +474,12 @@ void myFinalizer(SEXP) {
             stats_name = "?";
         }
 
-        auto out = [&ofs](auto x) { ofs << x << ","; };
+        auto out = [&ofs](Stat x, bool last = false) {
+            ofs << x.value << (last ? "\n" : ",");
+        };
 
-        auto qout = [&ofs](auto x) {
-            ofs << "\"" << x << "\""
-                << ",";
+        auto qout = [&ofs](auto x, bool last = false) {
+            ofs << "\"" << x << "\"" << (last ? "\n" : ",");
         };
 
         qout(stats_name);
@@ -487,24 +487,21 @@ void myFinalizer(SEXP) {
         out(totalFunctions);
         out(compiledFunctions);
         out(functionsUsingFeedback);
+        out(totalVersions);
+        out(totalDeopts);
 
         out(totalSlots);
         out(emptySlots);
+        out(emptyReferencedSlots);
         out(referencedSlots);
         out(readSlots);
         out(readNonEmptySlots);
-        out(usedSlots);
+        out(usedSlots, true);
 
-        out(emptySlotsOverTotalSlots.average());
-        out(slotsReadOverReferencedPerFunction.average());
-
-        out(slotsUsedOverNonEmptyPerFunction.average());
-        out(slotsUsedOverReadNonEmptyPerFunction.average());
-
-        out(usedSlotsOfKindType);
-        out(narrowedSlots);
-        out(exactMatchUsedSlots);
-        ofs << widenedUsedSlots << "\n";
+        // out(usedSlotsOfKindType);
+        // out(narrowedSlots);
+        // out(exactMatchUsedSlots);
+        // ofs << widenedUsedSlots << "\n";
     }
 }
 
