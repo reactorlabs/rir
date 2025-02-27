@@ -205,6 +205,8 @@ void myFinalizer(SEXP) {
     unsigned int totalFunctions = list.length();
 
     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
+    FunctionAggregate nonEmptySlotsOverTotalSlots{"non-empty slots"};
+
     FunctionAggregate slotsReadOverReferencedPerFunction{
         "read / referenced slots"};
     FunctionAggregate slotsUsedOverReadNonEmptyPerFunction{
@@ -281,6 +283,12 @@ void myFinalizer(SEXP) {
         }
         emptySlots += emptySlotsCountInFunction;
 
+
+        if (slotsInFunction.value != 0) {
+            emptySlotsOverTotalSlots.add(emptySlotsCountInFunction /
+                                         slotsInFunction);
+        }
+
         Stat nonEmptySlotsCountInFunction = {
             "non-empty slots",
             slotsInFunction.value - emptySlotsCountInFunction.value};
@@ -291,7 +299,7 @@ void myFinalizer(SEXP) {
 
             outputInFunction << p;
 
-            emptySlotsOverTotalSlots.add(p);
+            nonEmptySlotsOverTotalSlots.add(p);
         }
 
         if (baseline->involvedInCompilation) {
@@ -358,10 +366,7 @@ void myFinalizer(SEXP) {
 
     ss << (emptySlots / totalSlots).named("empty slots (never filled)");
     ss << emptySlotsOverTotalSlots;
-    ss << "non-empty slots (on average of "
-       << emptySlotsOverTotalSlots.values.size() << " functions)";
-    showPercent(1 - emptySlotsOverTotalSlots.average(), ss);
-    ss << "\n";
+    ss << nonEmptySlotsOverTotalSlots;
     ss << "\n";
 
     ss << (referencedSlots / totalSlots)
