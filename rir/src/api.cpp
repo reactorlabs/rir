@@ -200,6 +200,7 @@ void myFinalizer(SEXP) {
     Stat functionsUsingFeedback{"functions using feedback"};
 
     Stat emptySlots{"empty"};
+    Stat emptyReferencedSlots{"empty referenced"};
 
     auto list = RList(DTs);
     Stat totalFunctions = {"Total functions (RIR compiled)", list.length()};
@@ -302,6 +303,9 @@ void myFinalizer(SEXP) {
         }
         emptySlots += emptySlotsCountInFunction;
 
+        if (baseline->involvedInCompilation) {
+            emptyReferencedSlots += emptySlotsCountInFunction;
+        }
 
         if (slotsInFunction.value != 0) {
             emptySlotsOverTotalSlots.add(emptySlotsCountInFunction /
@@ -369,6 +373,7 @@ void myFinalizer(SEXP) {
             Stat versions{"#versions", dt->size()};
             outputInFunction << versions;
             totalVersions += versions;
+
             // ---------
             // Deopts
             // ---------
