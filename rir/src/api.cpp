@@ -462,9 +462,9 @@ void myFinalizer(SEXP) {
         ofs.seekp(0, std::ios::end);
         if (ofs.tellp() == 0) {
             // clang-format off
-            ofs << "name,total functions,compiled functions,benefited functions,total versions,total deopts,"
-                << "total slots,empty slots,empty referenced slots,referenced slots,read slots,read non-empty slots,used slots,"
-                // << "used type slots,narrowed,exact match,widened"
+            ofs << "name,total functions,compiled functions,benefited functions,total versions,total deopts"
+                << ",total slots,empty slots,empty referenced slots,referenced slots,read slots,read non-empty slots,used slots"
+                // << ",used type slots,narrowed,exact match,widened"
                 << "\n";
             // clang-format on
         }
