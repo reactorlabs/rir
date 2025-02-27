@@ -202,7 +202,7 @@ void myFinalizer(SEXP) {
     Stat emptySlots{"empty"};
 
     auto list = RList(DTs);
-    unsigned int totalFunctions = list.length();
+    Stat totalFunctions = {"Total functions (RIR compiled)", list.length()};
 
     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
     FunctionAggregate nonEmptySlotsOverTotalSlots{"non-empty slots"};
@@ -226,11 +226,18 @@ void myFinalizer(SEXP) {
                          << "\n";
         outputInFunction << "baseline function: " << dt->baseline() << "\n";
 
+        // ---------
+        // Slots count
+        // ---------
         Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
         totalSlots += slotsInFunction;
 
-        readSlots += baseline->slotsRead.size();
+        Stat slotsReadInFunction{"read", baseline->slotsRead.size()};
+        readSlots += slotsReadInFunction;
 
+        // ---------
+        // Read non-empty
+        // ---------
         Stat readNonEmptySlotsInFunction{"read non-empty"};
         for (auto& slot : baseline->slotsRead) {
             switch (slot.kind) {
@@ -255,7 +262,14 @@ void myFinalizer(SEXP) {
         }
         readNonEmptySlots += readNonEmptySlotsInFunction;
 
+        // ---------
+        // Used
+        // ---------
         usedSlots += baseline->slotsUsed.size();
+
+        // ---------
+        // Slots of kind type
+        // ---------
         narrowedSlots += baseline->slotsNarrowedWithStaticType.size();
         exactMatchUsedSlots += baseline->slotsUsedExactMatch.size();
         widenedUsedSlots += baseline->slotsUsedWidened.size();
@@ -265,6 +279,9 @@ void myFinalizer(SEXP) {
                 usedSlotsOfKindType++;
         }
 
+        // ---------
+        // Empty slots
+        // ---------
         Stat emptySlotsCountInFunction{"empty slots in function"};
 
         for (size_t i = 0; i < feedback->tests_size(); i++) {
@@ -289,6 +306,9 @@ void myFinalizer(SEXP) {
                                          slotsInFunction);
         }
 
+        // ---------
+        // Non empty slots
+        // ---------
         Stat nonEmptySlotsCountInFunction = {
             "non-empty slots",
             slotsInFunction.value - emptySlotsCountInFunction.value};
@@ -302,6 +322,9 @@ void myFinalizer(SEXP) {
             nonEmptySlotsOverTotalSlots.add(p);
         }
 
+        // ---------
+        // Compiled stats
+        // ---------
         if (baseline->involvedInCompilation) {
             compiledFunctions++;
             if (baseline->slotsUsed.size()) {
@@ -311,8 +334,8 @@ void myFinalizer(SEXP) {
             referencedSlots += slotsInFunction;
 
             if (slotsInFunction.value != 0) {
-                Stat slotsRead{"read", baseline->slotsRead.size()};
-                auto p = (slotsRead / slotsInFunction).named("slots read");
+                auto p =
+                    (slotsReadInFunction / slotsInFunction).named("slots read");
 
                 outputInFunction << p;
                 slotsReadOverReferencedPerFunction.add(p);
@@ -338,8 +361,14 @@ void myFinalizer(SEXP) {
                     usedSlots / readNonEmptySlotsInFunction);
             }
 
+            // ---------
+            // Versions
+            // ---------
             Stat versions{"#versions", dt->size()};
             outputInFunction << versions;
+            // ---------
+            // Deopts
+            // ---------
 
             Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
             outputInFunction
@@ -357,11 +386,11 @@ void myFinalizer(SEXP) {
     std::ostream& ss = defaultOutput;
 
     ss << "\n\n********** SUMMARY *************\n\n";
-    ss << "Total functions (RIR compiled): " << totalFunctions << "\n";
+    ss << totalFunctions;
+    ss << "Compiled functions (PIR compiled): " << compiledFunctions.value
+       << "\n";
 
-    ss << "Compiled functions (PIR compiled): " << compiledFunctions << "\n";
-
-    ss << "Total slots: " << totalSlots << "\n";
+    ss << "Total slots: " << totalSlots.value << "\n";
     ss << "\n";
 
     ss << (emptySlots / totalSlots).named("empty slots (never filled)");
@@ -390,7 +419,7 @@ void myFinalizer(SEXP) {
     ss << slotsUsedOverReadNonEmptyPerFunction;
     ss << "\n";
 
-    // USED /  non-empty
+    // USED / non-empty
     ss << (usedSlots / nonEmptySlots)
               .named("non-empty slots used in speculation");
     ss << slotsUsedOverNonEmptyPerFunction;
