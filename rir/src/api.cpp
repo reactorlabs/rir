@@ -167,7 +167,8 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
         return os;
     }
 
-    os << agg.name << " (on average of " << agg.values.size() << " function): ";
+    os << agg.name << " (on average of " << agg.values.size()
+       << " functions): ";
 
     showPercent(agg.average(), os);
 
@@ -199,12 +200,16 @@ void myFinalizer(SEXP) {
     Stat functionsUsingFeedback{"functions using feedback"};
 
     Stat emptySlots{"empty"};
+    Stat emptyReferencedSlots{"empty referenced"};
 
     auto list = RList(DTs);
-    unsigned int totalFunctions = list.length();
-    unsigned int totalFunctionsWithSlots = 0;
+    Stat totalFunctions = {"Total functions (RIR compiled)", list.length()};
+    Stat totalCompiledVersions = {"Total compiled versions", 0};
+    Stat totalDeopts = {"Total deopts", 0};
 
     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
+    FunctionAggregate nonEmptySlotsOverTotalSlots{"non-empty slots"};
+
     FunctionAggregate slotsReadOverReferencedPerFunction{
         "read / referenced slots"};
     FunctionAggregate slotsUsedOverReadNonEmptyPerFunction{
@@ -224,26 +229,26 @@ void myFinalizer(SEXP) {
                          << "\n";
 
         outputInFunction << "baseline function: " << dt->baseline() << "\n";
+        // ---------
+        // Versions
+        // ---------
+        Stat compiledVersions{"compiled versions", dt->size() - 1};
+        outputInFunction << compiledVersions;
 
-        // Stat versions{"#versions", dt->size()};
-        outputInFunction << "#versions: baseline ";
-        if (dt->size() > 1) {
-            outputInFunction << "+ " << dt->size() - 1;
-        }
-        outputInFunction << "\n";
-        ;
+        totalCompiledVersions += compiledVersions;
 
-        Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
-        outputInFunction << (deoptedSlots / usedSlots).named("deopted slots");
-
+        // ---------
+        // Slots count
+        // ---------
         Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
         totalSlots += slotsInFunction;
-        if (slotsInFunction.value != 0) {
-            totalFunctionsWithSlots++;
-        }
 
-        readSlots += baseline->slotsRead.size();
+        Stat slotsReadInFunction{"read", baseline->slotsRead.size()};
+        readSlots += slotsReadInFunction;
 
+        // ---------
+        // Read non-empty
+        // ---------
         Stat readNonEmptySlotsInFunction{"read non-empty"};
         for (auto& slot : baseline->slotsRead) {
             switch (slot.kind) {
@@ -268,7 +273,14 @@ void myFinalizer(SEXP) {
         }
         readNonEmptySlots += readNonEmptySlotsInFunction;
 
+        // ---------
+        // Used
+        // ---------
         usedSlots += baseline->slotsUsed.size();
+
+        // ---------
+        // Slots of kind type
+        // ---------
         narrowedSlots += baseline->slotsNarrowedWithStaticType.size();
         exactMatchUsedSlots += baseline->slotsUsedExactMatch.size();
         widenedUsedSlots += baseline->slotsUsedWidened.size();
@@ -278,6 +290,9 @@ void myFinalizer(SEXP) {
                 usedSlotsOfKindType++;
         }
 
+        // ---------
+        // Empty slots
+        // ---------
         Stat emptySlotsCountInFunction{"empty slots in function"};
 
         for (size_t i = 0; i < feedback->tests_size(); i++) {
@@ -296,6 +311,18 @@ void myFinalizer(SEXP) {
         }
         emptySlots += emptySlotsCountInFunction;
 
+        if (baseline->involvedInCompilation) {
+            emptyReferencedSlots += emptySlotsCountInFunction;
+        }
+
+        if (slotsInFunction.value != 0) {
+            emptySlotsOverTotalSlots.add(emptySlotsCountInFunction /
+                                         slotsInFunction);
+        }
+
+        // ---------
+        // Non empty slots
+        // ---------
         Stat nonEmptySlotsCountInFunction = {
             "non-empty slots",
             slotsInFunction.value - emptySlotsCountInFunction.value};
@@ -306,9 +333,12 @@ void myFinalizer(SEXP) {
 
             outputInFunction << p;
 
-            emptySlotsOverTotalSlots.add(p);
+            nonEmptySlotsOverTotalSlots.add(p);
         }
 
+        // ---------
+        // Compiled stats
+        // ---------
         if (baseline->involvedInCompilation) {
             compiledFunctions++;
             if (baseline->slotsUsed.size()) {
@@ -318,8 +348,8 @@ void myFinalizer(SEXP) {
             referencedSlots += slotsInFunction;
 
             if (slotsInFunction.value != 0) {
-                Stat slotsRead{"read", baseline->slotsRead.size()};
-                auto p = (slotsRead / slotsInFunction).named("slots read");
+                auto p =
+                    (slotsReadInFunction / slotsInFunction).named("slots read");
 
                 outputInFunction << p;
                 slotsReadOverReferencedPerFunction.add(p);
@@ -345,6 +375,9 @@ void myFinalizer(SEXP) {
                     usedSlots / readNonEmptySlotsInFunction);
             }
 
+            // ---------
+            // Speculation and Inlines
+            // ---------
             Stat speculationWithinInline{
                 "speculation within inlines",
                 baseline->speculationWithinInlines.size()};
@@ -354,6 +387,18 @@ void myFinalizer(SEXP) {
                 "speculation in functions",
                 baseline->speculationInFunctions.size()};
             outputInFunction << speculationInFunctions;
+
+            // ---------
+            // Deopts
+            // ---------
+            Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
+            outputInFunction
+                << (deoptedSlots / usedSlots).named("deopted slots");
+
+            Stat deopts{"deopt count", baseline->otherVersionDeopted};
+            outputInFunction << deopts;
+
+            totalDeopts += deopts;
         }
 
         outputInFunction << "\n";
@@ -361,24 +406,24 @@ void myFinalizer(SEXP) {
 
     Stat nonEmptySlots{"non-empty", totalSlots.value - emptySlots.value};
 
-    constexpr bool printSummaryToFile = false;
-    std::ofstream fileStream("summary.txt", std::ios::app);
-    std::ostream& ss = printSummaryToFile ? fileStream : defaultOutput;
+    // std::ofstream fileStream("summary.txt", std::ios::app);
+    // std::ostream& ss = fileStream;
+
+    std::ostream& ss = defaultOutput;
 
     ss << "\n\n********** SUMMARY *************\n\n";
-    ss << "Total functions (RIR compiled): " << totalFunctions << "\n";
+    ss << totalFunctions;
+    ss << "Compiled functions (PIR compiled): " << compiledFunctions.value
+       << "\n";
+    ss << totalCompiledVersions;
+    ss << totalDeopts;
 
-    ss << "Compiled functions (PIR compiled): " << compiledFunctions << "\n";
-
-    ss << "Total slots: " << totalSlots << "\n";
+    ss << "Total slots: " << totalSlots.value << "\n";
     ss << "\n";
 
     ss << (emptySlots / totalSlots).named("empty slots (never filled)");
     ss << emptySlotsOverTotalSlots;
-    ss << "non-empty slots (on average of "
-       << emptySlotsOverTotalSlots.values.size() << " functions)";
-    showPercent(1 - emptySlotsOverTotalSlots.average(), ss);
-    ss << "\n";
+    ss << nonEmptySlotsOverTotalSlots;
     ss << "\n";
 
     ss << (referencedSlots / totalSlots)
@@ -402,7 +447,7 @@ void myFinalizer(SEXP) {
     ss << slotsUsedOverReadNonEmptyPerFunction;
     ss << "\n";
 
-    // USED /  non-empty
+    // USED / non-empty
     ss << (usedSlots / nonEmptySlots)
               .named("non-empty slots used in speculation");
     ss << slotsUsedOverNonEmptyPerFunction;
@@ -431,11 +476,10 @@ void myFinalizer(SEXP) {
         ofs.seekp(0, std::ios::end);
         if (ofs.tellp() == 0) {
             // clang-format off
-            ofs << "name,total functions,compiled functions,benefited functions,"
-                << "total slots,empty slots,referenced slots,read slots,read non-empty slots,used slots,"
-                << "avg empty slots (per function),avg read slots (per function),"
-                << "avg used slots (per function),avg used slots from read (per function),"
-                << "used type slots,narrowed,exact match,widened\n";
+            ofs << "name,total functions,compiled functions,benefited functions,total versions,total deopts"
+                << ",total slots,empty slots,empty referenced slots,referenced slots,read slots,read non-empty slots,used slots"
+                // << ",used type slots,narrowed,exact match,widened"
+                << "\n";
             // clang-format on
         }
 
@@ -444,11 +488,12 @@ void myFinalizer(SEXP) {
             stats_name = "?";
         }
 
-        auto out = [&ofs](auto x) { ofs << x << ","; };
+        auto out = [&ofs](Stat x, bool last = false) {
+            ofs << x.value << (last ? "\n" : ",");
+        };
 
-        auto qout = [&ofs](auto x) {
-            ofs << "\"" << x << "\""
-                << ",";
+        auto qout = [&ofs](auto x, bool last = false) {
+            ofs << "\"" << x << "\"" << (last ? "\n" : ",");
         };
 
         qout(stats_name);
@@ -456,24 +501,21 @@ void myFinalizer(SEXP) {
         out(totalFunctions);
         out(compiledFunctions);
         out(functionsUsingFeedback);
+        out(totalCompiledVersions);
+        out(totalDeopts);
 
         out(totalSlots);
         out(emptySlots);
+        out(emptyReferencedSlots);
         out(referencedSlots);
         out(readSlots);
         out(readNonEmptySlots);
-        out(usedSlots);
+        out(usedSlots, true);
 
-        out(emptySlotsOverTotalSlots.average());
-        out(slotsReadOverReferencedPerFunction.average());
-
-        out(slotsUsedOverNonEmptyPerFunction.average());
-        out(slotsUsedOverReadNonEmptyPerFunction.average());
-
-        out(usedSlotsOfKindType);
-        out(narrowedSlots);
-        out(exactMatchUsedSlots);
-        ofs << widenedUsedSlots << "\n";
+        // out(usedSlotsOfKindType);
+        // out(narrowedSlots);
+        // out(exactMatchUsedSlots);
+        // ofs << widenedUsedSlots << "\n";
     }
 }
 

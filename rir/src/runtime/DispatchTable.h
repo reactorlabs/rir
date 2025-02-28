@@ -110,6 +110,7 @@ struct DispatchTable
     }
 
     void remove(Code* funCode) {
+        assert(false && "Version removed");
         size_t i = 1;
         for (; i < size(); ++i) {
             auto fun = get(i);
@@ -166,6 +167,7 @@ struct DispatchTable
             Rf_error("dispatch table overflow");
 #endif
             // Evict one element and retry
+            assert(false && "Version removed");
             auto pos = 1 + (Random::singleton()() % (size() - 1));
             get(pos)->dispatchTable(nullptr);
             size_--;
