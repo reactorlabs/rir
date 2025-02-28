@@ -473,6 +473,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
             fo.function()->slotsRead.insert(fo.index());
             fo.function()->slotsUsed.insert(fo.index());
+            assert(feedback.isEmpty() && "non empty slot in branch!");
 
             stack.clear();
         } else if (auto i = Instruction::Cast(target)) {
