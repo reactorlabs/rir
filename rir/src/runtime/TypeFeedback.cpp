@@ -60,7 +60,10 @@ DeoptReason::DeoptReason(const FeedbackOrigin& origin,
 void DeoptReason::record(SEXP val) const {
     origin.function()->registerDeoptReason(reason);
 
-    origin.function()->slotsDeopted.insert(origin.index());
+    if (origin.index().kind == rir::FeedbackKind::Type) {
+        origin.function()->slotsDeopted.insert(origin.index());
+    }
+    origin.function()->otherVersionDeopted++;
 
     switch (reason) {
     case DeoptReason::Unknown:

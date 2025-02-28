@@ -362,7 +362,8 @@ class TypeFeedback : public RirRuntimeObject<TypeFeedback, TYPEFEEDBACK_MAGIC> {
     ObservedTest& test(uint32_t idx);
     ObservedValues& types(uint32_t idx);
 
-    size_t slotsSize() { return tests_size() + callees_size() + types_size(); }
+    // size_t slotsSize() { return tests_size() + callees_size() + types_size();
+    // }
 
     void record_callee(uint32_t idx, Function* function, SEXP callee,
                        bool invalidateWhenFull = false) {

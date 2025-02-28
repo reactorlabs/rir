@@ -240,7 +240,7 @@ void myFinalizer(SEXP) {
         // ---------
         // Slots count
         // ---------
-        Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
+        Stat slotsInFunction = {"slots in function", feedback->types_size()};
         totalSlots += slotsInFunction;
 
         Stat slotsReadInFunction{"read", baseline->slotsRead.size()};
@@ -258,11 +258,13 @@ void myFinalizer(SEXP) {
                 break;
 
             case rir::FeedbackKind::Call:
+                assert(false);
                 if (!feedback->callees(slot.idx).isEmpty())
                     readNonEmptySlotsInFunction++;
                 break;
 
             case rir::FeedbackKind::Test:
+                assert(false);
                 if (!feedback->test(slot.idx).isEmpty())
                     readNonEmptySlotsInFunction++;
                 break;
@@ -286,8 +288,8 @@ void myFinalizer(SEXP) {
         widenedUsedSlots += baseline->slotsUsedWidened.size();
 
         for (auto& s : baseline->slotsUsed) {
-            if (s.kind == rir::FeedbackKind::Type)
-                usedSlotsOfKindType++;
+            assert(s.kind == rir::FeedbackKind::Type);
+            usedSlotsOfKindType++;
         }
 
         // ---------
@@ -295,15 +297,15 @@ void myFinalizer(SEXP) {
         // ---------
         Stat emptySlotsCountInFunction{"empty slots in function"};
 
-        for (size_t i = 0; i < feedback->tests_size(); i++) {
-            if (feedback->test(i).isEmpty())
-                emptySlotsCountInFunction++;
-        }
+        // for (size_t i = 0; i < feedback->tests_size(); i++) {
+        //     if (feedback->test(i).isEmpty())
+        //         emptySlotsCountInFunction++;
+        // }
 
-        for (size_t i = 0; i < feedback->callees_size(); i++) {
-            if (feedback->callees(i).isEmpty())
-                emptySlotsCountInFunction++;
-        }
+        // for (size_t i = 0; i < feedback->callees_size(); i++) {
+        //     if (feedback->callees(i).isEmpty())
+        //         emptySlotsCountInFunction++;
+        // }
 
         for (size_t i = 0; i < feedback->types_size(); i++) {
             if (feedback->types(i).isEmpty())

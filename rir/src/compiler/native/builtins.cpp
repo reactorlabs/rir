@@ -837,7 +837,6 @@ void deoptImpl(rir::Code* c, SEXP cls, DeoptMetadata* m, R_bcstack_t* args,
 
     deoptReason->origin.function()->contextsDeopted.insert(
         c->function()->context());
-    deoptReason->origin.function()->otherVersionDeopted++;
 
     deoptReason->record(deoptTrigger);
 

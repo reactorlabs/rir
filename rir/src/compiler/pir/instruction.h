@@ -192,8 +192,11 @@ class Instruction : public Value {
     bool hasCallFeedback() const { return callFeedback_.get(); }
 
     void slotRead(FeedbackOrigin& fo) const {
-        if (fo.hasSlot()) {
-            fo.function()->slotsRead.insert(fo.index());
+        if (fo.index().kind == rir::FeedbackKind::Type) {
+
+            if (fo.hasSlot()) {
+                fo.function()->slotsRead.insert(fo.index());
+            }
         }
     }
 
@@ -225,8 +228,8 @@ class Instruction : public Value {
     std::shared_ptr<CallFeedback> callFeedback_;
     const CallFeedback& callFeedback(bool recordSlotRead = true) const {
         if (callFeedback_.get()) {
-            if (recordSlotRead)
-                slotRead(callFeedback_->feedbackOrigin);
+            // if (recordSlotRead)
+            //     slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
         }
         const static CallFeedback none;
@@ -234,8 +237,8 @@ class Instruction : public Value {
     }
     CallFeedback& updateCallFeedback(bool recordSlotRead = true) {
         if (callFeedback_.get()) {
-            if (recordSlotRead)
-                slotRead(callFeedback_->feedbackOrigin);
+            // if (recordSlotRead)
+            //     slotRead(callFeedback_->feedbackOrigin);
             return *callFeedback_;
         }
         callFeedback_.reset(new CallFeedback());
@@ -2716,8 +2719,8 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
 class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
-    bool deadCall = false;
-    Function* deadCallOrigin = nullptr;
+    // bool deadCall = false;
+    // Function* deadCallOrigin = nullptr;
 
     bool escapedEnv = true;
 

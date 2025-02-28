@@ -20,7 +20,8 @@ void ClosureVersion::scanForSpeculation() {
             auto fo = assume->reason.origin;
             auto feedbackOriginBaselineFunction = fo.function();
 
-            if (!fo.index().isUndefined() && !assume->defaultFeedback) {
+            if (!fo.index().isUndefined() && !assume->defaultFeedback &&
+                fo.index().kind == FeedbackKind::Type) {
                 hasSpeculationFromTF = true;
                 feedbackOriginBaselineFunction->slotsUsed.insert(fo.index());
 
@@ -36,54 +37,52 @@ void ClosureVersion::scanForSpeculation() {
                         .insert(this->owner()->rirFunction());
                 }
 
-                if (fo.index().kind == FeedbackKind::Type) {
+                if (assume->typeFeedbackNarrowedWithStaticType) {
 
-                    if (assume->typeFeedbackNarrowedWithStaticType) {
+                    // std::cerr <<
+                    // "***************************************************************";
+                    // //std::cerr << "expected: " << expected << " -
+                    // feedback.type: " << feedback.type << "\n"; std::cerr
+                    // << "\n"; Instruction::Cast(i)->print(std::cerr,
+                    // true); std::cerr << "\n";
 
-                        // std::cerr <<
-                        // "***************************************************************";
-                        // //std::cerr << "expected: " << expected << " -
-                        // feedback.type: " << feedback.type << "\n"; std::cerr
-                        // << "\n"; Instruction::Cast(i)->print(std::cerr,
-                        // true); std::cerr << "\n";
-
-                        feedbackOriginBaselineFunction
-                            ->slotsNarrowedWithStaticType.insert(fo.index());
-                    }
-                    if (assume->exactMatch)
-                        feedbackOriginBaselineFunction->slotsUsedExactMatch
-                            .insert(fo.index());
-
-                    else {
-
-                        // std::cerr << "WIDENED
-                        // ***************************************************************";
-                        // //std::cerr << "expected: " << expected << " -
-                        // feedback.type: " << feedback.type << "\n"; std::cerr
-                        // << "\n"; if (auto arg =
-                        // Instruction::Cast(assume->arg(0).val())) {
-                        //     arg->print(std::cerr, true);
-                        //     std::cerr << "\n";
-
-                        // }
-
-                        feedbackOriginBaselineFunction->slotsUsedWidened.insert(
-                            fo.index());
-                    }
+                    feedbackOriginBaselineFunction->slotsNarrowedWithStaticType
+                        .insert(fo.index());
                 }
-            }
-        } else if (auto deopt = Deopt::Cast(i)) {
+                if (assume->exactMatch)
+                    feedbackOriginBaselineFunction->slotsUsedExactMatch.insert(
+                        fo.index());
 
-            if (deopt->deadCall) {
-                deopt->deadCallOrigin->speculationInFunctions.insert(
-                    this->owner()->rirFunction());
+                else {
 
-                if (deopt->deadCallOrigin != this->owner()->rirFunction()) {
-                    deopt->deadCallOrigin->speculationWithinInlines.insert(
-                        this->owner()->rirFunction());
+                    // std::cerr << "WIDENED
+                    // ***************************************************************";
+                    // //std::cerr << "expected: " << expected << " -
+                    // feedback.type: " << feedback.type << "\n"; std::cerr
+                    // << "\n"; if (auto arg =
+                    // Instruction::Cast(assume->arg(0).val())) {
+                    //     arg->print(std::cerr, true);
+                    //     std::cerr << "\n";
+
+                    // }
+
+                    feedbackOriginBaselineFunction->slotsUsedWidened.insert(
+                        fo.index());
                 }
             }
         }
+        // else if (auto deopt = Deopt::Cast(i)) {
+        //     if (deopt->deadCall) {
+        //         deopt->deadCallOrigin->speculationInFunctions.insert(
+        //             this->owner()->rirFunction());
+
+        //         if (deopt->deadCallOrigin != this->owner()->rirFunction()) {
+        //             deopt->deadCallOrigin->speculationWithinInlines.insert(
+        //                 this->owner()->rirFunction());
+        //         }
+        //     }
+        // }
+
     });
 
     if (hasSpeculationFromTF) {
