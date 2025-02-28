@@ -18,11 +18,23 @@ void ClosureVersion::scanForSpeculation() {
         if (auto assume = Assume::Cast(i)) {
 
             auto fo = assume->reason.origin;
-            auto function = fo.function();
+            auto feedbackOriginBaselineFunction = fo.function();
 
             if (!fo.index().isUndefined() && !assume->defaultFeedback) {
                 hasSpeculationFromTF = true;
-                function->slotsUsed.insert(fo.index());
+                feedbackOriginBaselineFunction->slotsUsed.insert(fo.index());
+
+                assert(this->owner()->rirFunction());
+
+                feedbackOriginBaselineFunction->speculationInFunctions.insert(
+                    this->owner()->rirFunction());
+
+                if (this->owner()->rirFunction() !=
+                    feedbackOriginBaselineFunction) {
+
+                    feedbackOriginBaselineFunction->speculationWithinInlines
+                        .insert(this->owner()->rirFunction());
+                }
 
                 if (fo.index().kind == FeedbackKind::Type) {
 
@@ -35,11 +47,12 @@ void ClosureVersion::scanForSpeculation() {
                         // << "\n"; Instruction::Cast(i)->print(std::cerr,
                         // true); std::cerr << "\n";
 
-                        function->slotsNarrowedWithStaticType.insert(
-                            fo.index());
+                        feedbackOriginBaselineFunction
+                            ->slotsNarrowedWithStaticType.insert(fo.index());
                     }
                     if (assume->exactMatch)
-                        function->slotsUsedExactMatch.insert(fo.index());
+                        feedbackOriginBaselineFunction->slotsUsedExactMatch
+                            .insert(fo.index());
 
                     else {
 
@@ -54,8 +67,20 @@ void ClosureVersion::scanForSpeculation() {
 
                         // }
 
-                        function->slotsUsedWidened.insert(fo.index());
+                        feedbackOriginBaselineFunction->slotsUsedWidened.insert(
+                            fo.index());
                     }
+                }
+            }
+        } else if (auto deopt = Deopt::Cast(i)) {
+
+            if (deopt->deadCall) {
+                deopt->deadCallOrigin->speculationInFunctions.insert(
+                    this->owner()->rirFunction());
+
+                if (deopt->deadCallOrigin != this->owner()->rirFunction()) {
+                    deopt->deadCallOrigin->speculationWithinInlines.insert(
+                        this->owner()->rirFunction());
                 }
             }
         }

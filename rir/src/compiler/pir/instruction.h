@@ -2716,6 +2716,9 @@ class Checkpoint : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0,
 class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
                                          HasEnvSlot::No, Controlflow::Exit> {
   public:
+    bool deadCall = false;
+    Function* deadCallOrigin = nullptr;
+
     bool escapedEnv = true;
 
     explicit Deopt(FrameState* frameState);

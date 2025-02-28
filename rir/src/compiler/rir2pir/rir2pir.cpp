@@ -466,6 +466,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                               target);
 
             // FEEDBACKINFO
+            d->deadCall = true;
+            d->deadCallOrigin = srcCode->function();
+
             auto fo =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
             fo.function()->slotsRead.insert(fo.index());

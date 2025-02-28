@@ -115,6 +115,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
             invocationCount_++;
     }
     bool involvedInCompilation = false;
+    std::unordered_set<Function*> speculationInFunctions;
+    std::unordered_set<Function*> speculationWithinInlines;
+
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_set<FeedbackIndex> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsDeopted;

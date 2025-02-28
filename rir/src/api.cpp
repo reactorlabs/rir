@@ -222,7 +222,19 @@ void myFinalizer(SEXP) {
                          << (baseline->involvedInCompilation ? " (compiled)"
                                                              : "")
                          << "\n";
+
         outputInFunction << "baseline function: " << dt->baseline() << "\n";
+
+        // Stat versions{"#versions", dt->size()};
+        outputInFunction << "#versions: baseline ";
+        if (dt->size() > 1) {
+            outputInFunction << "+ " << dt->size() - 1;
+        }
+        outputInFunction << "\n";
+        ;
+
+        Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
+        outputInFunction << (deoptedSlots / usedSlots).named("deopted slots");
 
         Stat slotsInFunction = {"slots in function", feedback->slotsSize()};
         totalSlots += slotsInFunction;
@@ -333,12 +345,15 @@ void myFinalizer(SEXP) {
                     usedSlots / readNonEmptySlotsInFunction);
             }
 
-            Stat versions{"#versions", dt->size()};
-            outputInFunction << versions;
+            Stat speculationWithinInline{
+                "speculation within inlines",
+                baseline->speculationWithinInlines.size()};
+            outputInFunction << speculationWithinInline;
 
-            Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
-            outputInFunction
-                << (deoptedSlots / usedSlots).named("deopted slots");
+            Stat speculationInFunctions{
+                "speculation in functions",
+                baseline->speculationInFunctions.size()};
+            outputInFunction << speculationInFunctions;
         }
 
         outputInFunction << "\n";
