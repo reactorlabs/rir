@@ -48,6 +48,7 @@ class Compiler {
     void optimizeClosureVersion(ClosureVersion*);
     void printRelaxResults();
     void printFeedbackResults();
+    void computeAndReportUnusedSlots(Function* rirFunction, Code* c);
 
     bool seenC = false;
 

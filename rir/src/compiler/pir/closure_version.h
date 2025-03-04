@@ -2,6 +2,8 @@
 #define COMPILER_CLOSURE_VERSION_H
 
 #include "code.h"
+#include "promise.h"
+
 #include "compiler/log/debug.h"
 #include "pir.h"
 #include "runtime/Function.h"
@@ -116,19 +118,10 @@ class ClosureVersion : public Code {
                 it(p);
     }
 
-    // void aa() {
-    //     rir::pir::Promise* p = promises_.at(0);
-    //     rir::pir::Code* c =  static_cast<rir::pir::Code*>(p);
-    // }
-
-    // void withEachPromise(std::function<void(Code*)> it) {
-    //     it(this);
-    //     for (auto p : promises_)
-    //         if (p) {
-    //             Code* c = static_cast<Code*>(p);
-    //             it(c);
-    //         }
-    // }
+    void withEachPromise(CodeIterator it) {
+        it(this);
+        eachPromise([&](Promise* p) { it(p); });
+    }
 
     size_t numNonDeoptInstrs() const;
 

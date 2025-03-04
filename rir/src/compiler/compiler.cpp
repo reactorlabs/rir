@@ -469,6 +469,43 @@ void Compiler::optimizeModule() {
     logger.flushAll();
 }
 
+size_t pirSlotsCount = 0;
+
+void Compiler::computeAndReportUnusedSlots(Function* rirFunction, Code* c) {
+
+    Visitor::run(c->entry, [&](Instruction* i) {
+        if (i->hasTypeFeedback()) {
+
+            auto fb = i->typeFeedback();
+            if (fb.feedbackOrigin.function() == rirFunction &&
+                fb.feedbackOrigin.hasSlot() &&
+                fb.feedbackOrigin.index().kind == FeedbackKind::Type) {
+
+                pirSlotsCount++;
+                std::string slotInfo = "";
+
+                auto ov =
+                    rirFunction->typeFeedback()->types(fb.feedbackOrigin.idx());
+
+                if (ov.isEmpty())
+                    slotInfo += "[origin empty] ";
+
+                if (!i->typeFeedbackUsed)
+                    slotInfo += "!used ";
+                else {
+                    slotInfo += "used ";
+                }
+
+                if (i->typeFeedback().defaultFeedback)
+                    slotInfo += "defaultFeedback ";
+
+                std::cerr << fb.feedbackOrigin.index() << " - " << slotInfo
+                          << "\n";
+            }
+        }
+    });
+}
+
 void Compiler::printFeedbackResults() {
     std::stringstream ss;
 
@@ -478,62 +515,38 @@ void Compiler::printFeedbackResults() {
 
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
-            // bool hasUnused = false;
-
             std::cerr << "\n\n\n ------------- New version ----------\n\n";
 
             if (v->owner()->hasOriginClosure()) {
                 auto rirFunction = v->owner()->rirFunction();
 
+                std::cerr << "** RIR slots ** \n";
                 std::cerr << "#type slots: "
                           << rirFunction->typeFeedback()->types_size() << "\n";
                 int emptySlotsCount = 0;
                 for (size_t i = 0;
                      i < rirFunction->typeFeedback()->types_size(); i++) {
                     auto ov = rirFunction->typeFeedback()->types(i);
-                    auto emptyOV = ObservedValues();
-                    if (memcmp(&ov, &emptyOV, sizeof(ObservedValues))) {
+                    if (ov.isEmpty()) {
                         emptySlotsCount++;
                     }
                 }
                 std::cerr << "#type slots EMPTY: " << emptySlotsCount << "\n";
-                bool anySlotsToReport = false;
-                // v->withEachPromise([&](Code* c) {
 
-                //     Visitor::run(c->entry, [&](Instruction* i) {
-                //         if (i->hasTypeFeedback() && (!i->typeFeedbackUsed ||
-                //         i->typeFeedback().defaultFeedback)) {
+                std::cerr << "** PIR SLOTS ** \n";
+                pirSlotsCount = 0;
+                v->withEachPromise([&](Code* p) {
+                    computeAndReportUnusedSlots(rirFunction, p);
+                });
 
-                //             std::string unusedType = "";
-                //             if (!i->typeFeedbackUsed)
-                //                 unusedType += "!used ";
-
-                //             if (i->typeFeedback().defaultFeedback)
-                //                 unusedType += "defaultFeedback ";
-
-                //             auto fb = i->typeFeedback();
-                //             if (fb.feedbackOrigin.function() == rirFunction
-                //             &&
-                //                 fb.feedbackOrigin.hasSlot() &&
-                //                 fb.feedbackOrigin.index().kind ==
-                //                 FeedbackKind::Type
-                //             ) {
-                //                 std::cerr <<  fb.feedbackOrigin.index() << "
-                //                 - " << unusedType <<  "\n"; anySlotsToReport
-                //                 = true;
-                //             }
-                //         }
-                //     });
-                // });
+                std::cerr << "PIR slots count: " << pirSlotsCount << "\n";
 
                 std::cerr << "\n";
-
                 rirFunction->disassemble(std::cerr);
-
-                if (anySlotsToReport) {
-                    std::cerr << "\n";
-                    v->print(std::cerr, true);
-                }
+                std::cerr << "\n";
+                std::cerr << v->context() << "\n";
+                v->printStandard(std::cerr, false, false);
+                // v->print(std::cerr, false);
             }
 
             std::cerr << "\n\n\n ------------- END New version ---------- \n";
@@ -602,7 +615,7 @@ void Compiler::printRelaxResults() {
                     }
 
                     if (anyRelaxedLdArg) {
-                        ldArg->print(ss, true);
+                        ldArg->print(ss, false);
                         ss << "\n";
                         ss << ldss.rdbuf();
                         ss << "\n";

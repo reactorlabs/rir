@@ -181,6 +181,11 @@ struct ObservedValues {
 
     void print(std::ostream& out) const;
 
+    bool isEmpty() const {
+        auto emptyOV = ObservedValues();
+        return !memcmp(this, &emptyOV, sizeof(ObservedValues));
+    }
+
   private:
     inline void record(SEXP e) {
         REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));

@@ -27,9 +27,43 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
-        if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed ||
-            i->type.isA(i->typeFeedback().type))
+        if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed)
             return;
+
+        if (i->type.isA(i->typeFeedback().type)) {
+            if (i->type != PirType::val().forced() &&
+                i->type.orNAOrNaN() != i->typeFeedback().type.orNAOrNaN() &&
+                i->type != i->typeFeedback().type) {
+
+                //  &&
+                //     cls->relatedInstructions.count(&i->type) &&
+                //     cls->relatedInstructions[&i->type].size()
+
+                std::cerr << "---- instruction  ";
+                i->print(std::cerr, false);
+                std::cerr << "\n is equal or more precise than feedback ";
+                if (i->typeFeedback().defaultFeedback) {
+                    std::cerr << "and feedback is DEFAULT ";
+                }
+
+                if (auto ldi = LdArg::Cast(i->followCastsAndForce())) {
+                    std::cerr << "\n and got type from LdArg \n ";
+                    ldi->print(std::cerr, false);
+                    std::cerr << "\n ";
+                    std::cerr << cls->context();
+                    std::cerr << "\n\n ";
+                }
+
+                // auto& relatedWithType = cls->relatedInstructions[&i->type];
+                // for (auto x : relatedWithType) {
+                //     x->print(std::cerr, false);
+                //     std::cerr << ", \n";
+                // }
+                std::cerr << "------\n";
+            }
+
+            return;
+        }
 
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
@@ -103,6 +137,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (mk->contains(ld->varName))
                     return;
 
+        std::cerr
+            << "\n\n\n\n -------   SPEC attempt START ------------------- \n\n";
+
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
@@ -112,7 +149,10 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 assert(i->hasTypeFeedback());
                 i->typeFeedbackUsed = true;
             },
-            []() {});
+            []() {}, true);
+
+        std::cerr
+            << "\n\n\n\n -------   SPEC attempt END ------------------- \n\n";
     });
 
     bool anyChange = false;
