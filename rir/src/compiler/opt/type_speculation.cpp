@@ -16,6 +16,8 @@ namespace pir {
 bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             AbstractLog& log, size_t) const {
 
+    std::cerr << "Type speculation on: " << cls->owner()->name() << "\n";
+
     AvailableCheckpoints checkpoint(cls, code, log);
     DeadInstructions maybeUsedUnboxed(code, 1, Effects::Any(),
                                       DeadInstructions::IgnoreBoxedUses);
@@ -27,9 +29,44 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
-        if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed ||
-            i->type.isA(i->typeFeedback().type))
+        if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed) {
             return;
+        }
+
+        if (i->type.isA(i->typeFeedback().type)) {
+
+            auto& tf = i->typeFeedback();
+            if (!tf.defaultFeedback &&
+                tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type) {
+                auto index = tf.feedbackOrigin.index();
+                if (!tf.feedbackOrigin.function()
+                         ->slotsNotUsedSubsumedByStaticType.count(index)) {
+
+                    rir::SlotNotUsedStaticType snu;
+
+                    std::stringstream ss1;
+                    i->type.print(ss1);
+                    snu.staticType = ss1.str();
+
+                    std::stringstream ss2;
+                    i->typeFeedback().type.print(ss2);
+                    snu.feedbackType = ss2.str();
+
+                    tf.feedbackOrigin.function()
+                        ->slotsNotUsedSubsumedByStaticType[index] = snu;
+
+                    std::cerr << "---- instruction  ";
+                    i->print(std::cerr, false);
+                    std::cerr << "\n is equal or more precise than feedback ";
+
+                    code->printCode(std::cerr, true, false);
+
+                    std::cerr << "\n--------------------- \n ";
+                }
+            }
+
+            return;
+        }
 
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
@@ -135,10 +172,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                                       DeoptReason::Typecheck, bb, ip);
 
             auto assume = Assume::Cast(*(ip - 1));
-            assume->defaultFeedback = info.defaultFeedback;
-            assume->typeFeedbackNarrowedWithStaticType =
-                info.typeFeedbackNarrowedWithStaticType;
-            assume->exactMatch = info.exactMatch;
+            info.updateAssume(*assume);
 
             // std::cerr <<  " ************************* FROM TYPE SPECULATION"
             // << "\n"; assume->print(std::cerr, true); std::cerr << "\n";

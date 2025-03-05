@@ -191,11 +191,12 @@ class Instruction : public Value {
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
     bool hasCallFeedback() const { return callFeedback_.get(); }
 
-    void slotRead(FeedbackOrigin& fo) const {
-        if (fo.index().kind == rir::FeedbackKind::Type) {
+    void slotRead(TypeFeedback& tf) const {
+        if (tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type) {
 
-            if (fo.hasSlot()) {
-                fo.function()->slotsRead.insert(fo.index());
+            if (tf.feedbackOrigin.hasSlot()) {
+                tf.feedbackOrigin.function()->slotsRead.insert(
+                    tf.feedbackOrigin.index());
             }
         }
     }
@@ -203,7 +204,7 @@ class Instruction : public Value {
     const TypeFeedback& typeFeedback(bool recordSlotRead = true) const {
         if (typeFeedback_.get()) {
             if (recordSlotRead)
-                slotRead(typeFeedback_->feedbackOrigin);
+                slotRead(*typeFeedback_);
             return *typeFeedback_;
         }
 
@@ -213,7 +214,7 @@ class Instruction : public Value {
     TypeFeedback& updateTypeFeedback(bool recordSlotRead = true) {
         if (typeFeedback_.get()) {
             if (recordSlotRead)
-                slotRead(typeFeedback_->feedbackOrigin);
+                slotRead(*typeFeedback_);
             return *typeFeedback_;
         }
 

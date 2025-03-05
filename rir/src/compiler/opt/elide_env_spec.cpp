@@ -93,10 +93,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     bb, ip);
 
                                 auto assume = Assume::Cast(*(ip - 1));
-                                assume->defaultFeedback = info.defaultFeedback;
-                                assume->typeFeedbackNarrowedWithStaticType =
-                                    info.typeFeedbackNarrowedWithStaticType;
-                                assume->exactMatch = info.exactMatch;
+                                info.updateAssume(*assume);
 
                                 // std::cerr <<  " *************************
                                 // FROM elide env" << "\n";

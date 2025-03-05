@@ -12,6 +12,11 @@
 
 namespace rir {
 
+struct SlotNotUsedStaticType {
+    std::string staticType;
+    std::string feedbackType;
+};
+
 struct DispatchTable;
 
 /**
@@ -125,6 +130,9 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     std::unordered_set<FeedbackIndex> slotsUsedExactMatch;
     std::unordered_set<FeedbackIndex> slotsUsedWidened;
     std::unordered_set<FeedbackIndex> slotsNarrowedWithStaticType;
+
+    std::unordered_map<FeedbackIndex, SlotNotUsedStaticType>
+        slotsNotUsedSubsumedByStaticType;
 
     std::unordered_set<Context> contextsDeopted;
     unsigned otherVersionDeopted = 0;

@@ -17,6 +17,13 @@ class TypeTest {
         bool defaultFeedback;
         bool typeFeedbackNarrowedWithStaticType;
         bool exactMatch;
+
+        void updateAssume(Assume& assume) {
+            assume.defaultFeedback = defaultFeedback;
+            assume.typeFeedbackNarrowedWithStaticType =
+                typeFeedbackNarrowedWithStaticType;
+            assume.exactMatch = exactMatch;
+        }
     };
     static void Create(Value* i, const TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,

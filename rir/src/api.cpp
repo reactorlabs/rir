@@ -257,17 +257,17 @@ void myFinalizer(SEXP) {
                     readNonEmptySlotsInFunction++;
                 break;
 
-            case rir::FeedbackKind::Call:
-                assert(false);
-                if (!feedback->callees(slot.idx).isEmpty())
-                    readNonEmptySlotsInFunction++;
-                break;
+                // case rir::FeedbackKind::Call:
+                //     assert(false);
+                //     if (!feedback->callees(slot.idx).isEmpty())
+                //         readNonEmptySlotsInFunction++;
+                //     break;
 
-            case rir::FeedbackKind::Test:
-                assert(false);
-                if (!feedback->test(slot.idx).isEmpty())
-                    readNonEmptySlotsInFunction++;
-                break;
+                // case rir::FeedbackKind::Test:
+                //     assert(false);
+                //     if (!feedback->test(slot.idx).isEmpty())
+                //         readNonEmptySlotsInFunction++;
+                //     break;
 
             default:
                 assert(false);
