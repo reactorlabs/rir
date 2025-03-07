@@ -12,6 +12,26 @@
 namespace rir {
 namespace pir {
 
+struct SlotNotUsedStaticTypeReason {
+    std::string staticType;
+    std::string feedbackType;
+    bool equalTypes; // equal types  or more strict
+
+    bool fromContext;
+    Context ctx;
+    std::string fromInstruction;
+};
+
+struct SlotOptimizedAway {};
+
+struct FeedbackStatsPerFunction {
+
+    std::unordered_map<FeedbackIndex, SlotNotUsedStaticTypeReason>
+        slotsReadNotUsedStaticTypeReason;
+
+    std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
+};
+
 /*
  * ClosureVersion
  *
@@ -51,6 +71,22 @@ class ClosureVersion : public Code {
     bool anyChangeCurrentIter = true;
 
     rir::Function* optFunction;
+
+    // FB
+
+    std::unordered_map<Function*, FeedbackStatsPerFunction>
+        feedbackStatsByFunction;
+
+    bool hasFeedbackStatsFor(Function* baseline) {
+        return feedbackStatsByFunction.count(baseline);
+    }
+    FeedbackStatsPerFunction& feedbackStatsFor(Function* baseline) {
+        if (!feedbackStatsByFunction.count(baseline)) {
+            feedbackStatsByFunction[baseline] = FeedbackStatsPerFunction();
+        }
+
+        return feedbackStatsByFunction[baseline];
+    }
 
   private:
     Closure* owner_;

@@ -13,6 +13,12 @@
 namespace rir {
 namespace pir {
 
+std::string streamToString(std::function<void(std::stringstream&)> f) {
+    std::stringstream ss;
+    f(ss);
+    return ss.str();
+}
+
 bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             AbstractLog& log, size_t) const {
 
@@ -39,27 +45,46 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (!tf.defaultFeedback &&
                 tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type) {
                 auto index = tf.feedbackOrigin.index();
-                if (!tf.feedbackOrigin.function()
-                         ->slotsNotUsedSubsumedByStaticType.count(index)) {
 
-                    rir::SlotNotUsedStaticType snu;
+                if (!cls->hasFeedbackStatsFor(tf.feedbackOrigin.function())) {
+                    auto& feedbackStats =
+                        cls->feedbackStatsFor(tf.feedbackOrigin.function());
 
-                    std::stringstream ss1;
-                    i->type.print(ss1);
-                    snu.staticType = ss1.str();
+                    rir::pir::SlotNotUsedStaticTypeReason snu;
 
-                    std::stringstream ss2;
-                    i->typeFeedback().type.print(ss2);
-                    snu.feedbackType = ss2.str();
+                    snu.staticType = streamToString(
+                        [&](std::stringstream& ss) { i->type.print(ss); });
 
-                    tf.feedbackOrigin.function()
-                        ->slotsNotUsedSubsumedByStaticType[index] = snu;
+                    snu.feedbackType =
+                        streamToString([&](std::stringstream& ss) {
+                            i->typeFeedback().type.print(ss);
+                        });
 
-                    std::cerr << "---- instruction  ";
-                    i->print(std::cerr, false);
-                    std::cerr << "\n is equal or more precise than feedback ";
+                    // std::cerr << "---- instruction  ";
+                    // i->print(std::cerr, false);
+                    // std::cerr << "\n is ";
 
-                    code->printCode(std::cerr, true, false);
+                    snu.fromContext = false;
+                    snu.equalTypes = (i->type == i->typeFeedback().type);
+
+                    if (auto ldi = LdArg::Cast(i->followCastsAndForce())) {
+                        snu.fromContext = true;
+                        snu.ctx = cls->context();
+                        snu.fromInstruction =
+                            streamToString([&](std::stringstream& ss) {
+                                ldi->print(ss, false);
+                            });
+
+                        // std::cerr << "\n and got type from LdArg \n ";
+                        // ldi->print(std::cerr, false);
+                        // std::cerr << "\n ";
+                        // std::cerr << cls->context();
+                        // std::cerr << "\n\n ";
+                    }
+
+                    feedbackStats.slotsReadNotUsedStaticTypeReason[index] = snu;
+
+                    // code->printCode(std::cerr, true, false);
 
                     std::cerr << "\n--------------------- \n ";
                 }
