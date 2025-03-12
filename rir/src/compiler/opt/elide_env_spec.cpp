@@ -84,9 +84,14 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             if (arg == e->vec())
                                 suggested = required.noAttribsOrObject();
 
+                        bool specSucceeded = false;
+                        bool reqFulfilled = true;
+
                         TypeTest::Create(
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
+                                specSucceeded = true;
+
                                 BBTransform::insertAssume(
                                     info.test, info.expectation, cp,
                                     info.feedbackOrigin, DeoptReason::Typecheck,
@@ -95,10 +100,6 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 auto assume = Assume::Cast(*(ip - 1));
                                 info.updateAssume(*assume);
 
-                                // std::cerr <<  " *************************
-                                // FROM elide env" << "\n";
-                                // assume->print(std::cerr, true);
-                                // std::cerr << "\n";
 
                                 if (argi) {
                                     auto cast = new CastType(
@@ -110,9 +111,45 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                     argi->replaceDominatedUses(cast, dom);
                                 }
                             },
-                            [&]() { successful = false; });
+                            [&]() {
+                                reqFulfilled = false;
+                                successful = false;
+                            });
+
+                        if (!specSucceeded) {
+
+                            if (seen.feedbackOrigin.hasSlot()) {
+                                auto& feedbackStats = cls->feedbackStatsFor(
+                                    seen.feedbackOrigin.function());
+
+                                // if
+                                // (feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index()))
+                                // {
+                                //     std::cerr << " --" ;
+                                //     Instruction::Cast(arg)->print(std::cerr,
+                                //     true); std::cerr <<  " -- ";
+                                //     Instruction::Cast(feedbackStats.slotsReadCandidateNotUsedReason[seen.feedbackOrigin.index()].aa)->print(std::cerr,
+                                //     true); std::cerr << "\n";
+                                //     code->printCode(std::cerr, true, false);
+                                // }
+
+                                // assert(!feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index())
+                                //         && "stats for index exist");
+
+                                SlotCandidateButNotUsedReason cnu;
+
+                                cnu.hasUsefulFeedbackInfo = true;
+                                cnu.reqFulfilledWithoutSpec = reqFulfilled;
+                                feedbackStats.slotsReadCandidateNotUsedReason
+                                    [seen.feedbackOrigin.index()] = cnu;
+                            }
+                        }
+
+
+
                     });
                     if (successful) {
+
                         anyChange = true;
                         if (auto blt = CallBuiltin::Cast(i)) {
                             std::vector<Value*> args;
@@ -127,6 +164,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         }
                         i->updateTypeAndEffects();
                     }
+
                     next = ip + 1;
                 }
                 // We do this in cleanup. Repeating it here increase the chances

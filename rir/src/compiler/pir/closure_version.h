@@ -12,7 +12,7 @@
 namespace rir {
 namespace pir {
 
-struct SlotNotUsedStaticTypeReason {
+struct SlotNotUsedSubsumedStaticTypeReason {
     std::string staticType;
     std::string feedbackType;
     bool equalTypes; // equal types  or more strict
@@ -22,12 +22,19 @@ struct SlotNotUsedStaticTypeReason {
     std::string fromInstruction;
 };
 
+struct SlotCandidateButNotUsedReason {
+    bool hasUsefulFeedbackInfo;
+    bool reqFulfilledWithoutSpec;
+};
 struct SlotOptimizedAway {};
 
 struct FeedbackStatsPerFunction {
 
-    std::unordered_map<FeedbackIndex, SlotNotUsedStaticTypeReason>
+    std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
         slotsReadNotUsedStaticTypeReason;
+
+    std::unordered_map<FeedbackIndex, SlotCandidateButNotUsedReason>
+        slotsReadCandidateNotUsedReason;
 
     std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
 };
@@ -81,10 +88,6 @@ class ClosureVersion : public Code {
         return feedbackStatsByFunction.count(baseline);
     }
     FeedbackStatsPerFunction& feedbackStatsFor(Function* baseline) {
-        if (!feedbackStatsByFunction.count(baseline)) {
-            feedbackStatsByFunction[baseline] = FeedbackStatsPerFunction();
-        }
-
         return feedbackStatsByFunction[baseline];
     }
 
@@ -104,7 +107,10 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
+    void computeFeedbackStats();
     void scanForSpeculation();
+    void computeSlotsOptimizedAway();
+
     ClosureVersion* clone(const Context& newContext);
 
     const Context& context() const { return optimizationContext_; }

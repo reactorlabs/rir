@@ -177,6 +177,38 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
     return os;
 }
 
+class FeedbackStats {
+
+  public:
+    FeedbackStats() { init(); }
+
+  private:
+    void init() {
+
+        SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
+        auto list = RList(DTs);
+
+        for (auto a = list.begin(); a != list.end(); ++a) {
+            DispatchTable* dt = DispatchTable::unpack(*a);
+            auto baseline = dt->baseline();
+            auto feedback = baseline->typeFeedback();
+
+            // compute slots
+            for (size_t i = 0; i < feedback->types_size(); i++) {
+                FeedbackIndex ix;
+                ix.kind = FeedbackKind::Type;
+                ix.idx = i;
+                baseline->emptySlots.insert(ix);
+                if (!feedback->types(i).isEmpty()) {
+                    baseline->nonEmptySlots.insert(ix);
+                } else {
+                    baseline->emptySlots.insert(ix);
+                }
+            }
+        }
+    }
+};
+
 void myFinalizer(SEXP) {
     std::ofstream null_stream("/dev/null");
     std::ostream& defaultOutput = std::cerr;
@@ -203,6 +235,7 @@ void myFinalizer(SEXP) {
     Stat emptyReferencedSlots{"empty referenced"};
 
     auto list = RList(DTs);
+
     Stat totalFunctions = {"Total functions (RIR compiled)", list.length()};
     Stat totalCompiledVersions = {"Total compiled versions", 0};
     Stat totalDeopts = {"Total deopts", 0};
@@ -848,10 +881,12 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             // body
             pir::Backend backend(m, logger, name);
             auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-                c->scanForSpeculation();
+                // c->scanForSpeculation();
+                c->computeFeedbackStats();
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
                 DispatchTable::unpack(body)->insert(fun);
+
                 if (body == BODY(what))
                     done = fun;
             };
