@@ -50,7 +50,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto& feedbackStats =
                     cls->feedbackStatsFor(tf.feedbackOrigin.function());
 
-                rir::pir::SlotNotUsedSubsumedStaticTypeReason snu;
+                report::SlotNotUsedSubsumedStaticTypeReason snu;
 
                 snu.staticType = streamToString(
                     [&](std::stringstream& ss) { i->type.print(ss); });
@@ -156,7 +156,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (feedback.feedbackOrigin.hasSlot()) {
                 auto& feedbackStats =
                     cls->feedbackStatsFor(feedback.feedbackOrigin.function());
-                SlotCandidateButNotUsedReason cnu;
+                report::SlotCandidateButNotUsedReason cnu;
                 cnu.hasUsefulFeedbackInfo = false;
                 feedbackStats.slotsReadCandidateNotUsedReason
                     [feedback.feedbackOrigin.index()] = cnu;
@@ -173,7 +173,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     if (feedback.feedbackOrigin.hasSlot()) {
                         auto& feedbackStats = cls->feedbackStatsFor(
                             feedback.feedbackOrigin.function());
-                        SlotCandidateButNotUsedReason cnu;
+                        report::SlotCandidateButNotUsedReason cnu;
                         cnu.hasUsefulFeedbackInfo = false;
                         feedbackStats.slotsReadCandidateNotUsedReason
                             [feedback.feedbackOrigin.index()] = cnu;
@@ -203,7 +203,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (feedback.feedbackOrigin.hasSlot()) {
                 auto& feedbackStats =
                     cls->feedbackStatsFor(feedback.feedbackOrigin.function());
-                SlotCandidateButNotUsedReason cnu;
+                report::SlotCandidateButNotUsedReason cnu;
                 cnu.hasUsefulFeedbackInfo = true;
                 cnu.reqFulfilledWithoutSpec = reqFulfilled;
                 feedbackStats.slotsReadCandidateNotUsedReason

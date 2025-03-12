@@ -4,6 +4,7 @@
 #include "code.h"
 #include "compiler/log/debug.h"
 #include "pir.h"
+#include "report.h"
 #include "runtime/Function.h"
 #include <functional>
 #include <sstream>
@@ -11,33 +12,6 @@
 
 namespace rir {
 namespace pir {
-
-struct SlotNotUsedSubsumedStaticTypeReason {
-    std::string staticType;
-    std::string feedbackType;
-    bool equalTypes; // equal types  or more strict
-
-    bool fromContext;
-    Context ctx;
-    std::string fromInstruction;
-};
-
-struct SlotCandidateButNotUsedReason {
-    bool hasUsefulFeedbackInfo;
-    bool reqFulfilledWithoutSpec;
-};
-struct SlotOptimizedAway {};
-
-struct FeedbackStatsPerFunction {
-
-    std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
-        slotsReadNotUsedStaticTypeReason;
-
-    std::unordered_map<FeedbackIndex, SlotCandidateButNotUsedReason>
-        slotsReadCandidateNotUsedReason;
-
-    std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
-};
 
 /*
  * ClosureVersion
@@ -80,15 +54,15 @@ class ClosureVersion : public Code {
     rir::Function* optFunction;
 
     // FB
-
-    std::unordered_map<Function*, FeedbackStatsPerFunction>
+    std::unordered_map<Function*, report::FeedbackStatsPerFunction>
         feedbackStatsByFunction;
 
-    bool hasFeedbackStatsFor(Function* baseline) {
-        return feedbackStatsByFunction.count(baseline);
-    }
-    FeedbackStatsPerFunction& feedbackStatsFor(Function* baseline) {
+    report::FeedbackStatsPerFunction& feedbackStatsFor(Function* baseline) {
         return feedbackStatsByFunction[baseline];
+    }
+
+    ClosureVersion* getClosureVersion() override {
+        return this;
     }
 
   private:

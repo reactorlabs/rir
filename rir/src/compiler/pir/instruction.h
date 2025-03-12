@@ -191,15 +191,7 @@ class Instruction : public Value {
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
     bool hasCallFeedback() const { return callFeedback_.get(); }
 
-    void slotRead(TypeFeedback& tf) const {
-        if (tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type) {
-
-            if (tf.feedbackOrigin.hasSlot()) {
-                tf.feedbackOrigin.function()->slotsRead.insert(
-                    tf.feedbackOrigin.index());
-            }
-        }
-    }
+    void slotRead(TypeFeedback& tf) const;
 
     const TypeFeedback& typeFeedback(bool recordSlotRead = true) const {
         if (typeFeedback_.get()) {

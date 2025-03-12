@@ -11,6 +11,8 @@ struct Code;
 
 namespace pir {
 
+class ClosureVersion;
+
 /*
  * A piece of code, starting at the BB entry.
  *
@@ -33,6 +35,7 @@ class Code {
 
     virtual rir::Code* rirSrc() const = 0;
     virtual void printName(std::ostream&) const = 0;
+    virtual ClosureVersion* getClosureVersion() = 0;
 
     friend std::ostream& operator<<(std::ostream& out, const Code& e) {
         e.printName(out);

@@ -379,6 +379,10 @@ class MockBB : public BB {
             entry = new MockBB;
         }
         rir::Code* rirSrc() const override final { return nullptr; }
+
+        ClosureVersion* getClosureVersion() override {
+            assert(false);
+        }
     };
 
   public:

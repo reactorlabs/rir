@@ -20,10 +20,6 @@ void ClosureVersion::computeFeedbackStats() {
 }
 
 void ClosureVersion::scanForSpeculation() {
-
-    // bool hasSpeculationFromTF = false;
-
-    // this->print(std::cerr, true);
     Visitor::run(this->entry, [&](Instruction* i) {
         if (auto assume = Assume::Cast(i)) {
 
@@ -32,73 +28,41 @@ void ClosureVersion::scanForSpeculation() {
 
             if (!assume->defaultFeedback && !fo.index().isUndefined() &&
                 fo.index().kind == FeedbackKind::Type) {
-                // hasSpeculationFromTF = true;
-                feedbackOriginBaselineFunction->slotsUsed.insert(fo.index());
 
                 assert(this->owner()->rirFunction());
 
+                // TODO: ?
+                // speculation in functions/inlines
                 feedbackOriginBaselineFunction->speculationInFunctions.insert(
                     this->owner()->rirFunction());
 
                 if (this->owner()->rirFunction() !=
                     feedbackOriginBaselineFunction) {
-
                     feedbackOriginBaselineFunction->speculationWithinInlines
                         .insert(this->owner()->rirFunction());
                 }
 
-                if (assume->typeFeedbackNarrowedWithStaticType) {
+                // Slot used
+                report::SlotUsed slotUsed {
+                    .narrowedWithStaticType = assume->typeFeedbackNarrowedWithStaticType
+                };
 
-                    // std::cerr <<
-                    // "***************************************************************";
-                    // //std::cerr << "expected: " << expected << " -
-                    // feedback.type: " << feedback.type << "\n"; std::cerr
-                    // << "\n"; Instruction::Cast(i)->print(std::cerr,
-                    // true); std::cerr << "\n";
-
-                    feedbackOriginBaselineFunction->slotsNarrowedWithStaticType
-                        .insert(fo.index());
+                if (assume->exactMatch) {
+                    slotUsed.type = report::SlotUsed::exactMatch;
                 }
-                if (assume->exactMatch)
-                    feedbackOriginBaselineFunction->slotsUsedExactMatch.insert(
-                        fo.index());
-
                 else {
-
-                    // std::cerr << "WIDENED
-                    // ***************************************************************";
-                    // //std::cerr << "expected: " << expected << " -
-                    // feedback.type: " << feedback.type << "\n"; std::cerr
-                    // << "\n"; if (auto arg =
-                    // Instruction::Cast(assume->arg(0).val())) {
-                    //     arg->print(std::cerr, true);
-                    //     std::cerr << "\n";
-
-                    // }
-
-                    feedbackOriginBaselineFunction->slotsUsedWidened.insert(
-                        fo.index());
+                    slotUsed.type = report::SlotUsed::widened;
                 }
+
+                auto& info = this->feedbackStatsFor(fo.function());
+                // TODO:
+                // if (info.slotsUsed.count(fo.index())) {
+                //     assert(info.slotsUsed[fo.index()] == slotUsed);
+                // }
+                info.slotsUsed.emplace(fo.index(), slotUsed);
             }
         }
-        // else if (auto deopt = Deopt::Cast(i)) {
-        //     if (deopt->deadCall) {
-        //         deopt->deadCallOrigin->speculationInFunctions.insert(
-        //             this->owner()->rirFunction());
-
-        //         if (deopt->deadCallOrigin != this->owner()->rirFunction()) {
-        //             deopt->deadCallOrigin->speculationWithinInlines.insert(
-        //                 this->owner()->rirFunction());
-        //         }
-        //     }
-        // }
-
     });
-
-    // if (hasSpeculationFromTF) {
-    //     // std::cerr << "\n\n ===========  SPECULATION FROM TF ===========
-    //     // \n\n"; this->print(std::cerr, true); std::cerr << "\n\n";
-    // }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

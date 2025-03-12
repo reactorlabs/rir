@@ -116,25 +116,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     bool involvedInCompilation = false;
 
-    ////
-    std::unordered_set<FeedbackIndex> nonEmptySlots; // type -slots
-    std::unordered_set<FeedbackIndex> emptySlots;    // type -slots
-    std::unordered_set<FeedbackIndex> slots;         // type -slots
-
-    ////
     std::unordered_set<Function*> speculationInFunctions;
     std::unordered_set<Function*> speculationWithinInlines;
 
-    std::unordered_set<FeedbackIndex> slotsRead;
-    std::unordered_set<FeedbackIndex> slotsUsed;
-    std::unordered_set<FeedbackIndex> slotsDeopted;
-
-    std::unordered_set<FeedbackIndex> slotsUsedExactMatch;
-    std::unordered_set<FeedbackIndex> slotsUsedWidened;
-    std::unordered_set<FeedbackIndex> slotsNarrowedWithStaticType;
-
-    std::unordered_set<Context> contextsDeopted;
-    unsigned otherVersionDeopted = 0;
+    std::unordered_set<FeedbackOrigin> slotsDeopted;
+    unsigned allDeoptsCount = 0;
 
     unsigned size; /// Size, in bytes, of the function and its data
 

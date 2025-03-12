@@ -22,6 +22,10 @@ class Promise : public Code {
 
     void printName(std::ostream& out) const override;
 
+    ClosureVersion* getClosureVersion() override {
+        return owner;
+    }
+
   private:
     rir::Code* rirSrc_;
     const unsigned srcPoolIdx_;

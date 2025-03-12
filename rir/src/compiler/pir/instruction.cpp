@@ -1477,5 +1477,14 @@ PirType Colon::inferType(const GetType& getType) const {
     return t.orNotScalar();
 }
 
+void Instruction::slotRead(TypeFeedback& tf) const {
+    if (tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type &&
+        tf.feedbackOrigin.hasSlot()) {
+        assert(bb_);
+        bb_->owner->getClosureVersion()
+            ->feedbackStatsFor(tf.feedbackOrigin.function())
+            .slotsRead.insert(tf.feedbackOrigin.index());
+    }
+}
 } // namespace pir
 } // namespace rir

@@ -136,7 +136,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 // assert(!feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index())
                                 //         && "stats for index exist");
 
-                                SlotCandidateButNotUsedReason cnu;
+                                report::SlotCandidateButNotUsedReason cnu;
 
                                 cnu.hasUsefulFeedbackInfo = true;
                                 cnu.reqFulfilledWithoutSpec = reqFulfilled;
