@@ -376,6 +376,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         cp = replaced.at(cp);
                     auto assume = new Assume(std::get<Instruction*>(g), cp,
                                              std::get<Assume*>(g)->reason);
+                    assume->defaultFeedback = std::get<Assume*>(g)->defaultFeedback;
+                    assume->slotUsed = std::get<Assume*>(g)->slotUsed;
                     ip = bb->insert(ip, assume);
                     anyChange = true;
                 }
@@ -407,7 +409,11 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto newTT = new IsType(expected, tt->arg<0>().val());
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
-                    ip = bb->insert(ip, new Assume(newTT, cp, a->reason)) + 1;
+                    auto newAssume = new Assume(newTT, cp, a->reason);
+                    newAssume->defaultFeedback = a->defaultFeedback;
+                    newAssume->slotUsed = a->slotUsed;
+                    ip = bb->insert(ip, newAssume) + 1;
+
                     auto casted = new CastType(inp, CastType::Downcast,
                                                PirType::any(), newTT->typeTest);
                     casted->effects.set(Effect::DependsOnAssume);
