@@ -73,7 +73,7 @@ class TypeTest {
 
             auto slotUsed = new report::SlotUsed(
                 typeFeedbackNarrowedWithStaticType, match, expected, i->type,
-                feedback.type, expected, required);
+                feedback.type, expected, required, *Instruction::Cast(i));
 
             return action({expected, new IsType(expected, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
@@ -107,7 +107,7 @@ class TypeTest {
             auto match = computeMatchType(checkFor, expected);
             auto slotUsed = new report::SlotUsed(
                 typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
-                feedback.type, expected, required);
+                feedback.type, expected, required, *Instruction::Cast(i));
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
@@ -133,7 +133,7 @@ class TypeTest {
             auto match = computeMatchType(checkFor, expected);
             auto slotUsed = new report::SlotUsed(
                 typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
-                feedback.type, expected, required);
+                feedback.type, expected, required, *Instruction::Cast(i));
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,

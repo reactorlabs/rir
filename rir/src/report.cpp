@@ -1,11 +1,18 @@
 #include "report.h"
 #include "R/RList.h"
 #include "compiler/pir/closure_version.h"
+#include "compiler/pir/instruction.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
 
 namespace rir {
 namespace report {
+
+std::string streamToString(std::function<void(std::stringstream&)> f) {
+    std::stringstream ss;
+    f(ss);
+    return ss.str();
+};
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
 
@@ -14,7 +21,8 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
                    const pir::PirType& checkFor, const pir::PirType& staticType,
                    const pir::PirType& feedbackType,
                    const pir::PirType& expectedType,
-                   const pir::PirType& requiredType) {
+                   const pir::PirType& requiredType,
+                   pir::Instruction& instruction) {
     this->narrowedWithStaticType = narrowedWithStaticType;
     this->kind = kind;
 
@@ -23,9 +31,12 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
     this->feedbackType = new pir::PirType(feedbackType);
     this->expectedType = new pir::PirType(expectedType);
     this->requiredType = new pir::PirType(requiredType);
+    this->instructionAsString = report::streamToString(
+        [&](std::stringstream& ss) { instruction.print(ss); });
 }
 
 void SlotUsed::print(std::ostream& os) {
+    os << instructionAsString << "\n";
     os << "narrowed with static type: " << boolToString(narrowedWithStaticType)
        << "\n";
     os << "exact match/widened: "

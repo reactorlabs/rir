@@ -14,8 +14,13 @@ namespace pir {
 struct PirType;
 }
 
+namespace pir {
+struct Instruction;
+}
+
 namespace report {
 
+std::string streamToString(std::function<void(std::stringstream&)> f);
 // ------------------------------------------------------------
 
 struct SlotNotUsedSubsumedStaticTypeReason {
@@ -42,7 +47,7 @@ struct SlotUsed {
     SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
              const pir::PirType& checkFor, const pir::PirType& staticType,
              const pir::PirType& feedbackType, const pir::PirType& expectedType,
-             const pir::PirType& requiredType);
+             const pir::PirType& requiredType, pir::Instruction& instruction);
 
     bool narrowedWithStaticType;
 
@@ -51,7 +56,6 @@ struct SlotUsed {
     pir::PirType* feedbackType;
     pir::PirType* expectedType;
     pir::PirType* requiredType;
-
     std::string instructionAsString;
 
     void print(std::ostream&);

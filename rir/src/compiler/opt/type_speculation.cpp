@@ -13,12 +13,6 @@
 namespace rir {
 namespace pir {
 
-std::string streamToString(std::function<void(std::stringstream&)> f) {
-    std::stringstream ss;
-    f(ss);
-    return ss.str();
-}
-
 bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             AbstractLog& log, size_t) const {
 
@@ -50,12 +44,13 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                 report::SlotNotUsedSubsumedStaticTypeReason snu;
 
-                snu.staticType = streamToString(
+                snu.staticType = report::streamToString(
                     [&](std::stringstream& ss) { i->type.print(ss); });
 
-                snu.feedbackType = streamToString([&](std::stringstream& ss) {
-                    i->typeFeedback().type.print(ss);
-                });
+                snu.feedbackType =
+                    report::streamToString([&](std::stringstream& ss) {
+                        i->typeFeedback().type.print(ss);
+                    });
 
                 // std::cerr << "---- instruction  ";
                 // i->print(std::cerr, false);
@@ -67,7 +62,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 if (auto ldi = LdArg::Cast(i->followCastsAndForce())) {
                     snu.fromContext = true;
                     snu.ctx = cls->context();
-                    snu.fromInstruction = streamToString(
+                    snu.fromInstruction = report::streamToString(
                         [&](std::stringstream& ss) { ldi->print(ss, false); });
 
                     // std::cerr << "\n and got type from LdArg \n ";
