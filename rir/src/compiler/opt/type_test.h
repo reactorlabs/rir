@@ -15,14 +15,11 @@ class TypeTest {
         FeedbackOrigin feedbackOrigin;
 
         bool defaultFeedback;
-        bool typeFeedbackNarrowedWithStaticType;
-        bool exactMatch;
+        report::SlotUsed* slotUsed = nullptr;
 
         void updateAssume(Assume& assume) {
             assume.defaultFeedback = defaultFeedback;
-            assume.typeFeedbackNarrowedWithStaticType =
-                typeFeedbackNarrowedWithStaticType;
-            assume.exactMatch = exactMatch;
+            assume.slotUsed = slotUsed;
         }
     };
     static void Create(Value* i, const TypeFeedback& feedback,
@@ -32,9 +29,12 @@ class TypeTest {
         auto expected = i->type & feedback.type;
 
         // NA checks are only possible on scalars
+        bool widenedNA = false;
         if (i->type.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
-            !expected.isSimpleScalar())
+            !expected.isSimpleScalar()) {
             expected = expected.orNAOrNaN();
+            widenedNA = true;
+        }
 
         if (i->type.isA(expected) && i->type.isA(required))
             return;
@@ -51,7 +51,17 @@ class TypeTest {
 
         assert(feedback.feedbackOrigin.hasSlot());
 
-        auto typeFeedbackNarrowedWithStaticType = expected != feedback.type;
+        std::function<report::SlotUsed::Kind(PirType, PirType)>
+            computeMatchType = [&](PirType check, PirType exp) {
+                auto match = check == exp ? report::SlotUsed::exactMatch
+                                          : report::SlotUsed::widened;
+                if (widenedNA)
+                    match = report::SlotUsed::widened;
+
+                return match;
+            };
+
+        auto typeFeedbackNarrowedWithStaticType = !feedback.type.isA(i->type);
 
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
@@ -59,9 +69,15 @@ class TypeTest {
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
 
+            auto match = computeMatchType(expected, expected);
+
+            auto slotUsed = new report::SlotUsed(
+                typeFeedbackNarrowedWithStaticType, match, expected, i->type,
+                feedback.type, expected, required);
+
             return action({expected, new IsType(expected, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           typeFeedbackNarrowedWithStaticType, true});
+                           slotUsed});
         }
 
         // Second try to test for object-ness, or attribute-ness.
@@ -88,11 +104,14 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
+            auto match = computeMatchType(checkFor, expected);
+            auto slotUsed = new report::SlotUsed(
+                typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
+                feedback.type, expected, required);
+
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           typeFeedbackNarrowedWithStaticType, false
-
-            });
+                           slotUsed});
         }
 
         checkFor = i->type.notLazy().notObject();
@@ -111,9 +130,14 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
+            auto match = computeMatchType(checkFor, expected);
+            auto slotUsed = new report::SlotUsed(
+                typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
+                feedback.type, expected, required);
+
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           typeFeedbackNarrowedWithStaticType, false});
+                           slotUsed});
         }
 
         if (i->type.isA(required))

@@ -15,8 +15,8 @@ void ClosureVersion::computeFeedbackStats() {
     // non-empty remove from slotsReadNotUsedStaticTypeReason and
     // slotsReadCandidateNotUsedReason  slots that were optimized away
 
-    // this->computeSlotsOptimizedAway();
     this->scanForSpeculation();
+    // this->computeSlotsOptimizedAway();
 }
 
 void ClosureVersion::scanForSpeculation() {
@@ -24,42 +24,29 @@ void ClosureVersion::scanForSpeculation() {
         if (auto assume = Assume::Cast(i)) {
 
             auto fo = assume->reason.origin;
-            auto feedbackOriginBaselineFunction = fo.function();
+            // auto feedbackOriginBaselineFunction = fo.function();
 
             if (!assume->defaultFeedback && !fo.index().isUndefined() &&
                 fo.index().kind == FeedbackKind::Type) {
 
                 assert(this->owner()->rirFunction());
 
-                // TODO: ?
-                // speculation in functions/inlines
-                feedbackOriginBaselineFunction->speculationInFunctions.insert(
-                    this->owner()->rirFunction());
+                // // TODO: ?
+                // // speculation in functions/inlines
+                // feedbackOriginBaselineFunction->speculationInFunctions.insert(
+                //     this->owner()->rirFunction());
 
-                if (this->owner()->rirFunction() !=
-                    feedbackOriginBaselineFunction) {
-                    feedbackOriginBaselineFunction->speculationWithinInlines
-                        .insert(this->owner()->rirFunction());
-                }
+                // if (this->owner()->rirFunction() !=
+                //     feedbackOriginBaselineFunction) {
+                //     feedbackOriginBaselineFunction->speculationWithinInlines
+                //         .insert(this->owner()->rirFunction());
+                // }
 
                 // Slot used
-                report::SlotUsed slotUsed {
-                    .narrowedWithStaticType = assume->typeFeedbackNarrowedWithStaticType
-                };
-
-                if (assume->exactMatch) {
-                    slotUsed.type = report::SlotUsed::exactMatch;
-                }
-                else {
-                    slotUsed.type = report::SlotUsed::widened;
-                }
-
+                assert(assume->slotUsed);
                 auto& info = this->feedbackStatsFor(fo.function());
-                // TODO:
-                // if (info.slotsUsed.count(fo.index())) {
-                //     assert(info.slotsUsed[fo.index()] == slotUsed);
-                // }
-                info.slotsUsed.emplace(fo.index(), slotUsed);
+                info.slotsUsed[fo.index()] =
+                    *assume->slotUsed; // this should be a multimap
             }
         }
     });

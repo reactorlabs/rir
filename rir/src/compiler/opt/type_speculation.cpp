@@ -22,8 +22,6 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
 bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                             AbstractLog& log, size_t) const {
 
-    std::cerr << "Type speculation on: " << cls->owner()->name() << "\n";
-
     AvailableCheckpoints checkpoint(cls, code, log);
     DeadInstructions maybeUsedUnboxed(code, 1, Effects::Any(),
                                       DeadInstructions::IgnoreBoxedUses);

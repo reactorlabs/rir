@@ -116,8 +116,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
     bool involvedInCompilation = false;
 
-    std::unordered_set<Function*> speculationInFunctions;
-    std::unordered_set<Function*> speculationWithinInlines;
 
     std::unordered_set<FeedbackOrigin> slotsDeopted;
     unsigned allDeoptsCount = 0;

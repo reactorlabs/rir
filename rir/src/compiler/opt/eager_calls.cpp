@@ -68,7 +68,8 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
         auto assume = new Assume(
             test, speculation.cp,
             DeoptReason(speculation.origin, DeoptReason::CallTarget));
-        assume->exactMatch = true;
+
+
         ip = bb->insert(ip, assume);
         ++ip;
 

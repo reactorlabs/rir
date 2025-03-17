@@ -36,9 +36,25 @@ struct SlotCandidateButNotUsedReason {
 struct SlotOptimizedAway {};
 
 struct SlotUsed {
+    enum Kind { exactMatch, widened } kind;
+
+    SlotUsed();
+    SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
+             const pir::PirType& checkFor, const pir::PirType& staticType,
+             const pir::PirType& feedbackType, const pir::PirType& expectedType,
+             const pir::PirType& requiredType);
+
     bool narrowedWithStaticType;
-    enum { exactMatch, widened } type;
-    // pir::PirType* type_; // TODO: try to include here
+
+    pir::PirType* checkFor;
+    pir::PirType* staticType;
+    pir::PirType* feedbackType;
+    pir::PirType* expectedType;
+    pir::PirType* requiredType;
+
+    std::string instructionAsString;
+
+    void print(std::ostream&);
 };
 
 struct FeedbackStatsPerFunction {
@@ -200,7 +216,7 @@ struct FunctionAggregateStats {
 
 // ------------------------------------------------------------
 
-void report(std::ostream& os);
+void report(std::ostream& os, bool breakdownInfo);
 
 } // namespace report
 } // namespace rir

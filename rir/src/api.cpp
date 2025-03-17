@@ -75,9 +75,7 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 bool finalizerSet = false;
 SEXP DTsSymbol = Rf_install("__DTs");
 
-void myFinalizer(SEXP) {
-    report::report(std::cerr);
-}
+void myFinalizer(SEXP) { report::report(std::cerr, true); }
 
 std::string getClosureName(SEXP cls) {
     std::string name = "";
@@ -408,11 +406,14 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
             // body
             pir::Backend backend(m, logger, name);
             auto apply = [&](SEXP body, pir::ClosureVersion* c) {
-                // c->scanForSpeculation();
+                // we have to make the call HERE.  Later, Assume instructions
+                // will be lowered and gone
                 c->computeFeedbackStats();
+
                 auto fun = backend.getOrCompile(c);
                 Protect p(fun->container());
                 DispatchTable::unpack(body)->insert(fun);
+
                 compilationSession.addClosureVersion(c, fun);
 
                 if (body == BODY(what))

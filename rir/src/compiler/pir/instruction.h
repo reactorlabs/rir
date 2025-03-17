@@ -7,6 +7,7 @@
 #include "env.h"
 #include "instruction_list.h"
 #include "pir.h"
+#include "report.h"
 #include "runtime/ArglistOrder.h"
 #include "runtime/Deoptimization.h"
 #include "runtime/TypeFeedback.h"
@@ -2748,8 +2749,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     const DeoptReason reason;
 
     bool defaultFeedback = false;
-    bool typeFeedbackNarrowedWithStaticType = false;
-    bool exactMatch = false;
+    report::SlotUsed* slotUsed = nullptr;
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)
