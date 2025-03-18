@@ -376,8 +376,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         cp = replaced.at(cp);
                     auto assume = new Assume(std::get<Instruction*>(g), cp,
                                              std::get<Assume*>(g)->reason);
-                    assume->defaultFeedback = std::get<Assume*>(g)->defaultFeedback;
-                    assume->slotUsed = std::get<Assume*>(g)->slotUsed;
+                    assume->copyStatsFrom(*std::get<Assume*>(g));
                     ip = bb->insert(ip, assume);
                     anyChange = true;
                 }
@@ -410,8 +409,22 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
                     auto newAssume = new Assume(newTT, cp, a->reason);
-                    newAssume->defaultFeedback = a->defaultFeedback;
-                    newAssume->slotUsed = a->slotUsed;
+                    auto oldSlotUsed = a->slotUsed;
+                    newAssume->slotUsed = new report::SlotUsed(
+                        oldSlotUsed->narrowedWithStaticType, oldSlotUsed->kind,
+                        expected, inp->type, *oldSlotUsed->feedbackType,
+                        *oldSlotUsed->expectedType, *oldSlotUsed->requiredType,
+                        *Instruction::Cast(inp));
+                    std::cerr << "\n\n";
+                    std::cerr << "old slot: \n";
+                    oldSlotUsed->print(std::cerr);
+                    std::cerr << "\n\n";
+                    std::cerr << "new slot: \n";
+                    newAssume->slotUsed->print(std::cerr);
+                    std::cerr << "\n\n";
+                    assert(false);
+
+                    newAssume->copyStatsFrom(*a);
                     ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,

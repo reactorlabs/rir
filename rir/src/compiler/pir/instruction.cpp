@@ -1397,6 +1397,11 @@ void Checkpoint::printGraphBranches(std::ostream& out, size_t bbId) const {
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 BB* Checkpoint::nextBB() { return bb()->trueBranch(); }
 
+void Assume::copyStatsFrom(Assume& other) {
+    this->defaultFeedback = other.defaultFeedback;
+    this->slotUsed = other.slotUsed;
+}
+
 Value* Assume::valueUnderTest() const {
     switch (reason.reason) {
     case DeoptReason::Typecheck: {

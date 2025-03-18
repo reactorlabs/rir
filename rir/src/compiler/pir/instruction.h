@@ -2750,6 +2750,7 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
 
     bool defaultFeedback = false;
     report::SlotUsed* slotUsed = nullptr;
+    void copyStatsFrom(Assume& other);
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)
