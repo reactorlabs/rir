@@ -73,7 +73,7 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 }
 
 bool finalizerSet = false;
-SEXP DTsSymbol = Rf_install("__DTs");
+std::vector<DispatchTable*> PreservedDispatchTables;
 
 void myFinalizer(SEXP) { report::report(std::cerr, true); }
 
@@ -126,29 +126,22 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
-
-
         // register rir closures
-        SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
-        if (DTs == R_UnboundValue) {
-            Rf_setVar(DTsSymbol, R_NilValue, R_GlobalEnv);
+        if (!finalizerSet) {
             Compiler::onNewDt = [&](SEXP sexpDT) {
-                SEXP currentDTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
-                currentDTs = Rf_cons(sexpDT, currentDTs);
-                Rf_setVar(DTsSymbol, currentDTs, R_GlobalEnv);
+                R_PreserveObject(sexpDT);
+                PreservedDispatchTables.push_back(
+                    DispatchTable::unpack(sexpDT));
             };
 
-            if (!finalizerSet) {
-                // Call `loadNamespace("Base")`
-                SEXP baseStr = PROTECT(Rf_mkString("base"));
-                SEXP expr =
-                    PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
-                SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
-                R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
-                UNPROTECT(3);
+            // Call `loadNamespace("Base")`
+            SEXP baseStr = PROTECT(Rf_mkString("base"));
+            SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));
+            SEXP namespaceRes = PROTECT(Rf_eval(expr, R_GlobalEnv));
+            R_RegisterCFinalizerEx(namespaceRes, &myFinalizer, TRUE);
+            UNPROTECT(3);
 
-                finalizerSet = true;
-            }
+            finalizerSet = true;
         }
 
         // Change the input closure inplace
@@ -384,7 +377,8 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
 
     REC_HOOK(recording::recordCompile(what, name, assumptions));
     auto& compilationSession = report::CompilationSession::getNew(
-        DispatchTable::unpack(BODY(what))->baseline(), assumptions, DTsSymbol);
+        DispatchTable::unpack(BODY(what))->baseline(), assumptions,
+        PreservedDispatchTables);
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
     // compile to pir

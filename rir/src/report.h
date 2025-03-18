@@ -2,6 +2,7 @@
 #define REPORT_H
 
 #include "runtime/Context.h"
+#include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
 #include <numeric>
 #include <string>
@@ -137,7 +138,7 @@ struct CompilationSession {
 
     static CompilationSession& getNew(Function* compiledFunction,
                                       const Context& compiledContext,
-                                      SEXP DTsSymbol);
+                                      std::vector<DispatchTable*> DTs);
 };
 
 // ------------------------------------------------------------

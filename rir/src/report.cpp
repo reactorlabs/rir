@@ -51,11 +51,8 @@ void SlotUsed::print(std::ostream& os) {
 
 void computeFunctionsInfo(
     std::unordered_map<Function*, FunctionInfo>& functionsInfo,
-    SEXP DTsSymbol) {
-    auto list = RList(Rf_findVar(DTsSymbol, R_GlobalEnv));
-
-    for (auto DT : list) {
-        DispatchTable* dt = DispatchTable::unpack(DT);
+    std::vector<DispatchTable*> DTs) {
+    for (auto dt : DTs) {
         auto baseline = dt->baseline();
         auto& slotData = functionsInfo[baseline];
 
@@ -127,10 +124,10 @@ std::vector<CompilationSession> sessions;
 
 CompilationSession& CompilationSession::getNew(Function* compiledFunction,
                                                const Context& compiledContext,
-                                               SEXP DTsSymbol) {
+                                               std::vector<DispatchTable*> DTs) {
     sessions.emplace_back(compiledFunction, compiledContext);
     auto& session = sessions.back();
-    computeFunctionsInfo(session.functionsInfo, DTsSymbol);
+    computeFunctionsInfo(session.functionsInfo, DTs);
     return session;
 }
 
