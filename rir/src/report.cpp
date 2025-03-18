@@ -35,7 +35,7 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
         [&](std::stringstream& ss) { instruction.print(ss); });
 }
 
-void SlotUsed::print(std::ostream& os) {
+void SlotUsed::print(std::ostream& os) const {
     os << instructionAsString << "\n";
     os << "narrowed with static type: " << boolToString(narrowedWithStaticType)
        << "\n";

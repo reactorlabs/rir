@@ -59,7 +59,7 @@ struct SlotUsed {
     pir::PirType* requiredType;
     std::string instructionAsString;
 
-    void print(std::ostream&);
+    void print(std::ostream&) const;
 };
 
 struct FeedbackStatsPerFunction {
