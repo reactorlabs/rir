@@ -45,6 +45,10 @@ void ClosureVersion::scanForSpeculation() {
                 // Slot used
                 assert(assume->slotUsed);
                 auto& info = this->feedbackStatsFor(fo.function());
+
+                // if (info.slotsUsed.count(fo.index()))
+                //     assert(false && "used slots: key exists for function");
+
                 info.slotsUsed[fo.index()] =
                     *assume->slotUsed; // this should be a multimap
             }
