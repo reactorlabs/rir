@@ -415,16 +415,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         expected, inp->type, *oldSlotUsed->feedbackType,
                         *oldSlotUsed->expectedType, *oldSlotUsed->requiredType,
                         *Instruction::Cast(inp));
-                    std::cerr << "\n\n";
-                    std::cerr << "old slot: \n";
-                    oldSlotUsed->print(std::cerr);
-                    std::cerr << "\n\n";
-                    std::cerr << "new slot: \n";
-                    newAssume->slotUsed->print(std::cerr);
-                    std::cerr << "\n\n";
-                    assert(false);
 
-                    newAssume->copyStatsFrom(*a);
                     ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,
