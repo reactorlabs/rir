@@ -388,6 +388,8 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 inlineeCls->rirFunction()->flags.set(
                     rir::Function::NotInlineable);
             } else {
+                cls->feedbackStatsFor(inlinee->optFunction->dispatchTable()->baseline());
+
                 anyChange = true;
                 Checkpoint* cpAtCall = nullptr;
                 {
