@@ -109,11 +109,14 @@ void computeFunctionsInfo(
 
         // Types
         auto feedback = baseline->typeFeedback();
-        slotData.allTypeSlots = feedback->types_size();
-
         for (size_t i = 0; i < feedback->types_size(); ++i) {
+            auto idx = FeedbackIndex::type(i);
+
+            slotData.allTypeSlots.insert(idx);
             if (feedback->types(i).isEmpty()) {
-                slotData.emptySlots.insert(FeedbackIndex::type(i));
+                slotData.emptySlots.insert(idx);
+            } else {
+                slotData.nonEmptySlots.insert(idx);
             }
         }
 
@@ -242,9 +245,8 @@ void report(std::ostream& os, bool breakdownInfo) {
         }
 
         os << dt->closureName << " [" << dt << "]\n" << StreamColor::clear;
-        os << "# of slots: " << info.allTypeSlots << "\n"
-           << "# of non-empty slots: "
-           << info.allTypeSlots - info.emptySlots.size() << "\n";
+        os << "# of slots: " << info.allTypeSlots.size() << "\n"
+           << "non-empty slots: " << info.nonEmptySlots.size() << "\n";
     };
 
     auto printFeedbackStats = [&](FeedbackStatsPerFunction& stats) {
@@ -267,19 +269,19 @@ void report(std::ostream& os, bool breakdownInfo) {
         auto onUniverse =
             [&](std::function<size_t(const FunctionInfo&)> apply) {
                 size_t s = 0;
-                for (auto f : universe){
+                for (auto f : universe) {
                     s += apply(session.functionsInfo[f]);
                 }
                 return s;
             };
 
-        size_t referenced =
-            onUniverse([](const FunctionInfo& i) { return i.allTypeSlots; });
-        size_t empty = onUniverse(
-            [](const FunctionInfo& i) { return i.emptySlots.size(); });
+        size_t referenced = onUniverse(
+            [](const FunctionInfo& i) { return i.allTypeSlots.size(); });
+        size_t nonEmpty = onUniverse(
+            [](const FunctionInfo& i) { return i.nonEmptySlots.size(); });
 
         os << "referenced slots: " << referenced << "\n";
-        os << "non-empty slots: " << referenced - empty << "\n";
+        os << "non-empty slots: " << nonEmpty << "\n";
     };
 
     for (auto& session : sessions) {

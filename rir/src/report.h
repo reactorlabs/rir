@@ -108,8 +108,9 @@ g.baseline()->inlinedSlotsDeopted.add(type1)
 */
 
 struct FunctionInfo {
-    size_t allTypeSlots; // TODO: as set of slots
+    std::unordered_set<FeedbackIndex> allTypeSlots;
     std::unordered_set<FeedbackIndex> emptySlots;
+    std::unordered_set<FeedbackIndex> nonEmptySlots;
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
