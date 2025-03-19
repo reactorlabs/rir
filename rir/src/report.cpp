@@ -1,9 +1,53 @@
 #include "report.h"
-#include "R/RList.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/instruction.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "utils/Terminal.h"
+
+// ------------------------------------------------------------
+
+namespace StreamColor {
+struct {
+} red;
+
+struct {
+} yellow;
+
+struct {
+} blue;
+
+struct {
+} magenta;
+
+struct {
+} clear;
+
+struct {
+} bold;
+
+#define COLOR_OPERATOR(color)                                                  \
+    std::ostream& operator<<(std::ostream& os, decltype(StreamColor::color)) { \
+        auto forceColor = std::getenv("STATS_COLOR");                          \
+        if ((forceColor != nullptr && std::string(forceColor) == "1") ||       \
+            ConsoleColor::isTTY(os)) {                                         \
+            ConsoleColor::color(os);                                           \
+        }                                                                      \
+        return os;                                                             \
+    }
+
+COLOR_OPERATOR(red)
+COLOR_OPERATOR(yellow)
+COLOR_OPERATOR(blue)
+COLOR_OPERATOR(magenta)
+COLOR_OPERATOR(clear)
+COLOR_OPERATOR(bold)
+
+#undef COLOR_OPERATOR
+
+}; // namespace StreamColor
+
+// ------------------------------------------------------------
 
 namespace rir {
 namespace report {
@@ -15,6 +59,8 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
 };
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
+
+// ------------------------------------------------------------
 
 SlotUsed::SlotUsed() {}
 SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
@@ -36,18 +82,23 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
 }
 
 void SlotUsed::print(std::ostream& os) const {
-    os << instructionAsString << "\n";
+    using namespace StreamColor;
+
+    os << bold << instructionAsString << clear << "\n";
+
     os << "narrowed with static type: " << boolToString(narrowedWithStaticType)
        << "\n";
     os << "exact match/widened: "
        << (kind == exactMatch ? "exact match" : "widened") << "\n";
 
-    os << "checkFor: " << *checkFor << " ; "
-       << "static: " << *staticType << " ; "
-       << "feedback: " << *feedbackType << " ; "
-       << "expected: " << *expectedType << " ; "
-       << "required: " << *requiredType << "\n";
+    os << bold << "checkFor: " << clear << *checkFor << ", " << bold
+       << "static: " << clear << *staticType << ", " << bold
+       << "feedback: " << clear << *feedbackType << ", " << bold
+       << "expected: " << clear << *expectedType << ", " << bold
+       << "required: " << clear << *requiredType << "\n";
 }
+
+// ------------------------------------------------------------
 
 void computeFunctionsInfo(
     std::unordered_map<Function*, FunctionInfo>& functionsInfo,
@@ -80,51 +131,24 @@ void computeFunctionsInfo(
     }
 }
 
-std::unordered_map<Function*, FunctionAggregateStats>
-aggregateCompilationSession(const CompilationSession& session) {
-    std::unordered_map<Function*, FunctionAggregateStats> stats;
+// ------------------------------------------------------------
 
-    for (const auto& closure : session.closuresVersionStats) {
-        auto& closureStats = stats[closure.function];
-
-        for (const auto& i : closure.feedbackStats) {
-            const auto& iStats = i.second;
-
-            if (i.first == closure.function) {
-                closureStats.slotsRead.value = iStats.slotsRead.size();
-                closureStats.slotsUsed.value = iStats.slotsUsed.size();
-            } else {
-                // Inlinee info
-                auto& inlineeStats = stats[i.first];
-
-                inlineeStats.timesInlined++;
-                inlineeStats.inlineeSlotsRead += iStats.slotsRead.size();
-                inlineeStats.inlineeSlotsUsed += iStats.slotsUsed.size();
-
-                closureStats.inlinedSlotsReferenced +=
-                    session.functionsInfo.at(i.first).allTypeSlots;
-                closureStats.inlinedSlotsRead += iStats.slotsRead.size();
-                closureStats.inlinedSlotsUsed += iStats.slotsUsed.size();
-            }
-        }
+Universe ClosureVersionStats::universe() const {
+    Universe u;
+    for (const auto& i : feedbackStats) {
+        u.insert(i.first);
     }
-
-    for (auto& i : stats) {
-        const auto& info = session.functionsInfo.at(i.first);
-        i.second.slotsCount.value = info.allTypeSlots;
-        i.second.slotsEmpty.value = info.emptySlots.size();
-    }
-
-    return stats;
+    return u;
 }
 
 // ------------------------------------------------------------
 
 std::vector<CompilationSession> sessions;
 
-CompilationSession& CompilationSession::getNew(Function* compiledFunction,
-                                               const Context& compiledContext,
-                                               std::vector<DispatchTable*> DTs) {
+CompilationSession&
+CompilationSession::getNew(Function* compiledFunction,
+                           const Context& compiledContext,
+                           std::vector<DispatchTable*> DTs) {
     sessions.emplace_back(compiledFunction, compiledContext);
     auto& session = sessions.back();
     computeFunctionsInfo(session.functionsInfo, DTs);
@@ -138,6 +162,16 @@ void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
 
     closuresVersionStats.emplace_back(baseline, context,
                                       closureVersion->feedbackStatsByFunction);
+}
+
+Universe CompilationSession::universe() const {
+    Universe u;
+    for (const auto& i : closuresVersionStats) {
+        auto u2 = i.universe();
+        u.insert(u2.begin(), u2.end());
+    }
+
+    return u;
 }
 
 // ------------------------------------------------------------
@@ -197,83 +231,110 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
     return os;
 }
 
+// ------------------------------------------------------------
+
 void report(std::ostream& os, bool breakdownInfo) {
-
-    std::function<void(std::string&, FunctionInfo&)> printFunctionInfo =
-        [&](std::string& functionName, FunctionInfo& info) {
-            os << functionName << " ("
-               << "# of slots: " << info.allTypeSlots << " - "
-               << "#non-empty: " << info.allTypeSlots - info.emptySlots.size()
-               << ")"
-               << "\n";
-        };
-
-    std::function<void(FeedbackStatsPerFunction&)> printFeedbackStats =
-        [&](FeedbackStatsPerFunction& stats) {
-            os << "read slots: " << stats.slotsRead.size() << "\n";
-            if (breakdownInfo) {
-
-                // for (auto& sr : stats.slotsRead) {
-                //     os << sr << "\n";
-                // }
-
-                os << "\n";
-            }
-
-            os << "used slots: " << stats.slotsUsed.size() << "\n";
-            if (breakdownInfo) {
-                for (auto& su : stats.slotsUsed) {
-                    os << su.first << ": \n";
-                    su.second.print(os);
-                    os << "\n\n";
-                }
-            }
-
-            os << "\n";
-        };
-
-    for (auto& session : sessions) {
-        os << "*********************** Compilation: "
-           << session.function->dispatchTable()->closureName << " ("
-           << session.context << ")"
-           << " ***********************\n\n";
-
-        for (auto& cvstat : session.closuresVersionStats) {
-            auto& mainInfo = session.functionsInfo[cvstat.function];
-            printFunctionInfo(cvstat.function->dispatchTable()->closureName,
-                              mainInfo);
-
-            auto& mainFeedbackStats = cvstat.feedbackStats[cvstat.function];
-            printFeedbackStats(mainFeedbackStats);
-
-            for (auto& i : cvstat.feedbackStats) {
-                if (i.first == cvstat.function) {
-                    continue;
-                }
-                auto fun = i.first;
-                auto feedbackStats = i.second;
-                auto info = session.functionsInfo[fun];
-                os << "\n ---------------- \n";
-                os << "Inlinee: ";
-                printFunctionInfo(fun->dispatchTable()->closureName, info);
-                printFeedbackStats(feedbackStats);
-            }
-
-            os << "===============================================\n";
+    auto printFunctionInfo = [&](DispatchTable* dt, FunctionInfo& info,
+                                 bool isInlinee = false) {
+        os << StreamColor::yellow;
+        if (isInlinee) {
+            os << "Inlinee: ";
         }
 
-        // auto agg = aggregateCompilationSession(session);
-        // for ( const auto& i : agg ) {
-        //     const auto& info = i.second;
-        //     os << "Name: " << i.first->dispatchTable()->closureName << "\n";
-        //     os << info.slotsCount << info.slotsEmpty << info.slotsRead <<
-        //     info.slotsUsed << "\n"; os << info.inlinedSlotsReferenced <<
-        //     info.inlinedSlotsRead << info.inlinedSlotsUsed << "\n"; os <<
-        //     info.timesInlined << info.inlineeSlotsRead <<
-        //     info.inlineeSlotsUsed << "\n"; os << "----------------\n";
-        // }
+        os << dt->closureName << " [" << dt << "]\n" << StreamColor::clear;
+        os << "# of slots: " << info.allTypeSlots << "\n"
+           << "# of non-empty slots: "
+           << info.allTypeSlots - info.emptySlots.size() << "\n";
+    };
 
-        os << "\n\n";
+    auto printFeedbackStats = [&](FeedbackStatsPerFunction& stats) {
+        os << "read slots: " << stats.slotsRead.size() << "\n";
+        os << "used slots: " << stats.slotsUsed.size() << "\n";
+        if (breakdownInfo) {
+            for (auto& i : stats.slotsUsed) {
+                auto& index = i.first;
+                auto& slotUsed = i.second;
+
+                os << StreamColor::red << index << StreamColor::clear << "\n";
+                slotUsed.print(os);
+                os << "\n";
+            }
+        }
+    };
+
+    auto printUniverseStats = [&](CompilationSession& session,
+                                  const Universe& universe) {
+        auto onUniverse =
+            [&](std::function<size_t(const FunctionInfo&)> apply) {
+                size_t s = 0;
+                for (auto f : universe){
+                    s += apply(session.functionsInfo[f]);
+                }
+                return s;
+            };
+
+        size_t referenced =
+            onUniverse([](const FunctionInfo& i) { return i.allTypeSlots; });
+        size_t empty = onUniverse(
+            [](const FunctionInfo& i) { return i.emptySlots.size(); });
+
+        os << "referenced slots: " << referenced << "\n";
+        os << "non-empty slots: " << referenced - empty << "\n";
+    };
+
+    for (auto& session : sessions) {
+        os << StreamColor::magenta << "*********************** Compilation: "
+           << session.function->dispatchTable()->closureName << " ("
+           << session.context << ") ***********************\n"
+           << StreamColor::clear;
+
+        printUniverseStats(session, session.universe());
+        os << "\n";
+
+        for (auto& cvstat : session.closuresVersionStats) {
+            auto mainFun = cvstat.function;
+            os << StreamColor::blue
+               << "======================= ClosureVersion: "
+               << mainFun->dispatchTable()->closureName << " ("
+               << cvstat.context << ") =======================\n"
+               << StreamColor::clear;
+
+            printUniverseStats(session, cvstat.universe());
+            size_t readSlots = 0;
+            size_t usedSlots = 0;
+
+            for (const auto& i : cvstat.feedbackStats) {
+                const auto& feedbackStats = i.second;
+                readSlots += feedbackStats.slotsRead.size();
+                usedSlots += feedbackStats.slotsUsed.size();
+            }
+
+            os << "read slots: " << readSlots << "\n";
+            os << "used slots: " << usedSlots << "\n";
+            os << "\n";
+
+            // Main
+            auto& mainInfo = session.functionsInfo[mainFun];
+            auto& mainFeedbackStats = cvstat.feedbackStats[mainFun];
+            printFunctionInfo(mainFun->dispatchTable(), mainInfo);
+            printFeedbackStats(mainFeedbackStats);
+            os << "\n";
+
+            for (auto& i : cvstat.feedbackStats) {
+                auto fun = i.first;
+                auto info = session.functionsInfo[fun];
+                auto feedbackStats = i.second;
+
+                if (fun == mainFun) {
+                    continue;
+                }
+
+                os << "----------------\n";
+                printFunctionInfo(fun->dispatchTable(), info, true);
+                printFeedbackStats(feedbackStats);
+                os << "\n";
+            }
+        }
     }
 }
 

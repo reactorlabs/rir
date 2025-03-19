@@ -13,15 +13,13 @@ namespace rir {
 
 namespace pir {
 struct PirType;
-}
-
-namespace pir {
 struct Instruction;
-}
+} // namespace pir
 
 namespace report {
 
 std::string streamToString(std::function<void(std::stringstream&)> f);
+
 // ------------------------------------------------------------
 
 struct SlotNotUsedSubsumedStaticTypeReason {
@@ -44,12 +42,6 @@ struct SlotOptimizedAway {};
 struct SlotUsed {
     enum Kind { exactMatch, widened } kind;
 
-    SlotUsed();
-    SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
-             const pir::PirType& checkFor, const pir::PirType& staticType,
-             const pir::PirType& feedbackType, const pir::PirType& expectedType,
-             const pir::PirType& requiredType, pir::Instruction& instruction);
-
     bool narrowedWithStaticType;
 
     pir::PirType* checkFor;
@@ -59,8 +51,16 @@ struct SlotUsed {
     pir::PirType* requiredType;
     std::string instructionAsString;
 
+    SlotUsed();
+    SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
+             const pir::PirType& checkFor, const pir::PirType& staticType,
+             const pir::PirType& feedbackType, const pir::PirType& expectedType,
+             const pir::PirType& requiredType, pir::Instruction& instruction);
+
     void print(std::ostream&) const;
 };
+
+// ------------------------------------------------------------
 
 struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
@@ -76,6 +76,8 @@ struct FeedbackStatsPerFunction {
 
 // ------------------------------------------------------------
 
+using Universe = std::unordered_set<Function*>;
+
 struct ClosureVersionStats {
     // Baseline of the compiled function
     Function* function;
@@ -83,13 +85,14 @@ struct ClosureVersionStats {
 
     std::unordered_map<Function*, FeedbackStatsPerFunction> feedbackStats;
 
+    Universe universe() const;
+
     ClosureVersionStats(
         Function* function, const Context& context,
         const std::unordered_map<Function*, FeedbackStatsPerFunction>&
             feedbackStats)
         : function(function), context(context), feedbackStats(feedbackStats) {}
 };
-
 
 /*
 f <- function()
@@ -102,7 +105,7 @@ assume [g#type1]
 deopt on this assume
 
 g.baseline()->inlinedSlotsDeopted.add(type1)
- */
+*/
 
 struct FunctionInfo {
     size_t allTypeSlots; // TODO: as set of slots
@@ -129,6 +132,8 @@ struct CompilationSession {
     static CompilationSession& getNew(Function* compiledFunction,
                                       const Context& compiledContext,
                                       std::vector<DispatchTable*> DTs);
+
+    Universe universe() const;
 };
 
 // ------------------------------------------------------------
@@ -185,29 +190,6 @@ struct FunctionAggregate {
 std::ostream& operator<<(std::ostream& os, const Stat& st);
 std::ostream& operator<<(std::ostream& os, const MetricPercent& metric);
 std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg);
-
-// ------------------------------------------------------------
-
-struct FunctionAggregateStats {
-    bool installedInDT = false;
-
-    Stat slotsCount = {"number of slots"};
-    Stat slotsEmpty = {"empty"};
-
-    Stat slotsRead = {"read"};
-    Stat slotsUsed = {"used"};
-
-    // other is inlined into this
-    Stat inlinedSlotsReferenced = {"other referenced"};
-    Stat inlinedSlotsRead = {"other read"};
-    Stat inlinedSlotsUsed = {"other used"};
-
-    Stat timesInlined = {"times inlined"};
-
-    // this was inlined to somewhere else
-    Stat inlineeSlotsRead = {"read (when inlined)"};
-    Stat inlineeSlotsUsed = {"used (when inlined)"};
-};
 
 // ------------------------------------------------------------
 

@@ -17,6 +17,7 @@ struct ConsoleColor {
     static void yellow(std::ostream& out) { out << "\033[1;33m"; }
     static void blue(std::ostream& out) { out << "\033[1;34m"; }
     static void magenta(std::ostream& out) { out << "\033[1;35m"; }
+    static void bold(std::ostream& out) { out << "\033[1m"; }
     static void clear(std::ostream& out) { out << "\033[0m"; }
 };
 
