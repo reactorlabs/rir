@@ -150,7 +150,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         auto outerDT = DispatchTable::unpack(BODY(what));
         auto name = getClosureName(what);
         if (name != "") {
-            outerDT->closureName = getClosureName(what);
+            outerDT->closureName = name;
         }
 
         return what;
