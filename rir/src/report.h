@@ -81,17 +81,7 @@ struct ClosureVersionStats {
     Function* function;
     Context context;
 
-/* TODO g might not be a key here
-g <- function() if (false) {
-        slots here, never read
-    }
-
-f <- function()
-    g() # inlined here
-*/
     std::unordered_map<Function*, FeedbackStatsPerFunction> feedbackStats;
-    // When inlining (?)
-    // f->feedbackStats.insert(&g, FeedbackStatsPerFunction());
 
     ClosureVersionStats(
         Function* function, const Context& context,
