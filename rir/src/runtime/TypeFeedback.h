@@ -210,6 +210,11 @@ struct ObservedValues {
         notFastVecelt = notFastVecelt || !fastVeceltOk(e);
 
         uint8_t type = TYPEOF(e);
+        if (type == PROMSXP) {
+            std::cerr << "\n\n ************************** RECORDING A "
+                         "PROMISE!! ***************** \n\n";
+        }
+
         if (numTypes < MaxTypes) {
             int i = 0;
             for (; i < numTypes; ++i) {
@@ -259,6 +264,8 @@ struct DeoptReason {
     enum Reason : uint32_t {
         Unknown,
         Typecheck,
+        Typecheck2,
+
         DeadCall,
         CallTarget,
         ForceAndCall,
@@ -281,6 +288,10 @@ struct DeoptReason {
         case Typecheck:
             out << "Typecheck";
             break;
+        case Typecheck2:
+            out << "Typecheck2";
+            break;
+
         case DeadCall:
             out << "DeadCall";
             break;

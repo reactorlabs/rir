@@ -16,6 +16,7 @@ DeoptContext::DeoptContext(Opcode* pc, size_t envSize, SEXP actualEnv,
       reason_(reason) {
     switch (reason.reason) {
     case DeoptReason::Typecheck:
+    case DeoptReason::Typecheck2:
         typeCheckTrigger_ = PirType(deoptTrigger);
         break;
     case DeoptReason::DeadBranchReached:

@@ -23,7 +23,9 @@ struct AAssumption {
         switch (a->reason.reason) {
         case DeoptReason::Unknown:
             break;
-        case DeoptReason::Typecheck: {
+        case DeoptReason::Typecheck:
+        case DeoptReason::Typecheck2: {
+
             if (auto t = IsType::Cast(cond)) {
                 c.typecheck = {t->arg(0).val(), t->typeTest};
                 kind = Typecheck;
@@ -408,7 +410,12 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto newTT = new IsType(expected, tt->arg<0>().val());
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
-                    auto newAssume = new Assume(newTT, cp, a->reason);
+
+                    assert(a->reason.reason == DeoptReason::Reason::Typecheck);
+                    auto newDeoptReason = DeoptReason(
+                        a->reason.origin, DeoptReason::Reason::Typecheck2);
+
+                    auto newAssume = new Assume(newTT, cp, newDeoptReason);
                     auto oldSlotUsed = a->slotUsed;
                     newAssume->slotUsed = new report::SlotUsed(
                         oldSlotUsed->narrowedWithStaticType, oldSlotUsed->kind,
@@ -428,6 +435,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     f->updateTypeAndEffects();
                     assert(!f->type.isVoid());
                     ip = bb->insert(ip, casted) + 1;
+
+                    // std::cerr << "value for new assume: \n";
+                    // Instruction::Cast(newAssume->valueUnderTest())->print(std::cerr,
+                    // true); std::cerr << "\n\n";
                 }
             }
             ip++;

@@ -428,10 +428,23 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             t.feedbackOrigin =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
+
+                // std::cerr << "before merging: \n";
+                // std::cerr << t.type << "\n";
+
                 t.type.merge(feedback);
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
                         feedback.stateBeforeLastForce);
+
+                    if (t.type.maybeLazy()) {
+                        std::cerr << "maybelazy: \n\n";
+                        force->print(std::cerr, true);
+                        std::cerr << "\n";
+                        std::cerr << t.type << "\n";
+
+                        assert(false && "maybe lazy");
+                    }
                 }
             } else if (t.type.isVoid() &&
                        (!insert.function->optFunction->isOptimized() ||

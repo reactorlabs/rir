@@ -1404,7 +1404,9 @@ void Assume::copyStatsFrom(Assume& other) {
 
 Value* Assume::valueUnderTest() const {
     switch (reason.reason) {
-    case DeoptReason::Typecheck: {
+    case DeoptReason::Typecheck:
+    case DeoptReason::Typecheck2: {
+
         if (auto t = IsType::Cast(condition()))
             return t->arg<0>().val();
         break;
