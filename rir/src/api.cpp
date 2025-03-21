@@ -75,7 +75,23 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 bool finalizerSet = false;
 std::vector<DispatchTable*> PreservedDispatchTables;
 
-void myFinalizer(SEXP) { report::report(std::cerr, true); }
+void myFinalizer(SEXP) {
+    auto verbose_env = std::getenv("STATS_VERBOSE");
+    bool verbose = !(verbose_env != nullptr && std::string(verbose_env) == "0");
+
+    report::report(std::cerr, verbose, PreservedDispatchTables);
+
+    auto csv_file = getenv("STATS_CSV");
+    if (csv_file != nullptr) {
+        const char* stats_name = getenv("STATS_NAME");
+        if (stats_name == nullptr) {
+            stats_name = "?";
+        }
+
+        std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
+        report::reportCsv(ofs, stats_name);
+    }
+}
 
 std::string getClosureName(SEXP cls) {
     std::string name = "";

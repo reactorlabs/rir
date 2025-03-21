@@ -52,6 +52,33 @@ COLOR_OPERATOR(bold)
 namespace rir {
 namespace report {
 
+template <typename K, typename V>
+std::unordered_set<K> keys(const std::unordered_map<K, V>& map) {
+    std::unordered_set<K> res;
+
+    for (const auto& i : map) {
+        res.insert(i.first);
+    }
+
+    return res;
+}
+
+template <typename T>
+std::unordered_set<T> intersect(const std::unordered_set<T>& lhs,
+                                const std::unordered_set<T>& rhs) {
+    std::unordered_set<T> res;
+
+    for (const auto& i : lhs) {
+        if (rhs.count(i)) {
+            res.insert(i);
+        }
+    }
+
+    return res;
+}
+
+// ------------------------------------------------------------
+
 std::string streamToString(std::function<void(std::stringstream&)> f) {
     std::stringstream ss;
     f(ss);
@@ -59,6 +86,83 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
 };
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
+
+void showPercent(double percent, std::ostream& ss) {
+    ss << percent * 100 << "%";
+}
+
+// ------------------------------------------------------------
+
+MetricPercent Stat::operator/(Stat& denom) {
+    return MetricPercent{.numerator = this, .denominator = &denom};
+}
+
+double MetricPercent::value() const {
+    if (denominator->value == 0) {
+        assert(false && "cannot divide by 0");
+    }
+
+    return static_cast<double>(numerator->value) / denominator->value;
+}
+
+double FunctionAggregate::average() const {
+    if (values.empty()) {
+        assert(false && "empty aggregate");
+        return 0.0;
+    }
+
+    double sum = std::accumulate(values.begin(), values.end(), 0.0);
+    return sum / values.size();
+}
+
+// ------------------------------------------------------------
+
+std::ostream& operator<<(std::ostream& os, const Stat& st) {
+    if (st.name != "") {
+        os << st.name << ": ";
+    }
+
+    os << StreamColor::bold << st.value << StreamColor::clear << "\n";
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const MetricPercent& metric) {
+    if (metric.name != "") {
+        os << metric.name << " ";
+    }
+
+    os << "(" << metric.numerator->name << " / " << metric.denominator->name
+       << "): ";
+
+    os << StreamColor::bold << metric.numerator->value << " / "
+       << metric.denominator->value;
+
+    if (metric.denominator->value) {
+        os << " (";
+        showPercent(metric.value(), os);
+        os << ")";
+    }
+
+    os << StreamColor::clear << "\n";
+
+    return os;
+};
+
+std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
+    if (agg.values.empty()) {
+        return os;
+    }
+
+    os << agg.name << " (on average out of " << agg.values.size()
+       << " values): ";
+
+    os << StreamColor::bold;
+    showPercent(agg.average(), os);
+    os << StreamColor::clear << "\n";
+
+    return os;
+}
 
 // ------------------------------------------------------------
 
@@ -81,21 +185,90 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
         [&](std::stringstream& ss) { instruction.print(ss); });
 }
 
-void SlotUsed::print(std::ostream& os) const {
+std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     using namespace StreamColor;
 
-    os << bold << instructionAsString << clear << "\n";
+    os << bold << slotUsed.instructionAsString << clear << "\n";
 
-    os << "narrowed with static type: " << boolToString(narrowedWithStaticType)
-       << "\n";
+    os << "narrowed with static type: "
+       << boolToString(slotUsed.narrowedWithStaticType) << "\n";
     os << "exact match/widened: "
-       << (kind == exactMatch ? "exact match" : "widened") << "\n";
+       << (slotUsed.kind == SlotUsed::exactMatch ? "exact match" : "widened")
+       << "\n";
 
-    os << bold << "checkFor: " << clear << *checkFor << ", " << bold
-       << "static: " << clear << *staticType << ", " << bold
-       << "feedback: " << clear << *feedbackType << ", " << bold
-       << "expected: " << clear << *expectedType << ", " << bold
-       << "required: " << clear << *requiredType << "\n";
+    // clang-format off
+    os << bold << "checkFor: " << clear << *slotUsed.checkFor << ", "
+       << bold << "static: "   << clear << *slotUsed.staticType << ", "
+       << bold << "feedback: " << clear << *slotUsed.feedbackType << ", "
+       << bold << "expected: " << clear << *slotUsed.expectedType << ", "
+       << bold << "required: " << clear << *slotUsed.requiredType << "\n";
+    // clang-format on
+    return os;
+}
+
+// ------------------------------------------------------------
+
+std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
+    return os << agg.read << agg.readNonEmpty << agg.used << agg.usedNonEmpty;
+}
+
+// ------------------------------------------------------------
+
+Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
+    Aggregate agg;
+
+    agg.read += slotsRead.size();
+    agg.readNonEmpty += intersect(info.nonEmptySlots, slotsRead).size();
+    agg.used += slotsUsed.size();
+    agg.usedNonEmpty += intersect(info.nonEmptySlots, keys(slotsUsed)).size();
+
+    return agg;
+}
+
+// ------------------------------------------------------------
+
+Universe ClosureVersionStats::universe() const { return keys(feedbackStats); }
+
+Aggregate ClosureVersionStats::getAgg(
+    std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
+    Aggregate agg;
+
+    for (auto& i : feedbackStats) {
+        agg += i.second.getAgg(functionsInfo[i.first]);
+    }
+
+    return agg;
+}
+
+FinalAggregate ClosureVersionStats::getFinalAgg(
+    std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
+    FinalAggregate res;
+
+    auto agg = getAgg(functionsInfo);
+
+    res.universe = universe();
+    for (auto fun : res.universe) {
+        auto& info = functionsInfo[fun];
+
+        res.referenced += info.allTypeSlots.size();
+        res.referencedNonEmpty += info.nonEmptySlots.size();
+    }
+
+    res.read += agg.read;
+    res.readNonEmpty += agg.readNonEmpty;
+    res.used += agg.used;
+    res.usedNonEmpty += agg.usedNonEmpty;
+
+    res.referencedNonEmptyRatio.add(res.referencedNonEmpty / res.referenced);
+    res.readRatio.add(res.readNonEmpty / res.referenced);
+    res.usedRatio.add(res.usedNonEmpty / res.referenced);
+
+    res.compiledClosureVersions++;
+    if (res.used.value != 0) {
+        res.benefitedClosureVersions++;
+    }
+
+    return res;
 }
 
 // ------------------------------------------------------------
@@ -134,29 +307,19 @@ void computeFunctionsInfo(
     }
 }
 
-// ------------------------------------------------------------
-
-Universe ClosureVersionStats::universe() const {
-    Universe u;
-    for (const auto& i : feedbackStats) {
-        u.insert(i.first);
-    }
-    return u;
-}
-
-// ------------------------------------------------------------
-
-std::vector<CompilationSession> sessions;
+std::vector<CompilationSession> COMPILATION_SESSIONS;
 
 CompilationSession&
 CompilationSession::getNew(Function* compiledFunction,
                            const Context& compiledContext,
-                           std::vector<DispatchTable*> DTs) {
-    sessions.emplace_back(compiledFunction, compiledContext);
-    auto& session = sessions.back();
+                           const std::vector<DispatchTable*>& DTs) {
+    COMPILATION_SESSIONS.emplace_back(compiledFunction, compiledContext);
+    auto& session = COMPILATION_SESSIONS.back();
     computeFunctionsInfo(session.functionsInfo, DTs);
     return session;
 }
+
+// ------------------------------------------------------------
 
 void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
                                            Function* compiledFunction) {
@@ -177,560 +340,206 @@ Universe CompilationSession::universe() const {
     return u;
 }
 
-// ------------------------------------------------------------
+FinalAggregate CompilationSession::getFinalAgg() {
+    FinalAggregate res;
 
-MetricPercent operator/(Stat& lhs, Stat& rhs) {
-    return MetricPercent{.numerator = &lhs, .denominator = &rhs};
-}
-
-void showPercent(double percent, std::ostream& ss) {
-    ss << percent * 100 << "%";
-}
-
-std::ostream& operator<<(std::ostream& os, const Stat& st) {
-    if (st.name != "") {
-        os << st.name;
-        os << ": ";
+    for (auto i : COMPILATION_SESSIONS) {
+        for (auto j : i.closuresVersionStats) {
+            res += j.getFinalAgg(i.functionsInfo);
+        }
     }
 
-    os << st.value;
-    os << "\n";
-
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const MetricPercent& metric) {
-    if (metric.name != "") {
-        os << metric.name << " ";
-    }
-
-    os << "(" << metric.numerator->name << " / " << metric.denominator->name
-       << "): " << metric.numerator->value << " / " << metric.denominator->value
-       << " (";
-
-    if (metric.denominator->value) {
-        showPercent(metric.value(), os);
-    } else {
-        os << "-";
-    }
-
-    os << ")\n";
-
-    return os;
-};
-
-std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
-    if (agg.values.empty()) {
-        return os;
-    }
-
-    os << agg.name << " (on average of " << agg.values.size()
-       << " functions): ";
-
-    showPercent(agg.average(), os);
-
-    os << "\n";
-
-    return os;
+    return res;
 }
 
 // ------------------------------------------------------------
 
-void report(std::ostream& os, bool breakdownInfo) {
-    auto printFunctionInfo = [&](DispatchTable* dt, FunctionInfo& info,
-                                 bool isInlinee = false) {
+const std::string& closureName(Function* fun) {
+    return fun->dispatchTable()->closureName;
+}
+
+template <typename T>
+std::vector<std::pair<FeedbackIndex, T>>
+sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
+    std::vector<std::pair<FeedbackIndex, T>> vec{map.begin(), map.end()};
+
+    std::sort(vec.begin(), vec.end(),
+              [](const std::pair<FeedbackIndex, T>& lhs,
+                 const std::pair<FeedbackIndex, T>& rhs) {
+                  return lhs.first.idx < rhs.first.idx;
+              });
+
+    return vec;
+}
+
+void report(std::ostream& os, bool breakdownInfo,
+            const std::vector<DispatchTable*>& DTs) {
+    auto printFunctionInfo = [&](DispatchTable* dt,
+                                 const FeedbackStatsPerFunction& stats,
+                                 FunctionInfo& info, bool isInlinee = false) {
+        // Header
         os << StreamColor::yellow;
         if (isInlinee) {
             os << "Inlinee: ";
         }
+        os << dt->closureName << " [" << dt << "] " << StreamColor::clear;
 
-        os << dt->closureName << " [" << dt << "]\n" << StreamColor::clear;
-        os << "# of slots: " << info.allTypeSlots.size() << "\n"
-           << "non-empty slots: " << info.nonEmptySlots.size() << "\n";
-    };
+        // Static slots info
+        os << "(# of slots: " << info.allTypeSlots.size()
+           << ", # of non-empty: " << info.nonEmptySlots.size() << ")\n";
 
-    auto printFeedbackStats = [&](FeedbackStatsPerFunction& stats) {
-        os << "read slots: " << stats.slotsRead.size() << "\n";
-        os << "used slots: " << stats.slotsUsed.size() << "\n";
+        // Compilation slots info
+        os << stats.getAgg(info) << "\n";
+
         if (breakdownInfo) {
-            for (auto& i : stats.slotsUsed) {
+            auto slotsUsed = sortByFeedbackIndex(stats.slotsUsed);
+            for (auto& i : slotsUsed) {
                 auto& index = i.first;
                 auto& slotUsed = i.second;
 
-                os << StreamColor::red << index << StreamColor::clear << "\n";
-                slotUsed.print(os);
-                os << "\n";
+                os << StreamColor::red << index << StreamColor::clear << "\n"
+                   << slotUsed << "\n";
             }
         }
     };
 
-    auto printUniverseStats = [&](CompilationSession& session,
-                                  const Universe& universe) {
-        auto onUniverse =
-            [&](std::function<size_t(const FunctionInfo&)> apply) {
-                size_t s = 0;
-                for (auto f : universe) {
-                    s += apply(session.functionsInfo[f]);
-                }
-                return s;
-            };
-
-        size_t referenced = onUniverse(
-            [](const FunctionInfo& i) { return i.allTypeSlots.size(); });
-        size_t nonEmpty = onUniverse(
-            [](const FunctionInfo& i) { return i.nonEmptySlots.size(); });
-
-        os << "referenced slots: " << referenced << "\n";
-        os << "non-empty slots: " << nonEmpty << "\n";
-    };
-
-    for (auto& session : sessions) {
+    for (auto& session : COMPILATION_SESSIONS) {
         os << StreamColor::magenta << "*********************** Compilation: "
-           << session.function->dispatchTable()->closureName << " ("
-           << session.context << ") ***********************\n"
+           << closureName(session.function) << " (" << session.context
+           << ") ***********************\n"
            << StreamColor::clear;
-
-        printUniverseStats(session, session.universe());
-        os << "\n";
 
         for (auto& cvstat : session.closuresVersionStats) {
             auto mainFun = cvstat.function;
+
+            // Banner
             os << StreamColor::blue
                << "======================= ClosureVersion: "
-               << mainFun->dispatchTable()->closureName << " ("
-               << cvstat.context << ") =======================\n"
+               << closureName(mainFun) << " (" << cvstat.context
+               << ") =======================\n"
                << StreamColor::clear;
 
-            printUniverseStats(session, cvstat.universe());
-            size_t readSlots = 0;
-            size_t usedSlots = 0;
+            // Sum info
+            auto onUniverse =
+                [&](std::function<size_t(const FunctionInfo&)> apply) {
+                    size_t s = 0;
+                    for (auto f : cvstat.universe()) {
+                        s += apply(session.functionsInfo[f]);
+                    }
+                    return s;
+                };
 
-            for (const auto& i : cvstat.feedbackStats) {
-                const auto& feedbackStats = i.second;
-                readSlots += feedbackStats.slotsRead.size();
-                usedSlots += feedbackStats.slotsUsed.size();
-            }
+            size_t referenced = onUniverse(
+                [](const FunctionInfo& i) { return i.allTypeSlots.size(); });
+            size_t nonEmpty = onUniverse(
+                [](const FunctionInfo& i) { return i.nonEmptySlots.size(); });
 
-            os << "read slots: " << readSlots << "\n";
-            os << "used slots: " << usedSlots << "\n";
-            os << "\n";
+            // clang-format off
+            os << Stat{"referenced slots: ", referenced}
+               << Stat{"referenced non-empty slots: ", nonEmpty}
+               << cvstat.getAgg(session.functionsInfo)
+               << "\n";
+            // clang-format on
 
             // Main
             auto& mainInfo = session.functionsInfo[mainFun];
             auto& mainFeedbackStats = cvstat.feedbackStats[mainFun];
-            printFunctionInfo(mainFun->dispatchTable(), mainInfo);
-            printFeedbackStats(mainFeedbackStats);
+            printFunctionInfo(mainFun->dispatchTable(), mainFeedbackStats,
+                              mainInfo);
             os << "\n";
 
+            // Rest
             for (auto& i : cvstat.feedbackStats) {
                 auto fun = i.first;
-                auto info = session.functionsInfo[fun];
-                auto feedbackStats = i.second;
+                auto& info = session.functionsInfo[fun];
+                auto& feedbackStats = i.second;
 
                 if (fun == mainFun) {
                     continue;
                 }
 
                 os << "----------------\n";
-                printFunctionInfo(fun->dispatchTable(), info, true);
-                printFeedbackStats(feedbackStats);
+                printFunctionInfo(fun->dispatchTable(), feedbackStats, info,
+                                  true);
                 os << "\n";
             }
         }
     }
+
+    os << StreamColor::magenta
+       << "----------------------- Summary ------------------------\n"
+       << StreamColor::clear;
+
+    auto agg = CompilationSession::getFinalAgg();
+
+    // clang-format off
+    os  << Stat{"total functions (RIR compiled)", DTs.size()}
+        << Stat{"compiled functions (PIR compiled)", agg.universe.size()}
+        << agg.compiledClosureVersions
+        << agg.benefitedClosureVersions
+        << "\n";
+
+    os << StreamColor::blue << "Slots\n" << StreamColor::clear;
+    os  << agg.referenced
+        << agg.read
+        << agg.used
+        << "\n";
+
+    os << StreamColor::blue << "Non-empty slots\n" << StreamColor::clear;
+    os  << agg.referencedNonEmpty
+        << agg.readNonEmpty
+        << agg.usedNonEmpty
+        << "\n";
+
+    os  << agg.referencedNonEmpty / agg.referenced
+        << agg.readNonEmpty / agg.referenced
+        << agg.usedNonEmpty / agg.referenced
+        << "\n";
+
+    os << StreamColor::blue << "Averaged per closure version\n" << StreamColor::clear;
+    os << agg.referencedNonEmptyRatio
+       << agg.readRatio
+       << agg.usedRatio;
+    // clang-format on
 }
 
-//     std::ofstream null_stream("/dev/null");
-//     std::ostream& defaultOutput = std::cerr;
-//
-//     std::ostream& outputInFunction = defaultOutput;
-//
-//     SEXP DTs = Rf_findVar(DTsSymbol, R_GlobalEnv);
-//
-//     Stat totalSlots{"total"};
-//     Stat referencedSlots{"referenced"};
-//     Stat readSlots{"read"};
-//     Stat readNonEmptySlots{"read non-empty"};
-//     Stat usedSlots{"used"};
-//     Stat usedNonEmptySlots{"used non-empty"};
-//
-//     Stat usedSlotsOfKindType{"used (kind type)"};
-//     Stat exactMatchUsedSlots{"exact match"};
-//     Stat widenedUsedSlots{"widened"};
-//     Stat narrowedSlots{"narrowed"};
-//
-//     Stat compiledFunctions{"compiled functions"};
-//     Stat functionsUsingFeedback{"functions using feedback"};
-//
-//     Stat emptySlots{"empty"};
-//     Stat emptyReferencedSlots{"empty referenced"};
-//
-//     auto list = RList(DTs);
-//     Stat totalFunctions = {"Total functions (RIR compiled)",
-//     list.length()}; Stat totalCompiledVersions = {"Total compiled
-//     versions", 0}; Stat totalDeopts = {"Total deopts", 0};
-//
-//     FunctionAggregate emptySlotsOverTotalSlots{"empty slots"};
-//     FunctionAggregate nonEmptySlotsOverTotalSlots{"non-empty slots"};
-//
-//     FunctionAggregate slotsReadOverReferencedPerFunction{
-//         "read / referenced slots"};
-//     FunctionAggregate slotsUsedOverReadNonEmptyPerFunction{
-//         "used / read non-empty slots"};
-//     FunctionAggregate slotsUsedOverNonEmptyPerFunction{
-//         "used / non-empty slots"};
-//
-//     FunctionAggregate typeSlotsPerFunction{"% of slots beign type"};
-//
-//     for (auto a = list.begin(); a != list.end(); ++a) {
-//         DispatchTable* dt = DispatchTable::unpack(*a);
-//         auto baseline = dt->baseline();
-//         auto feedback = baseline->typeFeedback();
-//
-//         outputInFunction << "---------\nname: " << dt->closureName
-//                          << (baseline->involvedInCompilation ? "
-//                          (compiled)"
-//                                                              : "")
-//                          << "\n";
-//
-//         outputInFunction << "baseline function: " << dt->baseline() <<
-//         "\n";
-//         // ---------
-//         // Versions
-//         // ---------
-//         Stat compiledVersions{"compiled versions", dt->size() - 1};
-//         outputInFunction << compiledVersions;
-//
-//         totalCompiledVersions += compiledVersions;
-//
-//         outputInFunction << "\n";
-//
-//         // ---------
-//         // Slots count
-//         // ---------
-//         Stat slotsInFunction = {"slots in function",
-//         feedback->types_size()}; totalSlots += slotsInFunction;
-//
-//         {
-//             Stat allSlots = {"", feedback->types_size() +
-//                                      feedback->callees_size() +
-//                                      feedback->tests_size()};
-//             if (allSlots.value != 0) {
-//                 typeSlotsPerFunction.add(slotsInFunction / allSlots);
-//             }
-//         }
-//
-//         Stat slotsReadInFunction{"read", baseline->slotsRead.size()};
-//         readSlots += slotsReadInFunction;
-//
-//         Stat slotsUsedInFunction = {"used", baseline->slotsUsed.size()};
-//         usedSlots += slotsUsedInFunction;
-//
-//         Stat slotsUsedInInlinedFunction = {"used as inline",
-//                                            baseline->slotsUsedInlined.size()};
-//
-//         // ---------
-//         // Read non-empty
-//         // ---------
-//         Stat readNonEmptySlotsInFunction{"read non-empty"};
-//         for (auto& slot : baseline->slotsRead) {
-//             switch (slot.kind) {
-//             case FeedbackKind::Type:
-//                 if (!feedback->types(slot.idx).isEmpty())
-//                     readNonEmptySlotsInFunction++;
-//                 break;
-//
-//             default:
-//                 assert(false);
-//             }
-//         }
-//         readNonEmptySlots += readNonEmptySlotsInFunction;
-//
-//         // ---------
-//         // Used
-//         // ---------
-//         Stat usedNonEmptySlotsInFunction{"used non-empty"};
-//         for (auto& slot : baseline->slotsUsed) {
-//             switch (slot.kind) {
-//             case FeedbackKind::Type:
-//                 if (!feedback->types(slot.idx).isEmpty())
-//                     usedNonEmptySlotsInFunction++;
-//                 break;
-//
-//             case FeedbackKind::Call:
-//                 assert(false);
-//                 if (!feedback->callees(slot.idx).isEmpty())
-//                     usedNonEmptySlotsInFunction++;
-//                 break;
-//
-//             case FeedbackKind::Test:
-//                 assert(false);
-//                 if (!feedback->test(slot.idx).isEmpty())
-//                     usedNonEmptySlotsInFunction++;
-//                 break;
-//
-//             default:
-//                 assert(false);
-//             }
-//         }
-//         usedNonEmptySlots += usedNonEmptySlotsInFunction;
-//
-//         // ---------
-//         // Slots of kind type
-//         // ---------
-//         narrowedSlots += baseline->slotsNarrowedWithStaticType.size();
-//         exactMatchUsedSlots += baseline->slotsUsedExactMatch.size();
-//         widenedUsedSlots += baseline->slotsUsedWidened.size();
-//
-//         for (auto& s : baseline->slotsUsed) {
-//             assert(s.kind == FeedbackKind::Type);
-//             usedSlotsOfKindType++;
-//         }
-//
-//         // ---------
-//         // Empty slots
-//         // ---------
-//         Stat emptySlotsCountInFunction{"empty slots in function"};
-//
-//         // for (size_t i = 0; i < feedback->tests_size(); i++) {
-//         //     if (feedback->test(i).isEmpty())
-//         //         emptySlotsCountInFunction++;
-//         // }
-//
-//         // for (size_t i = 0; i < feedback->callees_size(); i++) {
-//         //     if (feedback->callees(i).isEmpty())
-//         //         emptySlotsCountInFunction++;
-//         // }
-//
-//         for (size_t i = 0; i < feedback->types_size(); i++) {
-//             if (feedback->types(i).isEmpty())
-//                 emptySlotsCountInFunction++;
-//         }
-//         emptySlots += emptySlotsCountInFunction;
-//
-//         if (baseline->involvedInCompilation) {
-//             emptyReferencedSlots += emptySlotsCountInFunction;
-//         }
-//
-//         if (slotsInFunction.value != 0) {
-//             emptySlotsOverTotalSlots.add(emptySlotsCountInFunction /
-//                                          slotsInFunction);
-//         }
-//
-//         // ---------
-//         // Non empty slots
-//         // ---------
-//         Stat nonEmptySlotsCountInFunction = {
-//             "non-empty slots",
-//             slotsInFunction.value - emptySlotsCountInFunction.value};
-//
-//         if (slotsInFunction.value != 0) {
-//             auto p = (nonEmptySlotsCountInFunction / slotsInFunction)
-//                          .named("non-empty slots");
-//
-//             nonEmptySlotsOverTotalSlots.add(p);
-//         }
-//
-//         // ---------
-//         // Print
-//         // ---------
-//         outputInFunction << slotsInFunction;
-//         outputInFunction << nonEmptySlotsCountInFunction;
-//         outputInFunction << slotsReadInFunction;
-//         outputInFunction << slotsUsedInFunction;
-//         outputInFunction << slotsUsedInInlinedFunction;
-//
-//         Stat assumeEmited{"assume emited",
-//         baseline->assumeEmited.size()}; outputInFunction << assumeEmited;
-//
-//         // ---------
-//         // Compiled stats
-//         // ---------
-//         if (baseline->involvedInCompilation) {
-//             compiledFunctions++;
-//             if (baseline->slotsUsed.size()) {
-//                 functionsUsingFeedback++;
-//             }
-//
-//             referencedSlots += slotsInFunction;
-//
-//             if (slotsInFunction.value != 0) {
-//                 auto p =
-//                     (slotsReadInFunction / slotsInFunction).named("slots
-//                     read");
-//
-//                 slotsReadOverReferencedPerFunction.add(p);
-//             }
-//
-//             if (nonEmptySlotsCountInFunction.value != 0) {
-//                 slotsUsedOverNonEmptyPerFunction.add(
-//                     slotsUsedInFunction / nonEmptySlotsCountInFunction);
-//             }
-//
-//             if (readNonEmptySlotsInFunction.value != 0) {
-//                 slotsUsedOverReadNonEmptyPerFunction.add(
-//                     slotsUsedInFunction / readNonEmptySlotsInFunction);
-//             }
-//
-//             // ---------
-//             // Speculation and Inlines
-//             // ---------
-//             // Stat speculationWithinInline{
-//             //     "speculation within inlines",
-//             //     baseline->speculationWithinInlines.size()};
-//             // outputInFunction << speculationWithinInline;
-//             //
-//             // Stat speculationInFunctions{
-//             //     "speculation in functions",
-//             //     baseline->speculationInFunctions.size()};
-//             // outputInFunction << speculationInFunctions;
-//
-//             // ---------
-//             // Deopts
-//             // ---------
-//             Stat deoptedSlots{"deopted", baseline->slotsDeopted.size()};
-//             outputInFunction << deoptedSlots;
-//
-//             Stat deopts{"deopt count", baseline->otherVersionDeopted};
-//             outputInFunction << deopts;
-//
-//             totalDeopts += deopts;
-//         }
-//
-//         outputInFunction << "\n";
-//     }
-//
-//     Stat nonEmptySlots{"non-empty", totalSlots.value - emptySlots.value};
-//
-//     // std::ofstream fileStream("summary.txt", std::ios::app);
-//     // std::ostream& ss = fileStream;
-//
-//     std::ostream& ss = defaultOutput;
-//
-//     ss << "\n\n********** SUMMARY *************\n\n";
-//     ss << totalFunctions;
-//     ss << "Compiled functions (PIR compiled): " <<
-//     compiledFunctions.value
-//        << "\n";
-//     ss << totalCompiledVersions;
-//     ss << totalDeopts;
-//
-//     ss << "Total slots: " << totalSlots.value << "\n";
-//     ss << "\n";
-//
-//     ss << (emptySlots / totalSlots).named("empty slots (never filled)");
-//     ss << emptySlotsOverTotalSlots;
-//     ss << nonEmptySlotsOverTotalSlots;
-//     ss << "\n";
-//
-//     ss << (referencedSlots / totalSlots)
-//               .named("referenced slots in compilation");
-//     ss << (readSlots / referencedSlots).named("slots read");
-//     ss << slotsReadOverReferencedPerFunction;
-//     ss << "\n";
-//
-//     // benefit
-//     ss << (functionsUsingFeedback / compiledFunctions)
-//               .named("benefited from feedback");
-//     ss << "\n";
-//
-//     // used slots
-//     ss << "--- USED SLOTS ---\n";
-//
-//     // ss << (usedSlots / totalSlots).named("slots used in speculation");
-//     ss << (usedSlots / referencedSlots)
-//               .named("referenced slots used in speculation");
-//     ss << (usedSlots / readSlots).named("read slots used in
-//     speculation"); ss << "\n";
-//
-//     // USED / READ non-empty
-//     ss << (usedSlots / readNonEmptySlots)
-//               .named("read non-empty slots used in speculation ");
-//     ss << slotsUsedOverReadNonEmptyPerFunction;
-//     ss << "\n";
-//
-//     // USED / non-empty
-//     ss << (usedSlots / nonEmptySlots)
-//               .named("non-empty slots used in speculation");
-//     ss << slotsUsedOverNonEmptyPerFunction;
-//     ss << "\n";
-//
-//     // USED MATCH
-//     ss << "--- KIND TYPE ---\n";
-//     ss << "used (of kind type): " << usedSlotsOfKindType << "\n";
-//
-//     ss << (narrowedSlots / usedSlotsOfKindType)
-//               .named("narrowed with static type");
-//     ss << (exactMatchUsedSlots / usedSlotsOfKindType).named("exact
-//     match"); ss << (widenedUsedSlots /
-//     usedSlotsOfKindType).named("widened"); ss << "\n";
-//
-//     ss.flush();
-//
-//     auto csv_file = getenv("STATS_CSV");
-//     if (csv_file != nullptr) {
-//         std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
-//
-//         ofs.seekp(0, std::ios::end);
-//         if (ofs.tellp() == 0) {
-//             // clang-format off
-//             ofs << "name,total functions,compiled functions,benefited
-//             functions,total versions,total deopts"
-//                 << ",total slots,referenced slots,empty slots,empty
-//                 referenced slots"
-//                 << ",read slots,read non-empty slots,used slots,used
-//                 non-empty slots"
-//                 << ",type slots perc"
-//                 // << ",used type slots,narrowed,exact match,widened"
-//                 << "\n";
-//             // clang-format on
-//         }
-//
-//         const char* stats_name = getenv("STATS_NAME");
-//         if (stats_name == nullptr) {
-//             stats_name = "?";
-//         }
-//
-//         auto out = [&ofs](Stat x, bool last = false) {
-//             ofs << x.value << (last ? "\n" : ",");
-//         };
-//
-//         auto qout = [&ofs](auto x, bool last = false) {
-//             ofs << "\"" << x << "\"" << (last ? "\n" : ",");
-//         };
-//
-//         qout(stats_name);
-//
-//         out(totalFunctions);
-//         out(compiledFunctions);
-//         out(functionsUsingFeedback);
-//         out(totalCompiledVersions);
-//         out(totalDeopts);
-//
-//         out(totalSlots);
-//         out(referencedSlots);
-//         out(emptySlots);
-//         out(emptyReferencedSlots);
-//
-//         out(readSlots);
-//         out(readNonEmptySlots);
-//         out(usedSlots);
-//         /*out(usedNonEmptySlots, true);*/
-//         out(usedNonEmptySlots);
-//
-//         if (typeSlotsPerFunction.values.size() != 0) {
-//             ofs << typeSlotsPerFunction.average();
-//         }
-//
-//         ofs << "\n";
-//
-//         // out(usedSlotsOfKindType);
-//         // out(narrowedSlots);
-//         // out(exactMatchUsedSlots);
-//         // out(widenedUsedSlots);
-//     }
-//
-//     assert(usedSlotsOfKindType.value == usedSlots.value);
+void reportCsv(std::ostream& os, const std::string& program_name) {
+    // Print the header if the file is empty
+    os.seekp(0, std::ios::end);
+    if (os.tellp() == 0) {
+        // clang-format off
+            os  << "name"
+                << ",referenced,read,used"
+                << ",referenced non-empty,read non-empty,used non-empty"
+                << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
+                << "\n";
+        // clang-format on
+    }
+
+    auto out = [&os](const auto& x, bool last = false) {
+        os << x << (last ? "\n" : ",");
+    };
+
+    auto qout = [&os](const auto& x, bool last = false) {
+        os << "\"" << x << "\"" << (last ? "\n" : ",");
+    };
+
+    auto agg = CompilationSession::getFinalAgg();
+
+    qout(program_name);
+
+    out(agg.referenced.value);
+    out(agg.read.value);
+    out(agg.used.value);
+
+    out(agg.referencedNonEmpty.value);
+    out(agg.readNonEmpty.value);
+    out(agg.usedNonEmpty.value);
+
+    out(agg.referencedNonEmptyRatio.average());
+    out(agg.readRatio.average());
+    out(agg.usedRatio.average(), true);
+}
 
 } // namespace report
 } // namespace rir

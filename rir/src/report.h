@@ -22,6 +22,59 @@ std::string streamToString(std::function<void(std::stringstream&)> f);
 
 // ------------------------------------------------------------
 
+struct MetricPercent;
+
+struct Stat {
+    std::string name;
+    size_t value = 0;
+
+    void operator++(int) { value++; }
+    void operator+=(size_t add) { value += add; }
+    void operator+=(const Stat& other) { value += other.value; }
+
+    MetricPercent operator/(Stat& denom);
+};
+
+struct MetricPercent {
+    Stat* numerator;
+    Stat* denominator;
+    std::string name = "";
+
+    MetricPercent& named(const std::string& name) {
+        this->name = name;
+        return *this;
+    }
+
+    double value() const;
+};
+
+struct FunctionAggregate {
+    std::string name;
+    std::vector<double> values{};
+
+    void add(double value) { values.push_back(value); }
+    void add(const MetricPercent& metric) {
+        if (metric.denominator->value) {
+            values.push_back(metric.value());
+        }
+    }
+
+    void operator+=(const FunctionAggregate& other) {
+        for (const auto& i : other.values) {
+            values.push_back(i);
+        }
+    }
+
+    double average() const;
+};
+
+std::ostream& operator<<(std::ostream& os, const Stat& st);
+std::ostream& operator<<(std::ostream& os, const MetricPercent& metric);
+std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg);
+
+// ------------------------------------------------------------
+
+// TODO: strings to types
 struct SlotNotUsedSubsumedStaticTypeReason {
     std::string staticType;
     std::string feedbackType;
@@ -56,8 +109,91 @@ struct SlotUsed {
              const pir::PirType& checkFor, const pir::PirType& staticType,
              const pir::PirType& feedbackType, const pir::PirType& expectedType,
              const pir::PirType& requiredType, pir::Instruction& instruction);
+};
 
-    void print(std::ostream&) const;
+std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
+
+// ------------------------------------------------------------
+
+using Universe = std::unordered_set<Function*>;
+
+// ------------------------------------------------------------
+
+struct Aggregate {
+    Stat read{"read slots"};
+    Stat readNonEmpty{"read non-empty slots"};
+    Stat used{"used slots"};
+    Stat usedNonEmpty{"used non-empty slots"};
+
+    void operator+=(const Aggregate& other) {
+        read += other.read;
+        readNonEmpty += other.readNonEmpty;
+        used += other.used;
+        usedNonEmpty += other.usedNonEmpty;
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
+
+struct FinalAggregate {
+    Universe universe;
+    Stat compiledClosureVersions{"closure version compilations"};
+    Stat benefitedClosureVersions{
+        "closure version compilations using some type feedback"};
+
+    Stat referenced{"referenced"};
+    Stat read{"read"};
+    Stat used{"used"};
+
+    Stat referencedNonEmpty{"referenced non-empty"};
+    Stat readNonEmpty{"read non-empty"};
+    Stat usedNonEmpty{"used non-empty"};
+
+    FunctionAggregate referencedNonEmptyRatio{
+        "referenced non-empty / referenced"};
+    FunctionAggregate readRatio{"read non-empty / referenced"};
+    FunctionAggregate usedRatio{"used non-empty / referenced"};
+
+    void operator+=(const FinalAggregate& other) {
+        universe.insert(other.universe.begin(), other.universe.end());
+        compiledClosureVersions += other.compiledClosureVersions;
+        benefitedClosureVersions += other.benefitedClosureVersions;
+
+        referenced += other.referenced;
+        read += other.read;
+        used += other.used;
+
+        referencedNonEmpty += other.referencedNonEmpty;
+        readNonEmpty += other.readNonEmpty;
+        usedNonEmpty += other.usedNonEmpty;
+
+        referencedNonEmptyRatio += other.referencedNonEmptyRatio;
+        readRatio += other.readRatio;
+        usedRatio += other.usedRatio;
+    }
+};
+
+// ------------------------------------------------------------
+
+/*
+f <- function()
+    g()
+
+pir code:
+...
+assume [g#type1]
+
+deopt on this assume
+
+g.baseline()->inlinedSlotsDeopted.add(type1)
+*/
+struct FunctionInfo {
+    std::unordered_set<FeedbackIndex> allTypeSlots;
+    std::unordered_set<FeedbackIndex> emptySlots;
+    std::unordered_set<FeedbackIndex> nonEmptySlots;
+    std::unordered_set<FeedbackIndex> slotsDeopted;
+    std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
+    size_t deoptsCount;
 };
 
 // ------------------------------------------------------------
@@ -72,11 +208,11 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
+
+    Aggregate getAgg(const FunctionInfo& info) const;
 };
 
 // ------------------------------------------------------------
-
-using Universe = std::unordered_set<Function*>;
 
 struct ClosureVersionStats {
     // Baseline of the compiled function
@@ -92,32 +228,18 @@ struct ClosureVersionStats {
         const std::unordered_map<Function*, FeedbackStatsPerFunction>&
             feedbackStats)
         : function(function), context(context), feedbackStats(feedbackStats) {}
+
+    Aggregate
+    getAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
+
+    FinalAggregate
+    getFinalAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
 };
 
-/*
-f <- function()
-    g()
-
-pir code:
-...
-assume [g#type1]
-
-deopt on this assume
-
-g.baseline()->inlinedSlotsDeopted.add(type1)
-*/
-
-struct FunctionInfo {
-    std::unordered_set<FeedbackIndex> allTypeSlots;
-    std::unordered_set<FeedbackIndex> emptySlots;
-    std::unordered_set<FeedbackIndex> nonEmptySlots;
-    std::unordered_set<FeedbackIndex> slotsDeopted;
-    std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
-    size_t deoptsCount;
-};
+// ------------------------------------------------------------
 
 struct CompilationSession {
-    // ? the info passed to PirCompile
+    // the info passed to PirCompile
     Function* function;
     Context context;
 
@@ -132,69 +254,18 @@ struct CompilationSession {
 
     static CompilationSession& getNew(Function* compiledFunction,
                                       const Context& compiledContext,
-                                      std::vector<DispatchTable*> DTs);
+                                      const std::vector<DispatchTable*>& DTs);
 
     Universe universe() const;
+
+    static FinalAggregate getFinalAgg();
 };
 
 // ------------------------------------------------------------
 
-struct Stat {
-    std::string name;
-    size_t value = 0;
-
-    void operator++(int) { value++; }
-    void operator+=(size_t add) { value += add; }
-    void operator+=(const Stat& other) { value += other.value; }
-};
-
-struct MetricPercent {
-    Stat* numerator;
-    Stat* denominator;
-    std::string name = "";
-
-    double value() const {
-        if (denominator->value == 0) {
-            assert(false && "cannot divide by 0");
-            // return 0;
-        }
-
-        return static_cast<double>(numerator->value) / denominator->value;
-    }
-
-    MetricPercent& named(const std::string& name) {
-        this->name = name;
-        return *this;
-    }
-};
-
-MetricPercent operator/(Stat& lhs, Stat& rhs);
-
-struct FunctionAggregate {
-    std::string name;
-    std::vector<double> values{};
-
-    void add(double value) { values.push_back(value); }
-    void add(const MetricPercent& metric) { values.push_back(metric.value()); }
-
-    double average() const {
-        if (values.empty()) {
-            assert(false && "empty aggregate");
-            return 0.0;
-        }
-
-        double sum = std::accumulate(values.begin(), values.end(), 0.0);
-        return sum / values.size();
-    }
-};
-
-std::ostream& operator<<(std::ostream& os, const Stat& st);
-std::ostream& operator<<(std::ostream& os, const MetricPercent& metric);
-std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg);
-
-// ------------------------------------------------------------
-
-void report(std::ostream& os, bool breakdownInfo);
+void report(std::ostream& os, bool breakdownInfo,
+            const std::vector<DispatchTable*>& DTs);
+void reportCsv(std::ostream& os, const std::string& name);
 
 } // namespace report
 } // namespace rir
