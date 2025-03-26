@@ -102,13 +102,17 @@ struct SlotUsed {
     pir::PirType* feedbackType;
     pir::PirType* expectedType;
     pir::PirType* requiredType;
-    std::string instructionAsString;
+
+    std::string speculatedOn;
+    std::string assumeInstr;
+
+    void finalize(pir::Instruction* speculatedOn, pir::Instruction* assumeInstr);
 
     SlotUsed();
     SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
              const pir::PirType& checkFor, const pir::PirType& staticType,
              const pir::PirType& feedbackType, const pir::PirType& expectedType,
-             const pir::PirType& requiredType, pir::Instruction& instruction);
+             const pir::PirType& requiredType);
 };
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);

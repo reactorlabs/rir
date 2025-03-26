@@ -166,13 +166,21 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 // ------------------------------------------------------------
 
+void SlotUsed::finalize(pir::Instruction* speculatedOn,
+                        pir::Instruction* assumeInstr) {
+    this->speculatedOn =
+        streamToString([&](std::stringstream& ss) { speculatedOn->print(ss); });
+
+    this->assumeInstr =
+        streamToString([&](std::stringstream& ss) { assumeInstr->print(ss); });
+}
+
 SlotUsed::SlotUsed() {}
 SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
                    const pir::PirType& checkFor, const pir::PirType& staticType,
                    const pir::PirType& feedbackType,
                    const pir::PirType& expectedType,
-                   const pir::PirType& requiredType,
-                   pir::Instruction& instruction) {
+                   const pir::PirType& requiredType) {
     this->narrowedWithStaticType = narrowedWithStaticType;
     this->kind = kind;
 
@@ -181,15 +189,12 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
     this->feedbackType = new pir::PirType(feedbackType);
     this->expectedType = new pir::PirType(expectedType);
     this->requiredType = new pir::PirType(requiredType);
-    this->instructionAsString = report::streamToString(
-        [&](std::stringstream& ss) { instruction.print(ss); });
 }
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     using namespace StreamColor;
 
-    os << bold << slotUsed.instructionAsString << clear << "\n";
-
+    os << bold << slotUsed.speculatedOn << clear << "\n";
     os << "narrowed with static type: "
        << boolToString(slotUsed.narrowedWithStaticType) << "\n";
     os << "exact match/widened: "

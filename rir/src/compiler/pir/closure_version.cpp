@@ -44,6 +44,13 @@ void ClosureVersion::scanForSpeculation() {
 
                 // Slot used
                 assert(assume->slotUsed);
+                auto typeTest = IsType::Cast(assume->arg<0>().val());
+                assert(typeTest);
+                auto speculatedOn =  Instruction::Cast(typeTest->arg<0>().val());
+                assert(speculatedOn);
+
+                assume->slotUsed->finalize(speculatedOn, assume);
+
                 auto& info = this->feedbackStatsFor(fo.function());
 
                 // if (info.slotsUsed.count(fo.index()))

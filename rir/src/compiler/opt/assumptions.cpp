@@ -420,8 +420,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     newAssume->slotUsed = new report::SlotUsed(
                         oldSlotUsed->narrowedWithStaticType, oldSlotUsed->kind,
                         expected, inp->type, *oldSlotUsed->feedbackType,
-                        *oldSlotUsed->expectedType, *oldSlotUsed->requiredType,
-                        *Instruction::Cast(inp));
+                        *oldSlotUsed->expectedType, *oldSlotUsed->requiredType);
 
                     ip = bb->insert(ip, newAssume) + 1;
 
