@@ -44,10 +44,11 @@ void ClosureVersion::scanForSpeculation() {
 
                 // Slot used
                 assert(assume->slotUsed);
-                auto typeTest = IsType::Cast(assume->arg<0>().val());
-                assert(typeTest);
-                auto speculatedOn =  Instruction::Cast(typeTest->arg<0>().val());
-                assert(speculatedOn);
+                pir::Instruction* speculatedOn = nullptr;
+
+                if (auto typeTest = IsType::Cast(assume->arg<0>().val())) {
+                    speculatedOn = Instruction::Cast(typeTest->arg<0>().val());
+                }
 
                 assume->slotUsed->finalize(speculatedOn, assume);
 

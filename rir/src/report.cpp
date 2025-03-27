@@ -168,8 +168,10 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 void SlotUsed::finalize(pir::Instruction* speculatedOn,
                         pir::Instruction* assumeInstr) {
-    this->speculatedOn =
-        streamToString([&](std::stringstream& ss) { speculatedOn->print(ss); });
+    if (speculatedOn) {
+        this->speculatedOn = streamToString(
+            [&](std::stringstream& ss) { speculatedOn->print(ss); });
+    }
 
     this->assumeInstr =
         streamToString([&](std::stringstream& ss) { assumeInstr->print(ss); });
@@ -194,7 +196,11 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     using namespace StreamColor;
 
-    os << bold << slotUsed.speculatedOn << clear << "\n";
+    if (!slotUsed.speculatedOn.empty()){
+        os << bold << slotUsed.speculatedOn << clear << "\n";
+    }
+    os << bold << slotUsed.assumeInstr << clear << "\n";
+
     os << "narrowed with static type: "
        << boolToString(slotUsed.narrowedWithStaticType) << "\n";
     os << "exact match/widened: "
