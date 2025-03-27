@@ -93,9 +93,10 @@ struct SlotCandidateButNotUsedReason {
 struct SlotOptimizedAway {};
 
 struct SlotUsed {
-    enum Kind { exactMatch, widened } kind;
-
+    bool widened;
     bool narrowedWithStaticType;
+
+    bool exactMatch() const { return !widened && !narrowedWithStaticType; }
 
     pir::PirType* checkFor;
     pir::PirType* staticType;
@@ -109,7 +110,7 @@ struct SlotUsed {
     void finalize(pir::Instruction* speculatedOn, pir::Instruction* assumeInstr);
 
     SlotUsed();
-    SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
+    SlotUsed(bool narrowedWithStaticType, bool widened,
              const pir::PirType& checkFor, const pir::PirType& staticType,
              const pir::PirType& feedbackType, const pir::PirType& expectedType,
              const pir::PirType& requiredType);

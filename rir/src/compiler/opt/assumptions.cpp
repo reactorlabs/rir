@@ -418,7 +418,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto newAssume = new Assume(newTT, cp, newDeoptReason);
                     auto oldSlotUsed = a->slotUsed;
                     newAssume->slotUsed = new report::SlotUsed(
-                        oldSlotUsed->narrowedWithStaticType, oldSlotUsed->kind,
+                        oldSlotUsed->narrowedWithStaticType, oldSlotUsed->widened,
                         expected, inp->type, *oldSlotUsed->feedbackType,
                         *oldSlotUsed->expectedType, *oldSlotUsed->requiredType);
 

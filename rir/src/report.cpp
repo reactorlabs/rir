@@ -178,13 +178,13 @@ void SlotUsed::finalize(pir::Instruction* speculatedOn,
 }
 
 SlotUsed::SlotUsed() {}
-SlotUsed::SlotUsed(bool narrowedWithStaticType, SlotUsed::Kind kind,
+SlotUsed::SlotUsed(bool narrowedWithStaticType, bool widened,
                    const pir::PirType& checkFor, const pir::PirType& staticType,
                    const pir::PirType& feedbackType,
                    const pir::PirType& expectedType,
                    const pir::PirType& requiredType) {
     this->narrowedWithStaticType = narrowedWithStaticType;
-    this->kind = kind;
+    this->widened = widened;
 
     this->checkFor = new pir::PirType(checkFor);
     this->staticType = new pir::PirType(staticType);
@@ -201,11 +201,13 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     }
     os << bold << slotUsed.assumeInstr << clear << "\n";
 
-    os << "narrowed with static type: "
-       << boolToString(slotUsed.narrowedWithStaticType) << "\n";
-    os << "exact match/widened: "
-       << (slotUsed.kind == SlotUsed::exactMatch ? "exact match" : "widened")
-       << "\n";
+    if (slotUsed.exactMatch()) {
+        os << "exact match\n";
+    } else {
+        os << "narrowed with static type: "
+           << boolToString(slotUsed.narrowedWithStaticType) << "\n";
+        os << "widened: " << boolToString(slotUsed.widened) << "\n";
+    }
 
     // clang-format off
     os << bold << "checkFor: " << clear << *slotUsed.checkFor << ", "

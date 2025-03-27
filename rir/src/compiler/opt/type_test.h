@@ -51,15 +51,11 @@ class TypeTest {
 
         assert(feedback.feedbackOrigin.hasSlot());
 
-        std::function<report::SlotUsed::Kind(PirType, PirType)>
-            computeMatchType = [&](PirType check, PirType exp) {
-                auto match = check == exp ? report::SlotUsed::exactMatch
-                                          : report::SlotUsed::widened;
-                if (widenedNA)
-                    match = report::SlotUsed::widened;
+        auto isWidened = [&](PirType check, PirType exp) {
+            auto widened = check != exp || widenedNA;
 
-                return match;
-            };
+            return widened;
+        };
 
         auto typeFeedbackNarrowedWithStaticType = !feedback.type.isA(i->type);
 
@@ -69,10 +65,10 @@ class TypeTest {
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
 
-            auto match = computeMatchType(expected, expected);
+            auto widened = isWidened(expected, expected);
 
             auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, match, expected, i->type,
+                typeFeedbackNarrowedWithStaticType, widened, expected, i->type,
                 feedback.type, expected, required);
 
             return action({expected, new IsType(expected, i), true,
@@ -104,9 +100,9 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
-            auto match = computeMatchType(checkFor, expected);
+            auto widened = isWidened(checkFor, expected);
             auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
+                typeFeedbackNarrowedWithStaticType, widened, checkFor, i->type,
                 feedback.type, expected, required);
 
             return action({checkFor, new IsType(checkFor, i), true,
@@ -130,9 +126,9 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
-            auto match = computeMatchType(checkFor, expected);
+            auto widened = isWidened(checkFor, expected);
             auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, match, checkFor, i->type,
+                typeFeedbackNarrowedWithStaticType, widened, checkFor, i->type,
                 feedback.type, expected, required);
 
             return action({checkFor, new IsType(checkFor, i), true,
