@@ -46,8 +46,14 @@ void ClosureVersion::scanForSpeculation() {
                 assert(assume->slotUsed);
                 pir::Instruction* speculatedOn = nullptr;
 
-                if (auto typeTest = IsType::Cast(assume->arg<0>().val())) {
+                auto assumeArg = assume->arg<0>().val();
+                if (auto typeTest = IsType::Cast(assumeArg)) {
                     speculatedOn = Instruction::Cast(typeTest->arg<0>().val());
+                    assert(speculatedOn);
+                    assert(*assume->slotUsed->checkFor == typeTest->typeTest);
+                } else {
+                    assert(assumeArg == pir::False::instance());
+                    return; // skip the constant-folded false
                 }
 
                 assume->slotUsed->finalize(speculatedOn, assume);

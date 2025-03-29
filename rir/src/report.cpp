@@ -168,10 +168,8 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 void SlotUsed::finalize(pir::Instruction* speculatedOn,
                         pir::Instruction* assumeInstr) {
-    if (speculatedOn) {
-        this->speculatedOn = streamToString(
-            [&](std::stringstream& ss) { speculatedOn->print(ss); });
-    }
+    this->speculatedOn = streamToString(
+        [&](std::stringstream& ss) { speculatedOn->print(ss); });
 
     this->assumeInstr =
         streamToString([&](std::stringstream& ss) { assumeInstr->print(ss); });
