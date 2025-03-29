@@ -403,7 +403,12 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     assert(tt->arg(0).val() == f);
                     auto inp = f->arg(0).val();
                     auto expected = tt->typeTest;
+                    auto oldSlotUsed = a->slotUsed;
+                    auto newWidened = oldSlotUsed->widened;
                     if (f->observed != Force::ArgumentKind::value) {
+                        if (!expected.maybePromiseWrapped()){
+                            newWidened = true;
+                        }
                         expected = expected.orFullyPromiseWrapped();
                     }
                     assert(!expected.maybeLazy());
@@ -416,9 +421,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         a->reason.origin, DeoptReason::Reason::Typecheck2);
 
                     auto newAssume = new Assume(newTT, cp, newDeoptReason);
-                    auto oldSlotUsed = a->slotUsed;
                     newAssume->slotUsed = new report::SlotUsed(
-                        oldSlotUsed->narrowedWithStaticType, oldSlotUsed->widened,
+                        oldSlotUsed->narrowedWithStaticType, newWidened,
                         expected, inp->type, *oldSlotUsed->feedbackType,
                         *oldSlotUsed->expectedType, *oldSlotUsed->requiredType);
 
