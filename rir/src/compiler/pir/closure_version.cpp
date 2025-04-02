@@ -51,6 +51,24 @@ void ClosureVersion::scanForSpeculation() {
                     speculatedOn = Instruction::Cast(typeTest->arg<0>().val());
                     assert(speculatedOn);
                     assert(*assume->slotUsed->checkFor == typeTest->typeTest);
+
+                    auto bb = assume->bb();
+                    auto iter = bb->atPosition(assume);
+                    // Move after the assume
+                    ++iter;
+                    // Make sure we don't fall out of BB
+                    if (iter != bb->end()) {
+                        // If it is a cast (not deopted)
+                        if (auto cast = pir::CastType::Cast(*iter)) {
+                            // If the cast is on the speculated on instruction
+                            auto castee = cast->arg<0>().val();
+                            if (castee == speculatedOn) {
+                                assert(cast->type ==
+                                       (cast->type & castee->type));
+                            }
+                        }
+                    }
+
                 } else {
                     assert(assumeArg == pir::False::instance());
                     return; // skip the constant-folded false
