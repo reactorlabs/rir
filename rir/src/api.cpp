@@ -81,15 +81,21 @@ void myFinalizer(SEXP) {
 
     report::report(std::cerr, verbose, PreservedDispatchTables);
 
+    const char* stats_name = getenv("STATS_NAME");
+    if (stats_name == nullptr) {
+        stats_name = "?";
+    }
+
     auto csv_file = getenv("STATS_CSV");
     if (csv_file != nullptr) {
-        const char* stats_name = getenv("STATS_NAME");
-        if (stats_name == nullptr) {
-            stats_name = "?";
-        }
-
         std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
         report::reportCsv(ofs, stats_name);
+    }
+
+    auto individual_file = getenv("STATS_ALL_CSV");
+    if (individual_file != nullptr) {
+        std::ofstream ofs{individual_file, std::ios::out | std::ios::app};
+        report::reportIndividual(ofs, stats_name);
     }
 }
 

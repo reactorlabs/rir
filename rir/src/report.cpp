@@ -168,8 +168,8 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 void SlotUsed::finalize(pir::Instruction* speculatedOn,
                         pir::Instruction* assumeInstr) {
-    this->speculatedOn = streamToString(
-        [&](std::stringstream& ss) { speculatedOn->print(ss); });
+    this->speculatedOn =
+        streamToString([&](std::stringstream& ss) { speculatedOn->print(ss); });
 
     this->assumeInstr =
         streamToString([&](std::stringstream& ss) { assumeInstr->print(ss); });
@@ -194,7 +194,7 @@ SlotUsed::SlotUsed(bool narrowedWithStaticType, bool widened,
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     using namespace StreamColor;
 
-    if (!slotUsed.speculatedOn.empty()){
+    if (!slotUsed.speculatedOn.empty()) {
         os << bold << slotUsed.speculatedOn << clear << "\n";
     }
     os << bold << slotUsed.assumeInstr << clear << "\n";
@@ -519,11 +519,11 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
         // clang-format off
-            os  << "name"
-                << ",referenced,read,used"
-                << ",referenced non-empty,read non-empty,used non-empty"
-                << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
-                << "\n";
+        os  << "name"
+            << ",referenced,read,used"
+            << ",referenced non-empty,read non-empty,used non-empty"
+            << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
+            << "\n";
         // clang-format on
     }
 
@@ -550,6 +550,44 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
     out(agg.referencedNonEmptyRatio.average());
     out(agg.readRatio.average());
     out(agg.usedRatio.average(), true);
+}
+
+void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
+    // Print the header if the file is empty
+    os.seekp(0, std::ios::end);
+    if (os.tellp() == 0) {
+        // clang-format off
+        os  << "benchmark,closure"
+            << ",referenced,read,used"
+            << ",referenced non-empty,read non-empty,used non-empty"
+            << "\n";
+        // clang-format on
+    }
+
+    auto out = [&os](const auto& x, bool last = false) {
+        os << x << (last ? "\n" : ",");
+    };
+
+    auto qout = [&os](const auto& x, bool last = false) {
+        os << "\"" << x << "\"" << (last ? "\n" : ",");
+    };
+
+    for (auto& cs : COMPILATION_SESSIONS) {
+        for (auto& cv : cs.closuresVersionStats) {
+            auto agg = cv.getFinalAgg(cs.functionsInfo);
+
+            qout(benchmark_name);
+            qout(cv.function->dispatchTable()->closureName);
+
+            out(agg.referenced.value);
+            out(agg.read.value);
+            out(agg.used.value);
+
+            out(agg.referencedNonEmpty.value);
+            out(agg.readNonEmpty.value);
+            out(agg.usedNonEmpty.value, true);
+        }
+    }
 }
 
 } // namespace report

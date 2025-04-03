@@ -271,6 +271,7 @@ struct CompilationSession {
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs);
 void reportCsv(std::ostream& os, const std::string& name);
+void reportIndividual(std::ostream& os, const std::string& benchmark_name);
 
 } // namespace report
 } // namespace rir
