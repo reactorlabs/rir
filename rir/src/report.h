@@ -18,7 +18,9 @@ struct Instruction;
 
 namespace report {
 
+// Helpers
 std::string streamToString(std::function<void(std::stringstream&)> f);
+pir::PirType getSlotPirType(size_t i, Function* baseline);
 
 // ------------------------------------------------------------
 
@@ -188,7 +190,7 @@ deopt on this assume
 g.baseline()->inlinedSlotsDeopted.add(type1)
 */
 struct FunctionInfo {
-    std::unordered_set<FeedbackIndex> allTypeSlots;
+    std::unordered_map<FeedbackIndex, pir::PirType> allTypeSlots;
     std::unordered_set<FeedbackIndex> emptySlots;
     std::unordered_set<FeedbackIndex> nonEmptySlots;
     std::unordered_set<FeedbackIndex> slotsDeopted;
@@ -234,6 +236,8 @@ struct ClosureVersionStats {
 
     FinalAggregate
     getFinalAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
+
+    size_t getDuplicateSlots(std::unordered_map<Function*, FunctionInfo>& functionsInfo) const;
 };
 
 // ------------------------------------------------------------
@@ -259,6 +263,8 @@ struct CompilationSession {
     Universe universe() const;
 
     static FinalAggregate getFinalAgg();
+
+    static size_t getDuplicateSlots();
 };
 
 // ------------------------------------------------------------

@@ -80,13 +80,8 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 slotUsed.staticType = mkT(speculatedOn->type);
-
-                {
-                    auto observed =
-                        fo.function()->typeFeedback()->types(fo.index().idx);
-                    slotUsed.feedbackType = mkT(pir::PirType::bottom());
-                    slotUsed.feedbackType->merge(observed);
-                }
+                slotUsed.feedbackType =
+                    mkT(report::getSlotPirType(fo.index().idx, fo.function()));
 
                 assert(assume->required);
                 slotUsed.requiredType = assume->required;

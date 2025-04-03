@@ -52,6 +52,17 @@ COLOR_OPERATOR(bold)
 namespace rir {
 namespace report {
 
+pir::PirType getSlotPirType(size_t i, Function* baseline) {
+    auto observed = baseline->typeFeedback()->types(i);
+    auto t = pir::PirType::bottom();
+    if (observed.numTypes) {
+        t.merge(observed);
+    }
+    return t;
+}
+
+// ------------------------------------------------------------
+
 template <typename K, typename V>
 std::unordered_set<K> keys(const std::unordered_map<K, V>& map) {
     std::unordered_set<K> res;
@@ -279,6 +290,46 @@ FinalAggregate ClosureVersionStats::getFinalAgg(
     return res;
 }
 
+size_t ClosureVersionStats::getDuplicateSlots(
+    std::unordered_map<Function*, FunctionInfo>& functionsInfo) const {
+    std::unordered_set<pir::PirType> usedFeedbackTypes;
+    std::unordered_set<std::pair<Function*, FeedbackIndex>, pairhash> usedSlots;
+
+    for (const auto& i : feedbackStats) {
+        auto fun = i.first;
+        const auto& stats = i.second;
+
+        for (const auto& j : stats.slotsUsed) {
+            const auto& idx = j.first;
+            const auto& used = j.second;
+
+            usedSlots.emplace(fun, idx);
+            usedFeedbackTypes.insert(*used.feedbackType);
+        }
+    }
+
+    size_t count = 0;
+
+    for (auto fun : universe()) {
+        const auto& info = functionsInfo[fun];
+
+        for (const auto& i : info.allTypeSlots) {
+            const auto& idx = i.first;
+            const auto& type = i.second;
+
+            if (usedSlots.count({fun, idx})) {
+                continue;
+            }
+
+            if (usedFeedbackTypes.count(type)) {
+                count++;
+            }
+        }
+    }
+
+    return count;
+}
+
 // ------------------------------------------------------------
 
 void computeFunctionsInfo(
@@ -293,7 +344,7 @@ void computeFunctionsInfo(
         for (size_t i = 0; i < feedback->types_size(); ++i) {
             auto idx = FeedbackIndex::type(i);
 
-            slotData.allTypeSlots.insert(idx);
+            slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
             if (feedback->types(i).isEmpty()) {
                 slotData.emptySlots.insert(idx);
             } else {
@@ -358,6 +409,18 @@ FinalAggregate CompilationSession::getFinalAgg() {
     }
 
     return res;
+}
+
+size_t CompilationSession::getDuplicateSlots() {
+    size_t count = 0;
+
+    for (auto i : COMPILATION_SESSIONS) {
+        for (auto j : i.closuresVersionStats) {
+            count += j.getDuplicateSlots(i.functionsInfo);
+        }
+    }
+
+    return count;
 }
 
 // ------------------------------------------------------------
@@ -443,9 +506,10 @@ void report(std::ostream& os, bool breakdownInfo,
                 [](const FunctionInfo& i) { return i.nonEmptySlots.size(); });
 
             // clang-format off
-            os << Stat{"referenced slots: ", referenced}
-               << Stat{"referenced non-empty slots: ", nonEmpty}
+            os << Stat{"referenced slots", referenced}
+               << Stat{"referenced non-empty slots", nonEmpty}
                << cvstat.getAgg(session.functionsInfo)
+               << Stat{"duplicate slots", cvstat.getDuplicateSlots(session.functionsInfo)}
                << "\n";
             // clang-format on
 
@@ -487,13 +551,14 @@ void report(std::ostream& os, bool breakdownInfo,
         << agg.benefitedClosureVersions
         << "\n";
 
-    os << StreamColor::blue << "Slots\n" << StreamColor::clear;
+    os  << StreamColor::blue << "Slots\n" << StreamColor::clear;
     os  << agg.referenced
         << agg.read
         << agg.used
+        << Stat{"duplicate slots", CompilationSession::getDuplicateSlots()}
         << "\n";
 
-    os << StreamColor::blue << "Non-empty slots\n" << StreamColor::clear;
+    os  << StreamColor::blue << "Non-empty slots\n" << StreamColor::clear;
     os  << agg.referencedNonEmpty
         << agg.readNonEmpty
         << agg.usedNonEmpty
@@ -518,6 +583,7 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
         // clang-format off
         os  << "name"
             << ",referenced,read,used"
+            << ",duplicate"
             << ",referenced non-empty,read non-empty,used non-empty"
             << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
             << "\n";
@@ -540,6 +606,8 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
     out(agg.read.value);
     out(agg.used.value);
 
+    out(CompilationSession::getDuplicateSlots());
+
     out(agg.referencedNonEmpty.value);
     out(agg.readNonEmpty.value);
     out(agg.usedNonEmpty.value);
@@ -556,6 +624,7 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
         // clang-format off
         os  << "benchmark,closure"
             << ",referenced,read,used"
+            << ",duplicate"
             << ",referenced non-empty,read non-empty,used non-empty"
             << "\n";
         // clang-format on
@@ -579,6 +648,8 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
             out(agg.referenced.value);
             out(agg.read.value);
             out(agg.used.value);
+
+            out(cv.getDuplicateSlots(cs.functionsInfo));
 
             out(agg.referencedNonEmpty.value);
             out(agg.readNonEmpty.value);
