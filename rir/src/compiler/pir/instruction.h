@@ -2749,8 +2749,11 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
     const DeoptReason reason;
 
     bool defaultFeedback = false;
-    report::SlotUsed* slotUsed = nullptr;
-    void copyStatsFrom(Assume& other);
+    PirType* required = nullptr;
+    void copyStatsFrom(Assume& other) {
+        this->defaultFeedback = other.defaultFeedback;
+        this->required = other.required;
+    }
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,
            bool expectation = true)

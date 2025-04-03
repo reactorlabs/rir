@@ -24,67 +24,86 @@ void ClosureVersion::scanForSpeculation() {
         if (auto assume = Assume::Cast(i)) {
 
             auto fo = assume->reason.origin;
-            // auto feedbackOriginBaselineFunction = fo.function();
 
             if (!assume->defaultFeedback && !fo.index().isUndefined() &&
                 fo.index().kind == FeedbackKind::Type) {
 
                 assert(this->owner()->rirFunction());
 
-                // // TODO: ?
-                // // speculation in functions/inlines
-                // feedbackOriginBaselineFunction->speculationInFunctions.insert(
-                //     this->owner()->rirFunction());
-
-                // if (this->owner()->rirFunction() !=
-                //     feedbackOriginBaselineFunction) {
-                //     feedbackOriginBaselineFunction->speculationWithinInlines
-                //         .insert(this->owner()->rirFunction());
-                // }
-
                 // Slot used
-                assert(assume->slotUsed);
-                pir::Instruction* speculatedOn = nullptr;
 
+                // Type test
                 auto assumeArg = assume->arg<0>().val();
-                if (auto typeTest = IsType::Cast(assumeArg)) {
-                    speculatedOn = Instruction::Cast(typeTest->arg<0>().val());
-                    assert(speculatedOn);
-                    assert(*assume->slotUsed->checkFor == typeTest->typeTest);
+                auto typeTest = IsType::Cast(assumeArg);
+                if (!typeTest) {
+                    assert(assumeArg == pir::False::instance());
+                    return; // skip the constant-folded false
+                }
 
+                // Instruction we speculated on
+                pir::Instruction* speculatedOn =
+                    Instruction::Cast(typeTest->arg<0>().val());
+                assert(speculatedOn);
+
+                // The cast of speculated instr to the assumed type
+                pir::CastType* cast = nullptr;
+                {
                     auto bb = assume->bb();
                     auto iter = bb->atPosition(assume);
                     // Move after the assume
                     ++iter;
                     // Make sure we don't fall out of BB
                     if (iter != bb->end()) {
+                        cast = pir::CastType::Cast(*iter);
                         // If it is a cast (not deopted)
-                        if (auto cast = pir::CastType::Cast(*iter)) {
-                            // If the cast is on the speculated on instruction
-                            auto castee = cast->arg<0>().val();
-                            if (castee == speculatedOn) {
-                                assert(cast->type ==
-                                       (cast->type & castee->type));
-                            }
+                        // and the cast is on the speculated on instruction
+                        if (cast && cast->arg<0>().val() == speculatedOn) {
+                            // sanity check
+                            assert(cast->type ==
+                                   (cast->type & speculatedOn->type));
+                        } else {
+                            cast = nullptr;
                         }
                     }
-
-                } else {
-                    assert(assumeArg == pir::False::instance());
-                    return; // skip the constant-folded false
                 }
 
-                assume->slotUsed->finalize(speculatedOn, assume);
+                // Construct the slotUsed
+                auto slotUsed = report::SlotUsed();
+                auto mkT = [](const pir::PirType& type) {
+                    return new pir::PirType(type);
+                };
+
+                if (cast) {
+                    slotUsed.checkFor = mkT(cast->type);
+                } else {
+                    slotUsed.checkFor = mkT(typeTest->type);
+                }
+
+                slotUsed.staticType = mkT(speculatedOn->type);
+
+                {
+                    auto observed =
+                        fo.function()->typeFeedback()->types(fo.index().idx);
+                    slotUsed.feedbackType = mkT(pir::PirType::bottom());
+                    slotUsed.feedbackType->merge(observed);
+                }
+
+                assert(assume->required);
+                slotUsed.requiredType = assume->required;
+
+                slotUsed.speculatedOn = report::streamToString(
+                    [&](std::ostream& os) { speculatedOn->print(os); });
+                slotUsed.assumeInstr = report::streamToString(
+                    [&](std::ostream& os) { assume->print(os); });
 
                 auto& info = this->feedbackStatsFor(fo.function());
 
                 // Sanity check
-                if (assume->slotUsed->exactMatch()) {
-                    assert(*assume->slotUsed->checkFor ==
-                           *assume->slotUsed->feedbackType);
+                if (slotUsed.exactMatch()) {
+                    assert(*slotUsed.checkFor == *slotUsed.feedbackType);
                 }
 
-                info.slotsUsed[fo.index()] = *assume->slotUsed;
+                info.slotsUsed[fo.index()] = slotUsed;
             }
         }
     });

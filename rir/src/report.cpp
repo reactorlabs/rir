@@ -166,52 +166,49 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 // ------------------------------------------------------------
 
-void SlotUsed::finalize(pir::Instruction* speculatedOn,
-                        pir::Instruction* assumeInstr) {
-    this->speculatedOn =
-        streamToString([&](std::stringstream& ss) { speculatedOn->print(ss); });
+SlotUsed::SlotUsed() {}
 
-    this->assumeInstr =
-        streamToString([&](std::stringstream& ss) { assumeInstr->print(ss); });
+pir::PirType SlotUsed::expectedType() const {
+    pir::PirType expected = *staticType & *feedbackType;
+
+    // Reflecting what happens in TypeTest::Create
+    if (staticType->maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
+        !expected.isSimpleScalar()) {
+        expected = expected.orNAOrNaN();
+    }
+
+    return expected;
 }
 
-SlotUsed::SlotUsed() {}
-SlotUsed::SlotUsed(bool narrowedWithStaticType, bool widened,
-                   const pir::PirType& checkFor, const pir::PirType& staticType,
-                   const pir::PirType& feedbackType,
-                   const pir::PirType& expectedType,
-                   const pir::PirType& requiredType) {
-    this->narrowedWithStaticType = narrowedWithStaticType;
-    this->widened = widened;
+bool SlotUsed::widened() const {
+    // reflects "NA checks are only possible on scalars" in type_test
+    return (!feedbackType->maybeNAOrNaN() && expectedType().maybeNAOrNaN()) ||
+           (*checkFor != expectedType());
+}
 
-    this->checkFor = new pir::PirType(checkFor);
-    this->staticType = new pir::PirType(staticType);
-    this->feedbackType = new pir::PirType(feedbackType);
-    this->expectedType = new pir::PirType(expectedType);
-    this->requiredType = new pir::PirType(requiredType);
+bool SlotUsed::narrowedWithStaticType() const {
+    return !(feedbackType->isA(*staticType));
 }
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     using namespace StreamColor;
 
-    if (!slotUsed.speculatedOn.empty()) {
-        os << bold << slotUsed.speculatedOn << clear << "\n";
-    }
+    os << bold << slotUsed.speculatedOn << clear << "\n";
     os << bold << slotUsed.assumeInstr << clear << "\n";
 
     if (slotUsed.exactMatch()) {
         os << "exact match\n";
     } else {
         os << "narrowed with static type: "
-           << boolToString(slotUsed.narrowedWithStaticType) << "\n";
-        os << "widened: " << boolToString(slotUsed.widened) << "\n";
+           << boolToString(slotUsed.narrowedWithStaticType()) << "\n";
+        os << "widened: " << boolToString(slotUsed.widened()) << "\n";
     }
 
     // clang-format off
     os << bold << "checkFor: " << clear << *slotUsed.checkFor << ", "
        << bold << "static: "   << clear << *slotUsed.staticType << ", "
        << bold << "feedback: " << clear << *slotUsed.feedbackType << ", "
-       << bold << "expected: " << clear << *slotUsed.expectedType << ", "
+       << bold << "expected: " << clear << slotUsed.expectedType() << ", "
        << bold << "required: " << clear << *slotUsed.requiredType << "\n";
     // clang-format on
     return os;

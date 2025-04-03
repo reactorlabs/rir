@@ -93,27 +93,22 @@ struct SlotCandidateButNotUsedReason {
 struct SlotOptimizedAway {};
 
 struct SlotUsed {
-    bool widened;
-    bool narrowedWithStaticType;
+    bool widened() const;
+    bool narrowedWithStaticType() const;
 
-    bool exactMatch() const { return !widened && !narrowedWithStaticType; }
+    bool exactMatch() const { return !widened() && !narrowedWithStaticType(); }
 
-    pir::PirType* checkFor;
-    pir::PirType* staticType;
-    pir::PirType* feedbackType;
-    pir::PirType* expectedType;
-    pir::PirType* requiredType;
+    pir::PirType* checkFor = nullptr;
+    pir::PirType* staticType = nullptr;
+    pir::PirType* feedbackType = nullptr;
+    pir::PirType* requiredType = nullptr;
+
+    pir::PirType expectedType() const;
 
     std::string speculatedOn;
     std::string assumeInstr;
 
-    void finalize(pir::Instruction* speculatedOn, pir::Instruction* assumeInstr);
-
     SlotUsed();
-    SlotUsed(bool narrowedWithStaticType, bool widened,
-             const pir::PirType& checkFor, const pir::PirType& staticType,
-             const pir::PirType& feedbackType, const pir::PirType& expectedType,
-             const pir::PirType& requiredType);
 };
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);

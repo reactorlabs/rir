@@ -15,11 +15,11 @@ class TypeTest {
         FeedbackOrigin feedbackOrigin;
 
         bool defaultFeedback;
-        report::SlotUsed* slotUsed = nullptr;
+        PirType* required = nullptr;
 
         void updateAssume(Assume& assume) {
             assume.defaultFeedback = defaultFeedback;
-            assume.slotUsed = slotUsed;
+            assume.required = required;
         }
     };
     static void Create(Value* i, const TypeFeedback& feedback,
@@ -29,11 +29,9 @@ class TypeTest {
         auto expected = i->type & feedback.type;
 
         // NA checks are only possible on scalars
-        bool widenedNA = false;
         if (i->type.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
             !expected.isSimpleScalar()) {
             expected = expected.orNAOrNaN();
-            widenedNA = true;
         }
 
         if (i->type.isA(expected) && i->type.isA(required))
@@ -51,29 +49,17 @@ class TypeTest {
 
         assert(feedback.feedbackOrigin.hasSlot());
 
-        auto isWidened = [&](PirType check, PirType exp) {
-            auto widened = check != exp || widenedNA;
-
-            return widened;
-        };
-
-        auto typeFeedbackNarrowedWithStaticType = !feedback.type.isA(i->type);
-
         // First try to refine the type
         if (!expected.maybeObj() && // TODO: Is this right?
             (expected.noAttribsOrObject().isA(RType::integer) ||
              expected.noAttribsOrObject().isA(RType::real) ||
              expected.noAttribsOrObject().isA(RType::logical))) {
 
-            auto widened = isWidened(expected, expected);
-
-            auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, widened, expected, i->type,
-                feedback.type, expected, required);
+            auto requiredPtr = new PirType(required);
 
             return action({expected, new IsType(expected, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           slotUsed});
+                           requiredPtr});
         }
 
         // Second try to test for object-ness, or attribute-ness.
@@ -100,14 +86,11 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
-            auto widened = isWidened(checkFor, expected);
-            auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, widened, checkFor, i->type,
-                feedback.type, expected, required);
+            auto requiredPtr = new PirType(required);
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           slotUsed});
+                           requiredPtr});
         }
 
         checkFor = i->type.notLazy().notObject();
@@ -126,14 +109,11 @@ class TypeTest {
                 //           << "checkFor: " << checkFor << "\n\n\n";
             }
 
-            auto widened = isWidened(checkFor, expected);
-            auto slotUsed = new report::SlotUsed(
-                typeFeedbackNarrowedWithStaticType, widened, checkFor, i->type,
-                feedback.type, expected, required);
+            auto requiredPtr = new PirType(required);
 
             return action({checkFor, new IsType(checkFor, i), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
-                           slotUsed});
+                           requiredPtr});
         }
 
         if (i->type.isA(required))
