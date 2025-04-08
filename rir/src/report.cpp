@@ -671,6 +671,8 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
         os  << "benchmark,closure"
             << ",referenced,read,used"
             << ",referenced non-empty,read non-empty,used non-empty"
+            << ",optimized away,dependent"
+            << ",optimized away non-empty,dependent non-empty"
             << "\n";
         // clang-format on
     }
@@ -696,7 +698,13 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
 
             out(agg.referencedNonEmpty.value);
             out(agg.readNonEmpty.value);
-            out(agg.usedNonEmpty.value, true);
+            out(agg.usedNonEmpty.value);
+
+            out(agg.optimizedAway.value);
+            out(agg.dependent.value);
+
+            out(agg.optimizedAwayNonEmpty.value);
+            out(agg.dependentNonEmpty.value, true);
         }
     }
 }
