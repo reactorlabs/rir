@@ -35,7 +35,11 @@ struct Stat {
     void operator+=(size_t add) { value += add; }
     void operator+=(const Stat& other) { value += other.value; }
 
-    void set(size_t value) { this->value = value; }
+    Stat& operator=(size_t value) {
+        this->value = value;
+        return *this;
+    }
+
     void set(const Stat& other) { this->value = other.value; }
 
     MetricPercent operator/(Stat& denom);

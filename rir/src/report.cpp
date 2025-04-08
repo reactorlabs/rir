@@ -262,14 +262,14 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
-    agg.referenced.set(info.allTypeSlots.size());
-    agg.read.set(slotsRead.size());
-    agg.used.set(slotsUsed.size());
+    agg.referenced = info.allTypeSlots.size();
+    agg.read = slotsRead.size();
+    agg.used = slotsUsed.size();
 
-    agg.referencedNonEmpty.set(
-        intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size());
-    agg.readNonEmpty.set(intersect(info.nonEmptySlots, slotsRead).size());
-    agg.usedNonEmpty.set(intersect(info.nonEmptySlots, keys(slotsUsed)).size());
+    agg.referencedNonEmpty =
+        intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
+    agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
+    agg.usedNonEmpty = intersect(info.nonEmptySlots, keys(slotsUsed)).size();
 
     auto usedFeedbackTypes = getUsedFeedbackTypes();
 
