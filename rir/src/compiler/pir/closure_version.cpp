@@ -16,7 +16,7 @@ void ClosureVersion::computeFeedbackStats() {
     // slotsReadCandidateNotUsedReason  slots that were optimized away
 
     this->scanForSpeculation();
-    // this->computeSlotsOptimizedAway();
+    this->computeSlotsOptimizedAway();
 }
 
 void ClosureVersion::scanForSpeculation() {
@@ -80,8 +80,7 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 slotUsed.staticType = mkT(speculatedOn->type);
-                slotUsed.feedbackType =
-                    mkT(report::getSlotPirType(fo.index().idx, fo.function()));
+                slotUsed.feedbackType = mkT(report::getSlotPirType(fo));
 
                 assert(assume->required);
                 slotUsed.requiredType = assume->required;
@@ -101,6 +100,28 @@ void ClosureVersion::scanForSpeculation() {
                 info.slotsUsed[fo.index()] = slotUsed;
             }
         }
+    });
+}
+
+void ClosureVersion::computeSlotsOptimizedAway() {
+    Visitor::run(this->entry, [&](Instruction* i) {
+        if (!i->hasTypeFeedback()) {
+            return;
+        }
+
+        const auto& tf = i->typeFeedback(false);
+        const auto& origin = tf.feedbackOrigin;
+        if (origin.index().isUndefined()) {
+            return;
+        }
+
+        auto& info = this->feedbackStatsFor(origin.function());
+
+        auto slotPresent = report::SlotPresent();
+        slotPresent.presentInstr =
+            report::streamToString([&](std::ostream& os) { i->print(os); });
+
+        info.slotPresent[origin.index()] = slotPresent;
     });
 }
 

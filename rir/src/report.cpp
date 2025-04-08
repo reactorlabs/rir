@@ -61,6 +61,10 @@ pir::PirType getSlotPirType(size_t i, Function* baseline) {
     return t;
 }
 
+pir::PirType getSlotPirType(const FeedbackOrigin& origin) {
+    return getSlotPirType(origin.index().idx, origin.function());
+}
+
 // ------------------------------------------------------------
 
 template <typename K, typename V>
@@ -81,6 +85,21 @@ std::unordered_set<T> intersect(const std::unordered_set<T>& lhs,
 
     for (const auto& i : lhs) {
         if (rhs.count(i)) {
+            res.insert(i);
+        }
+    }
+
+    return res;
+}
+
+// LHS \ RHS
+template <typename T>
+std::unordered_set<T> difference(const std::unordered_set<T>& lhs,
+                                 const std::unordered_set<T>& rhs) {
+    std::unordered_set<T> res;
+
+    for (const auto& i : lhs) {
+        if (!rhs.count(i)) {
             res.insert(i);
         }
     }
@@ -177,8 +196,6 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 // ------------------------------------------------------------
 
-SlotUsed::SlotUsed() {}
-
 pir::PirType SlotUsed::expectedType() const {
     pir::PirType expected = *staticType & *feedbackType;
 
@@ -228,7 +245,16 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 // ------------------------------------------------------------
 
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
-    return os << agg.read << agg.readNonEmpty << agg.used << agg.usedNonEmpty;
+    // clang-format off
+    return os << agg.referenced << agg.read << agg.used
+              << "\n"
+              << agg.referencedNonEmpty << agg.readNonEmpty << agg.usedNonEmpty
+              << "\n"
+              << StreamColor::blue << "Unused\n" << StreamColor::clear
+              << agg.optimizedAway << agg.dependent << agg.unusedOther
+              << "\n"
+              << agg.optimizedAwayNonEmpty << agg.dependentNonEmpty << agg.unusedOtherNonEmpty;
+    // clang-format on
 }
 
 // ------------------------------------------------------------
@@ -236,12 +262,52 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
-    agg.read += slotsRead.size();
-    agg.readNonEmpty += intersect(info.nonEmptySlots, slotsRead).size();
-    agg.used += slotsUsed.size();
-    agg.usedNonEmpty += intersect(info.nonEmptySlots, keys(slotsUsed)).size();
+    agg.referenced.set(info.allTypeSlots.size());
+    agg.read.set(slotsRead.size());
+    agg.used.set(slotsUsed.size());
+
+    agg.referencedNonEmpty.set(
+        intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size());
+    agg.readNonEmpty.set(intersect(info.nonEmptySlots, slotsRead).size());
+    agg.usedNonEmpty.set(intersect(info.nonEmptySlots, keys(slotsUsed)).size());
+
+    auto usedFeedbackTypes = getUsedFeedbackTypes();
+
+    auto unused = difference(keys(info.allTypeSlots), keys(slotsUsed));
+    for (auto slot : unused) {
+        if (!slotPresent.count(slot)) {
+            agg.optimizedAway++;
+            if (info.nonEmptySlots.count(slot)) {
+                agg.optimizedAwayNonEmpty++;
+            }
+        } else if (usedFeedbackTypes.count(info.allTypeSlots.at(slot))) {
+            agg.dependent++;
+            if (info.nonEmptySlots.count(slot)) {
+                agg.dependentNonEmpty++;
+            }
+        } else {
+            agg.unusedOther++;
+            if (info.nonEmptySlots.count(slot)) {
+                agg.unusedOtherNonEmpty++;
+            }
+        }
+    }
+
+    // Sanity check
+    assert(agg.optimizedAway.value + agg.dependent.value +
+               agg.unusedOther.value ==
+           info.allTypeSlots.size() - agg.used.value);
 
     return agg;
+}
+
+std::unordered_set<pir::PirType>
+FeedbackStatsPerFunction::getUsedFeedbackTypes() const {
+    std::unordered_set<pir::PirType> usedFeedbackTypes;
+    for (const auto& i : slotsUsed) {
+        usedFeedbackTypes.insert(*i.second.feedbackType);
+    }
+    return usedFeedbackTypes;
 }
 
 // ------------------------------------------------------------
@@ -261,73 +327,20 @@ Aggregate ClosureVersionStats::getAgg(
 
 FinalAggregate ClosureVersionStats::getFinalAgg(
     std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
-    FinalAggregate res;
+    auto agg = FinalAggregate::from(getAgg(functionsInfo));
 
-    auto agg = getAgg(functionsInfo);
+    agg.universe = universe();
 
-    res.universe = universe();
-    for (auto fun : res.universe) {
-        auto& info = functionsInfo[fun];
+    agg.referencedNonEmptyRatio.add(agg.referencedNonEmpty / agg.referenced);
+    agg.readRatio.add(agg.readNonEmpty / agg.referenced);
+    agg.usedRatio.add(agg.usedNonEmpty / agg.referenced);
 
-        res.referenced += info.allTypeSlots.size();
-        res.referencedNonEmpty += info.nonEmptySlots.size();
+    agg.compiledClosureVersions++;
+    if (agg.used.value != 0) {
+        agg.benefitedClosureVersions++;
     }
 
-    res.read += agg.read;
-    res.readNonEmpty += agg.readNonEmpty;
-    res.used += agg.used;
-    res.usedNonEmpty += agg.usedNonEmpty;
-
-    res.referencedNonEmptyRatio.add(res.referencedNonEmpty / res.referenced);
-    res.readRatio.add(res.readNonEmpty / res.referenced);
-    res.usedRatio.add(res.usedNonEmpty / res.referenced);
-
-    res.compiledClosureVersions++;
-    if (res.used.value != 0) {
-        res.benefitedClosureVersions++;
-    }
-
-    return res;
-}
-
-size_t ClosureVersionStats::getDuplicateSlots(
-    std::unordered_map<Function*, FunctionInfo>& functionsInfo) const {
-    std::unordered_set<pir::PirType> usedFeedbackTypes;
-    std::unordered_set<std::pair<Function*, FeedbackIndex>, pairhash> usedSlots;
-
-    for (const auto& i : feedbackStats) {
-        auto fun = i.first;
-        const auto& stats = i.second;
-
-        for (const auto& j : stats.slotsUsed) {
-            const auto& idx = j.first;
-            const auto& used = j.second;
-
-            usedSlots.emplace(fun, idx);
-            usedFeedbackTypes.insert(*used.feedbackType);
-        }
-    }
-
-    size_t count = 0;
-
-    for (auto fun : universe()) {
-        const auto& info = functionsInfo[fun];
-
-        for (const auto& i : info.allTypeSlots) {
-            const auto& idx = i.first;
-            const auto& type = i.second;
-
-            if (usedSlots.count({fun, idx})) {
-                continue;
-            }
-
-            if (usedFeedbackTypes.count(type)) {
-                count++;
-            }
-        }
-    }
-
-    return count;
+    return agg;
 }
 
 // ------------------------------------------------------------
@@ -411,18 +424,6 @@ FinalAggregate CompilationSession::getFinalAgg() {
     return res;
 }
 
-size_t CompilationSession::getDuplicateSlots() {
-    size_t count = 0;
-
-    for (auto i : COMPILATION_SESSIONS) {
-        for (auto j : i.closuresVersionStats) {
-            count += j.getDuplicateSlots(i.functionsInfo);
-        }
-    }
-
-    return count;
-}
-
 // ------------------------------------------------------------
 
 const std::string& closureName(Function* fun) {
@@ -445,31 +446,67 @@ sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
 
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs) {
+    auto printSlotBreakdown =
+        [&](const FeedbackIndex& index, const pir::PirType& feedbackType,
+            const FeedbackStatsPerFunction& stats, FunctionInfo& info) {
+            bool used = stats.slotsUsed.count(index);
+
+            os << StreamColor::red << index << StreamColor::clear;
+
+            if (used) {
+                os << " [used] ";
+            } else {
+                os << " [unused] ";
+            }
+
+            os << feedbackType << "\n";
+
+            if (used) {
+                os << stats.slotsUsed.at(index);
+            } else {
+                bool isDependency =
+                    stats.getUsedFeedbackTypes().count(feedbackType);
+                if (!stats.slotPresent.count(index)) {
+                    os << "optimized away";
+                    if (isDependency) {
+                        os << " (dependency)";
+                    }
+                    os << "\n";
+                } else {
+                    auto present = stats.slotPresent.at(index);
+                    os << StreamColor::bold << present.presentInstr
+                       << StreamColor::clear << "\n";
+
+                    if (isDependency) {
+                        os << "dependent slot\n";
+                    } else {
+                        os << "other unused reason\n";
+                    }
+                }
+            }
+        };
+
     auto printFunctionInfo = [&](DispatchTable* dt,
                                  const FeedbackStatsPerFunction& stats,
                                  FunctionInfo& info, bool isInlinee = false) {
         // Header
+        os << "----------------------\n";
         os << StreamColor::yellow;
         if (isInlinee) {
             os << "Inlinee: ";
         }
-        os << dt->closureName << " [" << dt << "] " << StreamColor::clear;
-
-        // Static slots info
-        os << "(# of slots: " << info.allTypeSlots.size()
-           << ", # of non-empty: " << info.nonEmptySlots.size() << ")\n";
+        os << dt->closureName << " [" << dt << "]\n" << StreamColor::clear;
 
         // Compilation slots info
         os << stats.getAgg(info) << "\n";
 
         if (breakdownInfo) {
-            auto slotsUsed = sortByFeedbackIndex(stats.slotsUsed);
-            for (auto& i : slotsUsed) {
+            auto allSlots = sortByFeedbackIndex(info.allTypeSlots);
+            for (auto& i : allSlots) {
                 auto& index = i.first;
-                auto& slotUsed = i.second;
-
-                os << StreamColor::red << index << StreamColor::clear << "\n"
-                   << slotUsed << "\n";
+                auto& feedbackType = i.second;
+                printSlotBreakdown(index, feedbackType, stats, info);
+                os << "\n";
             }
         }
     };
@@ -490,26 +527,8 @@ void report(std::ostream& os, bool breakdownInfo,
                << ") =======================\n"
                << StreamColor::clear;
 
-            // Sum info
-            auto onUniverse =
-                [&](std::function<size_t(const FunctionInfo&)> apply) {
-                    size_t s = 0;
-                    for (auto f : cvstat.universe()) {
-                        s += apply(session.functionsInfo[f]);
-                    }
-                    return s;
-                };
-
-            size_t referenced = onUniverse(
-                [](const FunctionInfo& i) { return i.allTypeSlots.size(); });
-            size_t nonEmpty = onUniverse(
-                [](const FunctionInfo& i) { return i.nonEmptySlots.size(); });
-
             // clang-format off
-            os << Stat{"referenced slots", referenced}
-               << Stat{"referenced non-empty slots", nonEmpty}
-               << cvstat.getAgg(session.functionsInfo)
-               << Stat{"duplicate slots", cvstat.getDuplicateSlots(session.functionsInfo)}
+            os << cvstat.getAgg(session.functionsInfo)
                << "\n";
             // clang-format on
 
@@ -518,7 +537,6 @@ void report(std::ostream& os, bool breakdownInfo,
             auto& mainFeedbackStats = cvstat.feedbackStats[mainFun];
             printFunctionInfo(mainFun->dispatchTable(), mainFeedbackStats,
                               mainInfo);
-            os << "\n";
 
             // Rest
             for (auto& i : cvstat.feedbackStats) {
@@ -530,10 +548,8 @@ void report(std::ostream& os, bool breakdownInfo,
                     continue;
                 }
 
-                os << "----------------\n";
                 printFunctionInfo(fun->dispatchTable(), feedbackStats, info,
                                   true);
-                os << "\n";
             }
         }
     }
@@ -544,6 +560,10 @@ void report(std::ostream& os, bool breakdownInfo,
 
     auto agg = CompilationSession::getFinalAgg();
 
+    auto finalHeader = [&](const auto& name) {
+        os << StreamColor::blue << name << "\n" << StreamColor::clear;
+    };
+
     // clang-format off
     os  << Stat{"total functions (RIR compiled)", DTs.size()}
         << Stat{"compiled functions (PIR compiled)", agg.universe.size()}
@@ -551,14 +571,13 @@ void report(std::ostream& os, bool breakdownInfo,
         << agg.benefitedClosureVersions
         << "\n";
 
-    os  << StreamColor::blue << "Slots\n" << StreamColor::clear;
+    finalHeader("Slots");
     os  << agg.referenced
         << agg.read
         << agg.used
-        << Stat{"duplicate slots", CompilationSession::getDuplicateSlots()}
         << "\n";
 
-    os  << StreamColor::blue << "Non-empty slots\n" << StreamColor::clear;
+    finalHeader("Non-empty slots");
     os  << agg.referencedNonEmpty
         << agg.readNonEmpty
         << agg.usedNonEmpty
@@ -569,10 +588,32 @@ void report(std::ostream& os, bool breakdownInfo,
         << agg.usedNonEmpty / agg.referenced
         << "\n";
 
-    os << StreamColor::blue << "Averaged per closure version\n" << StreamColor::clear;
-    os << agg.referencedNonEmptyRatio
-       << agg.readRatio
-       << agg.usedRatio;
+    finalHeader("Averaged per closure version");
+    os  << agg.referencedNonEmptyRatio
+        << agg.readRatio
+        << agg.usedRatio
+        << "\n";
+
+    finalHeader("Unused slots");
+    os  << agg.optimizedAway
+        << agg.dependent
+        << agg.unusedOther
+        << "\n";
+
+    os  << agg.optimizedAway / agg.referenced
+        << agg.dependent / agg.referenced
+        << agg.unusedOther / agg.referenced
+        << "\n";
+
+    finalHeader("Non-empty unused slots");
+    os  << agg.optimizedAwayNonEmpty
+        << agg.dependentNonEmpty
+        << agg.unusedOtherNonEmpty
+        << "\n";
+
+    os  << agg.optimizedAwayNonEmpty / agg.referencedNonEmpty
+        << agg.dependentNonEmpty / agg.referencedNonEmpty
+        << agg.unusedOtherNonEmpty / agg.referencedNonEmpty;
     // clang-format on
 }
 
@@ -583,9 +624,10 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
         // clang-format off
         os  << "name"
             << ",referenced,read,used"
-            << ",duplicate"
             << ",referenced non-empty,read non-empty,used non-empty"
             << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
+            << ",optimized away,dependent"
+            << ",optimized away non-empty,dependent non-empty"
             << "\n";
         // clang-format on
     }
@@ -606,15 +648,19 @@ void reportCsv(std::ostream& os, const std::string& program_name) {
     out(agg.read.value);
     out(agg.used.value);
 
-    out(CompilationSession::getDuplicateSlots());
-
     out(agg.referencedNonEmpty.value);
     out(agg.readNonEmpty.value);
     out(agg.usedNonEmpty.value);
 
     out(agg.referencedNonEmptyRatio.average());
     out(agg.readRatio.average());
-    out(agg.usedRatio.average(), true);
+    out(agg.usedRatio.average());
+
+    out(agg.optimizedAway.value);
+    out(agg.dependent.value);
+
+    out(agg.optimizedAwayNonEmpty.value);
+    out(agg.dependentNonEmpty.value, true);
 }
 
 void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
@@ -624,7 +670,6 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
         // clang-format off
         os  << "benchmark,closure"
             << ",referenced,read,used"
-            << ",duplicate"
             << ",referenced non-empty,read non-empty,used non-empty"
             << "\n";
         // clang-format on
@@ -648,8 +693,6 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
             out(agg.referenced.value);
             out(agg.read.value);
             out(agg.used.value);
-
-            out(cv.getDuplicateSlots(cs.functionsInfo));
 
             out(agg.referencedNonEmpty.value);
             out(agg.readNonEmpty.value);
