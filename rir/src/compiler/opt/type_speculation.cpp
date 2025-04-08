@@ -34,45 +34,45 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (i->type.isA(i->typeFeedback().type)) {
 
             auto& tf = i->typeFeedback();
-            auto index = tf.feedbackOrigin.index();
+            // auto index = tf.feedbackOrigin.index();
 
             if (!tf.defaultFeedback &&
                 tf.feedbackOrigin.index().kind == rir::FeedbackKind::Type) {
 
-                auto& feedbackStats =
-                    cls->feedbackStatsFor(tf.feedbackOrigin.function());
+                // auto& feedbackStats =
+                //     cls->feedbackStatsFor(tf.feedbackOrigin.function());
 
-                report::SlotNotUsedSubsumedStaticTypeReason snu;
-
-                snu.staticType = report::streamToString(
-                    [&](std::stringstream& ss) { i->type.print(ss); });
-
-                snu.feedbackType =
-                    report::streamToString([&](std::stringstream& ss) {
-                        i->typeFeedback().type.print(ss);
-                    });
+                // report::SlotNotUsedSubsumedStaticTypeReason snu;
+                //
+                // snu.staticType = report::streamToString(
+                //     [&](std::stringstream& ss) { i->type.print(ss); });
+                //
+                // snu.feedbackType =
+                //     report::streamToString([&](std::stringstream& ss) {
+                //         i->typeFeedback().type.print(ss);
+                //     });
 
                 // std::cerr << "---- instruction  ";
                 // i->print(std::cerr, false);
                 // std::cerr << "\n is ";
 
-                snu.fromContext = false;
-                snu.equalTypes = (i->type == i->typeFeedback().type);
+                // snu.fromContext = false;
+                // snu.equalTypes = (i->type == i->typeFeedback().type);
 
-                if (auto ldi = LdArg::Cast(i->followCastsAndForce())) {
-                    snu.fromContext = true;
-                    snu.ctx = cls->context();
-                    snu.fromInstruction = report::streamToString(
-                        [&](std::stringstream& ss) { ldi->print(ss, false); });
-
-                    // std::cerr << "\n and got type from LdArg \n ";
-                    // ldi->print(std::cerr, false);
-                    // std::cerr << "\n ";
-                    // std::cerr << cls->context();
-                    // std::cerr << "\n\n ";
-                }
-
-                feedbackStats.slotsReadNotUsedStaticTypeReason[index] = snu;
+                // if (auto ldi = LdArg::Cast(i->followCastsAndForce())) {
+                //     snu.fromContext = true;
+                //     snu.ctx = cls->context();
+                //     snu.fromInstruction = report::streamToString(
+                //         [&](std::stringstream& ss) { ldi->print(ss, false); });
+                //
+                //     // std::cerr << "\n and got type from LdArg \n ";
+                //     // ldi->print(std::cerr, false);
+                //     // std::cerr << "\n ";
+                //     // std::cerr << cls->context();
+                //     // std::cerr << "\n\n ";
+                // }
+                //
+                // feedbackStats.slotsReadNotUsedStaticTypeReason[index] = snu;
 
                 // code->printCode(std::cerr, true, false);
                 // std::cerr << "\n--------------------- \n ";
@@ -146,14 +146,14 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             (speculate.count(typecheckPos) &&
              speculate[typecheckPos].count(speculateOn))) {
 
-            if (feedback.feedbackOrigin.hasSlot()) {
-                auto& feedbackStats =
-                    cls->feedbackStatsFor(feedback.feedbackOrigin.function());
-                report::SlotCandidateButNotUsedReason cnu;
-                cnu.hasUsefulFeedbackInfo = false;
-                feedbackStats.slotsReadCandidateNotUsedReason
-                    [feedback.feedbackOrigin.index()] = cnu;
-            }
+            // if (feedback.feedbackOrigin.hasSlot()) {
+            //     auto& feedbackStats =
+            //         cls->feedbackStatsFor(feedback.feedbackOrigin.function());
+            //     report::SlotCandidateButNotUsedReason cnu;
+            //     cnu.hasUsefulFeedbackInfo = false;
+            //     feedbackStats.slotsReadCandidateNotUsedReason
+            //         [feedback.feedbackOrigin.index()] = cnu;
+            // }
 
             return;
         }
@@ -163,14 +163,14 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (auto mk = MkEnv::Cast(ld->env()))
                 if (mk->contains(ld->varName)) {
 
-                    if (feedback.feedbackOrigin.hasSlot()) {
-                        auto& feedbackStats = cls->feedbackStatsFor(
-                            feedback.feedbackOrigin.function());
-                        report::SlotCandidateButNotUsedReason cnu;
-                        cnu.hasUsefulFeedbackInfo = false;
-                        feedbackStats.slotsReadCandidateNotUsedReason
-                            [feedback.feedbackOrigin.index()] = cnu;
-                    }
+                    // if (feedback.feedbackOrigin.hasSlot()) {
+                    //     auto& feedbackStats = cls->feedbackStatsFor(
+                    //         feedback.feedbackOrigin.function());
+                    //     report::SlotCandidateButNotUsedReason cnu;
+                    //     cnu.hasUsefulFeedbackInfo = false;
+                    //     feedbackStats.slotsReadCandidateNotUsedReason
+                    //         [feedback.feedbackOrigin.index()] = cnu;
+                    // }
 
                     return;
                 }
@@ -193,15 +193,15 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             });
 
         if (!specSucceeded) {
-            if (feedback.feedbackOrigin.hasSlot()) {
-                auto& feedbackStats =
-                    cls->feedbackStatsFor(feedback.feedbackOrigin.function());
-                report::SlotCandidateButNotUsedReason cnu;
-                cnu.hasUsefulFeedbackInfo = true;
-                cnu.reqFulfilledWithoutSpec = reqFulfilled;
-                feedbackStats.slotsReadCandidateNotUsedReason
-                    [feedback.feedbackOrigin.index()] = cnu;
-            }
+            // if (feedback.feedbackOrigin.hasSlot()) {
+            //     auto& feedbackStats =
+            //         cls->feedbackStatsFor(feedback.feedbackOrigin.function());
+            //     report::SlotCandidateButNotUsedReason cnu;
+            //     cnu.hasUsefulFeedbackInfo = true;
+            //     cnu.reqFulfilledWithoutSpec = reqFulfilled;
+            //     feedbackStats.slotsReadCandidateNotUsedReason
+            //         [feedback.feedbackOrigin.index()] = cnu;
+            // }
         }
     });
 

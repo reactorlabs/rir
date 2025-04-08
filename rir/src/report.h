@@ -77,22 +77,23 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg);
 // ------------------------------------------------------------
 
 // TODO: strings to types
-struct SlotNotUsedSubsumedStaticTypeReason {
-    std::string staticType;
-    std::string feedbackType;
-    bool equalTypes; // equal types or more strict
-
-    bool fromContext;
-    Context ctx;
-    std::string fromInstruction;
-};
-
-struct SlotCandidateButNotUsedReason {
-    bool hasUsefulFeedbackInfo;
-    bool reqFulfilledWithoutSpec;
-};
-
-struct SlotOptimizedAway {};
+//
+// struct SlotNotUsedSubsumedStaticTypeReason {
+//     std::string staticType;
+//     std::string feedbackType;
+//     bool equalTypes; // equal types or more strict
+//
+//     bool fromContext;
+//     Context ctx;
+//     std::string fromInstruction;
+// };
+//
+// struct SlotCandidateButNotUsedReason {
+//     bool hasUsefulFeedbackInfo;
+//     bool reqFulfilledWithoutSpec;
+// };
+//
+// struct SlotOptimizedAway {};
 
 struct SlotUsed {
     bool widened() const;
@@ -201,13 +202,14 @@ struct FunctionInfo {
 // ------------------------------------------------------------
 
 struct FeedbackStatsPerFunction {
-    std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
-        slotsReadNotUsedStaticTypeReason;
+    // std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
+    //     slotsReadNotUsedStaticTypeReason;
+    //
+    // std::unordered_map<FeedbackIndex, SlotCandidateButNotUsedReason>
+    //     slotsReadCandidateNotUsedReason;
+    //
+    // std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
 
-    std::unordered_map<FeedbackIndex, SlotCandidateButNotUsedReason>
-        slotsReadCandidateNotUsedReason;
-
-    std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
 
