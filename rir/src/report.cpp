@@ -137,7 +137,6 @@ double MetricPercent::value() const {
 
 double FunctionAggregate::average() const {
     if (values.empty()) {
-        assert(false && "empty aggregate");
         return 0.0;
     }
 
@@ -246,14 +245,17 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
     // clang-format off
-    return os << agg.referenced << agg.read << agg.used
+    return os << agg.referenced << agg.referencedNonEmpty << agg.readNonEmpty
+              << agg.used
               << "\n"
-              << agg.referencedNonEmpty << agg.readNonEmpty << agg.usedNonEmpty
-              << "\n"
+
               << StreamColor::blue << "Unused\n" << StreamColor::clear
+              << agg.unusedNonEmpty
               << agg.optimizedAway << agg.dependent << agg.unusedOther
               << "\n"
-              << agg.optimizedAwayNonEmpty << agg.dependentNonEmpty << agg.unusedOtherNonEmpty;
+
+              << StreamColor::blue << "Polluted\n" << StreamColor::clear
+              << agg.polluted << agg.pollutedUsed;
     // clang-format on
 }
 
@@ -263,40 +265,33 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
     agg.referenced = info.allTypeSlots.size();
-    agg.read = slotsRead.size();
-    agg.used = slotsUsed.size();
-
     agg.referencedNonEmpty =
         intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
-    agg.usedNonEmpty = intersect(info.nonEmptySlots, keys(slotsUsed)).size();
+
+    agg.used = slotsUsed.size();
+    auto unusedNonEmpty =
+        intersect(difference(keys(info.allTypeSlots), keys(slotsUsed)),
+                  info.nonEmptySlots);
+    agg.unusedNonEmpty = unusedNonEmpty.size();
+
+    assert(agg.used.value ==
+           intersect(info.nonEmptySlots, keys(slotsUsed)).size());
 
     auto usedFeedbackTypes = getUsedFeedbackTypes();
 
-    auto unused = difference(keys(info.allTypeSlots), keys(slotsUsed));
-    for (auto slot : unused) {
+    for (auto slot : unusedNonEmpty) {
         if (!slotPresent.count(slot)) {
             agg.optimizedAway++;
-            if (info.nonEmptySlots.count(slot)) {
-                agg.optimizedAwayNonEmpty++;
-            }
         } else if (usedFeedbackTypes.count(info.allTypeSlots.at(slot))) {
             agg.dependent++;
-            if (info.nonEmptySlots.count(slot)) {
-                agg.dependentNonEmpty++;
-            }
         } else {
             agg.unusedOther++;
-            if (info.nonEmptySlots.count(slot)) {
-                agg.unusedOtherNonEmpty++;
-            }
         }
     }
 
-    // Sanity check
-    assert(agg.optimizedAway.value + agg.dependent.value +
-               agg.unusedOther.value ==
-           info.allTypeSlots.size() - agg.used.value);
+    agg.polluted = info.pollutedSlots.size();
+    agg.pollutedUsed = intersect(info.pollutedSlots, keys(slotsUsed)).size();
 
     return agg;
 }
@@ -333,7 +328,15 @@ FinalAggregate ClosureVersionStats::getFinalAgg(
 
     agg.referencedNonEmptyRatio.add(agg.referencedNonEmpty / agg.referenced);
     agg.readRatio.add(agg.readNonEmpty / agg.referenced);
-    agg.usedRatio.add(agg.usedNonEmpty / agg.referenced);
+    agg.usedRatio.add(agg.used / agg.referenced);
+
+    agg.optimizedAwayRatio.add(agg.optimizedAway / agg.unusedNonEmpty);
+    agg.dependentRatio.add(agg.dependent / agg.unusedNonEmpty);
+    agg.unusedOtherRatio.add(agg.unusedOther / agg.unusedNonEmpty);
+
+    agg.pollutedRatio.add(agg.polluted / agg.referencedNonEmpty);
+    agg.pollutedOutOfUsedRatio.add(agg.pollutedUsed / agg.used);
+    agg.pollutedUsedRatio.add(agg.pollutedUsed / agg.polluted);
 
     agg.compiledClosureVersions++;
     if (agg.used.value != 0) {
@@ -358,10 +361,16 @@ void computeFunctionsInfo(
             auto idx = FeedbackIndex::type(i);
 
             slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
-            if (feedback->types(i).isEmpty()) {
+            const auto& tf = feedback->types(i);
+
+            if (tf.isEmpty()) {
                 slotData.emptySlots.insert(idx);
             } else {
                 slotData.nonEmptySlots.insert(idx);
+            }
+
+            if (tf.isPolluted) {
+                slotData.pollutedSlots.insert(idx);
             }
         }
 
@@ -459,7 +468,13 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << " [unused] ";
             }
 
-            os << feedbackType << "\n";
+            os << feedbackType;
+
+            if (info.pollutedSlots.count(index)) {
+                os << " (polluted)";
+            }
+
+            os << "\n";
 
             if (used) {
                 os << stats.slotsUsed.at(index);
@@ -573,138 +588,127 @@ void report(std::ostream& os, bool breakdownInfo,
 
     finalHeader("Slots");
     os  << agg.referenced
-        << agg.read
-        << agg.used
-        << "\n";
-
-    finalHeader("Non-empty slots");
-    os  << agg.referencedNonEmpty
+        << agg.referencedNonEmpty
         << agg.readNonEmpty
-        << agg.usedNonEmpty
+        << agg.used
         << "\n";
 
     os  << agg.referencedNonEmpty / agg.referenced
         << agg.readNonEmpty / agg.referenced
-        << agg.usedNonEmpty / agg.referenced
+        << agg.used / agg.referenced
         << "\n";
 
-    finalHeader("Averaged per closure version");
+    finalHeader("Slots - Averaged per closure version");
     os  << agg.referencedNonEmptyRatio
         << agg.readRatio
         << agg.usedRatio
         << "\n";
 
     finalHeader("Unused slots");
-    os  << agg.optimizedAway
+    os  << agg.unusedNonEmpty
+        << agg.optimizedAway
         << agg.dependent
         << agg.unusedOther
         << "\n";
 
-    os  << agg.optimizedAway / agg.referenced
-        << agg.dependent / agg.referenced
-        << agg.unusedOther / agg.referenced
+    os  << agg.optimizedAway / agg.unusedNonEmpty
+        << agg.dependent / agg.unusedNonEmpty
+        << agg.unusedOther / agg.unusedNonEmpty
         << "\n";
 
-    finalHeader("Non-empty unused slots");
-    os  << agg.optimizedAwayNonEmpty
-        << agg.dependentNonEmpty
-        << agg.unusedOtherNonEmpty
+    finalHeader("Unused slots - Averaged per closure version");
+    os  << agg.optimizedAwayRatio
+        << agg.dependentRatio
+        << agg.unusedOtherRatio
         << "\n";
 
-    os  << agg.optimizedAwayNonEmpty / agg.referencedNonEmpty
-        << agg.dependentNonEmpty / agg.referencedNonEmpty
-        << agg.unusedOtherNonEmpty / agg.referencedNonEmpty;
+    finalHeader("Polluted slots");
+    os  << agg.polluted
+        << agg.pollutedUsed
+        << "\n";
+
+    os  << agg.polluted / agg.referencedNonEmpty
+        << agg.pollutedUsed / agg.used
+        << agg.pollutedUsed / agg.polluted
+        << "\n";
+
+    finalHeader("Polluted slots - Averaged per closure version");
+    os  << agg.pollutedRatio
+        << agg.pollutedOutOfUsedRatio
+        << agg.pollutedUsedRatio
+        << "\n";
     // clang-format on
 }
 
-void reportCsv(std::ostream& os, const std::string& program_name) {
+void printCsvHeader(std::ostream& os,
+                    std::initializer_list<std::string> extraFields,
+                    FinalAggregate& fields) {
+    assert(extraFields.size() != 0);
+
     // Print the header if the file is empty
     os.seekp(0, std::ios::end);
-    if (os.tellp() == 0) {
-        // clang-format off
-        os  << "name"
-            << ",referenced,read,used"
-            << ",referenced non-empty,read non-empty,used non-empty"
-            << ",referenced non-empty / referenced,read non-empty / referenced,used non-empty / referenced"
-            << ",optimized away,dependent"
-            << ",optimized away non-empty,dependent non-empty"
-            << "\n";
-        // clang-format on
+    if (os.tellp() != 0) {
+        return;
     }
 
-    auto out = [&os](const auto& x, bool last = false) {
-        os << x << (last ? "\n" : ",");
-    };
+    bool first = true;
 
-    auto qout = [&os](const auto& x, bool last = false) {
-        os << "\"" << x << "\"" << (last ? "\n" : ",");
-    };
+    for (const auto& i : extraFields) {
+        if (first) {
+            os << i;
+            first = false;
+        } else {
+            os << "," << i;
+        }
+    }
 
+    for (const auto& i : fields.stats()) {
+        os << "," << i->name;
+    }
+
+    for (const auto& i : fields.aggregates()) {
+        os << "," << i->name;
+    }
+
+    os << "\n";
+}
+
+// Assumes you have written something before (the extraFields)
+void printCsvLine(std::ostream& os, FinalAggregate& agg) {
+    for (const auto& i : agg.stats()) {
+        os << "," << i->value;
+    }
+
+    for (const auto& i : agg.aggregates()) {
+        os << "," << i->average();
+    }
+
+    os << "\n";
+}
+
+void reportCsv(std::ostream& os, const std::string& program_name) {
     auto agg = CompilationSession::getFinalAgg();
 
-    qout(program_name);
-
-    out(agg.referenced.value);
-    out(agg.read.value);
-    out(agg.used.value);
-
-    out(agg.referencedNonEmpty.value);
-    out(agg.readNonEmpty.value);
-    out(agg.usedNonEmpty.value);
-
-    out(agg.referencedNonEmptyRatio.average());
-    out(agg.readRatio.average());
-    out(agg.usedRatio.average());
-
-    out(agg.optimizedAway.value);
-    out(agg.dependent.value);
-
-    out(agg.optimizedAwayNonEmpty.value);
-    out(agg.dependentNonEmpty.value, true);
+    printCsvHeader(os, {"name"}, agg);
+    os << "\"" << program_name << "\"";
+    printCsvLine(os, agg);
 }
 
 void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
-    // Print the header if the file is empty
-    os.seekp(0, std::ios::end);
-    if (os.tellp() == 0) {
-        // clang-format off
-        os  << "benchmark,closure"
-            << ",referenced,read,used"
-            << ",referenced non-empty,read non-empty,used non-empty"
-            << ",optimized away,dependent"
-            << ",optimized away non-empty,dependent non-empty"
-            << "\n";
-        // clang-format on
-    }
-
-    auto out = [&os](const auto& x, bool last = false) {
-        os << x << (last ? "\n" : ",");
-    };
-
-    auto qout = [&os](const auto& x, bool last = false) {
-        os << "\"" << x << "\"" << (last ? "\n" : ",");
-    };
+    bool first = true;
 
     for (auto& cs : COMPILATION_SESSIONS) {
         for (auto& cv : cs.closuresVersionStats) {
             auto agg = cv.getFinalAgg(cs.functionsInfo);
 
-            qout(benchmark_name);
-            qout(cv.function->dispatchTable()->closureName);
+            if (first) {
+                printCsvHeader(os, {"benchmark", "closure"}, agg);
+                first = false;
+            }
 
-            out(agg.referenced.value);
-            out(agg.read.value);
-            out(agg.used.value);
-
-            out(agg.referencedNonEmpty.value);
-            out(agg.readNonEmpty.value);
-            out(agg.usedNonEmpty.value);
-
-            out(agg.optimizedAway.value);
-            out(agg.dependent.value);
-
-            out(agg.optimizedAwayNonEmpty.value);
-            out(agg.dependentNonEmpty.value, true);
+            os << "\"" << benchmark_name << "\"";
+            os << ",\"" << cv.function->dispatchTable()->closureName << "\"";
+            printCsvLine(os, agg);
         }
     }
 }

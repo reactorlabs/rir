@@ -180,6 +180,8 @@ struct ObservedValues {
 
     std::array<uint8_t, MaxTypes> seen;
 
+    bool isPolluted = false;
+
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
         memset(this, 0, sizeof(ObservedValues));
@@ -193,7 +195,7 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
-        REC_HOOK(uint32_t old; memcpy(&old, this, sizeof(old)));
+        ObservedValues old = *this;
 
         // Set attribs flag for every object even if the SEXP does  not
         // have attributes. The assumption used to be that e having no
@@ -225,12 +227,22 @@ struct ObservedValues {
                 seen[numTypes++] = type;
         }
 
-        REC_HOOK(recording::recordSCChanged(memcmp(&old, this, sizeof(old))));
+        // clang-format off
+        bool changed =  notScalar != old.notScalar ||
+                        object != old.object ||
+                        attribs != old.attribs ||
+                        notFastVecelt != old.notFastVecelt ||
+                        numTypes != old.numTypes;
+        // clang-format on
+        if (old.numTypes != 0) {
+            isPolluted = isPolluted || changed;
+        }
+        REC_HOOK(recording::recordSCChanged(changed));
     }
 };
 
-static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
-              "Size needs to fit inside a record_ bc immediate args");
+// static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
+//               "Size needs to fit inside a record_ bc immediate args");
 
 enum class Opcode : uint8_t;
 

@@ -136,39 +136,48 @@ using Universe = std::unordered_set<Function*>;
 
 // ------------------------------------------------------------
 
+template <typename T>
+void addVectors(const std::vector<T*>& lhs, const std::vector<T*> rhs) {
+    assert(lhs.size() == rhs.size());
+
+    for (size_t i = 0; i < lhs.size(); i++) {
+        *lhs[i] += *rhs[i];
+    }
+}
+
 struct Aggregate {
     Stat referenced{"referenced slots"};
-    Stat read{"read slots"};
-    Stat used{"used slots"};
-
     Stat referencedNonEmpty{"referenced non-empty slots"};
+    // Stat read{"read slots"};
     Stat readNonEmpty{"read non-empty slots"};
-    Stat usedNonEmpty{"used non-empty slots"};
 
-    Stat optimizedAway{"optimized away slots"};
+    Stat used{"used slots"};
+    Stat unusedNonEmpty{"unused non-empty slots"};
+
+    Stat optimizedAway{"optimized away non-empty slots"};
     Stat dependent{"dependent slots"};
-    Stat unusedOther{"other reasons unused slots"};
+    Stat unusedOther{"other reasons unused non-empty slots"};
 
-    Stat optimizedAwayNonEmpty{"optimized away non-empty slots"};
-    Stat dependentNonEmpty{"dependent non-empty slots"};
-    Stat unusedOtherNonEmpty{"other reasons non-empty slots"};
+    // TODO: all are non-empty now
+    //
+    // Stat optimizedAwayNonEmpty{"optimized away non-empty slots"};
+    // Stat unusedOtherNonEmpty{"other reasons non-empty slots"};
 
-    void operator+=(const Aggregate& other) {
-        referenced += other.referenced;
-        read += other.read;
-        used += other.used;
+    Stat polluted{"polluted slots"};
+    Stat pollutedUsed{"used polluted slots"};
 
-        referencedNonEmpty += other.referencedNonEmpty;
-        readNonEmpty += other.readNonEmpty;
-        usedNonEmpty += other.usedNonEmpty;
+    std::vector<Stat*> stats() {
+        return {&referenced,    &referencedNonEmpty, &readNonEmpty,
 
-        optimizedAway += other.optimizedAway;
-        dependent += other.dependent;
-        unusedOther += other.unusedOther;
+                &used,          &unusedNonEmpty,
 
-        optimizedAwayNonEmpty += other.optimizedAwayNonEmpty;
-        dependentNonEmpty += other.dependentNonEmpty;
-        unusedOtherNonEmpty += other.unusedOtherNonEmpty;
+                &optimizedAway, &dependent,          &unusedOther,
+
+                &polluted,      &pollutedUsed};
+    }
+
+    void operator+=(Aggregate other) {
+        addVectors<Stat>(stats(), other.stats());
     }
 };
 
@@ -181,72 +190,98 @@ struct FinalAggregate {
         "closure version compilations using some type feedback"};
 
     Stat referenced{"referenced"};
-    Stat read{"read"};
-    Stat used{"used"};
-
     Stat referencedNonEmpty{"referenced non-empty"};
+    // Stat read{"read"};
     Stat readNonEmpty{"read non-empty"};
-    Stat usedNonEmpty{"used non-empty"};
+
+    Stat used{"used"};
+    Stat unusedNonEmpty{"unused non-empty"};
+
+    Stat optimizedAway{"optimized away non-empty"};
+    Stat dependent{"dependent"};
+    Stat unusedOther{"other reasons unused non-empty"};
+
+    Stat polluted{"polluted"};
+    Stat pollutedUsed{"used polluted"};
 
     FunctionAggregate referencedNonEmptyRatio{
         "referenced non-empty / referenced"};
     FunctionAggregate readRatio{"read non-empty / referenced"};
-    FunctionAggregate usedRatio{"used non-empty / referenced"};
+    FunctionAggregate usedRatio{"used / referenced"};
 
-    Stat optimizedAway{"optimized away"};
-    Stat dependent{"dependent"};
-    Stat unusedOther{"other reasons"};
+    FunctionAggregate optimizedAwayRatio{
+        "optimized away non-empty / unused non-empty"};
+    FunctionAggregate dependentRatio{"dependent / unused non-empty"};
+    FunctionAggregate unusedOtherRatio{
+        "other unused non-empty / unused non-empty"};
 
-    Stat optimizedAwayNonEmpty{"optimized away non-empty"};
-    Stat dependentNonEmpty{"dependent non-empty"};
-    Stat unusedOtherNonEmpty{"other reasons non-empty"};
+    FunctionAggregate pollutedRatio{"polluted / referenced non-empty"};
+    FunctionAggregate pollutedOutOfUsedRatio{"used polluted / used"};
+    FunctionAggregate pollutedUsedRatio{"used polluted / polluted"};
 
-    void operator+=(const FinalAggregate& other) {
+    std::vector<Stat*> stats() {
+        return {
+            &compiledClosureVersions,
+            &benefitedClosureVersions,
+
+            &referenced,
+            &referencedNonEmpty,
+            &readNonEmpty,
+
+            &used,
+            &unusedNonEmpty,
+
+            &optimizedAway,
+            &dependent,
+            &unusedOther,
+
+            &polluted,
+            &pollutedUsed,
+        };
+    }
+
+    std::vector<FunctionAggregate*> aggregates() {
+        return {
+            &referencedNonEmptyRatio,
+            &readRatio,
+            &usedRatio,
+
+            &optimizedAwayRatio,
+            &dependentRatio,
+            &unusedOtherRatio,
+
+            &pollutedRatio,
+            &pollutedOutOfUsedRatio,
+            &pollutedUsedRatio,
+        };
+    }
+
+    void operator+=(FinalAggregate other) {
         universe.insert(other.universe.begin(), other.universe.end());
-        compiledClosureVersions += other.compiledClosureVersions;
-        benefitedClosureVersions += other.benefitedClosureVersions;
-
-        referenced += other.referenced;
-        read += other.read;
-        used += other.used;
-
-        referencedNonEmpty += other.referencedNonEmpty;
-        readNonEmpty += other.readNonEmpty;
-        usedNonEmpty += other.usedNonEmpty;
-
-        referencedNonEmptyRatio += other.referencedNonEmptyRatio;
-        readRatio += other.readRatio;
-        usedRatio += other.usedRatio;
-
-        optimizedAway += other.optimizedAway;
-        dependent += other.dependent;
-        unusedOther += other.unusedOther;
-
-        optimizedAwayNonEmpty += other.optimizedAwayNonEmpty;
-        dependentNonEmpty += other.dependentNonEmpty;
-        unusedOtherNonEmpty += other.unusedOtherNonEmpty;
+        addVectors<Stat>(stats(), other.stats());
+        addVectors<FunctionAggregate>(aggregates(), other.aggregates());
     }
 
     static FinalAggregate from(const Aggregate& agg) {
+#define move(field) res.field.set(agg.field);
         FinalAggregate res;
 
-        res.referenced.set(agg.referenced);
-        res.read.set(agg.read);
-        res.used.set(agg.used);
+        move(referenced);
+        move(referencedNonEmpty);
+        move(readNonEmpty);
 
-        res.referencedNonEmpty.set(agg.referencedNonEmpty);
-        res.readNonEmpty.set(agg.readNonEmpty);
-        res.usedNonEmpty.set(agg.usedNonEmpty);
+        move(used);
+        move(unusedNonEmpty);
 
-        res.optimizedAway.set(agg.optimizedAway);
-        res.dependent.set(agg.dependent);
-        res.unusedOther.set(agg.unusedOther);
+        move(optimizedAway);
+        move(dependent);
+        move(unusedOther);
 
-        res.optimizedAwayNonEmpty.set(agg.optimizedAwayNonEmpty);
-        res.dependentNonEmpty.set(agg.dependentNonEmpty);
-        res.unusedOtherNonEmpty.set(agg.unusedOtherNonEmpty);
+        move(polluted);
+        move(pollutedUsed);
 
         return res;
+#undef move
     }
 };
 
@@ -268,6 +303,8 @@ struct FunctionInfo {
     std::unordered_map<FeedbackIndex, pir::PirType> allTypeSlots;
     std::unordered_set<FeedbackIndex> emptySlots;
     std::unordered_set<FeedbackIndex> nonEmptySlots;
+
+    std::unordered_set<FeedbackIndex> pollutedSlots;
 
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
