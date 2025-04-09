@@ -307,40 +307,14 @@ FeedbackStatsPerFunction::getUsedFeedbackTypes() const {
 
 // ------------------------------------------------------------
 
-Universe ClosureVersionStats::universe() const { return keys(feedbackStats); }
-
 Aggregate ClosureVersionStats::getAgg(
     std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
     Aggregate agg;
 
+    agg.universe = keys(feedbackStats);
+
     for (auto& i : feedbackStats) {
         agg += i.second.getAgg(functionsInfo[i.first]);
-    }
-
-    return agg;
-}
-
-FinalAggregate ClosureVersionStats::getFinalAgg(
-    std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
-    auto agg = FinalAggregate::from(getAgg(functionsInfo));
-
-    agg.universe = universe();
-
-    agg.referencedNonEmptyRatio.add(agg.referencedNonEmpty / agg.referenced);
-    agg.readRatio.add(agg.readNonEmpty / agg.referenced);
-    agg.usedRatio.add(agg.used / agg.referenced);
-
-    agg.optimizedAwayRatio.add(agg.optimizedAway / agg.unusedNonEmpty);
-    agg.dependentRatio.add(agg.dependent / agg.unusedNonEmpty);
-    agg.unusedOtherRatio.add(agg.unusedOther / agg.unusedNonEmpty);
-
-    agg.pollutedRatio.add(agg.polluted / agg.referencedNonEmpty);
-    agg.pollutedOutOfUsedRatio.add(agg.pollutedUsed / agg.used);
-    agg.pollutedUsedRatio.add(agg.pollutedUsed / agg.polluted);
-
-    agg.compiledClosureVersions++;
-    if (agg.used.value != 0) {
-        agg.benefitedClosureVersions++;
     }
 
     return agg;
@@ -411,26 +385,47 @@ void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
                                       closureVersion->feedbackStatsByFunction);
 }
 
-Universe CompilationSession::universe() const {
-    Universe u;
-    for (const auto& i : closuresVersionStats) {
-        auto u2 = i.universe();
-        u.insert(u2.begin(), u2.end());
-    }
-
-    return u;
-}
-
 FinalAggregate CompilationSession::getFinalAgg() {
     FinalAggregate res;
+    std::vector<Aggregate> values;
 
     for (auto i : COMPILATION_SESSIONS) {
         for (auto j : i.closuresVersionStats) {
-            res += j.getFinalAgg(i.functionsInfo);
+            auto agg = j.getAgg(i.functionsInfo);
+            res.sums += agg;
+            values.push_back(agg);
+
+            res.compiledClosureVersions++;
+            if (agg.used.value > 0) {
+                res.benefitedClosureVersions++;
+            }
         }
     }
 
+#define average(resultField, num, denom)                                       \
+    {                                                                          \
+        res.resultField.name =                                                 \
+            Aggregate{}.num.name + " / " + Aggregate{}.denom.name;             \
+                                                                               \
+        for (auto& i : values) {                                               \
+            res.resultField.add(i.num / i.denom);                              \
+        }                                                                      \
+    }
+
+    average(referencedNonEmptyRatio, referencedNonEmpty, referenced);
+    average(readRatio, readNonEmpty, referenced);
+    average(usedRatio, used, referenced);
+
+    average(optimizedAwayRatio, optimizedAway, unusedNonEmpty);
+    average(dependentRatio, dependent, unusedNonEmpty);
+    average(unusedOtherRatio, unusedOther, unusedNonEmpty);
+
+    average(pollutedRatio, polluted, referencedNonEmpty);
+    average(pollutedOutOfUsedRatio, pollutedUsed, used);
+    average(pollutedUsedRatio, pollutedUsed, polluted);
+
     return res;
+#undef average
 }
 
 // ------------------------------------------------------------
@@ -573,7 +568,7 @@ void report(std::ostream& os, bool breakdownInfo,
        << "----------------------- Summary ------------------------\n"
        << StreamColor::clear;
 
-    auto agg = CompilationSession::getFinalAgg();
+    auto final = CompilationSession::getFinalAgg();
 
     auto finalHeader = [&](const auto& name) {
         os << StreamColor::blue << name << "\n" << StreamColor::clear;
@@ -581,68 +576,69 @@ void report(std::ostream& os, bool breakdownInfo,
 
     // clang-format off
     os  << Stat{"total functions (RIR compiled)", DTs.size()}
-        << Stat{"compiled functions (PIR compiled)", agg.universe.size()}
-        << agg.compiledClosureVersions
-        << agg.benefitedClosureVersions
+        << Stat{"compiled functions (PIR compiled)", final.sums.universe.size()}
+        << final.compiledClosureVersions
+        << final.benefitedClosureVersions
         << "\n";
 
     finalHeader("Slots");
-    os  << agg.referenced
-        << agg.referencedNonEmpty
-        << agg.readNonEmpty
-        << agg.used
+    os  << final.sums.referenced
+        << final.sums.referencedNonEmpty
+        << final.sums.readNonEmpty
+        << final.sums.used
         << "\n";
 
-    os  << agg.referencedNonEmpty / agg.referenced
-        << agg.readNonEmpty / agg.referenced
-        << agg.used / agg.referenced
+    os  << final.sums.referencedNonEmpty / final.sums.referenced
+        << final.sums.readNonEmpty / final.sums.referenced
+        << final.sums.used / final.sums.referenced
         << "\n";
 
     finalHeader("Slots - Averaged per closure version");
-    os  << agg.referencedNonEmptyRatio
-        << agg.readRatio
-        << agg.usedRatio
+    os  << final.referencedNonEmptyRatio
+        << final.readRatio
+        << final.usedRatio
         << "\n";
 
     finalHeader("Unused slots");
-    os  << agg.unusedNonEmpty
-        << agg.optimizedAway
-        << agg.dependent
-        << agg.unusedOther
+    os  << final.sums.unusedNonEmpty
+        << final.sums.optimizedAway
+        << final.sums.dependent
+        << final.sums.unusedOther
         << "\n";
 
-    os  << agg.optimizedAway / agg.unusedNonEmpty
-        << agg.dependent / agg.unusedNonEmpty
-        << agg.unusedOther / agg.unusedNonEmpty
+    os  << final.sums.optimizedAway / final.sums.unusedNonEmpty
+        << final.sums.dependent / final.sums.unusedNonEmpty
+        << final.sums.unusedOther / final.sums.unusedNonEmpty
         << "\n";
 
     finalHeader("Unused slots - Averaged per closure version");
-    os  << agg.optimizedAwayRatio
-        << agg.dependentRatio
-        << agg.unusedOtherRatio
+    os  << final.optimizedAwayRatio
+        << final.dependentRatio
+        << final.unusedOtherRatio
         << "\n";
 
     finalHeader("Polluted slots");
-    os  << agg.polluted
-        << agg.pollutedUsed
+    os  << final.sums.polluted
+        << final.sums.pollutedUsed
         << "\n";
 
-    os  << agg.polluted / agg.referencedNonEmpty
-        << agg.pollutedUsed / agg.used
-        << agg.pollutedUsed / agg.polluted
+    os  << final.sums.polluted / final.sums.referencedNonEmpty
+        << final.sums.pollutedUsed / final.sums.used
+        << final.sums.pollutedUsed / final.sums.polluted
         << "\n";
 
     finalHeader("Polluted slots - Averaged per closure version");
-    os  << agg.pollutedRatio
-        << agg.pollutedOutOfUsedRatio
-        << agg.pollutedUsedRatio
+    os  << final.pollutedRatio
+        << final.pollutedOutOfUsedRatio
+        << final.pollutedUsedRatio
         << "\n";
     // clang-format on
 }
 
 void printCsvHeader(std::ostream& os,
                     std::initializer_list<std::string> extraFields,
-                    FinalAggregate& fields) {
+                    Aggregate* aggFields,
+                    FinalAggregate* finalFields = nullptr) {
     assert(extraFields.size() != 0);
 
     // Print the header if the file is empty
@@ -662,25 +658,38 @@ void printCsvHeader(std::ostream& os,
         }
     }
 
-    for (const auto& i : fields.stats()) {
+    for (const auto& i : aggFields->stats()) {
         os << "," << i->name;
     }
 
-    for (const auto& i : fields.aggregates()) {
-        os << "," << i->name;
+    if (finalFields != nullptr) {
+        for (const auto& i : finalFields->stats()) {
+            os << "," << i->name;
+        }
+
+        for (auto i : finalFields->aggregates()) {
+            os << "," << i->name;
+        }
     }
 
     os << "\n";
 }
 
 // Assumes you have written something before (the extraFields)
-void printCsvLine(std::ostream& os, FinalAggregate& agg) {
-    for (const auto& i : agg.stats()) {
+void printCsvLine(std::ostream& os, Aggregate* aggFields,
+                  FinalAggregate* finalFields = nullptr) {
+    for (const auto& i : aggFields->stats()) {
         os << "," << i->value;
     }
 
-    for (const auto& i : agg.aggregates()) {
-        os << "," << i->average();
+    if (finalFields != nullptr) {
+        for (const auto& i : finalFields->stats()) {
+            os << "," << i->value;
+        }
+
+        for (const auto& i : finalFields->aggregates()) {
+            os << "," << i->average();
+        }
     }
 
     os << "\n";
@@ -689,9 +698,9 @@ void printCsvLine(std::ostream& os, FinalAggregate& agg) {
 void reportCsv(std::ostream& os, const std::string& program_name) {
     auto agg = CompilationSession::getFinalAgg();
 
-    printCsvHeader(os, {"name"}, agg);
+    printCsvHeader(os, {"name"}, &agg.sums, &agg);
     os << "\"" << program_name << "\"";
-    printCsvLine(os, agg);
+    printCsvLine(os, &agg.sums, &agg);
 }
 
 void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
@@ -699,16 +708,16 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
 
     for (auto& cs : COMPILATION_SESSIONS) {
         for (auto& cv : cs.closuresVersionStats) {
-            auto agg = cv.getFinalAgg(cs.functionsInfo);
+            auto agg = cv.getAgg(cs.functionsInfo);
 
             if (first) {
-                printCsvHeader(os, {"benchmark", "closure"}, agg);
+                printCsvHeader(os, {"benchmark", "closure"}, &agg);
                 first = false;
             }
 
             os << "\"" << benchmark_name << "\"";
             os << ",\"" << cv.function->dispatchTable()->closureName << "\"";
-            printCsvLine(os, agg);
+            printCsvLine(os, &agg);
         }
     }
 }

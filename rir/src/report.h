@@ -40,8 +40,6 @@ struct Stat {
         return *this;
     }
 
-    void set(const Stat& other) { this->value = other.value; }
-
     MetricPercent operator/(Stat& denom);
 };
 
@@ -62,16 +60,9 @@ struct FunctionAggregate {
     std::string name;
     std::vector<double> values{};
 
-    void add(double value) { values.push_back(value); }
     void add(const MetricPercent& metric) {
         if (metric.denominator->value) {
             values.push_back(metric.value());
-        }
-    }
-
-    void operator+=(const FunctionAggregate& other) {
-        for (const auto& i : other.values) {
-            values.push_back(i);
         }
     }
 
@@ -136,58 +127,8 @@ using Universe = std::unordered_set<Function*>;
 
 // ------------------------------------------------------------
 
-template <typename T>
-void addVectors(const std::vector<T*>& lhs, const std::vector<T*> rhs) {
-    assert(lhs.size() == rhs.size());
-
-    for (size_t i = 0; i < lhs.size(); i++) {
-        *lhs[i] += *rhs[i];
-    }
-}
-
 struct Aggregate {
-    Stat referenced{"referenced slots"};
-    Stat referencedNonEmpty{"referenced non-empty slots"};
-    // Stat read{"read slots"};
-    Stat readNonEmpty{"read non-empty slots"};
-
-    Stat used{"used slots"};
-    Stat unusedNonEmpty{"unused non-empty slots"};
-
-    Stat optimizedAway{"optimized away non-empty slots"};
-    Stat dependent{"dependent slots"};
-    Stat unusedOther{"other reasons unused non-empty slots"};
-
-    // TODO: all are non-empty now
-    //
-    // Stat optimizedAwayNonEmpty{"optimized away non-empty slots"};
-    // Stat unusedOtherNonEmpty{"other reasons non-empty slots"};
-
-    Stat polluted{"polluted slots"};
-    Stat pollutedUsed{"used polluted slots"};
-
-    std::vector<Stat*> stats() {
-        return {&referenced,    &referencedNonEmpty, &readNonEmpty,
-
-                &used,          &unusedNonEmpty,
-
-                &optimizedAway, &dependent,          &unusedOther,
-
-                &polluted,      &pollutedUsed};
-    }
-
-    void operator+=(Aggregate other) {
-        addVectors<Stat>(stats(), other.stats());
-    }
-};
-
-std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
-
-struct FinalAggregate {
     Universe universe;
-    Stat compiledClosureVersions{"closure version compilations"};
-    Stat benefitedClosureVersions{
-        "closure version compilations using some type feedback"};
 
     Stat referenced{"referenced"};
     Stat referencedNonEmpty{"referenced non-empty"};
@@ -204,26 +145,9 @@ struct FinalAggregate {
     Stat polluted{"polluted"};
     Stat pollutedUsed{"used polluted"};
 
-    FunctionAggregate referencedNonEmptyRatio{
-        "referenced non-empty / referenced"};
-    FunctionAggregate readRatio{"read non-empty / referenced"};
-    FunctionAggregate usedRatio{"used / referenced"};
-
-    FunctionAggregate optimizedAwayRatio{
-        "optimized away non-empty / unused non-empty"};
-    FunctionAggregate dependentRatio{"dependent / unused non-empty"};
-    FunctionAggregate unusedOtherRatio{
-        "other unused non-empty / unused non-empty"};
-
-    FunctionAggregate pollutedRatio{"polluted / referenced non-empty"};
-    FunctionAggregate pollutedOutOfUsedRatio{"used polluted / used"};
-    FunctionAggregate pollutedUsedRatio{"used polluted / polluted"};
-
     std::vector<Stat*> stats() {
+        // clang-format off
         return {
-            &compiledClosureVersions,
-            &benefitedClosureVersions,
-
             &referenced,
             &referencedNonEmpty,
             &readNonEmpty,
@@ -236,11 +160,48 @@ struct FinalAggregate {
             &unusedOther,
 
             &polluted,
-            &pollutedUsed,
+            &pollutedUsed
         };
+        // clang-format on
     }
 
-    std::vector<FunctionAggregate*> aggregates() {
+    void operator+=(Aggregate other) {
+        universe.insert(other.universe.begin(), other.universe.end());
+        auto thisV = this->stats();
+        auto otherV = other.stats();
+
+        for (size_t i = 0; i < thisV.size(); i++) {
+            *thisV[i] += *otherV[i];
+        }
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
+
+struct FinalAggregate {
+    Aggregate sums;
+
+    Stat compiledClosureVersions{"closure version compilations"};
+    Stat benefitedClosureVersions{
+        "closure version compilations using some type feedback"};
+
+    FunctionAggregate referencedNonEmptyRatio;
+    FunctionAggregate readRatio;
+    FunctionAggregate usedRatio;
+
+    FunctionAggregate optimizedAwayRatio;
+    FunctionAggregate dependentRatio;
+    FunctionAggregate unusedOtherRatio;
+
+    FunctionAggregate pollutedRatio;
+    FunctionAggregate pollutedOutOfUsedRatio;
+    FunctionAggregate pollutedUsedRatio;
+
+    std::vector<Stat const*> stats() {
+        return {&compiledClosureVersions, &benefitedClosureVersions};
+    }
+
+    std::vector<FunctionAggregate const*> aggregates() const {
         return {
             &referencedNonEmptyRatio,
             &readRatio,
@@ -254,34 +215,6 @@ struct FinalAggregate {
             &pollutedOutOfUsedRatio,
             &pollutedUsedRatio,
         };
-    }
-
-    void operator+=(FinalAggregate other) {
-        universe.insert(other.universe.begin(), other.universe.end());
-        addVectors<Stat>(stats(), other.stats());
-        addVectors<FunctionAggregate>(aggregates(), other.aggregates());
-    }
-
-    static FinalAggregate from(const Aggregate& agg) {
-#define move(field) res.field.set(agg.field);
-        FinalAggregate res;
-
-        move(referenced);
-        move(referencedNonEmpty);
-        move(readNonEmpty);
-
-        move(used);
-        move(unusedNonEmpty);
-
-        move(optimizedAway);
-        move(dependent);
-        move(unusedOther);
-
-        move(polluted);
-        move(pollutedUsed);
-
-        return res;
-#undef move
     }
 };
 
@@ -339,8 +272,6 @@ struct ClosureVersionStats {
 
     std::unordered_map<Function*, FeedbackStatsPerFunction> feedbackStats;
 
-    Universe universe() const;
-
     ClosureVersionStats(
         Function* function, const Context& context,
         const std::unordered_map<Function*, FeedbackStatsPerFunction>&
@@ -349,9 +280,6 @@ struct ClosureVersionStats {
 
     Aggregate
     getAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
-
-    FinalAggregate
-    getFinalAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
 };
 
 // ------------------------------------------------------------
@@ -373,8 +301,6 @@ struct CompilationSession {
     static CompilationSession& getNew(Function* compiledFunction,
                                       const Context& compiledContext,
                                       const std::vector<DispatchTable*>& DTs);
-
-    Universe universe() const;
 
     static FinalAggregate getFinalAgg();
 };
