@@ -249,6 +249,10 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << agg.used
               << "\n"
 
+              << StreamColor::blue << "Used\n" << StreamColor::clear
+              << agg.exactMatch << agg.widened << agg.narrowed << agg.widenedNarrowed
+              << "\n"
+
               << StreamColor::blue << "Unused\n" << StreamColor::clear
               << agg.unusedNonEmpty
               << agg.optimizedAway << agg.dependent << agg.unusedOther
@@ -264,22 +268,41 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
+    // Static info
     agg.referenced = info.allTypeSlots.size();
     agg.referencedNonEmpty =
         intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
 
+    // Used
     agg.used = slotsUsed.size();
+    assert(agg.used.value ==
+               intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
+           "There is an empty used slot");
+
+    for (const auto& i : slotsUsed) {
+        const auto& usage = i.second;
+
+        if (usage.exactMatch()) {
+            agg.exactMatch++;
+        } else if (usage.narrowedWithStaticType() && usage.widened()) {
+            agg.widenedNarrowed++;
+        } else if (usage.narrowedWithStaticType()) {
+            agg.narrowed++;
+        } else if (usage.widened()) {
+            agg.widened++;
+        } else {
+            assert(false);
+        }
+    }
+
+    // Unused
     auto unusedNonEmpty =
         intersect(difference(keys(info.allTypeSlots), keys(slotsUsed)),
                   info.nonEmptySlots);
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
-    assert(agg.used.value ==
-           intersect(info.nonEmptySlots, keys(slotsUsed)).size());
-
     auto usedFeedbackTypes = getUsedFeedbackTypes();
-
     for (auto slot : unusedNonEmpty) {
         if (!slotPresent.count(slot)) {
             agg.optimizedAway++;
@@ -290,6 +313,7 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
         }
     }
 
+    // Polluted
     agg.polluted = info.pollutedSlots.size();
     agg.pollutedUsed = intersect(info.pollutedSlots, keys(slotsUsed)).size();
 
@@ -597,6 +621,13 @@ void report(std::ostream& os, bool breakdownInfo,
     os  << final.referencedNonEmptyRatio
         << final.readRatio
         << final.usedRatio
+        << "\n";
+
+    finalHeader("Used slots");
+    os  << final.sums.exactMatch
+        << final.sums.widened
+        << final.sums.narrowed
+        << final.sums.widenedNarrowed
         << "\n";
 
     finalHeader("Unused slots");

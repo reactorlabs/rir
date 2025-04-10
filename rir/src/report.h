@@ -138,6 +138,11 @@ struct Aggregate {
     Stat used{"used"};
     Stat unusedNonEmpty{"unused non-empty"};
 
+    Stat exactMatch{"exact match"};
+    Stat widened{"widened"};
+    Stat narrowed{"narrowed"};
+    Stat widenedNarrowed{"widened narrowed"};
+
     Stat optimizedAway{"optimized away non-empty"};
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
@@ -154,6 +159,11 @@ struct Aggregate {
 
             &used,
             &unusedNonEmpty,
+
+            &exactMatch,
+            &widened,
+            &narrowed,
+            &widenedNarrowed,
 
             &optimizedAway,
             &dependent,
