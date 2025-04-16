@@ -25,34 +25,25 @@
 namespace rir {
 namespace recording {
 
-SEXP PirWarmupReason::toSEXP() const {
-    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-    SET_VECTOR_ELT(vec, 0, serialization::to_sexp(invocationCount));
+const std::vector<const char*> PirWarmupReason::fieldNames = {
+    "invocationCount"};
 
-    UNPROTECT(1);
-    return vec;
+SEXP PirWarmupReason::toSEXP() const {
+    return serialization::fields_to_sexp<PirWarmupReason>(invocationCount);
 }
 
 void PirWarmupReason::fromSEXP(SEXP sexp) {
-    this->CompileReasonImpl::fromSEXP(sexp);
-
-    this->invocationCount =
-        serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+    serialization::fields_from_sexp<PirWarmupReason>(sexp, invocationCount);
 }
 
+const std::vector<const char*> OSRLoopReason::fieldNames = {"loopCount"};
+
 SEXP OSRLoopReason::toSEXP() const {
-    auto vec = PROTECT(this->CompileReasonImpl::toSEXP());
-
-    SET_VECTOR_ELT(vec, 0, serialization::to_sexp(loopCount));
-
-    UNPROTECT(1);
-    return vec;
+    return serialization::fields_to_sexp<OSRLoopReason>(loopCount);
 }
 
 void OSRLoopReason::fromSEXP(SEXP sexp) {
-    this->CompileReasonImpl::fromSEXP(sexp);
-
-    this->loopCount = serialization::uint64_t_from_sexp(VECTOR_ELT(sexp, 0));
+    serialization::fields_from_sexp<OSRLoopReason>(sexp, loopCount);
 }
 
 size_t Record::initOrGetRecording(const SEXP cls, const std::string& name) {
@@ -211,6 +202,9 @@ SEXP Record::save() {
     return recordSexp;
 }
 
+const std::vector<const char*> FunRecording::fieldNames = {
+    "primIdx", "name", "env", "closure", "address"};
+
 // Plays along nicer with diff tools
 #define HIDE_UNKNOWN_CLOSURE_POINTER true
 
@@ -243,15 +237,8 @@ SEXP SpeculativeContextEvent::toSEXP() const {
 }
 
 void SpeculativeContextEvent::fromSEXP(SEXP sexp) {
-    return serialization::fields_from_sexp<SpeculativeContextEvent, uint64_t,
-                                           bool, uint64_t, SpeculativeContext,
-                                           bool, bool>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {is_promise, serialization::bool_from_sexp},
-        {index, serialization::uint64_t_from_sexp},
-        {sc, serialization::speculative_context_from_sexp},
-        {changed, serialization::bool_from_sexp},
-        {deopt, serialization::bool_from_sexp});
+    return serialization::fields_from_sexp<SpeculativeContextEvent>(
+        sexp, funRecIndex_, is_promise, index, sc, changed, deopt);
 }
 
 const std::vector<const char*> CompilationStartEvent::fieldNames = {
@@ -265,15 +252,9 @@ SEXP CompilationStartEvent::toSEXP() const {
 }
 
 void CompilationStartEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<CompilationStartEvent, uint64_t,
-                                    std::string, std::unique_ptr<CompileReason>,
-                                    std::unique_ptr<CompileReason>,
-                                    std::unique_ptr<CompileReason>>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {compileName, serialization::string_from_sexp},
-        {compile_reasons.heuristic, serialization::compile_reason_from_sexp},
-        {compile_reasons.condition, serialization::compile_reason_from_sexp},
-        {compile_reasons.osr, serialization::compile_reason_from_sexp});
+    serialization::fields_from_sexp<CompilationStartEvent>(
+        sexp, funRecIndex_, compileName, compile_reasons.heuristic,
+        compile_reasons.condition, compile_reasons.osr);
 }
 
 const std::vector<const char*> CompilationEvent::fieldNames = {
@@ -287,17 +268,9 @@ SEXP CompilationEvent::toSEXP() const {
 }
 
 void CompilationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<CompilationEvent, uint64_t, Context,
-                                    std::vector<SpeculativeContext>,
-                                    std::string, std::string, uint64_t>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {version, serialization::context_from_sexp},
-        {speculative_contexts,
-         serialization::vector_from_sexp<
-             SpeculativeContext, serialization::speculative_context_from_sexp>},
-        {bitcode, serialization::string_from_sexp},
-        {pir_code, serialization::string_from_sexp},
-        {deopt_count, serialization::uint64_t_from_sexp});
+    serialization::fields_from_sexp<CompilationEvent>(
+        sexp, funRecIndex_, version, speculative_contexts, bitcode, pir_code,
+        deopt_count);
 }
 
 const std::vector<const char*> CompilationEndEvent::fieldNames = {
@@ -309,11 +282,8 @@ SEXP CompilationEndEvent::toSEXP() const {
 }
 
 void CompilationEndEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<CompilationEndEvent, uint64_t, Duration,
-                                    bool>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {time_length, serialization::time_from_sexp},
-        {succesful, serialization::bool_from_sexp});
+    serialization::fields_from_sexp<CompilationEndEvent>(
+        sexp, funRecIndex_, time_length, succesful);
 }
 
 const std::vector<const char*> DeoptEvent::fieldNames = {
@@ -327,16 +297,9 @@ SEXP DeoptEvent::toSEXP() const {
 }
 
 void DeoptEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<DeoptEvent, uint64_t, Context,
-                                    DeoptReason::Reason, uint64_t,
-                                    FeedbackIndex, SEXP, int64_t>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {version, serialization::context_from_sexp},
-        {reason, serialization::deopt_reason_from_sexp},
-        {origin_function, serialization::uint64_t_from_sexp},
-        {index, serialization::feedback_index_from_sexp},
-        {trigger, serialization::sexp_from_sexp},
-        {trigger_index, serialization::int64_t_from_sexp});
+    serialization::fields_from_sexp<DeoptEvent>(sexp, funRecIndex_, version,
+                                                reason, origin_function, index,
+                                                trigger, trigger_index);
 
     if (trigger != R_NilValue) {
         R_PreserveObject(trigger);
@@ -360,16 +323,9 @@ SEXP InvocationEvent::toSEXP() const {
 }
 
 void InvocationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<InvocationEvent, uint64_t, Context, Source,
-                                    Context, bool, uint64_t, bool, bool>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {version, serialization::context_from_sexp},
-        {source, serialization::invocation_source_from_sexp},
-        {callContext, serialization::context_from_sexp},
-        {isNative, serialization::bool_from_sexp},
-        {address, serialization::uint64_t_from_sexp},
-        {missingAsmptPresent, serialization::bool_from_sexp},
-        {missingAsmptRecovered, serialization::bool_from_sexp});
+    serialization::fields_from_sexp<InvocationEvent>(
+        sexp, funRecIndex_, version, source, callContext, isNative, address,
+        missingAsmptPresent, missingAsmptRecovered);
 }
 
 const std::vector<const char*> UnregisterInvocationEvent::fieldNames = {
@@ -381,10 +337,8 @@ SEXP UnregisterInvocationEvent::toSEXP() const {
 }
 
 void UnregisterInvocationEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<UnregisterInvocationEvent, uint64_t,
-                                    Context>(
-        sexp, {funRecIndex_, serialization::uint64_t_from_sexp},
-        {version, serialization::context_from_sexp});
+    serialization::fields_from_sexp<UnregisterInvocationEvent>(
+        sexp, funRecIndex_, version);
 }
 
 const std::vector<const char*> CustomEvent::fieldNames = {"name"};
@@ -394,8 +348,7 @@ SEXP CustomEvent::toSEXP() const {
 }
 
 void CustomEvent::fromSEXP(SEXP sexp) {
-    serialization::fields_from_sexp<CustomEvent, std::string>(
-        sexp, {name, serialization::string_from_sexp});
+    serialization::fields_from_sexp<CustomEvent>(sexp, name);
 }
 
 SEXP setClassName(SEXP s, const char* className) {
