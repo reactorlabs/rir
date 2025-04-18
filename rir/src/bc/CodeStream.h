@@ -24,6 +24,12 @@ class CodeStream {
     unsigned size = 1024;
     unsigned nops = 0;
 
+    // Flag that tracks if the next inserted BC will be dead code. The first BC
+    // is always reachable since it's the entrypoint. Inserting an exit or
+    // uncontidional jump makes the next position unreachable. Inserting a label
+    // makes it reachable again since it's a possible jump target.
+    bool nextPosUnreachable = false;
+
     FunctionWriter& function;
     Preserve preserve;
 
@@ -80,7 +86,14 @@ class CodeStream {
                                      : needed + align - (needed % align);
     }
 
+    bool isNextPosUnreachable() const { return nextPosUnreachable; }
+
     CodeStream& operator<<(const BC& b) {
+        SLOWASSERT(!nextPosUnreachable &&
+                   "inserting dead code into CodeStream");
+        // TODO: should be `b.isExit()` but when we inline a promise that has a
+        // return_ we still emit the rest of the sequence that uses it...
+        nextPosUnreachable = b.bc == Opcode::ret_ || b.isUncondJmp();
         if (b.bc == Opcode::nop_)
             nops++;
         b.write(*this);
@@ -88,6 +101,7 @@ class CodeStream {
     }
 
     CodeStream& operator<<(BC::Label label) {
+        nextPosUnreachable = false;
 
         // get rid of unnecessary jumps
         {
@@ -144,6 +158,8 @@ class CodeStream {
     }
 
     Code* finalize(size_t localsCnt, size_t bindingsCnt) {
+        SLOWASSERT(nextPosUnreachable && "CodeStream should end with a BC that "
+                                         "is an exit or an unconditional jump");
         Code* res =
             function.writeCode(ast, &(*code)[0], pos, sources, patchpoints,
                                labels, localsCnt, nops, bindingsCnt);
