@@ -30,7 +30,6 @@ bool stringStartsWith(const std::string& s, const std::string& prefix);
 std::string getEnvironmentName(SEXP env);
 std::string getClosureName(SEXP cls);
 
-class Record;
 struct FunRecording;
 
 constexpr size_t NO_INDEX = (size_t)-1;
@@ -38,9 +37,7 @@ constexpr size_t PROMISE_INDEX = (size_t)-2;
 constexpr const char* GLOBAL_ENV_NAME = ".GlobalEnv";
 
 // Controls if SEXP closures should be serialized
-const bool SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
-                                ? atoi(getenv("RIR_RECORD_SERIALIZE"))
-                                : false;
+extern bool SERIALIZE_SEXP;
 
 enum class SpeculativeContextType { Callees, Test, Values };
 

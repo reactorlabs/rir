@@ -413,7 +413,13 @@ void recordFinalizer(SEXP) {
     UNPROTECT(1);
 }
 
+bool SERIALIZE_SEXP;
+
 void recordExecution(const char* filePath, const char* filterArg) {
+    SERIALIZE_SEXP = getenv("RIR_RECORD_SERIALIZE")
+                         ? atoi(getenv("RIR_RECORD_SERIALIZE"))
+                         : false;
+
     if (filterArg != nullptr) {
         filter_ = {.compile = false,
                    .deopt = false,
