@@ -540,6 +540,8 @@ REXPORT SEXP loadRecordings(SEXP filename) {
 REXPORT SEXP getRecordings() { return rir::recording::recorder_.save(); }
 
 REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
+    using namespace rir::recording::serialization;
+
     if (Rf_isNull(obj)) {
         return Rf_mkString("");
     }
@@ -554,11 +556,10 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
     std::ostringstream ss;
 
     if (type_str == "context") { // version or dispatch context
-        auto disp = rir::recording::serialization::context_from_sexp(obj);
+        auto disp = from_sexp<rir::Context>(obj);
         ss << disp;
     } else if (type_str == "speculative") {
-        auto sc =
-            rir::recording::serialization::speculative_context_from_sexp(obj);
+        auto sc = from_sexp<rir::recording::SpeculativeContext>(obj);
 
         ss << "[ ";
         switch (sc.type) {
@@ -578,9 +579,8 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
                     continue;
                 }
 
-                auto fun =
-                    rir::recording::serialization::fun_recorder_from_sexp(
-                        VECTOR_ELT(functions, c));
+                auto fun = from_sexp<rir::recording::FunRecording>(
+                    VECTOR_ELT(functions, c));
                 ss << fun;
             }
             ss << " ] Call";
@@ -599,11 +599,11 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
         }
 
     } else if (type_str == "reason") {
-        auto ev = rir::recording::serialization::compile_reason_from_sexp(obj);
+        auto ev =
+            from_sexp<std::unique_ptr<rir::recording::CompileReason>>(obj);
         ev->print(ss);
     } else if (type_str == "invocation_source") {
-        auto src =
-            rir::recording::serialization::invocation_source_from_sexp(obj);
+        auto src = from_sexp<rir::recording::InvocationEvent::Source>(obj);
 
         switch (src) {
         case rir::recording::InvocationEvent::Unknown:
@@ -620,8 +620,7 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             break;
         }
     } else if (type_str == "deopt_reason") {
-        auto reason =
-            rir::recording::serialization::deopt_reason_from_sexp(obj);
+        auto reason = from_sexp<rir::DeoptReason::Reason>(obj);
 
         switch (reason) {
         case rir::DeoptReason::Reason::Typecheck:
@@ -653,10 +652,9 @@ REXPORT SEXP printEventPart(SEXP obj, SEXP type, SEXP functions) {
             break;
         }
     } else if (type_str == "feedback_index") {
-        ss << rir::recording::serialization::feedback_index_from_sexp(obj);
+        ss << from_sexp<rir::FeedbackIndex>(obj);
     } else if (type_str == "address") {
-        ss << "0x" << std::hex
-           << rir::recording::serialization::uint64_t_from_sexp(obj);
+        ss << "0x" << std::hex << from_sexp<uintptr_t>(obj);
     } else {
         std::cerr << "type parameter '" << type_str
                   << "' is not a known type "
