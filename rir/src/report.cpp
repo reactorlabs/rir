@@ -246,7 +246,7 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
     // clang-format off
     return os << agg.referenced << agg.referencedNonEmpty << agg.readNonEmpty
-              << agg.used
+              << agg.used << agg.slotPresentNonEmpty
               << "\n"
 
               << StreamColor::blue << "Used\n" << StreamColor::clear
@@ -301,6 +301,9 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
         intersect(difference(keys(info.allTypeSlots), keys(slotsUsed)),
                   info.nonEmptySlots);
     agg.unusedNonEmpty = unusedNonEmpty.size();
+
+    auto slotPresentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
+    agg.slotPresentNonEmpty = slotPresentNonEmpty.size();
 
     auto usedFeedbackTypes = getUsedFeedbackTypes();
     for (auto slot : unusedNonEmpty) {
@@ -386,7 +389,7 @@ void computeFunctionsInfo(
     }
 }
 
-std::vector<CompilationSession> COMPILATION_SESSIONS;
+static std::vector<CompilationSession> COMPILATION_SESSIONS;
 
 CompilationSession&
 CompilationSession::getNew(Function* compiledFunction,
@@ -402,11 +405,13 @@ CompilationSession::getNew(Function* compiledFunction,
 
 void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
                                            Function* compiledFunction) {
+
+    assert(closureVersion->context() == compiledFunction->context());
     auto baseline = compiledFunction->dispatchTable()->baseline();
     const auto& context = compiledFunction->context();
 
-    closuresVersionStats.emplace_back(baseline, context,
-                                      closureVersion->feedbackStatsByFunction);
+    closureVersionStats.emplace_back(baseline, context,
+                                     closureVersion->feedbackStatsByFunction);
 }
 
 FinalAggregate CompilationSession::getFinalAgg() {
@@ -414,7 +419,7 @@ FinalAggregate CompilationSession::getFinalAgg() {
     std::vector<Aggregate> values;
 
     for (auto i : COMPILATION_SESSIONS) {
-        for (auto j : i.closuresVersionStats) {
+        for (auto j : i.closureVersionStats) {
             auto agg = j.getAgg(i.functionsInfo);
             res.sums += agg;
             values.push_back(agg);
@@ -546,12 +551,13 @@ void report(std::ostream& os, bool breakdownInfo,
     };
 
     for (auto& session : COMPILATION_SESSIONS) {
-        os << StreamColor::magenta << "*********************** Compilation: "
+        os << StreamColor::magenta
+           << "*********************** Compilation session for: "
            << closureName(session.function) << " (" << session.context
            << ") ***********************\n"
            << StreamColor::clear;
 
-        for (auto& cvstat : session.closuresVersionStats) {
+        for (auto& cvstat : session.closureVersionStats) {
             auto mainFun = cvstat.function;
 
             // Banner
@@ -738,7 +744,7 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
     bool first = true;
 
     for (auto& cs : COMPILATION_SESSIONS) {
-        for (auto& cv : cs.closuresVersionStats) {
+        for (auto& cv : cs.closureVersionStats) {
             auto agg = cv.getAgg(cs.functionsInfo);
 
             if (first) {

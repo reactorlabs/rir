@@ -137,6 +137,7 @@ struct Aggregate {
 
     Stat used{"used"};
     Stat unusedNonEmpty{"unused non-empty"};
+    Stat slotPresentNonEmpty{"present non-empty"};
 
     Stat exactMatch{"exact match"};
     Stat widened{"widened"};
@@ -159,6 +160,7 @@ struct Aggregate {
 
             &used,
             &unusedNonEmpty,
+            &slotPresentNonEmpty,
 
             &exactMatch,
             &widened,
@@ -300,7 +302,7 @@ struct CompilationSession {
     Context context;
 
     std::unordered_map<Function*, FunctionInfo> functionsInfo;
-    std::vector<ClosureVersionStats> closuresVersionStats;
+    std::vector<ClosureVersionStats> closureVersionStats;
 
     CompilationSession(Function* function, const Context& context)
         : function(function), context(context) {}
