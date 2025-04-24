@@ -305,11 +305,13 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     auto slotPresentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
     agg.slotPresentNonEmpty = slotPresentNonEmpty.size();
 
-    auto usedFeedbackTypes = getUsedFeedbackTypes();
+    auto allFeedbackTypesBag = getUFeedbackTypesBag(info);
     for (auto slot : unusedNonEmpty) {
         if (!slotPresent.count(slot)) {
             agg.optimizedAway++;
-        } else if (usedFeedbackTypes.count(info.allTypeSlots.at(slot))) {
+        }
+
+        if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
             agg.dependent++;
         } else {
             agg.unusedOther++;
@@ -323,13 +325,14 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     return agg;
 }
 
-std::unordered_set<pir::PirType>
-FeedbackStatsPerFunction::getUsedFeedbackTypes() const {
-    std::unordered_set<pir::PirType> usedFeedbackTypes;
-    for (const auto& i : slotsUsed) {
-        usedFeedbackTypes.insert(*i.second.feedbackType);
+std::unordered_multiset<pir::PirType>
+FeedbackStatsPerFunction::getUFeedbackTypesBag(
+    const FunctionInfo& functionInfo) const {
+    std::unordered_multiset<pir::PirType> result;
+    for (const auto& kv : functionInfo.allTypeSlots) {
+        result.insert(kv.second);
     }
-    return usedFeedbackTypes;
+    return result;
 }
 
 // ------------------------------------------------------------
@@ -504,7 +507,7 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << stats.slotsUsed.at(index);
             } else {
                 bool isDependency =
-                    stats.getUsedFeedbackTypes().count(feedbackType);
+                    stats.getUFeedbackTypesBag(info).count(feedbackType) > 1;
                 if (!stats.slotPresent.count(index)) {
                     os << "optimized away";
                     if (isDependency) {

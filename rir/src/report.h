@@ -272,7 +272,8 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
 
     Aggregate getAgg(const FunctionInfo& info) const;
-    std::unordered_set<pir::PirType> getUsedFeedbackTypes() const;
+    std::unordered_multiset<pir::PirType>
+    getUFeedbackTypesBag(const FunctionInfo& functionInfo) const;
 };
 
 // ------------------------------------------------------------
