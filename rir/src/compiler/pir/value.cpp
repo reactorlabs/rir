@@ -56,6 +56,7 @@ void Value::callArgTypeToContext(Context& assumptions, unsigned i) const {
     arg = arg->cFollowCastsAndForce();
     if (!MkArg::Cast(arg))
         check(arg);
+
 }
 
 void Value::checkReplace(Value* replace) const {

@@ -2264,7 +2264,7 @@ bool deoptChaosTriggerImpl(bool deoptTrue) {
 void checkTypeImpl(SEXP val, uint64_t type, const char* msg) {
     assert(pir::Parameter::RIR_CHECK_PIR_TYPES);
     pir::PirType typ(type);
-    if (!typ.isInstance(val)) {
+    if (!typ.isInstance(val, true)) {
         std::cerr << "type assert failed\n";
         std::cerr << "got " << pir::PirType(val) << " but expected a " << typ
                   << ":\n";
