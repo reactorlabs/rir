@@ -346,6 +346,7 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     // Polluted
     agg.polluted = info.pollutedSlots.size();
     agg.pollutedUsed = intersect(info.pollutedSlots, keys(slotsUsed)).size();
+    agg.pollutedUnused = intersect(info.pollutedSlots, unusedNonEmpty).size();
 
     return agg;
 }
@@ -479,6 +480,7 @@ FinalAggregate CompilationSession::getFinalAgg() {
 
     average(pollutedRatio, polluted, referencedNonEmpty);
     average(pollutedOutOfUsedRatio, pollutedUsed, used);
+    average(pollutedOutOfUnusedRatio, pollutedUnused, unusedNonEmpty);
     average(pollutedUsedRatio, pollutedUsed, polluted);
 
     average(pollutedOutOfExactMatchRatio, pollutedExactMatch, exactMatch);

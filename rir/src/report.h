@@ -151,6 +151,7 @@ struct Aggregate {
 
     Stat polluted{"polluted"};
     Stat pollutedUsed{"used polluted"};
+    Stat pollutedUnused{"unused polluted non-empty"};
 
     Stat pollutedExactMatch{"used polluted exact match"};
     Stat pollutedWidened{"used polluted widened"};
@@ -215,6 +216,7 @@ struct FinalAggregate {
 
     FunctionAggregate pollutedRatio;
     FunctionAggregate pollutedOutOfUsedRatio;
+    FunctionAggregate pollutedOutOfUnusedRatio;
     FunctionAggregate pollutedUsedRatio;
 
     FunctionAggregate pollutedOutOfExactMatchRatio;
@@ -236,6 +238,7 @@ struct FinalAggregate {
             &unusedOtherRatio,
 
             &pollutedRatio,
+            &pollutedOutOfUnusedRatio,
             &pollutedOutOfUsedRatio,
             &pollutedUsedRatio,
 
