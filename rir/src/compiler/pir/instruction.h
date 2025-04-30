@@ -2750,9 +2750,11 @@ class FLI(Assume, 2, Effect::TriggerDeopt) {
 
     bool defaultFeedback = false;
     PirType* required = nullptr;
+    bool hoistedForce = false;
     void copyStatsFrom(Assume& other) {
         this->defaultFeedback = other.defaultFeedback;
         this->required = other.required;
+        this->hoistedForce = other.hoistedForce;
     }
 
     Assume(Value* test, Value* checkpoint, const DeoptReason& r,

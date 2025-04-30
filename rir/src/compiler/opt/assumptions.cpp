@@ -417,6 +417,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
 
                     auto newAssume = new Assume(newTT, cp, newDeoptReason);
                     newAssume->copyStatsFrom(*a);
+                    newAssume->hoistedForce = true;
                     ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,

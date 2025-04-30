@@ -98,6 +98,8 @@ void ClosureVersion::scanForSpeculation() {
                 slotUsed.assumeInstr = report::streamToString(
                     [&](std::ostream& os) { assume->print(os); });
 
+                slotUsed.hoistedForce = assume->hoistedForce;
+
                 auto& info = this->feedbackStatsFor(fo.function());
 
                 // Sanity check

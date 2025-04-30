@@ -110,6 +110,8 @@ struct SlotUsed {
     std::string speculatedOn;
     std::string assumeInstr;
 
+    bool hoistedForce;
+
     SlotUsed() {}
 };
 

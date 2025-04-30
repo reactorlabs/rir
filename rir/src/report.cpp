@@ -238,6 +238,11 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
        << bold << "expected: " << clear << slotUsed.expectedType() << ", "
        << bold << "required: " << clear << *slotUsed.requiredType << "\n";
     // clang-format on
+
+    if (slotUsed.hoistedForce) {
+        os << "(hoisted force)\n";
+    }
+
     return os;
 }
 
