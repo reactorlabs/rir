@@ -518,41 +518,36 @@ void report(std::ostream& os, bool breakdownInfo,
 
             os << StreamColor::red << index << StreamColor::clear;
 
-            if (used) {
-                os << " [used] ";
-            } else {
-                os << " [unused] ";
-            }
-
-            os << feedbackType;
-
             if (info.pollutedSlots.count(index)) {
-                os << " (polluted)";
+                os << " [polluted]";
             }
 
-            os << "\n";
+            os << StreamColor::bold << " <" << feedbackType << ">\n" << StreamColor::clear;
 
             if (used) {
                 os << stats.slotsUsed.at(index);
             } else {
+                bool otherReason = false;
+
                 bool isDependency =
                     stats.getUFeedbackTypesBag(info).count(feedbackType) > 1;
+
                 if (!stats.slotPresent.count(index)) {
-                    os << "optimized away";
-                    if (isDependency) {
-                        os << " (dependency)";
-                    }
-                    os << "\n";
+                    os << "optimized away\n";
+                    otherReason = false;
                 } else {
                     auto present = stats.slotPresent.at(index);
                     os << StreamColor::bold << present.presentInstr
                        << StreamColor::clear << "\n";
+                }
 
-                    if (isDependency) {
-                        os << "dependent slot\n";
-                    } else {
-                        os << "other unused reason\n";
-                    }
+                if (isDependency) {
+                    os << "dependent slot\n";
+                    otherReason = false;
+                }
+
+                if (otherReason) {
+                    os << "other unused reason\n";
                 }
             }
         };
