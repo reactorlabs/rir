@@ -246,11 +246,11 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
     // clang-format off
     return os << agg.referenced << agg.referencedNonEmpty << agg.readNonEmpty
-              << agg.used << agg.slotPresentNonEmpty
+              << agg.used << agg.presentNonEmpty
               << "\n"
 
               << StreamColor::blue << "Used\n" << StreamColor::clear
-              << agg.exactMatch << agg.widened << agg.narrowed << agg.widenedNarrowed
+              << agg.exactMatch << agg.widened << agg.narrowed
               << "\n"
 
               << StreamColor::blue << "Unused\n" << StreamColor::clear
@@ -283,16 +283,30 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     for (const auto& i : slotsUsed) {
         const auto& usage = i.second;
 
+        bool polluted = info.pollutedSlots.count(i.first);
+
         if (usage.exactMatch()) {
             agg.exactMatch++;
-        } else if (usage.narrowedWithStaticType() && usage.widened()) {
-            agg.widenedNarrowed++;
-        } else if (usage.narrowedWithStaticType()) {
-            agg.narrowed++;
-        } else if (usage.widened()) {
-            agg.widened++;
+
+            if (polluted) {
+                agg.pollutedExactMatch++;
+            }
         } else {
-            assert(false);
+            if (usage.narrowedWithStaticType()) {
+                agg.narrowed++;
+
+                if (polluted) {
+                    agg.pollutedNarrowed++;
+                }
+            }
+
+            if (usage.widened()) {
+                agg.widened++;
+
+                if (polluted) {
+                    agg.pollutedWidened++;
+                }
+            }
         }
     }
 
@@ -302,18 +316,24 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
                   info.nonEmptySlots);
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
-    auto slotPresentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
-    agg.slotPresentNonEmpty = slotPresentNonEmpty.size();
+    auto presentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
+    agg.presentNonEmpty = presentNonEmpty.size();
 
     auto allFeedbackTypesBag = getUFeedbackTypesBag(info);
     for (auto slot : unusedNonEmpty) {
+        bool unusedOther = true;
+
         if (!slotPresent.count(slot)) {
             agg.optimizedAway++;
+            unusedOther = false;
         }
 
         if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
             agg.dependent++;
-        } else {
+            unusedOther = false;
+        }
+
+        if (unusedOther) {
             agg.unusedOther++;
         }
     }
@@ -455,6 +475,10 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(pollutedRatio, polluted, referencedNonEmpty);
     average(pollutedOutOfUsedRatio, pollutedUsed, used);
     average(pollutedUsedRatio, pollutedUsed, polluted);
+
+    average(pollutedOutOfExactMatchRatio, pollutedExactMatch, exactMatch);
+    average(pollutedOutOfNarrowedRatio, pollutedNarrowed, narrowed);
+    average(pollutedOutOfWidenedRatio, pollutedWidened, widened);
 
     return res;
 #undef average
@@ -636,7 +660,6 @@ void report(std::ostream& os, bool breakdownInfo,
     os  << final.sums.exactMatch
         << final.sums.widened
         << final.sums.narrowed
-        << final.sums.widenedNarrowed
         << "\n";
 
     finalHeader("Unused slots");

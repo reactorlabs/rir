@@ -137,12 +137,11 @@ struct Aggregate {
 
     Stat used{"used"};
     Stat unusedNonEmpty{"unused non-empty"};
-    Stat slotPresentNonEmpty{"present non-empty"};
+    Stat presentNonEmpty{"present non-empty"};
 
     Stat exactMatch{"exact match"};
     Stat widened{"widened"};
     Stat narrowed{"narrowed"};
-    Stat widenedNarrowed{"widened narrowed"};
 
     Stat optimizedAway{"optimized away non-empty"};
     Stat dependent{"dependent"};
@@ -150,6 +149,10 @@ struct Aggregate {
 
     Stat polluted{"polluted"};
     Stat pollutedUsed{"used polluted"};
+
+    Stat pollutedExactMatch{"used polluted exact match"};
+    Stat pollutedWidened{"used polluted widened"};
+    Stat pollutedNarrowed{"used polluted narrowed"};
 
     std::vector<Stat*> stats() {
         // clang-format off
@@ -160,19 +163,22 @@ struct Aggregate {
 
             &used,
             &unusedNonEmpty,
-            &slotPresentNonEmpty,
+            &presentNonEmpty,
 
             &exactMatch,
             &widened,
             &narrowed,
-            &widenedNarrowed,
 
             &optimizedAway,
             &dependent,
             &unusedOther,
 
             &polluted,
-            &pollutedUsed
+            &pollutedUsed,
+
+            &pollutedExactMatch,
+            &pollutedWidened,
+            &pollutedNarrowed,
         };
         // clang-format on
     }
@@ -209,6 +215,10 @@ struct FinalAggregate {
     FunctionAggregate pollutedOutOfUsedRatio;
     FunctionAggregate pollutedUsedRatio;
 
+    FunctionAggregate pollutedOutOfExactMatchRatio;
+    FunctionAggregate pollutedOutOfWidenedRatio;
+    FunctionAggregate pollutedOutOfNarrowedRatio;
+
     std::vector<Stat const*> stats() {
         return {&compiledClosureVersions, &benefitedClosureVersions};
     }
@@ -226,6 +236,10 @@ struct FinalAggregate {
             &pollutedRatio,
             &pollutedOutOfUsedRatio,
             &pollutedUsedRatio,
+
+            &pollutedOutOfExactMatchRatio,
+            &pollutedOutOfWidenedRatio,
+            &pollutedOutOfNarrowedRatio,
         };
     }
 };
