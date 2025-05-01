@@ -300,21 +300,85 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     auto unusedNonEmpty =
         intersect(difference(keys(info.allTypeSlots), keys(slotsUsed)),
                   info.nonEmptySlots);
+
+    // info.aaa();
+
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
     auto slotPresentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
     agg.slotPresentNonEmpty = slotPresentNonEmpty.size();
 
     auto allFeedbackTypesBag = getUFeedbackTypesBag(info);
+
+    auto redundantPresent = 0;
+    // auto redundant = 0;
+
+    auto dependentPresent = 0;
+    auto additionaRedundantPresent = 0;
+
+    auto additionaRedundant = 0;
+
+    auto redundantSlotsNonEmpty = intersect(redundantSlots, unusedNonEmpty);
+
     for (auto slot : unusedNonEmpty) {
         if (!slotPresent.count(slot)) {
             agg.optimizedAway++;
         }
 
+        // if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
+        //     agg.dependent++;
+        // } else {
+        //     agg.unusedOther++;
+        // }
+
+        if (slotPresent.count(slot)) {
+            bool a, b;
+            a = false;
+            b = false;
+            if (redundantSlots.count(slot)) {
+                a = true;
+                redundantPresent++;
+            }
+
+            if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
+                b = true;
+                dependentPresent++;
+            }
+
+            if (a && !b) {
+                additionaRedundantPresent++;
+            }
+        }
+
         if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
             agg.dependent++;
         } else {
+
+            if (redundantSlotsNonEmpty.count(slot)) {
+                additionaRedundant++;
+            }
+
             agg.unusedOther++;
+        }
+    }
+    std::cerr << "****** "
+              << "total redudant: " << redundantSlots.size()
+              << " dependent: " << agg.dependent.value
+              << " redundant: " << redundantSlotsNonEmpty.size()
+              << " dependent present: " << dependentPresent
+              << "  redundant present: " << redundantPresent
+              << " additionaRedundantPresent: " << additionaRedundantPresent
+              << " additionaRedundant: " << additionaRedundant
+              << " *********   \n";
+
+    if (redundantSlots.size() != redundantSlotsNonEmpty.size()) {
+        for (auto s : redundantSlots) {
+            if (!redundantSlotsNonEmpty.count(s)) {
+                if (slotsUsed.count(s)) {
+                    std::cerr << "is used! \n";
+                }
+                // assert(false && "red");
+            }
         }
     }
 

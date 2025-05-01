@@ -14,12 +14,40 @@ void ClosureVersion::computeFeedbackStats() {
     // fill in slotsOptimizedAway .  Slots that don't appear in the code and are
     // non-empty remove from slotsReadNotUsedStaticTypeReason and
     // slotsReadCandidateNotUsedReason  slots that were optimized away
-
+    this->scanForRedundantSlots();
     this->scanForSpeculation();
     this->computeSlotsPresent();
 }
 
+void ClosureVersion::scanForRedundantSlots() {
+
+    Visitor::run(this->entry, [&](Instruction* i) {
+        if (!i->hasTypeFeedback()) {
+            return;
+        }
+
+        const auto& tf = i->typeFeedback(false);
+        const auto& origin = tf.feedbackOrigin;
+        if (origin.index().isUndefined() || tf.defaultFeedback ||
+            origin.index().kind != FeedbackKind::Type) {
+            return;
+        }
+
+        auto& info = this->feedbackStatsFor(origin.function());
+
+        if (i->isReturnTypePrecise()) {
+            // std::cerr << "precise type: ";
+            // i->print(std::cerr, true);
+            // std::cerr << "\n";
+
+            info.redundantSlots.insert(origin.index());
+
+            // assert(false);
+        }
+    });
+}
 void ClosureVersion::scanForSpeculation() {
+
     Visitor::run(this->entry, [&](Instruction* i) {
         if (auto assume = Assume::Cast(i)) {
 
@@ -99,6 +127,15 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 info.slotsUsed[fo.index()] = slotUsed;
+
+                // if (info.redundantSlots.count(fo.index())) {
+                //     std::cerr<< "\n";
+                //     std::cerr << slotUsed.speculatedOn << "\n";
+
+                //     std::cerr << slotUsed.assumeInstr << "\n";
+
+                //     assert(false && "used and redudant");
+                // }
             }
         }
     });

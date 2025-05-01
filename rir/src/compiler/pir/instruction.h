@@ -376,6 +376,18 @@ class Instruction : public Value {
         return effects;
     }
 
+    virtual bool isIntructionTypePrecise(const GetType& at = [](Value* v) {
+        return v->type;
+    }) const {
+        return false;
+    }
+
+    bool isReturnTypePrecise(const GetType& at = [](Value* v) {
+        return v->type;
+    }) const {
+        return type.isPrecise() || isIntructionTypePrecise(at);
+    }
+
     void updateTypeAndEffects() {
         auto isRType = type.isRType();
         assert(!type.isVoid() || !isRType);
@@ -2424,6 +2436,9 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
 
     PirType inferType(const GetType& at = [](Value* v) { return v->type; })
         const override final;
+
+    bool isIntructionTypePrecise(
+        const GetType& at = [](Value* v) { return v->type; }) const override;
 
     VisibilityFlag visibilityFlag() const override;
     Value* frameStateOrTs() const override final {

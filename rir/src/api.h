@@ -33,4 +33,6 @@ REXPORT SEXP rirCreateSimpleIntContext();
 // feedback by calling .Call('playground')
 REXPORT SEXP playground(SEXP what);
 
+REXPORT SEXP compile_c1(SEXP what);
+
 #endif // API_H_

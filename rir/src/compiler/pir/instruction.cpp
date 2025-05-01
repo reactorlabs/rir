@@ -717,6 +717,179 @@ size_t CallSafeBuiltin::gvnBase() const {
     return hash_combine(builtinId, tagHash());
 }
 
+bool CallSafeBuiltin::isIntructionTypePrecise(const GetType& getType) const {
+    PirType inferred = PirType::bottom();
+    std::string name = getBuiltinName(builtinSexp);
+    // bool saturated = false;
+
+    // static const std::unordered_set<std::string> bitwise = {
+    //     "bitwiseXor", "bitwiseShiftL", "bitwiseShiftLR",
+    //     "bitwiseAnd", "bitwiseNot",    "bitwiseOr"};
+    // if (bitwise.count(name)) {
+    //     inferred = PirType(RType::integer);
+    //     if (getType(callArg(0).val()).isSimpleScalar() &&
+    //         getType(callArg(1).val()).isSimpleScalar()) {
+    //         inferred = inferred.simpleScalar();
+    //         saturated = true;
+    //     }
+    // }
+
+    // if ("length" == name) {
+    //     inferred = (PirType() | RType::integer | RType::real)
+    //                    .simpleScalar()
+    //                    .orNAOrNaN();
+    //     //saturated = true;
+
+    // }
+
+    // // int doSummary =
+    // //     "min" == name || "max" == name || "prod" == name || "sum" == name;
+    // // if (name == "abs" || doSummary) {
+    // //     if (nCallArgs()) {
+    // //         auto m = PirType::bottom();
+    // //         for (size_t i = 0; i < nCallArgs(); ++i)
+    // //             m = m.mergeWithConversion(getType(callArg(i).val()));
+    // //         if (!m.maybeObj()) {
+    // //             auto lub = PirType::num().orAttribsOrObj();
+    // //             // Min/max support string comparison
+    // //             if (name == "min" || name == "max")
+    // //                 lub = lub | RType::str;
+    // //             inferred = m & lub;
+
+    // //             if (inferred.maybe(RType::logical))
+    // //                 inferred =
+    // //                     inferred.orT(RType::integer).notT(RType::logical);
+
+    // //             if (doSummary)
+    // //                 inferred = inferred.simpleScalar();
+    // //             if ("prod" == name)
+    // //                 inferred =
+    // inferred.orT(RType::real).notT(RType::integer);
+    // //             if ("abs" == name) {
+    // //                 if (inferred.maybe(RType::cplx))
+    // //                     inferred =
+    // inferred.orT(RType::real).notT(RType::cplx);
+    // //             }
+    // //         }
+    // //     }
+    // // }
+
+    // if ("as.integer" == name) {
+    //     if (!getType(callArg(0).val()).maybeObj()) {
+    //         inferred = PirType(RType::integer);
+    //         if (getType(callArg(0).val()).isSimpleScalar()) {
+    //             inferred = inferred.simpleScalar();
+    //             saturated = true;
+    //         }
+    //     }
+    // }
+
+    // if ("typeof" == name) {
+    //     inferred = PirType(RType::str).simpleScalar();
+    //     saturated = true;
+    // }
+
+    // static const std::unordered_set<std::string> vecTests = {
+    //     "is.na", "is.nan", "is.finite", "is.infinite"};
+    // if (vecTests.count(name)) {
+    //     if (!getType(callArg(0).val()).maybeObj()) {
+    //         inferred = PirType(RType::logical);
+    //         if (getType(callArg(0).val()).maybeHasAttrs())
+    //             inferred = inferred.orAttribsOrObj().notObject();
+    //         if (!getType(callArg(0).val()).maybeNotFastVecelt())
+    //             inferred = inferred.fastVecelt();
+    //         if (getType(callArg(0).val()).isSimpleScalar()) {
+    //             inferred = inferred.simpleScalar();
+    //             //saturated = true;
+    //         }
+    //     }
+    // }
+
+    // static const std::unordered_set<std::string> tests = {
+    //     "is.vector",   "is.null",      "is.integer",
+    //     "is.double",   "is.complex",   "is.character",
+    //     "is.symbol",   "is.name",      "is.environment",
+    //     "is.list",     "is.pairlist",  "is.expression",
+    //     "is.raw",      "is.object",    "isS4",
+    //     "is.numeric",  "is.matrix",    "is.array",
+    //     "is.atomic",   "is.recursive", "is.call",
+    //     "is.language", "is.function",  "all",
+    //     "any"};
+
+    // if (tests.count(name)) {
+    //     static const std::unordered_set<std::string> maybeDispatch = {"all",
+    //                                                                   "any"};
+
+    //     if (!maybeDispatch.count(name) ||
+    //     !getType(callArg(0).val()).maybeObj()) {
+    //         inferred = PirType(RType::logical).simpleScalar().notNAOrNaN();
+    //         saturated = true;
+    //     }
+    // }
+
+    if ("c" == name) {
+        inferred = mergedInputType(getType).collectionType(nCallArgs());
+        // If at least one arg is non-nil, then the result is
+        // also not nil
+        if (inferred.maybe(RType::nil)) {
+            auto notNil = false;
+            eachArg([&](Value* v) {
+                if (!v->type.maybe(RType::nil))
+                    notNil = true;
+            });
+            if (notNil)
+                inferred = inferred.notT(RType::nil);
+        }
+
+        if (nCallArgs() > 1 && inferred.isOneRType()) {
+            // std::cerr << "**** ";
+            // this->print(std::cerr, true);
+            // std::cerr << "\n";
+
+            // assert(false);
+            return true;
+        }
+    }
+
+    // if ("vector" == name) {
+    //     if (auto con = Const::Cast(arg(0).val())) {
+    //         if (TYPEOF(con->c()) == STRSXP && XLENGTH(con->c()) == 1) {
+    //             SEXPTYPE type = Rf_str2type(CHAR(STRING_ELT(con->c(), 0)));
+    //             switch (type) {
+    //             case LGLSXP:
+    //                 inferred = RType::logical;
+    //                 break;
+    //             case INTSXP:
+    //                 inferred = RType::integer;
+    //                 break;
+    //             case REALSXP:
+    //                 inferred = RType::real;
+    //                 break;
+    //             case CPLXSXP:
+    //                 inferred = RType::cplx;
+    //                 break;
+    //             case STRSXP:
+    //                 inferred = RType::str;
+    //                 break;
+    //             case VECSXP:
+    //                 inferred = RType::vec;
+    //                 break;
+    //             case RAWSXP:
+    //                 inferred = RType::raw;
+    //                 break;
+    //             default:
+    //                 assert(false);
+    //                 break;
+    //             }
+
+    //             //saturated = true;
+    //         }
+    //     }
+    // }
+
+    return false;
+}
+
 PirType CallSafeBuiltin::inferType(const Instruction::GetType& getType) const {
     PirType inferred = PirType::bottom();
     std::string name = getBuiltinName(builtinSexp);

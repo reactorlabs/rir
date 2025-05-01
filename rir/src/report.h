@@ -254,6 +254,18 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
+
+    // void aaa() const {
+
+    //     if (nonEmptySlots.size() > 0) {
+    //         for (auto s : nonEmptySlots) {
+    //             allTypeSlots.at(s).print(std::cerr);
+    //             std::cerr << "\n";
+    //         }
+
+    //         assert(false && "empty slots");
+    //     }
+    // }
 };
 
 // ------------------------------------------------------------
@@ -270,6 +282,7 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
+    std::unordered_set<FeedbackIndex> redundantSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
     std::unordered_multiset<pir::PirType>

@@ -429,9 +429,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
 
-                // std::cerr << "before merging: \n";
-                // std::cerr << t.type << "\n";
-
                 t.type.merge(feedback);
                 if (auto force = Force::Cast(i)) {
                     force->observed = static_cast<Force::ArgumentKind>(
