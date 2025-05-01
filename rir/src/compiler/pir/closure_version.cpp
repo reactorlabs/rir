@@ -77,22 +77,29 @@ void ClosureVersion::scanForSpeculation() {
                 pir::CastType* cast = nullptr;
                 {
                     auto bb = assume->bb();
-                    auto iter = bb->atPosition(assume);
-                    // Move after the assume
-                    ++iter;
-                    // Make sure we don't fall out of BB
-                    if (iter != bb->end()) {
-                        cast = pir::CastType::Cast(*iter);
-                        // If it is a cast (not deopted)
-                        // and the cast is on the speculated on instruction
-                        if (cast && cast->arg<0>().val() == speculatedOn) {
-                            // sanity check
-                            assert(cast->type ==
-                                   (cast->type & speculatedOn->type));
-                        } else {
-                            cast = nullptr;
+                    auto assumeSeen = false;
+
+                    Visitor::run(bb, [&](Instruction* i) {
+                        if (i == assume) {
+                            assumeSeen = true;
                         }
-                    }
+
+                        if (!assumeSeen) {
+                            return;
+                        }
+
+                        auto mbyCast = CastType::Cast(i);
+                        if (mbyCast &&
+                            mbyCast->arg<0>().val() == speculatedOn) {
+                            // sanity check
+                            assert(mbyCast->type ==
+                                   (mbyCast->type & speculatedOn->type));
+
+                            if (!cast) {
+                                cast = mbyCast;
+                            }
+                        }
+                    });
                 }
 
                 // Construct the slotUsed
@@ -104,7 +111,7 @@ void ClosureVersion::scanForSpeculation() {
                 if (cast) {
                     slotUsed.checkFor = mkT(cast->type);
                 } else {
-                    slotUsed.checkFor = mkT(typeTest->type);
+                    slotUsed.checkFor = mkT(typeTest->typeTest);
                 }
 
                 slotUsed.staticType = mkT(speculatedOn->type);
@@ -161,7 +168,6 @@ void ClosureVersion::computeSlotsPresent() {
             report::streamToString([&](std::ostream& os) { i->print(os); });
 
         info.slotPresent[origin.index()] = slotPresent;
-
     });
 }
 
