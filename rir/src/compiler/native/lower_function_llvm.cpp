@@ -2977,8 +2977,14 @@ void LowerFunctionLLVM::compile() {
                         break;
                     }
                     case blt("anyNA"):
-                    case blt("is.na"):
-                        if (irep == Rep::i32) {
+                    case blt("is.na"): {
+
+                        auto arg = i->arg(0).val();
+
+                        if ((irep == Rep::i32 || irep == Rep::f64) &&
+                            !arg->type.maybeNAOrNaN()) {
+                            setVal(i, constant(R_FalseValue, orep));
+                        } else if (irep == Rep::i32) {
                             setVal(i,
                                    builder.CreateSelect(
                                        builder.CreateICmpEQ(a, c(NA_INTEGER)),
@@ -2992,7 +2998,9 @@ void LowerFunctionLLVM::compile() {
                         } else {
                             done = false;
                         }
+
                         break;
+                    }
                     case blt("is.object"):
                         if (irep == Rep::SEXP) {
                             setVal(i, builder.CreateSelect(
@@ -4715,13 +4723,22 @@ void LowerFunctionLLVM::compile() {
                     assert(r1 == Rep::i32);
                     res = load(arg);
                     if (!arg->type.isA(RType::logical)) {
-                        res = builder.CreateSelect(
-                            builder.CreateICmpEQ(res, c(NA_INTEGER)),
-                            c(NA_LOGICAL),
-                            builder.CreateSelect(
+
+                        auto nonNAIntegerToBool = [&]() {
+                            return builder.CreateSelect(
                                 builder.CreateICmpEQ(res, c(0)),
                                 constant(R_FalseValue, t::Int),
-                                constant(R_TrueValue, t::Int)));
+                                constant(R_TrueValue, t::Int));
+                        };
+
+                        if (arg->type.maybeNAOrNaN()) {
+
+                            res = builder.CreateSelect(
+                                builder.CreateICmpEQ(res, c(NA_INTEGER)),
+                                c(NA_LOGICAL), nonNAIntegerToBool());
+                        } else {
+                            res = nonNAIntegerToBool();
+                        }
                     }
                 }
 
