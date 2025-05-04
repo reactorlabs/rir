@@ -95,7 +95,7 @@ xx3 <- function() {
    g()
 }
 
-for (i in 1:10)
+for (i in 1:1000)
 {xx1(); xx2(); xx3()}
 
 
@@ -111,3 +111,21 @@ stopifnot(g()==1)
 pir.compile(g)
 stopifnot(g()==1)
 
+
+
+f <- function() forceAndCall(1, function(zzz) missing(zzz), quote(expr=))
+for (i in 1:1000)
+  stopifnot(f() == FALSE)
+
+f <- function() forceAndCall(1, function(zzz) zzz, quote(expr=))
+for (i in 1:1000)
+  stopifnot(identical(f(), quote(expr=)))
+
+x <- as.list(function(y) 42)
+f <- function() forceAndCall(1, function(zzz) missing(zzz), x[[1]])
+for (i in 1:1000)
+  stopifnot(f() == FALSE)
+
+f <- function() forceAndCall(1, function(zzz) zzz, x[[1]])
+for (i in 1:1000)
+  stopifnot(identical(f(), quote(expr=)))

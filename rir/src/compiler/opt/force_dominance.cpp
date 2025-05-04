@@ -226,6 +226,7 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
+
                     } else if (toInline.count(f)) {
                         anyChange = true;
                         Promise* prom = mkarg->prom();
