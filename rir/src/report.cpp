@@ -352,6 +352,15 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 }
 
 std::unordered_multiset<pir::PirType>
+getUFeedbackTypesBag(const FunctionInfo& functionInfo) {
+    std::unordered_multiset<pir::PirType> result;
+    for (const auto& kv : functionInfo.allTypeSlots) {
+        result.insert(kv.second);
+    }
+    return result;
+}
+
+std::unordered_multiset<pir::PirType>
 FeedbackStatsPerFunction::getUFeedbackTypesBag(
     const FunctionInfo& functionInfo) const {
     std::unordered_multiset<pir::PirType> result;
@@ -487,6 +496,8 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(pollutedOutOfNarrowedRatio, pollutedNarrowed, narrowed);
     average(pollutedOutOfWidenedRatio, pollutedWidened, widened);
 
+    average(usedNonemptyRatio, used, referencedNonEmpty);
+
     return res;
 #undef average
 }
@@ -524,7 +535,8 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << " [polluted]";
             }
 
-            os << StreamColor::bold << " <" << feedbackType << ">\n" << StreamColor::clear;
+            os << StreamColor::bold << " <" << feedbackType << ">\n"
+               << StreamColor::clear;
 
             if (used) {
                 os << stats.slotsUsed.at(index);
@@ -783,6 +795,103 @@ void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
             os << "\"" << benchmark_name << "\"";
             os << ",\"" << cv.function->dispatchTable()->closureName << "\"";
             printCsvLine(os, &agg);
+        }
+    }
+}
+
+void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
+    os.seekp(0, std::ios::end);
+    if (os.tellp() == 0) {
+        // clang-format off
+        os  << "benchmark,compilation id,closure"
+            << ",non-empty,read,used"
+            << ",exact match,widened,narrowed"
+            << ",checkForT,staticT,feedbackT,expectedT,requiredT"
+            << ",optimized away,dependent"
+            << ",polymorphic"
+            << "\n";
+        // clang-format on
+    }
+
+    auto out_bool = [&](bool b, bool last = false) {
+        if (b) {
+            os << 1;
+        } else {
+            os << 0;
+        }
+
+        if (last) {
+            os << "\n";
+        } else {
+            os << ",";
+        }
+    };
+
+    size_t compilation_id = 0;
+
+    for (auto& session : COMPILATION_SESSIONS) {
+        auto& session_info = session.functionsInfo;
+
+        for (auto& closure_compilation : session.closureVersionStats) {
+            for (auto& i : closure_compilation.feedbackStats) {
+                auto& closure = i.first;
+                auto& feedback_info = i.second;
+                auto& static_info = session_info[closure];
+
+                auto feedback_types_bags = getUFeedbackTypesBag(static_info);
+
+                for (auto& j : sortByFeedbackIndex(static_info.allTypeSlots)) {
+                    auto& slot = j.first;
+                    auto& slot_type = j.second;
+
+                    // clang-format off
+                    os  << "\"" << benchmark_name << "\","
+                        << compilation_id << ","
+                        << "\"" << closure->dispatchTable()->closureName << "\",";
+                    // clang-format on
+
+                    bool non_empty = !static_info.emptySlots.count(slot);
+                    out_bool(non_empty);
+                    out_bool(feedback_info.slotsRead.count(slot));
+
+                    bool used = feedback_info.slotsUsed.count(slot);
+                    out_bool(used);
+
+                    if (used) {
+                        auto& usage = feedback_info.slotsUsed[slot];
+
+                        out_bool(usage.exactMatch());
+                        out_bool(usage.widened());
+                        out_bool(usage.narrowedWithStaticType());
+
+                        // clang-format off
+                        os  << "\"" << *usage.checkFor << "\"" << ","
+                            << "\"" << *usage.staticType << "\"" << ","
+                            << "\"" << *usage.feedbackType << "\"" << ","
+                            << "\"" << usage.expectedType() << "\"" << ","
+                            << "\"" << *usage.requiredType << "\"" << ",";
+                        // clang-format on
+
+                        out_bool(false);
+                        out_bool(false);
+                    } else {
+                        out_bool(false);
+                        out_bool(false);
+                        out_bool(false);
+
+                        for (int i = 0; i < 5; i++) {
+                            os << ",";
+                        }
+
+                        out_bool(!feedback_info.slotPresent.count(slot));
+                        out_bool(non_empty &&
+                                 feedback_types_bags.count(slot_type) > 1);
+                    }
+
+                    out_bool(static_info.pollutedSlots.count(slot), true);
+                }
+            }
+            compilation_id++;
         }
     }
 }

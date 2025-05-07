@@ -97,6 +97,12 @@ void myFinalizer(SEXP) {
         std::ofstream ofs{individual_file, std::ios::out | std::ios::app};
         report::reportIndividual(ofs, stats_name);
     }
+
+    auto slots_file = getenv("STATS_BY_SLOTS");
+    if (slots_file != nullptr) {
+        std::ofstream ofs{slots_file, std::ios::out | std::ios::app};
+        report::reportPerSlot(ofs, stats_name);
+    }
 }
 
 std::string getClosureName(SEXP cls) {

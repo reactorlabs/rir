@@ -151,7 +151,7 @@ struct Aggregate {
 
     Stat polluted{"polluted"};
     Stat pollutedUsed{"used polluted"};
-    Stat pollutedUnused{"unused polluted non-empty"};
+    Stat pollutedUnused{"unused polluted"};
 
     Stat pollutedExactMatch{"used polluted exact match"};
     Stat pollutedWidened{"used polluted widened"};
@@ -178,6 +178,7 @@ struct Aggregate {
 
             &polluted,
             &pollutedUsed,
+            &pollutedUnused,
 
             &pollutedExactMatch,
             &pollutedWidened,
@@ -223,6 +224,8 @@ struct FinalAggregate {
     FunctionAggregate pollutedOutOfWidenedRatio;
     FunctionAggregate pollutedOutOfNarrowedRatio;
 
+    FunctionAggregate usedNonemptyRatio;
+
     std::vector<Stat const*> stats() {
         return {&compiledClosureVersions, &benefitedClosureVersions};
     }
@@ -245,6 +248,8 @@ struct FinalAggregate {
             &pollutedOutOfExactMatchRatio,
             &pollutedOutOfWidenedRatio,
             &pollutedOutOfNarrowedRatio,
+
+            &usedNonemptyRatio,
         };
     }
 };
@@ -343,6 +348,7 @@ void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs);
 void reportCsv(std::ostream& os, const std::string& name);
 void reportIndividual(std::ostream& os, const std::string& benchmark_name);
+void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
 
 } // namespace report
 } // namespace rir
