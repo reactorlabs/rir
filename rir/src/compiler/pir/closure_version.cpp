@@ -149,26 +149,36 @@ void ClosureVersion::scanForSpeculation() {
 }
 
 void ClosureVersion::computeSlotsPresent() {
-    Visitor::run(this->entry, [&](Instruction* i) {
-        if (!i->hasTypeFeedback()) {
-            return;
+
+    std::function<void(BB*)> doCompute = [&](BB* e) {
+        Visitor::run(e, [&](Instruction* i) {
+            if (!i->hasTypeFeedback()) {
+                return;
+            }
+
+            const auto& tf = i->typeFeedback(false);
+            const auto& origin = tf.feedbackOrigin;
+            if (origin.index().isUndefined() || tf.defaultFeedback ||
+                origin.index().kind != FeedbackKind::Type) {
+                return;
+            }
+
+            auto& info = this->feedbackStatsFor(origin.function());
+
+            auto slotPresent = report::SlotPresent();
+            slotPresent.presentInstr =
+                report::streamToString([&](std::ostream& os) { i->print(os); });
+
+            info.slotPresent[origin.index()] = slotPresent;
+        });
+    };
+
+    doCompute(this->entry);
+    for (auto p : promises()) {
+        if (p) {
+            doCompute(p->entry);
         }
-
-        const auto& tf = i->typeFeedback(false);
-        const auto& origin = tf.feedbackOrigin;
-        if (origin.index().isUndefined() || tf.defaultFeedback ||
-            origin.index().kind != FeedbackKind::Type) {
-            return;
-        }
-
-        auto& info = this->feedbackStatsFor(origin.function());
-
-        auto slotPresent = report::SlotPresent();
-        slotPresent.presentInstr =
-            report::streamToString([&](std::ostream& os) { i->print(os); });
-
-        info.slotPresent[origin.index()] = slotPresent;
-    });
+    }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

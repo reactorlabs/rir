@@ -20,8 +20,14 @@
 namespace rir {
 namespace pir {
 
+static bool INLINE = getenv("PIR_INLINE") ? atoi(getenv("PIR_INLINE")) : true;
+
 bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                    AbstractLog& log, size_t) const {
+
+    if (!INLINE)
+        return false;
+
     bool anyChange = false;
     size_t fuel = Parameter::INLINER_INITIAL_FUEL;
 

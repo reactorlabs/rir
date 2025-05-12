@@ -136,6 +136,7 @@ struct Aggregate {
     Stat readNonEmpty{"read non-empty"};
 
     Stat used{"used"};
+    Stat unused{"unused"};
     Stat unusedNonEmpty{"unused non-empty"};
     Stat slotPresentNonEmpty{"present non-empty"};
 
@@ -144,7 +145,8 @@ struct Aggregate {
     Stat narrowed{"narrowed"};
     Stat widenedNarrowed{"widened narrowed"};
 
-    Stat optimizedAway{"optimized away non-empty"};
+    Stat optimizedAway{"optimized away"};
+    Stat optimizedAwayNonEmpty{"optimized away non-empty"};
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
 
@@ -159,6 +161,7 @@ struct Aggregate {
             &readNonEmpty,
 
             &used,
+            &unused,
             &unusedNonEmpty,
             &slotPresentNonEmpty,
 
@@ -168,6 +171,7 @@ struct Aggregate {
             &widenedNarrowed,
 
             &optimizedAway,
+            &optimizedAwayNonEmpty,
             &dependent,
             &unusedOther,
 
@@ -266,6 +270,9 @@ struct FunctionInfo {
     //         assert(false && "empty slots");
     //     }
     // }
+
+    std::unordered_multiset<pir::PirType> getFeedbackTypesBag() const;
+    size_t dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const;
 };
 
 // ------------------------------------------------------------
@@ -285,8 +292,9 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> redundantSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
-    std::unordered_multiset<pir::PirType>
-    getUFeedbackTypesBag(const FunctionInfo& functionInfo) const;
+
+    // std::unordered_multiset<pir::PirType>
+    // getFeedbackTypesBag(const FunctionInfo& functionInfo) const;
 };
 
 // ------------------------------------------------------------

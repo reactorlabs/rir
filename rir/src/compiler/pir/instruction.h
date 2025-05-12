@@ -2454,12 +2454,16 @@ class BuiltinCallFactory {
                             const std::vector<Value*>& args, unsigned srcIdx);
 };
 
+static bool DEFAULT_SPECULATION = getenv("PIR_DEFAULT_SPECULATION")
+                                      ? atoi(getenv("PIR_DEFAULT_SPECULATION"))
+                                      : true;
+
 class VLIE(MkEnv, Effect::LeaksArg) {
   public:
     std::vector<SEXP> varName;
     std::vector<bool> missing;
     bool stub = false;
-    bool neverStub = false;
+    bool neverStub = !DEFAULT_SPECULATION;
     int context = 1;
 
     typedef std::function<void(SEXP name, Value* val, bool missing)> LocalVarIt;

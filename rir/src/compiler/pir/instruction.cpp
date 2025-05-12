@@ -213,6 +213,10 @@ void Instruction::print(std::ostream& out, bool tty) const {
             out << typeFeedback().type;
         if (!typeFeedback().feedbackOrigin.hasSlot())
             out << "@?";
+
+        if (typeFeedback().feedbackOrigin.hasSlot()) {
+            out << "@" << typeFeedback().feedbackOrigin;
+        }
         out << ">";
     }
 }
