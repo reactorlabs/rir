@@ -350,7 +350,7 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
-    auto slotPresentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
+    auto slotPresentNonEmpty = intersect(keys(slotPresent), info.nonEmptySlots);
     agg.slotPresentNonEmpty = slotPresentNonEmpty.size();
 
     auto allFeedbackTypesBag = info.getFeedbackTypesBag();

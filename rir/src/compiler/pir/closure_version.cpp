@@ -14,8 +14,10 @@ void ClosureVersion::computeFeedbackStats() {
     // fill in slotsOptimizedAway .  Slots that don't appear in the code and are
     // non-empty remove from slotsReadNotUsedStaticTypeReason and
     // slotsReadCandidateNotUsedReason  slots that were optimized away
-    this->scanForRedundantSlots();
+
     this->scanForSpeculation();
+    this->scanForRedundantSlots();
+
     this->computeSlotsPresent();
 }
 

@@ -738,8 +738,8 @@ REXPORT SEXP compile_c1(SEXP what) {
 
     ///////////
     Context c = baseContext;
-    // c.setEager(0);
-    // c.setNonRefl(0);
+    c.setEager(0);
+    c.setNonRefl(0);
 
     std::cerr << "Context: " << c << "\n";
     pirCompile(what, c, "c1", opts);

@@ -2454,16 +2454,18 @@ class BuiltinCallFactory {
                             const std::vector<Value*>& args, unsigned srcIdx);
 };
 
-static bool DEFAULT_SPECULATION = getenv("PIR_DEFAULT_SPECULATION")
-                                      ? atoi(getenv("PIR_DEFAULT_SPECULATION"))
-                                      : true;
+// static bool DEFAULT_SPECULATION = getenv("PIR_DEFAULT_SPECULATION")
+//                                       ?
+//                                       atoi(getenv("PIR_DEFAULT_SPECULATION"))
+//                                       : true;
 
 class VLIE(MkEnv, Effect::LeaksArg) {
   public:
     std::vector<SEXP> varName;
     std::vector<bool> missing;
     bool stub = false;
-    bool neverStub = !DEFAULT_SPECULATION;
+    // bool neverStub = !DEFAULT_SPECULATION;
+    bool neverStub = false;
     int context = 1;
 
     typedef std::function<void(SEXP name, Value* val, bool missing)> LocalVarIt;
@@ -2765,7 +2767,8 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
     bool assumeTrue = true;
-    const DeoptReason reason;
+    // const
+    DeoptReason reason;
 
     bool defaultFeedback = false;
     PirType* required = nullptr;
