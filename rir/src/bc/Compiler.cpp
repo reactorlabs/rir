@@ -395,11 +395,16 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP fullAst, SEXP sym, SEXP seq,
     // } else {
 
     // m' <- colonCastLhs(m')
-    cs << BC::swap() << BC::colonCastLhs() << ctx.recordType()
-       << BC::ensureNamed() << BC::swap();
+    cs << BC::swap() << BC::colonCastLhs();
+
+    if (Compiler::profile)
+        cs << ctx.recordType();
+    cs << BC::ensureNamed() << BC::swap();
 
     // n' <- colonCastRhs(m', n')
-    cs << BC::colonCastRhs() << BC::ensureNamed() << ctx.recordType();
+    cs << BC::colonCastRhs() << BC::ensureNamed();
+    if (Compiler::profile)
+        cs << ctx.recordType();
 
     // step <- if (m' <= n') 1L else -1L
     cs << BC::dup2() << BC::le();

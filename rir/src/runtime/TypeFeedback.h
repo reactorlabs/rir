@@ -247,10 +247,11 @@ struct ObservedValues {
 enum class Opcode : uint8_t;
 
 class FeedbackOrigin {
+
+  public:
     FeedbackIndex index_;
     Function* function_ = nullptr;
 
-  public:
     FeedbackOrigin() {}
     FeedbackOrigin(rir::Function* fun, FeedbackIndex idx);
 

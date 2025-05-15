@@ -138,6 +138,7 @@ struct Aggregate {
     Stat readNonEmpty{"read non-empty"};
 
     Stat used{"used"};
+    Stat unused{"unused"};
     Stat unusedNonEmpty{"unused non-empty"};
     Stat presentNonEmpty{"present non-empty"};
 
@@ -145,7 +146,8 @@ struct Aggregate {
     Stat widened{"widened"};
     Stat narrowed{"narrowed"};
 
-    Stat optimizedAway{"optimized away non-empty"};
+    Stat optimizedAway{"optimized away"};
+    Stat optimizedAwayNonEmpty{"optimized away non-empty"};
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
 
@@ -165,6 +167,7 @@ struct Aggregate {
             &readNonEmpty,
 
             &used,
+            &unused,
             &unusedNonEmpty,
             &presentNonEmpty,
 
@@ -173,6 +176,7 @@ struct Aggregate {
             &narrowed,
 
             &optimizedAway,
+            &optimizedAwayNonEmpty,
             &dependent,
             &unusedOther,
 
@@ -278,6 +282,21 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
+
+    // void aaa() const {
+
+    //     if (nonEmptySlots.size() > 0) {
+    //         for (auto s : nonEmptySlots) {
+    //             allTypeSlots.at(s).print(std::cerr);
+    //             std::cerr << "\n";
+    //         }
+
+    //         assert(false && "empty slots");
+    //     }
+    // }
+
+    std::unordered_multiset<pir::PirType> getFeedbackTypesBag() const;
+    size_t dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const;
 };
 
 // ------------------------------------------------------------
@@ -294,10 +313,12 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
+    std::unordered_set<FeedbackIndex> redundantSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
-    std::unordered_multiset<pir::PirType>
-    getUFeedbackTypesBag(const FunctionInfo& functionInfo) const;
+
+    // std::unordered_multiset<pir::PirType>
+    // getFeedbackTypesBag(const FunctionInfo& functionInfo) const;
 };
 
 // ------------------------------------------------------------

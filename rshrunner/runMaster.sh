@@ -1,0 +1,3 @@
+source general.sh
+
+runMaster

@@ -83,6 +83,7 @@ class ClosureVersion : public Code {
   public:
     void computeFeedbackStats();
     void scanForSpeculation();
+    void scanForRedundantSlots();
     void computeSlotsPresent();
 
     ClosureVersion* clone(const Context& newContext);

@@ -731,6 +731,27 @@ REXPORT SEXP playground(SEXP what) {
     std::cerr << symbol << "\n";
     return R_NilValue;
 }
+REXPORT SEXP compile_c1(SEXP what) {
+
+    Context baseContext = pir::Compiler::defaultContext;
+    baseContext.add(Assumption::StaticallyArgmatched);
+    baseContext.add(Assumption::NoExplicitlyMissingArgs);
+    baseContext.add(Assumption::CorrectOrderOfArguments);
+    baseContext.add(Assumption::NotTooManyArguments);
+    baseContext.numMissing(0);
+
+    pir::DebugOptions opts = pir::DebugOptions::DefaultDebugOptions;
+
+    ///////////
+    Context c = baseContext;
+    c.setEager(0);
+    c.setNonRefl(0);
+
+    std::cerr << "Context: " << c << "\n";
+    pirCompile(what, c, "c1", opts);
+
+    return R_NilValue;
+}
 
 bool startup() {
     initializeRuntime();

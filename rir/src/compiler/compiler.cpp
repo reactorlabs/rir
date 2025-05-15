@@ -410,10 +410,10 @@ void Compiler::optimizeModule() {
                                           translation->getName());
 
                 if (v->anyChangePreviousIter) {
-
+                    v->scanForRedundantSlots();
                     auto resApply =
                         translation->apply(*this, v, clog, iteration);
-
+                    v->scanForRedundantSlots();
                     v->anyChangeCurrentIter |= resApply;
                     changed |= resApply;
                 }

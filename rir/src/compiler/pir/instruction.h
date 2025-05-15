@@ -376,6 +376,18 @@ class Instruction : public Value {
         return effects;
     }
 
+    virtual bool isIntructionTypePrecise(const GetType& at = [](Value* v) {
+        return v->type;
+    }) const {
+        return false;
+    }
+
+    bool isReturnTypePrecise(const GetType& at = [](Value* v) {
+        return v->type;
+    }) const {
+        return type.isPrecise() || isIntructionTypePrecise(at);
+    }
+
     void updateTypeAndEffects() {
         auto isRType = type.isRType();
         assert(!type.isVoid() || !isRType);
@@ -2425,6 +2437,9 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     PirType inferType(const GetType& at = [](Value* v) { return v->type; })
         const override final;
 
+    bool isIntructionTypePrecise(
+        const GetType& at = [](Value* v) { return v->type; }) const override;
+
     VisibilityFlag visibilityFlag() const override;
     Value* frameStateOrTs() const override final {
         return Tombstone::framestate();
@@ -2439,11 +2454,17 @@ class BuiltinCallFactory {
                             const std::vector<Value*>& args, unsigned srcIdx);
 };
 
+// static bool DEFAULT_SPECULATION = getenv("PIR_DEFAULT_SPECULATION")
+//                                       ?
+//                                       atoi(getenv("PIR_DEFAULT_SPECULATION"))
+//                                       : true;
+
 class VLIE(MkEnv, Effect::LeaksArg) {
   public:
     std::vector<SEXP> varName;
     std::vector<bool> missing;
     bool stub = false;
+    // bool neverStub = !DEFAULT_SPECULATION;
     bool neverStub = false;
     int context = 1;
 
@@ -2746,7 +2767,8 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 3, Effects::AnyI(),
 class FLI(Assume, 2, Effect::TriggerDeopt) {
   public:
     bool assumeTrue = true;
-    const DeoptReason reason;
+    // const
+    DeoptReason reason;
 
     bool defaultFeedback = false;
     PirType* required = nullptr;

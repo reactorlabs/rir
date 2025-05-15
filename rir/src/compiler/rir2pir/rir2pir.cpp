@@ -223,6 +223,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
     };
 
+    static bool TRANSFER_FEEDBACK = getenv("PIR_TRANSFER_FEEDBACK")
+                                        ? atoi(getenv("PIR_TRANSFER_FEEDBACK"))
+                                        : true;
+    static bool DEFAULT_SPECULATION =
+        getenv("PIR_DEFAULT_SPECULATION")
+            ? atoi(getenv("PIR_DEFAULT_SPECULATION"))
+            : true;
+
     switch (bc.bc) {
 
     case Opcode::push_: {
@@ -385,7 +393,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                              : (Value*)False::instance();
                 if (!i->typeFeedback(false).value) {
                     auto& t = i->updateTypeFeedback(false);
-                    t.value = v;
+                    if (TRANSFER_FEEDBACK) {
+                        t.value = v;
+                    }
                     t.feedbackOrigin = FeedbackOrigin(srcCode->function(),
                                                       FeedbackIndex::test(idx));
                 } else if (i->typeFeedback(false).value != v) {
@@ -429,28 +439,30 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::type(idx));
             if (feedback.numTypes) {
 
-                // std::cerr << "before merging: \n";
-                // std::cerr << t.type << "\n";
+                if (TRANSFER_FEEDBACK) {
+                    t.type.merge(feedback);
+                    if (auto force = Force::Cast(i)) {
+                        force->observed = static_cast<Force::ArgumentKind>(
+                            feedback.stateBeforeLastForce);
 
-                t.type.merge(feedback);
-                if (auto force = Force::Cast(i)) {
-                    force->observed = static_cast<Force::ArgumentKind>(
-                        feedback.stateBeforeLastForce);
+                        if (t.type.maybeLazy()) {
+                            std::cerr << "maybelazy: \n\n";
+                            force->print(std::cerr, true);
+                            std::cerr << "\n";
+                            std::cerr << t.type << "\n";
 
-                    if (t.type.maybeLazy()) {
-                        std::cerr << "maybelazy: \n\n";
-                        force->print(std::cerr, true);
-                        std::cerr << "\n";
-                        std::cerr << t.type << "\n";
-
-                        assert(false && "maybe lazy");
+                            assert(false && "maybe lazy");
+                        }
                     }
                 }
             } else if (t.type.isVoid() &&
                        (!insert.function->optFunction->isOptimized() ||
                         insert.function->optFunction->deoptCount() == 0)) {
-                t.type = PirType::val().notObject().fastVecelt();
-                t.defaultFeedback = true;
+
+                if (DEFAULT_SPECULATION) {
+                    t.type = PirType::val().notObject().fastVecelt();
+                    t.defaultFeedback = true;
+                }
             }
         }
         break;
@@ -464,7 +476,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // If this call was never executed we might as well compile an
         // unconditional deopt.
-        if (!inPromise() && !inlining() && feedback.taken == 0 &&
+        if (TRANSFER_FEEDBACK && !inPromise() && !inlining() &&
+            feedback.taken == 0 &&
             insert.function->optFunction->invocationCount() > 1 &&
             srcCode->function()->deadCallReached() < 3) {
             auto sp =
@@ -498,72 +511,81 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // in there.
             //
             auto& f = i->updateCallFeedback(false);
-            f.taken = feedback.taken;
             f.feedbackOrigin =
                 FeedbackOrigin(srcCode->function(), FeedbackIndex::call(idx));
-            if (feedback.numTargets == 1) {
-                assert(!feedback.invalid &&
-                       "feedback can't be invalid if numTargets is 1");
-                f.monomorphic = feedback.getTarget(srcCode->function(), 0);
-                f.type = TYPEOF(f.monomorphic);
-                f.stableEnv = true;
-            } else if (feedback.numTargets > 1) {
-                SEXP first = nullptr;
-                bool stableType = !feedback.invalid;
-                bool stableBody = !feedback.invalid;
-                bool stableEnv = !feedback.invalid;
-                for (size_t i = 0; i < feedback.numTargets; ++i) {
-                    SEXP b = feedback.getTarget(srcCode->function(), i);
-                    if (!first) {
-                        first = b;
-                    } else {
-                        if (TYPEOF(b) != TYPEOF(first))
-                            stableType = stableBody = stableEnv = false;
-                        else if (TYPEOF(b) == CLOSXP) {
-                            if (BODY(first) != BODY(b))
-                                stableBody = false;
-                            if (CLOENV(first) != CLOENV(b))
-                                stableEnv = false;
+
+            if (TRANSFER_FEEDBACK) {
+
+                f.taken = feedback.taken;
+                if (feedback.numTargets == 1) {
+                    assert(!feedback.invalid &&
+                           "feedback can't be invalid if numTargets is 1");
+                    f.monomorphic = feedback.getTarget(srcCode->function(), 0);
+                    f.type = TYPEOF(f.monomorphic);
+                    f.stableEnv = true;
+                } else if (feedback.numTargets > 1) {
+                    SEXP first = nullptr;
+                    bool stableType = !feedback.invalid;
+                    bool stableBody = !feedback.invalid;
+                    bool stableEnv = !feedback.invalid;
+                    for (size_t i = 0; i < feedback.numTargets; ++i) {
+                        SEXP b = feedback.getTarget(srcCode->function(), i);
+                        if (!first) {
+                            first = b;
                         } else {
-                            stableBody = stableEnv = false;
+                            if (TYPEOF(b) != TYPEOF(first))
+                                stableType = stableBody = stableEnv = false;
+                            else if (TYPEOF(b) == CLOSXP) {
+                                if (BODY(first) != BODY(b))
+                                    stableBody = false;
+                                if (CLOENV(first) != CLOENV(b))
+                                    stableEnv = false;
+                            } else {
+                                stableBody = stableEnv = false;
+                            }
                         }
                     }
-                }
 
-                if (auto c = cls->isContinuation()) {
-                    if (auto d = c->continuationContext->asDeoptContext()) {
-                        if (d->reason().reason == DeoptReason::CallTarget) {
-                            if (d->reason().origin.idx() == idx) {
-                                auto deoptCallTarget = d->callTargetTrigger();
-                                for (size_t i = 0; i < feedback.numTargets;
-                                     ++i) {
-                                    SEXP b = feedback.getTarget(
-                                        srcCode->function(), i);
-                                    if (b != deoptCallTarget)
-                                        deoptedCallTargets.insert(b);
-                                }
-                                if (feedback.numTargets == 2) {
-                                    assert(!feedback.invalid &&
-                                           "Feedback should not be invalid");
-                                    first = deoptCallTarget;
-                                    stableBody = stableEnv = stableType = true;
-                                    if (TYPEOF(deoptCallTarget) == CLOSXP &&
-                                        !isValidClosureSEXP(deoptCallTarget))
-                                        rir::Compiler::compileClosure(
-                                            deoptCallTarget);
-                                    deoptedCallReplacement = deoptCallTarget;
+                    if (auto c = cls->isContinuation()) {
+                        if (auto d = c->continuationContext->asDeoptContext()) {
+                            if (d->reason().reason == DeoptReason::CallTarget) {
+                                if (d->reason().origin.idx() == idx) {
+                                    auto deoptCallTarget =
+                                        d->callTargetTrigger();
+                                    for (size_t i = 0; i < feedback.numTargets;
+                                         ++i) {
+                                        SEXP b = feedback.getTarget(
+                                            srcCode->function(), i);
+                                        if (b != deoptCallTarget)
+                                            deoptedCallTargets.insert(b);
+                                    }
+                                    if (feedback.numTargets == 2) {
+                                        assert(
+                                            !feedback.invalid &&
+                                            "Feedback should not be invalid");
+                                        first = deoptCallTarget;
+                                        stableBody = stableEnv = stableType =
+                                            true;
+                                        if (TYPEOF(deoptCallTarget) == CLOSXP &&
+                                            !isValidClosureSEXP(
+                                                deoptCallTarget))
+                                            rir::Compiler::compileClosure(
+                                                deoptCallTarget);
+                                        deoptedCallReplacement =
+                                            deoptCallTarget;
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                if (stableType)
-                    f.type = TYPEOF(first);
-                if (stableBody)
-                    f.monomorphic = first;
-                if (stableEnv)
-                    f.stableEnv = true;
+                    if (stableType)
+                        f.type = TYPEOF(first);
+                    if (stableBody)
+                        f.monomorphic = first;
+                    if (stableEnv)
+                        f.stableEnv = true;
+                }
             }
         }
         break;

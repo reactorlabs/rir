@@ -248,8 +248,42 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 
 // ------------------------------------------------------------
 
+std::unordered_multiset<pir::PirType>
+FunctionInfo::getFeedbackTypesBag() const {
+    std::unordered_multiset<pir::PirType> result;
+    for (const auto& kv : allTypeSlots) {
+        result.insert(kv.second);
+    }
+
+    return result;
+}
+
+size_t
+FunctionInfo::dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const {
+
+    auto allFeedbackTypesBag = getFeedbackTypesBag();
+    size_t result = 0;
+    std::unordered_set<rir::pir::PirType> types;
+
+    for (auto s : slots) {
+        auto t = allTypeSlots.at(s);
+        if (allFeedbackTypesBag.count(t) > 1) {
+            types.insert(t);
+            result++;
+        }
+    }
+
+    if (result > 0) {
+        result = result - types.size();
+    }
+
+    return result;
+}
+
+// ------------------------------------------
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
     // clang-format off
+    //assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
     return os << agg.referenced << agg.referencedNonEmpty << agg.readNonEmpty
               << agg.used << agg.presentNonEmpty
               << "\n"
@@ -259,8 +293,12 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << "\n"
 
               << StreamColor::blue << "Unused\n" << StreamColor::clear
+              << agg.unused
+              << agg.optimizedAway
               << agg.unusedNonEmpty
-              << agg.optimizedAway << agg.dependent << agg.unusedOther
+              << agg.optimizedAwayNonEmpty
+              << agg.dependent
+              << agg.unusedOther
               << "\n"
 
               << StreamColor::blue << "Polluted\n" << StreamColor::clear
@@ -269,6 +307,15 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 }
 
 // ------------------------------------------------------------
+
+template <typename MapType>
+std::unordered_set<typename MapType::key_type> getKeys(const MapType& m) {
+    std::unordered_set<typename MapType::key_type> keys;
+    for (const auto& pair : m) {
+        keys.insert(pair.first);
+    }
+    return keys;
+}
 
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
@@ -316,32 +363,96 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     }
 
     // Unused
-    auto unusedNonEmpty =
-        intersect(difference(keys(info.allTypeSlots), keys(slotsUsed)),
-                  info.nonEmptySlots);
+    auto unusedSlots = difference(keys(info.allTypeSlots), keys(slotsUsed));
+    agg.unused = unusedSlots.size();
+    auto unusedNonEmpty = intersect(unusedSlots, info.nonEmptySlots);
+
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
     auto presentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
     agg.presentNonEmpty = presentNonEmpty.size();
 
-    auto allFeedbackTypesBag = getUFeedbackTypesBag(info);
-    for (auto slot : unusedNonEmpty) {
-        bool unusedOther = true;
+    auto allFeedbackTypesBag = info.getFeedbackTypesBag();
 
-        if (!slotPresent.count(slot)) {
-            agg.optimizedAway++;
-            unusedOther = false;
-        }
+    auto redundantPresent = 0;
+    // auto redundant = 0;
 
-        if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
-            agg.dependent++;
-            unusedOther = false;
-        }
+    // auto dependentPresent = 0;
+    // auto additionaRedundantPresent = 0;
 
-        if (unusedOther) {
-            agg.unusedOther++;
-        }
-    }
+    // auto additionaRedundant = 0;
+
+    auto redundantSlotsUnusedNonEmpty =
+        intersect(redundantSlots, unusedNonEmpty);
+    auto redundantSlotsUnusedNonEmptyPresent =
+        intersect(redundantSlotsUnusedNonEmpty, getKeys(slotPresent));
+
+    redundantPresent = redundantSlotsUnusedNonEmptyPresent.size();
+
+    auto optimizedAwayNonEmptySlots =
+        difference(unusedNonEmpty, getKeys(slotPresent));
+    agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
+
+    // auto unusedEmptySlots  =  difference(unusedSlots, info.emptySlots);
+    auto optimizedAwaySlots =
+        difference(getKeys(info.allTypeSlots), getKeys(slotPresent));
+    agg.optimizedAway = optimizedAwaySlots.size();
+
+    assert(optimizedAwaySlots.size() >= optimizedAwayNonEmptySlots.size());
+    assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
+
+    // for (auto slot : unusedNonEmpty) {
+    //     if (!slotPresent.count(slot)) {
+    //         agg.optimizedAwayNonEmpty++;
+    //     }
+
+    //     // if (slotPresent.count(slot)) {
+    //     //     bool a, b;
+    //     //     a = false;
+    //     //     b = false;
+    //     //     if (redundantSlots.count(slot)) {
+    //     //         a = true;
+    //     //         redundantPresent++;
+    //     //     }
+
+    //     //     if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1)
+    //     {
+    //     //         b = true;
+    //     //         dependentPresent++;
+    //     //     }
+
+    //     //     if (a && !b) {
+    //     //         additionaRedundantPresent++;
+    //     //     }
+    //     // }
+
+    //     // if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
+    //     //     //agg.dependent++;
+    //     // } else {
+
+    //     //     // if (redundantSlotsUnusedNonEmpty.count(slot)) {
+    //     //     //     additionaRedundant++;
+    //     //     // }
+
+    //     //     agg.unusedOther++;
+    //     // }
+    // }
+
+    agg.dependent = info.dependentsCountIn(unusedNonEmpty);
+    agg.unusedOther.value = unusedNonEmpty.size() - agg.dependent.value;
+
+    std::cerr
+        << "****** "
+        //<< "total redudant: " << redundantSlots.size()
+        << " redundant: " << redundantSlotsUnusedNonEmpty.size()
+        << " dependent: "
+        << agg.dependent.value
+        //<< " dependent present: " << dependentPresent
+        << "  redundant present: "
+        << redundantPresent
+        //   << " additionaRedundantPresent: " << additionaRedundantPresent
+        //   << " additionaRedundant: " << additionaRedundant
+        << " *********   \n";
 
     // Polluted
     agg.polluted = info.pollutedSlots.size();
@@ -349,25 +460,6 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.pollutedUnused = intersect(info.pollutedSlots, unusedNonEmpty).size();
 
     return agg;
-}
-
-std::unordered_multiset<pir::PirType>
-getUFeedbackTypesBag(const FunctionInfo& functionInfo) {
-    std::unordered_multiset<pir::PirType> result;
-    for (const auto& kv : functionInfo.allTypeSlots) {
-        result.insert(kv.second);
-    }
-    return result;
-}
-
-std::unordered_multiset<pir::PirType>
-FeedbackStatsPerFunction::getUFeedbackTypesBag(
-    const FunctionInfo& functionInfo) const {
-    std::unordered_multiset<pir::PirType> result;
-    for (const auto& kv : functionInfo.allTypeSlots) {
-        result.insert(kv.second);
-    }
-    return result;
 }
 
 // ------------------------------------------------------------
@@ -483,7 +575,7 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(readRatio, readNonEmpty, referenced);
     average(usedRatio, used, referenced);
 
-    average(optimizedAwayRatio, optimizedAway, unusedNonEmpty);
+    average(optimizedAwayRatio, optimizedAwayNonEmpty, unusedNonEmpty);
     average(dependentRatio, dependent, unusedNonEmpty);
     average(unusedOtherRatio, unusedOther, unusedNonEmpty);
 
@@ -544,8 +636,7 @@ void report(std::ostream& os, bool breakdownInfo,
                 bool otherReason = false;
 
                 bool isDependency =
-                    stats.getUFeedbackTypesBag(info).count(feedbackType) > 1;
-
+                    info.getFeedbackTypesBag().count(feedbackType) > 1;
                 if (!stats.slotPresent.count(index)) {
                     os << "optimized away\n";
                     otherReason = false;
@@ -677,13 +768,18 @@ void report(std::ostream& os, bool breakdownInfo,
         << "\n";
 
     finalHeader("Unused slots");
-    os  << final.sums.unusedNonEmpty
+    os
+        << final.sums.unused
         << final.sums.optimizedAway
+        << final.sums.unusedNonEmpty
+        << final.sums.optimizedAwayNonEmpty
         << final.sums.dependent
         << final.sums.unusedOther
         << "\n";
 
-    os  << final.sums.optimizedAway / final.sums.unusedNonEmpty
+    os
+        << final.sums.optimizedAway / final.sums.unused
+        << final.sums.optimizedAwayNonEmpty / final.sums.unusedNonEmpty
         << final.sums.dependent / final.sums.unusedNonEmpty
         << final.sums.unusedOther / final.sums.unusedNonEmpty
         << "\n";

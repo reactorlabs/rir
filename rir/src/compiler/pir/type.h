@@ -724,6 +724,8 @@ struct PirType {
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
 
+    constexpr bool isOneRType() const { return isRType() && t_.r.count() == 1; }
+
     constexpr bool isA(const PirType& o) const { return o.isSuper(*this); }
 
     constexpr bool isSuper(const PirType& o) const {
@@ -769,6 +771,48 @@ struct PirType {
     bool isVirtualValue() {
         return isA(NativeType::context) || isA(NativeType::checkpoint);
     }
+
+    bool hasPreciseFlags() const {
+
+        if (!isRType()) {
+            return false;
+        }
+
+        // we use these flags since nan and missing are not tracked in the
+        // typefeedback
+
+        auto flags = FlagSet() | TypeFlags::rtype | TypeFlags::maybeNAOrNaN |
+                     TypeFlags::maybeMissing;
+
+        auto flagsOk = true;
+        for (auto f : flags_) {
+            flagsOk = flagsOk && flags.contains(f);
+        }
+
+        return flagsOk;
+    }
+
+    bool hasPreciseFlagsNotScalar() const {
+
+        if (!isRType()) {
+            return false;
+        }
+
+        // we use these flags since nan and missing are not tracked in the
+        // typefeedback
+
+        auto flags = FlagSet() | TypeFlags::rtype | TypeFlags::maybeNAOrNaN |
+                     TypeFlags::maybeMissing | TypeFlags::maybeNotScalar;
+
+        auto flagsOk = true;
+        for (auto f : flags_) {
+            flagsOk = flagsOk && flags.contains(f);
+        }
+
+        return flagsOk;
+    }
+
+    bool isPrecise() const { return isOneRType() && hasPreciseFlags(); }
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
