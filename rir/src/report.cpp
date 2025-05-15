@@ -934,7 +934,7 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                 auto& feedback_info = i.second;
                 auto& static_info = session_info[closure];
 
-                auto feedback_types_bags = getUFeedbackTypesBag(static_info);
+                auto feedback_types_bags = static_info.getFeedbackTypesBag();
 
                 for (auto& j : sortByFeedbackIndex(static_info.allTypeSlots)) {
                     auto& slot = j.first;
