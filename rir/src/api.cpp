@@ -89,13 +89,7 @@ void myFinalizer(SEXP) {
     auto csv_file = getenv("STATS_CSV");
     if (csv_file != nullptr) {
         std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
-        report::reportCsv(ofs, stats_name);
-    }
-
-    auto individual_file = getenv("STATS_ALL_CSV");
-    if (individual_file != nullptr) {
-        std::ofstream ofs{individual_file, std::ios::out | std::ios::app};
-        report::reportIndividual(ofs, stats_name);
+        report::reportCsv(ofs, stats_name, PreservedDispatchTables);
     }
 
     auto slots_file = getenv("STATS_BY_SLOTS");

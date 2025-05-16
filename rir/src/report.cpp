@@ -812,91 +812,33 @@ void report(std::ostream& os, bool breakdownInfo,
     // clang-format on
 }
 
-void printCsvHeader(std::ostream& os,
-                    std::initializer_list<std::string> extraFields,
-                    Aggregate* aggFields,
-                    FinalAggregate* finalFields = nullptr) {
-    assert(extraFields.size() != 0);
-
-    // Print the header if the file is empty
+void reportCsv(std::ostream& os, const std::string& program_name,
+               const std::vector<DispatchTable*>& DTs) {
     os.seekp(0, std::ios::end);
-    if (os.tellp() != 0) {
-        return;
+    if (os.tellp() == 0) {
+        // clang-format off
+        os  << "benchmark"
+            << ",closures"
+            << ",compiled closures"
+            << ",closure compilations"
+            << ",benefited compilations"
+            << ",deopts"
+            << "\n";
+        // clang-format on
     }
 
-    bool first = true;
-
-    for (const auto& i : extraFields) {
-        if (first) {
-            os << i;
-            first = false;
-        } else {
-            os << "," << i;
-        }
-    }
-
-    for (const auto& i : aggFields->stats()) {
-        os << "," << i->name;
-    }
-
-    if (finalFields != nullptr) {
-        for (const auto& i : finalFields->stats()) {
-            os << "," << i->name;
-        }
-
-        for (auto i : finalFields->aggregates()) {
-            os << "," << i->name;
-        }
-    }
-
-    os << "\n";
-}
-
-// Assumes you have written something before (the extraFields)
-void printCsvLine(std::ostream& os, Aggregate* aggFields,
-                  FinalAggregate* finalFields = nullptr) {
-    for (const auto& i : aggFields->stats()) {
-        os << "," << i->value;
-    }
-
-    if (finalFields != nullptr) {
-        for (const auto& i : finalFields->stats()) {
-            os << "," << i->value;
-        }
-
-        for (const auto& i : finalFields->aggregates()) {
-            os << "," << i->average();
-        }
-    }
-
-    os << "\n";
-}
-
-void reportCsv(std::ostream& os, const std::string& program_name) {
     auto agg = CompilationSession::getFinalAgg();
 
-    printCsvHeader(os, {"name"}, &agg.sums, &agg);
-    os << "\"" << program_name << "\"";
-    printCsvLine(os, &agg.sums, &agg);
-}
-
-void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
-    bool first = true;
-
-    for (auto& cs : COMPILATION_SESSIONS) {
-        for (auto& cv : cs.closureVersionStats) {
-            auto agg = cv.getAgg(cs.functionsInfo);
-
-            if (first) {
-                printCsvHeader(os, {"benchmark", "closure"}, &agg);
-                first = false;
-            }
-
-            os << "\"" << benchmark_name << "\"";
-            os << ",\"" << cv.function->dispatchTable()->closureName << "\"";
-            printCsvLine(os, &agg);
-        }
-    }
+    // clang-format off
+    os
+        << "\"" << program_name << "\""
+        << "," << DTs.size()
+        << "," << agg.sums.universe.size()
+        << "," << agg.compiledClosureVersions
+        << "," << agg.benefitedClosureVersions
+        << "," << agg.deoptsCount
+        << "\n";
+    // clang-format on
 }
 
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
