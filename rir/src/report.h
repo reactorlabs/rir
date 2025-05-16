@@ -150,9 +150,9 @@ struct Aggregate {
     Stat optimizedAwayNonEmpty{"optimized away non-empty"};
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
-    Stat redundant{"redundant"};
-    Stat redundantNonEmpty{"redundant non-empty"};
-    Stat redundantPresentNonEmpty{"redudant present non-empty"};
+    Stat preciseType{"precise type"};
+    Stat preciseTypeNonEmpty{"precise type non-empty"};
+    Stat preciseTypePresentNonEmpty{"precise type present non-empty"};
 
     Stat polymorphic{"polymorphic"};
     Stat polymorphicUsed{"used polymorphic"};
@@ -182,9 +182,9 @@ struct Aggregate {
             &optimizedAwayNonEmpty,
             &dependent,
             &unusedOther,
-            &redundant,
-            &redundantNonEmpty,
-            &redundantPresentNonEmpty,
+            &preciseType,
+            &preciseTypeNonEmpty,
+            &preciseTypePresentNonEmpty,
 
 
             &polymorphic,
@@ -282,7 +282,7 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
-    std::unordered_set<FeedbackIndex> redundantSlots;
+    std::unordered_set<FeedbackIndex> preciseTypeSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
 };

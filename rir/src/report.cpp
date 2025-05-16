@@ -367,9 +367,9 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << agg.optimizedAwayNonEmpty
               << agg.dependent
               << agg.unusedOther
-              << agg.redundant
-              << agg.redundantNonEmpty
-              << agg.redundantPresentNonEmpty
+              << agg.preciseType
+              << agg.preciseTypeNonEmpty
+              << agg.preciseTypePresentNonEmpty
               << "\n"
 
               << StreamColor::blue << "Polymorphic\n" << StreamColor::clear
@@ -445,17 +445,14 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     auto allFeedbackTypesBag = info.getFeedbackTypesBag();
 
-    // redundant
-    auto redundantSlotsNonEmpty = intersect(redundantSlots, unusedNonEmpty);
-    auto redundantSlotsPresentNonEmpty =
-        intersect(redundantSlotsNonEmpty, getKeys(slotPresent));
+    // precise type
+    auto preciseTypeSlotsNonEmpty = intersect(preciseTypeSlots, unusedNonEmpty);
+    auto preciseTypeSlotsPresentNonEmpty =
+        intersect(preciseTypeSlotsNonEmpty, getKeys(slotPresent));
 
-    agg.redundant = redundantSlots.size();
-    agg.redundantNonEmpty = redundantSlotsNonEmpty.size();
-    agg.redundantPresentNonEmpty = redundantSlotsPresentNonEmpty.size();
-
-    // auto redundantPresent = redundantSlotsUnusedNonEmptyPresent.size();
-    // agg.redundantNonEmpty = redundantSlotsUnusedNonEmpty.size();
+    agg.preciseType = preciseTypeSlots.size();
+    agg.preciseTypeNonEmpty = preciseTypeSlotsNonEmpty.size();
+    agg.preciseTypePresentNonEmpty = preciseTypeSlotsPresentNonEmpty.size();
 
     auto optimizedAwayNonEmptySlots =
         difference(unusedNonEmpty, getKeys(slotPresent));
@@ -472,17 +469,6 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.dependent = info.dependentsCountIn(unusedNonEmpty);
     agg.unusedOther.value = unusedNonEmpty.size() - agg.dependent.value;
 
-    // std::cerr
-    //     << "****** "
-    //     << "total redudant: " << redundantSlots.size()
-    //     << " redundant: " << agg.redundantNonEmpty
-    //     << " dependent: "
-    //     << agg.dependent.value
-    //     //<< " dependent present: " << dependentPresent
-    //     << "  redundant present: "<< agg.re
-    //     //   << " additionaRedundantPresent: " << additionaRedundantPresent
-    //     //   << " additionaRedundant: " << additionaRedundant
-    //     << " *********   \n";
 
     // polymorphic
     agg.polymorphic = info.polymorphicSlots.size();
@@ -811,9 +797,9 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.sums.optimizedAwayNonEmpty
         << final.sums.dependent
         << final.sums.unusedOther
-        << final.sums.redundant
-        << final.sums.redundantNonEmpty
-        << final.sums.redundantPresentNonEmpty
+        << final.sums.preciseType
+        << final.sums.preciseTypeNonEmpty
+        << final.sums.preciseTypePresentNonEmpty
         << "\n";
 
     os
@@ -821,7 +807,7 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.sums.optimizedAwayNonEmpty / final.sums.unusedNonEmpty
         << final.sums.dependent / final.sums.unusedNonEmpty
         << final.sums.unusedOther / final.sums.unusedNonEmpty
-        << final.sums.redundantNonEmpty / final.sums.unusedNonEmpty
+        << final.sums.preciseTypeNonEmpty / final.sums.unusedNonEmpty
 
         << "\n";
 

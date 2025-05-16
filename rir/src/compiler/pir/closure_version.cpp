@@ -16,12 +16,12 @@ void ClosureVersion::computeFeedbackStats() {
     // slotsReadCandidateNotUsedReason  slots that were optimized away
 
     this->scanForSpeculation();
-    this->scanForRedundantSlots();
+    this->scanForPreciseTypeSlots();
 
     this->computeSlotsPresent();
 }
 
-void ClosureVersion::scanForRedundantSlots() {
+void ClosureVersion::scanForPreciseTypeSlots() {
 
     Visitor::run(this->entry, [&](Instruction* i) {
         if (!i->hasTypeFeedback()) {
@@ -42,7 +42,7 @@ void ClosureVersion::scanForRedundantSlots() {
             // i->print(std::cerr, true);
             // std::cerr << "\n";
 
-            info.redundantSlots.insert(origin.index());
+            info.preciseTypeSlots.insert(origin.index());
 
             // assert(false);
         }
@@ -140,15 +140,6 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 info.slotsUsed[fo.index()] = slotUsed;
-
-                // if (info.redundantSlots.count(fo.index())) {
-                //     std::cerr<< "\n";
-                //     std::cerr << slotUsed.speculatedOn << "\n";
-
-                //     std::cerr << slotUsed.assumeInstr << "\n";
-
-                //     assert(false && "used and redudant");
-                // }
             }
         }
     });
