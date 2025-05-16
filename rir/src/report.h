@@ -210,6 +210,7 @@ struct FinalAggregate {
     Stat compiledClosureVersions{"closure version compilations"};
     Stat benefitedClosureVersions{
         "closure version compilations using some type feedback"};
+    Stat deoptsCount {"deoptimizations"};
 
     FunctionAggregate referencedNonEmptyRatio;
     FunctionAggregate readRatio;

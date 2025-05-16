@@ -589,9 +589,13 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(pollutedOutOfWidenedRatio, pollutedWidened, widened);
 
     average(usedNonemptyRatio, used, referencedNonEmpty);
+#undef average
+
+    for (auto f : res.sums.universe) {
+        res.deoptsCount += f->allDeoptsCount;
+    }
 
     return res;
-#undef average
 }
 
 // ------------------------------------------------------------
