@@ -301,8 +301,8 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << agg.unusedOther
               << "\n"
 
-              << StreamColor::blue << "Polluted\n" << StreamColor::clear
-              << agg.polluted << agg.pollutedUsed;
+              << StreamColor::blue << "Polymorphic\n" << StreamColor::clear
+              << agg.polymorphic << agg.polymorphicUsed;
     // clang-format on
 }
 
@@ -335,28 +335,28 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     for (const auto& i : slotsUsed) {
         const auto& usage = i.second;
 
-        bool polluted = info.pollutedSlots.count(i.first);
+        bool polymorphic = info.polymorphicSlots.count(i.first);
 
         if (usage.exactMatch()) {
             agg.exactMatch++;
 
-            if (polluted) {
-                agg.pollutedExactMatch++;
+            if (polymorphic) {
+                agg.polymorphicExactMatch++;
             }
         } else {
             if (usage.narrowedWithStaticType()) {
                 agg.narrowed++;
 
-                if (polluted) {
-                    agg.pollutedNarrowed++;
+                if (polymorphic) {
+                    agg.polymorphicNarrowed++;
                 }
             }
 
             if (usage.widened()) {
                 agg.widened++;
 
-                if (polluted) {
-                    agg.pollutedWidened++;
+                if (polymorphic) {
+                    agg.polymorphicWidened++;
                 }
             }
         }
@@ -454,10 +454,10 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
         //   << " additionaRedundant: " << additionaRedundant
         << " *********   \n";
 
-    // Polluted
-    agg.polluted = info.pollutedSlots.size();
-    agg.pollutedUsed = intersect(info.pollutedSlots, keys(slotsUsed)).size();
-    agg.pollutedUnused = intersect(info.pollutedSlots, unusedNonEmpty).size();
+    // polymorphic
+    agg.polymorphic = info.polymorphicSlots.size();
+    agg.polymorphicUsed = intersect(info.polymorphicSlots, keys(slotsUsed)).size();
+    agg.polymorphicUnused = intersect(info.polymorphicSlots, unusedNonEmpty).size();
 
     return agg;
 }
@@ -500,8 +500,8 @@ void computeFunctionsInfo(
                 slotData.nonEmptySlots.insert(idx);
             }
 
-            if (tf.isPolluted) {
-                slotData.pollutedSlots.insert(idx);
+            if (tf.isPolymorphic) {
+                slotData.polymorphicSlots.insert(idx);
             }
         }
 
@@ -579,14 +579,14 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(dependentRatio, dependent, unusedNonEmpty);
     average(unusedOtherRatio, unusedOther, unusedNonEmpty);
 
-    average(pollutedRatio, polluted, referencedNonEmpty);
-    average(pollutedOutOfUsedRatio, pollutedUsed, used);
-    average(pollutedOutOfUnusedRatio, pollutedUnused, unusedNonEmpty);
-    average(pollutedUsedRatio, pollutedUsed, polluted);
+    average(polymorphicRatio, polymorphic, referencedNonEmpty);
+    average(polymorphicOutOfUsedRatio, polymorphicUsed, used);
+    average(polymorphicOutOfUnusedRatio, polymorphicUnused, unusedNonEmpty);
+    average(polymorphicUsedRatio, polymorphicUsed, polymorphic);
 
-    average(pollutedOutOfExactMatchRatio, pollutedExactMatch, exactMatch);
-    average(pollutedOutOfNarrowedRatio, pollutedNarrowed, narrowed);
-    average(pollutedOutOfWidenedRatio, pollutedWidened, widened);
+    average(polymorphicOutOfExactMatchRatio, polymorphicExactMatch, exactMatch);
+    average(polymorphicOutOfNarrowedRatio, polymorphicNarrowed, narrowed);
+    average(polymorphicOutOfWidenedRatio, polymorphicWidened, widened);
 
     average(usedNonemptyRatio, used, referencedNonEmpty);
 #undef average
@@ -627,8 +627,8 @@ void report(std::ostream& os, bool breakdownInfo,
 
             os << StreamColor::red << index << StreamColor::clear;
 
-            if (info.pollutedSlots.count(index)) {
-                os << " [polluted]";
+            if (info.polymorphicSlots.count(index)) {
+                os << " [polymorphic]";
             }
 
             os << StreamColor::bold << " <" << feedbackType << ">\n"
@@ -794,20 +794,20 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.unusedOtherRatio
         << "\n";
 
-    finalHeader("Polluted slots");
-    os  << final.sums.polluted
-        << final.sums.pollutedUsed
+    finalHeader("Polymorphic slots");
+    os  << final.sums.polymorphic
+        << final.sums.polymorphicUsed
         << "\n";
 
-    os  << final.sums.polluted / final.sums.referencedNonEmpty
-        << final.sums.pollutedUsed / final.sums.used
-        << final.sums.pollutedUsed / final.sums.polluted
+    os  << final.sums.polymorphic / final.sums.referencedNonEmpty
+        << final.sums.polymorphicUsed / final.sums.used
+        << final.sums.polymorphicUsed / final.sums.polymorphic
         << "\n";
 
-    finalHeader("Polluted slots - Averaged per closure version");
-    os  << final.pollutedRatio
-        << final.pollutedOutOfUsedRatio
-        << final.pollutedUsedRatio
+    finalHeader("Polymorphic slots - Averaged per closure version");
+    os  << final.polymorphicRatio
+        << final.polymorphicOutOfUsedRatio
+        << final.polymorphicUsedRatio
         << "\n";
     // clang-format on
 }
@@ -931,7 +931,7 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                                  feedback_types_bags.count(slot_type) > 1);
                     }
 
-                    out_bool(static_info.pollutedSlots.count(slot), true);
+                    out_bool(static_info.polymorphicSlots.count(slot), true);
                 }
             }
             compilation_id++;

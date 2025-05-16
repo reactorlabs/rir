@@ -151,13 +151,13 @@ struct Aggregate {
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
 
-    Stat polluted{"polluted"};
-    Stat pollutedUsed{"used polluted"};
-    Stat pollutedUnused{"unused polluted"};
+    Stat polymorphic{"polymorphic"};
+    Stat polymorphicUsed{"used polymorphic"};
+    Stat polymorphicUnused{"unused polymorphic"};
 
-    Stat pollutedExactMatch{"used polluted exact match"};
-    Stat pollutedWidened{"used polluted widened"};
-    Stat pollutedNarrowed{"used polluted narrowed"};
+    Stat polymorphicExactMatch{"used polymorphic exact match"};
+    Stat polymorphicWidened{"used polymorphic widened"};
+    Stat polymorphicNarrowed{"used polymorphic narrowed"};
 
     std::vector<Stat*> stats() {
         // clang-format off
@@ -180,13 +180,13 @@ struct Aggregate {
             &dependent,
             &unusedOther,
 
-            &polluted,
-            &pollutedUsed,
-            &pollutedUnused,
+            &polymorphic,
+            &polymorphicUsed,
+            &polymorphicUnused,
 
-            &pollutedExactMatch,
-            &pollutedWidened,
-            &pollutedNarrowed,
+            &polymorphicExactMatch,
+            &polymorphicWidened,
+            &polymorphicNarrowed,
         };
         // clang-format on
     }
@@ -220,14 +220,14 @@ struct FinalAggregate {
     FunctionAggregate dependentRatio;
     FunctionAggregate unusedOtherRatio;
 
-    FunctionAggregate pollutedRatio;
-    FunctionAggregate pollutedOutOfUsedRatio;
-    FunctionAggregate pollutedOutOfUnusedRatio;
-    FunctionAggregate pollutedUsedRatio;
+    FunctionAggregate polymorphicRatio;
+    FunctionAggregate polymorphicOutOfUsedRatio;
+    FunctionAggregate polymorphicOutOfUnusedRatio;
+    FunctionAggregate polymorphicUsedRatio;
 
-    FunctionAggregate pollutedOutOfExactMatchRatio;
-    FunctionAggregate pollutedOutOfWidenedRatio;
-    FunctionAggregate pollutedOutOfNarrowedRatio;
+    FunctionAggregate polymorphicOutOfExactMatchRatio;
+    FunctionAggregate polymorphicOutOfWidenedRatio;
+    FunctionAggregate polymorphicOutOfNarrowedRatio;
 
     FunctionAggregate usedNonemptyRatio;
 };
@@ -251,7 +251,7 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> emptySlots;
     std::unordered_set<FeedbackIndex> nonEmptySlots;
 
-    std::unordered_set<FeedbackIndex> pollutedSlots;
+    std::unordered_set<FeedbackIndex> polymorphicSlots;
 
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
