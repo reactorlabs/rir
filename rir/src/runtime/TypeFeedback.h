@@ -180,7 +180,7 @@ struct ObservedValues {
 
     std::array<uint8_t, MaxTypes> seen;
 
-    bool isPolluted = false;
+    bool isPolymorphic = false;
 
     ObservedValues() {
         // implicitly happens when writing bytecode stream...
@@ -235,7 +235,7 @@ struct ObservedValues {
                         numTypes != old.numTypes;
         // clang-format on
         if (old.numTypes != 0) {
-            isPolluted = isPolluted || changed;
+            isPolymorphic = isPolymorphic || changed;
         }
         REC_HOOK(recording::recordSCChanged(changed));
     }

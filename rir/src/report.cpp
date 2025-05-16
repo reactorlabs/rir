@@ -372,8 +372,8 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << agg.redundantPresentNonEmpty
               << "\n"
 
-              << StreamColor::blue << "Polluted\n" << StreamColor::clear
-              << agg.polluted << agg.pollutedUsed;
+              << StreamColor::blue << "Polymorphic\n" << StreamColor::clear
+              << agg.polymorphic << agg.polymorphicUsed;
     // clang-format on
 }
 
@@ -406,28 +406,28 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     for (const auto& i : slotsUsed) {
         const auto& usage = i.second;
 
-        bool polluted = info.pollutedSlots.count(i.first);
+        bool polymorphic = info.polymorphicSlots.count(i.first);
 
         if (usage.exactMatch()) {
             agg.exactMatch++;
 
-            if (polluted) {
-                agg.pollutedExactMatch++;
+            if (polymorphic) {
+                agg.polymorphicExactMatch++;
             }
         } else {
             if (usage.narrowedWithStaticType()) {
                 agg.narrowed++;
 
-                if (polluted) {
-                    agg.pollutedNarrowed++;
+                if (polymorphic) {
+                    agg.polymorphicNarrowed++;
                 }
             }
 
             if (usage.widened()) {
                 agg.widened++;
 
-                if (polluted) {
-                    agg.pollutedWidened++;
+                if (polymorphic) {
+                    agg.polymorphicWidened++;
                 }
             }
         }
@@ -484,10 +484,12 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     //     //   << " additionaRedundant: " << additionaRedundant
     //     << " *********   \n";
 
-    // Polluted
-    agg.polluted = info.pollutedSlots.size();
-    agg.pollutedUsed = intersect(info.pollutedSlots, keys(slotsUsed)).size();
-    agg.pollutedUnused = intersect(info.pollutedSlots, unusedNonEmpty).size();
+    // polymorphic
+    agg.polymorphic = info.polymorphicSlots.size();
+    agg.polymorphicUsed =
+        intersect(info.polymorphicSlots, keys(slotsUsed)).size();
+    agg.polymorphicUnused =
+        intersect(info.polymorphicSlots, unusedNonEmpty).size();
 
     return agg;
 }
@@ -530,8 +532,8 @@ void computeFunctionsInfo(
                 slotData.nonEmptySlots.insert(idx);
             }
 
-            if (tf.isPolluted) {
-                slotData.pollutedSlots.insert(idx);
+            if (tf.isPolymorphic) {
+                slotData.polymorphicSlots.insert(idx);
             }
         }
 
@@ -609,19 +611,23 @@ FinalAggregate CompilationSession::getFinalAgg() {
     average(dependentRatio, dependent, unusedNonEmpty);
     average(unusedOtherRatio, unusedOther, unusedNonEmpty);
 
-    average(pollutedRatio, polluted, referencedNonEmpty);
-    average(pollutedOutOfUsedRatio, pollutedUsed, used);
-    average(pollutedOutOfUnusedRatio, pollutedUnused, unusedNonEmpty);
-    average(pollutedUsedRatio, pollutedUsed, polluted);
+    average(polymorphicRatio, polymorphic, referencedNonEmpty);
+    average(polymorphicOutOfUsedRatio, polymorphicUsed, used);
+    average(polymorphicOutOfUnusedRatio, polymorphicUnused, unusedNonEmpty);
+    average(polymorphicUsedRatio, polymorphicUsed, polymorphic);
 
-    average(pollutedOutOfExactMatchRatio, pollutedExactMatch, exactMatch);
-    average(pollutedOutOfNarrowedRatio, pollutedNarrowed, narrowed);
-    average(pollutedOutOfWidenedRatio, pollutedWidened, widened);
+    average(polymorphicOutOfExactMatchRatio, polymorphicExactMatch, exactMatch);
+    average(polymorphicOutOfNarrowedRatio, polymorphicNarrowed, narrowed);
+    average(polymorphicOutOfWidenedRatio, polymorphicWidened, widened);
 
     average(usedNonemptyRatio, used, referencedNonEmpty);
+#undef average
+
+    for (auto f : res.sums.universe) {
+        res.deoptsCount += f->allDeoptsCount;
+    }
 
     return res;
-#undef average
 }
 
 // ------------------------------------------------------------
@@ -653,8 +659,8 @@ void report(std::ostream& os, bool breakdownInfo,
 
             os << StreamColor::red << index << StreamColor::clear;
 
-            if (info.pollutedSlots.count(index)) {
-                os << " [polluted]";
+            if (info.polymorphicSlots.count(index)) {
+                os << " [polymorphic]";
             }
 
             os << StreamColor::bold << " <" << feedbackType << ">\n"
@@ -825,116 +831,58 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.unusedOtherRatio
         << "\n";
 
-    finalHeader("Polluted slots");
-    os  << final.sums.polluted
-        << final.sums.pollutedUsed
+    finalHeader("Polymorphic slots");
+    os  << final.sums.polymorphic
+        << final.sums.polymorphicUsed
         << "\n";
 
-    os  << final.sums.polluted / final.sums.referencedNonEmpty
-        << final.sums.pollutedUsed / final.sums.used
-        << final.sums.pollutedUsed / final.sums.polluted
+    os  << final.sums.polymorphic / final.sums.referencedNonEmpty
+        << final.sums.polymorphicUsed / final.sums.used
+        << final.sums.polymorphicUsed / final.sums.polymorphic
         << "\n";
 
-    finalHeader("Polluted slots - Averaged per closure version");
-    os  << final.pollutedRatio
-        << final.pollutedOutOfUsedRatio
-        << final.pollutedUsedRatio
+    finalHeader("Polymorphic slots - Averaged per closure version");
+    os  << final.polymorphicRatio
+        << final.polymorphicOutOfUsedRatio
+        << final.polymorphicUsedRatio
         << "\n";
     // clang-format on
 }
 
-void printCsvHeader(std::ostream& os,
-                    std::initializer_list<std::string> extraFields,
-                    Aggregate* aggFields,
-                    FinalAggregate* finalFields = nullptr) {
-    assert(extraFields.size() != 0);
-
-    // Print the header if the file is empty
+void reportCsv(std::ostream& os, const std::string& program_name,
+               const std::vector<DispatchTable*>& DTs) {
     os.seekp(0, std::ios::end);
-    if (os.tellp() != 0) {
-        return;
+    if (os.tellp() == 0) {
+        // clang-format off
+        os  << "benchmark"
+            << ",closures"
+            << ",compiled closures"
+            << ",closure compilations"
+            << ",benefited compilations"
+            << ",deopts"
+            << "\n";
+        // clang-format on
     }
 
-    bool first = true;
-
-    for (const auto& i : extraFields) {
-        if (first) {
-            os << i;
-            first = false;
-        } else {
-            os << "," << i;
-        }
-    }
-
-    for (const auto& i : aggFields->stats()) {
-        os << "," << i->name;
-    }
-
-    if (finalFields != nullptr) {
-        for (const auto& i : finalFields->stats()) {
-            os << "," << i->name;
-        }
-
-        for (auto i : finalFields->aggregates()) {
-            os << "," << i->name;
-        }
-    }
-
-    os << "\n";
-}
-
-// Assumes you have written something before (the extraFields)
-void printCsvLine(std::ostream& os, Aggregate* aggFields,
-                  FinalAggregate* finalFields = nullptr) {
-    for (const auto& i : aggFields->stats()) {
-        os << "," << i->value;
-    }
-
-    if (finalFields != nullptr) {
-        for (const auto& i : finalFields->stats()) {
-            os << "," << i->value;
-        }
-
-        for (const auto& i : finalFields->aggregates()) {
-            os << "," << i->average();
-        }
-    }
-
-    os << "\n";
-}
-
-void reportCsv(std::ostream& os, const std::string& program_name) {
     auto agg = CompilationSession::getFinalAgg();
 
-    printCsvHeader(os, {"name"}, &agg.sums, &agg);
-    os << "\"" << program_name << "\"";
-    printCsvLine(os, &agg.sums, &agg);
-}
-
-void reportIndividual(std::ostream& os, const std::string& benchmark_name) {
-    bool first = true;
-
-    for (auto& cs : COMPILATION_SESSIONS) {
-        for (auto& cv : cs.closureVersionStats) {
-            auto agg = cv.getAgg(cs.functionsInfo);
-
-            if (first) {
-                printCsvHeader(os, {"benchmark", "closure"}, &agg);
-                first = false;
-            }
-
-            os << "\"" << benchmark_name << "\"";
-            os << ",\"" << cv.function->dispatchTable()->closureName << "\"";
-            printCsvLine(os, &agg);
-        }
-    }
+    // clang-format off
+    os
+        << "\"" << program_name << "\""
+        << "," << DTs.size()
+        << "," << agg.sums.universe.size()
+        << "," << agg.compiledClosureVersions
+        << "," << agg.benefitedClosureVersions
+        << "," << agg.deoptsCount
+        << "\n";
+    // clang-format on
 }
 
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
         // clang-format off
-        os  << "benchmark,compilation id,closure"
+        os  << "benchmark,compilation id,closure,slot idx"
             << ",non-empty,read,used"
             << ",exact match,widened,narrowed"
             << ",checkForT,staticT,feedbackT,expectedT,requiredT"
@@ -978,7 +926,8 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                     // clang-format off
                     os  << "\"" << benchmark_name << "\","
                         << compilation_id << ","
-                        << "\"" << closure->dispatchTable()->closureName << "\",";
+                        << "\"" << closure->dispatchTable()->closureName << "\","
+                        << slot.idx << ",";
                     // clang-format on
 
                     bool non_empty = !static_info.emptySlots.count(slot);
@@ -1019,7 +968,7 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                                  feedback_types_bags.count(slot_type) > 1);
                     }
 
-                    out_bool(static_info.pollutedSlots.count(slot), true);
+                    out_bool(static_info.polymorphicSlots.count(slot), true);
                 }
             }
             compilation_id++;

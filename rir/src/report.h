@@ -150,18 +150,17 @@ struct Aggregate {
     Stat optimizedAwayNonEmpty{"optimized away non-empty"};
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
-
     Stat redundant{"redundant"};
     Stat redundantNonEmpty{"redundant non-empty"};
     Stat redundantPresentNonEmpty{"redudant present non-empty"};
 
-    Stat polluted{"polluted"};
-    Stat pollutedUsed{"used polluted"};
-    Stat pollutedUnused{"unused polluted"};
+    Stat polymorphic{"polymorphic"};
+    Stat polymorphicUsed{"used polymorphic"};
+    Stat polymorphicUnused{"unused polymorphic"};
 
-    Stat pollutedExactMatch{"used polluted exact match"};
-    Stat pollutedWidened{"used polluted widened"};
-    Stat pollutedNarrowed{"used polluted narrowed"};
+    Stat polymorphicExactMatch{"used polymorphic exact match"};
+    Stat polymorphicWidened{"used polymorphic widened"};
+    Stat polymorphicNarrowed{"used polymorphic narrowed"};
 
     std::vector<Stat*> stats() {
         // clang-format off
@@ -188,13 +187,13 @@ struct Aggregate {
             &redundantPresentNonEmpty,
 
 
-            &polluted,
-            &pollutedUsed,
-            &pollutedUnused,
+            &polymorphic,
+            &polymorphicUsed,
+            &polymorphicUnused,
 
-            &pollutedExactMatch,
-            &pollutedWidened,
-            &pollutedNarrowed,
+            &polymorphicExactMatch,
+            &polymorphicWidened,
+            &polymorphicNarrowed,
         };
         // clang-format on
     }
@@ -218,6 +217,7 @@ struct FinalAggregate {
     Stat compiledClosureVersions{"closure version compilations"};
     Stat benefitedClosureVersions{
         "closure version compilations using some type feedback"};
+    Stat deoptsCount{"deoptimizations"};
 
     FunctionAggregate referencedNonEmptyRatio;
     FunctionAggregate readRatio;
@@ -227,43 +227,16 @@ struct FinalAggregate {
     FunctionAggregate dependentRatio;
     FunctionAggregate unusedOtherRatio;
 
-    FunctionAggregate pollutedRatio;
-    FunctionAggregate pollutedOutOfUsedRatio;
-    FunctionAggregate pollutedOutOfUnusedRatio;
-    FunctionAggregate pollutedUsedRatio;
+    FunctionAggregate polymorphicRatio;
+    FunctionAggregate polymorphicOutOfUsedRatio;
+    FunctionAggregate polymorphicOutOfUnusedRatio;
+    FunctionAggregate polymorphicUsedRatio;
 
-    FunctionAggregate pollutedOutOfExactMatchRatio;
-    FunctionAggregate pollutedOutOfWidenedRatio;
-    FunctionAggregate pollutedOutOfNarrowedRatio;
+    FunctionAggregate polymorphicOutOfExactMatchRatio;
+    FunctionAggregate polymorphicOutOfWidenedRatio;
+    FunctionAggregate polymorphicOutOfNarrowedRatio;
 
     FunctionAggregate usedNonemptyRatio;
-
-    std::vector<Stat const*> stats() {
-        return {&compiledClosureVersions, &benefitedClosureVersions};
-    }
-
-    std::vector<FunctionAggregate const*> aggregates() const {
-        return {
-            &referencedNonEmptyRatio,
-            &readRatio,
-            &usedRatio,
-
-            &optimizedAwayRatio,
-            &dependentRatio,
-            &unusedOtherRatio,
-
-            &pollutedRatio,
-            &pollutedOutOfUnusedRatio,
-            &pollutedOutOfUsedRatio,
-            &pollutedUsedRatio,
-
-            &pollutedOutOfExactMatchRatio,
-            &pollutedOutOfWidenedRatio,
-            &pollutedOutOfNarrowedRatio,
-
-            &usedNonemptyRatio,
-        };
-    }
 };
 
 // ------------------------------------------------------------
@@ -285,23 +258,11 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> emptySlots;
     std::unordered_set<FeedbackIndex> nonEmptySlots;
 
-    std::unordered_set<FeedbackIndex> pollutedSlots;
+    std::unordered_set<FeedbackIndex> polymorphicSlots;
 
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
-
-    // void aaa() const {
-
-    //     if (nonEmptySlots.size() > 0) {
-    //         for (auto s : nonEmptySlots) {
-    //             allTypeSlots.at(s).print(std::cerr);
-    //             std::cerr << "\n";
-    //         }
-
-    //         assert(false && "empty slots");
-    //     }
-    // }
 
     std::unordered_multiset<pir::PirType> getFeedbackTypesBag() const;
     size_t dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const;
@@ -324,9 +285,6 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> redundantSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
-
-    // std::unordered_multiset<pir::PirType>
-    // getFeedbackTypesBag(const FunctionInfo& functionInfo) const;
 };
 
 // ------------------------------------------------------------
@@ -375,8 +333,8 @@ struct CompilationSession {
 
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs);
-void reportCsv(std::ostream& os, const std::string& name);
-void reportIndividual(std::ostream& os, const std::string& benchmark_name);
+void reportCsv(std::ostream& os, const std::string& name,
+               const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
 
 } // namespace report
