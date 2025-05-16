@@ -5,6 +5,10 @@
 #include "runtime/Function.h"
 #include "utils/Terminal.h"
 
+#include <cmath>
+#include <iomanip>
+#include <iostream>
+
 // ------------------------------------------------------------
 
 namespace StreamColor {
@@ -117,8 +121,71 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
 
+// // Determine number of decimal places to show based on rules
+// int getDisplayPrecision(double value) {
+//     if (value >= 1.0) {
+//         return 1;
+//     } else {
+//         int digits = 0;
+//         int scale = 10;
+//         while (std::trunc(value * scale) == 0 && scale <= 1e9) {
+//             digits++;
+//             scale *= 10;
+//         }
+//         return digits + 1; // one digit after first non-zero
+//     }
+// }
+// std::string formatStatNumber(double value) {
+
+//     int precision = getDisplayPrecision(value);
+//     return report::streamToString([&](std::ostream& os) {
+//         os << std::fixed << std::setprecision(precision);
+//         os << value;
+//     });
+
+//     std::cout << std::fixed << std::setprecision(precision);
+
+// }
+
+std::string formatStatsNumber(double value) {
+    // Convert to full-precision fixed string
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(20) << value;
+    std::string str = oss.str();
+
+    // Trim trailing zeros and decimal point
+    str.erase(str.find_last_not_of('0') + 1);
+    if (str.back() == '.')
+        str.pop_back();
+
+    // ≥ 1.0 → keep up to one decimal place
+    if (value >= 1.0) {
+        size_t dot = str.find('.');
+        if (dot != std::string::npos && dot + 2 < str.size()) {
+            str = str.substr(0, dot + 2);
+        }
+        return str;
+    }
+
+    // < 1.0 → keep first non-zero decimal + 1 digit
+    size_t dot = str.find('.');
+    if (dot == std::string::npos)
+        return str;
+
+    size_t firstNonZero = dot + 1;
+    while (firstNonZero < str.size() && str[firstNonZero] == '0') {
+        firstNonZero++;
+    }
+
+    if (firstNonZero + 1 < str.size()) {
+        str = str.substr(0, firstNonZero + 2);
+    }
+
+    return str;
+}
+
 void showPercent(double percent, std::ostream& ss) {
-    ss << percent * 100 << "%";
+    ss << formatStatsNumber(percent * 100) << "%";
 }
 
 // ------------------------------------------------------------
@@ -151,7 +218,8 @@ std::ostream& operator<<(std::ostream& os, const Stat& st) {
         os << st.name << ": ";
     }
 
-    os << StreamColor::bold << st.value << StreamColor::clear << "\n";
+    os << StreamColor::bold << formatStatsNumber(st.value) << StreamColor::clear
+       << "\n";
 
     return os;
 }
@@ -299,6 +367,9 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
               << agg.optimizedAwayNonEmpty
               << agg.dependent
               << agg.unusedOther
+              << agg.redundant
+              << agg.redundantNonEmpty
+              << agg.redundantPresentNonEmpty
               << "\n"
 
               << StreamColor::blue << "Polluted\n" << StreamColor::clear
@@ -374,26 +445,22 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     auto allFeedbackTypesBag = info.getFeedbackTypesBag();
 
-    auto redundantPresent = 0;
-    // auto redundant = 0;
+    // redundant
+    auto redundantSlotsNonEmpty = intersect(redundantSlots, unusedNonEmpty);
+    auto redundantSlotsPresentNonEmpty =
+        intersect(redundantSlotsNonEmpty, getKeys(slotPresent));
 
-    // auto dependentPresent = 0;
-    // auto additionaRedundantPresent = 0;
+    agg.redundant = redundantSlots.size();
+    agg.redundantNonEmpty = redundantSlotsNonEmpty.size();
+    agg.redundantPresentNonEmpty = redundantSlotsPresentNonEmpty.size();
 
-    // auto additionaRedundant = 0;
-
-    auto redundantSlotsUnusedNonEmpty =
-        intersect(redundantSlots, unusedNonEmpty);
-    auto redundantSlotsUnusedNonEmptyPresent =
-        intersect(redundantSlotsUnusedNonEmpty, getKeys(slotPresent));
-
-    redundantPresent = redundantSlotsUnusedNonEmptyPresent.size();
+    // auto redundantPresent = redundantSlotsUnusedNonEmptyPresent.size();
+    // agg.redundantNonEmpty = redundantSlotsUnusedNonEmpty.size();
 
     auto optimizedAwayNonEmptySlots =
         difference(unusedNonEmpty, getKeys(slotPresent));
     agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
 
-    // auto unusedEmptySlots  =  difference(unusedSlots, info.emptySlots);
     auto optimizedAwaySlots =
         difference(getKeys(info.allTypeSlots), getKeys(slotPresent));
     agg.optimizedAway = optimizedAwaySlots.size();
@@ -401,58 +468,21 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     assert(optimizedAwaySlots.size() >= optimizedAwayNonEmptySlots.size());
     assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
 
-    // for (auto slot : unusedNonEmpty) {
-    //     if (!slotPresent.count(slot)) {
-    //         agg.optimizedAwayNonEmpty++;
-    //     }
-
-    //     // if (slotPresent.count(slot)) {
-    //     //     bool a, b;
-    //     //     a = false;
-    //     //     b = false;
-    //     //     if (redundantSlots.count(slot)) {
-    //     //         a = true;
-    //     //         redundantPresent++;
-    //     //     }
-
-    //     //     if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1)
-    //     {
-    //     //         b = true;
-    //     //         dependentPresent++;
-    //     //     }
-
-    //     //     if (a && !b) {
-    //     //         additionaRedundantPresent++;
-    //     //     }
-    //     // }
-
-    //     // if (allFeedbackTypesBag.count(info.allTypeSlots.at(slot)) > 1) {
-    //     //     //agg.dependent++;
-    //     // } else {
-
-    //     //     // if (redundantSlotsUnusedNonEmpty.count(slot)) {
-    //     //     //     additionaRedundant++;
-    //     //     // }
-
-    //     //     agg.unusedOther++;
-    //     // }
-    // }
 
     agg.dependent = info.dependentsCountIn(unusedNonEmpty);
     agg.unusedOther.value = unusedNonEmpty.size() - agg.dependent.value;
 
-    std::cerr
-        << "****** "
-        //<< "total redudant: " << redundantSlots.size()
-        << " redundant: " << redundantSlotsUnusedNonEmpty.size()
-        << " dependent: "
-        << agg.dependent.value
-        //<< " dependent present: " << dependentPresent
-        << "  redundant present: "
-        << redundantPresent
-        //   << " additionaRedundantPresent: " << additionaRedundantPresent
-        //   << " additionaRedundant: " << additionaRedundant
-        << " *********   \n";
+    // std::cerr
+    //     << "****** "
+    //     << "total redudant: " << redundantSlots.size()
+    //     << " redundant: " << agg.redundantNonEmpty
+    //     << " dependent: "
+    //     << agg.dependent.value
+    //     //<< " dependent present: " << dependentPresent
+    //     << "  redundant present: "<< agg.re
+    //     //   << " additionaRedundantPresent: " << additionaRedundantPresent
+    //     //   << " additionaRedundant: " << additionaRedundant
+    //     << " *********   \n";
 
     // Polluted
     agg.polluted = info.pollutedSlots.size();
@@ -775,6 +805,9 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.sums.optimizedAwayNonEmpty
         << final.sums.dependent
         << final.sums.unusedOther
+        << final.sums.redundant
+        << final.sums.redundantNonEmpty
+        << final.sums.redundantPresentNonEmpty
         << "\n";
 
     os
@@ -782,6 +815,8 @@ void report(std::ostream& os, bool breakdownInfo,
         << final.sums.optimizedAwayNonEmpty / final.sums.unusedNonEmpty
         << final.sums.dependent / final.sums.unusedNonEmpty
         << final.sums.unusedOther / final.sums.unusedNonEmpty
+        << final.sums.redundantNonEmpty / final.sums.unusedNonEmpty
+
         << "\n";
 
     finalHeader("Unused slots - Averaged per closure version");

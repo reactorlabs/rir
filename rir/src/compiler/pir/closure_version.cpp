@@ -66,7 +66,9 @@ void ClosureVersion::scanForSpeculation() {
                 auto assumeArg = assume->arg<0>().val();
                 auto typeTest = IsType::Cast(assumeArg);
                 if (!typeTest) {
-                    assert(assumeArg == pir::False::instance());
+                    // assume->print(std::cerr, true);
+                    assert(assumeArg == pir::False::instance() ||
+                           assumeArg == pir::True::instance());
                     return; // skip the constant-folded false
                 }
 

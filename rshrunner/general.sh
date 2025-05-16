@@ -20,7 +20,12 @@ rshMasterRBin="${rshMasterBinFolder}/bin/R"
 #rshDebugFlags="PIR_DEBUG=PrintPirAfterOpt,PrintToStdout PIR_OSR=0"   #########
 
 
-experimentFlagsDefault="PIR_DEFAULT_SPECULATION=0"
+experimentFlagsDefault=""
+experimentNoCDNoInlining="PIR_GLOBAL_SPECIALIZATION_LEVEL=0 PIR_INLINE=0"
+experimentNoCD="PIR_GLOBAL_SPECIALIZATION_LEVEL=0"
+experimentNoInline="PIR_INLINE=0"
+
+
 experimentFlagsEmptyFeedback_CD_Off="PIR_GLOBAL_SPECIALIZATION_LEVEL=0 PIR_TRANSFER_FEEDBACK=0 PIR_DEFAULT_SPECULATION=0 PIR_INLINE=0"
 #experimentFlagsEmptyFeedbackNoCDSpec="PIR_GLOBAL_SPECIALIZATION_LEVEL=0 PIR_TRANSFER_FEEDBACK=0 PIR_DEFAULT_SPECULATION=1 PIR_INLINE=0"
 
@@ -29,7 +34,7 @@ experimentFlagsRirOnlyNoRecording="RIR_PROFILING=off PIR_ENABLE=off"
 
 experimentFlags=$experimentFlagsDefault   #####
 
-rshDebugFlags="$experimentFlags STATS_VERBOSE=0 PIR_WARMUP=10 PIR_OSR=0 PIR_DEBUG=PrintEarlyPir,PrintPirAfterOpt,ShowWarnings,PrintToStdout"   #########
+rshDebugFlags="$experimentFlags PIR_DEFAULT_SPECULATION=0 STATS_VERBOSE=0 PIR_WARMUP=10 PIR_OSR=0 PIR_DEBUG=PrintEarlyPir,PrintPirAfterOpt,ShowWarnings,PrintToStdout"   #########
 
 
 

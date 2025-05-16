@@ -151,6 +151,10 @@ struct Aggregate {
     Stat dependent{"dependent"};
     Stat unusedOther{"other reasons unused non-empty"};
 
+    Stat redundant{"redundant"};
+    Stat redundantNonEmpty{"redundant non-empty"};
+    Stat redundantPresentNonEmpty{"redudant present non-empty"};
+
     Stat polluted{"polluted"};
     Stat pollutedUsed{"used polluted"};
     Stat pollutedUnused{"unused polluted"};
@@ -179,6 +183,10 @@ struct Aggregate {
             &optimizedAwayNonEmpty,
             &dependent,
             &unusedOther,
+            &redundant,
+            &redundantNonEmpty,
+            &redundantPresentNonEmpty,
+
 
             &polluted,
             &pollutedUsed,
