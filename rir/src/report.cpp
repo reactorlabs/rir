@@ -899,7 +899,7 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
         // clang-format off
-        os  << "benchmark,compilation id,closure"
+        os  << "benchmark,compilation id,closure,slot idx"
             << ",non-empty,read,used"
             << ",exact match,widened,narrowed"
             << ",checkForT,staticT,feedbackT,expectedT,requiredT"
@@ -943,7 +943,8 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                     // clang-format off
                     os  << "\"" << benchmark_name << "\","
                         << compilation_id << ","
-                        << "\"" << closure->dispatchTable()->closureName << "\",";
+                        << "\"" << closure->dispatchTable()->closureName << "\","
+                        << slot.idx << ",";
                     // clang-format on
 
                     bool non_empty = !static_info.emptySlots.count(slot);
