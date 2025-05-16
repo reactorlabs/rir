@@ -230,33 +230,6 @@ struct FinalAggregate {
     FunctionAggregate pollutedOutOfNarrowedRatio;
 
     FunctionAggregate usedNonemptyRatio;
-
-    std::vector<Stat const*> stats() {
-        return {&compiledClosureVersions, &benefitedClosureVersions};
-    }
-
-    std::vector<FunctionAggregate const*> aggregates() const {
-        return {
-            &referencedNonEmptyRatio,
-            &readRatio,
-            &usedRatio,
-
-            &optimizedAwayRatio,
-            &dependentRatio,
-            &unusedOtherRatio,
-
-            &pollutedRatio,
-            &pollutedOutOfUnusedRatio,
-            &pollutedOutOfUsedRatio,
-            &pollutedUsedRatio,
-
-            &pollutedOutOfExactMatchRatio,
-            &pollutedOutOfWidenedRatio,
-            &pollutedOutOfNarrowedRatio,
-
-            &usedNonemptyRatio,
-        };
-    }
 };
 
 // ------------------------------------------------------------
@@ -284,18 +257,6 @@ struct FunctionInfo {
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
 
-    // void aaa() const {
-
-    //     if (nonEmptySlots.size() > 0) {
-    //         for (auto s : nonEmptySlots) {
-    //             allTypeSlots.at(s).print(std::cerr);
-    //             std::cerr << "\n";
-    //         }
-
-    //         assert(false && "empty slots");
-    //     }
-    // }
-
     std::unordered_multiset<pir::PirType> getFeedbackTypesBag() const;
     size_t dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const;
 };
@@ -317,9 +278,6 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> redundantSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;
-
-    // std::unordered_multiset<pir::PirType>
-    // getFeedbackTypesBag(const FunctionInfo& functionInfo) const;
 };
 
 // ------------------------------------------------------------
