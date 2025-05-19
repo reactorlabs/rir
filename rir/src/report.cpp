@@ -857,9 +857,9 @@ void reportCsv(std::ostream& os, const std::string& program_name,
         << "\"" << program_name << "\""
         << "," << DTs.size()
         << "," << agg.sums.universe.size()
-        << "," << agg.compiledClosureVersions
-        << "," << agg.benefitedClosureVersions
-        << "," << agg.deoptsCount
+        << "," << agg.compiledClosureVersions.value
+        << "," << agg.benefitedClosureVersions.value
+        << "," << agg.deoptsCount.value
         << "\n";
     // clang-format on
 }
