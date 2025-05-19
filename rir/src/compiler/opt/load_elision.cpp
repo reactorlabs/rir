@@ -106,7 +106,7 @@ bool LoadElision::apply(Compiler&, ClosureVersion* cls, Code* code,
                 auto domald = loads.get(instr);
                 if (auto domld = domald.origin) {
                     anyChange = true;
-                    domld->type = domald.type;
+                    domld->setType(domald.type, OT::FromOpt, OT::load_elision);
                     instr->replaceUsesWith(domld);
                     next = bb->remove(ip);
                 }

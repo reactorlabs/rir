@@ -261,7 +261,9 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                                         input.otherPhi));
                                             }
                                         }
-                                        phi->type = PirType::test();
+                                        phi->setType(PirType::test(),
+                                                     OT::FromOpt,
+                                                     OT::constantfold);
                                         targetForPhi->insert(
                                             targetForPhi->begin(), phi);
                                     }
@@ -316,7 +318,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         } else if (larg == (int)!isEq) {
                             auto res = new Not(varg, i->env(), i->srcIdx);
                             // Guarenteed, and required by replaceUsesWith
-                            res->type = PirType::simpleScalarLogical();
+                            res->setType(PirType::simpleScalarLogical(),
+                                         OT::FromOpt, OT::constantfold);
                             iterAnyChange = true;
                             i->replaceUsesWith(res);
                             bb->replace(ip, res);
@@ -506,7 +509,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         iterAnyChange = true;
                         auto neg =
                             new Not(i->arg(1).val(), Env::elided(), i->srcIdx);
-                        neg->type = PirType::test();
+                        neg->setType(PirType::test(), OT::FromOpt,
+                                     OT::constantfold);
                         i->replaceUsesAndSwapWith(neg, ip);
                     } else if (isConst(i->arg(1).val(), p) &&
                                isConst(i->arg(1).val(), p) == R_FalseValue &&
@@ -514,7 +518,8 @@ bool Constantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         iterAnyChange = true;
                         auto neg =
                             new Not(i->arg(0).val(), Env::elided(), i->srcIdx);
-                        neg->type = PirType::test();
+                        neg->setType(PirType::test(), OT::FromOpt,
+                                     OT::constantfold);
                         i->replaceUsesAndSwapWith(neg, ip);
                     } else {
                         FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {

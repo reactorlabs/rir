@@ -238,7 +238,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 iter = bb->atPosition(iterPos);
 
             if (!phi->type.isA(res.type))
-                phi->type = res.type;
+                phi->setType(res.type, OT::FromOpt, OT::scope_resolution);
         }
 
         for (auto& phi : thePhis)
@@ -314,8 +314,8 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     }
 
                     if (after.noReflection()) {
-                        force->type.fromContext(cls->context(), a->pos,
-                                                cls->nargs(), true);
+                        force->setType(force->type.fromContext(cls->context(), a->pos,
+                                                cls->nargs(), true), OT::FromOpt, OT::scope_resolution);
                     }
                 }
             }
@@ -526,7 +526,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (i->type.isRType()) {
                     auto inferedType = res.type;
                     if (!i->type.isA(inferedType) && !inferedType.isVoid()) {
-                        i->type = inferedType;
+                        i->setType(inferedType, OT::FromOpt, OT::scope_resolution);
                         changed = true;
                     }
                 }

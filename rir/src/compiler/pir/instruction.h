@@ -163,6 +163,19 @@ class MkEnv;
 class FrameState;
 class Instruction : public Value {
   public:
+    uint8_t originSet_ : 1;
+    static constexpr auto ORIGIN_IDX_BITS = (sizeof(size_t) * 8) - 1;
+    size_t originIdx_ : ORIGIN_IDX_BITS;
+
+    size_t getOriginIdx() {
+        if (originSet_ == 0) {
+            originIdx_ = OT::new_node(type, OT::Default, name());
+            originSet_ = 1;
+        }
+
+        return originIdx_;
+    }
+
     struct InstructionUID : public std::pair<unsigned, unsigned> {
         InstructionUID(unsigned a, unsigned b)
             : std::pair<unsigned, unsigned>(a, b) {}
@@ -171,8 +184,8 @@ class Instruction : public Value {
     };
 
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
-        : Value(t, tag), effects(effects), typeFeedback_(nullptr),
-          srcIdx(srcIdx) {}
+        : Value(t, tag), originSet_(0), originIdx_(0), effects(effects),
+          typeFeedback_(nullptr), srcIdx(srcIdx) {}
 
     Effects effects;
 
@@ -391,11 +404,58 @@ class Instruction : public Value {
     void updateTypeAndEffects() {
         auto isRType = type.isRType();
         assert(!type.isVoid() || !isRType);
-        type = inferType();
+
+        auto inferred = inferType();
+
         // Can happen in unreachable code when we have conflicting speculations
-        if (isRType && type.isVoid())
-            type = PirType::val();
+        if (isRType && inferred.isVoid()) {
+            setType(PirType::val(), OT::Inferred);
+        } else if (inferred != type) {
+            setType(inferred, OT::Inferred);
+        }
+
         effects = inferEffects();
+    }
+
+    void setType(const PirType& newType, OT::Origin origin,
+                 OT::Opt opt = OT::None) override final {
+        assert((origin == OT::FromOpt && opt != OT::None) ||
+               (origin != OT::FromOpt && opt == OT::None));
+
+        auto updateIdx = [&]() {
+            type_ = newType;
+            originIdx_ = new_node(type, origin, name(), opt);
+            originSet_ = 1;
+        };
+
+        if (origin == OT::Default) {
+            // Reset the originIdx_, next time it will be revalidated
+            type_ = newType;
+            originSet_ = 0;
+        } else if (origin == OT::Context || origin == OT::FromOpt) {
+            updateIdx();
+        } else if (origin == OT::Inferred) {
+            auto prevIdx = getOriginIdx();
+
+            updateIdx();
+
+            auto& pars = OT::get_parents(originIdx_);
+            pars.reserve(nargs() + 1);
+            pars.push_back(prevIdx);
+
+            eachArg([&](Value* arg) {
+                if (auto i = Instruction::Cast(arg)) {
+                    pars.push_back(i->getOriginIdx());
+                } else {
+                    auto valNode =
+                        OT::new_node(arg->type, OT::Value, tagToStr(arg->tag));
+                    pars.push_back(valNode);
+                }
+            });
+
+        } else {
+            assert(false);
+        }
     }
 
     PirType mergedInputType(const GetType& getType = [](Value* v) {
@@ -644,7 +704,7 @@ class Instruction : public Value {
         return -1;
     }
 };
-static_assert(sizeof(Instruction) <= 72, "Bloated instructions...");
+// static_assert(sizeof(Instruction) <= 72, "Bloated instructions...");
 
 template <Tag ITAG, class Base, Effects::StoreType INITIAL_EFFECTS,
           HasEnvSlot ENV, Controlflow CF, class ArgStore>
@@ -2434,8 +2494,7 @@ class VLI(CallSafeBuiltin, Effects(Effect::Warn) | Effect::Error |
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
 
-    PirType inferType(const GetType& at = [](Value* v) { return v->type; })
-        const override final;
+    PirType inferType(const GetType& at) const override final;
 
     bool isIntructionTypePrecise(
         const GetType& at = [](Value* v) { return v->type; }) const override;

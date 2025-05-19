@@ -184,7 +184,7 @@ struct PirType {
         : flags_(other.flags_), t_(other.t_) {}
 
     explicit PirType(uint64_t);
-    uint64_t serialize() {
+    uint64_t serialize() const {
         uint64_t i;
         static_assert(sizeof(*this) <= sizeof(uint64_t), "PirType is too big");
         memcpy(&i, this, sizeof(*this));
@@ -543,7 +543,6 @@ struct PirType {
         return PirType(t_.r, flags_ | TypeFlags::promiseWrapped);
     }
 
-
     inline constexpr PirType orFullyPromiseWrapped() const {
         assert(isRType());
 
@@ -710,8 +709,9 @@ struct PirType {
     static const PirType voyd() { return PirType(NativeTypeSet()); }
     static const PirType bottom() { return optimistic(); }
 
-    void fromContext(const Context&, unsigned arg, unsigned nargs,
-                     bool forced = false);
+    [[nodiscard]] PirType fromContext(const Context&, unsigned arg,
+                                      unsigned nargs,
+                                      bool forced = false) const;
 
     inline bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
@@ -764,11 +764,11 @@ struct PirType {
     // Composite values are pseudo instruction that produce a "logical" PIR
     // value. At runtime it is represented by all the PIR argument values
     // individually.
-    bool isCompositeValue() { return isA(NativeType::frameState); }
+    bool isCompositeValue() const { return isA(NativeType::frameState); }
 
     // Some PIR instructions produce PIR values that have no runtime
     // representation at all. E.g. contexts.
-    bool isVirtualValue() {
+    bool isVirtualValue() const {
         return isA(NativeType::context) || isA(NativeType::checkpoint);
     }
 

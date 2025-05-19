@@ -1448,7 +1448,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
         size_t num = 0;
         for (auto t : initialStack) {
             auto n = insert(new LdArg(num++));
-            n->type = t;
+            n->setType(t, OT::Context);
             cur.stack.push(n);
         }
     }

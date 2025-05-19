@@ -40,7 +40,7 @@ void InsertCast::apply(BB* bb, AvailableCheckpoints& cp) {
                 // that the inc_ input is really an integer. But it has to be,
                 // since in the rir compiler we only use it that way.
                 if (Inc::Cast(instr)) {
-                    arg.val()->type = arg.val()->type & arg.type();
+                    arg.val()->setType(arg.val()->type & arg.type(), OT::Default);
                     break;
                 }
                 auto c = cast(arg.val(), arg.type(), env);

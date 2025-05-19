@@ -475,6 +475,7 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
                        {});
 
     REC_HOOK(recording::recordCompileFinish(successfulComp, m));
+    rir::pir::OT::reset();
 
     delete m;
     UNPROTECT(1);

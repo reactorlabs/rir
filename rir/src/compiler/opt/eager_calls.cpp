@@ -69,7 +69,6 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             test, speculation.cp,
             DeoptReason(speculation.origin, DeoptReason::CallTarget));
 
-
         ip = bb->insert(ip, assume);
         ++ip;
 
@@ -430,9 +429,10 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         Visitor::run(newCls->entry, [&](Instruction* i) {
                             if (auto ld = LdArg::Cast(i)) {
                                 if (eager.count(ld->pos)) {
-                                    ld->type = PirType::promiseWrappedVal()
-                                                   .notObject()
-                                                   .notMissing();
+                                    ld->setType(PirType::promiseWrappedVal()
+                                                    .notObject()
+                                                    .notMissing(),
+                                                OT::FromOpt, OT::eager_calls);
                                 }
                             }
                         });

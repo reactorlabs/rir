@@ -40,6 +40,7 @@ Function* OSR::compile(SEXP closure, rir::Code* c,
         });
 
     REC_HOOK(recording::recordCompileFinish(succesfulComp, module));
+    rir::pir::OT::reset();
     delete module;
 
     return fun;

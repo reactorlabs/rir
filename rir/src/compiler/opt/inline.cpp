@@ -103,7 +103,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                         auto e =
                             new CallSafeBuiltin(b, {call->runtimeClosure()}, 0);
-                        e->type = PirType::env();
+                        e->setType(PirType::env(), OT::FromOpt, OT::inline_);
                         e->effects.reset();
                         it = bb->insert(it, e);
                         it++;
@@ -475,7 +475,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     auto popc = new PopContext(inlineeRes, ctx);
                     split->insert(split->begin() + 1, popc);
-                    popc->type = popc->type & theCall->type;
+                    popc->setType(popc->type & theCall->type, OT::FromOpt, OT::inline_);
                     popc->updateTypeAndEffects();
 
                     if (hasNonLocalReturn) {

@@ -91,7 +91,7 @@ bool TypeInference::apply(Compiler&, ClosureVersion* cls, Code* code,
             // happen as it is guaranteed to cause problems downstream, e.g. in
             // code generation.
             if (!t->second.isVoid())
-                i->type = t->second;
+                i->setType(t->second, OT::FromOpt, OT::types);
         }
     });
 

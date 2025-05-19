@@ -116,7 +116,7 @@ Builder::Builder(Continuation* cnt, Value* closureEnv)
         size_t i = 0;
         while (e != cnt->continuationContext->envEnd()) {
             auto r = this->operator()(new LdArg(h + i));
-            r->type = std::get<PirType>(*e);
+            r->setType(std::get<PirType>(*e), OT::Context);
             args.push_back(r);
             auto n = std::get<SEXP>(*e);
             names.push_back(n);
@@ -160,11 +160,11 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
         args[i] = this->operator()(new LdArg(i));
 
         if (closure->formals().names()[i] == R_DotsSymbol)
-            args[i]->type = PirType::dotsArg();
-        args[i]->type.fromContext(context, i, closure->nargs());
+            args[i]->setType(PirType::dotsArg(), OT::Context);
+        args[i]->setType(args[i]->type.fromContext(context, i, closure->nargs()), OT::Context);
 
         if (depromiseArgs) {
-            args[i]->type = args[i]->type.notPromiseWrapped();
+            args[i]->setType(args[i]->type.notPromiseWrapped(), OT::Context);
         }
     }
     for (size_t i = nargs; i < closure->nargs(); ++i) {

@@ -152,7 +152,8 @@ static void lower(Module* module, ClosureVersion* cls, Code* code,
                               PirType::simpleScalarReal()) &&
                         representAsReal.isDead(*it);
                     if (indistinguishable) {
-                        b->type = b->type & PirType::simpleScalarReal();
+                        // TODO: is okay? Should be just ignored
+                        b->setType(b->type & PirType::simpleScalarReal(), OT::Default);
                     }
                 }
             } else if (auto ldfun = LdFun::Cast(*it)) {

@@ -237,8 +237,8 @@ bool PirType::isInstance(SEXP val) const {
     }
 }
 
-void PirType::fromContext(const Context& assumptions, unsigned arg,
-                          unsigned nargs, bool afterForce) {
+PirType PirType::fromContext(const Context& assumptions, unsigned arg,
+                             unsigned nargs, bool afterForce) const {
     PirType type = *this;
     auto i = arg;
     if (!afterForce &&
@@ -271,7 +271,9 @@ void PirType::fromContext(const Context& assumptions, unsigned arg,
     // but I don't want to make it an assert, since it can happen depending on
     // the pass order...
     if (!type.isVoid())
-        *this = type;
+        return type;
+    else
+        return *this;
 }
 
 } // namespace pir
