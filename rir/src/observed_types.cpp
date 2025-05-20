@@ -50,9 +50,27 @@ std::vector<size_t>& get_parents(size_t idx) {
 
 bool has_parents(size_t idx) { return PARENTS.count(idx) > 0; }
 
-GraphNode get_node(size_t idx) {
+//------------------------------------------------------
+
+DependencyNode get_node(size_t idx) {
     assert(idx < NODES.size());
-    return NODES[idx];
+    auto gnode = NODES[idx];
+    DependencyNode node {
+        .type = gnode.type,
+        .instr_name = gnode.instr_name,
+        .origin = gnode.origin,
+        .optimization = gnode.optimization
+    };
+
+    if (has_parents(idx)){
+        auto pars =  get_parents(idx);
+        node.parents.reserve(pars.size());
+        for (auto p : pars) {
+            node.parents.push_back(get_node(p));
+        }
+    }
+
+    return node;
 }
 
 //------------------------------------------------------
@@ -107,29 +125,32 @@ std::ostream& operator<<(std::ostream& os, Origin origin) {
     assert(false);
 }
 
-void print_node(std::ostream& os, size_t idx, size_t depth) {
-    auto node = get_node(idx);
-
+void DependencyNode::print(std::ostream& os, size_t depth) const {
     for (size_t i = 0; i < depth; i++) {
         os << "| ";
     }
 
-    ConsoleColor::bold(os);
-    os << node.type;
-    ConsoleColor::clear(os);
-    os << " " << node.instr_name << " (" << node.origin;
-    if (node.origin == FromOpt) {
-        os << ": " << node.optimization;
+    if (ConsoleColor::isTTY(os)){
+        ConsoleColor::bold(os);
+    }
+    os << type;
+    if (ConsoleColor::isTTY(os)){
+        ConsoleColor::clear(os);
+    }
+    os << " " << instr_name << " (" << origin;
+    if (origin == FromOpt) {
+        os << ": " << optimization;
     }
     os << ")\n";
 
-    if (has_parents(idx)) {
-        auto pars = get_parents(idx);
-        assert(pars.size() > 0);
-        for (auto p : pars) {
-            print_node(os, p, depth + 1);
-        }
+    for (auto p : parents) {
+        p.print(os, depth + 1);
     }
+}
+
+std::ostream& operator<<(std::ostream& os, const DependencyNode& node) {
+    node.print(os);
+    return os;
 }
 
 } // namespace OT

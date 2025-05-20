@@ -52,8 +52,6 @@ struct GraphNode {
     Opt optimization : 4;
 };
 
-void print_node(std::ostream& os, size_t idx, size_t depth = 0);
-
 //------------------------------------------------------
 
 size_t new_node(PirType type, OT::Origin origin, const std::string& instr_name,
@@ -69,7 +67,21 @@ std::vector<size_t>& get_parents(size_t idx);
 
 bool has_parents(size_t idx);
 
-GraphNode get_node(size_t idx);
+//------------------------------------------------------
+
+struct DependencyNode {
+    PirType type;
+    std::string instr_name;
+    Origin origin : 3;
+    Opt optimization : 4;
+    std::vector<DependencyNode> parents;
+
+    void print(std::ostream& os, size_t depth = 0) const;
+};
+
+std::ostream& operator<<(std::ostream& os, const DependencyNode& node);
+
+DependencyNode get_node(size_t idx);
 
 //------------------------------------------------------
 
