@@ -410,7 +410,7 @@ class Instruction : public Value {
         // Can happen in unreachable code when we have conflicting speculations
         if (isRType && inferred.isVoid()) {
             setType(PirType::val(), OT::Inferred);
-        } else if (inferred != type) {
+        } else {
             setType(inferred, OT::Inferred);
         }
 
@@ -418,43 +418,51 @@ class Instruction : public Value {
     }
 
     void setType(const PirType& newType, OT::Origin origin,
-                 OT::Opt opt = OT::None) override final {
+                 OT::Opt opt = OT::None,
+                 std::initializer_list<Value*> parents = {}) override final {
         assert((origin == OT::FromOpt && opt != OT::None) ||
                (origin != OT::FromOpt && opt == OT::None));
 
-        auto updateIdx = [&]() {
-            type_ = newType;
-            originIdx_ = new_node(type, origin, name(), opt);
-            originSet_ = 1;
-        };
+        assert(origin == OT::FromOpt || parents.size() == 0);
+
+        if (newType == type) {
+            return;
+        }
 
         if (origin == OT::Default) {
             // Reset the originIdx_, next time it will be revalidated
             type_ = newType;
             originSet_ = 0;
-        } else if (origin == OT::Context || origin == OT::FromOpt) {
-            updateIdx();
+        }
+
+        auto prevIdx = getOriginIdx();
+        type_ = newType;
+        originIdx_ = new_node(type, origin, name(), opt);
+        originSet_ = 1;
+
+        if (origin == OT::Context) {
+            // Context is reinforcement of previous type
+            OT::get_parents(originIdx_).push_back(prevIdx);
+        } else if (origin == OT::FromOpt) {
+            if (parents.size() != 0) {
+                auto& pars = OT::get_parents(originIdx_);
+                pars.reserve(parents.size());
+
+                for (auto p : parents) {
+                    if (p == this) {
+                        pars.push_back(prevIdx);
+                    } else {
+                        pars.push_back(OT::new_value_node(p));
+                    }
+                }
+            }
         } else if (origin == OT::Inferred) {
-            auto prevIdx = getOriginIdx();
-
-            updateIdx();
-
             auto& pars = OT::get_parents(originIdx_);
             pars.reserve(nargs() + 1);
             pars.push_back(prevIdx);
 
-            eachArg([&](Value* arg) {
-                if (auto i = Instruction::Cast(arg)) {
-                    pars.push_back(i->getOriginIdx());
-                } else {
-                    auto valNode =
-                        OT::new_node(arg->type, OT::Value, tagToStr(arg->tag));
-                    pars.push_back(valNode);
-                }
-            });
-
-        } else {
-            assert(false);
+            eachArg(
+                [&](Value* arg) { pars.push_back(OT::new_value_node(arg)); });
         }
     }
 

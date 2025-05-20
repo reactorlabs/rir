@@ -343,7 +343,7 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         assert(!promRes->type.maybePromiseWrapped());
                         f = Force::Cast(*split->begin());
                         // Ensure we don't lose inferred type information
-                        promRes->setType(promRes->type & f->type, OT::FromOpt, OT::force_dominance);
+                        promRes->setType(promRes->type & f->type, OT::FromOpt, OT::force_dominance, {promRes, f});
                         assert(f);
                         f->replaceUsesWith(promRes);
                         split->remove(split->begin());
@@ -486,7 +486,7 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (r != forcedMkArg.end()) {
                         anyChange = true;
                         auto repl = r->second.second;
-                        repl->setType(repl->type & c->type, OT::FromOpt, OT::force_dominance);
+                        repl->setType(repl->type & c->type, OT::FromOpt, OT::force_dominance, {repl, c});
                         c->replaceDominatedUses(repl, dom);
                         SLOWASSERT(c->usesAreOnly(repl->bb(), {Tag::MkEnv}));
                     }

@@ -32,7 +32,7 @@ class Value {
 
   public:
     virtual void setType(const PirType& newType, OT::Origin origin,
-                         OT::Opt opt = OT::None) {
+                         OT::Opt opt = OT::None, std::initializer_list<Value*> parents = {}) {
         type_ = newType;
     }
 

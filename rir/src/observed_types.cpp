@@ -1,6 +1,6 @@
+#include "utils/Terminal.h"
 #include <observed_types.h>
 #include <unordered_map>
-#include "utils/Terminal.h"
 
 namespace rir {
 namespace pir {
@@ -14,12 +14,24 @@ void reset() {
     PARENTS.clear();
 }
 
+//------------------------------------------------------
+
 size_t new_node(PirType type, OT::Origin origin, const std::string& instr_name,
                 OT::Opt opt) {
     size_t idx = NODES.size();
     NODES.emplace_back(type, origin, instr_name, opt);
     return idx;
 }
+
+size_t new_value_node(Value* value) {
+    if (auto inst = Instruction::Cast(value)) {
+        return inst->getOriginIdx();
+    } else {
+        return new_node(value->type, FromValue, tagToStr(value->tag));
+    }
+}
+
+//------------------------------------------------------
 
 std::vector<size_t>& get_parents(size_t idx) {
     assert(idx < NODES.size());
@@ -32,6 +44,8 @@ GraphNode get_node(size_t idx) {
     assert(idx < NODES.size());
     return NODES[idx];
 }
+
+//------------------------------------------------------
 
 std::ostream& operator<<(std::ostream& os, Opt opt) {
     switch (opt) {
@@ -58,9 +72,6 @@ std::ostream& operator<<(std::ostream& os, Opt opt) {
 
     case scope_resolution:
         return os << "scope_resolution";
-
-    case types:
-        return os << "types";
     }
     assert(false);
 }
@@ -71,11 +82,12 @@ std::ostream& operator<<(std::ostream& os, Origin origin) {
         return os << "Default";
     case Context:
         return os << "Context";
-    case FromOpt:
-        return os << "Optimization";
     case Inferred:
         return os << "Inferred";
-    case Value:
+
+    case FromOpt:
+        return os << "Optimization";
+    case FromValue:
         return os << "Value";
     }
     assert(false);

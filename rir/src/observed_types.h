@@ -9,9 +9,10 @@
 namespace rir {
 namespace pir {
 
+class Value;
 namespace OT {
 
-enum Opt {
+enum Opt : uint8_t {
     None,
     constantfold,
     eager_calls,
@@ -20,7 +21,6 @@ enum Opt {
     load_elision,
     overflow,
     scope_resolution,
-    types,
 };
 
 std::ostream& operator<<(std::ostream& os, Opt opt);
@@ -28,9 +28,10 @@ std::ostream& operator<<(std::ostream& os, Opt opt);
 enum Origin : uint8_t {
     Default,
     Context,
-    FromOpt,
     Inferred,
-    Value,
+
+    FromOpt,
+    FromValue,
 };
 
 std::ostream& operator<<(std::ostream& os, Origin origin);
@@ -38,16 +39,26 @@ std::ostream& operator<<(std::ostream& os, Origin origin);
 struct GraphNode {
     GraphNode(PirType type, Origin origin, std::string instr_name,
               Opt optimization)
-        : type(std::move(type)), origin(origin),
-          instr_name(std::move(instr_name)), optimization(optimization) {}
+        : type(std::move(type)), instr_name(std::move(instr_name)),
+          origin(origin), optimization(optimization) {}
 
     PirType type;
-    Origin origin;
     std::string instr_name;
-    Opt optimization;
+    Origin origin : 3;
+    Opt optimization : 4;
 };
 
-size_t new_node(PirType type, OT::Origin origin, const std::string& instr_name, OT::Opt opt = None);
+void print_node(std::ostream& os, size_t idx, size_t depth = 0);
+
+//------------------------------------------------------
+
+size_t new_node(PirType type, OT::Origin origin, const std::string& instr_name,
+                OT::Opt opt = None);
+
+size_t new_value_node(Value* value);
+
+
+//------------------------------------------------------
 
 std::vector<size_t>& get_parents(size_t idx);
 
@@ -55,7 +66,7 @@ bool has_parents(size_t idx);
 
 GraphNode get_node(size_t idx);
 
-void print_node(std::ostream& os, size_t idx, size_t depth = 0);
+//------------------------------------------------------
 
 void reset();
 

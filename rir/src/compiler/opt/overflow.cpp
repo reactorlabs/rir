@@ -86,7 +86,7 @@ bool Overflow::apply(Compiler&, ClosureVersion* cls, Code* code, AbstractLog&,
             return;
         // will definitely not overflow / underflow
         // so we set the result type to non-NA
-        instr->setType(instr->type.notNAOrNaN(), OT::FromOpt, OT::overflow);
+        instr->setType(instr->type.notNAOrNaN(), OT::FromOpt, OT::overflow, {instr});
     });
 
     return false;

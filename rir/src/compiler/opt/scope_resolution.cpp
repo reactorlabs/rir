@@ -315,7 +315,7 @@ bool ScopeResolution::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
 
                     if (after.noReflection()) {
                         force->setType(force->type.fromContext(cls->context(), a->pos,
-                                                cls->nargs(), true), OT::FromOpt, OT::scope_resolution);
+                                                cls->nargs(), true), OT::Context);
                     }
                 }
             }
