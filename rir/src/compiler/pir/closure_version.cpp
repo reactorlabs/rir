@@ -49,6 +49,7 @@ void ClosureVersion::scanForPreciseTypeSlots() {
     });
 }
 void ClosureVersion::scanForSpeculation() {
+    std::ostringstream ss;
 
     Visitor::run(this->entry, [&](Instruction* i) {
         if (auto assume = Assume::Cast(i)) {
@@ -140,9 +141,19 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 info.slotsUsed[fo.index()] = slotUsed;
+
+                if (cast && !slotUsed.exactMatch()) {
+                    ss << "[" << fo.index() << "]\n";
+                    ss << OT::get_node(cast->getOriginIdx()) << "\n";
+                }
             }
         }
     });
+
+    auto str = ss.str();
+    if (!str.empty()) {
+        std::cerr << this->name() << "\n" << str;
+    }
 }
 
 void ClosureVersion::computeSlotsPresent() {

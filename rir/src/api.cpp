@@ -76,6 +76,7 @@ bool finalizerSet = false;
 std::vector<DispatchTable*> PreservedDispatchTables;
 
 void myFinalizer(SEXP) {
+    return;
     auto verbose_env = std::getenv("STATS_VERBOSE");
     bool verbose = !(verbose_env != nullptr && std::string(verbose_env) == "0");
 
