@@ -9,7 +9,9 @@
 namespace rir {
 namespace pir {
 
+class CastType;
 class Value;
+
 namespace OT {
 
 enum Opt : uint8_t {
@@ -32,6 +34,8 @@ enum Origin : uint8_t {
 
     FromOpt,
     FromValue,
+    FromAssume,
+    FromTypeFeedback,
 };
 
 std::ostream& operator<<(std::ostream& os, Origin origin);
@@ -57,6 +61,7 @@ size_t new_node(PirType type, OT::Origin origin, const std::string& instr_name,
 
 size_t new_value_node(Value* value);
 
+void new_node_assume(CastType* cast, Value* speculateOn, PirType typeFeedback);
 
 //------------------------------------------------------
 

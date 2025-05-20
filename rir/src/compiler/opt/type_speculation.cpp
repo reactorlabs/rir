@@ -25,6 +25,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 std::pair<Checkpoint*, TypeTest::Info>>>
         speculate;
 
+    std::unordered_map<BB*, std::unordered_map<Instruction*, PirType>>
+        feedbackTypes;
+
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
         if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed) {
@@ -182,6 +185,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             PirType::any(),
             [&](TypeTest::Info info) {
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
+                feedbackTypes[typecheckPos][speculateOn] = feedback.type;
                 // Prevent redundant speculation
                 assert(i->hasTypeFeedback());
                 i->typeFeedbackUsed = true;
@@ -230,6 +234,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);
             cast->effects.set(Effect::DependsOnAssume);
+            OT::new_node_assume(cast, i, feedbackTypes[bb][i]);
             bb->insert(ip, cast);
             i->replaceDominatedUses(cast, dom);
             anyChange = true;

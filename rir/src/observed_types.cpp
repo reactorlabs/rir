@@ -1,3 +1,4 @@
+#include "compiler/pir/instruction.h"
 #include "utils/Terminal.h"
 #include <observed_types.h>
 #include <unordered_map>
@@ -29,6 +30,15 @@ size_t new_value_node(Value* value) {
     } else {
         return new_node(value->type, FromValue, tagToStr(value->tag));
     }
+}
+
+void new_node_assume(CastType* cast, Value* speculateOn, PirType typeFeedback) {
+    cast->originIdx_ = new_node(cast->type, OT::FromAssume, cast->name());
+    cast->originSet_ = 1;
+
+    auto& pars = get_parents(cast->originIdx_);
+    pars.push_back(new_node(typeFeedback, FromTypeFeedback, ""));
+    pars.push_back(new_value_node(speculateOn));
 }
 
 //------------------------------------------------------
@@ -89,6 +99,10 @@ std::ostream& operator<<(std::ostream& os, Origin origin) {
         return os << "Optimization";
     case FromValue:
         return os << "Value";
+    case FromAssume:
+        return os << "Assume";
+    case FromTypeFeedback:
+        return os << "TypeFeedback";
     }
     assert(false);
 }

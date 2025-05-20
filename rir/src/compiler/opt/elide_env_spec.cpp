@@ -100,12 +100,12 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 auto assume = Assume::Cast(*(ip - 1));
                                 info.updateAssume(*assume);
 
-
                                 if (argi) {
                                     auto cast = new CastType(
                                         argi, CastType::Downcast,
                                         PirType::val(), info.result);
                                     cast->effects.set(Effect::DependsOnAssume);
+                                    OT::new_node_assume(cast, argi, seen.type);
                                     ip = bb->insert(ip, cast);
                                     ip++;
                                     argi->replaceDominatedUses(cast, dom);
