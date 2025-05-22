@@ -19,6 +19,13 @@ void ClosureVersion::computeFeedbackStats() {
     this->scanForPreciseTypeSlots();
 
     this->computeSlotsPresent();
+
+    Visitor::run(this->entry, [](Instruction* i) {
+        if (OT::has_parents(i->getOriginIdx())){
+            i->print(std::cerr);
+            std::cerr << "\n" << OT::get_node(i->getOriginIdx()) << "\n";
+        }
+    });
 }
 
 void ClosureVersion::scanForPreciseTypeSlots() {
