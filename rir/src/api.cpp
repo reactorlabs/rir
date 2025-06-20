@@ -76,10 +76,16 @@ bool finalizerSet = false;
 std::vector<DispatchTable*> PreservedDispatchTables;
 
 void myFinalizer(SEXP) {
-    auto verbose_env = std::getenv("STATS_VERBOSE");
-    bool verbose = !(verbose_env != nullptr && std::string(verbose_env) == "0");
+    auto quiet_env = std::getenv("STATS_QUIET");
+    bool quiet = quiet_env != nullptr && std::string(quiet_env) == "1";
 
-    report::report(std::cerr, verbose, PreservedDispatchTables);
+    if (!quiet) {
+        auto verbose_env = std::getenv("STATS_VERBOSE");
+        bool verbose =
+            !(verbose_env != nullptr && std::string(verbose_env) == "0");
+
+        report::report(std::cerr, verbose, PreservedDispatchTables);
+    }
 
     const char* stats_name = getenv("STATS_NAME");
     if (stats_name == nullptr) {
