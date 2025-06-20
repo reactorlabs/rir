@@ -117,6 +117,19 @@ struct SlotUsed {
 
 struct SlotPresent {
     std::string presentInstr;
+    bool considered;
+
+    pir::PirType* staticType = nullptr;
+    pir::PirType* feedbackType = nullptr;
+
+    enum Type {
+        FB_isA_ST,
+        FB_ST_Disjoint,
+        FB_TooPolluted,
+        FB_TooPolluted_Narrowed
+    };
+
+    Type type() const;
 
     SlotPresent() {}
 };

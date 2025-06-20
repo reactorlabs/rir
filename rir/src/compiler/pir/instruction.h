@@ -149,6 +149,7 @@ struct TypeFeedback {
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
     bool defaultFeedback = false;
+    bool considered = false;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;

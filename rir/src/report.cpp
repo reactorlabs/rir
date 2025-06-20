@@ -263,16 +263,21 @@ std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
 
 // ------------------------------------------------------------
 
-pir::PirType SlotUsed::expectedType() const {
-    pir::PirType expected = *staticType & *feedbackType;
+pir::PirType makeExpectedType(const pir::PirType& staticType,
+                              const pir::PirType& feedbackType) {
+    pir::PirType expected = staticType & feedbackType;
 
     // Reflecting what happens in TypeTest::Create
-    if (staticType->maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
+    if (staticType.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
         !expected.isSimpleScalar()) {
         expected = expected.orNAOrNaN();
     }
 
     return expected;
+}
+
+pir::PirType SlotUsed::expectedType() const {
+    return makeExpectedType(*staticType, *feedbackType);
 }
 
 bool SlotUsed::widened() const {
@@ -312,6 +317,25 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     }
 
     return os;
+}
+
+// ------------------------------------------------------------
+
+SlotPresent::Type SlotPresent::type() const {
+    if (feedbackType->isA(*staticType)) {
+        return FB_isA_ST;
+    }
+
+    if ((*staticType & *feedbackType).isVoid()) {
+        return FB_ST_Disjoint;
+    }
+
+    auto expected = makeExpectedType(*staticType, *feedbackType);
+    if (feedbackType->isA(expected)) {
+        return FB_TooPolluted;
+    } else {
+        return FB_TooPolluted_Narrowed;
+    }
 }
 
 // ------------------------------------------------------------
@@ -465,10 +489,8 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     assert(optimizedAwaySlots.size() >= optimizedAwayNonEmptySlots.size());
     assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
 
-
     agg.dependent = info.dependentsCountIn(unusedNonEmpty);
     agg.unusedOther.value = unusedNonEmpty.size() - agg.dependent.value;
-
 
     // polymorphic
     agg.polymorphic = info.polymorphicSlots.size();
@@ -869,25 +891,55 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
     if (os.tellp() == 0) {
         // clang-format off
         os  << "benchmark,compilation id,closure,slot idx"
-            << ",non-empty,read,used"
+            << ",non-empty,read,used,polymorphic"
+            // How used
             << ",exact match,widened,narrowed"
-            << ",checkForT,staticT,feedbackT,expectedT,requiredT"
+            // Unused
             << ",optimized away,dependent"
-            << ",polymorphic"
+            // Unused non-optimized away
+            << ",too polluted,isA static,disjoint,unused narrowed,considered"
+            // Types
+            << ",staticT,feedbackT"
+            // Used types
+            << ",checkForT,expectedT,requiredT"
             << "\n";
         // clang-format on
     }
 
-    auto out_bool = [&](bool b, bool last = false) {
-        if (b) {
-            os << 1;
-        } else {
-            os << 0;
+    auto out = [&](const auto& x, bool quote = false, bool first = false) {
+        if (!first) {
+            os << ",";
         }
 
-        if (last) {
-            os << "\n";
+        if (quote) {
+            os << "\"";
+        }
+
+        os << x;
+
+        if (quote) {
+            os << "\"";
+        }
+    };
+
+    auto qout = [&](const auto& x, bool first = false) { out(x, true, first); };
+
+    auto out_bool = [&](bool b) {
+        if (b) {
+            os << "," << 1;
         } else {
+            os << "," << 0;
+        }
+    };
+
+    auto false_fields = [&](size_t count) {
+        for (size_t i = 0; i < count; i++) {
+            out_bool(false);
+        }
+    };
+
+    auto empty_fields = [&](size_t count) {
+        for (size_t i = 0; i < count; i++) {
             os << ",";
         }
     };
@@ -909,52 +961,102 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
                     auto& slot = j.first;
                     auto& slot_type = j.second;
 
-                    // clang-format off
-                    os  << "\"" << benchmark_name << "\","
-                        << compilation_id << ","
-                        << "\"" << closure->dispatchTable()->closureName << "\","
-                        << slot.idx << ",";
-                    // clang-format on
+                    // ID
+                    qout(benchmark_name, true);
+                    out(compilation_id);
+                    qout(closure->dispatchTable()->closureName);
+                    out(slot.idx);
 
                     bool non_empty = !static_info.emptySlots.count(slot);
+                    bool used = feedback_info.slotsUsed.count(slot);
+
+                    // Info
                     out_bool(non_empty);
                     out_bool(feedback_info.slotsRead.count(slot));
-
-                    bool used = feedback_info.slotsUsed.count(slot);
                     out_bool(used);
+                    out_bool(static_info.polymorphicSlots.count(slot));
 
                     if (used) {
                         auto& usage = feedback_info.slotsUsed[slot];
 
+                        // How used
                         out_bool(usage.exactMatch());
                         out_bool(usage.widened());
                         out_bool(usage.narrowedWithStaticType());
 
-                        // clang-format off
-                        os  << "\"" << *usage.checkFor << "\"" << ","
-                            << "\"" << *usage.staticType << "\"" << ","
-                            << "\"" << *usage.feedbackType << "\"" << ","
-                            << "\"" << usage.expectedType() << "\"" << ","
-                            << "\"" << *usage.requiredType << "\"" << ",";
-                        // clang-format on
+                        // Unused
+                        false_fields(2);
 
-                        out_bool(false);
-                        out_bool(false);
+                        // Unused non-optimized away
+                        false_fields(5);
+
+                        // Types
+                        qout(*usage.staticType);
+                        qout(*usage.feedbackType);
+
+                        // Used types
+                        qout(*usage.checkFor);
+                        qout(usage.expectedType());
+                        qout(*usage.requiredType);
                     } else {
-                        out_bool(false);
-                        out_bool(false);
-                        out_bool(false);
+                        // How used
+                        false_fields(3);
 
-                        for (int i = 0; i < 5; i++) {
-                            os << ",";
-                        }
-
-                        out_bool(!feedback_info.slotPresent.count(slot));
+                        // Unused
+                        auto present = feedback_info.slotPresent.count(slot);
+                        out_bool(!present);
                         out_bool(non_empty &&
                                  feedback_types_bags.count(slot_type) > 1);
-                    }
 
-                    out_bool(static_info.polymorphicSlots.count(slot), true);
+                        if (!present || !non_empty) {
+                            // Unused non-optimized away
+                            false_fields(5);
+
+                            // Types, Used types
+                            empty_fields(5);
+                        } else {
+                            bool tooPolluted = false;
+                            bool isAStatic = false;
+                            bool disjoint = false;
+                            bool narrowed = false;
+
+                            auto presentInfo = feedback_info.slotPresent[slot];
+
+                            switch (presentInfo.type()) {
+                            case SlotPresent::FB_isA_ST:
+                                isAStatic = true;
+                                break;
+
+                            case SlotPresent::FB_ST_Disjoint:
+                                disjoint = true;
+                                break;
+
+                            case SlotPresent::FB_TooPolluted:
+                                tooPolluted = true;
+                                break;
+
+                            case SlotPresent::FB_TooPolluted_Narrowed:
+                                narrowed = true;
+                                tooPolluted = true;
+                                break;
+                            }
+
+                            // Unused non-optimized away
+                            out_bool(tooPolluted);
+                            out_bool(isAStatic);
+                            out_bool(disjoint);
+                            out_bool(narrowed);
+                            out_bool(presentInfo.considered);
+
+                            // Types
+                            qout(*presentInfo.staticType);
+                            qout(*presentInfo.feedbackType);
+
+                            // Used types
+                            empty_fields(3);
+                        }
+                    }
+                    os << "\n";
                 }
             }
             compilation_id++;

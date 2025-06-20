@@ -22,10 +22,11 @@ class TypeTest {
             assume.required = required;
         }
     };
-    static void Create(Value* i, const TypeFeedback& feedback,
+    static void Create(Value* i, TypeFeedback& feedback,
                        const PirType& suggested, const PirType& required,
                        const std::function<void(Info)>& action,
                        const std::function<void()>& failed) {
+        feedback.considered = true;
         auto expected = i->type & feedback.type;
 
         // NA checks are only possible on scalars

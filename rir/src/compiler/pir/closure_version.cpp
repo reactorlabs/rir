@@ -146,7 +146,6 @@ void ClosureVersion::scanForSpeculation() {
 }
 
 void ClosureVersion::computeSlotsPresent() {
-
     std::function<void(BB*)> doCompute = [&](BB* e) {
         Visitor::run(e, [&](Instruction* i) {
             if (!i->hasTypeFeedback()) {
@@ -165,6 +164,11 @@ void ClosureVersion::computeSlotsPresent() {
             auto slotPresent = report::SlotPresent();
             slotPresent.presentInstr =
                 report::streamToString([&](std::ostream& os) { i->print(os); });
+
+            slotPresent.considered = tf.considered;
+
+            slotPresent.staticType = new pir::PirType(i->type);
+            slotPresent.feedbackType = new pir::PirType(tf.type);
 
             info.slotPresent[origin.index()] = slotPresent;
         });
