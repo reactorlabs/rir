@@ -480,15 +480,6 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 
 // ------------------------------------------------------------
 
-template <typename MapType>
-std::unordered_set<typename MapType::key_type> getKeys(const MapType& m) {
-    std::unordered_set<typename MapType::key_type> keys;
-    for (const auto& pair : m) {
-        keys.insert(pair.first);
-    }
-    return keys;
-}
-
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
@@ -549,18 +540,18 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     // precise type
     auto preciseTypeSlotsNonEmpty = intersect(preciseTypeSlots, unusedNonEmpty);
     auto preciseTypeSlotsPresentNonEmpty =
-        intersect(preciseTypeSlotsNonEmpty, getKeys(slotPresent));
+        intersect(preciseTypeSlotsNonEmpty, keys(slotPresent));
 
     agg.preciseType = preciseTypeSlots.size();
     agg.preciseTypeNonEmpty = preciseTypeSlotsNonEmpty.size();
     agg.preciseTypePresentNonEmpty = preciseTypeSlotsPresentNonEmpty.size();
 
     auto optimizedAwayNonEmptySlots =
-        difference(unusedNonEmpty, getKeys(slotPresent));
+        difference(unusedNonEmpty, keys(slotPresent));
     agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
 
     auto optimizedAwaySlots =
-        difference(getKeys(info.allTypeSlots), getKeys(slotPresent));
+        difference(keys(info.allTypeSlots), keys(slotPresent));
     agg.optimizedAway = optimizedAwaySlots.size();
 
     assert(optimizedAwaySlots.size() >= optimizedAwayNonEmptySlots.size());
