@@ -62,19 +62,26 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
                         TypeFeedback seen;
-                        if (argi)
+                        Instruction* seenOrigin;
+                        if (argi) {
                             seen = argi->typeFeedback();
+                            seenOrigin = argi;
+                        }
                         if (auto j = Instruction::Cast(arg->followCasts()))
                             if (seen.type.isVoid() ||
                                 (!j->typeFeedback().type.isVoid() &&
-                                 !seen.type.isA(j->typeFeedback().type)))
+                                 !seen.type.isA(j->typeFeedback().type))) {
                                 seen = j->typeFeedback();
+                                seenOrigin = j;
+                            }
                         if (auto j =
                                 Instruction::Cast(arg->followCastsAndForce()))
                             if (seen.type.isVoid() ||
                                 (!j->typeFeedback().type.isVoid() &&
-                                 !seen.type.isA(j->typeFeedback().type)))
+                                 !seen.type.isA(j->typeFeedback().type))) {
                                 seen = j->typeFeedback();
+                                seenOrigin = j;
+                            }
 
                         auto required = arg->type.notObject();
                         auto suggested = required;
@@ -87,9 +94,12 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bool specSucceeded = false;
                         bool reqFulfilled = true;
 
+                        seenOrigin->speculationConsidered();
+                        seenOrigin->speculationCreate();
                         TypeTest::Create(
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
+                                seenOrigin->speculationEmited();
                                 specSucceeded = true;
 
                                 BBTransform::insertAssume(
@@ -99,7 +109,6 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                                 auto assume = Assume::Cast(*(ip - 1));
                                 info.updateAssume(*assume);
-
 
                                 if (argi) {
                                     auto cast = new CastType(
@@ -123,17 +132,21 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             //         seen.feedbackOrigin.function());
                             //
                             //     // if
-                            //     // (feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index()))
+                            //     //
+                            //     (feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index()))
                             //     // {
                             //     //     std::cerr << " --" ;
-                            //     //     Instruction::Cast(arg)->print(std::cerr,
+                            //     // Instruction::Cast(arg)->print(std::cerr,
                             //     //     true); std::cerr <<  " -- ";
-                            //     //     Instruction::Cast(feedbackStats.slotsReadCandidateNotUsedReason[seen.feedbackOrigin.index()].aa)->print(std::cerr,
+                            //     //
+                            //     Instruction::Cast(feedbackStats.slotsReadCandidateNotUsedReason[seen.feedbackOrigin.index()].aa)->print(std::cerr,
                             //     //     true); std::cerr << "\n";
-                            //     //     code->printCode(std::cerr, true, false);
+                            //     //     code->printCode(std::cerr, true,
+                            //     false);
                             //     // }
                             //
-                            //     // assert(!feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index())
+                            //     //
+                            //     assert(!feedbackStats.slotsReadCandidateNotUsedReason.count(seen.feedbackOrigin.index())
                             //     //         && "stats for index exist");
                             //
                             //     report::SlotCandidateButNotUsedReason cnu;
@@ -144,9 +157,6 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                             //         [seen.feedbackOrigin.index()] = cnu;
                             // }
                         }
-
-
-
                     });
                     if (successful) {
 

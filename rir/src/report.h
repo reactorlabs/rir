@@ -115,26 +115,30 @@ struct SlotUsed {
     SlotUsed() {}
 };
 
+std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
+
 struct SlotPresent {
     std::string presentInstr;
-    bool considered;
 
     pir::PirType* staticType = nullptr;
     pir::PirType* feedbackType = nullptr;
 
-    enum Type {
-        FB_isA_ST,
-        FB_ST_Disjoint,
-        FB_TooPolluted,
-        FB_TooPolluted_Narrowed
-    };
+    bool considered = false;
+    bool create = false;
+    bool emited = false;
+
+    bool isReturned = false;
+
+    enum Type { FB_isA_ST, ST_isA_FB, FB_ST_Disjoint, Narrowed };
 
     Type type() const;
+
+    bool canBeSpeculated () const;
 
     SlotPresent() {}
 };
 
-std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
+std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent);
 
 // ------------------------------------------------------------
 

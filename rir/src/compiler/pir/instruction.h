@@ -149,7 +149,10 @@ struct TypeFeedback {
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
     bool defaultFeedback = false;
-    bool considered = false;
+
+    bool specConsidered = false;
+    bool specCreate = false;
+    bool specEmited = false;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;
@@ -215,6 +218,12 @@ class Instruction : public Value {
         typeFeedback_.reset(new TypeFeedback());
         return updateTypeFeedback();
     }
+
+    void speculationEmited() const { typeFeedback_->specEmited = true; }
+
+    void speculationConsidered() const { typeFeedback_->specConsidered = true; }
+
+    void speculationCreate() const { typeFeedback_->specCreate = true; }
 
     void typeFeedback(const TypeFeedback& feedback) {
         typeFeedback_.reset(new TypeFeedback(feedback));

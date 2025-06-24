@@ -321,7 +321,62 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 
 // ------------------------------------------------------------
 
+std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
+    using namespace StreamColor;
+
+    os << bold << slotPresent.presentInstr << clear << "\n";
+
+    switch (slotPresent.type()) {
+    case SlotPresent::FB_isA_ST:
+        os << "ST :> FB";
+        break;
+
+    case SlotPresent::ST_isA_FB:
+        os << ((*slotPresent.feedbackType == *slotPresent.staticType)
+                   ? "ST == FB"
+                   : "ST <: FB");
+        break;
+
+    case SlotPresent::FB_ST_Disjoint:
+        os << "FB ST empty intersection";
+        break;
+
+    case SlotPresent::Narrowed:
+        os << "narrowed with static type";
+        break;
+    }
+    os << "\n";
+
+    // clang-format off
+    os << bold << "static: "   << clear << *slotPresent.staticType << ", "
+       << bold << "feedback: " << clear << *slotPresent.feedbackType << "\n";
+    // clang-format on
+
+    if (slotPresent.emited) {
+        os << "(speculation emited)\n";
+    } else {
+        if (slotPresent.create) {
+            os << "(type check tried)\n";
+        } else if (slotPresent.considered) {
+            os << "(considered)\n";
+        }
+
+        if (slotPresent.canBeSpeculated()) {
+            os << "(speculatable)\n";
+        }
+    }
+
+    return os;
+}
+
+// ------------------------------------------------------------
+
 SlotPresent::Type SlotPresent::type() const {
+    // Also ST == FB
+    if (staticType->isA(*feedbackType)) {
+        return ST_isA_FB;
+    }
+
     if (feedbackType->isA(*staticType)) {
         return FB_isA_ST;
     }
@@ -330,12 +385,34 @@ SlotPresent::Type SlotPresent::type() const {
         return FB_ST_Disjoint;
     }
 
+    return Narrowed;
+}
+
+bool SlotPresent::canBeSpeculated() const {
     auto expected = makeExpectedType(*staticType, *feedbackType);
-    if (feedbackType->isA(expected)) {
-        return FB_TooPolluted;
-    } else {
-        return FB_TooPolluted_Narrowed;
+
+    if (expected.isVoid() || expected.maybeLazy()) {
+        return false;
     }
+
+    if (!expected.maybeObj() &&
+        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
+         expected.noAttribsOrObject().isA(pir::RType::real) ||
+         expected.noAttribsOrObject().isA(pir::RType::logical))) {
+        return true;
+    }
+
+    auto checkFor = staticType->notLazy().noAttribsOrObject();
+    if (expected.isA(checkFor)) {
+        return true;
+    }
+
+    checkFor = staticType->notLazy().notObject();
+    if (expected.isA(checkFor)) {
+        return true;
+    }
+
+    return false;
 }
 
 // ------------------------------------------------------------
@@ -677,27 +754,15 @@ void report(std::ostream& os, bool breakdownInfo,
             if (used) {
                 os << stats.slotsUsed.at(index);
             } else {
-                bool otherReason = false;
-
-                bool isDependency =
-                    info.getFeedbackTypesBag().count(feedbackType) > 1;
-                if (!stats.slotPresent.count(index)) {
-                    os << "optimized away\n";
-                    otherReason = false;
+                if (stats.slotPresent.count(index)) {
+                    os << stats.slotPresent.at(index);
                 } else {
-                    auto present = stats.slotPresent.at(index);
-                    os << StreamColor::bold << present.presentInstr
-                       << StreamColor::clear << "\n";
+                    os << "optimized away\n";
                 }
+            }
 
-                if (isDependency) {
-                    os << "dependent slot\n";
-                    otherReason = false;
-                }
-
-                if (otherReason) {
-                    os << "other unused reason\n";
-                }
+            if (info.getFeedbackTypesBag().count(feedbackType) > 1) {
+                os << "dependent slot\n";
             }
         };
 

@@ -63,7 +63,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 //     snu.fromContext = true;
                 //     snu.ctx = cls->context();
                 //     snu.fromInstruction = report::streamToString(
-                //         [&](std::stringstream& ss) { ldi->print(ss, false); });
+                //         [&](std::stringstream& ss) { ldi->print(ss, false);
+                //         });
                 //
                 //     // std::cerr << "\n and got type from LdArg \n ";
                 //     // ldi->print(std::cerr, false);
@@ -84,6 +85,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
         TypeFeedback feedback;
+        Instruction* feedbackOrigin = nullptr;
         BB* typecheckPos = nullptr;
 
         if (auto force = Force::Cast(i)) {
@@ -96,6 +98,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                         LdVar::Cast(arg) && !Env::isStaticEnv(i->env());
 
                     feedback = i->typeFeedback();
+                    feedbackOrigin = i;
                     // If this force was observed to receive evaluated
                     // promises, better speculate on the input already.
                     switch (force->observed) {
@@ -136,9 +139,14 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
             feedback = i->typeFeedback();
+            feedbackOrigin = i;
             guardPos = checkpoint.next(i, i, dom);
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
+        }
+
+        if (feedbackOrigin) {
+            feedbackOrigin->speculationConsidered();
         }
 
         if (!speculateOn || !guardPos || !typecheckPos ||
@@ -177,10 +185,12 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
         bool specSucceeded = false;
         bool reqFulfilled = true;
+        feedbackOrigin->speculationCreate();
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
             [&](TypeTest::Info info) {
+                feedbackOrigin->speculationEmited();
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
                 assert(i->hasTypeFeedback());

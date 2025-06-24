@@ -1,5 +1,7 @@
 #include "closure_version.h"
 #include "closure.h"
+#include "compiler/analysis/query.h"
+#include "compiler/opt/type_test.h"
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
 #include "pir_impl.h"
@@ -147,6 +149,7 @@ void ClosureVersion::scanForSpeculation() {
 
 void ClosureVersion::computeSlotsPresent() {
     std::function<void(BB*)> doCompute = [&](BB* e) {
+        auto returnValues = Query::returned(e->owner);
         Visitor::run(e, [&](Instruction* i) {
             if (!i->hasTypeFeedback()) {
                 return;
@@ -165,10 +168,26 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.presentInstr =
                 report::streamToString([&](std::ostream& os) { i->print(os); });
 
-            slotPresent.considered = tf.considered;
+            slotPresent.considered = tf.specConsidered;
+            slotPresent.create = tf.specCreate;
+            slotPresent.emited = tf.specEmited;
+
+            // create ==> considered
+            if (slotPresent.create) {
+                assert(slotPresent.considered);
+            }
+            // emited => create
+            if (slotPresent.emited) {
+                assert(slotPresent.create);
+            }
 
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
+
+            if (std::find(returnValues.begin(), returnValues.end(), i) !=
+                returnValues.end()) {
+                slotPresent.isReturned = true;
+            }
 
             info.slotPresent[origin.index()] = slotPresent;
         });
