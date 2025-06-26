@@ -25,6 +25,40 @@ pir::PirType getSlotPirType(const FeedbackOrigin& origin);
 
 // ------------------------------------------------------------
 
+using Universe = std::unordered_set<Function*>;
+
+// ------------------------------------------------------------
+
+struct Aggregate {
+    Universe universe{};
+
+    size_t referenced = 0;
+    size_t referencedNonEmpty = 0;
+    size_t readNonEmpty = 0;
+    size_t used = 0;
+
+    void operator+=(Aggregate other) {
+        universe.insert(other.universe.begin(), other.universe.end());
+
+        this->referenced += other.referenced;
+        this->referencedNonEmpty += other.referencedNonEmpty;
+        this->readNonEmpty += other.readNonEmpty;
+        this->used += other.used;
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
+
+struct FinalAggregate {
+    Universe universe{};
+
+    size_t compiledClosureVersions = 0;
+    size_t benefitedClosureVersions = 0;
+    size_t deoptsCount = 0;
+};
+
+// ------------------------------------------------------------
+
 struct SlotUsed {
     bool widened() const;
     bool narrowedWithStaticType() const;
@@ -73,40 +107,6 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent);
 
 // ------------------------------------------------------------
 
-using Universe = std::unordered_set<Function*>;
-
-// ------------------------------------------------------------
-
-struct Aggregate {
-    Universe universe{};
-
-    size_t referenced = 0;
-    size_t referencedNonEmpty = 0;
-    size_t readNonEmpty = 0;
-    size_t used = 0;
-
-    void operator+=(Aggregate other) {
-        universe.insert(other.universe.begin(), other.universe.end());
-
-        this->referenced += other.referenced;
-        this->referencedNonEmpty += other.referencedNonEmpty;
-        this->readNonEmpty += other.readNonEmpty;
-        this->used += other.used;
-    }
-};
-
-std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
-
-struct FinalAggregate {
-    Universe universe{};
-
-    size_t compiledClosureVersions = 0;
-    size_t benefitedClosureVersions = 0;
-    size_t deoptsCount = 0;
-};
-
-// ------------------------------------------------------------
-
 /*
 f <- function()
     g()
@@ -126,10 +126,12 @@ struct FunctionInfo {
 
     std::unordered_set<FeedbackIndex> polymorphicSlots;
 
+    // TODO: not used probably remove
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;
     size_t deoptsCount;
 
+    // TODO: not used by current analysis, probabluy refactor
     std::unordered_multiset<pir::PirType> getFeedbackTypesBag() const;
     size_t dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const;
 };
@@ -140,6 +142,8 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
+
+    // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;
 
     Aggregate getAgg(const FunctionInfo& info) const;

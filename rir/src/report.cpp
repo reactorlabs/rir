@@ -8,47 +8,7 @@
 #include <iostream>
 
 // ------------------------------------------------------------
-
-namespace StreamColor {
-struct {
-} red;
-
-struct {
-} yellow;
-
-struct {
-} blue;
-
-struct {
-} magenta;
-
-struct {
-} clear;
-
-struct {
-} bold;
-
-#define COLOR_OPERATOR(color)                                                  \
-    std::ostream& operator<<(std::ostream& os, decltype(StreamColor::color)) { \
-        auto forceColor = std::getenv("STATS_COLOR");                          \
-        if ((forceColor != nullptr && std::string(forceColor) == "1") ||       \
-            ConsoleColor::isTTY(os)) {                                         \
-            ConsoleColor::color(os);                                           \
-        }                                                                      \
-        return os;                                                             \
-    }
-
-COLOR_OPERATOR(red)
-COLOR_OPERATOR(yellow)
-COLOR_OPERATOR(blue)
-COLOR_OPERATOR(magenta)
-COLOR_OPERATOR(clear)
-COLOR_OPERATOR(bold)
-
-#undef COLOR_OPERATOR
-
-}; // namespace StreamColor
-
+// TYPE HELPERS
 // ------------------------------------------------------------
 
 namespace rir {
@@ -67,6 +27,21 @@ pir::PirType getSlotPirType(const FeedbackOrigin& origin) {
     return getSlotPirType(origin.index().idx, origin.function());
 }
 
+pir::PirType makeExpectedType(const pir::PirType& staticType,
+                              const pir::PirType& feedbackType) {
+    pir::PirType expected = staticType & feedbackType;
+
+    // Reflecting what happens in TypeTest::Create
+    if (staticType.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
+        !expected.isSimpleScalar()) {
+        expected = expected.orNAOrNaN();
+    }
+
+    return expected;
+}
+
+// ------------------------------------------------------------
+// SET HELPERS
 // ------------------------------------------------------------
 
 template <typename K, typename V>
@@ -110,33 +85,8 @@ std::unordered_set<T> difference(const std::unordered_set<T>& lhs,
 }
 
 // ------------------------------------------------------------
-
-std::string streamToString(std::function<void(std::stringstream&)> f) {
-    std::stringstream ss;
-    f(ss);
-    return ss.str();
-};
-
-std::string boolToString(bool b) { return b ? "yes" : "no"; }
-
-void printStat(std::ostream& os, const std::string& name, size_t value) {
-    os << name << ": " << StreamColor::bold << value << StreamColor::clear << "\n";
-}
-
+// SLOT USED
 // ------------------------------------------------------------
-
-pir::PirType makeExpectedType(const pir::PirType& staticType,
-                              const pir::PirType& feedbackType) {
-    pir::PirType expected = staticType & feedbackType;
-
-    // Reflecting what happens in TypeTest::Create
-    if (staticType.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
-        !expected.isSimpleScalar()) {
-        expected = expected.orNAOrNaN();
-    }
-
-    return expected;
-}
 
 pir::PirType SlotUsed::expectedType() const {
     return makeExpectedType(*staticType, *feedbackType);
@@ -150,6 +100,257 @@ bool SlotUsed::widened() const {
 
 bool SlotUsed::narrowedWithStaticType() const {
     return !(feedbackType->isA(*staticType));
+}
+
+// ------------------------------------------------------------
+// SLOT PRESENT
+// ------------------------------------------------------------
+
+SlotPresent::Type SlotPresent::type() const {
+    // Also ST == FB
+    if (staticType->isA(*feedbackType)) {
+        return ST_isA_FB;
+    }
+
+    if (feedbackType->isA(*staticType)) {
+        return FB_isA_ST;
+    }
+
+    if ((*staticType & *feedbackType).isVoid()) {
+        return FB_ST_Disjoint;
+    }
+
+    return Narrowed;
+}
+
+bool SlotPresent::canBeSpeculated() const {
+    auto expected = makeExpectedType(*staticType, *feedbackType);
+
+    if (expected.isVoid() || expected.maybeLazy()) {
+        return false;
+    }
+
+    if (!expected.maybeObj() &&
+        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
+         expected.noAttribsOrObject().isA(pir::RType::real) ||
+         expected.noAttribsOrObject().isA(pir::RType::logical))) {
+        return true;
+    }
+
+    auto checkFor = staticType->notLazy().noAttribsOrObject();
+    if (expected.isA(checkFor)) {
+        return true;
+    }
+
+    checkFor = staticType->notLazy().notObject();
+    if (expected.isA(checkFor)) {
+        return true;
+    }
+
+    return false;
+}
+
+// ------------------------------------------------------------
+// FUNCTION INFO
+// ------------------------------------------------------------
+
+std::unordered_multiset<pir::PirType>
+FunctionInfo::getFeedbackTypesBag() const {
+    std::unordered_multiset<pir::PirType> result;
+    for (const auto& kv : allTypeSlots) {
+        result.insert(kv.second);
+    }
+
+    return result;
+}
+
+size_t
+FunctionInfo::dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const {
+
+    auto allFeedbackTypesBag = getFeedbackTypesBag();
+    size_t result = 0;
+    std::unordered_set<rir::pir::PirType> types;
+
+    for (auto s : slots) {
+        auto t = allTypeSlots.at(s);
+        if (allFeedbackTypesBag.count(t) > 1) {
+            types.insert(t);
+            result++;
+        }
+    }
+
+    if (result > 0) {
+        result = result - types.size();
+    }
+
+    return result;
+}
+
+// ------------------------------------------------------------
+// COLLECT INFO
+// ------------------------------------------------------------
+
+static std::vector<CompilationSession> COMPILATION_SESSIONS;
+
+void computeFunctionsInfo(
+    std::unordered_map<Function*, FunctionInfo>& functionsInfo,
+    std::vector<DispatchTable*> DTs) {
+    for (auto dt : DTs) {
+        auto baseline = dt->baseline();
+        auto& slotData = functionsInfo[baseline];
+
+        // Types
+        auto feedback = baseline->typeFeedback();
+        for (size_t i = 0; i < feedback->types_size(); ++i) {
+            auto idx = FeedbackIndex::type(i);
+
+            slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
+            const auto& tf = feedback->types(i);
+
+            if (tf.isEmpty()) {
+                slotData.emptySlots.insert(idx);
+            } else {
+                slotData.nonEmptySlots.insert(idx);
+            }
+
+            if (tf.isPolymorphic) {
+                slotData.polymorphicSlots.insert(idx);
+            }
+        }
+
+        // Deopts
+        slotData.deoptsCount = baseline->allDeoptsCount;
+
+        for (auto origin : baseline->slotsDeopted) {
+            if (origin.function() == baseline) {
+                slotData.slotsDeopted.insert(origin.index());
+            } else {
+                functionsInfo[origin.function()].inlinedSlotsDeopted.insert(
+                    origin.index());
+            }
+        }
+    }
+}
+
+CompilationSession&
+CompilationSession::getNew(Function* compiledFunction,
+                           const Context& compiledContext,
+                           const std::vector<DispatchTable*>& DTs) {
+    COMPILATION_SESSIONS.emplace_back(compiledFunction, compiledContext);
+    auto& session = COMPILATION_SESSIONS.back();
+    computeFunctionsInfo(session.functionsInfo, DTs);
+    return session;
+}
+
+void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
+                                           Function* compiledFunction) {
+
+    assert(closureVersion->context() == compiledFunction->context());
+    auto baseline = compiledFunction->dispatchTable()->baseline();
+    const auto& context = compiledFunction->context();
+
+    closureVersionStats.emplace_back(baseline, context,
+                                     closureVersion->feedbackStatsByFunction);
+}
+
+// ------------------------------------------------------------
+// AGGREGATES
+// ------------------------------------------------------------
+
+Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
+    Aggregate agg;
+
+    // Static info
+    agg.referenced = info.allTypeSlots.size();
+    agg.referencedNonEmpty =
+        intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
+    agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
+    agg.used = slotsUsed.size();
+    assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
+           "There is an empty used slot");
+    return agg;
+}
+
+Aggregate ClosureVersionStats::getAgg(
+    std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
+    Aggregate agg;
+
+    agg.universe = keys(feedbackStats);
+
+    for (auto& i : feedbackStats) {
+        agg += i.second.getAgg(functionsInfo[i.first]);
+    }
+
+    return agg;
+}
+FinalAggregate CompilationSession::getFinalAgg() {
+    FinalAggregate res;
+
+    for (auto i : COMPILATION_SESSIONS) {
+        for (auto j : i.closureVersionStats) {
+            auto agg = j.getAgg(i.functionsInfo);
+
+            res.universe.insert(agg.universe.begin(), agg.universe.end());
+
+            res.compiledClosureVersions++;
+            if (agg.used > 0) {
+                res.benefitedClosureVersions++;
+            }
+        }
+    }
+
+    for (auto f : res.universe) {
+        res.deoptsCount += f->allDeoptsCount;
+    }
+
+    return res;
+}
+
+// ------------------------------------------------------------
+// COLORS
+// ------------------------------------------------------------
+
+namespace StreamColor {
+#define COLOR(color)                                                           \
+    struct {                                                                   \
+    } color;                                                                   \
+                                                                               \
+    std::ostream& operator<<(std::ostream& os, decltype(StreamColor::color)) { \
+        auto forceColor = std::getenv("STATS_COLOR");                          \
+        if ((forceColor != nullptr && std::string(forceColor) == "1") ||       \
+            ConsoleColor::isTTY(os)) {                                         \
+            ConsoleColor::color(os);                                           \
+        }                                                                      \
+        return os;                                                             \
+    }
+
+COLOR(red)
+COLOR(yellow)
+COLOR(blue)
+COLOR(magenta)
+COLOR(clear)
+COLOR(bold)
+
+#undef COLOR
+
+}; // namespace StreamColor
+
+
+// ------------------------------------------------------------
+// PRINT FORMAT
+// ------------------------------------------------------------
+
+std::string streamToString(std::function<void(std::stringstream&)> f) {
+    std::stringstream ss;
+    f(ss);
+    return ss.str();
+};
+
+std::string boolToString(bool b) { return b ? "yes" : "no"; }
+
+void printStat(std::ostream& os, const std::string& name, size_t value) {
+    os << name << ": " << StreamColor::bold << value << StreamColor::clear
+       << "\n";
 }
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
@@ -180,8 +381,6 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 
     return os;
 }
-
-// ------------------------------------------------------------
 
 std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
     using namespace StreamColor;
@@ -231,87 +430,6 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
     return os;
 }
 
-// ------------------------------------------------------------
-
-SlotPresent::Type SlotPresent::type() const {
-    // Also ST == FB
-    if (staticType->isA(*feedbackType)) {
-        return ST_isA_FB;
-    }
-
-    if (feedbackType->isA(*staticType)) {
-        return FB_isA_ST;
-    }
-
-    if ((*staticType & *feedbackType).isVoid()) {
-        return FB_ST_Disjoint;
-    }
-
-    return Narrowed;
-}
-
-bool SlotPresent::canBeSpeculated() const {
-    auto expected = makeExpectedType(*staticType, *feedbackType);
-
-    if (expected.isVoid() || expected.maybeLazy()) {
-        return false;
-    }
-
-    if (!expected.maybeObj() &&
-        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
-         expected.noAttribsOrObject().isA(pir::RType::real) ||
-         expected.noAttribsOrObject().isA(pir::RType::logical))) {
-        return true;
-    }
-
-    auto checkFor = staticType->notLazy().noAttribsOrObject();
-    if (expected.isA(checkFor)) {
-        return true;
-    }
-
-    checkFor = staticType->notLazy().notObject();
-    if (expected.isA(checkFor)) {
-        return true;
-    }
-
-    return false;
-}
-
-// ------------------------------------------------------------
-
-std::unordered_multiset<pir::PirType>
-FunctionInfo::getFeedbackTypesBag() const {
-    std::unordered_multiset<pir::PirType> result;
-    for (const auto& kv : allTypeSlots) {
-        result.insert(kv.second);
-    }
-
-    return result;
-}
-
-size_t
-FunctionInfo::dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const {
-
-    auto allFeedbackTypesBag = getFeedbackTypesBag();
-    size_t result = 0;
-    std::unordered_set<rir::pir::PirType> types;
-
-    for (auto s : slots) {
-        auto t = allTypeSlots.at(s);
-        if (allFeedbackTypesBag.count(t) > 1) {
-            types.insert(t);
-            result++;
-        }
-    }
-
-    if (result > 0) {
-        result = result - types.size();
-    }
-
-    return result;
-}
-
-// ------------------------------------------
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
     printStat(os, "referenced", agg.referenced);
     printStat(os, "referenced non-empty", agg.referencedNonEmpty);
@@ -321,131 +439,8 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 }
 
 // ------------------------------------------------------------
-
-Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
-    Aggregate agg;
-
-    // Static info
-    agg.referenced = info.allTypeSlots.size();
-    agg.referencedNonEmpty =
-        intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
-    agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
-    agg.used = slotsUsed.size();
-    assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
-           "There is an empty used slot");
-    return agg;
-}
-
+// OUTPUT
 // ------------------------------------------------------------
-
-Aggregate ClosureVersionStats::getAgg(
-    std::unordered_map<Function*, FunctionInfo>& functionsInfo) {
-    Aggregate agg;
-
-    agg.universe = keys(feedbackStats);
-
-    for (auto& i : feedbackStats) {
-        agg += i.second.getAgg(functionsInfo[i.first]);
-    }
-
-    return agg;
-}
-
-// ------------------------------------------------------------
-
-void computeFunctionsInfo(
-    std::unordered_map<Function*, FunctionInfo>& functionsInfo,
-    std::vector<DispatchTable*> DTs) {
-    for (auto dt : DTs) {
-        auto baseline = dt->baseline();
-        auto& slotData = functionsInfo[baseline];
-
-        // Types
-        auto feedback = baseline->typeFeedback();
-        for (size_t i = 0; i < feedback->types_size(); ++i) {
-            auto idx = FeedbackIndex::type(i);
-
-            slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
-            const auto& tf = feedback->types(i);
-
-            if (tf.isEmpty()) {
-                slotData.emptySlots.insert(idx);
-            } else {
-                slotData.nonEmptySlots.insert(idx);
-            }
-
-            if (tf.isPolymorphic) {
-                slotData.polymorphicSlots.insert(idx);
-            }
-        }
-
-        // Deopts
-        slotData.deoptsCount = baseline->allDeoptsCount;
-
-        for (auto origin : baseline->slotsDeopted) {
-            if (origin.function() == baseline) {
-                slotData.slotsDeopted.insert(origin.index());
-            } else {
-                functionsInfo[origin.function()].inlinedSlotsDeopted.insert(
-                    origin.index());
-            }
-        }
-    }
-}
-
-static std::vector<CompilationSession> COMPILATION_SESSIONS;
-
-CompilationSession&
-CompilationSession::getNew(Function* compiledFunction,
-                           const Context& compiledContext,
-                           const std::vector<DispatchTable*>& DTs) {
-    COMPILATION_SESSIONS.emplace_back(compiledFunction, compiledContext);
-    auto& session = COMPILATION_SESSIONS.back();
-    computeFunctionsInfo(session.functionsInfo, DTs);
-    return session;
-}
-
-// ------------------------------------------------------------
-
-void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
-                                           Function* compiledFunction) {
-
-    assert(closureVersion->context() == compiledFunction->context());
-    auto baseline = compiledFunction->dispatchTable()->baseline();
-    const auto& context = compiledFunction->context();
-
-    closureVersionStats.emplace_back(baseline, context,
-                                     closureVersion->feedbackStatsByFunction);
-}
-
-FinalAggregate CompilationSession::getFinalAgg() {
-    FinalAggregate res;
-
-    for (auto i : COMPILATION_SESSIONS) {
-        for (auto j : i.closureVersionStats) {
-            auto agg = j.getAgg(i.functionsInfo);
-
-            res.universe.insert(agg.universe.begin(), agg.universe.end());
-
-            res.compiledClosureVersions++;
-            if (agg.used > 0) {
-                res.benefitedClosureVersions++;
-            }
-        }
-    }
-
-    for (auto f : res.universe) {
-        res.deoptsCount += f->allDeoptsCount;
-    }
-
-    return res;
-}
-
-// ------------------------------------------------------------
-
-const std::string& closureName(Function* fun) {
-    return fun->dispatchTable()->closureName;
-}
 
 template <typename T>
 std::vector<std::pair<FeedbackIndex, T>>
@@ -463,6 +458,10 @@ sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
 
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs) {
+    auto closureName = [](Function* fun) {
+        return fun->dispatchTable()->closureName;
+    };
+
     auto printSlotBreakdown =
         [&](const FeedbackIndex& index, const pir::PirType& feedbackType,
             const FeedbackStatsPerFunction& stats, FunctionInfo& info) {
@@ -575,6 +574,10 @@ void report(std::ostream& os, bool breakdownInfo,
               final.benefitedClosureVersions);
     printStat(os, "deoptimizations", final.deoptsCount);
 }
+
+// ------------------------------------------------------------
+// CSV OUTPUT
+// ------------------------------------------------------------
 
 void reportCsv(std::ostream& os, const std::string& program_name,
                const std::vector<DispatchTable*>& DTs) {
