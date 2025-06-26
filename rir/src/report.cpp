@@ -5,8 +5,6 @@
 #include "runtime/Function.h"
 #include "utils/Terminal.h"
 
-#include <cmath>
-#include <iomanip>
 #include <iostream>
 
 // ------------------------------------------------------------
@@ -121,144 +119,8 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
 
-// // Determine number of decimal places to show based on rules
-// int getDisplayPrecision(double value) {
-//     if (value >= 1.0) {
-//         return 1;
-//     } else {
-//         int digits = 0;
-//         int scale = 10;
-//         while (std::trunc(value * scale) == 0 && scale <= 1e9) {
-//             digits++;
-//             scale *= 10;
-//         }
-//         return digits + 1; // one digit after first non-zero
-//     }
-// }
-// std::string formatStatNumber(double value) {
-
-//     int precision = getDisplayPrecision(value);
-//     return report::streamToString([&](std::ostream& os) {
-//         os << std::fixed << std::setprecision(precision);
-//         os << value;
-//     });
-
-//     std::cout << std::fixed << std::setprecision(precision);
-
-// }
-
-std::string formatStatsNumber(double value) {
-    // Convert to full-precision fixed string
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(20) << value;
-    std::string str = oss.str();
-
-    // Trim trailing zeros and decimal point
-    str.erase(str.find_last_not_of('0') + 1);
-    if (str.back() == '.')
-        str.pop_back();
-
-    // ≥ 1.0 → keep up to one decimal place
-    if (value >= 1.0) {
-        size_t dot = str.find('.');
-        if (dot != std::string::npos && dot + 2 < str.size()) {
-            str = str.substr(0, dot + 2);
-        }
-        return str;
-    }
-
-    // < 1.0 → keep first non-zero decimal + 1 digit
-    size_t dot = str.find('.');
-    if (dot == std::string::npos)
-        return str;
-
-    size_t firstNonZero = dot + 1;
-    while (firstNonZero < str.size() && str[firstNonZero] == '0') {
-        firstNonZero++;
-    }
-
-    if (firstNonZero + 1 < str.size()) {
-        str = str.substr(0, firstNonZero + 2);
-    }
-
-    return str;
-}
-
-void showPercent(double percent, std::ostream& ss) {
-    ss << formatStatsNumber(percent * 100) << "%";
-}
-
-// ------------------------------------------------------------
-
-MetricPercent Stat::operator/(Stat& denom) {
-    return MetricPercent{.numerator = this, .denominator = &denom};
-}
-
-double MetricPercent::value() const {
-    if (denominator->value == 0) {
-        assert(false && "cannot divide by 0");
-    }
-
-    return static_cast<double>(numerator->value) / denominator->value;
-}
-
-double FunctionAggregate::average() const {
-    if (values.empty()) {
-        return 0.0;
-    }
-
-    double sum = std::accumulate(values.begin(), values.end(), 0.0);
-    return sum / values.size();
-}
-
-// ------------------------------------------------------------
-
-std::ostream& operator<<(std::ostream& os, const Stat& st) {
-    if (st.name != "") {
-        os << st.name << ": ";
-    }
-
-    os << StreamColor::bold << formatStatsNumber(st.value) << StreamColor::clear
-       << "\n";
-
-    return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const MetricPercent& metric) {
-    if (metric.name != "") {
-        os << metric.name << " ";
-    }
-
-    os << "(" << metric.numerator->name << " / " << metric.denominator->name
-       << "): ";
-
-    os << StreamColor::bold << metric.numerator->value << " / "
-       << metric.denominator->value;
-
-    if (metric.denominator->value) {
-        os << " (";
-        showPercent(metric.value(), os);
-        os << ")";
-    }
-
-    os << StreamColor::clear << "\n";
-
-    return os;
-};
-
-std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg) {
-    if (agg.values.empty()) {
-        return os;
-    }
-
-    os << agg.name << " (on average out of " << agg.values.size()
-       << " values): ";
-
-    os << StreamColor::bold;
-    showPercent(agg.average(), os);
-    os << StreamColor::clear << "\n";
-
-    return os;
+void printStat(std::ostream& os, const std::string& name, size_t value) {
+    os << name << ": " << StreamColor::bold << value << StreamColor::clear << "\n";
 }
 
 // ------------------------------------------------------------
@@ -451,31 +313,11 @@ FunctionInfo::dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const {
 
 // ------------------------------------------
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
-    // clang-format off
-    //assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
-    return os << agg.referenced << agg.referencedNonEmpty << agg.readNonEmpty
-              << agg.used << agg.presentNonEmpty
-              << "\n"
-
-              << StreamColor::blue << "Used\n" << StreamColor::clear
-              << agg.exactMatch << agg.widened << agg.narrowed
-              << "\n"
-
-              << StreamColor::blue << "Unused\n" << StreamColor::clear
-              << agg.unused
-              << agg.optimizedAway
-              << agg.unusedNonEmpty
-              << agg.optimizedAwayNonEmpty
-              << agg.dependent
-              << agg.unusedOther
-              << agg.preciseType
-              << agg.preciseTypeNonEmpty
-              << agg.preciseTypePresentNonEmpty
-              << "\n"
-
-              << StreamColor::blue << "Polymorphic\n" << StreamColor::clear
-              << agg.polymorphic << agg.polymorphicUsed;
-    // clang-format on
+    printStat(os, "referenced", agg.referenced);
+    printStat(os, "referenced non-empty", agg.referencedNonEmpty);
+    printStat(os, "read non-empty", agg.readNonEmpty);
+    printStat(os, "used", agg.used);
+    return os;
 }
 
 // ------------------------------------------------------------
@@ -488,85 +330,9 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.referencedNonEmpty =
         intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
-
-    // Used
     agg.used = slotsUsed.size();
-    assert(agg.used.value ==
-               intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
+    assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
            "There is an empty used slot");
-
-    for (const auto& i : slotsUsed) {
-        const auto& usage = i.second;
-
-        bool polymorphic = info.polymorphicSlots.count(i.first);
-
-        if (usage.exactMatch()) {
-            agg.exactMatch++;
-
-            if (polymorphic) {
-                agg.polymorphicExactMatch++;
-            }
-        } else {
-            if (usage.narrowedWithStaticType()) {
-                agg.narrowed++;
-
-                if (polymorphic) {
-                    agg.polymorphicNarrowed++;
-                }
-            }
-
-            if (usage.widened()) {
-                agg.widened++;
-
-                if (polymorphic) {
-                    agg.polymorphicWidened++;
-                }
-            }
-        }
-    }
-
-    // Unused
-    auto unusedSlots = difference(keys(info.allTypeSlots), keys(slotsUsed));
-    agg.unused = unusedSlots.size();
-    auto unusedNonEmpty = intersect(unusedSlots, info.nonEmptySlots);
-
-    agg.unusedNonEmpty = unusedNonEmpty.size();
-
-    auto presentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
-    agg.presentNonEmpty = presentNonEmpty.size();
-
-    auto allFeedbackTypesBag = info.getFeedbackTypesBag();
-
-    // precise type
-    auto preciseTypeSlotsNonEmpty = intersect(preciseTypeSlots, unusedNonEmpty);
-    auto preciseTypeSlotsPresentNonEmpty =
-        intersect(preciseTypeSlotsNonEmpty, keys(slotPresent));
-
-    agg.preciseType = preciseTypeSlots.size();
-    agg.preciseTypeNonEmpty = preciseTypeSlotsNonEmpty.size();
-    agg.preciseTypePresentNonEmpty = preciseTypeSlotsPresentNonEmpty.size();
-
-    auto optimizedAwayNonEmptySlots =
-        difference(unusedNonEmpty, keys(slotPresent));
-    agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
-
-    auto optimizedAwaySlots =
-        difference(keys(info.allTypeSlots), keys(slotPresent));
-    agg.optimizedAway = optimizedAwaySlots.size();
-
-    assert(optimizedAwaySlots.size() >= optimizedAwayNonEmptySlots.size());
-    assert(agg.optimizedAway.value >= agg.optimizedAwayNonEmpty.value);
-
-    agg.dependent = info.dependentsCountIn(unusedNonEmpty);
-    agg.unusedOther.value = unusedNonEmpty.size() - agg.dependent.value;
-
-    // polymorphic
-    agg.polymorphic = info.polymorphicSlots.size();
-    agg.polymorphicUsed =
-        intersect(info.polymorphicSlots, keys(slotsUsed)).size();
-    agg.polymorphicUnused =
-        intersect(info.polymorphicSlots, unusedNonEmpty).size();
-
     return agg;
 }
 
@@ -654,52 +420,21 @@ void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
 
 FinalAggregate CompilationSession::getFinalAgg() {
     FinalAggregate res;
-    std::vector<Aggregate> values;
 
     for (auto i : COMPILATION_SESSIONS) {
         for (auto j : i.closureVersionStats) {
             auto agg = j.getAgg(i.functionsInfo);
-            res.sums += agg;
-            values.push_back(agg);
+
+            res.universe.insert(agg.universe.begin(), agg.universe.end());
 
             res.compiledClosureVersions++;
-            if (agg.used.value > 0) {
+            if (agg.used > 0) {
                 res.benefitedClosureVersions++;
             }
         }
     }
 
-#define average(resultField, num, denom)                                       \
-    {                                                                          \
-        res.resultField.name =                                                 \
-            Aggregate{}.num.name + " / " + Aggregate{}.denom.name;             \
-                                                                               \
-        for (auto& i : values) {                                               \
-            res.resultField.add(i.num / i.denom);                              \
-        }                                                                      \
-    }
-
-    average(referencedNonEmptyRatio, referencedNonEmpty, referenced);
-    average(readRatio, readNonEmpty, referenced);
-    average(usedRatio, used, referenced);
-
-    average(optimizedAwayRatio, optimizedAwayNonEmpty, unusedNonEmpty);
-    average(dependentRatio, dependent, unusedNonEmpty);
-    average(unusedOtherRatio, unusedOther, unusedNonEmpty);
-
-    average(polymorphicRatio, polymorphic, referencedNonEmpty);
-    average(polymorphicOutOfUsedRatio, polymorphicUsed, used);
-    average(polymorphicOutOfUnusedRatio, polymorphicUnused, unusedNonEmpty);
-    average(polymorphicUsedRatio, polymorphicUsed, polymorphic);
-
-    average(polymorphicOutOfExactMatchRatio, polymorphicExactMatch, exactMatch);
-    average(polymorphicOutOfNarrowedRatio, polymorphicNarrowed, narrowed);
-    average(polymorphicOutOfWidenedRatio, polymorphicWidened, widened);
-
-    average(usedNonemptyRatio, used, referencedNonEmpty);
-#undef average
-
-    for (auto f : res.sums.universe) {
+    for (auto f : res.universe) {
         res.deoptsCount += f->allDeoptsCount;
     }
 
@@ -832,85 +567,13 @@ void report(std::ostream& os, bool breakdownInfo,
 
     auto final = CompilationSession::getFinalAgg();
 
-    auto finalHeader = [&](const auto& name) {
-        os << StreamColor::blue << name << "\n" << StreamColor::clear;
-    };
-
-    // clang-format off
-    os  << Stat{"total functions (RIR compiled)", DTs.size()}
-        << Stat{"compiled functions (PIR compiled)", final.sums.universe.size()}
-        << final.compiledClosureVersions
-        << final.benefitedClosureVersions
-        << "\n";
-
-    finalHeader("Slots");
-    os  << final.sums.referenced
-        << final.sums.referencedNonEmpty
-        << final.sums.readNonEmpty
-        << final.sums.used
-        << "\n";
-
-    os  << final.sums.referencedNonEmpty / final.sums.referenced
-        << final.sums.readNonEmpty / final.sums.referenced
-        << final.sums.used / final.sums.referenced
-        << "\n";
-
-    finalHeader("Slots - Averaged per closure version");
-    os  << final.referencedNonEmptyRatio
-        << final.readRatio
-        << final.usedRatio
-        << "\n";
-
-    finalHeader("Used slots");
-    os  << final.sums.exactMatch
-        << final.sums.widened
-        << final.sums.narrowed
-        << "\n";
-
-    finalHeader("Unused slots");
-    os
-        << final.sums.unused
-        << final.sums.optimizedAway
-        << final.sums.unusedNonEmpty
-        << final.sums.optimizedAwayNonEmpty
-        << final.sums.dependent
-        << final.sums.unusedOther
-        << final.sums.preciseType
-        << final.sums.preciseTypeNonEmpty
-        << final.sums.preciseTypePresentNonEmpty
-        << "\n";
-
-    os
-        << final.sums.optimizedAway / final.sums.unused
-        << final.sums.optimizedAwayNonEmpty / final.sums.unusedNonEmpty
-        << final.sums.dependent / final.sums.unusedNonEmpty
-        << final.sums.unusedOther / final.sums.unusedNonEmpty
-        << final.sums.preciseTypeNonEmpty / final.sums.unusedNonEmpty
-
-        << "\n";
-
-    finalHeader("Unused slots - Averaged per closure version");
-    os  << final.optimizedAwayRatio
-        << final.dependentRatio
-        << final.unusedOtherRatio
-        << "\n";
-
-    finalHeader("Polymorphic slots");
-    os  << final.sums.polymorphic
-        << final.sums.polymorphicUsed
-        << "\n";
-
-    os  << final.sums.polymorphic / final.sums.referencedNonEmpty
-        << final.sums.polymorphicUsed / final.sums.used
-        << final.sums.polymorphicUsed / final.sums.polymorphic
-        << "\n";
-
-    finalHeader("Polymorphic slots - Averaged per closure version");
-    os  << final.polymorphicRatio
-        << final.polymorphicOutOfUsedRatio
-        << final.polymorphicUsedRatio
-        << "\n";
-    // clang-format on
+    printStat(os, "total functions (RIR compiled)", DTs.size());
+    printStat(os, "compiled functions (PIR compiled)", final.universe.size());
+    printStat(os, "closure version compilations",
+              final.compiledClosureVersions);
+    printStat(os, "closure version compilations using some type feedback",
+              final.benefitedClosureVersions);
+    printStat(os, "deoptimizations", final.deoptsCount);
 }
 
 void reportCsv(std::ostream& os, const std::string& program_name,
@@ -931,13 +594,12 @@ void reportCsv(std::ostream& os, const std::string& program_name,
     auto agg = CompilationSession::getFinalAgg();
 
     // clang-format off
-    os
-        << "\"" << program_name << "\""
+    os  << "\"" << program_name << "\""
         << "," << DTs.size()
-        << "," << agg.sums.universe.size()
-        << "," << agg.compiledClosureVersions.value
-        << "," << agg.benefitedClosureVersions.value
-        << "," << agg.deoptsCount.value
+        << "," << agg.universe.size()
+        << "," << agg.compiledClosureVersions
+        << "," << agg.benefitedClosureVersions
+        << "," << agg.deoptsCount
         << "\n";
     // clang-format on
 }

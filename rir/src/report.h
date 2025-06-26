@@ -25,75 +25,6 @@ pir::PirType getSlotPirType(const FeedbackOrigin& origin);
 
 // ------------------------------------------------------------
 
-struct MetricPercent;
-
-struct Stat {
-    std::string name;
-    size_t value = 0;
-
-    void operator++(int) { value++; }
-    void operator+=(size_t add) { value += add; }
-    void operator+=(const Stat& other) { value += other.value; }
-
-    Stat& operator=(size_t value) {
-        this->value = value;
-        return *this;
-    }
-
-    MetricPercent operator/(Stat& denom);
-};
-
-struct MetricPercent {
-    Stat* numerator;
-    Stat* denominator;
-    std::string name = "";
-
-    MetricPercent& named(const std::string& name) {
-        this->name = name;
-        return *this;
-    }
-
-    double value() const;
-};
-
-struct FunctionAggregate {
-    std::string name;
-    std::vector<double> values{};
-
-    void add(const MetricPercent& metric) {
-        if (metric.denominator->value) {
-            values.push_back(metric.value());
-        }
-    }
-
-    double average() const;
-};
-
-std::ostream& operator<<(std::ostream& os, const Stat& st);
-std::ostream& operator<<(std::ostream& os, const MetricPercent& metric);
-std::ostream& operator<<(std::ostream& os, const FunctionAggregate& agg);
-
-// ------------------------------------------------------------
-
-// TODO: strings to types
-//
-// struct SlotNotUsedSubsumedStaticTypeReason {
-//     std::string staticType;
-//     std::string feedbackType;
-//     bool equalTypes; // equal types or more strict
-//
-//     bool fromContext;
-//     Context ctx;
-//     std::string fromInstruction;
-// };
-//
-// struct SlotCandidateButNotUsedReason {
-//     bool hasUsefulFeedbackInfo;
-//     bool reqFulfilledWithoutSpec;
-// };
-//
-// struct SlotOptimizedAway {};
-
 struct SlotUsed {
     bool widened() const;
     bool narrowedWithStaticType() const;
@@ -133,7 +64,7 @@ struct SlotPresent {
 
     Type type() const;
 
-    bool canBeSpeculated () const;
+    bool canBeSpeculated() const;
 
     SlotPresent() {}
 };
@@ -147,113 +78,31 @@ using Universe = std::unordered_set<Function*>;
 // ------------------------------------------------------------
 
 struct Aggregate {
-    Universe universe;
+    Universe universe{};
 
-    Stat referenced{"referenced"};
-    Stat referencedNonEmpty{"referenced non-empty"};
-    // Stat read{"read"};
-    Stat readNonEmpty{"read non-empty"};
-
-    Stat used{"used"};
-    Stat unused{"unused"};
-    Stat unusedNonEmpty{"unused non-empty"};
-    Stat presentNonEmpty{"present non-empty"};
-
-    Stat exactMatch{"exact match"};
-    Stat widened{"widened"};
-    Stat narrowed{"narrowed"};
-
-    Stat optimizedAway{"optimized away"};
-    Stat optimizedAwayNonEmpty{"optimized away non-empty"};
-    Stat dependent{"dependent"};
-    Stat unusedOther{"other reasons unused non-empty"};
-    Stat preciseType{"precise type"};
-    Stat preciseTypeNonEmpty{"precise type non-empty"};
-    Stat preciseTypePresentNonEmpty{"precise type present non-empty"};
-
-    Stat polymorphic{"polymorphic"};
-    Stat polymorphicUsed{"used polymorphic"};
-    Stat polymorphicUnused{"unused polymorphic"};
-
-    Stat polymorphicExactMatch{"used polymorphic exact match"};
-    Stat polymorphicWidened{"used polymorphic widened"};
-    Stat polymorphicNarrowed{"used polymorphic narrowed"};
-
-    std::vector<Stat*> stats() {
-        // clang-format off
-        return {
-            &referenced,
-            &referencedNonEmpty,
-            &readNonEmpty,
-
-            &used,
-            &unused,
-            &unusedNonEmpty,
-            &presentNonEmpty,
-
-            &exactMatch,
-            &widened,
-            &narrowed,
-
-            &optimizedAway,
-            &optimizedAwayNonEmpty,
-            &dependent,
-            &unusedOther,
-            &preciseType,
-            &preciseTypeNonEmpty,
-            &preciseTypePresentNonEmpty,
-
-
-            &polymorphic,
-            &polymorphicUsed,
-            &polymorphicUnused,
-
-            &polymorphicExactMatch,
-            &polymorphicWidened,
-            &polymorphicNarrowed,
-        };
-        // clang-format on
-    }
+    size_t referenced = 0;
+    size_t referencedNonEmpty = 0;
+    size_t readNonEmpty = 0;
+    size_t used = 0;
 
     void operator+=(Aggregate other) {
         universe.insert(other.universe.begin(), other.universe.end());
-        auto thisV = this->stats();
-        auto otherV = other.stats();
 
-        for (size_t i = 0; i < thisV.size(); i++) {
-            *thisV[i] += *otherV[i];
-        }
+        this->referenced += other.referenced;
+        this->referencedNonEmpty += other.referencedNonEmpty;
+        this->readNonEmpty += other.readNonEmpty;
+        this->used += other.used;
     }
 };
 
 std::ostream& operator<<(std::ostream& os, const Aggregate& agg);
 
 struct FinalAggregate {
-    Aggregate sums;
+    Universe universe{};
 
-    Stat compiledClosureVersions{"closure version compilations"};
-    Stat benefitedClosureVersions{
-        "closure version compilations using some type feedback"};
-    Stat deoptsCount{"deoptimizations"};
-
-    FunctionAggregate referencedNonEmptyRatio;
-    FunctionAggregate readRatio;
-    FunctionAggregate usedRatio;
-
-    FunctionAggregate optimizedAwayRatio;
-    FunctionAggregate dependentRatio;
-    FunctionAggregate unusedOtherRatio;
-
-    FunctionAggregate polymorphicRatio;
-    FunctionAggregate polymorphicOutOfUsedRatio;
-    FunctionAggregate polymorphicOutOfUnusedRatio;
-    FunctionAggregate polymorphicUsedRatio;
-
-    FunctionAggregate polymorphicOutOfExactMatchRatio;
-    FunctionAggregate polymorphicOutOfWidenedRatio;
-    FunctionAggregate polymorphicOutOfNarrowedRatio;
-
-    FunctionAggregate usedNonemptyRatio;
+    size_t compiledClosureVersions = 0;
+    size_t benefitedClosureVersions = 0;
+    size_t deoptsCount = 0;
 };
 
 // ------------------------------------------------------------
@@ -288,14 +137,6 @@ struct FunctionInfo {
 // ------------------------------------------------------------
 
 struct FeedbackStatsPerFunction {
-    // std::unordered_map<FeedbackIndex, SlotNotUsedSubsumedStaticTypeReason>
-    //     slotsReadNotUsedStaticTypeReason;
-    //
-    // std::unordered_map<FeedbackIndex, SlotCandidateButNotUsedReason>
-    //     slotsReadCandidateNotUsedReason;
-    //
-    // std::unordered_map<FeedbackIndex, SlotOptimizedAway> slotsOptimizedAway;
-
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
