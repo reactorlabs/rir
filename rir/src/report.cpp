@@ -327,7 +327,7 @@ FinalAggregate CompilationSession::getFinalAgg() {
 // ------------------------------------------------------------
 
 void ClosureVersionStats::perSlotInfo(
-    size_t compilation_id,
+    const std::string& benchmark_name, size_t compilation_id,
     std::unordered_map<Function*, FunctionInfo>& session_info,
     std::function<void(const SlotInfo&)> consume) {
 
@@ -349,6 +349,7 @@ void ClosureVersionStats::perSlotInfo(
             SlotInfo res;
 
             // ID
+            res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
             res.slot_idx = slot.idx;
@@ -378,13 +379,13 @@ void ClosureVersionStats::perSlotInfo(
                 res.instruction = usage.speculatedOn;
             } else {
                 // Unused
-                res.optimizedAway = feedback_info.slotPresent.count(slot) == 0;
+                res.optimizedAway = feedback_info.slotsPresent.count(slot) == 0;
                 res.dependent =
                     (res.nonempty && feedback_types_bags.count(slot_type) > 1);
 
                 // Unused non-optimized away non-empty
                 if (!res.optimizedAway && res.nonempty) {
-                    auto presentInfo = feedback_info.slotPresent[slot];
+                    auto presentInfo = feedback_info.slotsPresent[slot];
 
                     switch (presentInfo.type()) {
                     case SlotPresent::FB_isA_ST:
@@ -403,8 +404,6 @@ void ClosureVersionStats::perSlotInfo(
                         res.unusedNarrowed = true;
                         break;
                     }
-
-                    res.considered = presentInfo.considered;
 
                     // Types
                     res.staticT = typeToStr(*presentInfo.staticType);
@@ -528,18 +527,39 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
        << bold << "feedback: " << clear << *slotPresent.feedbackType << "\n";
     // clang-format on
 
-    if (slotPresent.emited) {
-        os << "(speculation emited)\n";
-    } else {
-        if (slotPresent.create) {
-            os << "(type check tried)\n";
-        } else if (slotPresent.considered) {
-            os << "(considered)\n";
-        }
+    if (slotPresent.inPromiseOnly) {
+        os << bold << "promise, not inlined\n" << clear;
+    }
 
-        if (slotPresent.canBeSpeculated()) {
-            os << "(speculatable)\n";
-        }
+    switch (slotPresent.speculation) {
+    case NotRun:
+        os << "opt pass not run";
+        break;
+
+    case Run:
+        os << "opt pass run";
+        break;
+
+    case Considered:
+        os << "considered";
+        break;
+
+    case NoCheckpoint:
+        os << "no checkpoint available";
+        break;
+
+    case InCreate:
+        os << "type check tried";
+        break;
+
+    case Emited:
+        os << "speculation emited";
+        break;
+    }
+    os << "\n";
+
+    if (slotPresent.canBeSpeculated()) {
+        os << "(speculatable)\n";
     }
 
     return os;
@@ -574,21 +594,21 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << " [polymorphic]";
             }
 
+            if (info.getFeedbackTypesBag().count(feedbackType) > 1) {
+                os << " [dependent]";
+            }
+
             os << StreamColor::bold << " <" << feedbackType << ">\n"
                << StreamColor::clear;
 
             if (used) {
                 os << stats.slotsUsed.at(index);
             } else {
-                if (stats.slotPresent.count(index)) {
-                    os << stats.slotPresent.at(index);
+                if (stats.slotsPresent.count(index)) {
+                    os << stats.slotsPresent.at(index);
                 } else {
                     os << "optimized away\n";
                 }
-            }
-
-            if (info.getFeedbackTypesBag().count(feedbackType) > 1) {
-                os << "dependent slot\n";
             }
         };
 
@@ -713,78 +733,65 @@ void reportCsv(std::ostream& os, const std::string& program_name,
 // ------------------------------------------------------------
 
 void SlotInfo::header(std::ostream& os) {
-    // clang-format off
-    os  << "benchmark,compilation id,closure,slot idx"
-        << ",non-empty,read,used,polymorphic"
-        // How used
-        << ",exact match,widened,narrowed"
-        // Unused
-        << ",optimized away,dependent"
-        // Unused non-optimized away
-        << ",FB isA ST,ST isA FB,disjoint,unused narrowed,considered"
-        // Types
-        << ",staticT,feedbackT,expectedT"
-        // Used types
-        << ",checkForT,requiredT"
-        // Instruction
-        << ",instruction"
-        << "\n";
-    // clang-format on
+    bool first = true;
+
+#define X(_type, _name, id)                                                    \
+    {                                                                          \
+        if (first) {                                                           \
+            first = false;                                                     \
+        } else {                                                               \
+            os << ",";                                                         \
+        }                                                                      \
+        os << id;                                                              \
+    }
+
+    SLOT_INFOS(X)
+#undef X
+    os << "\n";
 }
 
-void SlotInfo::print(std::ostream& os, const std::string benchmark_name) const {
-    auto iout = [&](size_t x) { os << "," << x; };
+void SlotInfo::print(std::ostream& os) const {
+    struct {
+        bool first = true;
 
-    auto qout = [&](std::string x) {
-        for (size_t i = 0; i < x.size(); i++) {
-            if (x[i] == '"') {
-                x[i] = '\'';
-            } else if (x[i] == ',') {
-                x[i] = ';';
+        void comma(std::ostream& os) {
+            if (first) {
+                first = false;
+            } else {
+                os << ",";
             }
         }
-        os << ",\"" << x << "\"";
-    };
 
-    auto bout = [&](bool b) { os << "," << (b ? 1 : 0); };
+        void operator()(std::ostream& os, std::string str) {
+            comma(os);
+            if (str.size() == 0) {
+                return;
+            }
 
-    os << "\"" << benchmark_name << "\"";
-    iout(compilation_id);
-    qout(closure);
-    iout(slot_idx);
+            for (size_t i = 0; i < str.size(); i++) {
+                if (str[i] == '"') {
+                    str[i] = '\'';
+                } else if (str[i] == ',') {
+                    str[i] = ';';
+                }
+            }
+            os << "\"" << str << "\"";
+        }
 
-    bout(nonempty);
-    bout(read);
-    bout(used);
-    bout(polymorphic);
+        void operator()(std::ostream& os, size_t i) {
+            comma(os);
+            os << i;
+        }
 
-    // How used
-    bout(exactMatch);
-    bout(widened);
-    bout(narrowed);
+        void operator()(std::ostream& os, bool b) {
+            comma(os);
+            os << (b ? 1 : 0);
+        }
+    } out;
 
-    // Unused
-    bout(optimizedAway);
-    bout(dependent);
-
-    // Unused non-optimized away
-    bout(FBisST);
-    bout(STisFB);
-    bout(disjoint);
-    bout(unusedNarrowed);
-    bout(considered);
-
-    // Types
-    qout(staticT);
-    qout(feedbackT);
-    qout(expectedT);
-
-    // Used types
-    qout(checkForT);
-    qout(requiredT);
-
-    // Instruction
-    qout(instruction);
+#define X(_type, name, _id) out(os, name);
+    SLOT_INFOS(X)
+#undef X
     os << "\n";
 }
 
@@ -801,8 +808,8 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
 
         for (auto& closure_compilation : session.closureVersionStats) {
             closure_compilation.perSlotInfo(
-                compilation_id, session_info,
-                [&](const SlotInfo& info) { info.print(os, benchmark_name); });
+                benchmark_name, compilation_id, session_info,
+                [&](const SlotInfo& info) { info.print(os); });
             compilation_id++;
         }
     }

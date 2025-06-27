@@ -27,6 +27,8 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
+        i->setSpeculationPhase(report::Run);
+
         if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed) {
             return;
         }
@@ -85,7 +87,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         Instruction* speculateOn = nullptr;
         Checkpoint* guardPos = nullptr;
         TypeFeedback feedback;
-        Instruction* feedbackOrigin = nullptr;
+        bool feedbackSet = false;
         BB* typecheckPos = nullptr;
 
         if (auto force = Force::Cast(i)) {
@@ -98,7 +100,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                         LdVar::Cast(arg) && !Env::isStaticEnv(i->env());
 
                     feedback = i->typeFeedback();
-                    feedbackOrigin = i;
+                    feedbackSet = true;
                     // If this force was observed to receive evaluated
                     // promises, better speculate on the input already.
                     switch (force->observed) {
@@ -139,21 +141,24 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     maybeUsedUnboxed.isAlive(i))) {
             speculateOn = i;
             feedback = i->typeFeedback();
-            feedbackOrigin = i;
+            feedbackSet = true;
             guardPos = checkpoint.next(i, i, dom);
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
         }
 
-        if (feedbackOrigin) {
-            feedbackOrigin->speculationConsidered();
+        if (feedbackSet) {
+            if (!guardPos) {
+                i->setSpeculationPhase(report::NoCheckpoint);
+            } else {
+                i->setSpeculationPhase(report::Considered);
+            }
         }
 
         if (!speculateOn || !guardPos || !typecheckPos ||
             typecheckPos->isDeopt() ||
             (speculate.count(typecheckPos) &&
              speculate[typecheckPos].count(speculateOn))) {
-
             // if (feedback.feedbackOrigin.hasSlot()) {
             //     auto& feedbackStats =
             //         cls->feedbackStatsFor(feedback.feedbackOrigin.function());
@@ -185,12 +190,12 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
         bool specSucceeded = false;
         bool reqFulfilled = true;
-        feedbackOrigin->speculationCreate();
+        i->setSpeculationPhase(report::InCreate);
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
             [&](TypeTest::Info info) {
-                feedbackOrigin->speculationEmited();
+                i->setSpeculationPhase(report::Emited);
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
                 assert(i->hasTypeFeedback());

@@ -60,38 +60,44 @@ struct FinalAggregate {
 // ------------------------------------------------------------
 
 struct SlotInfo {
-    size_t compilation_id;
-    std::string closure;
-    size_t slot_idx;
+#define SLOT_INFOS(X)                                                          \
+    X(std::string, benchmark, "benchmark")                                     \
+    X(size_t, compilation_id, "compilation id")                                \
+    X(std::string, closure, "closure")                                         \
+    X(size_t, slot_idx, "slot idx")                                            \
+                                                                               \
+    X(bool, nonempty, "non-empty")                                             \
+    X(bool, read, "read")                                                      \
+    X(bool, used, "used")                                                      \
+    X(bool, polymorphic, "polymorphic")                                        \
+                                                                               \
+    X(bool, exactMatch, "exact match")                                         \
+    X(bool, widened, "widened")                                                \
+    X(bool, narrowed, "narrowed")                                              \
+                                                                               \
+    X(bool, optimizedAway, "optimized away")                                   \
+    X(bool, dependent, "dependent")                                            \
+                                                                               \
+    X(bool, FBisST, "FB isA ST")                                               \
+    X(bool, STisFB, "ST isA FB")                                               \
+    X(bool, disjoint, "disjoint")                                              \
+    X(bool, unusedNarrowed, "unused narrowed")                                 \
+    X(bool, considered, "considered")                                          \
+                                                                               \
+    X(std::string, staticT, "staticT")                                         \
+    X(std::string, feedbackT, "feedbackT")                                     \
+    X(std::string, expectedT, "expectedT")                                     \
+                                                                               \
+    X(std::string, checkForT, "checkForT")                                     \
+    X(std::string, requiredT, "requiredT")                                     \
+                                                                               \
+    X(std::string, instruction, "instruction")
 
-    bool nonempty = false;
-    bool read = false;
-    bool used = false;
-    bool polymorphic = false;
+#define X(type, name, _id) type name{};
+    SLOT_INFOS(X)
+#undef X
 
-    bool exactMatch = false;
-    bool widened = false;
-    bool narrowed = false;
-
-    bool optimizedAway = false;
-    bool dependent = false;
-
-    bool FBisST = false;
-    bool STisFB = false;
-    bool disjoint = false;
-    bool unusedNarrowed = false;
-    bool considered = false;
-
-    std::string staticT;
-    std::string feedbackT;
-    std::string expectedT;
-
-    std::string checkForT;
-    std::string requiredT;
-
-    std::string instruction;
-
-    void print(std::ostream& os, const std::string benchmark_name) const;
+    void print(std::ostream& os) const;
     static void header(std::ostream& os);
 };
 
@@ -120,23 +126,28 @@ struct SlotUsed {
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
 
+enum SpeculationPhase {
+    NotRun,
+    Run,
+    Considered,
+    NoCheckpoint,
+    InCreate,
+    Emited
+};
+
 struct SlotPresent {
+    SpeculationPhase speculation;
+
     std::string presentInstr;
 
     pir::PirType* staticType = nullptr;
     pir::PirType* feedbackType = nullptr;
+    bool canBeSpeculated() const;
 
-    bool considered = false;
-    bool create = false;
-    bool emited = false;
-
-    bool isReturned = false;
+    bool inPromiseOnly = false;
 
     enum Type { FB_isA_ST, ST_isA_FB, FB_ST_Disjoint, Narrowed };
-
     Type type() const;
-
-    bool canBeSpeculated() const;
 
     SlotPresent() {}
 };
@@ -179,7 +190,8 @@ struct FunctionInfo {
 struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
-    std::unordered_map<FeedbackIndex, SlotPresent> slotPresent;
+    std::unordered_map<FeedbackIndex, SlotPresent> slotsPresent;
+    std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
 
     // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;
@@ -205,7 +217,7 @@ struct ClosureVersionStats {
     Aggregate
     getAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
 
-    void perSlotInfo(size_t compilation_id,
+    void perSlotInfo(const std::string& benchmark_name, size_t compilation_id,
                      std::unordered_map<Function*, FunctionInfo>& session_info,
                      std::function<void(const SlotInfo&)> consume);
 };

@@ -94,12 +94,11 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bool specSucceeded = false;
                         bool reqFulfilled = true;
 
-                        seenOrigin->speculationConsidered();
-                        seenOrigin->speculationCreate();
+                        seenOrigin->setSpeculationPhase(report::InCreate);
                         TypeTest::Create(
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
-                                seenOrigin->speculationEmited();
+                                seenOrigin->setSpeculationPhase(report::Emited);
                                 specSucceeded = true;
 
                                 BBTransform::insertAssume(
@@ -177,9 +176,10 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                     next = ip + 1;
                 }
-                // We do this in cleanup. Repeating it here increase the chances
-                // to apply the following elide environment pass because it
-                // reduces the number of forces attached to an environment
+                // We do this in cleanup. Repeating it here increase the
+                // chances to apply the following elide environment pass
+                // because it reduces the number of forces attached to an
+                // environment
                 else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
                     // Missing args produce error.

@@ -148,8 +148,7 @@ void ClosureVersion::scanForSpeculation() {
 }
 
 void ClosureVersion::computeSlotsPresent() {
-    std::function<void(BB*)> doCompute = [&](BB* e) {
-        auto returnValues = Query::returned(e->owner);
+    auto doCompute = [&](BB* e, bool isPromise) {
         Visitor::run(e, [&](Instruction* i) {
             if (!i->hasTypeFeedback()) {
                 return;
@@ -164,39 +163,35 @@ void ClosureVersion::computeSlotsPresent() {
 
             auto& info = this->feedbackStatsFor(origin.function());
 
+            // Non-promise slotPresent has higher precedence
+            if (isPromise && info.slotsPresent.count(origin.index())) {
+                return;
+            }
+
             auto slotPresent = report::SlotPresent();
             slotPresent.presentInstr =
                 report::streamToString([&](std::ostream& os) { i->print(os); });
 
-            slotPresent.considered = tf.specConsidered;
-            slotPresent.create = tf.specCreate;
-            slotPresent.emited = tf.specEmited;
+            slotPresent.speculation = tf.speculation;
 
-            // create ==> considered
-            if (slotPresent.create) {
-                assert(slotPresent.considered);
-            }
-            // emited => create
-            if (slotPresent.emited) {
-                assert(slotPresent.create);
+            if (slotPresent.speculation == report::Emited) {
+                assert(info.slotsAssumeRemoved.count(origin.index()) ||
+                       info.slotsUsed.count(origin.index()));
             }
 
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
 
-            if (std::find(returnValues.begin(), returnValues.end(), i) !=
-                returnValues.end()) {
-                slotPresent.isReturned = true;
-            }
+            slotPresent.inPromiseOnly = isPromise;
 
-            info.slotPresent[origin.index()] = slotPresent;
+            info.slotsPresent[origin.index()] = slotPresent;
         });
     };
 
-    doCompute(this->entry);
+    doCompute(this->entry, false);
     for (auto p : promises()) {
         if (p) {
-            doCompute(p->entry);
+            doCompute(p->entry, true);
         }
     }
 }
