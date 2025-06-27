@@ -84,6 +84,20 @@ std::unordered_set<T> difference(const std::unordered_set<T>& lhs,
     return res;
 }
 
+template <typename T>
+std::vector<std::pair<FeedbackIndex, T>>
+sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
+    std::vector<std::pair<FeedbackIndex, T>> vec{map.begin(), map.end()};
+
+    std::sort(vec.begin(), vec.end(),
+              [](const std::pair<FeedbackIndex, T>& lhs,
+                 const std::pair<FeedbackIndex, T>& rhs) {
+                  return lhs.first.idx < rhs.first.idx;
+              });
+
+    return vec;
+}
+
 // ------------------------------------------------------------
 // SLOT USED
 // ------------------------------------------------------------
@@ -242,6 +256,8 @@ CompilationSession::getNew(Function* compiledFunction,
     return session;
 }
 
+// ------------------------------------------------------------
+
 void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
                                            Function* compiledFunction) {
 
@@ -307,6 +323,106 @@ FinalAggregate CompilationSession::getFinalAgg() {
 }
 
 // ------------------------------------------------------------
+// SLOTS INFOS
+// ------------------------------------------------------------
+
+void ClosureVersionStats::perSlotInfo(
+    size_t compilation_id,
+    std::unordered_map<Function*, FunctionInfo>& session_info,
+    std::function<void(const SlotInfo&)> consume) {
+
+    auto typeToStr = [](pir::PirType t) {
+        return streamToString([&t](std::ostream& os) { os << t; });
+    };
+
+    for (auto& i : this->feedbackStats) {
+        auto& closure = i.first;
+        auto& feedback_info = i.second;
+        auto& static_info = session_info[closure];
+
+        auto feedback_types_bags = static_info.getFeedbackTypesBag();
+
+        for (auto& j : sortByFeedbackIndex(static_info.allTypeSlots)) {
+            auto& slot = j.first;
+            auto& slot_type = j.second;
+
+            SlotInfo res;
+
+            // ID
+            res.compilation_id = compilation_id;
+            res.closure = closure->dispatchTable()->closureName;
+            res.slot_idx = slot.idx;
+
+            // Info
+            res.nonempty = !static_info.emptySlots.count(slot);
+            res.read = feedback_info.slotsRead.count(slot);
+            res.used = feedback_info.slotsUsed.count(slot);
+            res.polymorphic = static_info.polymorphicSlots.count(slot);
+
+            if (res.used) {
+                auto& usage = feedback_info.slotsUsed[slot];
+
+                // How used
+                res.exactMatch = usage.exactMatch();
+                res.widened = usage.widened();
+                res.narrowed = usage.narrowedWithStaticType();
+
+                // Types
+                res.staticT = typeToStr(*usage.staticType);
+                res.feedbackT = typeToStr(*usage.feedbackType);
+                res.expectedT = typeToStr(usage.expectedType());
+                res.checkForT = typeToStr(*usage.checkFor);
+                res.requiredT = typeToStr(*usage.requiredType);
+
+                // Instruction
+                res.instruction = usage.speculatedOn;
+            } else {
+                // Unused
+                res.optimizedAway = feedback_info.slotPresent.count(slot) == 0;
+                res.dependent =
+                    (res.nonempty && feedback_types_bags.count(slot_type) > 1);
+
+                // Unused non-optimized away non-empty
+                if (!res.optimizedAway && res.nonempty) {
+                    auto presentInfo = feedback_info.slotPresent[slot];
+
+                    switch (presentInfo.type()) {
+                    case SlotPresent::FB_isA_ST:
+                        res.FBisST = true;
+                        break;
+
+                    case SlotPresent::ST_isA_FB:
+                        res.STisFB = true;
+                        break;
+
+                    case SlotPresent::FB_ST_Disjoint:
+                        res.disjoint = true;
+                        break;
+
+                    case SlotPresent::Narrowed:
+                        res.unusedNarrowed = true;
+                        break;
+                    }
+
+                    res.considered = presentInfo.considered;
+
+                    // Types
+                    res.staticT = typeToStr(*presentInfo.staticType);
+                    res.feedbackT = typeToStr(*presentInfo.feedbackType);
+                    res.expectedT = typeToStr(makeExpectedType(
+                        *presentInfo.staticType, *presentInfo.feedbackType));
+
+                    // Instruction
+                    res.instruction = (presentInfo.presentInstr);
+                }
+            }
+
+            consume(res);
+        }
+    }
+}
+
+// ------------------------------------------------------------
 // COLORS
 // ------------------------------------------------------------
 
@@ -334,7 +450,6 @@ COLOR(bold)
 #undef COLOR
 
 }; // namespace StreamColor
-
 
 // ------------------------------------------------------------
 // PRINT FORMAT
@@ -441,20 +556,6 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 // ------------------------------------------------------------
 // OUTPUT
 // ------------------------------------------------------------
-
-template <typename T>
-std::vector<std::pair<FeedbackIndex, T>>
-sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
-    std::vector<std::pair<FeedbackIndex, T>> vec{map.begin(), map.end()};
-
-    std::sort(vec.begin(), vec.end(),
-              [](const std::pair<FeedbackIndex, T>& lhs,
-                 const std::pair<FeedbackIndex, T>& rhs) {
-                  return lhs.first.idx < rhs.first.idx;
-              });
-
-    return vec;
-}
 
 void report(std::ostream& os, bool breakdownInfo,
             const std::vector<DispatchTable*>& DTs) {
@@ -607,117 +708,91 @@ void reportCsv(std::ostream& os, const std::string& program_name,
     // clang-format on
 }
 
-namespace {
-struct CsvLine {
-    size_t compilation_id;
-    std::string closure;
-    size_t slot_idx;
+// ------------------------------------------------------------
+// SLOT OUTPUT
+// ------------------------------------------------------------
 
-    bool nonempty = false;
-    bool read = false;
-    bool used = false;
-    bool polymorphic = false;
+void SlotInfo::header(std::ostream& os) {
+    // clang-format off
+    os  << "benchmark,compilation id,closure,slot idx"
+        << ",non-empty,read,used,polymorphic"
+        // How used
+        << ",exact match,widened,narrowed"
+        // Unused
+        << ",optimized away,dependent"
+        // Unused non-optimized away
+        << ",FB isA ST,ST isA FB,disjoint,unused narrowed,considered"
+        // Types
+        << ",staticT,feedbackT,expectedT"
+        // Used types
+        << ",checkForT,requiredT"
+        // Instruction
+        << ",instruction"
+        << "\n";
+    // clang-format on
+}
 
-    bool exactMatch = false;
-    bool widened = false;
-    bool narrowed = false;
+void SlotInfo::print(std::ostream& os, const std::string benchmark_name) const {
+    auto iout = [&](size_t x) { os << "," << x; };
 
-    bool optimizedAway = false;
-    bool dependent = false;
-
-    bool FBisST = false;
-    bool STisFB = false;
-    bool disjoint = false;
-    bool unusedNarrowed = false;
-    bool considered = false;
-
-    std::string staticT;
-    std::string feedbackT;
-    std::string expectedT;
-
-    std::string checkForT;
-    std::string requiredT;
-
-    std::string instruction;
-
-    void print(std::ostream& os, const std::string benchmark_name) {
-        auto iout = [&](size_t x) { os << "," << x; };
-
-        auto qout = [&](std::string x) {
-            for (size_t i = 0; i < x.size(); i++) {
-                if (x[i] == '"') {
-                    x[i] = '\'';
-                } else if (x[i] == ',') {
-                    x[i] = ';';
-                }
+    auto qout = [&](std::string x) {
+        for (size_t i = 0; i < x.size(); i++) {
+            if (x[i] == '"') {
+                x[i] = '\'';
+            } else if (x[i] == ',') {
+                x[i] = ';';
             }
-            os << ",\"" << x << "\"";
-        };
+        }
+        os << ",\"" << x << "\"";
+    };
 
-        auto bout = [&](bool b) { os << "," << (b ? 1 : 0); };
+    auto bout = [&](bool b) { os << "," << (b ? 1 : 0); };
 
-        os << "\"" << benchmark_name << "\"";
-        iout(compilation_id);
-        qout(closure);
-        iout(slot_idx);
+    os << "\"" << benchmark_name << "\"";
+    iout(compilation_id);
+    qout(closure);
+    iout(slot_idx);
 
-        bout(nonempty);
-        bout(read);
-        bout(used);
-        bout(polymorphic);
+    bout(nonempty);
+    bout(read);
+    bout(used);
+    bout(polymorphic);
 
-        bout(exactMatch);
-        bout(widened);
-        bout(narrowed);
+    // How used
+    bout(exactMatch);
+    bout(widened);
+    bout(narrowed);
 
-        bout(optimizedAway);
-        bout(dependent);
+    // Unused
+    bout(optimizedAway);
+    bout(dependent);
 
-        bout(FBisST);
-        bout(STisFB);
-        bout(disjoint);
-        bout(unusedNarrowed);
-        bout(considered);
+    // Unused non-optimized away
+    bout(FBisST);
+    bout(STisFB);
+    bout(disjoint);
+    bout(unusedNarrowed);
+    bout(considered);
 
-        qout(staticT);
-        qout(feedbackT);
-        qout(expectedT);
+    // Types
+    qout(staticT);
+    qout(feedbackT);
+    qout(expectedT);
 
-        qout(checkForT);
-        qout(requiredT);
+    // Used types
+    qout(checkForT);
+    qout(requiredT);
 
-        qout(instruction);
-        os << "\n";
-    }
-};
-
-} // namespace
+    // Instruction
+    qout(instruction);
+    os << "\n";
+}
 
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
     os.seekp(0, std::ios::end);
     if (os.tellp() == 0) {
-        // clang-format off
-        os  << "benchmark,compilation id,closure,slot idx"
-            << ",non-empty,read,used,polymorphic"
-            // How used
-            << ",exact match,widened,narrowed"
-            // Unused
-            << ",optimized away,dependent"
-            // Unused non-optimized away
-            << ",FB isA ST,ST isA FB,disjoint,unused narrowed,considered"
-            // Types
-            << ",staticT,feedbackT,expectedT"
-            // Used types
-            << ",checkForT,requiredT"
-            // Instruction
-            << ",instruction"
-            << "\n";
-        // clang-format on
+        SlotInfo::header(os);
     }
-
-    auto typeToStr = [](pir::PirType t) {
-        return streamToString([&t](std::ostream& os) { os << t; });
-    };
 
     size_t compilation_id = 0;
 
@@ -725,95 +800,9 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
         auto& session_info = session.functionsInfo;
 
         for (auto& closure_compilation : session.closureVersionStats) {
-            for (auto& i : closure_compilation.feedbackStats) {
-                auto& closure = i.first;
-                auto& feedback_info = i.second;
-                auto& static_info = session_info[closure];
-
-                auto feedback_types_bags = static_info.getFeedbackTypesBag();
-
-                for (auto& j : sortByFeedbackIndex(static_info.allTypeSlots)) {
-                    auto& slot = j.first;
-                    auto& slot_type = j.second;
-
-                    CsvLine res;
-
-                    // ID
-                    res.compilation_id = compilation_id;
-                    res.closure = closure->dispatchTable()->closureName;
-                    res.slot_idx = slot.idx;
-
-                    // Info
-                    res.nonempty = !static_info.emptySlots.count(slot);
-                    res.read = feedback_info.slotsRead.count(slot);
-                    res.used = feedback_info.slotsUsed.count(slot);
-                    res.polymorphic = static_info.polymorphicSlots.count(slot);
-
-                    if (res.used) {
-                        auto& usage = feedback_info.slotsUsed[slot];
-
-                        // How used
-                        res.exactMatch = usage.exactMatch();
-                        res.widened = usage.widened();
-                        res.narrowed = usage.narrowedWithStaticType();
-
-                        // Types
-                        res.staticT = typeToStr(*usage.staticType);
-                        res.feedbackT = typeToStr(*usage.feedbackType);
-                        res.expectedT = typeToStr(usage.expectedType());
-                        res.checkForT = typeToStr(*usage.checkFor);
-                        res.requiredT = typeToStr(*usage.requiredType);
-
-                        // Instruction
-                        res.instruction = usage.speculatedOn;
-                    } else {
-                        // Unused
-                        res.optimizedAway =
-                            feedback_info.slotPresent.count(slot) == 0;
-                        res.dependent =
-                            (res.nonempty &&
-                             feedback_types_bags.count(slot_type) > 1);
-
-                        // Unused non-optimized away non-empty
-                        if (!res.optimizedAway && res.nonempty) {
-                            auto presentInfo = feedback_info.slotPresent[slot];
-
-                            switch (presentInfo.type()) {
-                            case SlotPresent::FB_isA_ST:
-                                res.FBisST = true;
-                                break;
-
-                            case SlotPresent::ST_isA_FB:
-                                res.STisFB = true;
-                                break;
-
-                            case SlotPresent::FB_ST_Disjoint:
-                                res.disjoint = true;
-                                break;
-
-                            case SlotPresent::Narrowed:
-                                res.unusedNarrowed = true;
-                                break;
-                            }
-
-                            res.considered = presentInfo.considered;
-
-                            // Types
-                            res.staticT = typeToStr(*presentInfo.staticType);
-                            res.feedbackT =
-                                typeToStr(*presentInfo.feedbackType);
-                            res.expectedT = typeToStr(
-                                makeExpectedType(*presentInfo.staticType,
-                                                 *presentInfo.feedbackType));
-
-                            // Instruction
-                            res.instruction = (presentInfo.presentInstr);
-                        }
-                    }
-
-                    res.print(os, benchmark_name);
-                }
-            }
+            closure_compilation.perSlotInfo(
+                compilation_id, session_info,
+                [&](const SlotInfo& info) { info.print(os, benchmark_name); });
             compilation_id++;
         }
     }

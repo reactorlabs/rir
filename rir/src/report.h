@@ -59,6 +59,44 @@ struct FinalAggregate {
 
 // ------------------------------------------------------------
 
+struct SlotInfo {
+    size_t compilation_id;
+    std::string closure;
+    size_t slot_idx;
+
+    bool nonempty = false;
+    bool read = false;
+    bool used = false;
+    bool polymorphic = false;
+
+    bool exactMatch = false;
+    bool widened = false;
+    bool narrowed = false;
+
+    bool optimizedAway = false;
+    bool dependent = false;
+
+    bool FBisST = false;
+    bool STisFB = false;
+    bool disjoint = false;
+    bool unusedNarrowed = false;
+    bool considered = false;
+
+    std::string staticT;
+    std::string feedbackT;
+    std::string expectedT;
+
+    std::string checkForT;
+    std::string requiredT;
+
+    std::string instruction;
+
+    void print(std::ostream& os, const std::string benchmark_name) const;
+    static void header(std::ostream& os);
+};
+
+// ------------------------------------------------------------
+
 struct SlotUsed {
     bool widened() const;
     bool narrowedWithStaticType() const;
@@ -166,6 +204,10 @@ struct ClosureVersionStats {
 
     Aggregate
     getAgg(std::unordered_map<Function*, FunctionInfo>& functionsInfo);
+
+    void perSlotInfo(size_t compilation_id,
+                     std::unordered_map<Function*, FunctionInfo>& session_info,
+                     std::function<void(const SlotInfo&)> consume);
 };
 
 // ------------------------------------------------------------
