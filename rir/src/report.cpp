@@ -480,6 +480,13 @@ std::ostream& operator<<(std::ostream& os, const Aggregate& agg) {
 
 // ------------------------------------------------------------
 
+template <typename T>
+void printUnorderedSet(const std::unordered_set<T>& mySet) {
+    for (const auto& item : mySet) {
+        std::cerr << item << std::endl;
+    }
+}
+
 Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     Aggregate agg;
 
@@ -532,7 +539,7 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     agg.unusedNonEmpty = unusedNonEmpty.size();
 
-    auto presentNonEmpty = intersect(keys(slotPresent), unusedNonEmpty);
+    auto presentNonEmpty = intersect(keys(slotPresent), info.nonEmptySlots);
     agg.presentNonEmpty = presentNonEmpty.size();
 
     auto allFeedbackTypesBag = info.getFeedbackTypesBag();
@@ -548,6 +555,30 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     auto optimizedAwayNonEmptySlots =
         difference(unusedNonEmpty, keys(slotPresent));
+    // if (slotsUsed.size() == 9) {
+    //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
+    //     std::cerr << "\n";
+    //     std::cerr << "slot present: " <<  keys(slotPresent).size() << "\n";
+    //      printUnorderedSet(keys(slotPresent));
+    //     std::cerr << "\n";
+    //     std::cerr << "slot present non-empty: " <<  presentNonEmpty.size();
+    //     std::cerr << "\n";
+    //     std::cerr << "slot present non-empty & unused non empty: " <<
+    //     intersect(presentNonEmpty, unusedNonEmpty).size(); std::cerr << "\n";
+    //     std::cerr << "slotUsed: " <<  keys(slotsUsed).size();
+    //     printUnorderedSet(keys(slotsUsed));
+
+    //     std::cerr << "\n";
+    //     std::cerr << "presentNonEmpty & slotUsed: " <<
+    //     intersect(keys(slotsUsed),presentNonEmpty).size();
+
+    //     std::cerr << "\n";
+
+    //     std::cerr << "\n";
+
+    //     //assert(false);
+    // }
+
     agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
 
     auto optimizedAwaySlots =
