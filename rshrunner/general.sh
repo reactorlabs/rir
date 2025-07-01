@@ -32,20 +32,29 @@ experimentFlagsEmptyFeedback_CD_Off="PIR_GLOBAL_SPECIALIZATION_LEVEL=0 PIR_TRANS
 experimentFlagsRirOnly="PIR_ENABLE=off"
 experimentFlagsRirOnlyNoRecording="RIR_PROFILING=off PIR_ENABLE=off"
 
-experimentFlags=$experimentFlagsDefault   #####
+experimentFlags="PIR_DEFAULT_SPECULATION=0 PIR_GLOBAL_SPECIALIZATION_LEVEL=0 PIR_WARMUP=10 PIR_OSR=0"   #####
 
-rshDebugFlags="$experimentFlags PIR_DEFAULT_SPECULATION=0 STATS_VERBOSE=0 PIR_WARMUP=10 PIR_OSR=0 PIR_DEBUG=PrintEarlyPir,PrintPirAfterOpt,ShowWarnings,PrintToStdout"   #########
+rshDebugFlags="$experimentFlags STATS_VERBOSE=0 PIR_DEBUG=PrintPirAfterOpt,ShowWarnings,PrintToStdout"   #########
 
 
 
 ### BENCH SETTINGS ####################################################
 
 
-#benchmarkFolder="$HOME/benchmarks/RBenchmarking/Benchmarks/shootout"
-#benchmarkArgs="-f harness.r --args spectralnorm/spectralnorm_naive 15 150"
-#benchmarkArgs="-f harness.r --args pidigits/pidigits 15 30"
-#benchmarkArgs="-f harness.r --args nbody/nbody 15 25000"
 
+benchmarkFolder="$HOME/benchmarks/RBenchmarking/Benchmarks/shootout"
+# benchmarkArgs="-f harness.r --args spectralnorm/spectralnorm_naive 15 150"
+# benchmarkArgs="-f harness.r --args pidigits/pidigits 15 30"
+# benchmarkArgs="-f harness.r --args nbody/nbody 15 25000"
+benchmarkArgs="-f harness.r --args mandelbrot/mandelbrot_naive_ascii 15 200"  ###
+#benchmarkArgs="-f harness.r --args spectralnorm/spectralnorm 15 1200".  ###
+
+
+# benchmarkFolder="$HOME/benchmarks/RBenchmarking/Benchmarks/areWeFast"
+# benchmarkArgs="-f harness.r --args Bounce_nonames_simple 15 35".  ###
+
+#benchmarkFolder="$HOME/benchmarks/RBenchmarking/Benchmarks/RealThing"
+#benchmarkArgs="-f harness.r --args convolution 15 500".   ###
 
 
 
@@ -56,8 +65,8 @@ rshDebugFlags="$experimentFlags PIR_DEFAULT_SPECULATION=0 STATS_VERBOSE=0 PIR_WA
 # benchmarkArgs="-f dependentsFail.R"
 
 
-benchmarkFolder="$rshMasterBinFolder/../../rir/tests/"
-benchmarkArgs="-f pir_simple_range.R"
+#benchmarkFolder="$rshMasterBinFolder/../../rir/tests/"
+#benchmarkArgs="-f pir_simple_range.R"
 #benchmarkArgs="-f matrix_regression.r"
 #benchmarkArgs="-f pir_regression_splines.R"
 #benchmarkArgs="-f regression_reg-packages.R"
@@ -132,7 +141,7 @@ runR() {
 
     echo ${allEnv} ${RExecPath} ${args}
     mkdir -p ${rshMasterBuildFolder}/output/
-    env ${allEnv} ${RExecPath} ${args} &> ${rshMasterBuildFolder}/output/feednotempty.txt
+    env ${allEnv} ${RExecPath} ${args} &> ${rshMasterBuildFolder}/output/studybench.txt
 
 
 }

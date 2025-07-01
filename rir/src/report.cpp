@@ -271,6 +271,30 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.used = slotsUsed.size();
     assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
            "There is an empty used slot");
+    // if (slotsUsed.size() == 9) {
+    //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
+    //     std::cerr << "\n";
+    //     std::cerr << "slot present: " <<  keys(slotPresent).size() << "\n";
+    //     //printUnorderedSet(keys(slotPresent));
+    //     std::cerr << "\n";
+    //     std::cerr << "slot present non-empty: " <<  presentNonEmpty.size();
+    //     std::cerr << "\n";
+    //        std::cerr << "slot present & unused non empty: " <<
+    //            intersect(keys(slotPresent), unusedNonEmpty).size();
+    //        std::cerr << "\n";
+    //     std::cerr << "slotUsed: " <<  keys(slotsUsed).size();
+    //     //printUnorderedSet(keys(slotsUsed));
+
+    //     std::cerr << "\n";
+    //     std::cerr << "presentNonEmpty & slotUsed: " <<
+    //     intersect(keys(slotsUsed),presentNonEmpty).size();
+
+    //     std::cerr << "\n";
+
+    //     std::cerr << "\n";
+
+    // assert(false);
+    //}
     return agg;
 }
 
@@ -461,6 +485,13 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
     f(ss);
     return ss.str();
 };
+
+template <typename T>
+void printUnorderedSet(const std::unordered_set<T>& mySet) {
+    for (const auto& item : mySet) {
+        std::cerr << item << std::endl;
+    }
+}
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
 

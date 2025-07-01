@@ -133,7 +133,6 @@ void ClosureVersion::scanForSpeculation() {
                     [&](std::ostream& os) { assume->print(os); });
 
                 slotUsed.hoistedForce = assume->hoistedForce;
-
                 auto& info = this->feedbackStatsFor(fo.function());
 
                 // Sanity check
@@ -192,6 +191,51 @@ void ClosureVersion::computeSlotsPresent() {
     for (auto p : promises()) {
         if (p) {
             doCompute(p->entry, true);
+        }
+    }
+
+    // add slots that are present but dont'have explicit feedback attached due
+    // to hoised Force. These can be recovered but looking at the Assume
+    // instructions example:
+    //        val?^ | miss    %26.5 = LdVar              eR    lim, e2.4
+    //   lgl$#-          %32.0 = IsType                   %26.5 isA real$-
+    //   void                    Assume             D     %32.0, %30.3
+    //   (Typecheck@0x55d9c0a56440[Type#124])
+    // No need to look into promises as we don't speculate within them
+    for (auto& fs : feedbackStatsByFunction) {
+        // auto function = fs.first;
+        auto& info = fs.second;
+
+        for (auto& su : info.slotsUsed) {
+
+            auto index = su.first;
+            auto& slotUsed = su.second;
+
+            if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
+
+                if (info.slotPresent.find(index) == info.slotPresent.end()) {
+
+                    // assert(false && "end");
+
+                    auto slotPresent = report::SlotPresent();
+                    slotPresent.presentInstr = slotUsed.speculatedOn;
+
+                    slotPresent.considered = true;
+                    slotPresent.create = true;
+                    slotPresent.emited = true;
+
+                    slotPresent.staticType = slotUsed.staticType;
+                    slotPresent.feedbackType = slotUsed.feedbackType;
+
+                    // if (std::find(returnValues.begin(),
+                    // returnValues.end(), i) !=
+                    //     returnValues.end()) {
+                    //     slotPresent.isReturned = true;
+                    // }
+
+                    info.slotPresent[index] = slotPresent;
+                }
+            }
         }
     }
 }
