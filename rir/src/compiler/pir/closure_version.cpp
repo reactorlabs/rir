@@ -141,6 +141,19 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 info.slotsUsed[fo.index()] = slotUsed;
+
+                // Add preemptive slot present
+                {
+                    auto slotPresent = report::SlotPresent();
+
+                    slotPresent.staticType = slotUsed.staticType;
+                    slotPresent.feedbackType = slotUsed.feedbackType;
+                    slotPresent.speculation = report::Emited;
+                    slotPresent.inPromiseOnly = false;
+                    slotPresent.presentInstr = slotUsed.speculatedOn;
+
+                    info.slotsPresent[fo.index()] = slotPresent;
+                }
             }
         }
     });
@@ -173,10 +186,10 @@ void ClosureVersion::computeSlotsPresent() {
 
             slotPresent.speculation = tf.speculation;
 
-            if (slotPresent.speculation == report::Emited) {
-                assert(info.slotsAssumeRemoved.count(origin.index()) ||
-                       info.slotsUsed.count(origin.index()));
-            }
+            // if (slotPresent.speculation == report::Emited) {
+            //     assert(info.slotsAssumeRemoved.count(origin.index()) ||
+            //            info.slotsUsed.count(origin.index()));
+            // }
 
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
@@ -202,31 +215,32 @@ void ClosureVersion::computeSlotsPresent() {
     //   void                    Assume             D     %32.0, %30.3
     //   (Typecheck@0x55d9c0a56440[Type#124])
     // No need to look into promises as we don't speculate within them
-    for (auto& fs : feedbackStatsByFunction) {
-        // auto function = fs.first;
-        auto& info = fs.second;
-
-        for (auto& su : info.slotsUsed) {
-
-            auto index = su.first;
-            auto& slotUsed = su.second;
-
-            if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
-
-                if (info.slotsPresent.find(index) == info.slotsPresent.end()) {
-                    auto slotPresent = report::SlotPresent();
-
-                    slotPresent.staticType = slotUsed.staticType;
-                    slotPresent.feedbackType = slotUsed.feedbackType;
-                    slotPresent.speculation = report::Emited;
-                    slotPresent.inPromiseOnly = false;
-                    slotPresent.presentInstr = slotUsed.speculatedOn;
-
-                    info.slotsPresent[index] = slotPresent;
-                }
-            }
-        }
-    }
+    // for (auto& fs : feedbackStatsByFunction) {
+    //     // auto function = fs.first;
+    //     auto& info = fs.second;
+    //
+    //     for (auto& su : info.slotsUsed) {
+    //
+    //         auto index = su.first;
+    //         auto& slotUsed = su.second;
+    //
+    //         if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
+    //
+    //             if (info.slotsPresent.find(index) == info.slotsPresent.end())
+    //             {
+    //                 auto slotPresent = report::SlotPresent();
+    //
+    //                 slotPresent.staticType = slotUsed.staticType;
+    //                 slotPresent.feedbackType = slotUsed.feedbackType;
+    //                 slotPresent.speculation = report::Emited;
+    //                 slotPresent.inPromiseOnly = false;
+    //                 slotPresent.presentInstr = slotUsed.speculatedOn;
+    //
+    //                 info.slotsPresent[index] = slotPresent;
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {
