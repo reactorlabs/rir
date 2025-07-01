@@ -218,7 +218,7 @@ class Instruction : public Value {
     }
 
     void setSpeculationPhase(report::SpeculationPhase spec) const {
-        if (typeFeedback_) {
+        if (typeFeedback_ && typeFeedback_->speculation < spec) {
             typeFeedback_->speculation = spec;
         }
     }

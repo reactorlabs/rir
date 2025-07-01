@@ -138,8 +138,8 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
 enum SpeculationPhase {
     NotRun,
     Run,
-    Considered,
     NoCheckpoint,
+    Considered,
     InCreate,
     Emited
 };
