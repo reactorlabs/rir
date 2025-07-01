@@ -563,8 +563,9 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     //     std::cerr << "\n";
     //     std::cerr << "slot present non-empty: " <<  presentNonEmpty.size();
     //     std::cerr << "\n";
-    //     std::cerr << "slot present non-empty & unused non empty: " <<
-    //     intersect(presentNonEmpty, unusedNonEmpty).size(); std::cerr << "\n";
+    //        std::cerr << "slot present & unused non empty: " <<
+    //            intersect(keys(slotPresent), unusedNonEmpty).size();
+    //        std::cerr << "\n";
     //     std::cerr << "slotUsed: " <<  keys(slotsUsed).size();
     //     //printUnorderedSet(keys(slotsUsed));
 
@@ -576,8 +577,8 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
 
     //     std::cerr << "\n";
 
-    //     //assert(false);
-    // }
+    // assert(false);
+    //}
 
     agg.optimizedAwayNonEmpty = optimizedAwayNonEmptySlots.size();
 
