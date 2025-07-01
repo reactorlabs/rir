@@ -207,45 +207,42 @@ void ClosureVersion::computeSlotsPresent() {
     //   void                    Assume             D     %32.0, %30.3
     //   (Typecheck@0x55d9c0a56440[Type#124])
     // No need to look into promises as we don't speculate within them
-    // for (auto& fs : feedbackStatsByFunction) {
-    //     //auto function = fs.first;
-    //     auto& info = fs.second;
+    for (auto& fs : feedbackStatsByFunction) {
+        // auto function = fs.first;
+        auto& info = fs.second;
 
-    //     for (auto& su : info.slotsUsed) {
+        for (auto& su : info.slotsUsed) {
 
-    //         auto index = su.first;
-    //         auto& slotUsed = su.second;
+            auto index = su.first;
+            auto& slotUsed = su.second;
 
-    //         if (slotUsed.hoistedForce) {
+            if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
 
-    //             if (info.slotPresent.find(index) == info.slotPresent.end()) {
+                if (info.slotPresent.find(index) == info.slotPresent.end()) {
 
-    //                 //assert(false && "end");
+                    // assert(false && "end");
 
-    //                 auto slotPresent = report::SlotPresent();
-    //                 slotPresent.presentInstr = slotUsed.speculatedOn;
+                    auto slotPresent = report::SlotPresent();
+                    slotPresent.presentInstr = slotUsed.speculatedOn;
 
-    //                 slotPresent.considered = true;
-    //                 slotPresent.create = true;
-    //                 slotPresent.emited = true;
+                    slotPresent.considered = true;
+                    slotPresent.create = true;
+                    slotPresent.emited = true;
 
-    //                 slotPresent.staticType = slotUsed.staticType;
-    //                 slotPresent.feedbackType = slotUsed.feedbackType;
+                    slotPresent.staticType = slotUsed.staticType;
+                    slotPresent.feedbackType = slotUsed.feedbackType;
 
-    //                 // if (std::find(returnValues.begin(),
-    //                 returnValues.end(), i) !=
-    //                 //     returnValues.end()) {
-    //                 //     slotPresent.isReturned = true;
-    //                 // }
+                    // if (std::find(returnValues.begin(),
+                    // returnValues.end(), i) !=
+                    //     returnValues.end()) {
+                    //     slotPresent.isReturned = true;
+                    // }
 
-    //                 info.slotPresent[index] = slotPresent;
-    //             }
-
-    //         }
-
-    //     }
-
-    // }
+                    info.slotPresent[index] = slotPresent;
+                }
+            }
+        }
+    }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

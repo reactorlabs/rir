@@ -559,14 +559,14 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
     //     std::cerr << "\n";
     //     std::cerr << "slot present: " <<  keys(slotPresent).size() << "\n";
-    //      printUnorderedSet(keys(slotPresent));
+    //     //printUnorderedSet(keys(slotPresent));
     //     std::cerr << "\n";
     //     std::cerr << "slot present non-empty: " <<  presentNonEmpty.size();
     //     std::cerr << "\n";
     //     std::cerr << "slot present non-empty & unused non empty: " <<
     //     intersect(presentNonEmpty, unusedNonEmpty).size(); std::cerr << "\n";
     //     std::cerr << "slotUsed: " <<  keys(slotsUsed).size();
-    //     printUnorderedSet(keys(slotsUsed));
+    //     //printUnorderedSet(keys(slotsUsed));
 
     //     std::cerr << "\n";
     //     std::cerr << "presentNonEmpty & slotUsed: " <<
