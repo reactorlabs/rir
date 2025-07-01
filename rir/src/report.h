@@ -37,7 +37,7 @@ struct Aggregate {
     size_t readNonEmpty = 0;
     size_t used = 0;
 
-    void operator+=(Aggregate other) {
+    void operator+=(const Aggregate& other) {
         universe.insert(other.universe.begin(), other.universe.end());
 
         this->referenced += other.referenced;
@@ -60,37 +60,46 @@ struct FinalAggregate {
 // ------------------------------------------------------------
 
 struct SlotInfo {
+    // type, field name, field column descriptor
 #define SLOT_INFOS(X)                                                          \
+    /* ID */                                                                   \
     X(std::string, benchmark, "benchmark")                                     \
     X(size_t, compilation_id, "compilation id")                                \
     X(std::string, closure, "closure")                                         \
     X(size_t, slot_idx, "slot idx")                                            \
                                                                                \
+    /* Info */                                                                 \
     X(bool, nonempty, "non-empty")                                             \
     X(bool, read, "read")                                                      \
     X(bool, used, "used")                                                      \
     X(bool, polymorphic, "polymorphic")                                        \
                                                                                \
+    /* How used */                                                             \
     X(bool, exactMatch, "exact match")                                         \
     X(bool, widened, "widened")                                                \
     X(bool, narrowed, "narrowed")                                              \
                                                                                \
+    /* Unused */                                                               \
     X(bool, optimizedAway, "optimized away")                                   \
     X(bool, dependent, "dependent")                                            \
                                                                                \
-    X(bool, FBisST, "FB isA ST")                                               \
-    X(bool, STisFB, "ST isA FB")                                               \
-    X(bool, disjoint, "disjoint")                                              \
-    X(bool, unusedNarrowed, "unused narrowed")                                 \
-    X(bool, considered, "considered")                                          \
+    /* Unused non-optimized away non-empty */                                  \
+    X(bool, expectedEmpty, "expected empty")                                   \
+    X(bool, expectedIsStatic, "expected is static")                            \
+    X(bool, canBeSpeculated, "can be speculated")                              \
+    X(bool, inPromiseOnly, "only in promise")                                  \
+    X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
+    /* Types */                                                                \
     X(std::string, staticT, "staticT")                                         \
     X(std::string, feedbackT, "feedbackT")                                     \
     X(std::string, expectedT, "expectedT")                                     \
                                                                                \
+    /* Used types */                                                           \
     X(std::string, checkForT, "checkForT")                                     \
     X(std::string, requiredT, "requiredT")                                     \
                                                                                \
+    /* Instruction */                                                          \
     X(std::string, instruction, "instruction")
 
 #define X(type, name, _id) type name{};
@@ -136,18 +145,16 @@ enum SpeculationPhase {
 };
 
 struct SlotPresent {
-    SpeculationPhase speculation;
-
-    std::string presentInstr;
+    bool canBeSpeculated() const;
 
     pir::PirType* staticType = nullptr;
     pir::PirType* feedbackType = nullptr;
-    bool canBeSpeculated() const;
+    pir::PirType expectedType() const;
 
+    SpeculationPhase speculation;
     bool inPromiseOnly = false;
 
-    enum Type { FB_isA_ST, ST_isA_FB, FB_ST_Disjoint, Narrowed };
-    Type type() const;
+    std::string presentInstr;
 
     SlotPresent() {}
 };

@@ -120,25 +120,12 @@ bool SlotUsed::narrowedWithStaticType() const {
 // SLOT PRESENT
 // ------------------------------------------------------------
 
-SlotPresent::Type SlotPresent::type() const {
-    // Also ST == FB
-    if (staticType->isA(*feedbackType)) {
-        return ST_isA_FB;
-    }
-
-    if (feedbackType->isA(*staticType)) {
-        return FB_isA_ST;
-    }
-
-    if ((*staticType & *feedbackType).isVoid()) {
-        return FB_ST_Disjoint;
-    }
-
-    return Narrowed;
+pir::PirType SlotPresent::expectedType() const {
+    return makeExpectedType(*staticType, *feedbackType);
 }
 
 bool SlotPresent::canBeSpeculated() const {
-    auto expected = makeExpectedType(*staticType, *feedbackType);
+    auto expected = expectedType();
 
     if (expected.isVoid() || expected.maybeLazy()) {
         return false;
@@ -372,6 +359,8 @@ void ClosureVersionStats::perSlotInfo(
                 res.staticT = typeToStr(*usage.staticType);
                 res.feedbackT = typeToStr(*usage.feedbackType);
                 res.expectedT = typeToStr(usage.expectedType());
+
+                // Used types
                 res.checkForT = typeToStr(*usage.checkFor);
                 res.requiredT = typeToStr(*usage.requiredType);
 
@@ -379,40 +368,53 @@ void ClosureVersionStats::perSlotInfo(
                 res.instruction = usage.speculatedOn;
             } else {
                 // Unused
-                res.optimizedAway = feedback_info.slotsPresent.count(slot) == 0;
+                res.optimizedAway = !feedback_info.slotsPresent.count(slot);
                 res.dependent =
-                    (res.nonempty && feedback_types_bags.count(slot_type) > 1);
+                    res.nonempty && feedback_types_bags.count(slot_type) > 1;
 
                 // Unused non-optimized away non-empty
                 if (!res.optimizedAway && res.nonempty) {
                     auto presentInfo = feedback_info.slotsPresent[slot];
+                    auto expected = presentInfo.expectedType();
 
-                    switch (presentInfo.type()) {
-                    case SlotPresent::FB_isA_ST:
-                        res.FBisST = true;
+                    res.expectedEmpty = expected.isVoid();
+                    res.expectedIsStatic = expected == *presentInfo.staticType;
+                    res.canBeSpeculated = presentInfo.canBeSpeculated();
+                    res.inPromiseOnly = presentInfo.inPromiseOnly;
+
+                    switch (presentInfo.speculation) {
+                    case NotRun:
+                        res.speculationPhase = "not run";
                         break;
 
-                    case SlotPresent::ST_isA_FB:
-                        res.STisFB = true;
+                    case Run:
+                        res.speculationPhase = "run";
                         break;
 
-                    case SlotPresent::FB_ST_Disjoint:
-                        res.disjoint = true;
+                    case Considered:
+                        res.speculationPhase = "considered";
                         break;
 
-                    case SlotPresent::Narrowed:
-                        res.unusedNarrowed = true;
+                    case NoCheckpoint:
+                        res.speculationPhase = "no checkpoint";
+                        break;
+
+                    case InCreate:
+                        res.speculationPhase = "passed to create";
+                        break;
+
+                    case Emited:
+                        res.speculationPhase = "emited";
                         break;
                     }
 
                     // Types
                     res.staticT = typeToStr(*presentInfo.staticType);
                     res.feedbackT = typeToStr(*presentInfo.feedbackType);
-                    res.expectedT = typeToStr(makeExpectedType(
-                        *presentInfo.staticType, *presentInfo.feedbackType));
+                    res.expectedT = typeToStr(expected);
 
                     // Instruction
-                    res.instruction = (presentInfo.presentInstr);
+                    res.instruction = presentInfo.presentInstr;
                 }
             }
 
@@ -501,62 +503,42 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
 
     os << bold << slotPresent.presentInstr << clear << "\n";
 
-    switch (slotPresent.type()) {
-    case SlotPresent::FB_isA_ST:
-        os << "ST :> FB";
-        break;
+    if (slotPresent.inPromiseOnly) {
+        os << "promise, not inlined";
+    } else {
+        switch (slotPresent.speculation) {
+        case NotRun:
+            os << "opt pass not run";
+            break;
 
-    case SlotPresent::ST_isA_FB:
-        os << ((*slotPresent.feedbackType == *slotPresent.staticType)
-                   ? "ST == FB"
-                   : "ST <: FB");
-        break;
+        case Run:
+            os << "opt pass run";
+            break;
 
-    case SlotPresent::FB_ST_Disjoint:
-        os << "FB ST empty intersection";
-        break;
+        case Considered:
+            os << "considered";
+            break;
 
-    case SlotPresent::Narrowed:
-        os << "narrowed with static type";
-        break;
+        case NoCheckpoint:
+            os << "no checkpoint available";
+            break;
+
+        case InCreate:
+            os << "type check tried";
+            break;
+
+        case Emited:
+            os << "speculation emited";
+            break;
+        }
     }
     os << "\n";
 
     // clang-format off
     os << bold << "static: "   << clear << *slotPresent.staticType << ", "
-       << bold << "feedback: " << clear << *slotPresent.feedbackType << "\n";
+       << bold << "feedback: " << clear << *slotPresent.feedbackType << ", "
+       << bold << "expected: " << clear << slotPresent.expectedType() << "\n";
     // clang-format on
-
-    if (slotPresent.inPromiseOnly) {
-        os << bold << "promise, not inlined\n" << clear;
-    }
-
-    switch (slotPresent.speculation) {
-    case NotRun:
-        os << "opt pass not run";
-        break;
-
-    case Run:
-        os << "opt pass run";
-        break;
-
-    case Considered:
-        os << "considered";
-        break;
-
-    case NoCheckpoint:
-        os << "no checkpoint available";
-        break;
-
-    case InCreate:
-        os << "type check tried";
-        break;
-
-    case Emited:
-        os << "speculation emited";
-        break;
-    }
-    os << "\n";
 
     if (slotPresent.canBeSpeculated()) {
         os << "(speculatable)\n";
