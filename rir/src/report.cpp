@@ -271,6 +271,9 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.used = slotsUsed.size();
     assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
            "There is an empty used slot");
+    assert(agg.used == intersect(keys(slotsUsed), keys(slotsPresent)).size() &&
+           "There is an non-present used slot");
+
     // if (slotsUsed.size() == 9) {
     //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
     //     std::cerr << "\n";

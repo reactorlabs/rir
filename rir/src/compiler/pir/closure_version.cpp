@@ -213,27 +213,16 @@ void ClosureVersion::computeSlotsPresent() {
 
             if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
 
-                if (info.slotPresent.find(index) == info.slotPresent.end()) {
-
-                    // assert(false && "end");
-
+                if (info.slotsPresent.find(index) == info.slotsPresent.end()) {
                     auto slotPresent = report::SlotPresent();
-                    slotPresent.presentInstr = slotUsed.speculatedOn;
-
-                    slotPresent.considered = true;
-                    slotPresent.create = true;
-                    slotPresent.emited = true;
 
                     slotPresent.staticType = slotUsed.staticType;
                     slotPresent.feedbackType = slotUsed.feedbackType;
+                    slotPresent.speculation = report::Emited;
+                    slotPresent.inPromiseOnly = false;
+                    slotPresent.presentInstr = slotUsed.speculatedOn;
 
-                    // if (std::find(returnValues.begin(),
-                    // returnValues.end(), i) !=
-                    //     returnValues.end()) {
-                    //     slotPresent.isReturned = true;
-                    // }
-
-                    info.slotPresent[index] = slotPresent;
+                    info.slotsPresent[index] = slotPresent;
                 }
             }
         }
