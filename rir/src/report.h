@@ -20,6 +20,8 @@ namespace report {
 
 // Helpers
 std::string streamToString(std::function<void(std::stringstream&)> f);
+std::string typeToString(const pir::PirType& t);
+std::string instrToString(pir::Instruction* instr);
 pir::PirType getSlotPirType(size_t i, Function* baseline);
 pir::PirType getSlotPirType(const FeedbackOrigin& origin);
 

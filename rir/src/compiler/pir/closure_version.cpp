@@ -126,11 +126,9 @@ void ClosureVersion::scanForSpeculation() {
                 assert(assume->required);
                 slotUsed.requiredType = assume->required;
 
-                slotUsed.speculatedOn = report::streamToString(
-                    [&](std::ostream& os) { speculatedOn->print(os); });
+                slotUsed.speculatedOn = report::instrToString(speculatedOn);
 
-                slotUsed.assumeInstr = report::streamToString(
-                    [&](std::ostream& os) { assume->print(os); });
+                slotUsed.assumeInstr = report::instrToString(assume);
 
                 slotUsed.hoistedForce = assume->hoistedForce;
                 auto& info = this->feedbackStatsFor(fo.function());
@@ -181,8 +179,7 @@ void ClosureVersion::computeSlotsPresent() {
             }
 
             auto slotPresent = report::SlotPresent();
-            slotPresent.presentInstr =
-                report::streamToString([&](std::ostream& os) { i->print(os); });
+            slotPresent.presentInstr = report::instrToString(i);
 
             slotPresent.speculation = tf.speculation;
 

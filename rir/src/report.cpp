@@ -345,10 +345,6 @@ void ClosureVersionStats::perSlotInfo(
     std::unordered_map<Function*, FunctionInfo>& session_info,
     std::function<void(const SlotInfo&)> consume) {
 
-    auto typeToStr = [](pir::PirType t) {
-        return streamToString([&t](std::ostream& os) { os << t; });
-    };
-
     for (auto& i : this->feedbackStats) {
         auto& closure = i.first;
         auto& feedback_info = i.second;
@@ -383,13 +379,13 @@ void ClosureVersionStats::perSlotInfo(
                 res.narrowed = usage.narrowedWithStaticType();
 
                 // Types
-                res.staticT = typeToStr(*usage.staticType);
-                res.feedbackT = typeToStr(*usage.feedbackType);
-                res.expectedT = typeToStr(usage.expectedType());
+                res.staticT = typeToString(*usage.staticType);
+                res.feedbackT = typeToString(*usage.feedbackType);
+                res.expectedT = typeToString(usage.expectedType());
 
                 // Used types
-                res.checkForT = typeToStr(*usage.checkFor);
-                res.requiredT = typeToStr(*usage.requiredType);
+                res.checkForT = typeToString(*usage.checkFor);
+                res.requiredT = typeToString(*usage.requiredType);
 
                 // Instruction
                 res.instruction = usage.speculatedOn;
@@ -436,9 +432,9 @@ void ClosureVersionStats::perSlotInfo(
                     }
 
                     // Types
-                    res.staticT = typeToStr(*presentInfo.staticType);
-                    res.feedbackT = typeToStr(*presentInfo.feedbackType);
-                    res.expectedT = typeToStr(expected);
+                    res.staticT = typeToString(*presentInfo.staticType);
+                    res.feedbackT = typeToString(*presentInfo.feedbackType);
+                    res.expectedT = typeToString(expected);
 
                     // Instruction
                     res.instruction = presentInfo.presentInstr;
@@ -488,6 +484,14 @@ std::string streamToString(std::function<void(std::stringstream&)> f) {
     f(ss);
     return ss.str();
 };
+
+std::string typeToString(const pir::PirType& t) {
+    return streamToString([&](std::ostream& os) { os << t; });
+}
+
+std::string instrToString(pir::Instruction* instr) {
+    return streamToString([&](std::ostream& os) { instr->print(os); });
+}
 
 template <typename T>
 void printUnorderedSet(const std::unordered_set<T>& mySet) {
