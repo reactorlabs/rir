@@ -70,6 +70,7 @@ bool CleanupCheckpoints::apply(Compiler&, ClosureVersion* cls, Code* code,
                         tfSpecOn.feedbackOrigin.function_;
                     assume->reason.origin.index_ =
                         tfSpecOn.feedbackOrigin.index_;
+                    assume->defaultFeedback = tfSpecOn.defaultFeedback;
                 }
             }
         }
