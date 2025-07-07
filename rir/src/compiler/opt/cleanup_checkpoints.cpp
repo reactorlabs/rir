@@ -39,42 +39,42 @@ bool CleanupCheckpoints::apply(Compiler&, ClosureVersion* cls, Code* code,
     }
 
     // Feedback paper patch - Fix assume instruction origin!!
-    Visitor::run(code->entry, [&](Instruction* i) {
-        if (auto assume = Assume::Cast(i)) {
-
-            auto fo = assume->reason.origin;
-
-            if (!assume->defaultFeedback && !fo.index().isUndefined() &&
-                fo.index().kind == FeedbackKind::Type) {
-
-                // Type test
-                auto assumeArg = assume->arg<0>().val();
-                auto typeTest = IsType::Cast(assumeArg);
-                if (!typeTest) {
-                    // assume->print(std::cerr, true);
-                    assert(assumeArg == pir::False::instance() ||
-                           assumeArg == pir::True::instance());
-
-                    return; // skip the constant-folded false
-                }
-
-                // Instruction we speculated on
-                pir::Instruction* speculatedOn =
-                    Instruction::Cast(typeTest->arg<0>().val());
-                assert(speculatedOn);
-
-                // fix feedback origin in Assume instruction
-                if (speculatedOn->hasTypeFeedback()) {
-                    auto& tfSpecOn = speculatedOn->typeFeedback(false);
-                    assume->reason.origin.function_ =
-                        tfSpecOn.feedbackOrigin.function_;
-                    assume->reason.origin.index_ =
-                        tfSpecOn.feedbackOrigin.index_;
-                    assume->defaultFeedback = tfSpecOn.defaultFeedback;
-                }
-            }
-        }
-    });
+    // Visitor::run(code->entry, [&](Instruction* i) {
+    //     if (auto assume = Assume::Cast(i)) {
+    //
+    //         auto fo = assume->reason.origin;
+    //
+    //         if (!assume->defaultFeedback && !fo.index().isUndefined() &&
+    //             fo.index().kind == FeedbackKind::Type) {
+    //
+    //             // Type test
+    //             auto assumeArg = assume->arg<0>().val();
+    //             auto typeTest = IsType::Cast(assumeArg);
+    //             if (!typeTest) {
+    //                 // assume->print(std::cerr, true);
+    //                 assert(assumeArg == pir::False::instance() ||
+    //                        assumeArg == pir::True::instance());
+    //
+    //                 return; // skip the constant-folded false
+    //             }
+    //
+    //             // Instruction we speculated on
+    //             pir::Instruction* speculatedOn =
+    //                 Instruction::Cast(typeTest->arg<0>().val());
+    //             assert(speculatedOn);
+    //
+    //             // fix feedback origin in Assume instruction
+    //             if (speculatedOn->hasTypeFeedback()) {
+    //                 auto& tfSpecOn = speculatedOn->typeFeedback(false);
+    //                 assume->reason.origin.function_ =
+    //                     tfSpecOn.feedbackOrigin.function_;
+    //                 assume->reason.origin.index_ =
+    //                     tfSpecOn.feedbackOrigin.index_;
+    //                 assume->defaultFeedback = tfSpecOn.defaultFeedback;
+    //             }
+    //         }
+    //     }
+    // });
 
     return anyChange;
 }
