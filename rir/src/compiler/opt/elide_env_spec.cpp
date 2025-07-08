@@ -94,11 +94,11 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bool specSucceeded = false;
                         bool reqFulfilled = true;
 
-                        seenOrigin->setSpeculationPhase(report::InCreate);
+                        cls->setSpeculationPhase(seenOrigin, report::InCreate);
                         TypeTest::Create(
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
-                                seenOrigin->setSpeculationPhase(report::Emited);
+                                cls->setSpeculationPhase(seenOrigin, report::Emited);
                                 specSucceeded = true;
 
                                 BBTransform::insertAssume(

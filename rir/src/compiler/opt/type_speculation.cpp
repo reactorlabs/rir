@@ -27,7 +27,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
     auto dom = DominanceGraph(code);
     VisitorNoDeoptBranch::run(code->entry, [&](Instruction* i) {
-        i->setSpeculationPhase(report::Run);
+        cls->setSpeculationPhase(i, report::Run);
 
         if (i->typeFeedback().type.isVoid() || i->typeFeedbackUsed) {
             return;
@@ -149,9 +149,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
         if (feedbackSet) {
             if (!guardPos) {
-                i->setSpeculationPhase(report::NoCheckpoint);
+                cls->setSpeculationPhase(i, report::NoCheckpoint);
             } else {
-                i->setSpeculationPhase(report::Considered);
+                cls->setSpeculationPhase(i, report::Considered);
             }
         }
 
@@ -190,12 +190,12 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
         bool specSucceeded = false;
         bool reqFulfilled = true;
-        i->setSpeculationPhase(report::InCreate);
+        cls->setSpeculationPhase(i, report::InCreate);
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
             [&](TypeTest::Info info) {
-                i->setSpeculationPhase(report::Emited);
+                cls->setSpeculationPhase(i, report::Emited);
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
                 assert(i->hasTypeFeedback());

@@ -201,9 +201,12 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
+    std::unordered_map<FeedbackIndex, SpeculationPhase> slotsSpeculationPhase;
 
     // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;
+
+    size_t timesInlined = 0;
 
     Aggregate getAgg(const FunctionInfo& info) const;
 };

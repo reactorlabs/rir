@@ -61,6 +61,8 @@ class ClosureVersion : public Code {
         return feedbackStatsByFunction[baseline];
     }
 
+    void setSpeculationPhase(Instruction* instr, report::SpeculationPhase phase);
+
     ClosureVersion* getClosureVersion() override {
         return this;
     }

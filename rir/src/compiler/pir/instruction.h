@@ -149,8 +149,6 @@ struct TypeFeedback {
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
     bool defaultFeedback = false;
-
-    report::SpeculationPhase speculation = report::NotRun;
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;
@@ -215,12 +213,6 @@ class Instruction : public Value {
 
         typeFeedback_.reset(new TypeFeedback());
         return updateTypeFeedback(recordSlotRead);
-    }
-
-    void setSpeculationPhase(report::SpeculationPhase spec) const {
-        if (typeFeedback_ && typeFeedback_->speculation < spec) {
-            typeFeedback_->speculation = spec;
-        }
     }
 
     void typeFeedback(const TypeFeedback& feedback) {

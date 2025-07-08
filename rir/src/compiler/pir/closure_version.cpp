@@ -181,7 +181,12 @@ void ClosureVersion::computeSlotsPresent() {
             auto slotPresent = report::SlotPresent();
             slotPresent.presentInstr = report::instrToString(i);
 
-            slotPresent.speculation = tf.speculation;
+            if (info.slotsSpeculationPhase.count(origin.index())) {
+                slotPresent.speculation =
+                    info.slotsSpeculationPhase[origin.index()];
+            } else {
+                slotPresent.speculation = report::SpeculationPhase::NotRun;
+            }
 
             // if (slotPresent.speculation == report::Emited) {
             //     assert(info.slotsAssumeRemoved.count(origin.index()) ||
@@ -207,7 +212,7 @@ void ClosureVersion::computeSlotsPresent() {
     // add slots that are present but dont'have explicit feedback attached due
     // to hoised Force. These can be recovered but looking at the Assume
     // instructions example:
-    //        val?^ | miss    %26.5 = LdVar              eR    lim, e2.4
+    //   val?^ | miss    %26.5 = LdVar              eR    lim, e2.4
     //   lgl$#-          %32.0 = IsType                   %26.5 isA real$-
     //   void                    Assume             D     %32.0, %30.3
     //   (Typecheck@0x55d9c0a56440[Type#124])
@@ -238,6 +243,23 @@ void ClosureVersion::computeSlotsPresent() {
     //         }
     //     }
     // }
+}
+
+void ClosureVersion::setSpeculationPhase(Instruction* instr,
+                                         report::SpeculationPhase phase) {
+    if (!instr->typeFeedback_) {
+        return;
+    }
+    auto origin = instr->typeFeedback_->feedbackOrigin;
+    if (origin.index().isUndefined()) {
+        return;
+    }
+
+    auto& stats = feedbackStatsFor(origin.function());
+    if (!stats.slotsSpeculationPhase.count(origin.index()) ||
+        stats.slotsSpeculationPhase[origin.index()] < phase) {
+        stats.slotsSpeculationPhase[origin.index()] = phase;
+    }
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {
