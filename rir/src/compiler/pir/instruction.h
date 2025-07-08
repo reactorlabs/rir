@@ -214,7 +214,7 @@ class Instruction : public Value {
         }
 
         typeFeedback_.reset(new TypeFeedback());
-        return updateTypeFeedback();
+        return updateTypeFeedback(recordSlotRead);
     }
 
     void setSpeculationPhase(report::SpeculationPhase spec) const {
