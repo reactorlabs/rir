@@ -184,6 +184,8 @@ struct FunctionInfo {
 
     std::unordered_set<FeedbackIndex> polymorphicSlots;
 
+    std::unordered_set<FeedbackIndex> promiseSlots;
+
     // TODO: not used probably remove
     std::unordered_set<FeedbackIndex> slotsDeopted;
     std::unordered_set<FeedbackIndex> inlinedSlotsDeopted;

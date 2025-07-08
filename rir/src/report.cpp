@@ -219,6 +219,20 @@ void computeFunctionsInfo(
             }
         }
 
+        // Promise scan
+        auto code = baseline->body();
+        std::unordered_set<FeedbackIndex> codeSlots;
+
+        for (auto pc = code->code(); pc < code->endCode(); pc = BC::next(pc)) {
+            auto bc = BC::decode(pc, code);
+            if (bc.bc == Opcode::record_type_) {
+                codeSlots.insert(FeedbackIndex::type(bc.immediate.i));
+            }
+        }
+
+        slotData.promiseSlots =
+            difference(keys(slotData.allTypeSlots), codeSlots);
+
         // Deopts
         slotData.deoptsCount = baseline->allDeoptsCount;
 
