@@ -259,6 +259,8 @@ struct CompilationSession {
     static FinalAggregate getFinalAgg();
 };
 
+CompilationSession& currentSession();
+
 // ------------------------------------------------------------
 
 void report(std::ostream& os, bool breakdownInfo,
