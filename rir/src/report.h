@@ -137,13 +137,23 @@ struct SlotUsed {
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
 
+// Ordering matters -> weakest to strongest phases
 enum SpeculationPhase {
+    // The type speculation pass did not run,
+    // probably in promise
     NotRun,
-    Run,
-    NoCheckpoint,
-    Considered,
-    InCreate,
-    Emited
+
+    // Expected type is not useful
+    NotUseful,
+
+    // There is either no available checkpoint or no position for typecheck
+    NoPlace,
+
+    // ST.isA(FB), no reason for speculation
+    StaticIsFeedback,
+
+    // The Assume was emitted at some point
+    Emitted
 };
 
 struct SlotPresent {

@@ -429,24 +429,20 @@ void ClosureVersionStats::perSlotInfo(
                         res.speculationPhase = "not run";
                         break;
 
-                    case Run:
-                        res.speculationPhase = "run";
+                    case NotUseful:
+                        res.speculationPhase = "not useful";
                         break;
 
-                    case Considered:
-                        res.speculationPhase = "considered";
+                    case NoPlace:
+                        res.speculationPhase = "no place";
                         break;
 
-                    case NoCheckpoint:
-                        res.speculationPhase = "no checkpoint";
+                    case StaticIsFeedback:
+                        res.speculationPhase = "static is feedback";
                         break;
 
-                    case InCreate:
-                        res.speculationPhase = "passed to create";
-                        break;
-
-                    case Emited:
-                        res.speculationPhase = "emited";
+                    case Emitted:
+                        res.speculationPhase = "emitted";
                         break;
                     }
 
@@ -568,24 +564,20 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
             os << "opt pass not run";
             break;
 
-        case Run:
-            os << "opt pass run";
+        case NotUseful:
+            os << "not useful";
             break;
 
-        case Considered:
-            os << "considered";
+        case NoPlace:
+            os << "no place to place checkpoint/guard";
             break;
 
-        case NoCheckpoint:
-            os << "no checkpoint available";
+        case StaticIsFeedback:
+            os << "static is feedback";
             break;
 
-        case InCreate:
-            os << "type check tried";
-            break;
-
-        case Emited:
-            os << "speculation emited";
+        case Emitted:
+            os << "speculation emitted";
             break;
         }
     }

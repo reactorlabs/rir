@@ -146,7 +146,7 @@ void ClosureVersion::scanForSpeculation() {
 
                     slotPresent.staticType = slotUsed.staticType;
                     slotPresent.feedbackType = slotUsed.feedbackType;
-                    slotPresent.speculation = report::Emited;
+                    slotPresent.speculation = report::Emitted;
                     slotPresent.inPromiseOnly = false;
                     slotPresent.presentInstr = slotUsed.speculatedOn;
 
@@ -251,7 +251,7 @@ void ClosureVersion::setSpeculationPhase(Instruction* instr,
         return;
     }
     auto origin = instr->typeFeedback_->feedbackOrigin;
-    if (origin.index().isUndefined()) {
+    if (!origin.hasSlot()) {
         return;
     }
 
