@@ -89,7 +89,7 @@ struct SlotInfo {
     X(bool, expectedEmpty, "expected empty")                                   \
     X(bool, expectedIsStatic, "expected is static")                            \
     X(bool, canBeSpeculated, "can be speculated")                              \
-    X(bool, inPromiseOnly, "only in promise")                                  \
+    /* X(bool, inPromiseOnly, "only in promise") */                            \
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
     /* Types */                                                                \
@@ -143,28 +143,31 @@ enum SpeculationPhase {
     // probably in promise
     NotRun,
 
-    // Expected type is not useful
-    NotUseful,
+    // Static is feedback , no need for speculation
+    RunNoNeed,
 
     // There is either no available checkpoint or no position for typecheck
-    NoPlace,
+    RunNoPlace,
 
-    // ST.isA(FB), no reason for speculation
-    StaticIsFeedback,
+    // Some heuristics failed meaning it is worth leaving it for
+    // some other pass
+    RunHeuristicFailed,
 
-    // The Assume was emitted at some point
-    Emitted
+    // Speculation was considered
+    RunConsidered
+
 };
 
 struct SlotPresent {
     bool canBeSpeculated() const;
+    // int compareExpectedTypeToStaticType() const;
 
     pir::PirType* staticType = nullptr;
     pir::PirType* feedbackType = nullptr;
     pir::PirType expectedType() const;
 
     SpeculationPhase speculation;
-    bool inPromiseOnly = false;
+    // bool inPromiseOnly = false;
 
     std::string presentInstr;
 

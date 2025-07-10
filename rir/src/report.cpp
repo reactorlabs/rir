@@ -124,6 +124,17 @@ pir::PirType SlotPresent::expectedType() const {
     return makeExpectedType(*staticType, *feedbackType);
 }
 
+// int SlotPresent::compareExpectedTypeToStaticType() const {
+//     // returns 0 is exp == st
+//     /// return -1 if  exp < st
+//     // fails otherwise. That should not happen
+//     if (expectedType() == *staticType) {
+//         return 0;
+//     }
+//     assert(expectedType().isA( *staticType));
+//     return -1;
+// }
+
 bool SlotPresent::canBeSpeculated() const {
     auto expected = expectedType();
 
@@ -359,6 +370,33 @@ FinalAggregate CompilationSession::getFinalAgg() {
 // SLOTS INFOS
 // ------------------------------------------------------------
 
+std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
+    switch (speculation) {
+    case NotRun:
+        os << "not run";
+        break;
+
+    case RunNoNeed:
+        os << "no need";
+        break;
+
+    case RunNoPlace:
+        os << "no place";
+        break;
+
+    case RunHeuristicFailed:
+        os << "heuristic failed";
+        break;
+
+    case RunConsidered:
+        os << "considered";
+        break;
+    default:
+        assert(false);
+    }
+    return os;
+}
+
 void ClosureVersionStats::perSlotInfo(
     const std::string& benchmark_name, size_t compilation_id,
     std::unordered_map<Function*, FunctionInfo>& session_info,
@@ -421,30 +459,17 @@ void ClosureVersionStats::perSlotInfo(
 
                     res.expectedEmpty = expected.isVoid();
                     res.expectedIsStatic = expected == *presentInfo.staticType;
+
+                    if (!res.expectedIsStatic)
+                        assert(expected.isA(*presentInfo.staticType) &&
+                               "expected is not <= static");
                     res.canBeSpeculated = presentInfo.canBeSpeculated();
-                    res.inPromiseOnly = presentInfo.inPromiseOnly;
+                    // res.inPromiseOnly = presentInfo.inPromiseOnly;
 
-                    switch (presentInfo.speculation) {
-                    case NotRun:
-                        res.speculationPhase = "not run";
-                        break;
-
-                    case NotUseful:
-                        res.speculationPhase = "not useful";
-                        break;
-
-                    case NoPlace:
-                        res.speculationPhase = "no place";
-                        break;
-
-                    case StaticIsFeedback:
-                        res.speculationPhase = "static is feedback";
-                        break;
-
-                    case Emitted:
-                        res.speculationPhase = "emitted";
-                        break;
-                    }
+                    res.speculationPhase =
+                        streamToString([&](std::ostream& os) {
+                            os << presentInfo.speculation;
+                        });
 
                     // Types
                     res.staticT = typeToString(*presentInfo.staticType);
@@ -547,7 +572,6 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
     if (slotUsed.hoistedForce) {
         os << "(hoisted force)\n";
     }
-
     return os;
 }
 
@@ -555,32 +579,8 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
     using namespace StreamColor;
 
     os << bold << slotPresent.presentInstr << clear << "\n";
+    os << slotPresent.speculation;
 
-    if (slotPresent.inPromiseOnly) {
-        os << "promise, not inlined";
-    } else {
-        switch (slotPresent.speculation) {
-        case NotRun:
-            os << "opt pass not run";
-            break;
-
-        case NotUseful:
-            os << "not useful";
-            break;
-
-        case NoPlace:
-            os << "no place to place checkpoint/guard";
-            break;
-
-        case StaticIsFeedback:
-            os << "static is feedback";
-            break;
-
-        case Emitted:
-            os << "speculation emitted";
-            break;
-        }
-    }
     os << "\n";
 
     // clang-format off

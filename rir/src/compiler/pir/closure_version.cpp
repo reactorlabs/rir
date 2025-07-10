@@ -142,12 +142,19 @@ void ClosureVersion::scanForSpeculation() {
 
                 // Add preemptive slot present
                 {
+                    // add slots that are present but dont'have explicit
+                    // feedback attached due to hoised Force. These can be
+                    // recovered but looking at the Assume instructions example:
+                    //   val?^ | miss    %26.5 = LdVar              eR    lim,
+                    //   e2.4 lgl$#-          %32.0 = IsType %26.5 isA real$-
+                    //   void                    Assume             D     %32.0,
+                    //   %30.3 (Typecheck@0x55d9c0a56440[Type#124])
                     auto slotPresent = report::SlotPresent();
 
                     slotPresent.staticType = slotUsed.staticType;
                     slotPresent.feedbackType = slotUsed.feedbackType;
-                    slotPresent.speculation = report::Emitted;
-                    slotPresent.inPromiseOnly = false;
+                    slotPresent.speculation = report::RunConsidered;
+                    // slotPresent.inPromiseOnly = false;
                     slotPresent.presentInstr = slotUsed.speculatedOn;
 
                     info.slotsPresent[fo.index()] = slotPresent;
@@ -158,7 +165,7 @@ void ClosureVersion::scanForSpeculation() {
 }
 
 void ClosureVersion::computeSlotsPresent() {
-    auto doCompute = [&](BB* e, bool isPromise) {
+    auto doCompute = [&](BB* e) {
         Visitor::run(e, [&](Instruction* i) {
             if (!i->hasTypeFeedback()) {
                 return;
@@ -173,14 +180,10 @@ void ClosureVersion::computeSlotsPresent() {
 
             auto& info = this->feedbackStatsFor(origin.function());
 
-            // Non-promise slotPresent has higher precedence
-            if (isPromise && info.slotsPresent.count(origin.index())) {
-                return;
-            }
 
             auto slotPresent = report::SlotPresent();
-            slotPresent.presentInstr = report::instrToString(i);
 
+            slotPresent.presentInstr = report::instrToString(i);
             if (info.slotsSpeculationPhase.count(origin.index())) {
                 slotPresent.speculation =
                     info.slotsSpeculationPhase[origin.index()];
@@ -196,51 +199,16 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
 
-            slotPresent.inPromiseOnly = isPromise;
+            // slotPresent.inPromiseOnly = isPromise;
 
             info.slotsPresent[origin.index()] = slotPresent;
         });
     };
 
-    doCompute(this->entry, false);
-    for (auto p : promises()) {
-        if (p) {
-            doCompute(p->entry, true);
-        }
-    }
-
-    // add slots that are present but dont'have explicit feedback attached due
-    // to hoised Force. These can be recovered but looking at the Assume
-    // instructions example:
-    //   val?^ | miss    %26.5 = LdVar              eR    lim, e2.4
-    //   lgl$#-          %32.0 = IsType                   %26.5 isA real$-
-    //   void                    Assume             D     %32.0, %30.3
-    //   (Typecheck@0x55d9c0a56440[Type#124])
-    // No need to look into promises as we don't speculate within them
-    // for (auto& fs : feedbackStatsByFunction) {
-    //     // auto function = fs.first;
-    //     auto& info = fs.second;
-    //
-    //     for (auto& su : info.slotsUsed) {
-    //
-    //         auto index = su.first;
-    //         auto& slotUsed = su.second;
-    //
-    //         if (slotUsed.speculatedOn.find("Force") == std::string::npos) {
-    //
-    //             if (info.slotsPresent.find(index) == info.slotsPresent.end())
-    //             {
-    //                 auto slotPresent = report::SlotPresent();
-    //
-    //                 slotPresent.staticType = slotUsed.staticType;
-    //                 slotPresent.feedbackType = slotUsed.feedbackType;
-    //                 slotPresent.speculation = report::Emited;
-    //                 slotPresent.inPromiseOnly = false;
-    //                 slotPresent.presentInstr = slotUsed.speculatedOn;
-    //
-    //                 info.slotsPresent[index] = slotPresent;
-    //             }
-    //         }
+    doCompute(this->entry);
+    // for (auto p : promises()) {
+    //     if (p) {
+    //         doCompute(p->entry, true);
     //     }
     // }
 }

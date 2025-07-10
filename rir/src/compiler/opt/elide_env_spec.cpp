@@ -48,6 +48,11 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
+
+            if (i->hasTypeFeedback()) {
+                cls->setSpeculationPhase(i, report::RunNoNeed);
+            }
+
             auto next = ip + 1;
             if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
@@ -62,7 +67,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         auto argi = Instruction::Cast(arg);
                         assert(!arg->type.maybePromiseWrapped());
                         TypeFeedback seen;
-                        Instruction* seenOrigin;
+                        Instruction* seenOrigin = nullptr;
                         if (argi) {
                             seen = argi->typeFeedback();
                             seenOrigin = argi;
@@ -94,10 +99,14 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                         bool specSucceeded = false;
                         bool reqFulfilled = true;
 
+                        if (seenOrigin) {
+                            cls->setSpeculationPhase(seenOrigin,
+                                                     report::RunConsidered);
+                        }
                         TypeTest::Create(
                             arg, seen, suggested, required,
                             [&](TypeTest::Info info) {
-                                cls->setSpeculationPhase(seenOrigin, report::Emitted);
+
                                 specSucceeded = true;
 
                                 BBTransform::insertAssume(

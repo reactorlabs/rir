@@ -31,11 +31,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             return;
         }
 
-        // If we do not suceed, we fail with this
-        cls->setSpeculationPhase(i, report::NotUseful);
 
         if (i->type.isA(i->typeFeedback().type)) {
-            cls->setSpeculationPhase(i, report::StaticIsFeedback);
+            cls->setSpeculationPhase(i, report::RunNoNeed);
 
             auto& tf = i->typeFeedback();
             // auto index = tf.feedbackOrigin.index();
@@ -151,9 +149,10 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             (speculate.count(typecheckPos) &&
              speculate[typecheckPos].count(speculateOn))) {
 
-            if (speculateOn && (!guardPos || !typecheckPos)) {
-                cls->setSpeculationPhase(i, report::NoPlace);
-            }
+            // if (speculateOn && (!guardPos || !typecheckPos)) {
+            cls->setSpeculationPhase(i, report::RunNoPlace);
+            //}
+
             // if (feedback.feedbackOrigin.hasSlot()) {
             //     auto& feedbackStats =
             //         cls->feedbackStatsFor(feedback.feedbackOrigin.function());
@@ -179,17 +178,18 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                     //     feedbackStats.slotsReadCandidateNotUsedReason
                     //         [feedback.feedbackOrigin.index()] = cnu;
                     // }
-
+                    cls->setSpeculationPhase(i, report::RunHeuristicFailed);
                     return;
                 }
 
+        cls->setSpeculationPhase(i, report::RunConsidered);
         bool specSucceeded = false;
         bool reqFulfilled = true;
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
             [&](TypeTest::Info info) {
-                cls->setSpeculationPhase(i, report::Emitted);
+
                 speculate[typecheckPos][speculateOn] = {guardPos, info};
                 // Prevent redundant speculation
                 assert(i->hasTypeFeedback());
