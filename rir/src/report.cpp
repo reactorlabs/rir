@@ -422,6 +422,7 @@ void ClosureVersionStats::perSlotInfo(
             res.slot_idx = slot.idx;
 
             // Info
+            res.inPromise = static_info.promiseSlots.count(slot) > 0;
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
             res.used = feedback_info.slotsUsed.count(slot);

@@ -71,6 +71,7 @@ struct SlotInfo {
     X(size_t, slot_idx, "slot idx")                                            \
                                                                                \
     /* Info */                                                                 \
+    X(bool, inPromise, "in promise")                                           \
     X(bool, nonempty, "non-empty")                                             \
     X(bool, read, "read")                                                      \
     X(bool, used, "used")                                                      \
