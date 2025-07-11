@@ -57,7 +57,7 @@ class TypeTest {
 
             auto requiredPtr = new PirType(required);
 
-            return action({expected, new IsType(expected, i), true,
+            return action({expected, new IsType(expected, i, feedback.feedbackOrigin), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
                            requiredPtr});
         }
@@ -88,7 +88,7 @@ class TypeTest {
 
             auto requiredPtr = new PirType(required);
 
-            return action({checkFor, new IsType(checkFor, i), true,
+            return action({checkFor, new IsType(checkFor, i, feedback.feedbackOrigin), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
                            requiredPtr});
         }
@@ -111,7 +111,7 @@ class TypeTest {
 
             auto requiredPtr = new PirType(required);
 
-            return action({checkFor, new IsType(checkFor, i), true,
+            return action({checkFor, new IsType(checkFor, i, feedback.feedbackOrigin), true,
                            feedback.feedbackOrigin, feedback.defaultFeedback,
                            requiredPtr});
         }

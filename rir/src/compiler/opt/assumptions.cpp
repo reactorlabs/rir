@@ -407,7 +407,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         expected = expected.orFullyPromiseWrapped();
                     }
                     assert(!expected.maybeLazy());
-                    auto newTT = new IsType(expected, tt->arg<0>().val());
+                    auto newTT = new IsType(expected, tt->arg<0>().val(), tt->origin);
                     newTT->arg(0).val() = inp;
                     ip = bb->insert(ip, newTT) + 1;
 
