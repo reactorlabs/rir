@@ -38,9 +38,20 @@ Log::Log(const DebugOptions& options) : options(options) {
         auto t = std::time(nullptr);
         auto tm = *std::localtime(&t);
         std::stringstream ss;
-        ss << "compiler-log-" << std::put_time(&tm, "%y%m%d-%H%M%S")
-           << "-XXXXXX";
-        debugLocation = createTmpDirectory(ss.str()) + "/";
+        auto time = std::put_time(&tm, "%y%m%d-%H%M%S");
+
+        auto env_location = std::getenv("PIR_DEBUG_FOLDER");
+        if (env_location != nullptr) {
+            ss << env_location<< "-" << time << "/";
+            debugLocation = ss.str();
+            auto ret = mkdir(debugLocation.c_str(), 0700);
+            if (ret != 0) {
+                perror("PIR debug folder:");
+            }
+        } else {
+            ss << "compiler-log-" << time << "-XXXXXX";
+            debugLocation = createTmpDirectory(ss.str()) + "/";
+        }
     }
 }
 
