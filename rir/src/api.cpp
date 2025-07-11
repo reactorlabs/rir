@@ -485,6 +485,17 @@ SEXP pirCompile(SEXP what, const Context& assumptions, const std::string& name,
     delete m;
     UNPROTECT(1);
 
+    auto& compilations = compilationSession.closureVersionStats;
+    std::sort(
+        compilations.begin(), compilations.end(),
+        [](const report::ClosureVersionStats& a,
+           const report::ClosureVersionStats& b) -> bool {
+            return std::make_pair(a.function->dispatchTable()->closureName,
+                                  a.context) <
+                   std::make_pair(b.function->dispatchTable()->closureName,
+                                  b.context);
+        });
+
     return what;
 }
 
