@@ -24,6 +24,7 @@ std::string typeToString(const pir::PirType& t);
 std::string instrToString(pir::Instruction* instr);
 pir::PirType getSlotPirType(size_t i, Function* baseline);
 pir::PirType getSlotPirType(const FeedbackOrigin& origin);
+std::unordered_set<FeedbackIndex> findAllSlots(Code* code);
 
 // ------------------------------------------------------------
 
@@ -84,13 +85,13 @@ struct SlotInfo {
                                                                                \
     /* Unused */                                                               \
     X(bool, optimizedAway, "optimized away")                                   \
+    X(bool, promiseInlined, "promise inlined")                                 \
     X(bool, dependent, "dependent")                                            \
                                                                                \
     /* Unused non-optimized away non-empty */                                  \
     X(bool, expectedEmpty, "expected empty")                                   \
     X(bool, expectedIsStatic, "expected is static")                            \
     X(bool, canBeSpeculated, "can be speculated")                              \
-    /* X(bool, inPromiseOnly, "only in promise") */                            \
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
     /* Types */                                                                \
@@ -159,6 +160,8 @@ enum SpeculationPhase {
 
 };
 
+std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation);
+
 struct SlotPresent {
     bool canBeSpeculated() const;
     // int compareExpectedTypeToStaticType() const;
@@ -168,7 +171,6 @@ struct SlotPresent {
     pir::PirType expectedType() const;
 
     SpeculationPhase speculation;
-    // bool inPromiseOnly = false;
 
     std::string presentInstr;
 
@@ -218,6 +220,7 @@ struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, SlotPresent> slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
     std::unordered_map<FeedbackIndex, SpeculationPhase> slotsSpeculationPhase;
+    std::unordered_set<FeedbackIndex> slotsPromiseInlined;
 
     // TODO: not used right now
     std::unordered_set<FeedbackIndex> preciseTypeSlots;

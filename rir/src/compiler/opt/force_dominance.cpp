@@ -223,11 +223,13 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                 if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
                     if (mkarg->isEager()) {
                         anyChange = true;
+                        cls->promiseInlined(mkarg->prom());
                         Value* eager = mkarg->eagerArg();
                         f->replaceUsesWith(eager);
                         next = bb->remove(ip);
                     } else if (toInline.count(f)) {
                         anyChange = true;
+                        cls->promiseInlined(mkarg->prom());
                         Promise* prom = mkarg->prom();
                         BB* split =
                             BBTransform::split(code->nextBBId++, bb, ip, code);
@@ -430,7 +432,10 @@ bool ForceDominance::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                             };
                             cast->replaceUsesIn(
                                 eager, bb,
-                                [&](Instruction*, size_t) { anyChange = true; },
+                                [&](Instruction*, size_t) {
+                                    anyChange = true;
+                                    cls->promiseInlined(mk->prom());
+                                },
                                 allowedToReplace);
                         }
                     }

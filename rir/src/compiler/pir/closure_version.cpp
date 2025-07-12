@@ -156,7 +156,6 @@ void ClosureVersion::scanForSpeculation() {
                     slotPresent.staticType = slotUsed.staticType;
                     slotPresent.feedbackType = slotUsed.feedbackType;
                     slotPresent.speculation = report::RunConsidered;
-                    // slotPresent.inPromiseOnly = false;
                     slotPresent.presentInstr = slotUsed.speculatedOn;
 
                     info.slotsPresent[fo.index()] = slotPresent;
@@ -182,7 +181,6 @@ void ClosureVersion::computeSlotsPresent() {
 
             auto& info = this->feedbackStatsFor(origin.function());
 
-
             auto slotPresent = report::SlotPresent();
 
             slotPresent.presentInstr = report::instrToString(i);
@@ -201,18 +199,11 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
 
-            // slotPresent.inPromiseOnly = isPromise;
-
             info.slotsPresent[origin.index()] = slotPresent;
         });
     };
 
     doCompute(this->entry);
-    // for (auto p : promises()) {
-    //     if (p) {
-    //         doCompute(p->entry, true);
-    //     }
-    // }
 }
 
 void ClosureVersion::setSpeculationPhase(Instruction* instr,
@@ -230,6 +221,13 @@ void ClosureVersion::setSpeculationPhase(Instruction* instr,
         stats.slotsSpeculationPhase[origin.index()] < phase) {
         stats.slotsSpeculationPhase[origin.index()] = phase;
     }
+}
+
+void ClosureVersion::promiseInlined(Promise* promise) {
+    auto newSlots = report::findAllSlots(promise->rirSrc());
+
+    feedbackStatsFor(promise->rirSrc()->function())
+        .slotsPromiseInlined.insert(newSlots.begin(), newSlots.end());
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

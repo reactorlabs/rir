@@ -7,12 +7,12 @@
 
 #include <iostream>
 
+namespace rir {
+namespace report {
+
 // ------------------------------------------------------------
 // TYPE HELPERS
 // ------------------------------------------------------------
-
-namespace rir {
-namespace report {
 
 pir::PirType getSlotPirType(size_t i, Function* baseline) {
     auto observed = baseline->typeFeedback()->types(i);
@@ -38,6 +38,23 @@ pir::PirType makeExpectedType(const pir::PirType& staticType,
     }
 
     return expected;
+}
+
+// ------------------------------------------------------------
+// SLOT HELPERS
+// ------------------------------------------------------------
+
+std::unordered_set<FeedbackIndex> findAllSlots(Code* code) {
+    std::unordered_set<FeedbackIndex> slots;
+
+    for (auto pc = code->code(); pc < code->endCode(); pc = BC::next(pc)) {
+        auto bc = BC::decode(pc, code);
+        if (bc.bc == Opcode::record_type_) {
+            slots.insert(FeedbackIndex::type(bc.immediate.i));
+        }
+    }
+
+    return slots;
 }
 
 // ------------------------------------------------------------
@@ -231,15 +248,8 @@ void computeFunctionsInfo(
         }
 
         // Promise scan
-        auto code = baseline->body();
-        std::unordered_set<FeedbackIndex> codeSlots;
-
-        for (auto pc = code->code(); pc < code->endCode(); pc = BC::next(pc)) {
-            auto bc = BC::decode(pc, code);
-            if (bc.bc == Opcode::record_type_) {
-                codeSlots.insert(FeedbackIndex::type(bc.immediate.i));
-            }
-        }
+        std::unordered_set<FeedbackIndex> codeSlots =
+            findAllSlots(baseline->body());
 
         slotData.promiseSlots =
             difference(keys(slotData.allTypeSlots), codeSlots);
@@ -303,6 +313,9 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
            "There is an empty used slot");
     assert(agg.used == intersect(keys(slotsUsed), keys(slotsPresent)).size() &&
            "There is an non-present used slot");
+
+    assert(slotsPromiseInlined ==
+           intersect(info.promiseSlots, slotsPromiseInlined));
 
     // if (slotsUsed.size() == 9) {
     //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
@@ -370,33 +383,6 @@ FinalAggregate CompilationSession::getFinalAgg() {
 // SLOTS INFOS
 // ------------------------------------------------------------
 
-std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
-    switch (speculation) {
-    case NotRun:
-        os << "not run";
-        break;
-
-    case RunNoNeed:
-        os << "no need";
-        break;
-
-    case RunNoPlace:
-        os << "no place";
-        break;
-
-    case RunHeuristicFailed:
-        os << "heuristic failed";
-        break;
-
-    case RunConsidered:
-        os << "considered";
-        break;
-    default:
-        assert(false);
-    }
-    return os;
-}
-
 void ClosureVersionStats::perSlotInfo(
     const std::string& benchmark_name, size_t compilation_id,
     std::unordered_map<Function*, FunctionInfo>& session_info,
@@ -450,6 +436,8 @@ void ClosureVersionStats::perSlotInfo(
             } else {
                 // Unused
                 res.optimizedAway = !feedback_info.slotsPresent.count(slot);
+                res.promiseInlined =
+                    feedback_info.slotsPromiseInlined.count(slot);
                 res.dependent =
                     res.nonempty && feedback_types_bags.count(slot_type) > 1;
 
@@ -465,7 +453,6 @@ void ClosureVersionStats::perSlotInfo(
                         assert(expected.isA(*presentInfo.staticType) &&
                                "expected is not <= static");
                     res.canBeSpeculated = presentInfo.canBeSpeculated();
-                    // res.inPromiseOnly = presentInfo.inPromiseOnly;
 
                     res.speculationPhase =
                         streamToString([&](std::ostream& os) {
@@ -546,6 +533,33 @@ std::string boolToString(bool b) { return b ? "yes" : "no"; }
 void printStat(std::ostream& os, const std::string& name, size_t value) {
     os << name << ": " << StreamColor::bold << value << StreamColor::clear
        << "\n";
+}
+
+std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
+    switch (speculation) {
+    case NotRun:
+        os << "not run";
+        break;
+
+    case RunNoNeed:
+        os << "no need";
+        break;
+
+    case RunNoPlace:
+        os << "no place";
+        break;
+
+    case RunHeuristicFailed:
+        os << "heuristic failed";
+        break;
+
+    case RunConsidered:
+        os << "considered";
+        break;
+    default:
+        assert(false);
+    }
+    return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
