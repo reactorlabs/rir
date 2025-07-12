@@ -94,6 +94,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             guardPos = checkpoint.next(i, i, dom);
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
+        } else {
+            cls->setSpeculationPhase(i, report::RunConsidered);
+            return;
         }
 
         if (!speculateOn || !guardPos || !typecheckPos ||
@@ -101,9 +104,12 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             (speculate.count(typecheckPos) &&
              speculate[typecheckPos].count(speculateOn))) {
 
-            // if (speculateOn && (!guardPos || !typecheckPos)) {
-            cls->setSpeculationPhase(i, report::RunNoPlace);
-            //}
+            if (speculateOn &&
+                (!guardPos || !typecheckPos || typecheckPos->isDeopt())) {
+                cls->setSpeculationPhase(i, report::RunNoPlace);
+            } else {
+                cls->setSpeculationPhase(i, report::RunHeuristicFailed);
+            }
 
             return;
         }

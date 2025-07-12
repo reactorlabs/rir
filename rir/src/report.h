@@ -145,7 +145,7 @@ enum SpeculationPhase {
     // probably in promise
     NotRun,
 
-    // Static is feedback , no need for speculation
+    // Static is feedback, no need for speculation (implementation detail)
     RunNoNeed,
 
     // There is either no available checkpoint or no position for typecheck
