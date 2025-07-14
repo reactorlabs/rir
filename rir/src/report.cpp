@@ -435,14 +435,14 @@ void ClosureVersionStats::perSlotInfo(
                 res.instruction = usage.speculatedOn;
             } else {
                 // Unused
-                res.optimizedAway = !feedback_info.slotsPresent.count(slot);
+                res.notPresent = !feedback_info.slotsPresent.count(slot);
                 res.promiseInlined =
                     feedback_info.slotsPromiseInlined.count(slot);
                 res.dependent =
                     res.nonempty && feedback_types_bags.count(slot_type) > 1;
 
-                // Unused non-optimized away non-empty
-                if (!res.optimizedAway && res.nonempty) {
+                // Unused present non-empty
+                if (!res.notPresent && res.nonempty) {
                     auto presentInfo = feedback_info.slotsPresent[slot];
                     auto expected = presentInfo.expectedType();
 
@@ -452,8 +452,8 @@ void ClosureVersionStats::perSlotInfo(
                     if (!res.expectedIsStatic)
                         assert(expected.isA(*presentInfo.staticType) &&
                                "expected is not <= static");
-                    res.canBeSpeculated = presentInfo.canBeSpeculated();
 
+                    res.canBeSpeculated = presentInfo.canBeSpeculated();
                     res.speculationPhase =
                         streamToString([&](std::ostream& os) {
                             os << presentInfo.speculation;
@@ -653,7 +653,7 @@ void report(std::ostream& os, bool breakdownInfo,
                 if (stats.slotsPresent.count(index)) {
                     os << stats.slotsPresent.at(index);
                 } else {
-                    os << "optimized away\n";
+                    os << "not present\n";
                 }
             }
         };

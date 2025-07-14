@@ -62,6 +62,11 @@ struct FinalAggregate {
 
 // ------------------------------------------------------------
 
+// TODO:
+// narrowed and widened (exactMatch?) for unused present
+// make exact match computed
+// show the widened type
+
 struct SlotInfo {
     // type, field name, field column descriptor
 #define SLOT_INFOS(X)                                                          \
@@ -84,13 +89,14 @@ struct SlotInfo {
     X(bool, narrowed, "narrowed")                                              \
                                                                                \
     /* Unused */                                                               \
-    X(bool, optimizedAway, "optimized away")                                   \
+    X(bool, notPresent, "not present")                                         \
     X(bool, promiseInlined, "promise inlined")                                 \
     X(bool, dependent, "dependent")                                            \
                                                                                \
-    /* Unused non-optimized away non-empty */                                  \
+    /* Unused present non-empty */                                             \
     X(bool, expectedEmpty, "expected empty")                                   \
     X(bool, expectedIsStatic, "expected is static")                            \
+    /* Maybe this flag is not used? */                                         \
     X(bool, canBeSpeculated, "can be speculated")                              \
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
