@@ -23,12 +23,6 @@ struct Code;
 struct Function;
 class TypeFeedback;
 
-template <typename T>
-bool isEmpty2(const T* thiss) {
-    auto empty = T();
-    return !memcmp(thiss, &empty, sizeof(T));
-}
-
 enum class FeedbackKind : uint8_t {
     Call,
     Test,
