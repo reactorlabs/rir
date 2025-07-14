@@ -544,21 +544,17 @@ std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
     case NotRun:
         os << "not run";
         break;
-
-    case RunNoNeed:
-        os << "no need";
+    case RunTypeObserved:
+        os << "type observed";
         break;
-
     case RunNoPlace:
         os << "no place";
         break;
-
-    case RunHeuristicFailed:
-        os << "heuristic failed";
+    case RunNonTypeHeuristicFailed:
+        os << "non-type heuristic fail";
         break;
-
-    case RunConsidered:
-        os << "considered";
+    case RunEarlyTypecheckFail:
+        os << "early type-check fail";
         break;
     default:
         assert(false);

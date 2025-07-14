@@ -6,6 +6,7 @@
 #include "compiler/analysis/cfg.h"
 #include "compiler/util/bb_transform.h"
 #include "pass_definitions.h"
+#include "report.h"
 #include "type_test.h"
 
 #include <unordered_map>
@@ -32,7 +33,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
 
         if (i->type.isA(i->typeFeedback().type)) {
-            cls->setSpeculationPhase(i, report::RunNoNeed);
+            cls->setSpeculationPhase(i, report::RunTypeObserved);
             return;
         }
 
@@ -95,7 +96,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
         } else {
-            cls->setSpeculationPhase(i, report::RunConsidered);
+            cls->setSpeculationPhase(i, report::RunEarlyTypecheckFail);
             return;
         }
 
@@ -108,7 +109,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
                 (!guardPos || !typecheckPos || typecheckPos->isDeopt())) {
                 cls->setSpeculationPhase(i, report::RunNoPlace);
             } else {
-                cls->setSpeculationPhase(i, report::RunHeuristicFailed);
+                cls->setSpeculationPhase(i, report::RunNonTypeHeuristicFailed);
             }
 
             return;
@@ -118,11 +119,11 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (auto ld = LdVar::Cast(speculateOn))
             if (auto mk = MkEnv::Cast(ld->env()))
                 if (mk->contains(ld->varName)) {
-                    cls->setSpeculationPhase(i, report::RunHeuristicFailed);
+                    cls->setSpeculationPhase(i, report::RunNonTypeHeuristicFailed);
                     return;
                 }
 
-        cls->setSpeculationPhase(i, report::RunConsidered);
+        cls->setSpeculationPhase(i, report::RunTypeObserved);
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),

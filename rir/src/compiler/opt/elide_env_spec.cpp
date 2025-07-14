@@ -49,10 +49,6 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
         while (ip != bb->end()) {
             Instruction* i = *ip;
 
-            if (i->hasTypeFeedback()) {
-                cls->setSpeculationPhase(i, report::RunNoNeed);
-            }
-
             auto next = ip + 1;
             if (i->hasEnv()) {
                 // Speculatively elide environments on instructions in which
@@ -98,7 +94,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
 
                         if (seenOrigin) {
                             cls->setSpeculationPhase(seenOrigin,
-                                                     report::RunConsidered);
+                                                     report::RunTypeObserved);
                         }
                         TypeTest::Create(
                             arg, seen, suggested, required,

@@ -97,7 +97,6 @@ struct SlotInfo {
     /* Unused present non-empty */                                             \
     X(bool, expectedEmpty, "expected empty")                                   \
     X(bool, expectedIsStatic, "expected is static")                            \
-    /* Maybe this flag is not used? */                                         \
     X(bool, canBeSpeculated, "can be speculated")                              \
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
@@ -109,6 +108,9 @@ struct SlotInfo {
     /* Used types */                                                           \
     X(std::string, checkForT, "checkForT")                                     \
     X(std::string, requiredT, "requiredT")                                     \
+                                                                               \
+    /* Unused types*/                                                          \
+    X(std::string, widenedT, "widenedT")                                       \
                                                                                \
     /* Instruction */                                                          \
     X(std::string, instruction, "instruction")
@@ -147,24 +149,24 @@ struct SlotUsed {
 std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed);
 
 // Ordering matters -> weakest to strongest phases
+// It might be that no place, non-type heuristic and early typecheck fail are
+// uncomparable
 enum SpeculationPhase {
-    // The type speculation pass did not run,
-    // probably in promise
+    // The type speculation pass did not run
     NotRun,
 
-    // Static is feedback, no need for speculation (implementation detail)
-    RunNoNeed,
+    // Either static is feedback or speculation was considered (type related
+    // heuristic could've failed)
+    RunTypeObserved,
 
     // There is either no available checkpoint or no position for typecheck
     RunNoPlace,
 
-    // Some heuristics failed meaning it is worth leaving it for
-    // some other pass
-    RunHeuristicFailed,
+    // Some non-type related heuristics failed
+    RunNonTypeHeuristicFailed,
 
-    // Speculation was considered
-    RunConsidered
-
+    // The early typecheck in TypeSpeculation has failed
+    RunEarlyTypecheckFail,
 };
 
 std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation);

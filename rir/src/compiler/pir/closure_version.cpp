@@ -5,6 +5,7 @@
 #include "compiler/util/bb_transform.h"
 #include "compiler/util/visitor.h"
 #include "pir_impl.h"
+#include "report.h"
 
 #include <iostream>
 
@@ -155,7 +156,7 @@ void ClosureVersion::scanForSpeculation() {
 
                     slotPresent.staticType = slotUsed.staticType;
                     slotPresent.feedbackType = slotUsed.feedbackType;
-                    slotPresent.speculation = report::RunConsidered;
+                    slotPresent.speculation = report::RunTypeObserved;
                     slotPresent.presentInstr = slotUsed.speculatedOn;
 
                     info.slotsPresent[fo.index()] = slotPresent;
