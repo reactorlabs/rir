@@ -405,13 +405,14 @@ void ClosureVersionStats::perSlotInfo(
             res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
+            res.inlinee = closure != this->function;
             res.slot_idx = slot.idx;
 
             // Info
-            res.inPromise = static_info.promiseSlots.count(slot) > 0;
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
             res.used = feedback_info.slotsUsed.count(slot);
+            res.inPromise = static_info.promiseSlots.count(slot);
             res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
@@ -422,6 +423,9 @@ void ClosureVersionStats::perSlotInfo(
                 res.widened = usage.widened();
                 res.narrowed = usage.narrowedWithStaticType();
 
+                // Unused defaults
+                res.promiseInlined =
+                    feedback_info.slotsPromiseInlined.count(slot);
                 // Types
                 res.staticT = typeToString(*usage.staticType);
                 res.feedbackT = typeToString(*usage.feedbackType);

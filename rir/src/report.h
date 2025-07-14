@@ -74,13 +74,14 @@ struct SlotInfo {
     X(std::string, benchmark, "benchmark")                                     \
     X(size_t, compilation_id, "compilation id")                                \
     X(std::string, closure, "closure")                                         \
+    X(bool, inlinee, "inlinee")                                                \
     X(size_t, slot_idx, "slot idx")                                            \
                                                                                \
     /* Info */                                                                 \
-    X(bool, inPromise, "in promise")                                           \
     X(bool, nonempty, "non-empty")                                             \
     X(bool, read, "read")                                                      \
     X(bool, used, "used")                                                      \
+    X(bool, inPromise, "in promise")                                           \
     X(bool, polymorphic, "polymorphic")                                        \
                                                                                \
     /* How used */                                                             \
