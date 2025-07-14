@@ -40,6 +40,45 @@ pir::PirType makeExpectedType(const pir::PirType& staticType,
     return expected;
 }
 
+pir::PirType makeWidenedType(const pir::PirType& staticType,
+                             const pir::PirType& expectedType) {
+    if (!expectedType.maybeObj() &&
+        (expectedType.noAttribsOrObject().isA(pir::RType::integer) ||
+         expectedType.noAttribsOrObject().isA(pir::RType::real) ||
+         expectedType.noAttribsOrObject().isA(pir::RType::logical))) {
+        return expectedType;
+    }
+
+    auto checkFor = staticType.notLazy().noAttribsOrObject();
+    if (expectedType.isA(checkFor)) {
+        return checkFor;
+    }
+
+    checkFor = staticType.notLazy().notObject();
+    if (expectedType.isA(checkFor)) {
+        return checkFor;
+    }
+
+    return pir::PirType::voyd();
+}
+
+bool isWidened(const pir::PirType& staticType,
+               const pir::PirType& feedbackType) {
+    auto intersection = staticType & feedbackType;
+
+    auto expected = makeExpectedType(staticType, feedbackType);
+    if (!expected.isA(intersection)) {
+        return true;
+    }
+
+    auto widened = makeWidenedType(staticType, expected);
+    if (!widened.isA(intersection)) {
+        return true;
+    }
+
+    return false;
+}
+
 // ------------------------------------------------------------
 // SLOT HELPERS
 // ------------------------------------------------------------
@@ -124,8 +163,8 @@ pir::PirType SlotUsed::expectedType() const {
 }
 
 bool SlotUsed::widened() const {
-    // reflects "NA checks are only possible on scalars" in type_test
-    return (!feedbackType->maybeNAOrNaN() && expectedType().maybeNAOrNaN()) ||
+    // The actual checkFor could be even more widened
+    return isWidened(*staticType, *feedbackType) ||
            (*checkFor != expectedType());
 }
 
@@ -136,10 +175,6 @@ bool SlotUsed::narrowedWithStaticType() const {
 // ------------------------------------------------------------
 // SLOT PRESENT
 // ------------------------------------------------------------
-
-pir::PirType SlotPresent::expectedType() const {
-    return makeExpectedType(*staticType, *feedbackType);
-}
 
 // int SlotPresent::compareExpectedTypeToStaticType() const {
 //     // returns 0 is exp == st
@@ -152,6 +187,18 @@ pir::PirType SlotPresent::expectedType() const {
 //     return -1;
 // }
 
+pir::PirType SlotPresent::expectedType() const {
+    return makeExpectedType(*staticType, *feedbackType);
+}
+
+pir::PirType SlotPresent::widenExpected() const {
+    return makeWidenedType(*staticType, expectedType());
+}
+
+bool SlotPresent::widened() const {
+    return isWidened(*staticType, *feedbackType);
+}
+
 bool SlotPresent::canBeSpeculated() const {
     auto expected = expectedType();
 
@@ -159,24 +206,8 @@ bool SlotPresent::canBeSpeculated() const {
         return false;
     }
 
-    if (!expected.maybeObj() &&
-        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
-         expected.noAttribsOrObject().isA(pir::RType::real) ||
-         expected.noAttribsOrObject().isA(pir::RType::logical))) {
-        return true;
-    }
-
-    auto checkFor = staticType->notLazy().noAttribsOrObject();
-    if (expected.isA(checkFor)) {
-        return true;
-    }
-
-    checkFor = staticType->notLazy().notObject();
-    if (expected.isA(checkFor)) {
-        return true;
-    }
-
-    return false;
+    auto widened = widenExpected();
+    return expected.isA(widened);
 }
 
 // ------------------------------------------------------------
@@ -405,22 +436,26 @@ void ClosureVersionStats::perSlotInfo(
             res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
-            res.inlinee = closure != this->function;
             res.slot_idx = slot.idx;
 
             // Info
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
             res.used = feedback_info.slotsUsed.count(slot);
+
+            // More info
+            res.inlinee = closure != this->function;
             res.inPromise = static_info.promiseSlots.count(slot);
             res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
                 auto& usage = feedback_info.slotsUsed[slot];
 
+                // Present info
+                res.widened = usage.widened();
+
                 // How used
                 res.exactMatch = usage.exactMatch();
-                res.widened = usage.widened();
                 res.narrowed = usage.narrowedWithStaticType();
 
                 // Unused defaults
@@ -450,12 +485,14 @@ void ClosureVersionStats::perSlotInfo(
                     auto presentInfo = feedback_info.slotsPresent[slot];
                     auto expected = presentInfo.expectedType();
 
+                    // Present info
+                    res.widened = presentInfo.widened();
+
+                    // Unused present non-empty
                     res.expectedEmpty = expected.isVoid();
                     res.expectedIsStatic = expected == *presentInfo.staticType;
-
-                    if (!res.expectedIsStatic)
-                        assert(expected.isA(*presentInfo.staticType) &&
-                               "expected is not <= static");
+                    assert(expected.isA(*presentInfo.staticType) &&
+                           "expected is not <= static");
 
                     res.canBeSpeculated = presentInfo.canBeSpeculated();
                     res.speculationPhase =
@@ -467,6 +504,9 @@ void ClosureVersionStats::perSlotInfo(
                     res.staticT = typeToString(*presentInfo.staticType);
                     res.feedbackT = typeToString(*presentInfo.feedbackType);
                     res.expectedT = typeToString(expected);
+
+                    // Unused types
+                    res.widenedT = typeToString(presentInfo.widenExpected());
 
                     // Instruction
                     res.instruction = presentInfo.presentInstr;

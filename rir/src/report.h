@@ -74,19 +74,23 @@ struct SlotInfo {
     X(std::string, benchmark, "benchmark")                                     \
     X(size_t, compilation_id, "compilation id")                                \
     X(std::string, closure, "closure")                                         \
-    X(bool, inlinee, "inlinee")                                                \
     X(size_t, slot_idx, "slot idx")                                            \
                                                                                \
     /* Info */                                                                 \
     X(bool, nonempty, "non-empty")                                             \
     X(bool, read, "read")                                                      \
     X(bool, used, "used")                                                      \
+                                                                               \
+    /* More info */                                                            \
+    X(bool, inlinee, "inlinee")                                                \
     X(bool, inPromise, "in promise")                                           \
     X(bool, polymorphic, "polymorphic")                                        \
                                                                                \
+    /* Present info */                                                         \
+    X(bool, widened, "widened")                                                \
+                                                                               \
     /* How used */                                                             \
     X(bool, exactMatch, "exact match")                                         \
-    X(bool, widened, "widened")                                                \
     X(bool, narrowed, "narrowed")                                              \
                                                                                \
     /* Unused */                                                               \
@@ -128,7 +132,6 @@ struct SlotInfo {
 struct SlotUsed {
     bool widened() const;
     bool narrowedWithStaticType() const;
-
     bool exactMatch() const { return !widened() && !narrowedWithStaticType(); }
 
     pir::PirType* checkFor = nullptr;
@@ -173,11 +176,15 @@ std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation);
 
 struct SlotPresent {
     bool canBeSpeculated() const;
+    bool widened() const;
+
     // int compareExpectedTypeToStaticType() const;
 
     pir::PirType* staticType = nullptr;
     pir::PirType* feedbackType = nullptr;
+
     pir::PirType expectedType() const;
+    pir::PirType widenExpected() const;
 
     SpeculationPhase speculation;
 
