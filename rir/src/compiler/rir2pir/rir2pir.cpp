@@ -183,6 +183,7 @@ Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
             log.warn("Failed to inline a promise");
             return nullptr;
         }
+        cls->promiseInlined(prom);
     }
 
     if (eager) {
@@ -612,6 +613,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 log.warn("Failed to inline a promise");
                 return false;
             }
+            cls->promiseInlined(prom);
         }
         push(insert(new MkArg(prom, val, env)));
         break;
@@ -1270,8 +1272,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::is_:
         if (bc.immediate.typecheck == BC::RirTypecheck::isNonObject) {
-            push(insert(
-                new IsType(PirType::val().notMissing().notObject(), pop(), FeedbackOrigin())));
+            push(insert(new IsType(PirType::val().notMissing().notObject(),
+                                   pop(), FeedbackOrigin())));
         } else if (bc.immediate.typecheck == BC::RirTypecheck::isVector) {
             std::vector<Instruction*> tests;
             for (auto type : BC::isVectorTypes) {
