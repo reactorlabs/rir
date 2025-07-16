@@ -42,13 +42,6 @@ pir::PirType makeExpectedType(const pir::PirType& staticType,
 
 pir::PirType makeWidenedType(const pir::PirType& staticType,
                              const pir::PirType& expectedType) {
-    if (!expectedType.maybeObj() &&
-        (expectedType.noAttribsOrObject().isA(pir::RType::integer) ||
-         expectedType.noAttribsOrObject().isA(pir::RType::real) ||
-         expectedType.noAttribsOrObject().isA(pir::RType::logical))) {
-        return expectedType;
-    }
-
     auto checkFor = staticType.notLazy().noAttribsOrObject();
     if (expectedType.isA(checkFor)) {
         return checkFor;
@@ -66,13 +59,21 @@ bool isWidened(const pir::PirType& staticType,
                const pir::PirType& feedbackType) {
     auto intersection = staticType & feedbackType;
 
+    // Widened by the NA check
     auto expected = makeExpectedType(staticType, feedbackType);
     if (!expected.isA(intersection)) {
         return true;
     }
 
+    if (!expected.maybeObj() &&
+        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
+         expected.noAttribsOrObject().isA(pir::RType::real) ||
+         expected.noAttribsOrObject().isA(pir::RType::logical))) {
+        return false;
+    }
+
     auto widened = makeWidenedType(staticType, expected);
-    if (!widened.isA(intersection)) {
+    if (widened != pir::PirType::voyd() && !widened.isA(intersection)) {
         return true;
     }
 
@@ -461,6 +462,7 @@ void ClosureVersionStats::perSlotInfo(
                 // Unused defaults
                 res.promiseInlined =
                     feedback_info.slotsPromiseInlined.count(slot);
+
                 // Types
                 res.staticT = typeToString(*usage.staticType);
                 res.feedbackT = typeToString(*usage.feedbackType);
