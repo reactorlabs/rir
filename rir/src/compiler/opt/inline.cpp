@@ -406,15 +406,21 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         cls->feedbackStatsFor(inlineeCls->rirFunction());
                     stats.timesInlined++;
 
+                    auto& inlineeStats =
+                        inlinee->feedbackStatsFor(inlineeCls->rirFunction());
+
                     for (const auto& original :
-                         inlinee->feedbackStatsFor(inlineeCls->rirFunction())
-                             .slotsSpeculationPhase) {
+                         inlineeStats.slotsSpeculationPhase) {
                         if (stats.slotsSpeculationPhase.count(original.first) &&
                             stats.slotsSpeculationPhase[original.first] <
                                 original.second) {
                             stats.slotsSpeculationPhase.insert(original);
                         }
                     }
+
+                    stats.slotsPromiseInlined.insert(
+                        inlineeStats.slotsPromiseInlined.begin(),
+                        inlineeStats.slotsPromiseInlined.end());
                 }
 
                 anyChange = true;
