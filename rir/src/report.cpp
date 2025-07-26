@@ -155,6 +155,13 @@ sortByFeedbackIndex(const std::unordered_map<FeedbackIndex, T>& map) {
     return vec;
 }
 
+template <typename T>
+void printUnorderedSet(const std::unordered_set<T>& mySet) {
+    for (const auto& item : mySet) {
+        std::cerr << item << std::endl;
+    }
+}
+
 // ------------------------------------------------------------
 // SLOT USED
 // ------------------------------------------------------------
@@ -253,49 +260,46 @@ FunctionInfo::dependentsCountIn(std::unordered_set<FeedbackIndex> slots) const {
 
 static std::vector<CompilationSession> COMPILATION_SESSIONS;
 
-void computeFunctionsInfo(
+void computeFunctionInfo(
     std::unordered_map<Function*, FunctionInfo>& functionsInfo,
-    std::vector<DispatchTable*> DTs) {
-    for (auto dt : DTs) {
-        auto baseline = dt->baseline();
-        auto& slotData = functionsInfo[baseline];
+    DispatchTable* dt) {
+    auto baseline = dt->baseline();
+    auto& slotData = functionsInfo[baseline];
 
-        // Types
-        auto feedback = baseline->typeFeedback();
-        for (size_t i = 0; i < feedback->types_size(); ++i) {
-            auto idx = FeedbackIndex::type(i);
+    // Types
+    auto feedback = baseline->typeFeedback();
+    for (size_t i = 0; i < feedback->types_size(); ++i) {
+        auto idx = FeedbackIndex::type(i);
 
-            slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
-            const auto& tf = feedback->types(i);
+        slotData.allTypeSlots[idx] = getSlotPirType(i, baseline);
+        const auto& tf = feedback->types(i);
 
-            if (tf.isEmpty()) {
-                slotData.emptySlots.insert(idx);
-            } else {
-                slotData.nonEmptySlots.insert(idx);
-            }
-
-            if (tf.isPolymorphic) {
-                slotData.polymorphicSlots.insert(idx);
-            }
+        if (tf.isEmpty()) {
+            slotData.emptySlots.insert(idx);
+        } else {
+            slotData.nonEmptySlots.insert(idx);
         }
 
-        // Promise scan
-        std::unordered_set<FeedbackIndex> codeSlots =
-            findAllSlots(baseline->body());
+        if (tf.isPolymorphic) {
+            slotData.polymorphicSlots.insert(idx);
+        }
+    }
 
-        slotData.promiseSlots =
-            difference(keys(slotData.allTypeSlots), codeSlots);
+    // Promise scan
+    std::unordered_set<FeedbackIndex> codeSlots =
+        findAllSlots(baseline->body());
 
-        // Deopts
-        slotData.deoptsCount = baseline->allDeoptsCount;
+    slotData.promiseSlots = difference(keys(slotData.allTypeSlots), codeSlots);
 
-        for (auto origin : baseline->slotsDeopted) {
-            if (origin.function() == baseline) {
-                slotData.slotsDeopted.insert(origin.index());
-            } else {
-                functionsInfo[origin.function()].inlinedSlotsDeopted.insert(
-                    origin.index());
-            }
+    // Deopts
+    slotData.deoptsCount = baseline->allDeoptsCount;
+
+    for (auto origin : baseline->slotsDeopted) {
+        if (origin.function() == baseline) {
+            slotData.slotsDeopted.insert(origin.index());
+        } else {
+            functionsInfo[origin.function()].inlinedSlotsDeopted.insert(
+                origin.index());
         }
     }
 }
@@ -306,7 +310,9 @@ CompilationSession::getNew(Function* compiledFunction,
                            const std::vector<DispatchTable*>& DTs) {
     COMPILATION_SESSIONS.emplace_back(compiledFunction, compiledContext);
     auto& session = COMPILATION_SESSIONS.back();
-    computeFunctionsInfo(session.functionsInfo, DTs);
+    for (auto dt : DTs) {
+        computeFunctionInfo(session.functionsInfo, dt);
+    }
     return session;
 }
 
@@ -324,8 +330,15 @@ void CompilationSession::addClosureVersion(pir::ClosureVersion* closureVersion,
     auto baseline = compiledFunction->dispatchTable()->baseline();
     const auto& context = compiledFunction->context();
 
-    closureVersionStats.emplace_back(baseline, context,
-                                     closureVersion->feedbackStatsByFunction);
+    const auto& stats = closureVersion->feedbackStatsByFunction;
+
+    for (auto& f : keys(stats)) {
+        if (!functionsInfo.count(f)) {
+            computeFunctionInfo(functionsInfo, f->dispatchTable());
+        }
+    }
+
+    closureVersionStats.emplace_back(baseline, context, stats);
 }
 
 // ------------------------------------------------------------
@@ -463,6 +476,9 @@ void ClosureVersionStats::perSlotInfo(
                 res.promiseInlined =
                     feedback_info.slotsPromiseInlined.count(slot);
 
+                // (used && slot from promise) => promise inlined
+                assert(!res.inPromise || res.promiseInlined);
+
                 // Types
                 res.staticT = typeToString(*usage.staticType);
                 res.feedbackT = typeToString(*usage.feedbackType);
@@ -565,13 +581,6 @@ std::string typeToString(const pir::PirType& t) {
 
 std::string instrToString(pir::Instruction* instr) {
     return streamToString([&](std::ostream& os) { instr->print(os); });
-}
-
-template <typename T>
-void printUnorderedSet(const std::unordered_set<T>& mySet) {
-    for (const auto& item : mySet) {
-        std::cerr << item << std::endl;
-    }
 }
 
 std::string boolToString(bool b) { return b ? "yes" : "no"; }
@@ -748,6 +757,7 @@ void report(std::ostream& os, bool breakdownInfo,
             // clang-format on
 
             // Main
+            assert(session.functionsInfo.count(mainFun));
             auto& mainInfo = session.functionsInfo[mainFun];
             auto& mainFeedbackStats = cvstat.feedbackStats[mainFun];
             printFunctionInfo(mainFun->dispatchTable(), mainFeedbackStats,
@@ -756,6 +766,7 @@ void report(std::ostream& os, bool breakdownInfo,
             // Rest
             for (auto& i : cvstat.feedbackStats) {
                 auto fun = i.first;
+                assert(session.functionsInfo.count(fun));
                 auto& info = session.functionsInfo[fun];
                 auto& feedbackStats = i.second;
 
