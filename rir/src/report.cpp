@@ -316,10 +316,7 @@ CompilationSession::getNew(Function* compiledFunction,
     return session;
 }
 
-CompilationSession& currentSession() {
-    assert(!COMPILATION_SESSIONS.empty());
-    return COMPILATION_SESSIONS.back();
-}
+size_t currentSessionId() { return COMPILATION_SESSIONS.size() - 1; }
 
 // ------------------------------------------------------------
 

@@ -42,7 +42,7 @@ Log::Log(const DebugOptions& options) : options(options) {
 
         auto env_location = std::getenv("PIR_DEBUG_FOLDER");
         if (env_location != nullptr) {
-            ss << env_location<< "-" << time << "/";
+            ss << env_location << "-" << time << "/";
             debugLocation = ss.str();
             auto ret = mkdir(debugLocation.c_str(), 0700);
             if (ret != 0) {
@@ -66,8 +66,10 @@ Log::~Log() {
 static std::string closureLogPath(const std::string& debugLocation,
                                   size_t logId, const ClosureVersion* cls) {
     std::stringstream filePath;
-    filePath << debugLocation << std::setfill('0') << std::setw(5) << logId
-             << "-" << cls->owner()->name() << "-pir-function";
+    filePath << debugLocation << std::setfill('0') << std::setw(3)
+             << report::currentSessionId() << "-" << std::setfill('0')
+             << std::setw(5) << logId << "-" << cls->owner()->name()
+             << "-pir-function";
 
     return filePath.str();
 }

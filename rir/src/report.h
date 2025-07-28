@@ -292,7 +292,7 @@ struct CompilationSession {
     static FinalAggregate getFinalAgg();
 };
 
-CompilationSession& currentSession();
+size_t currentSessionId();
 
 // ------------------------------------------------------------
 
