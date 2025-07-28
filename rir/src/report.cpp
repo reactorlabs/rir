@@ -642,19 +642,14 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
     using namespace StreamColor;
 
     os << bold << slotPresent.presentInstr << clear << "\n";
-    os << slotPresent.speculation;
-
-    os << "\n";
+    os << slotPresent.speculation << "\n";
 
     // clang-format off
     os << bold << "static: "   << clear << *slotPresent.staticType << ", "
        << bold << "feedback: " << clear << *slotPresent.feedbackType << ", "
-       << bold << "expected: " << clear << slotPresent.expectedType() << "\n";
+       << bold << "expected: " << clear << slotPresent.expectedType() << ", "
+       << bold << "widened: "  << clear << slotPresent.widenExpected() << "\n";
     // clang-format on
-
-    if (slotPresent.canBeSpeculated()) {
-        os << "(speculatable)\n";
-    }
 
     return os;
 }
