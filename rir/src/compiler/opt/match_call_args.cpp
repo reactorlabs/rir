@@ -194,27 +194,34 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     if (usemethodTarget) {
                         if (!DispatchTable::check(BODY(usemethodTarget)))
                             rir::Compiler::compileClosure(usemethodTarget);
-                        if (DispatchTable::check(BODY(usemethodTarget)))
+                        if (auto dt =
+                                DispatchTable::check(BODY(usemethodTarget))) {
+                            std::stringstream ss;
+                            ss << "unknown--fromOverride(" << dt->closureName
+                               << ")";
                             cmp.compileClosure(
-                                usemethodTarget, "unknown--fromOverride", asmpt,
-                                false,
+                                usemethodTarget, ss.str(), asmpt, false,
                                 [&](ClosureVersion* fun) {
                                     cmp.optimizeClosureVersion(fun);
                                     target = fun;
                                 },
                                 []() {}, {});
+                        }
                     } else if (auto cnst = Const::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
                             if (dt->baseline()->body()->codeSize <
-                                Parameter::RECOMPILE_THRESHOLD)
+                                Parameter::RECOMPILE_THRESHOLD) {
+                                std::stringstream ss;
+                                ss << "unknown--fromConstant("
+                                   << dt->closureName << ")";
                                 cmp.compileClosure(
-                                    cnst->c(), "unknown--fromConstant", asmpt,
-                                    false,
+                                    cnst->c(), ss.str(), asmpt, false,
                                     [&](ClosureVersion* fun) {
                                         cmp.optimizeClosureVersion(fun);
                                         target = fun;
                                     },
                                     []() {}, {});
+                            }
                         }
                     } else if (auto mk = MkCls::Cast(calli->tryGetClsArg())) {
                         if (auto cls = mk->tryGetCls())
@@ -223,16 +230,19 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         if (!target && dt) {
                             auto srcRef = mk->srcRef;
                             if (dt->baseline()->body()->codeSize <
-                                Parameter::RECOMPILE_THRESHOLD)
+                                Parameter::RECOMPILE_THRESHOLD) {
+                                std::stringstream ss;
+                                ss << "unknown--fromMkCls(" << dt->closureName
+                                   << ")";
                                 cmp.compileFunction(
-                                    dt, "unknown--fromMkCls", formals, srcRef,
-                                    asmpt,
+                                    dt, ss.str(), formals, srcRef, asmpt,
                                     [&](ClosureVersion* fun) {
                                         mk->setCls(fun->owner());
                                         cmp.optimizeClosureVersion(fun);
                                         target = fun;
                                     },
                                     []() {}, {});
+                            }
                         }
                     }
                 }
