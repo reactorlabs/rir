@@ -2088,6 +2088,4 @@ bool Compiler::profile =
 
 bool Compiler::loopPeelingEnabled = true;
 
-std::function<void(SEXP)> Compiler::onNewDt = [](SEXP) {};
-
 } // namespace rir

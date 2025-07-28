@@ -148,6 +148,11 @@ std::string getClosureName(SEXP cls) {
     return name;
 }
 
+std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
+    R_PreserveObject(sexpDT);
+    PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
+};
+
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
@@ -156,12 +161,6 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
 
         // register rir closures
         if (!finalizerSet) {
-            Compiler::onNewDt = [&](SEXP sexpDT) {
-                R_PreserveObject(sexpDT);
-                PreservedDispatchTables.push_back(
-                    DispatchTable::unpack(sexpDT));
-            };
-
             // Call `loadNamespace("Base")`
             SEXP baseStr = PROTECT(Rf_mkString("base"));
             SEXP expr = PROTECT(Rf_lang2(Rf_install("loadNamespace"), baseStr));

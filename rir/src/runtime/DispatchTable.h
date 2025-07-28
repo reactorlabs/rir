@@ -24,6 +24,7 @@ struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
 
     std::string closureName;
+    static std::function<void(SEXP)> onNewDt;
 
     size_t size() const { return size_; }
 
@@ -204,7 +205,9 @@ struct DispatchTable
         size_t sz =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, sz);
-        return new (INTEGER(s)) DispatchTable(capacity);
+        auto d = new (INTEGER(s)) DispatchTable(capacity);
+        onNewDt(s);
+        return d;
     }
 
     size_t capacity() const { return info.gc_area_length; }

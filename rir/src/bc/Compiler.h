@@ -42,7 +42,6 @@ class Compiler {
     static bool profile;
     static bool unsoundOpts;
     static bool loopPeelingEnabled;
-    static std::function<void(SEXP)> onNewDt;
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);
@@ -62,7 +61,6 @@ class Compiler {
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
         dt->baseline(Function::unpack(res));
-        Compiler::onNewDt(dt->container());
 
         return dt->container();
     }
@@ -95,7 +93,6 @@ class Compiler {
 
         // Set the closure fields.
         SET_BODY(inClosure, dt->container());
-        Compiler::onNewDt(dt->container());
     }
 };
 
