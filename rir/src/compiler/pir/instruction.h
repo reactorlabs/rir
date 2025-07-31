@@ -170,6 +170,40 @@ class Instruction : public Value {
         unsigned idx() const { return second; }
     };
 
+    Instruction(const Instruction& other)
+        : Value(other), effects(other.effects), deleted(other.deleted),
+          typeFeedbackUsed(other.typeFeedbackUsed),
+          typeFeedback_(other.typeFeedback_
+                            ? new TypeFeedback(*other.typeFeedback_)
+                            : nullptr),
+          callFeedback_(other.callFeedback_), bb_(other.bb_),
+          srcIdx(other.srcIdx) {}
+
+    Instruction& operator=(const Instruction& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        tag = other.tag;
+        type = other.type;
+
+        effects = other.effects;
+        deleted = other.deleted;
+        typeFeedbackUsed = other.typeFeedbackUsed;
+        if (other.typeFeedback_) {
+            typeFeedback_.reset(new TypeFeedback(*other.typeFeedback_));
+        } else {
+            typeFeedback_.reset();
+        }
+        callFeedback_ = other.callFeedback_;
+        bb_ = other.bb_;
+        srcIdx = other.srcIdx;
+
+        return *this;
+    }
+    Instruction(Instruction&&) = default;
+    Instruction& operator=(Instruction&&) = default;
+
     Instruction(Tag tag, PirType t, Effects effects, unsigned srcIdx)
         : Value(t, tag), effects(effects), typeFeedback_(nullptr),
           srcIdx(srcIdx) {}
@@ -188,7 +222,7 @@ class Instruction : public Value {
         return effects.contains(Effect::Reflection);
     }
 
-    std::shared_ptr<TypeFeedback> typeFeedback_;
+    std::unique_ptr<TypeFeedback> typeFeedback_;
     bool hasTypeFeedback() const { return typeFeedback_.get(); }
     bool hasCallFeedback() const { return callFeedback_.get(); }
 
