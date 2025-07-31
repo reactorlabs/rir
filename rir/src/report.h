@@ -235,7 +235,6 @@ struct FeedbackStatsPerFunction {
     std::unordered_set<FeedbackIndex> slotsRead;
     std::unordered_map<FeedbackIndex, SlotPresent> slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
-    std::unordered_map<FeedbackIndex, SpeculationPhase> slotsSpeculationPhase;
     std::unordered_set<FeedbackIndex> slotsPromiseInlined;
 
     // TODO: not used right now

@@ -61,7 +61,6 @@ class ClosureVersion : public Code {
         return feedbackStatsByFunction[baseline];
     }
 
-    void setSpeculationPhase(Instruction* instr, report::SpeculationPhase phase);
     void promiseInlined(Promise* promise);
 
     ClosureVersion* getClosureVersion() override {

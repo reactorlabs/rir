@@ -185,17 +185,7 @@ void ClosureVersion::computeSlotsPresent() {
             auto slotPresent = report::SlotPresent();
 
             slotPresent.presentInstr = report::instrToString(i);
-            if (info.slotsSpeculationPhase.count(origin.index())) {
-                slotPresent.speculation =
-                    info.slotsSpeculationPhase[origin.index()];
-            } else {
-                slotPresent.speculation = report::SpeculationPhase::NotRun;
-            }
-
-            // if (slotPresent.speculation == report::Emited) {
-            //     assert(info.slotsAssumeRemoved.count(origin.index()) ||
-            //            info.slotsUsed.count(origin.index()));
-            // }
+            slotPresent.speculation = tf.phase;
 
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
@@ -205,23 +195,6 @@ void ClosureVersion::computeSlotsPresent() {
     };
 
     doCompute(this->entry);
-}
-
-void ClosureVersion::setSpeculationPhase(Instruction* instr,
-                                         report::SpeculationPhase phase) {
-    if (!instr->typeFeedback_) {
-        return;
-    }
-    auto origin = instr->typeFeedback_->feedbackOrigin;
-    if (!origin.hasSlot()) {
-        return;
-    }
-
-    auto& stats = feedbackStatsFor(origin.function());
-    if (!stats.slotsSpeculationPhase.count(origin.index()) ||
-        stats.slotsSpeculationPhase[origin.index()] < phase) {
-        stats.slotsSpeculationPhase[origin.index()] = phase;
-    }
 }
 
 void ClosureVersion::promiseInlined(Promise* promise) {

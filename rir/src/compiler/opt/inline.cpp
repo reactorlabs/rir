@@ -409,15 +409,6 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     auto& inlineeStats =
                         inlinee->feedbackStatsFor(inlineeCls->rirFunction());
 
-                    for (const auto& original :
-                         inlineeStats.slotsSpeculationPhase) {
-                        if (stats.slotsSpeculationPhase.count(original.first) &&
-                            stats.slotsSpeculationPhase[original.first] <
-                                original.second) {
-                            stats.slotsSpeculationPhase.insert(original);
-                        }
-                    }
-
                     stats.slotsPromiseInlined.insert(
                         inlineeStats.slotsPromiseInlined.begin(),
                         inlineeStats.slotsPromiseInlined.end());

@@ -149,6 +149,13 @@ struct TypeFeedback {
     Value* value = nullptr;
     FeedbackOrigin feedbackOrigin;
     bool defaultFeedback = false;
+    report::SpeculationPhase phase = report::NotRun;
+
+    void setSpeculationPhase(report::SpeculationPhase newPhase) {
+        if (phase < newPhase) {
+            phase = newPhase;
+        }
+    }
 };
 struct CallFeedback {
     FeedbackOrigin feedbackOrigin;

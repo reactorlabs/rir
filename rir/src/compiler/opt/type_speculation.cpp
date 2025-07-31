@@ -33,7 +33,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         }
 
         if (i->type.isA(i->typeFeedback().type)) {
-            cls->setSpeculationPhase(i, report::RunTypeObserved);
+            i->updateTypeFeedback(false).setSpeculationPhase(report::RunTypeObserved);
             return;
         }
 
@@ -96,7 +96,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
             if (guardPos)
                 typecheckPos = guardPos->nextBB();
         } else {
-            cls->setSpeculationPhase(i, report::RunEarlyTypecheckFail);
+            i->updateTypeFeedback(false).setSpeculationPhase(report::RunEarlyTypecheckFail);
             return;
         }
 
@@ -107,9 +107,9 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
             if (speculateOn &&
                 (!guardPos || !typecheckPos || typecheckPos->isDeopt())) {
-                cls->setSpeculationPhase(i, report::RunNoPlace);
+                i->updateTypeFeedback(false).setSpeculationPhase(report::RunNoPlace);
             } else {
-                cls->setSpeculationPhase(i, report::RunNonTypeHeuristicFailed);
+                i->updateTypeFeedback(false).setSpeculationPhase(report::RunNonTypeHeuristicFailed);
             }
 
             return;
@@ -119,11 +119,11 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
         if (auto ld = LdVar::Cast(speculateOn))
             if (auto mk = MkEnv::Cast(ld->env()))
                 if (mk->contains(ld->varName)) {
-                    cls->setSpeculationPhase(i, report::RunNonTypeHeuristicFailed);
+                    i->updateTypeFeedback(false).setSpeculationPhase(report::RunNonTypeHeuristicFailed);
                     return;
                 }
 
-        cls->setSpeculationPhase(i, report::RunTypeObserved);
+        i->updateTypeFeedback(false).setSpeculationPhase(report::RunTypeObserved);
         TypeTest::Create(
             speculateOn, feedback, speculateOn->type.notObject(),
             PirType::any(),
