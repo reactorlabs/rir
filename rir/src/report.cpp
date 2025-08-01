@@ -40,8 +40,19 @@ pir::PirType makeExpectedType(const pir::PirType& staticType,
     return expected;
 }
 
+bool isSimpleNumericType(const pir::PirType& expectedType) {
+    return !expectedType.maybeObj() &&
+           (expectedType.noAttribsOrObject().isA(pir::RType::integer) ||
+            expectedType.noAttribsOrObject().isA(pir::RType::real) ||
+            expectedType.noAttribsOrObject().isA(pir::RType::logical));
+}
+
 pir::PirType makeWidenedType(const pir::PirType& staticType,
                              const pir::PirType& expectedType) {
+    if (isSimpleNumericType(expectedType)) {
+        return expectedType;
+    }
+
     auto checkFor = staticType.notLazy().noAttribsOrObject();
     if (expectedType.isA(checkFor)) {
         return checkFor;
@@ -52,7 +63,7 @@ pir::PirType makeWidenedType(const pir::PirType& staticType,
         return checkFor;
     }
 
-    return pir::PirType::voyd();
+    return staticType;
 }
 
 bool isWidened(const pir::PirType& staticType,
@@ -65,15 +76,12 @@ bool isWidened(const pir::PirType& staticType,
         return true;
     }
 
-    if (!expected.maybeObj() &&
-        (expected.noAttribsOrObject().isA(pir::RType::integer) ||
-         expected.noAttribsOrObject().isA(pir::RType::real) ||
-         expected.noAttribsOrObject().isA(pir::RType::logical))) {
+    if (isSimpleNumericType(expected)) {
         return false;
     }
 
     auto widened = makeWidenedType(staticType, expected);
-    if (widened != pir::PirType::voyd() && !widened.isA(intersection)) {
+    if (!widened.isA(intersection)) {
         return true;
     }
 
@@ -215,7 +223,7 @@ bool SlotPresent::canBeSpeculated() const {
     }
 
     auto widened = widenExpected();
-    return expected.isA(widened);
+    return expected.isA(widened) && widened != *staticType;
 }
 
 // ------------------------------------------------------------
