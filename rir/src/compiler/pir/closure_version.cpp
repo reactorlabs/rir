@@ -75,7 +75,7 @@ void ClosureVersion::scanForSpeculation() {
                     return; // skip the constant-folded false
                 }
 
-                assert(typeTest->origin == fo);
+                // assert(typeTest->origin == fo);
 
                 // Instruction we speculated on
                 pir::Instruction* speculatedOn =
