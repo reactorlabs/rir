@@ -206,16 +206,17 @@ void Instruction::print(std::ostream& out, bool tty) const {
     printEnv(out, tty);
 
     if (hasTypeFeedback() && tag != Tag::MkEnv) {
+        auto tf = typeFeedback(false);
         out << "   <";
-        if (typeFeedback().value)
-            typeFeedback().value->printRef(out);
-        else if (!typeFeedback().type.isVoid())
-            out << typeFeedback().type;
-        if (!typeFeedback().feedbackOrigin.hasSlot())
+        if (tf.value)
+            tf.value->printRef(out);
+        else if (!tf.type.isVoid())
+            out << tf.type;
+        if (!tf.feedbackOrigin.hasSlot())
             out << "@?";
 
-        if (typeFeedback().feedbackOrigin.hasSlot()) {
-            out << "@" << typeFeedback().feedbackOrigin;
+        if (tf.feedbackOrigin.hasSlot()) {
+            out << "@" << tf.feedbackOrigin;
         }
         out << ">";
     }
