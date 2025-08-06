@@ -226,6 +226,20 @@ bool SlotPresent::canBeSpeculated() const {
     return expected.isA(widened) && widened != *staticType;
 }
 
+size_t SlotPresent::hash() const {
+    return hash_combine(
+        hash_combine(hash_combine(hash_combine(0, *staticType), *feedbackType),
+                     speculation),
+        presentInstr);
+}
+
+bool SlotPresent::operator==(const SlotPresent& other) const {
+    return this->staticType == other.staticType &&
+           this->feedbackType == other.feedbackType &&
+           this->speculation == other.speculation &&
+           this->presentInstr == other.presentInstr;
+}
+
 // ------------------------------------------------------------
 // FUNCTION INFO
 // ------------------------------------------------------------
@@ -361,8 +375,6 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.used = slotsUsed.size();
     assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
            "There is an empty used slot");
-    assert(agg.used == intersect(keys(slotsUsed), keys(slotsPresent)).size() &&
-           "There is an non-present used slot");
 
     assert(slotsPromiseInlined ==
            intersect(info.promiseSlots, slotsPromiseInlined));
@@ -468,7 +480,7 @@ void ClosureVersionStats::perSlotInfo(
             res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
-                auto& usage = feedback_info.slotsUsed[slot];
+                const auto& usage = feedback_info.slotsUsed[slot];
 
                 // Present info
                 res.widened = usage.widened();
@@ -495,6 +507,8 @@ void ClosureVersionStats::perSlotInfo(
 
                 // Instruction
                 res.instruction = usage.speculatedOn;
+
+                consume(res);
             } else {
                 // Unused
                 res.notPresent = !feedback_info.slotsPresent.count(slot);
@@ -505,38 +519,48 @@ void ClosureVersionStats::perSlotInfo(
 
                 // Unused present non-empty
                 if (!res.notPresent && res.nonempty) {
-                    auto presentInfo = feedback_info.slotsPresent[slot];
-                    auto expected = presentInfo.expectedType();
+                    const auto& allPresents = feedback_info.slotsPresent[slot];
 
-                    // Present info
-                    res.widened = presentInfo.widened();
+                    for (const auto& presentInfo : allPresents) {
+                        auto subRes = res;
 
-                    // Unused present non-empty
-                    res.expectedEmpty = expected.isVoid();
-                    res.expectedIsStatic = expected == *presentInfo.staticType;
-                    assert(expected.isA(*presentInfo.staticType) &&
-                           "expected is not <= static");
+                        auto expected = presentInfo.expectedType();
 
-                    res.canBeSpeculated = presentInfo.canBeSpeculated();
-                    res.speculationPhase =
-                        streamToString([&](std::ostream& os) {
-                            os << presentInfo.speculation;
-                        });
+                        // Present info
+                        subRes.widened = presentInfo.widened();
 
-                    // Types
-                    res.staticT = typeToString(*presentInfo.staticType);
-                    res.feedbackT = typeToString(*presentInfo.feedbackType);
-                    res.expectedT = typeToString(expected);
+                        // Unused present non-empty
+                        subRes.expectedEmpty = expected.isVoid();
+                        subRes.expectedIsStatic =
+                            expected == *presentInfo.staticType;
+                        assert(expected.isA(*presentInfo.staticType) &&
+                               "expected is not <= static");
 
-                    // Unused types
-                    res.widenedT = typeToString(presentInfo.widenExpected());
+                        subRes.canBeSpeculated = presentInfo.canBeSpeculated();
+                        subRes.speculationPhase =
+                            streamToString([&](std::ostream& os) {
+                                os << presentInfo.speculation;
+                            });
 
-                    // Instruction
-                    res.instruction = presentInfo.presentInstr;
+                        // Types
+                        subRes.staticT = typeToString(*presentInfo.staticType);
+                        subRes.feedbackT =
+                            typeToString(*presentInfo.feedbackType);
+                        subRes.expectedT = typeToString(expected);
+
+                        // Unused types
+                        subRes.widenedT =
+                            typeToString(presentInfo.widenExpected());
+
+                        // Instruction
+                        subRes.instruction = presentInfo.presentInstr;
+                        consume(subRes);
+                    }
+                } else {
+                    // Unused not present non-empty
+                    consume(res);
                 }
             }
-
-            consume(res);
         }
     }
 }
@@ -702,7 +726,9 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << stats.slotsUsed.at(index);
             } else {
                 if (stats.slotsPresent.count(index)) {
-                    os << stats.slotsPresent.at(index);
+                    for (const auto& i : stats.slotsPresent.at(index)) {
+                        os << i;
+                    }
                 } else {
                     os << "not present\n";
                 }

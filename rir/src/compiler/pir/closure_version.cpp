@@ -142,25 +142,6 @@ void ClosureVersion::scanForSpeculation() {
                 }
 
                 info.slotsUsed[fo.index()] = slotUsed;
-
-                // Add preemptive slot present
-                {
-                    // add slots that are present but dont'have explicit
-                    // feedback attached due to hoised Force. These can be
-                    // recovered but looking at the Assume instructions example:
-                    //   val?^ | miss    %26.5 = LdVar              eR    lim,
-                    //   e2.4 lgl$#-          %32.0 = IsType %26.5 isA real$-
-                    //   void                    Assume             D     %32.0,
-                    //   %30.3 (Typecheck@0x55d9c0a56440[Type#124])
-                    auto slotPresent = report::SlotPresent();
-
-                    slotPresent.staticType = slotUsed.staticType;
-                    slotPresent.feedbackType = slotUsed.feedbackType;
-                    slotPresent.speculation = report::RunTypeObserved;
-                    slotPresent.presentInstr = slotUsed.speculatedOn;
-
-                    info.slotsPresent[fo.index()] = slotPresent;
-                }
             }
         }
     });
@@ -190,7 +171,7 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
 
-            info.slotsPresent[origin.index()] = slotPresent;
+            info.slotsPresent[origin.index()].insert(slotPresent);
         });
     };
 
