@@ -79,7 +79,7 @@ struct SlotInfo {
     /* More info */                                                            \
     X(bool, inlinee, "inlinee")                                                \
     X(bool, inPromise, "in promise")                                           \
-    X(bool, polymorphic, "polymorphic")                                        \
+    /* X(bool, polymorphic, "polymorphic") */                                  \
                                                                                \
     /* Present info */                                                         \
     X(bool, widened, "widened")                                                \
@@ -91,12 +91,12 @@ struct SlotInfo {
     /* Unused */                                                               \
     X(bool, notPresent, "not present")                                         \
     X(bool, promiseInlined, "promise inlined")                                 \
-    X(bool, dependent, "dependent")                                            \
+    /* X(bool, dependent, "dependent") */                                      \
                                                                                \
     /* Unused present non-empty */                                             \
-    X(bool, expectedEmpty, "expected empty")                                   \
-    X(bool, expectedIsStatic, "expected is static")                            \
-    X(bool, canBeSpeculated, "can be speculated")                              \
+    /* X(bool, expectedEmpty, "expected empty") */                             \
+    /* X(bool, expectedIsStatic, "expected is static") */                      \
+    /* X(bool, canBeSpeculated, "can be speculated") */                        \
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
     /* Types */                                                                \

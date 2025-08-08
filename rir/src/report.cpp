@@ -459,7 +459,7 @@ void ClosureVersionStats::perSlotInfo(
 
         for (auto& j : sortByFeedbackIndex(static_info.allTypeSlots)) {
             auto& slot = j.first;
-            auto& slot_type = j.second;
+            // auto& slot_type = j.second;
 
             SlotInfo res;
 
@@ -477,7 +477,7 @@ void ClosureVersionStats::perSlotInfo(
             // More info
             res.inlinee = closure != this->function;
             res.inPromise = static_info.promiseSlots.count(slot);
-            res.polymorphic = static_info.polymorphicSlots.count(slot);
+            // res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
                 const auto& usage = feedback_info.slotsUsed[slot];
@@ -514,8 +514,8 @@ void ClosureVersionStats::perSlotInfo(
                 res.notPresent = !feedback_info.slotsPresent.count(slot);
                 res.promiseInlined =
                     feedback_info.slotsPromiseInlined.count(slot);
-                res.dependent =
-                    res.nonempty && feedback_types_bags.count(slot_type) > 1;
+                // res.dependent =
+                //     res.nonempty && feedback_types_bags.count(slot_type) > 1;
 
                 // Unused present non-empty
                 if (!res.notPresent && res.nonempty) {
@@ -530,13 +530,13 @@ void ClosureVersionStats::perSlotInfo(
                         subRes.widened = presentInfo.widened();
 
                         // Unused present non-empty
-                        subRes.expectedEmpty = expected.isVoid();
-                        subRes.expectedIsStatic =
-                            expected == *presentInfo.staticType;
+                        // subRes.expectedEmpty = expected.isVoid();
+                        // subRes.expectedIsStatic =
+                        //     expected == *presentInfo.staticType;
                         assert(expected.isA(*presentInfo.staticType) &&
                                "expected is not <= static");
 
-                        subRes.canBeSpeculated = presentInfo.canBeSpeculated();
+                        // subRes.canBeSpeculated = presentInfo.canBeSpeculated();
                         subRes.speculationPhase =
                             streamToString([&](std::ostream& os) {
                                 os << presentInfo.speculation;
