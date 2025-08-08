@@ -141,7 +141,7 @@ void ClosureVersion::scanForSpeculation() {
                     assert(*slotUsed.checkFor == *slotUsed.feedbackType);
                 }
 
-                info.slotsUsed[fo.index()] = slotUsed;
+                info.slotsUsed[fo.index()].push_back(slotUsed);
             }
         }
     });
@@ -171,7 +171,7 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.staticType = new pir::PirType(i->type);
             slotPresent.feedbackType = new pir::PirType(tf.type);
 
-            info.slotsPresent[origin.index()].insert(slotPresent);
+            info.slotsPresent[origin.index()].push_back(slotPresent);
         });
     };
 

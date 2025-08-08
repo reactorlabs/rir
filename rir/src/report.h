@@ -185,26 +185,7 @@ struct SlotPresent {
     std::string presentInstr;
 
     SlotPresent() {}
-
-    size_t hash() const;
-    bool operator==(const SlotPresent& other) const;
 };
-
-} // namespace report
-} // namespace rir
-
-namespace std {
-
-template <>
-struct hash<rir::report::SlotPresent> {
-    std::size_t operator()(const rir::report::SlotPresent& used) const {
-        return used.hash();
-    }
-};
-} // namespace std
-
-namespace rir {
-namespace report {
 
 std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent);
 
@@ -244,9 +225,9 @@ struct FunctionInfo {
 // ------------------------------------------------------------
 
 struct FeedbackStatsPerFunction {
-    std::unordered_map<FeedbackIndex, SlotUsed> slotsUsed;
+    std::unordered_map<FeedbackIndex, std::vector<SlotUsed>> slotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
-    std::unordered_map<FeedbackIndex, std::unordered_set<SlotPresent>>
+    std::unordered_map<FeedbackIndex, std::vector<SlotPresent>>
         slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
     std::unordered_set<FeedbackIndex> slotsPromiseInlined;

@@ -226,20 +226,6 @@ bool SlotPresent::canBeSpeculated() const {
     return expected.isA(widened) && widened != *staticType;
 }
 
-size_t SlotPresent::hash() const {
-    return hash_combine(
-        hash_combine(hash_combine(hash_combine(0, *staticType), *feedbackType),
-                     speculation),
-        presentInstr);
-}
-
-bool SlotPresent::operator==(const SlotPresent& other) const {
-    return this->staticType == other.staticType &&
-           this->feedbackType == other.feedbackType &&
-           this->speculation == other.speculation &&
-           this->presentInstr == other.presentInstr;
-}
-
 // ------------------------------------------------------------
 // FUNCTION INFO
 // ------------------------------------------------------------
@@ -372,7 +358,8 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.referencedNonEmpty =
         intersect(info.nonEmptySlots, keys(info.allTypeSlots)).size();
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
-    agg.used = slotsUsed.size();
+    agg.used = std::count_if(slotsUsed.begin(), slotsUsed.end(),
+                             [](auto& i) { return i.second.size(); });
     assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
            "There is an empty used slot");
 
@@ -472,7 +459,7 @@ void ClosureVersionStats::perSlotInfo(
             // Info
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
-            res.used = feedback_info.slotsUsed.count(slot);
+            res.used = feedback_info.slotsUsed[slot].size();
 
             // More info
             res.inlinee = closure != this->function;
@@ -480,38 +467,38 @@ void ClosureVersionStats::perSlotInfo(
             // res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
-                const auto& usage = feedback_info.slotsUsed[slot];
+                for (const auto& usage : feedback_info.slotsUsed[slot]) {
+                    // Present info
+                    res.widened = usage.widened();
 
-                // Present info
-                res.widened = usage.widened();
+                    // How used
+                    res.exactMatch = usage.exactMatch();
+                    res.narrowed = usage.narrowedWithStaticType();
 
-                // How used
-                res.exactMatch = usage.exactMatch();
-                res.narrowed = usage.narrowedWithStaticType();
+                    // Unused defaults
+                    res.promiseInlined =
+                        feedback_info.slotsPromiseInlined.count(slot);
 
-                // Unused defaults
-                res.promiseInlined =
-                    feedback_info.slotsPromiseInlined.count(slot);
+                    // (used && slot from promise) => promise inlined
+                    assert(!res.inPromise || res.promiseInlined);
 
-                // (used && slot from promise) => promise inlined
-                assert(!res.inPromise || res.promiseInlined);
+                    // Types
+                    res.staticT = typeToString(*usage.staticType);
+                    res.feedbackT = typeToString(*usage.feedbackType);
+                    res.expectedT = typeToString(usage.expectedType());
 
-                // Types
-                res.staticT = typeToString(*usage.staticType);
-                res.feedbackT = typeToString(*usage.feedbackType);
-                res.expectedT = typeToString(usage.expectedType());
+                    // Used types
+                    res.checkForT = typeToString(*usage.checkFor);
+                    res.requiredT = typeToString(*usage.requiredType);
 
-                // Used types
-                res.checkForT = typeToString(*usage.checkFor);
-                res.requiredT = typeToString(*usage.requiredType);
+                    // Instruction
+                    res.instruction = usage.speculatedOn;
 
-                // Instruction
-                res.instruction = usage.speculatedOn;
-
-                consume(res);
+                    consume(res);
+                }
             } else {
                 // Unused
-                res.notPresent = !feedback_info.slotsPresent.count(slot);
+                res.notPresent = !feedback_info.slotsPresent[slot].size();
                 res.promiseInlined =
                     feedback_info.slotsPromiseInlined.count(slot);
                 // res.dependent =
@@ -519,9 +506,7 @@ void ClosureVersionStats::perSlotInfo(
 
                 // Unused present non-empty
                 if (!res.notPresent && res.nonempty) {
-                    const auto& allPresents = feedback_info.slotsPresent[slot];
-
-                    for (const auto& presentInfo : allPresents) {
+                    for (const auto& presentInfo : feedback_info.slotsPresent[slot]) {
                         auto subRes = res;
 
                         auto expected = presentInfo.expectedType();
@@ -536,7 +521,8 @@ void ClosureVersionStats::perSlotInfo(
                         assert(expected.isA(*presentInfo.staticType) &&
                                "expected is not <= static");
 
-                        // subRes.canBeSpeculated = presentInfo.canBeSpeculated();
+                        // subRes.canBeSpeculated =
+                        // presentInfo.canBeSpeculated();
                         subRes.speculationPhase =
                             streamToString([&](std::ostream& os) {
                                 os << presentInfo.speculation;
@@ -706,8 +692,8 @@ void report(std::ostream& os, bool breakdownInfo,
 
     auto printSlotBreakdown =
         [&](const FeedbackIndex& index, const pir::PirType& feedbackType,
-            const FeedbackStatsPerFunction& stats, FunctionInfo& info) {
-            bool used = stats.slotsUsed.count(index);
+            FeedbackStatsPerFunction& stats, FunctionInfo& info) {
+            bool used = stats.slotsUsed[index].size();
 
             os << StreamColor::red << index << StreamColor::clear;
 
@@ -723,9 +709,11 @@ void report(std::ostream& os, bool breakdownInfo,
                << StreamColor::clear;
 
             if (used) {
-                os << stats.slotsUsed.at(index);
+                for (const auto& i : stats.slotsUsed.at(index)) {
+                    os << i;
+                }
             } else {
-                if (stats.slotsPresent.count(index)) {
+                if (stats.slotsPresent[index].size()) {
                     for (const auto& i : stats.slotsPresent.at(index)) {
                         os << i;
                     }
@@ -736,7 +724,7 @@ void report(std::ostream& os, bool breakdownInfo,
         };
 
     auto printFunctionInfo = [&](DispatchTable* dt,
-                                 const FeedbackStatsPerFunction& stats,
+                                 FeedbackStatsPerFunction& stats,
                                  FunctionInfo& info, bool isInlinee = false) {
         // Header
         os << "----------------------\n";
