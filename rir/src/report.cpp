@@ -48,7 +48,13 @@ bool isSimpleNumericType(const pir::PirType& expectedType) {
 }
 
 pir::PirType makeWidenedType(const pir::PirType& staticType,
-                             const pir::PirType& expectedType) {
+                             const pir::PirType& expectedType,
+                             bool earlyTypeCheckFail) {
+
+    if (earlyTypeCheckFail) {
+        return staticType;
+    }
+
     if (isSimpleNumericType(expectedType)) {
         return expectedType;
     }
@@ -66,8 +72,8 @@ pir::PirType makeWidenedType(const pir::PirType& staticType,
     return staticType;
 }
 
-bool isWidened(const pir::PirType& staticType,
-               const pir::PirType& feedbackType) {
+bool isWidened(const pir::PirType& staticType, const pir::PirType& feedbackType,
+               bool earlyTypeCheckFail) {
     auto intersection = staticType & feedbackType;
 
     // Widened by the NA check
@@ -80,7 +86,7 @@ bool isWidened(const pir::PirType& staticType,
         return false;
     }
 
-    auto widened = makeWidenedType(staticType, expected);
+    auto widened = makeWidenedType(staticType, expected, earlyTypeCheckFail);
     if (!widened.isA(intersection)) {
         return true;
     }
@@ -180,7 +186,7 @@ pir::PirType SlotUsed::expectedType() const {
 
 bool SlotUsed::widened() const {
     // The actual checkFor could be even more widened
-    return isWidened(*staticType, *feedbackType) ||
+    return isWidened(*staticType, *feedbackType, false) ||
            (*checkFor != expectedType());
 }
 
@@ -208,11 +214,14 @@ pir::PirType SlotPresent::expectedType() const {
 }
 
 pir::PirType SlotPresent::widenExpected() const {
-    return makeWidenedType(*staticType, expectedType());
+    return makeWidenedType(*staticType, expectedType(),
+                           speculation ==
+                               SpeculationPhase::RunEarlyTypecheckFail);
 }
 
 bool SlotPresent::widened() const {
-    return isWidened(*staticType, *feedbackType);
+    return isWidened(*staticType, *feedbackType,
+                     speculation == SpeculationPhase::RunEarlyTypecheckFail);
 }
 
 bool SlotPresent::canBeSpeculated() const {

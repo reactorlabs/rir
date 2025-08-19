@@ -142,6 +142,8 @@ PassScheduler::PassScheduler(unsigned optLevel, bool isFinal) {
         add<CleanupCheckpoints>();
 
         nextPhase("Final post");
+        add<TypeSpeculation>();
+
         addDefaultPostPhaseOpt();
         add<Constantfold>(); // Backend relies on the dead assume removal here
         add<Cleanup>();
