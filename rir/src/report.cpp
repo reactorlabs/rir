@@ -126,6 +126,19 @@ std::unordered_set<K> keys(const std::unordered_map<K, V>& map) {
     return res;
 }
 
+template <typename K, typename V>
+std::unordered_set<K> keys_nonempty(const std::unordered_map<K, V>& map) {
+    std::unordered_set<K> res;
+
+    for (const auto& i : map) {
+        if (i.second.size()) {
+            res.insert(i.first);
+        }
+    }
+
+    return res;
+}
+
 template <typename T>
 std::unordered_set<T> intersect(const std::unordered_set<T>& lhs,
                                 const std::unordered_set<T>& rhs) {
@@ -369,11 +382,14 @@ Aggregate FeedbackStatsPerFunction::getAgg(const FunctionInfo& info) const {
     agg.readNonEmpty = intersect(info.nonEmptySlots, slotsRead).size();
     agg.used = std::count_if(slotsUsed.begin(), slotsUsed.end(),
                              [](auto& i) { return i.second.size(); });
-    assert(agg.used == intersect(info.nonEmptySlots, keys(slotsUsed)).size() &&
+
+    assert(keys_nonempty(slotsUsed) ==
+               intersect(info.nonEmptySlots, keys_nonempty(slotsUsed)) &&
            "There is an empty used slot");
 
     assert(slotsPromiseInlined ==
-           intersect(info.promiseSlots, slotsPromiseInlined));
+               intersect(info.promiseSlots, slotsPromiseInlined) &&
+           "Inlined promise, not from promise");
 
     // if (slotsUsed.size() == 9) {
     //     std::cerr << "unused non empty: " <<  unusedNonEmpty.size();
@@ -515,7 +531,8 @@ void ClosureVersionStats::perSlotInfo(
 
                 // Unused present non-empty
                 if (!res.notPresent && res.nonempty) {
-                    for (const auto& presentInfo : feedback_info.slotsPresent[slot]) {
+                    for (const auto& presentInfo :
+                         feedback_info.slotsPresent[slot]) {
                         auto subRes = res;
 
                         auto expected = presentInfo.expectedType();
