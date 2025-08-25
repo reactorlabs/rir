@@ -829,8 +829,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (!eagerEval(args[i], i, false))
                     return false;
 
-            if (auto calli = Instruction::Cast(callee))
+            if (auto calli = Instruction::Cast(callee)) {
                 calli->typeFeedbackUsed = true;
+                calli->updateTypeFeedback(false).setSpeculationPhase(
+                    report::SpeculationPhase::RunNonTypeHeuristicFailed);
+            }
             popn(toPop);
             auto bt = insert(BuiltinCallFactory::New(
                 env, staticMonomorphicBuiltin ? staticCallee : ti.monomorphic,
@@ -991,8 +994,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             auto apply = [&](ClosureVersion* f) {
-                if (auto calli = Instruction::Cast(callee))
+                if (auto calli = Instruction::Cast(callee)) {
                     calli->typeFeedbackUsed = true;
+                    calli->updateTypeFeedback(false).setSpeculationPhase(
+                        report::SpeculationPhase::RunNonTypeHeuristicFailed);
+                }
                 popn(toPop);
                 assert(!inlining());
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack,
