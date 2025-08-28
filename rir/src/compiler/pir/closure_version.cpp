@@ -123,8 +123,8 @@ void ClosureVersion::scanForSpeculation() {
                     slotUsed.checkFor = mkT(typeTest->typeTest);
                 }
 
-                slotUsed.staticType = mkT(speculatedOn->type);
-                slotUsed.feedbackType = mkT(report::getSlotPirType(fo));
+                slotUsed.inferredType = mkT(speculatedOn->type);
+                slotUsed.observedType = mkT(report::getSlotPirType(fo));
 
                 assert(assume->required);
                 slotUsed.requiredType = assume->required;
@@ -138,7 +138,7 @@ void ClosureVersion::scanForSpeculation() {
 
                 // Sanity check
                 if (slotUsed.exactMatch()) {
-                    assert(*slotUsed.checkFor == *slotUsed.feedbackType);
+                    assert(*slotUsed.checkFor == *slotUsed.observedType);
                 }
 
                 info.slotsUsed[fo.index()].push_back(slotUsed);
@@ -168,8 +168,8 @@ void ClosureVersion::computeSlotsPresent() {
             slotPresent.presentInstr = report::instrToString(i);
             slotPresent.speculation = tf.phase;
 
-            slotPresent.staticType = new pir::PirType(i->type);
-            slotPresent.feedbackType = new pir::PirType(tf.type);
+            slotPresent.inferredType = new pir::PirType(i->type);
+            slotPresent.observedType = new pir::PirType(tf.type);
 
             info.slotsPresent[origin.index()].push_back(slotPresent);
         });

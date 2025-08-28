@@ -100,8 +100,8 @@ struct SlotInfo {
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
     /* Types */                                                                \
-    X(std::string, staticT, "staticT")                                         \
-    X(std::string, feedbackT, "feedbackT")                                     \
+    X(std::string, inferredT, "inferredT")                                         \
+    X(std::string, observedT, "observedT")                                     \
     X(std::string, expectedT, "expectedT")                                     \
                                                                                \
     /* Used types */                                                           \
@@ -130,8 +130,8 @@ struct SlotUsed {
     bool exactMatch() const { return !widened() && !narrowedWithStaticType(); }
 
     pir::PirType* checkFor = nullptr;
-    pir::PirType* staticType = nullptr;
-    pir::PirType* feedbackType = nullptr;
+    pir::PirType* inferredType = nullptr;
+    pir::PirType* observedType = nullptr;
     pir::PirType* requiredType = nullptr;
 
     pir::PirType expectedType() const;
@@ -175,8 +175,8 @@ struct SlotPresent {
 
     // int compareExpectedTypeToStaticType() const;
 
-    pir::PirType* staticType = nullptr;
-    pir::PirType* feedbackType = nullptr;
+    pir::PirType* inferredType = nullptr;
+    pir::PirType* observedType = nullptr;
 
     pir::PirType expectedType() const;
     pir::PirType widenExpected() const;

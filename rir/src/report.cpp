@@ -27,12 +27,12 @@ pir::PirType getSlotPirType(const FeedbackOrigin& origin) {
     return getSlotPirType(origin.index().idx, origin.function());
 }
 
-pir::PirType makeExpectedType(const pir::PirType& staticType,
-                              const pir::PirType& feedbackType) {
-    pir::PirType expected = staticType & feedbackType;
+pir::PirType makeExpectedType(const pir::PirType& inferredType,
+                              const pir::PirType& observedType) {
+    pir::PirType expected = inferredType & observedType;
 
     // Reflecting what happens in TypeTest::Create
-    if (staticType.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
+    if (inferredType.maybeNAOrNaN() && !expected.maybeNAOrNaN() &&
         !expected.isSimpleScalar()) {
         expected = expected.orNAOrNaN();
     }
@@ -47,37 +47,37 @@ bool isSimpleNumericType(const pir::PirType& expectedType) {
             expectedType.noAttribsOrObject().isA(pir::RType::logical));
 }
 
-pir::PirType makeWidenedType(const pir::PirType& staticType,
+pir::PirType makeWidenedType(const pir::PirType& inferredType,
                              const pir::PirType& expectedType,
                              bool earlyTypeCheckFail) {
 
     if (earlyTypeCheckFail) {
-        return staticType;
+        return inferredType;
     }
 
     if (isSimpleNumericType(expectedType)) {
         return expectedType;
     }
 
-    auto checkFor = staticType.notLazy().noAttribsOrObject();
+    auto checkFor = inferredType.notLazy().noAttribsOrObject();
     if (expectedType.isA(checkFor)) {
         return checkFor;
     }
 
-    checkFor = staticType.notLazy().notObject();
+    checkFor = inferredType.notLazy().notObject();
     if (expectedType.isA(checkFor)) {
         return checkFor;
     }
 
-    return staticType;
+    return inferredType;
 }
 
-bool isWidened(const pir::PirType& staticType, const pir::PirType& feedbackType,
+bool isWidened(const pir::PirType& inferredType, const pir::PirType& observedType,
                bool earlyTypeCheckFail) {
-    auto intersection = staticType & feedbackType;
+    auto intersection = inferredType & observedType;
 
     // Widened by the NA check
-    auto expected = makeExpectedType(staticType, feedbackType);
+    auto expected = makeExpectedType(inferredType, observedType);
     if (!expected.isA(intersection)) {
         return true;
     }
@@ -86,7 +86,7 @@ bool isWidened(const pir::PirType& staticType, const pir::PirType& feedbackType,
         return false;
     }
 
-    auto widened = makeWidenedType(staticType, expected, earlyTypeCheckFail);
+    auto widened = makeWidenedType(inferredType, expected, earlyTypeCheckFail);
     if (!widened.isA(intersection)) {
         return true;
     }
@@ -194,17 +194,17 @@ void printUnorderedSet(const std::unordered_set<T>& mySet) {
 // ------------------------------------------------------------
 
 pir::PirType SlotUsed::expectedType() const {
-    return makeExpectedType(*staticType, *feedbackType);
+    return makeExpectedType(*inferredType, *observedType);
 }
 
 bool SlotUsed::widened() const {
     // The actual checkFor could be even more widened
-    return isWidened(*staticType, *feedbackType, false) ||
+    return isWidened(*inferredType, *observedType, false) ||
            (*checkFor != expectedType());
 }
 
 bool SlotUsed::narrowedWithStaticType() const {
-    return !(feedbackType->isA(*staticType));
+    return !(observedType->isA(*inferredType));
 }
 
 // ------------------------------------------------------------
@@ -215,25 +215,25 @@ bool SlotUsed::narrowedWithStaticType() const {
 //     // returns 0 is exp == st
 //     /// return -1 if  exp < st
 //     // fails otherwise. That should not happen
-//     if (expectedType() == *staticType) {
+//     if (expectedType() == *inferredType) {
 //         return 0;
 //     }
-//     assert(expectedType().isA( *staticType));
+//     assert(expectedType().isA( *inferredType));
 //     return -1;
 // }
 
 pir::PirType SlotPresent::expectedType() const {
-    return makeExpectedType(*staticType, *feedbackType);
+    return makeExpectedType(*inferredType, *observedType);
 }
 
 pir::PirType SlotPresent::widenExpected() const {
-    return makeWidenedType(*staticType, expectedType(),
+    return makeWidenedType(*inferredType, expectedType(),
                            speculation ==
                                SpeculationPhase::RunEarlyTypecheckFail);
 }
 
 bool SlotPresent::widened() const {
-    return isWidened(*staticType, *feedbackType,
+    return isWidened(*inferredType, *observedType,
                      speculation == SpeculationPhase::RunEarlyTypecheckFail);
 }
 
@@ -245,7 +245,7 @@ bool SlotPresent::canBeSpeculated() const {
     }
 
     auto widened = widenExpected();
-    return expected.isA(widened) && widened != *staticType;
+    return expected.isA(widened) && widened != *inferredType;
 }
 
 // ------------------------------------------------------------
@@ -508,8 +508,8 @@ void ClosureVersionStats::perSlotInfo(
                     assert(!res.inPromise || res.promiseInlined);
 
                     // Types
-                    res.staticT = typeToString(*usage.staticType);
-                    res.feedbackT = typeToString(*usage.feedbackType);
+                    res.inferredT = typeToString(*usage.inferredType);
+                    res.observedT = typeToString(*usage.observedType);
                     res.expectedT = typeToString(usage.expectedType());
 
                     // Used types
@@ -543,8 +543,8 @@ void ClosureVersionStats::perSlotInfo(
                         // Unused present non-empty
                         // subRes.expectedEmpty = expected.isVoid();
                         // subRes.expectedIsStatic =
-                        //     expected == *presentInfo.staticType;
-                        assert(expected.isA(*presentInfo.staticType) &&
+                        //     expected == *presentInfo.inferredType;
+                        assert(expected.isA(*presentInfo.inferredType) &&
                                "expected is not <= static");
 
                         // subRes.canBeSpeculated =
@@ -555,9 +555,9 @@ void ClosureVersionStats::perSlotInfo(
                             });
 
                         // Types
-                        subRes.staticT = typeToString(*presentInfo.staticType);
-                        subRes.feedbackT =
-                            typeToString(*presentInfo.feedbackType);
+                        subRes.inferredT = typeToString(*presentInfo.inferredType);
+                        subRes.observedT =
+                            typeToString(*presentInfo.observedType);
                         subRes.expectedT = typeToString(expected);
 
                         // Unused types
@@ -670,8 +670,8 @@ std::ostream& operator<<(std::ostream& os, const SlotUsed& slotUsed) {
 
     // clang-format off
     os << bold << "checkFor: " << clear << *slotUsed.checkFor << ", "
-       << bold << "static: "   << clear << *slotUsed.staticType << ", "
-       << bold << "feedback: " << clear << *slotUsed.feedbackType << ", "
+       << bold << "static: "   << clear << *slotUsed.inferredType << ", "
+       << bold << "feedback: " << clear << *slotUsed.observedType << ", "
        << bold << "expected: " << clear << slotUsed.expectedType() << ", "
        << bold << "required: " << clear << *slotUsed.requiredType << "\n";
     // clang-format on
@@ -689,8 +689,8 @@ std::ostream& operator<<(std::ostream& os, const SlotPresent& slotPresent) {
     os << slotPresent.speculation << "\n";
 
     // clang-format off
-    os << bold << "static: "   << clear << *slotPresent.staticType << ", "
-       << bold << "feedback: " << clear << *slotPresent.feedbackType << ", "
+    os << bold << "static: "   << clear << *slotPresent.inferredType << ", "
+       << bold << "feedback: " << clear << *slotPresent.observedType << ", "
        << bold << "expected: " << clear << slotPresent.expectedType() << ", "
        << bold << "widened: "  << clear << slotPresent.widenExpected() << "\n";
     // clang-format on
@@ -717,7 +717,7 @@ void report(std::ostream& os, bool breakdownInfo,
     };
 
     auto printSlotBreakdown =
-        [&](const FeedbackIndex& index, const pir::PirType& feedbackType,
+        [&](const FeedbackIndex& index, const pir::PirType& observedType,
             FeedbackStatsPerFunction& stats, FunctionInfo& info) {
             bool used = stats.slotsUsed[index].size();
 
@@ -727,11 +727,11 @@ void report(std::ostream& os, bool breakdownInfo,
                 os << " [polymorphic]";
             }
 
-            if (info.getFeedbackTypesBag().count(feedbackType) > 1) {
+            if (info.getFeedbackTypesBag().count(observedType) > 1) {
                 os << " [dependent]";
             }
 
-            os << StreamColor::bold << " <" << feedbackType << ">\n"
+            os << StreamColor::bold << " <" << observedType << ">\n"
                << StreamColor::clear;
 
             if (used) {
@@ -767,8 +767,8 @@ void report(std::ostream& os, bool breakdownInfo,
             auto allSlots = sortByFeedbackIndex(info.allTypeSlots);
             for (auto& i : allSlots) {
                 auto& index = i.first;
-                auto& feedbackType = i.second;
-                printSlotBreakdown(index, feedbackType, stats, info);
+                auto& observedType = i.second;
+                printSlotBreakdown(index, observedType, stats, info);
                 os << "\n";
             }
         }
