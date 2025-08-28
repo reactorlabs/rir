@@ -72,8 +72,8 @@ pir::PirType makeWidenedType(const pir::PirType& inferredType,
     return inferredType;
 }
 
-bool isWidened(const pir::PirType& inferredType, const pir::PirType& observedType,
-               bool earlyTypeCheckFail) {
+bool isWidened(const pir::PirType& inferredType,
+               const pir::PirType& observedType, bool earlyTypeCheckFail) {
     auto intersection = inferredType & observedType;
 
     // Widened by the NA check
@@ -555,7 +555,8 @@ void ClosureVersionStats::perSlotInfo(
                             });
 
                         // Types
-                        subRes.inferredT = typeToString(*presentInfo.inferredType);
+                        subRes.inferredT =
+                            typeToString(*presentInfo.inferredType);
                         subRes.observedT =
                             typeToString(*presentInfo.observedType);
                         subRes.expectedT = typeToString(expected);
@@ -635,6 +636,9 @@ std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
     switch (speculation) {
     case NotRun:
         os << "not run";
+        break;
+    case ExternallySet:
+        os << "externally set";
         break;
     case RunTypeObserved:
         os << "type observed";

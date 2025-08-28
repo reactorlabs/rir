@@ -832,7 +832,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (auto calli = Instruction::Cast(callee)) {
                 calli->typeFeedbackUsed = true;
                 calli->updateTypeFeedback(false).setSpeculationPhase(
-                    report::SpeculationPhase::RunNonTypeHeuristicFailed);
+                    report::SpeculationPhase::ExternallySet);
             }
             popn(toPop);
             auto bt = insert(BuiltinCallFactory::New(
@@ -997,7 +997,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (auto calli = Instruction::Cast(callee)) {
                     calli->typeFeedbackUsed = true;
                     calli->updateTypeFeedback(false).setSpeculationPhase(
-                        report::SpeculationPhase::RunNonTypeHeuristicFailed);
+                        report::SpeculationPhase::ExternallySet);
                 }
                 popn(toPop);
                 assert(!inlining());

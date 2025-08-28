@@ -153,6 +153,9 @@ enum SpeculationPhase {
     // The type speculation pass did not run
     NotRun,
 
+    // The typeFeedbackUsed was set outside of type speculations
+    ExternallySet,
+
     // Either static is feedback or speculation was considered (type related
     // heuristic could've failed)
     RunTypeObserved,
