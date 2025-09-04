@@ -140,6 +140,7 @@ class CompilerContext {
     std::string name;
     std::string this_name;
     size_t* name_index;
+
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
@@ -211,9 +212,9 @@ class CompilerContext {
     MaybeBC recordType() {
         auto slotIdx = typeFeedbackBuilder.addType();
 
-        std::set<uint32_t> usedSlots;
+        auto usedSlots = report::getUsedSlotsFor(this_name);
 
-        if (usedSlots.find(slotIdx) != usedSlots.end()) {
+        if (!usedSlots.first || usedSlots.second.find(slotIdx) != usedSlots.second.end()) {
             return MaybeBC(BC::recordType(slotIdx));
         }
 
@@ -510,7 +511,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            auto dt = Compiler::compileFunction(args[1], args[0], ctx.name, ctx.name_index);
+            auto dt = Compiler::compileFunction(args[1], args[0], ctx.name,
+                                                ctx.name_index);
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
@@ -2040,7 +2042,8 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
 
 } // anonymous namespace
 
-SEXP Compiler::finalize(const std::string& this_name, const std::string& name, size_t* name_index) {
+SEXP Compiler::finalize(const std::string& this_name, const std::string& name,
+                        size_t* name_index) {
     FunctionWriter function;
     CompilerContext ctx(function, preserve);
 

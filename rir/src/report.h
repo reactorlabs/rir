@@ -305,6 +305,11 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
 
 // ------------------------------------------------------------
 
+// Return true if we should check the unordered_set, false
+// if we should always emit the recording
+std::pair<bool, const std::unordered_set<size_t>&>
+getUsedSlotsFor(const std::string& closure_name);
+
 // Only use the names that are identifyable at RIR compile time
 bool useRIRNames();
 

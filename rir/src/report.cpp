@@ -1019,6 +1019,62 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
 // PRECOMPUTED USED SLOTS
 // ------------------------------------------------------------
 
+bool USED_SLOTS_TRIED_LOADING = false;
+
+std::unordered_map<std::string, std::unordered_set<size_t>> USED_SLOTS;
+
+void loadSlotsUsed() {
+    USED_SLOTS_TRIED_LOADING = true;
+
+    auto filepath = std::getenv("STATS_USED");
+    if (filepath == nullptr) {
+        return;
+    }
+
+    std::ifstream ifs(filepath);
+    if (!ifs.is_open()) {
+        std::cerr << "Failed to open file: " << filepath << "\n";
+        return;
+    }
+
+    std::string line;
+    while (std::getline(ifs, line)) {
+        if (line.empty())
+            continue; // skip blank lines
+
+        // find first comma
+        std::size_t comma_pos = line.find(',');
+        if (comma_pos == std::string::npos) {
+            // whole line is the key, empty set
+            USED_SLOTS[line] = {};
+            continue;
+        }
+
+        auto key = line.substr(0, comma_pos);
+        auto rest = line.substr(comma_pos + 1);
+        std::istringstream line_ss{rest};
+
+        auto& values = USED_SLOTS[key];
+
+        std::string token;
+        while (std::getline(line_ss, token, ',')) {
+            values.insert(std::stoull(token));
+        }
+    }
+}
+
+std::pair<bool, const std::unordered_set<size_t>&>
+getUsedSlotsFor(const std::string& closure_name) {
+    if (!USED_SLOTS_TRIED_LOADING) {
+        loadSlotsUsed();
+    }
+
+    if (!USED_SLOTS.count(closure_name)) {
+        return {false, {}};
+    }
+
+    return {true, USED_SLOTS[closure_name]};
+}
 
 bool useRIRNames() {
     auto env = std::getenv("STATS_USE_RIR_NAMES");
