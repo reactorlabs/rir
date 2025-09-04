@@ -30,8 +30,6 @@
 #include <iostream>
 #include <numeric>
 
-extern "C" SEXP R_GetVarLocValue(R_varloc_t);
-
 using namespace rir;
 
 extern "C" Rboolean R_Visible;
@@ -105,49 +103,6 @@ void myFinalizer(SEXP) {
     }
 }
 
-std::string getClosureName(SEXP cls) {
-    std::string name = "";
-
-    // 1. Look trhu frames
-    auto frame = RList(FRAME(CLOENV(cls)));
-
-    for (auto e = frame.begin(); e != frame.end(); ++e) {
-        if (*e == cls) {
-            name = CHAR(PRINTNAME(e.tag()));
-            if (!name.empty()) {
-                return name;
-            }
-        }
-    }
-
-    // 2. Try to look thru symbols
-    auto env = PROTECT(CLOENV(cls));
-    auto symbols = PROTECT(R_lsInternal3(env, TRUE, FALSE));
-
-    auto size = Rf_length(symbols);
-    for (int i = 0; i < size; i++) {
-        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
-
-        // TODO: check parity with R_findVarInFrame
-        auto symbol = PROTECT(Rf_install(symbol_char));
-        R_varloc_t loc = R_findVarLocInFrame(env, symbol);
-        UNPROTECT(1);
-        auto cellValue = R_GetVarLocValue(loc);
-
-        if (TYPEOF(cellValue) == PROMSXP) {
-            cellValue = PRVALUE(cellValue);
-        }
-
-        if (cellValue == cls) {
-            name = symbol_char;
-            break;
-        }
-    }
-
-    UNPROTECT(2);
-    return name;
-}
-
 std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
     R_PreserveObject(sexpDT);
     PreservedDispatchTables.push_back(DispatchTable::unpack(sexpDT));
@@ -174,10 +129,13 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
         // Change the input closure inplace
 
         Compiler::compileClosure(what);
-        auto outerDT = DispatchTable::unpack(BODY(what));
-        auto name = getClosureName(what);
-        if (name != "") {
-            outerDT->closureName = name;
+
+        if (!report::useRIRNames()) {
+            auto outerDT = DispatchTable::unpack(BODY(what));
+            auto name = report::getClosureName(what);
+            if (name != "") {
+                outerDT->closureName = name;
+            }
         }
 
         return what;
@@ -737,7 +695,7 @@ REXPORT SEXP rirCreateSimpleIntContext() {
 }
 
 REXPORT SEXP playground(SEXP what) {
-    auto symbol = getClosureName(what);
+    auto symbol = report::getClosureName(what);
     std::cerr << symbol << "\n";
     return R_NilValue;
 }

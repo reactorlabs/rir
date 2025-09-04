@@ -4,6 +4,7 @@
 #include "R/Preserve.h"
 #include "R/Protect.h"
 #include "R/r.h"
+#include "report.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/TypeFeedback.h"
 #include "utils/FunctionWriter.h"
@@ -36,7 +37,8 @@ class Compiler {
         preserve(env);
     }
 
-    SEXP finalize();
+    SEXP finalize(const std::string& this_name, const std::string& name,
+                  size_t* name_index);
 
   public:
     static bool profile;
@@ -45,18 +47,27 @@ class Compiler {
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);
-        return c.finalize();
+        auto closureName = report::getClosureName(ast);
+        return c.finalize(closureName, closureName, nullptr);
     }
 
     // Compile a function which is not yet closed
-    static SEXP compileFunction(SEXP ast, SEXP formals) {
+    static SEXP compileFunction(SEXP ast, SEXP formals,
+                                const std::string& closureName,
+                                size_t* nameIndex) {
+        std::string thisClosureName =
+            closureName + "_" + std::to_string((*nameIndex)++);
+
         Protect p;
 
         Compiler c(ast, formals, nullptr);
-        auto res = p(c.finalize());
+        auto res = p(c.finalize(thisClosureName, closureName, nameIndex));
 
         // Allocate a new vtable.
         auto dt = DispatchTable::create();
+        if (report::useRIRNames()) {
+            dt->closureName = thisClosureName;
+        }
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
@@ -66,6 +77,7 @@ class Compiler {
     }
 
     static void compileClosure(SEXP inClosure) {
+        std::string closureName = report::getClosureName(inClosure);
         assert(TYPEOF(inClosure) == CLOSXP);
 
         Protect p;
@@ -78,11 +90,14 @@ class Compiler {
         }
 
         Compiler c(body, FORMALS(inClosure), CLOENV(inClosure));
-        auto res = p(c.finalize());
+        auto res = p(c.finalize(closureName, closureName, nullptr));
 
         // Allocate a new vtable.
         auto dt = DispatchTable::create();
         p(dt->container());
+        if (report::useRIRNames()) {
+            dt->closureName = closureName;
+        }
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.

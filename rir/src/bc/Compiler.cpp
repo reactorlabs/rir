@@ -137,6 +137,9 @@ class CompilerContext {
 
     CodeStream& cs() { return code.top()->cs; }
 
+    std::string name;
+    std::string this_name;
+    size_t* name_index;
     FunctionWriter& fun;
     Preserve& preserve;
     TypeFeedback::Builder typeFeedbackBuilder;
@@ -507,7 +510,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_,
 
     if (fun == symbol::Function && args.length() == 3) {
         if (!voidContext) {
-            auto dt = Compiler::compileFunction(args[1], args[0]);
+            auto dt = Compiler::compileFunction(args[1], args[0], ctx.name, ctx.name_index);
             Protect p(dt);
             // Mark this as an inner function to prevent the optimizer from
             // assuming a stable environment
@@ -2037,9 +2040,18 @@ Code* compilePromiseNoRir(CompilerContext& ctx, SEXP exp) {
 
 } // anonymous namespace
 
-SEXP Compiler::finalize() {
+SEXP Compiler::finalize(const std::string& this_name, const std::string& name, size_t* name_index) {
     FunctionWriter function;
     CompilerContext ctx(function, preserve);
+
+    // Allocate the correct name
+    size_t local_index = 0;
+    if (name_index == nullptr) {
+        name_index = &local_index;
+    }
+    ctx.name = name;
+    ctx.name_index = name_index;
+    ctx.this_name = this_name;
 
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);

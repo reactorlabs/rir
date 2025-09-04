@@ -19,11 +19,15 @@ struct Instruction;
 namespace report {
 
 // Helpers
+std::string getClosureName(SEXP cls);
+
 std::string streamToString(std::function<void(std::stringstream&)> f);
 std::string typeToString(const pir::PirType& t);
 std::string instrToString(pir::Instruction* instr);
+
 pir::PirType getSlotPirType(size_t i, Function* baseline);
 pir::PirType getSlotPirType(const FeedbackOrigin& origin);
+
 std::unordered_set<FeedbackIndex> findAllSlots(Code* code);
 
 // ------------------------------------------------------------
@@ -298,6 +302,11 @@ void report(std::ostream& os, bool breakdownInfo,
 void reportCsv(std::ostream& os, const std::string& name,
                const std::vector<DispatchTable*>& DTs);
 void reportPerSlot(std::ostream& os, const std::string& benchmark_name);
+
+// ------------------------------------------------------------
+
+// Only use the names that are identifyable at RIR compile time
+bool useRIRNames();
 
 } // namespace report
 } // namespace rir

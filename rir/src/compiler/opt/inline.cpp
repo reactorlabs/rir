@@ -395,11 +395,14 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                     rir::Function::NotInlineable);
             } else {
                 {
-                    auto& name =
-                        inlineeCls->rirFunction()->dispatchTable()->closureName;
+                    if (!report::useRIRNames()) {
+                        auto& name = inlineeCls->rirFunction()
+                                         ->dispatchTable()
+                                         ->closureName;
 
-                    if (name.empty()) {
-                        name = inlineeCls->name();
+                        if (name.empty()) {
+                            name = inlineeCls->name();
+                        }
                     }
 
                     auto& stats =

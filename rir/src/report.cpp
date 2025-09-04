@@ -1,4 +1,5 @@
 #include "report.h"
+#include "R/Protect.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/instruction.h"
 #include "runtime/DispatchTable.h"
@@ -7,8 +8,63 @@
 
 #include <iostream>
 
+extern "C" SEXP R_GetVarLocValue(R_varloc_t);
+
 namespace rir {
 namespace report {
+
+// ------------------------------------------------------------
+// CLOSURE NAME HELPER
+// ------------------------------------------------------------
+
+std::string getClosureName(SEXP cls) {
+    std::string name = "";
+
+    Protect p;
+
+    auto env = p(CLOENV(cls));
+    if (env == NULL || env == R_NilValue) {
+        return name;
+    }
+
+    // 1. Look thru frames
+    auto frame = p(FRAME(env));
+    if (frame != NULL && frame != R_NilValue) {
+        auto frameList = RList(frame);
+
+        for (auto e = frameList.begin(); e != frameList.end(); ++e) {
+            if (*e == cls) {
+                name = CHAR(PRINTNAME(e.tag()));
+                if (!name.empty()) {
+                    return name;
+                }
+            }
+        }
+    }
+
+    // 2. Try to look thru symbols
+    auto symbols = p(R_lsInternal3(env, TRUE, FALSE));
+
+    auto size = Rf_length(symbols);
+    for (int i = 0; i < size; i++) {
+        const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
+
+        auto symbol = PROTECT(Rf_install(symbol_char));
+        auto cellValue = R_GetVarLocValue(R_findVarLocInFrame(env, symbol));
+        UNPROTECT(1);
+
+        if (TYPEOF(cellValue) == PROMSXP) {
+            cellValue = PRVALUE(cellValue);
+        }
+
+        if (cellValue == cls) {
+            name = symbol_char;
+            break;
+        }
+    }
+
+    return name;
+}
 
 // ------------------------------------------------------------
 // TYPE HELPERS
@@ -479,6 +535,7 @@ void ClosureVersionStats::perSlotInfo(
             res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
+            assert(res.closure.size());
             res.slot_idx = slot.idx;
 
             // Info
@@ -956,6 +1013,16 @@ void reportPerSlot(std::ostream& os, const std::string& benchmark_name) {
             compilation_id++;
         }
     }
+}
+
+// ------------------------------------------------------------
+// PRECOMPUTED USED SLOTS
+// ------------------------------------------------------------
+
+
+bool useRIRNames() {
+    auto env = std::getenv("STATS_USE_RIR_NAMES");
+    return (env != nullptr && std::string(env) == "1");
 }
 
 } // namespace report

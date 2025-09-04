@@ -28,8 +28,8 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
         SEXP e = p(R_ParseVector(str, -1, &status, R_NilValue));
 
         // Compile expression to rir
-        SEXP rirexp =
-            p(rir::Compiler::compileFunction(VECTOR_ELT(e, 0), R_NilValue));
+        SEXP rirexp = p(rir::Compiler::compileFunction(
+            VECTOR_ELT(e, 0), R_NilValue, "", nullptr));
 
         // Evaluate expression under the fresh environment `env`
         Rf_eval(rirexp, env);
@@ -380,9 +380,7 @@ class MockBB : public BB {
         }
         rir::Code* rirSrc() const override final { return nullptr; }
 
-        ClosureVersion* getClosureVersion() override {
-            assert(false);
-        }
+        ClosureVersion* getClosureVersion() override { assert(false); }
     };
 
   public:
