@@ -15,6 +15,7 @@
 #include "simple_instruction_list.h"
 #include "utils/Pool.h"
 
+#include <set>
 #include <stack>
 
 namespace rir {
@@ -204,7 +205,17 @@ class CompilerContext {
              << BC::callBuiltin(4, ast, getBuiltinFun("warning")) << BC::pop();
     }
 
-    BC recordType() { return BC::recordType(typeFeedbackBuilder.addType()); }
+    MaybeBC recordType() {
+        auto slotIdx = typeFeedbackBuilder.addType();
+
+        std::set<uint32_t> usedSlots;
+
+        if (usedSlots.find(slotIdx) != usedSlots.end()) {
+            return MaybeBC(BC::recordType(slotIdx));
+        }
+
+        return MaybeBC();
+    }
 
     BC recordCall() { return BC::recordCall(typeFeedbackBuilder.addCallee()); }
 

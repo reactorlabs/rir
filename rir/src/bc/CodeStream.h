@@ -87,6 +87,13 @@ class CodeStream {
         return *this;
     }
 
+    CodeStream& operator<<(const MaybeBC& b) {
+        if (!b.hasValue)
+            return *this;
+
+        return (*this) << b.value;
+    }
+
     CodeStream& operator<<(BC::Label label) {
 
         // get rid of unnecessary jumps

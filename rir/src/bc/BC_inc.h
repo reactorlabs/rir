@@ -583,6 +583,15 @@ class BC {
     friend class CodeVerifier;
 };
 
+class MaybeBC {
+  public:
+    MaybeBC() : hasValue(false), value() {}
+    MaybeBC(BC&& v) : hasValue(true), value(std::move(v)) {}
+
+    bool hasValue;
+    BC value;
+};
+
 } // namespace rir
 
 #endif
