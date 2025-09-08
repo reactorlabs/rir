@@ -8,8 +8,6 @@
 
 #include <iostream>
 
-extern "C" SEXP R_GetVarLocValue(R_varloc_t);
-
 namespace rir {
 namespace report {
 
@@ -50,7 +48,7 @@ std::string getClosureName(SEXP cls) {
         const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
 
         auto symbol = PROTECT(Rf_install(symbol_char));
-        auto cellValue = R_GetVarLocValue(R_findVarLocInFrame(env, symbol));
+        auto cellValue = R_findVarLocInFrame(env, symbol).cell;
         UNPROTECT(1);
 
         if (TYPEOF(cellValue) == PROMSXP) {
