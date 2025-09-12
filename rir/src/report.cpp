@@ -2,6 +2,7 @@
 #include "R/Protect.h"
 #include "compiler/pir/closure_version.h"
 #include "compiler/pir/instruction.h"
+#include "interpreter/cache.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
 #include "utils/Terminal.h"
@@ -50,7 +51,17 @@ std::string getClosureName(SEXP cls) {
         const char* symbol_char = CHAR(VECTOR_ELT(symbols, i));
 
         auto symbol = PROTECT(Rf_install(symbol_char));
-        auto cellValue = R_GetVarLocValue(R_findVarLocInFrame(env, symbol));
+        auto loc = R_findVarLocInFrame(env, symbol);
+
+        SEXP cellValue;
+        if (R_VARLOC_IS_NULL(loc)) {
+            UNPROTECT(1);
+            continue;
+        } else if (IS_ACTIVE_BINDING(loc.cell)) {
+            cellValue = loc.cell;
+        } else {
+            cellValue = R_GetVarLocValue(loc);
+        }
         UNPROTECT(1);
 
         if (TYPEOF(cellValue) == PROMSXP) {
@@ -535,7 +546,9 @@ void ClosureVersionStats::perSlotInfo(
             res.benchmark = benchmark_name;
             res.compilation_id = compilation_id;
             res.closure = closure->dispatchTable()->closureName;
-            assert(res.closure.size());
+            if (useRIRNames()) {
+                assert(res.closure.size());
+            }
             res.slot_idx = slot.idx;
 
             // Info
