@@ -67,6 +67,8 @@ class ClosureVersion : public Code {
         return this;
     }
 
+    void registerProtoSlotUsed(Instruction* assume);
+
   private:
     Closure* owner_;
     std::vector<Promise*> promises_;

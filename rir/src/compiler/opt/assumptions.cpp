@@ -379,6 +379,15 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto assume = new Assume(std::get<Instruction*>(g), cp,
                                              std::get<Assume*>(g)->reason);
                     assume->copyStatsFrom(*std::get<Assume*>(g));
+
+                    if (assume->reason.reason ==
+                            DeoptReason::Reason::Typecheck ||
+                        assume->reason.reason ==
+                            DeoptReason::Reason::Typecheck2) {
+                        code->getClosureVersion()->registerProtoSlotUsed(
+                            assume); ////////
+                    }
+
                     ip = bb->insert(ip, assume);
                     anyChange = true;
                 }
@@ -418,6 +427,8 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto newAssume = new Assume(newTT, cp, newDeoptReason);
                     newAssume->copyStatsFrom(*a);
                     newAssume->hoistedForce = true;
+                    code->getClosureVersion()->registerProtoSlotUsed(
+                        newAssume); ////////
                     ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,
