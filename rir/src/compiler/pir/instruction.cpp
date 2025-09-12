@@ -317,8 +317,20 @@ void Instruction::replaceUsesIn(
     if (auto rep = Instruction::Cast(val)) {
         if (typeFeedback_.get())
             if (!rep->type.isA(typeFeedback().type) &&
-                rep->typeFeedback().type.isVoid())
+                rep->typeFeedback().type.isVoid()) {
                 rep->typeFeedback(typeFeedback());
+                // if (auto thisF = Force::Cast(this)) {
+                //     if (auto repF = Force::Cast(rep)) {
+                //         if (thisF->observed != Force::ArgumentKind::unknown
+                //         &&
+                //             (repF->observed == Force::ArgumentKind::unknown
+                //             ||
+                //              repF->observed > thisF->observed)) {
+                //             repF->observed = thisF->observed;
+                //         }
+                //     }
+                // }
+            }
     }
 }
 
@@ -379,8 +391,16 @@ void Instruction::replaceDominatedUses(
     if (typeFeedback_.get())
         if (auto rep = Instruction::Cast(replace)) {
             if (!rep->type.isA(typeFeedback().type) &&
-                rep->typeFeedback().type.isVoid())
+                rep->typeFeedback().type.isVoid()) {
                 rep->typeFeedback(typeFeedback());
+                // if (auto thisF = Force::Cast(this)) {
+                //     if (auto repF = Force::Cast(rep)) {
+                //         if (repF->observed > thisF->observed) {
+                //             repF->observed = thisF->observed;
+                //         }
+                //     }
+                // }
+            }
         }
 }
 
