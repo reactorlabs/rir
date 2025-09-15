@@ -47,7 +47,11 @@ class Compiler {
 
     static SEXP compileExpression(SEXP ast) {
         Compiler c(ast);
-        auto closureName = report::getClosureName(ast);
+
+        std::string closureName = "";
+        if (report::useRIRNames()) {
+            closureName = report::getClosureName(ast);
+        }
         return c.finalize(closureName, closureName, nullptr);
     }
 
@@ -77,7 +81,12 @@ class Compiler {
     }
 
     static void compileClosure(SEXP inClosure) {
-        std::string closureName = report::getClosureName(inClosure);
+
+        std::string closureName = "";
+        if (report::useRIRNames()) {
+            closureName = report::getClosureName(inClosure);
+        }
+
         assert(TYPEOF(inClosure) == CLOSXP);
 
         Protect p;
