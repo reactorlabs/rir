@@ -47,7 +47,7 @@ void context_init() {
     auto pir = getenv("PIR_ENABLE");
 
     c->closureCompiler = [](SEXP closure, SEXP name) {
-        return rirCompile(closure, R_NilValue);
+        return rirCompileWithName(closure, R_NilValue, name);
     };
     c->closureOptimizer = [](SEXP f, const Context&, SEXP n) { return f; };
 
@@ -56,12 +56,12 @@ void context_init() {
         // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
-            SEXP rir = rirCompile(f, R_NilValue);
+            SEXP rir = rirCompileWithName(f, R_NilValue, n);
             return rirOptDefaultOpts(rir, Context(), n);
         };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
-            SEXP rir = rirCompile(f, R_NilValue);
+            SEXP rir = rirCompileWithName(f, R_NilValue, n);
             return rirOptDefaultOptsDryrun(rir, Context(), n);
         };
     } else {
