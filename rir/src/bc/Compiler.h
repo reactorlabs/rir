@@ -95,6 +95,12 @@ class Compiler {
             if (!closureName.size()) {
                 closureName = report::getClosureName(inClosure);
             }
+
+            if (!closureName.size()) {
+                static size_t idx = 0;
+                closureName = "--unknown--";
+                closureName += std::to_string(idx++);
+            }
         }
 
         assert(TYPEOF(inClosure) == CLOSXP);
