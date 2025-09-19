@@ -109,6 +109,10 @@ std::function<void(SEXP)> DispatchTable::onNewDt = [](SEXP sexpDT) {
 };
 
 REXPORT SEXP rirCompile(SEXP what, SEXP env) {
+    return rirCompileWithName(what, env, R_NilValue);
+}
+
+REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
@@ -128,7 +132,7 @@ REXPORT SEXP rirCompile(SEXP what, SEXP env) {
 
         // Change the input closure inplace
 
-        Compiler::compileClosure(what);
+        Compiler::compileClosure(what, name);
 
         if (!report::useRIRNames()) {
             auto outerDT = DispatchTable::unpack(BODY(what));

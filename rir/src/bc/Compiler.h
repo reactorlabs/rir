@@ -80,11 +80,27 @@ class Compiler {
         return dt->container();
     }
 
-    static void compileClosure(SEXP inClosure) {
+    static void compileClosure(SEXP inClosure, SEXP name = R_NilValue) {
 
         std::string closureName = "";
         if (report::useRIRNames()) {
-            closureName = report::getClosureName(inClosure);
+            if (name != R_NilValue) {
+                if (TYPEOF(name) == STRSXP) {
+                    closureName = CHAR(name);
+                } else if (TYPEOF(name) == SYMSXP) {
+                    closureName = CHAR(PRINTNAME(name));
+                }
+            }
+
+            if (!closureName.size()) {
+                closureName = report::getClosureName(inClosure);
+            }
+
+            if (!closureName.size()) {
+                static size_t idx = 0;
+                closureName = "--unknown--";
+                closureName += std::to_string(idx++);
+            }
         }
 
         assert(TYPEOF(inClosure) == CLOSXP);

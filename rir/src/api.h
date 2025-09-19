@@ -15,6 +15,7 @@ REXPORT SEXP rirInvocationCount(SEXP what);
 REXPORT SEXP pirCompileWrapper(SEXP closure, SEXP name, SEXP debugFlags,
                                SEXP debugStyle);
 REXPORT SEXP rirCompile(SEXP what, SEXP env);
+REXPORT SEXP rirCompileWithName(SEXP what, SEXP env, SEXP name);
 REXPORT SEXP pirTests();
 REXPORT SEXP pirCheck(SEXP f, SEXP check, SEXP env);
 REXPORT SEXP pirSetDebugFlags(SEXP debugFlags);
