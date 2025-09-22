@@ -214,28 +214,6 @@ void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume) {
 
     registerProtoSlotUsedFromFO(castedAssume->reason.origin);
 
-    // // Construct the slotUsed
-    // auto slotUsed = report::SlotUsed();
-    // auto mkT = [](const pir::PirType& type) {
-    //     return new pir::PirType(type);
-    // };
-
-    // slotUsed.checkFor = mkT(pir::PirType::simpleScalarInt());
-
-    // slotUsed.inferredType = mkT(pir::PirType::any());
-    // slotUsed.observedType = mkT(pir::PirType::simpleScalarInt());
-
-    // slotUsed.requiredType = mkT(pir::PirType::any());
-
-    // slotUsed.speculatedOn = "--- speculatedOn unknown ---";
-    // slotUsed.assumeInstr = "--- assume instruction unknown ---";
-
-    // slotUsed.hoistedForce = castedAssume->hoistedForce;
-
-    // auto& fo = castedAssume->reason.origin ;
-    // auto& info = this->feedbackStatsFor(fo.function());
-
-    // info.slotsUsed[fo.index()].push_back(slotUsed);
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

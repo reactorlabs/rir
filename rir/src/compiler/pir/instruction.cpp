@@ -307,23 +307,6 @@ void Instruction::clearFrameState() {
     updateFrameState(Tombstone::framestate());
 }
 
-void transferForceObservedIfNeeded(Instruction* from, Instruction* to) {
-    // if (auto fromF = Force::Cast(from)) {
-    //     if (auto toF = Force::Cast(to)) {
-
-    //         toF->observed = Force::ArgumentKind::evaluatedPromise;
-
-    //         if (fromF->observed != Force::ArgumentKind::unknown
-    //         &&
-    //             (toF->observed == Force::ArgumentKind::unknown
-    //             ||
-    //                 toF->observed > fromF->observed)) {
-    //             toF->observed = fromF->observed;
-    //         }
-    //     }
-    // }
-}
-
 void Instruction::replaceUsesIn(
     Value* val, BB* target,
     const std::function<void(Instruction*, size_t)>& postAction,
@@ -336,7 +319,6 @@ void Instruction::replaceUsesIn(
             if (!rep->type.isA(typeFeedback().type) &&
                 rep->typeFeedback().type.isVoid()) {
                 rep->typeFeedback(typeFeedback());
-                transferForceObservedIfNeeded(this, rep);
             }
     }
 }
@@ -400,7 +382,6 @@ void Instruction::replaceDominatedUses(
             if (!rep->type.isA(typeFeedback().type) &&
                 rep->typeFeedback().type.isVoid()) {
                 rep->typeFeedback(typeFeedback());
-                transferForceObservedIfNeeded(this, rep);
             }
         }
 }
