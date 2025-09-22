@@ -428,7 +428,10 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     newAssume->copyStatsFrom(*a);
                     newAssume->hoistedForce = true;
                     code->getClosureVersion()->registerProtoSlotUsed(
-                        newAssume); ////////
+                        newAssume); ///////
+                    code->getClosureVersion()->registerProtoSlotUsedFromFO(
+                        f->typeFeedback().feedbackOrigin); ////////
+
                     ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,

@@ -185,9 +185,34 @@ void ClosureVersion::promiseInlined(Promise* promise) {
         .slotsPromiseInlined.insert(newSlots.begin(), newSlots.end());
 }
 
+void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
+
+    // Construct the slotUsed
+    auto slotUsed = report::SlotUsed();
+    auto mkT = [](const pir::PirType& type) { return new pir::PirType(type); };
+
+    slotUsed.checkFor = mkT(pir::PirType::simpleScalarInt());
+
+    slotUsed.inferredType = mkT(pir::PirType::any());
+    slotUsed.observedType = mkT(pir::PirType::simpleScalarInt());
+
+    slotUsed.requiredType = mkT(pir::PirType::any());
+
+    slotUsed.speculatedOn = "--- speculatedOn unknown ---";
+    slotUsed.assumeInstr = "--- assume instruction unknown ---";
+
+    slotUsed.hoistedForce = false;
+
+    auto& info = this->feedbackStatsFor(fo.function());
+
+    info.slotsUsed[fo.index()].push_back(slotUsed);
+}
+
 void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume) {
-    // auto castedAssume = Assume::Cast(assume);
-    // assert(castedAssume && "Not an assume instruction");
+    auto castedAssume = Assume::Cast(assume);
+    assert(castedAssume && "Not an assume instruction");
+
+    registerProtoSlotUsedFromFO(castedAssume->reason.origin);
 
     // // Construct the slotUsed
     // auto slotUsed = report::SlotUsed();
