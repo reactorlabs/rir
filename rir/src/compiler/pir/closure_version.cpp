@@ -198,8 +198,8 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
 
     slotUsed.requiredType = mkT(pir::PirType::any());
 
-    slotUsed.speculatedOn = "--- speculatedOn unknown ---";
-    slotUsed.assumeInstr = "--- assume instruction unknown ---";
+    slotUsed.speculatedOn = "speculatedOn unknown";
+    slotUsed.assumeInstr = "assume instruction unknown";
 
     slotUsed.hoistedForce = false;
 

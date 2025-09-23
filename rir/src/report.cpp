@@ -1047,6 +1047,7 @@ void loadSlotsUsed() {
     std::ifstream ifs(filepath);
     if (!ifs.is_open()) {
         std::cerr << "Failed to open file: " << filepath << "\n";
+        exit(EXIT_FAILURE);
         return;
     }
 
