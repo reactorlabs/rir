@@ -209,11 +209,16 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
 }
 
 void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume) {
+    // Only collect the used from final version and hoisted force
+    auto collect = std::getenv("STATS_MINIMAL_USED");
+    if (collect != nullptr && std::string(std::getenv(collect)) != "1") {
+        return;
+    }
+
     auto castedAssume = Assume::Cast(assume);
     assert(castedAssume && "Not an assume instruction");
 
     registerProtoSlotUsedFromFO(castedAssume->reason.origin);
-
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

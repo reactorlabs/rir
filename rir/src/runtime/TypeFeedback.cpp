@@ -12,8 +12,12 @@
 
 namespace rir {
 
-bool ObservedCallees::isEmpty() const {
-    return taken == 0 && numTargets == 0;
+bool ObservedValues::RECORD =
+    (std::getenv("STATS_TF_RECORD") == nullptr) ||
+    std::string(std::getenv("STATS_TF_RECORD")) == "0";
+
+bool ObservedCallees::isEmpty() const { return taken == 0 && numTargets == 0; }
+
 }
 
 void ObservedCallees::record(Function* function, SEXP callee,

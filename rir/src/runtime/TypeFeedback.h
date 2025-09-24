@@ -154,6 +154,7 @@ static_assert(sizeof(ObservedTest) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {
+    static bool RECORD;
     friend TypeFeedback;
     friend RuntimeProfiler;
 
@@ -189,6 +190,9 @@ struct ObservedValues {
 
   private:
     inline void record(SEXP e) {
+        if (!RECORD) {
+            return;
+        }
         ObservedValues old = *this;
 
         // Set attribs flag for every object even if the SEXP does  not
