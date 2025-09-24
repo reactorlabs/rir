@@ -988,6 +988,13 @@ void SlotInfo::print(std::ostream& os) const {
                     str[i] = ';';
                 }
             }
+
+            // Replace newlines
+            std::string::size_type pos;
+            while ((pos = str.find('\n')) != std::string::npos) {
+                str.replace(pos, 1, "\\n");
+            }
+
             os << "\"" << str << "\"";
         }
 
