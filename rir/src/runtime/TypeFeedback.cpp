@@ -18,8 +18,6 @@ bool ObservedValues::RECORD =
 
 bool ObservedCallees::isEmpty() const { return taken == 0 && numTargets == 0; }
 
-}
-
 void ObservedCallees::record(Function* function, SEXP callee,
                              bool invalidateWhenFull) {
     REC_HOOK(bool isSuccesful = false);
