@@ -14,7 +14,7 @@ namespace rir {
 
 bool ObservedValues::RECORD =
     (std::getenv("STATS_TF_RECORD") == nullptr) ||
-    std::string(std::getenv("STATS_TF_RECORD")) == "0";
+    std::string(std::getenv("STATS_TF_RECORD")) != "0";
 
 bool ObservedCallees::isEmpty() const { return taken == 0 && numTargets == 0; }
 

@@ -1097,10 +1097,11 @@ getUsedSlotsFor(const std::string& closure_name) {
     return {true, USED_SLOTS[closure_name]};
 }
 
-bool useRIRNames() {
-    auto env = std::getenv("STATS_USE_RIR_NAMES");
-    return (env != nullptr && std::string(env) == "1");
-}
+const bool USE_RIR_NAMES =
+    std::getenv("STATS_USE_RIR_NAMES") != nullptr &&
+    std::string(std::getenv("STATS_USE_RIR_NAMES")) == "1";
+
+bool useRIRNames() { return USE_RIR_NAMES; }
 
 } // namespace report
 } // namespace rir
