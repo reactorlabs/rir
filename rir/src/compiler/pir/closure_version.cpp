@@ -185,7 +185,16 @@ void ClosureVersion::promiseInlined(Promise* promise) {
         .slotsPromiseInlined.insert(newSlots.begin(), newSlots.end());
 }
 
+const bool STATS_MINIMAL_USED =
+    std::getenv("STATS_MINIMAL_USED") != nullptr &&
+    std::string(std::getenv("STATS_MINIMAL_USED")) == "1";
+
 void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
+
+    // Only collect the used from final version and hoisted force
+    if (STATS_MINIMAL_USED) {
+        return;
+    }
 
     // Construct the slotUsed
     auto slotUsed = report::SlotUsed();
@@ -208,15 +217,8 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
     info.slotsUsed[fo.index()].push_back(slotUsed);
 }
 
-const bool STATS_MINIMAL_USED =
-    std::getenv("STATS_MINIMAL_USED") != nullptr &&
-    std::string(std::getenv("STATS_MINIMAL_USED")) == "1";
 
 void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume) {
-    // Only collect the used from final version and hoisted force
-    if (STATS_MINIMAL_USED) {
-        return;
-    }
 
     auto castedAssume = Assume::Cast(assume);
     assert(castedAssume && "Not an assume instruction");
