@@ -219,7 +219,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
     bool anyChange = false;
     Visitor::runPostChange(code->entry, [&checkpoint, &assumptions, &dom,
                                          &replaced, &hoistAssume, &hoistCheck,
-                                         &anyChange](BB* bb) {
+                                         &anyChange, &code](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto next = ip + 1;
@@ -309,6 +309,11 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                         cp = replaced.at(cp);
                                     hoistCheck[f] = {tt, cp, assume};
                                     anyChange = true;
+
+                                    code->getClosureVersion()
+                                        ->registerProtoSlotUsedFromFO(
+                                            f->typeFeedback()
+                                                .feedbackOrigin); ////////
                                 }
                             }
                         }
