@@ -221,8 +221,11 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (hasDotslistArg)
                 weight *= 0.4;
             if (!(*it)->typeFeedback().type.isVoid() &&
-                (*it)->typeFeedback().type.unboxable())
+                (*it)->typeFeedback().type.unboxable()) {
                 weight *= 0.9;
+                code->getClosureVersion()->registerProtoSlotUsedFromFO(
+                    (*it)->typeFeedback().feedbackOrigin);
+            }
 
             // No recursive inlining
             if (inlinee->owner() == cls->owner() ||
