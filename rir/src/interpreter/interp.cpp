@@ -1001,8 +1001,9 @@ SEXP doCall(CallContext& call, bool popArgs) {
                         call.caller->function()->invocationCount() > 0 &&
                         !call.caller->isCompiled() &&
                         !call.caller->function()->disabled() &&
-                        call.caller->size() < pir::Parameter::MAX_INPUT_SIZE &&
-                        fun->body()->codeSize <
+                        // call.caller->size() < pir::Parameter::MAX_INPUT_SIZE
+                        // &&
+                        fun->body()->codeSize2() <
                             pir::Parameter::PIR_OPT_BC_SIZE) {
 
                         REC_HOOK(recording::recordOsrTriggerCallerCallee());

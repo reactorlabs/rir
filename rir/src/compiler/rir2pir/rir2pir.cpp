@@ -680,6 +680,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         bool monomorphicClosure =
             ti.monomorphic && isValidClosureSEXP(ti.monomorphic);
+
         bool stableEnv = ti.stableEnv;
         if (monomorphicClosure)
             if (auto dt = DispatchTable::check(BODY(ti.monomorphic)))
@@ -724,7 +725,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             // have static calls with lazily compiled PIR targtets, so we can
             // defer compilation to the point where we e.g. want to analyze or
             // inline the callee...
-            if (dt->baseline()->body()->codeSize >
+            if (dt->baseline()->body()->codeSize2() >
                 Parameter::RECOMPILE_THRESHOLD) {
                 auto cls = insert.function->owner();
                 // exclude recursive calls
@@ -1568,12 +1569,19 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                                                         Instruction::Cast(e)) {
                                                     // In case the typefeedback
                                                     // is more precise than the
+                                                    insert.code
+                                                        ->getClosureVersion()
+                                                        ->registerProtoSlotUsedFromFO(
+                                                            j->typeFeedback()
+                                                                .feedbackOrigin);
+
                                                     if (!j->typeFeedback()
                                                              .type.isVoid() &&
                                                         !checkedType.isA(
                                                             j->typeFeedback()
-                                                                .type))
+                                                                .type)) {
                                                         block = true;
+                                                    }
                                                 }
                                                 if (!block) {
                                                     auto cast =

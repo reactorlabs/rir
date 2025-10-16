@@ -122,6 +122,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
         return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
     }
 
+    unsigned codeSize2() {
+        return codeSize +
+               (sizeof(rir::Opcode) + sizeof(uint32_t)) * missingSlots;
+    }
+
     enum Flag {
         NoReflection,
 
@@ -142,6 +147,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     const unsigned bindingCacheSize; /// Number of different(ldVars|stVars)
 
     unsigned codeSize; /// bytes of code (not padded)
+
+    unsigned missingSlots = 0; /// number of missing slots in src pool
 
     unsigned srcLength; /// number of sources attached
 

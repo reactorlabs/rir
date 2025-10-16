@@ -121,6 +121,11 @@
     "scoped_allocator": "cpp",
     "valarray": "cpp",
     "cuchar": "cpp",
-    "r": "cpp"
+    "r": "cpp",
+    "rope": "cpp",
+    "core": "cpp",
+    "geometry": "cpp",
+    "matrixfunctions": "cpp",
+    "slist": "cpp"
   }
 }

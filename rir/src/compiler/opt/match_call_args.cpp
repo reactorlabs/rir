@@ -209,7 +209,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         }
                     } else if (auto cnst = Const::Cast(calli->tryGetClsArg())) {
                         if (auto dt = DispatchTable::check(BODY(cnst->c()))) {
-                            if (dt->baseline()->body()->codeSize <
+                            if (dt->baseline()->body()->codeSize2() <
                                 Parameter::RECOMPILE_THRESHOLD) {
                                 std::stringstream ss;
                                 ss << "unknown--fromConstant("
@@ -229,7 +229,7 @@ bool MatchCallArgs::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         auto dt = mk->originalBody;
                         if (!target && dt) {
                             auto srcRef = mk->srcRef;
-                            if (dt->baseline()->body()->codeSize <
+                            if (dt->baseline()->body()->codeSize2() <
                                 Parameter::RECOMPILE_THRESHOLD) {
                                 std::stringstream ss;
                                 ss << "unknown--fromMkCls(" << dt->closureName

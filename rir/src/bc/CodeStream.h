@@ -27,6 +27,8 @@ class CodeStream {
     FunctionWriter& function;
     Preserve preserve;
 
+    unsigned missingSlots = 0;
+
     SEXP ast;
 
     unsigned nextLabel = 0;
@@ -88,8 +90,10 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const MaybeBC& b) {
-        if (!b.hasValue)
+        if (!b.hasValue) {
+            this->missingSlots++;
             return *this;
+        }
 
         return (*this) << b.value;
     }
@@ -154,6 +158,7 @@ class CodeStream {
         Code* res =
             function.writeCode(ast, &(*code)[0], pos, sources, patchpoints,
                                labels, localsCnt, nops, bindingsCnt);
+        res->missingSlots = this->missingSlots;
         assert(res->extraPoolSize == 0 &&
                "promise indices and src pool idx need to be aligned");
         for (auto c : promises)

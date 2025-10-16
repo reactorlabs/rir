@@ -213,11 +213,15 @@ bool EagerCalls::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                                             }
                                             if (!inBase &&
                                                 ldfun->typeFeedback()
-                                                    .feedbackOrigin.hasSlot())
+                                                    .feedbackOrigin.hasSlot()) {
+                                                assert(false &&
+                                                       "typefeedback should be "
+                                                       "empty!");
                                                 needsGuard[ldfun] = {
                                                     builtin, cp,
                                                     ldfun->typeFeedback()
                                                         .feedbackOrigin};
+                                            }
                                         }
                                     }
                                 }
