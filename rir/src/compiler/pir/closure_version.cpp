@@ -189,10 +189,19 @@ const bool STATS_MINIMAL_USED =
     std::getenv("STATS_MINIMAL_USED") != nullptr &&
     std::string(std::getenv("STATS_MINIMAL_USED")) == "1";
 
-void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
+const bool STATS_MINIMAL_PATCHES_USED =
+    std::getenv("STATS_MINIMAL_PATCHES_USED") != nullptr &&
+    std::string(std::getenv("STATS_MINIMAL_PATCHES_USED")) == "1";
 
-    // Only collect the used from final version and hoisted force
+void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo,
+                                                 bool patch) {
+    // Only collect minimal
     if (STATS_MINIMAL_USED) {
+        return;
+    }
+
+    // Only collect minimal and patches
+    if (STATS_MINIMAL_PATCHES_USED && !patch) {
         return;
     }
 
@@ -217,8 +226,8 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo) {
     info.slotsUsed[fo.index()].push_back(slotUsed);
 }
 
-
-void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume) {
+void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume,
+                                           bool patch) {
 
     auto castedAssume = Assume::Cast(assume);
     assert(castedAssume && "Not an assume instruction");

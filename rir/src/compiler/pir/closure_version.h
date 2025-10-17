@@ -67,8 +67,8 @@ class ClosureVersion : public Code {
         return this;
     }
 
-    void registerProtoSlotUsed(Instruction* assume);
-    void registerProtoSlotUsedFromFO(const FeedbackOrigin& fo);
+    void registerProtoSlotUsed(Instruction* assume, bool patch = true);
+    void registerProtoSlotUsedFromFO(const FeedbackOrigin& fo, bool patch = true);
 
   private:
     Closure* owner_;

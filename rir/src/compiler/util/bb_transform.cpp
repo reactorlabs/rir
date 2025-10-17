@@ -272,7 +272,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
         (IsType::Cast(condition) ||
          assume->reason.reason == DeoptReason::Reason::Typecheck ||
          assume->reason.reason == DeoptReason::Reason::Typecheck2)) {
-        bb->owner->getClosureVersion()->registerProtoSlotUsed(assume); ////////
+        bb->owner->getClosureVersion()->registerProtoSlotUsed(assume, false); ////////
     }
 
     position = bb->insert(position + 1, assume);
