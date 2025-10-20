@@ -26,9 +26,12 @@
 #include <memory>
 #include <string>
 
+#include <fcntl.h> // open
 #include <fstream>
 #include <iostream>
 #include <numeric>
+#include <sys/file.h> // flock
+#include <unistd.h>   // close
 
 using namespace rir;
 
@@ -73,6 +76,25 @@ REXPORT SEXP rirDisassemble(SEXP what, SEXP verbose) {
 bool finalizerSet = false;
 std::vector<DispatchTable*> PreservedDispatchTables;
 
+class LockFile {
+    int fd;
+
+  public:
+    LockFile(const char* name) {
+        fd = open(name, O_WRONLY | O_CREAT | O_APPEND, 0666);
+        if (flock(fd, LOCK_EX) == -1) {
+            close(fd);
+            std::cerr << "Failed to lock file " << name << "\n";
+            exit(1);
+        }
+    }
+
+    ~LockFile() {
+        flock(fd, LOCK_UN);
+        close(fd);
+    }
+};
+
 void myFinalizer(SEXP) {
     auto quiet_env = std::getenv("STATS_QUIET");
     bool quiet = quiet_env != nullptr && std::string(quiet_env) == "1";
@@ -81,7 +103,6 @@ void myFinalizer(SEXP) {
         auto verbose_env = std::getenv("STATS_VERBOSE");
         bool verbose =
             !(verbose_env != nullptr && std::string(verbose_env) == "0");
-
         report::report(std::cerr, verbose, PreservedDispatchTables);
     }
 
@@ -92,12 +113,14 @@ void myFinalizer(SEXP) {
 
     auto csv_file = getenv("STATS_CSV");
     if (csv_file != nullptr) {
+        LockFile l{csv_file};
         std::ofstream ofs{csv_file, std::ios::out | std::ios::app};
         report::reportCsv(ofs, stats_name, PreservedDispatchTables);
     }
 
     auto slots_file = getenv("STATS_BY_SLOTS");
     if (slots_file != nullptr) {
+        LockFile l{slots_file};
         std::ofstream ofs{slots_file, std::ios::out | std::ios::app};
         report::reportPerSlot(ofs, stats_name);
     }
