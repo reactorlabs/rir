@@ -1571,7 +1571,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert, Opcode* start,
                                                     // is more precise than the
                                                     insert.code
                                                         ->getClosureVersion()
-                                                        ->registerProtoSlotUsedFromFO(
+                                                        ->registerProtoSlotUsed(
                                                             j->typeFeedback()
                                                                 .feedbackOrigin);
 

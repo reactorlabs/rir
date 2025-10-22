@@ -54,102 +54,107 @@ void ClosureVersion::scanForPreciseTypeSlots() {
         }
     });
 }
+
+// <Is succesful, the slot used>
+std::pair<bool, report::SlotUsed>
+slotUsedFromAssume(Assume* assume, const FeedbackOrigin& origin) {
+
+    auto assumeArg = assume->arg<0>().val();
+    auto typeTest = IsType::Cast(assumeArg);
+    if (!typeTest) {
+        assert(assumeArg == pir::False::instance() ||
+               assumeArg == pir::True::instance());
+        return {false, {}};
+    }
+
+    // assert(typeTest->origin == fo);
+
+    // Instruction we speculated on
+    pir::Instruction* speculatedOn =
+        Instruction::Cast(typeTest->arg<0>().val());
+    assert(speculatedOn);
+
+    // The cast of speculated instr to the assumed type
+    pir::CastType* cast = nullptr;
+    {
+        auto bb = assume->bb();
+        auto assumeSeen = false;
+
+        Visitor::run(bb, [&](Instruction* i) {
+            if (i == assume) {
+                assumeSeen = true;
+            }
+
+            if (!assumeSeen) {
+                return;
+            }
+
+            auto mbyCast = CastType::Cast(i);
+            if (mbyCast && mbyCast->arg<0>().val() == speculatedOn) {
+                // sanity check
+                assert(mbyCast->type == (mbyCast->type & speculatedOn->type));
+
+                if (!cast) {
+                    cast = mbyCast;
+                }
+            }
+        });
+    }
+
+    // Construct the slotUsed
+    auto slotUsed = report::SlotUsed();
+    auto mkT = [](const pir::PirType& type) { return new pir::PirType(type); };
+
+    if (cast) {
+        slotUsed.checkFor = mkT(cast->type);
+    } else {
+        slotUsed.checkFor = mkT(typeTest->typeTest);
+    }
+
+    slotUsed.inferredType = mkT(speculatedOn->type);
+    slotUsed.observedType = mkT(report::getSlotPirType(origin));
+
+    assert(assume->required);
+    slotUsed.requiredType = assume->required;
+
+    slotUsed.speculatedOn = report::instrToString(speculatedOn);
+
+    slotUsed.assumeInstr = report::instrToString(assume);
+
+    slotUsed.hoistedForce = assume->hoistedForce;
+
+    return {true, slotUsed};
+}
+
 void ClosureVersion::scanForSpeculation() {
     if (!COLLECT_USED) {
         return;
     }
 
     Visitor::run(this->entry, [&](Instruction* i) {
-        if (auto assume = Assume::Cast(i)) {
-
-            auto fo = assume->reason.origin;
-
-            if (!assume->defaultFeedback && !fo.index().isUndefined() &&
-                fo.index().kind == FeedbackKind::Type) {
-
-                assert(this->owner()->rirFunction());
-
-                // Slot used
-
-                // Type test
-                auto assumeArg = assume->arg<0>().val();
-                auto typeTest = IsType::Cast(assumeArg);
-                if (!typeTest) {
-                    // assume->print(std::cerr, true);
-                    assert(assumeArg == pir::False::instance() ||
-                           assumeArg == pir::True::instance());
-                    return; // skip the constant-folded false
-                }
-
-                // assert(typeTest->origin == fo);
-
-                // Instruction we speculated on
-                pir::Instruction* speculatedOn =
-                    Instruction::Cast(typeTest->arg<0>().val());
-                assert(speculatedOn);
-
-                // The cast of speculated instr to the assumed type
-                pir::CastType* cast = nullptr;
-                {
-                    auto bb = assume->bb();
-                    auto assumeSeen = false;
-
-                    Visitor::run(bb, [&](Instruction* i) {
-                        if (i == assume) {
-                            assumeSeen = true;
-                        }
-
-                        if (!assumeSeen) {
-                            return;
-                        }
-
-                        auto mbyCast = CastType::Cast(i);
-                        if (mbyCast &&
-                            mbyCast->arg<0>().val() == speculatedOn) {
-                            // sanity check
-                            assert(mbyCast->type ==
-                                   (mbyCast->type & speculatedOn->type));
-
-                            if (!cast) {
-                                cast = mbyCast;
-                            }
-                        }
-                    });
-                }
-
-                // Construct the slotUsed
-                auto slotUsed = report::SlotUsed();
-                auto mkT = [](const pir::PirType& type) {
-                    return new pir::PirType(type);
-                };
-
-                if (cast) {
-                    slotUsed.checkFor = mkT(cast->type);
-                } else {
-                    slotUsed.checkFor = mkT(typeTest->typeTest);
-                }
-
-                slotUsed.inferredType = mkT(speculatedOn->type);
-                slotUsed.observedType = mkT(report::getSlotPirType(fo));
-
-                assert(assume->required);
-                slotUsed.requiredType = assume->required;
-
-                slotUsed.speculatedOn = report::instrToString(speculatedOn);
-
-                slotUsed.assumeInstr = report::instrToString(assume);
-
-                slotUsed.hoistedForce = assume->hoistedForce;
-                auto& info = this->feedbackStatsFor(fo.function());
-
-                // Sanity check
-                if (slotUsed.exactMatch()) {
-                    assert(*slotUsed.checkFor == *slotUsed.observedType);
-                }
-
-                info.slotsUsed[fo.index()].push_back(slotUsed);
-            }
+        auto assume = Assume::Cast(i);
+        if (!assume) {
+            return;
         }
+        auto origin = assume->reason.origin;
+
+        if (origin.index().isUndefined() || assume->defaultFeedback ||
+            origin.index().kind != FeedbackKind::Type) {
+            return;
+        }
+
+        // Slot used
+        auto maybeSlotUsed = slotUsedFromAssume(assume, origin);
+        if (!maybeSlotUsed.first) {
+            return;
+        }
+        auto slotUsed = maybeSlotUsed.second;
+
+        // TODO: why?
+        assert(this->owner()->rirFunction());
+
+        auto& info = this->feedbackStatsFor(origin.function());
+        info.slotsUsed[origin.index()].push_back(slotUsed);
     });
 }
 
@@ -199,8 +204,9 @@ const bool STATS_MINIMAL_PATCHES_USED =
     std::getenv("STATS_MINIMAL_PATCHES_USED") != nullptr &&
     std::string(std::getenv("STATS_MINIMAL_PATCHES_USED")) == "1";
 
-void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo,
-                                                 bool patch) {
+void ClosureVersion::registerProtoSlotUsed(Assume* assume,
+                                           const FeedbackOrigin& origin,
+                                           bool patch) {
     if (!COLLECT_USED) {
         return;
     }
@@ -215,37 +221,36 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo,
         return;
     }
 
-    // Construct the slotUsed
-    auto slotUsed = report::SlotUsed();
-    auto mkT = [](const pir::PirType& type) { return new pir::PirType(type); };
-
-    slotUsed.checkFor = mkT(pir::PirType::simpleScalarInt());
-
-    slotUsed.inferredType = mkT(pir::PirType::any());
-    slotUsed.observedType = mkT(pir::PirType::simpleScalarInt());
-
-    slotUsed.requiredType = mkT(pir::PirType::any());
-
-    slotUsed.speculatedOn = "speculatedOn unknown";
-    slotUsed.assumeInstr = "assume instruction unknown";
-
-    slotUsed.hoistedForce = false;
-
-    auto& info = this->feedbackStatsFor(fo.function());
-
-    info.slotsUsed[fo.index()].push_back(slotUsed);
-}
-
-void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume,
-                                           bool patch) {
-    if (!COLLECT_USED) {
+    if (origin.index().isUndefined() || (assume && assume->defaultFeedback) ||
+        origin.index().kind != FeedbackKind::Type) {
         return;
     }
 
-    auto castedAssume = Assume::Cast(assume);
-    assert(castedAssume && "Not an assume instruction");
+    // Construct the SlotUsed
+    report::SlotUsed slotUsed;
+    if (assume) {
+        auto maybeSlotUsed = slotUsedFromAssume(assume, origin);
+        if (!maybeSlotUsed.first) {
+            return;
+        }
+        slotUsed = maybeSlotUsed.second;
+    } else {
+        // Dummy slot
+        static auto any = pir::PirType::any();
 
-    registerProtoSlotUsedFromFO(castedAssume->reason.origin);
+        slotUsed.checkFor = &any;
+        slotUsed.inferredType = &any;
+        slotUsed.observedType = &any;
+        slotUsed.requiredType = &any;
+
+        slotUsed.speculatedOn = "?";
+        slotUsed.assumeInstr = "?";
+
+        slotUsed.hoistedForce = false;
+    }
+
+    auto& info = this->feedbackStatsFor(origin.function());
+    info.slotsUsed[origin.index()].push_back(slotUsed);
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {

@@ -3,6 +3,7 @@
 
 #include "code.h"
 #include "compiler/log/debug.h"
+#include "compiler/pir/instruction.h"
 #include "pir.h"
 #include "report.h"
 #include "runtime/Function.h"
@@ -12,6 +13,8 @@
 
 namespace rir {
 namespace pir {
+
+class Assume;
 
 /*
  * ClosureVersion
@@ -63,12 +66,21 @@ class ClosureVersion : public Code {
 
     void promiseInlined(Promise* promise);
 
-    ClosureVersion* getClosureVersion() override {
-        return this;
+    ClosureVersion* getClosureVersion() override { return this; }
+
+  private:
+    void registerProtoSlotUsed(Assume* assume, const FeedbackOrigin& origin,
+                               bool patch);
+
+  public:
+    void registerProtoSlotUsed(Assume* assume, bool patch = true) {
+        registerProtoSlotUsed(assume, assume->reason.origin, patch);
     }
 
-    void registerProtoSlotUsed(Instruction* assume, bool patch = true);
-    void registerProtoSlotUsedFromFO(const FeedbackOrigin& fo, bool patch = true);
+    void registerProtoSlotUsed(const FeedbackOrigin& origin,
+                                     bool patch = true) {
+        registerProtoSlotUsed(nullptr, origin, patch);
+    }
 
   private:
     Closure* owner_;

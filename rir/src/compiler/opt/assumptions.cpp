@@ -311,7 +311,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                     anyChange = true;
 
                                     code->getClosureVersion()
-                                        ->registerProtoSlotUsedFromFO(
+                                        ->registerProtoSlotUsed(
                                             f->typeFeedback()
                                                 .feedbackOrigin); ////////
                                 }
@@ -434,7 +434,7 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     newAssume->hoistedForce = true;
                     code->getClosureVersion()->registerProtoSlotUsed(
                         newAssume); ///////
-                    code->getClosureVersion()->registerProtoSlotUsedFromFO(
+                    code->getClosureVersion()->registerProtoSlotUsed(
                         f->typeFeedback().feedbackOrigin); ////////
 
                     ip = bb->insert(ip, newAssume) + 1;

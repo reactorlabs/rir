@@ -223,7 +223,7 @@ bool Inline::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
             if (!(*it)->typeFeedback().type.isVoid() &&
                 (*it)->typeFeedback().type.unboxable()) {
                 weight *= 0.9;
-                code->getClosureVersion()->registerProtoSlotUsedFromFO(
+                code->getClosureVersion()->registerProtoSlotUsed(
                     (*it)->typeFeedback().feedbackOrigin);
             }
 
