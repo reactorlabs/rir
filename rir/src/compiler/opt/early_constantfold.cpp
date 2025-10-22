@@ -132,7 +132,7 @@ bool EarlyConstantfold::apply(Compiler& cmp, ClosureVersion* cls, Code* code,
                         BBTransform::insertAssume(
                             new IsType(type, given, FeedbackOrigin()), true, cp,
                             fb.feedbackOrigin, DeoptReason::ForceAndCall, bb,
-                            ip);
+                            ip, nullptr);
 
                         if (auto argi = Instruction::Cast(given)) {
                             argi->typeFeedbackUsed = true;

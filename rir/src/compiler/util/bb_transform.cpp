@@ -263,20 +263,26 @@ BB* BBTransform::lowerAssume(Module* m, Code* code, BB* srcBlock,
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
                                Checkpoint* cp, const FeedbackOrigin& origin,
                                DeoptReason::Reason reason, BB* bb,
-                               BB::Instrs::iterator& position) {
+                               BB::Instrs::iterator& position,
+                               TypeTest::Info* info) {
     position = bb->insert(position, condition);
     auto assume =
         new Assume(condition, cp, DeoptReason(origin, reason), assumePositive);
+
+    if (info) {
+        info->updateAssume(*assume);
+    }
+
+    position = bb->insert(position + 1, assume);
+    position++;
 
     if ( // assume->reason.reason != DeoptReason::Reason::ForceAndCall &&
         (IsType::Cast(condition) ||
          assume->reason.reason == DeoptReason::Reason::Typecheck ||
          assume->reason.reason == DeoptReason::Reason::Typecheck2)) {
-        bb->owner->getClosureVersion()->registerProtoSlotUsed(assume, false); ////////
+        bb->owner->getClosureVersion()->registerProtoSlotUsed(assume,
+                                                              false); ////////
     }
-
-    position = bb->insert(position + 1, assume);
-    position++;
 }
 
 void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
@@ -285,7 +291,7 @@ void BBTransform::insertAssume(Instruction* condition, bool assumePositive,
     auto contBB = cp->bb()->trueBranch();
     auto contBegin = contBB->begin();
     insertAssume(condition, assumePositive, cp, origin, reason, contBB,
-                 contBegin);
+                 contBegin, nullptr);
 }
 
 Value* BBTransform::insertCalleeGuard(Compiler& compiler,

@@ -102,10 +102,7 @@ bool ElideEnvSpec::apply(Compiler&, ClosureVersion* cls, Code* code,
                                 BBTransform::insertAssume(
                                     info.test, info.expectation, cp,
                                     info.feedbackOrigin, DeoptReason::Typecheck,
-                                    bb, ip);
-
-                                auto assume = Assume::Cast(*(ip - 1));
-                                info.updateAssume(*assume);
+                                    bb, ip, &info);
 
                                 if (argi) {
                                     auto cast = new CastType(

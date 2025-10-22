@@ -153,10 +153,7 @@ bool TypeSpeculation::apply(Compiler&, ClosureVersion* cls, Code* code,
 
             BBTransform::insertAssume(info.test, info.expectation, cp,
                                       info.feedbackOrigin,
-                                      DeoptReason::Typecheck, bb, ip);
-
-            auto assume = Assume::Cast(*(ip - 1));
-            info.updateAssume(*assume);
+                                      DeoptReason::Typecheck, bb, ip, &info);
 
             auto cast = new CastType(i, CastType::Downcast, PirType::any(),
                                      info.result);

@@ -8,6 +8,7 @@
 #include "compiler/pir/values.h"
 #include "compiler/rir2pir/rir2pir.h"
 #include "runtime/TypeFeedback.h"
+#include "compiler/opt/type_test.h"
 
 namespace rir {
 
@@ -35,7 +36,7 @@ class BBTransform {
     static void insertAssume(Instruction* condition, bool assumePositive,
                              Checkpoint* cp, const FeedbackOrigin& origin,
                              DeoptReason::Reason reason, BB* bb,
-                             BB::Instrs::iterator& position);
+                             BB::Instrs::iterator& position, TypeTest::Info* info);
     static void insertAssume(Instruction* condition, bool assumePositive,
                              Checkpoint* cp, const FeedbackOrigin& origin,
                              DeoptReason::Reason reason);

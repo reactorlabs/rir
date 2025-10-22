@@ -385,6 +385,9 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                                              std::get<Assume*>(g)->reason);
                     assume->copyStatsFrom(*std::get<Assume*>(g));
 
+                    ip = bb->insert(ip, assume);
+                    anyChange = true;
+
                     if (assume->reason.reason ==
                             DeoptReason::Reason::Typecheck ||
                         assume->reason.reason ==
@@ -392,9 +395,6 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                         code->getClosureVersion()->registerProtoSlotUsed(
                             assume); ////////
                     }
-
-                    ip = bb->insert(ip, assume);
-                    anyChange = true;
                 }
             }
             if (auto f = Force::Cast(*ip)) {
@@ -432,12 +432,12 @@ bool OptimizeAssumptions::apply(Compiler&, ClosureVersion* vers, Code* code,
                     auto newAssume = new Assume(newTT, cp, newDeoptReason);
                     newAssume->copyStatsFrom(*a);
                     newAssume->hoistedForce = true;
+
+                    ip = bb->insert(ip, newAssume) + 1;
                     code->getClosureVersion()->registerProtoSlotUsed(
                         newAssume); ///////
                     code->getClosureVersion()->registerProtoSlotUsed(
                         f->typeFeedback().feedbackOrigin); ////////
-
-                    ip = bb->insert(ip, newAssume) + 1;
 
                     auto casted = new CastType(inp, CastType::Downcast,
                                                PirType::any(), newTT->typeTest);
