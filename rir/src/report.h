@@ -91,6 +91,7 @@ struct SlotInfo {
     /* How used */                                                             \
     X(bool, exactMatch, "exact match")                                         \
     X(bool, narrowed, "narrowed")                                              \
+    X(std::string, slotUsedSource, "slot used source")                         \
                                                                                \
     /* Unused */                                                               \
     X(bool, notPresent, "not present")                                         \
@@ -128,6 +129,14 @@ struct SlotInfo {
 
 // ------------------------------------------------------------
 
+enum SlotUsedSource {
+    FinalVersion,
+    Proto,
+    Patch,
+};
+
+std::ostream& operator<<(std::ostream& os, const SlotUsedSource source);
+
 struct SlotUsed {
     bool widened() const;
     bool narrowedWithStaticType() const;
@@ -144,6 +153,7 @@ struct SlotUsed {
     std::string assumeInstr;
 
     bool hoistedForce;
+    SlotUsedSource source;
 
     SlotUsed() {}
 };

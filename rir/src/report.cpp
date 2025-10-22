@@ -574,6 +574,8 @@ void ClosureVersionStats::perSlotInfo(
                             // How used
                             res.exactMatch = usage.exactMatch();
                             res.narrowed = usage.narrowedWithStaticType();
+                            res.slotUsedSource = streamToString(
+                                [&](std::ostream& os) { os << usage.source; });
 
                             // Unused defaults
                             res.promiseInlined =
@@ -739,6 +741,24 @@ std::ostream& operator<<(std::ostream& os, const SpeculationPhase speculation) {
     default:
         assert(false);
     }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const SlotUsedSource source) {
+    switch (source) {
+    case FinalVersion:
+        os << "final version";
+        break;
+    case Proto:
+        os << "proto";
+        break;
+    case Patch:
+        os << "patch";
+        break;
+    default:
+        assert(false);
+    }
+
     return os;
 }
 

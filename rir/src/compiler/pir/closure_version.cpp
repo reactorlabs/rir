@@ -149,6 +149,7 @@ void ClosureVersion::scanForSpeculation() {
             return;
         }
         auto slotUsed = maybeSlotUsed.second;
+        slotUsed.source = report::FinalVersion;
 
         // TODO: why?
         assert(this->owner()->rirFunction());
@@ -248,6 +249,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
 
         slotUsed.hoistedForce = false;
     }
+    slotUsed.source = patch ? report::Patch : report::Proto;
 
     auto& info = this->feedbackStatsFor(origin.function());
     info.protoSlotsUsed[origin.index()].push_back(slotUsed);
