@@ -12,6 +12,9 @@
 namespace rir {
 namespace pir {
 
+bool COLLECT_USED = !(std::getenv("STATS_NO_USED") != nullptr &&
+                      std::string(std::getenv("STATS_NO_USED")) == "1");
+
 void ClosureVersion::computeFeedbackStats() {
 
     // fill in slotsOptimizedAway .  Slots that don't appear in the code and are
@@ -52,6 +55,9 @@ void ClosureVersion::scanForPreciseTypeSlots() {
     });
 }
 void ClosureVersion::scanForSpeculation() {
+    if (!COLLECT_USED) {
+        return;
+    }
 
     Visitor::run(this->entry, [&](Instruction* i) {
         if (auto assume = Assume::Cast(i)) {
@@ -195,6 +201,10 @@ const bool STATS_MINIMAL_PATCHES_USED =
 
 void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo,
                                                  bool patch) {
+    if (!COLLECT_USED) {
+        return;
+    }
+
     // Only collect minimal
     if (STATS_MINIMAL_USED) {
         return;
@@ -228,6 +238,9 @@ void ClosureVersion::registerProtoSlotUsedFromFO(const FeedbackOrigin& fo,
 
 void ClosureVersion::registerProtoSlotUsed(pir::Instruction* assume,
                                            bool patch) {
+    if (!COLLECT_USED) {
+        return;
+    }
 
     auto castedAssume = Assume::Cast(assume);
     assert(castedAssume && "Not an assume instruction");
