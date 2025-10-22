@@ -554,7 +554,10 @@ void ClosureVersionStats::perSlotInfo(
             // Info
             res.nonempty = !static_info.emptySlots.count(slot);
             res.read = feedback_info.slotsRead.count(slot);
-            res.used = feedback_info.slotsUsed[slot].size();
+
+            bool hasSlotUsed = feedback_info.slotsUsed[slot].size();
+            bool hasProtoSlotUsed = feedback_info.protoSlotsUsed[slot].size();
+            res.used = hasSlotUsed || hasProtoSlotUsed;
 
             // More info
             res.inlinee = closure != this->function;
@@ -562,35 +565,46 @@ void ClosureVersionStats::perSlotInfo(
             // res.polymorphic = static_info.polymorphicSlots.count(slot);
 
             if (res.used) {
-                for (const auto& usage : feedback_info.slotsUsed[slot]) {
-                    // Present info
-                    res.widened = usage.widened();
+                auto consumeSlotUsed =
+                    [&](const std::vector<SlotUsed>& slotsUsed) {
+                        for (const auto& usage : slotsUsed) {
+                            // Present info
+                            res.widened = usage.widened();
 
-                    // How used
-                    res.exactMatch = usage.exactMatch();
-                    res.narrowed = usage.narrowedWithStaticType();
+                            // How used
+                            res.exactMatch = usage.exactMatch();
+                            res.narrowed = usage.narrowedWithStaticType();
 
-                    // Unused defaults
-                    res.promiseInlined =
-                        feedback_info.slotsPromiseInlined.count(slot);
+                            // Unused defaults
+                            res.promiseInlined =
+                                feedback_info.slotsPromiseInlined.count(slot);
 
-                    // (used && slot from promise) => promise inlined
-                    assert(!res.inPromise || res.promiseInlined);
+                            // (used && slot from promise) => promise inlined
+                            assert(!res.inPromise || res.promiseInlined);
 
-                    // Types
-                    res.inferredT = typeToString(*usage.inferredType);
-                    res.observedT = typeToString(*usage.observedType);
-                    res.expectedT = typeToString(usage.expectedType());
+                            // Types
+                            res.inferredT = typeToString(*usage.inferredType);
+                            res.observedT = typeToString(*usage.observedType);
+                            res.expectedT = typeToString(usage.expectedType());
 
-                    // Used types
-                    res.checkForT = typeToString(*usage.checkFor);
-                    res.requiredT = typeToString(*usage.requiredType);
+                            // Used types
+                            res.checkForT = typeToString(*usage.checkFor);
+                            res.requiredT = typeToString(*usage.requiredType);
 
-                    // Instruction
-                    res.instruction = usage.speculatedOn;
+                            // Instruction
+                            res.instruction = usage.speculatedOn;
 
-                    consume(res);
+                            consume(res);
+                        }
+                    };
+
+                if (hasSlotUsed) {
+                    consumeSlotUsed(feedback_info.slotsUsed[slot]);
+                } else {
+                    assert(hasProtoSlotUsed);
+                    consumeSlotUsed(feedback_info.protoSlotsUsed[slot]);
                 }
+
             } else {
                 // Unused
                 res.notPresent = !feedback_info.slotsPresent[slot].size();

@@ -104,7 +104,7 @@ struct SlotInfo {
     X(std::string, speculationPhase, "speculation phase")                      \
                                                                                \
     /* Types */                                                                \
-    X(std::string, inferredT, "inferredT")                                         \
+    X(std::string, inferredT, "inferredT")                                     \
     X(std::string, observedT, "observedT")                                     \
     X(std::string, expectedT, "expectedT")                                     \
                                                                                \
@@ -233,9 +233,9 @@ struct FunctionInfo {
 
 struct FeedbackStatsPerFunction {
     std::unordered_map<FeedbackIndex, std::vector<SlotUsed>> slotsUsed;
+    std::unordered_map<FeedbackIndex, std::vector<SlotUsed>> protoSlotsUsed;
     std::unordered_set<FeedbackIndex> slotsRead;
-    std::unordered_map<FeedbackIndex, std::vector<SlotPresent>>
-        slotsPresent;
+    std::unordered_map<FeedbackIndex, std::vector<SlotPresent>> slotsPresent;
     std::unordered_set<FeedbackIndex> slotsAssumeRemoved;
     std::unordered_set<FeedbackIndex> slotsPromiseInlined;
 

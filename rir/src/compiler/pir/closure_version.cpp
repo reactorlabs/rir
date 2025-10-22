@@ -250,7 +250,7 @@ void ClosureVersion::registerProtoSlotUsed(Assume* assume,
     }
 
     auto& info = this->feedbackStatsFor(origin.function());
-    info.slotsUsed[origin.index()].push_back(slotUsed);
+    info.protoSlotsUsed[origin.index()].push_back(slotUsed);
 }
 
 void ClosureVersion::print(std::ostream& out, bool tty) const {
